@@ -9,7 +9,8 @@ docs/
 ├── README.md                          # This file
 └── design-system/                     # Design system documentation
     ├── css-design-system.md           # CSS design tokens and architecture
-    └── responsive-design.md           # Responsive design patterns and utilities
+    ├── responsive-design.md           # Responsive design patterns and utilities
+    └── theming.md                     # Theme system and color scheme switching
 ```
 
 ## Documentation Index
@@ -17,6 +18,7 @@ docs/
 ### Design System
 - **[CSS Design System](./design-system/css-design-system.md)** - Design tokens, color system, typography, spacing, and more
 - **[Responsive Design](./design-system/responsive-design.md)** - Mobile-first approach, breakpoints, and responsive utilities
+- **[Theming System](./design-system/theming.md)** - How to modify and swap color schemes easily
 
 ### Component Framework
 _(Documentation will be added as components are built)_

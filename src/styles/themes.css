@@ -1,0 +1,181 @@
+/**
+ * Theme System
+ *
+ * Purpose: Easy color scheme switching and theme variants
+ * Supports: Multiple themes, dark mode, custom brand colors
+ *
+ * Usage:
+ * - Default: No class needed (uses :root variables)
+ * - Dark mode: Add data-theme="dark" to <html> or <body>
+ * - Custom theme: Add data-theme="your-theme" to <html> or <body>
+ */
+
+/* ===========================
+   DEFAULT THEME (Light)
+   =========================== */
+
+:root {
+  /* Semantic color assignments - these can be easily swapped */
+  --color-background: var(--color-white);
+  --color-background-secondary: var(--color-gray-50);
+  --color-background-tertiary: var(--color-gray-100);
+
+  --color-surface: var(--color-white);
+  --color-surface-elevated: var(--color-white);
+
+  --color-text-primary: var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-600);
+  --color-text-tertiary: var(--color-gray-500);
+  --color-text-inverse: var(--color-white);
+
+  --color-border: var(--color-gray-200);
+  --color-border-hover: var(--color-gray-300);
+  --color-border-focus: var(--color-primary-500);
+
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+
+  --color-action-secondary: var(--color-gray-200);
+  --color-action-secondary-hover: var(--color-gray-300);
+  --color-action-secondary-active: var(--color-gray-400);
+}
+
+/* ===========================
+   DARK THEME
+   =========================== */
+
+[data-theme='dark'] {
+  /* Background colors */
+  --color-background: var(--color-gray-900);
+  --color-background-secondary: var(--color-gray-800);
+  --color-background-tertiary: var(--color-gray-700);
+
+  --color-surface: var(--color-gray-800);
+  --color-surface-elevated: var(--color-gray-700);
+
+  /* Text colors */
+  --color-text-primary: var(--color-gray-50);
+  --color-text-secondary: var(--color-gray-300);
+  --color-text-tertiary: var(--color-gray-400);
+  --color-text-inverse: var(--color-gray-900);
+
+  /* Border colors */
+  --color-border: var(--color-gray-700);
+  --color-border-hover: var(--color-gray-600);
+  --color-border-focus: var(--color-primary-400);
+
+  /* Action colors */
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+  --color-action-primary-active: var(--color-primary-300);
+
+  --color-action-secondary: var(--color-gray-700);
+  --color-action-secondary-hover: var(--color-gray-600);
+  --color-action-secondary-active: var(--color-gray-500);
+}
+
+/* ===========================
+   ALTERNATIVE THEME EXAMPLE
+   Custom brand colors
+   =========================== */
+
+[data-theme='ocean'] {
+  /* Override primary colors with ocean blue palette */
+  --color-primary-50: #ecfeff;
+  --color-primary-100: #cffafe;
+  --color-primary-200: #a5f3fc;
+  --color-primary-300: #67e8f9;
+  --color-primary-400: #22d3ee;
+  --color-primary-500: #06b6d4;
+  --color-primary-600: #0891b2;
+  --color-primary-700: #0e7490;
+  --color-primary-800: #155e75;
+  --color-primary-900: #164e63;
+
+  /* Semantic colors use the new primary palette */
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+}
+
+[data-theme='sunset'] {
+  /* Override primary colors with orange/red palette */
+  --color-primary-50: #fff7ed;
+  --color-primary-100: #ffedd5;
+  --color-primary-200: #fed7aa;
+  --color-primary-300: #fdba74;
+  --color-primary-400: #fb923c;
+  --color-primary-500: #f97316;
+  --color-primary-600: #ea580c;
+  --color-primary-700: #c2410c;
+  --color-primary-800: #9a3412;
+  --color-primary-900: #7c2d12;
+
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+}
+
+[data-theme='forest'] {
+  /* Override primary colors with green palette */
+  --color-primary-50: #f0fdf4;
+  --color-primary-100: #dcfce7;
+  --color-primary-200: #bbf7d0;
+  --color-primary-300: #86efac;
+  --color-primary-400: #4ade80;
+  --color-primary-500: #22c55e;
+  --color-primary-600: #16a34a;
+  --color-primary-700: #15803d;
+  --color-primary-800: #166534;
+  --color-primary-900: #14532d;
+
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+}
+
+/* ===========================
+   THEME TRANSITIONS
+   =========================== */
+
+/**
+ * Smooth transition when switching themes
+ * Applied to elements that should animate on theme change
+ */
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-base),
+              color var(--transition-base);
+}
+
+/* ===========================
+   RESPECT USER PREFERENCES
+   =========================== */
+
+/**
+ * Auto dark mode based on system preference
+ * Only applies if no data-theme attribute is set
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    /* Apply dark theme colors automatically */
+    --color-background: var(--color-gray-900);
+    --color-background-secondary: var(--color-gray-800);
+    --color-background-tertiary: var(--color-gray-700);
+
+    --color-surface: var(--color-gray-800);
+    --color-surface-elevated: var(--color-gray-700);
+
+    --color-text-primary: var(--color-gray-50);
+    --color-text-secondary: var(--color-gray-300);
+    --color-text-tertiary: var(--color-gray-400);
+
+    --color-border: var(--color-gray-700);
+    --color-border-hover: var(--color-gray-600);
+
+    --color-action-primary: var(--color-primary-500);
+    --color-action-primary-hover: var(--color-primary-400);
+  }
+}
