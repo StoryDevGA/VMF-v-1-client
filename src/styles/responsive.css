@@ -1,0 +1,312 @@
+/**
+ * Responsive Utilities
+ *
+ * Purpose: Mobile-first responsive design utilities
+ * Philosophy: Build for mobile first, enhance for larger screens
+ *
+ * Breakpoints:
+ * - sm: 640px   (Small tablets, large phones)
+ * - md: 768px   (Tablets)
+ * - lg: 1024px  (Laptops, small desktops)
+ * - xl: 1280px  (Desktops)
+ * - 2xl: 1536px (Large desktops)
+ */
+
+/* ===========================
+   CONTAINER
+   =========================== */
+
+/**
+ * Responsive container with max-width at each breakpoint
+ * Centers content and provides consistent padding
+ */
+.container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+}
+
+@media (min-width: 640px) {
+  .container {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1024px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1280px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .container {
+    max-width: 1536px;
+  }
+}
+
+/* ===========================
+   DISPLAY UTILITIES
+   =========================== */
+
+/* Hide on mobile, show on larger screens */
+.hidden-mobile {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .hidden-mobile {
+    display: block;
+  }
+}
+
+/* Show on mobile, hide on larger screens */
+.visible-mobile {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .visible-mobile {
+    display: none;
+  }
+}
+
+/* Hide on tablet and below */
+.hidden-tablet {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .hidden-tablet {
+    display: block;
+  }
+}
+
+/* ===========================
+   RESPONSIVE GRID
+   =========================== */
+
+/**
+ * Flexible grid system
+ * Mobile: 1 column
+ * Tablet: 2 columns
+ * Desktop: 3+ columns
+ */
+.grid {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .grid-sm-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-sm-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .grid-md-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-md-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .grid-md-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid-lg-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .grid-lg-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .grid-lg-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* ===========================
+   RESPONSIVE FLEXBOX
+   =========================== */
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+/* Stack on mobile, row on tablet+ */
+@media (min-width: 768px) {
+  .flex-md-row {
+    flex-direction: row;
+  }
+}
+
+/* ===========================
+   RESPONSIVE SPACING
+   =========================== */
+
+/* Responsive padding */
+.p-responsive {
+  padding: var(--spacing-sm);
+}
+
+@media (min-width: 768px) {
+  .p-responsive {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (min-width: 1024px) {
+  .p-responsive {
+    padding: var(--spacing-lg);
+  }
+}
+
+/* Responsive margin */
+.m-responsive {
+  margin: var(--spacing-sm);
+}
+
+@media (min-width: 768px) {
+  .m-responsive {
+    margin: var(--spacing-md);
+  }
+}
+
+@media (min-width: 1024px) {
+  .m-responsive {
+    margin: var(--spacing-lg);
+  }
+}
+
+/* ===========================
+   RESPONSIVE TYPOGRAPHY
+   =========================== */
+
+/* Responsive heading sizes */
+.text-responsive-xl {
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+}
+
+@media (min-width: 768px) {
+  .text-responsive-xl {
+    font-size: var(--font-size-2xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .text-responsive-xl {
+    font-size: var(--font-size-3xl);
+  }
+}
+
+.text-responsive-lg {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+}
+
+@media (min-width: 768px) {
+  .text-responsive-lg {
+    font-size: var(--font-size-xl);
+  }
+}
+
+/* ===========================
+   ASPECT RATIO (for media)
+   =========================== */
+
+/**
+ * Maintains aspect ratio for images/videos
+ * Prevents layout shift during loading
+ */
+.aspect-video {
+  aspect-ratio: 16 / 9;
+}
+
+.aspect-square {
+  aspect-ratio: 1 / 1;
+}
+
+.aspect-portrait {
+  aspect-ratio: 3 / 4;
+}
+
+/* ===========================
+   RESPONSIVE IMAGES
+   =========================== */
+
+/**
+ * Ensures images are responsive by default
+ * Prevents overflow on small screens
+ */
+.img-responsive {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ===========================
+   TEXT UTILITIES
+   =========================== */
+
+/* Prevent text from wrapping */
+.text-nowrap {
+  white-space: nowrap;
+}
+
+/* Truncate text with ellipsis */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Responsive text alignment */
+.text-center-mobile {
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .text-center-mobile {
+    text-align: left;
+  }
+}
