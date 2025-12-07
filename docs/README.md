@@ -9,6 +9,7 @@ docs/
 ├── README.md                          # This file
 ├── routing.md                         # Routing and navigation
 ├── components/                        # Component documentation
+│   ├── accordion.md                   # Accordion component
 │   ├── avatar.md                      # Avatar component
 │   ├── button.md                      # Button component
 │   ├── card.md                        # Card component
@@ -32,6 +33,7 @@ docs/
 - **[Theming System](./design-system/theming.md)** - How to modify and swap color schemes easily
 
 ### Component Framework
+- **[Accordion](./components/accordion.md)** - Accessible accordion component with smooth animations and keyboard navigation
 - **[Avatar](./components/avatar.md)** - User profile pictures with initials, sizes, shapes, and status indicators
 - **[Button](./components/button.md)** - Accessible button component with variants, sizes, and states
 - **[Card](./components/card.md)** - Professional card component with variants, sections, and responsive layouts
