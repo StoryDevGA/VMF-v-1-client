@@ -9,6 +9,7 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Outlet } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
+import { Spinner } from '../components/Spinner' // Import the new Spinner component
 
 // Lazy-loaded page components
 const Home = lazy(() => import('../pages/Home'))
@@ -24,26 +25,15 @@ function LoadingFallback() {
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '60vh',
         color: 'var(--color-text-secondary)'
       }}
     >
-      <div style={{ textAlign: 'center' }}>
-        <div
-          style={{
-            width: '40px',
-            height: '40px',
-            border: '3px solid var(--color-border)',
-            borderTopColor: 'var(--color-primary-500)',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-            margin: '0 auto'
-          }}
-        ></div>
-        <p style={{ marginTop: 'var(--spacing-md)' }}>Loading...</p>
-      </div>
+      <Spinner size="lg" /> {/* Use the new Spinner component */}
+      <p style={{ marginTop: 'var(--spacing-md)' }}>Loading...</p>
     </div>
   )
 }
@@ -115,11 +105,4 @@ export const router = createBrowserRouter([
   },
 ])
 
-// Add loading spinner animation to global styles
-const style = document.createElement('style')
-style.textContent = `
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-`
-document.head.appendChild(style)
+

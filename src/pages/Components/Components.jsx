@@ -15,6 +15,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Tickbox } from '../../components/Tickbox'
 import { Radio } from '../../components/Radio'
+import { Spinner } from '../../components/Spinner'
 
 function Components() {
   const [loading, setLoading] = useState(false)
@@ -1338,6 +1339,51 @@ function Components() {
               />
             </div>
           </fieldset>
+        </div>
+      </section>
+
+      <section style={{ marginTop: '3rem' }}>
+        <h2 className="text-responsive-lg">Spinner Component</h2>
+        <p className="text-responsive-base" style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
+          A simple, accessible loading spinner for indicating ongoing processes.
+        </p>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>Sizes</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginTop: '1rem' }}>
+            <Spinner size="sm" />
+            <Spinner size="md" />
+            <Spinner size="lg" />
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>Colors</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginTop: '1rem' }}>
+            <Spinner color="primary" />
+            <Spinner color="secondary" />
+            <Spinner color="success" />
+            <Spinner color="danger" />
+            <Spinner color="info" />
+            <div style={{ color: 'purple' }}>
+              <Spinner color="inherit" />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>In Buttons</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginTop: '1rem' }}>
+            <Button loading>
+              <Spinner size="sm" color="inherit" /> Loading
+            </Button>
+            <Button variant="outline" loading>
+              <Spinner size="sm" color="inherit" /> Loading
+            </Button>
+            <Button variant="danger" loading>
+              <Spinner size="sm" color="inherit" /> Loading
+            </Button>
+          </div>
         </div>
       </section>
 

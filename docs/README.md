@@ -19,6 +19,7 @@ docs/
 │   ├── header.md                      # Header component
 │   ├── input.md                       # Input component
 │   ├── radio.md                       # Radio component
+│   ├── spinner.md                     # Spinner component
 │   ├── tickbox.md                     # Tickbox component
 │   └── link.md                        # Link component
 └── design-system/                     # Design system documentation
@@ -48,6 +49,7 @@ docs/
 - **[Header](./components/header.md)** - Responsive header with logo and navigation
 - **[Input](./components/input.md)** - Input component with floating label animation and very light placeholder text
 - **[Radio](./components/radio.md)** - Custom-styled, accessible radio button component
+- **[Spinner](./components/spinner.md)** - Simple, accessible loading spinner
 - **[Tickbox](./components/tickbox.md)** - Custom-styled, accessible checkbox component
 - **[Link](./components/link.md)** - Smart link component for internal routing and external navigation
 

@@ -1,0 +1,86 @@
+/**
+ * Spinner Component Styles
+ *
+ * A simple, accessible loading spinner.
+ */
+
+.spinner {
+  display: inline-block;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: var(--color-primary); /* Default color */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* ===========================
+   SIZES
+   =========================== */
+
+.spinner--sm {
+  width: 20px;
+  height: 20px;
+}
+
+.spinner--md {
+  width: 32px;
+  height: 32px;
+}
+
+.spinner--lg {
+  width: 48px;
+  height: 48px;
+}
+
+/* ===========================
+   COLORS
+   =========================== */
+
+.spinner--primary {
+  border-left-color: var(--color-primary);
+}
+
+.spinner--secondary {
+  border-left-color: var(--color-secondary);
+}
+
+.spinner--success {
+  border-left-color: var(--color-success);
+}
+
+.spinner--danger {
+  border-left-color: var(--color-danger);
+}
+
+.spinner--info {
+  border-left-color: var(--color-info);
+}
+
+.spinner--inherit {
+  border-left-color: currentColor;
+}
+
+/* ===========================
+   ANIMATION
+   =========================== */
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Hide text for screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
