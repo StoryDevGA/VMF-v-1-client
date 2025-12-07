@@ -7,6 +7,7 @@ This directory contains all documentation for the VMF-v1 client application.
 ```
 docs/
 ├── README.md                          # This file
+├── routing.md                         # Routing and navigation
 ├── components/                        # Component documentation
 │   └── button.md                      # Button component
 └── design-system/                     # Design system documentation
@@ -16,6 +17,9 @@ docs/
 ```
 
 ## Documentation Index
+
+### Application
+- **[Routing](./routing.md)** - React Router setup, lazy loading, navigation, and adding new routes
 
 ### Design System
 - **[CSS Design System](./design-system/css-design-system.md)** - Design tokens, color system, typography, spacing, and more

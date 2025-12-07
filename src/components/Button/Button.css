@@ -24,7 +24,7 @@
   line-height: var(--line-height-tight);
 
   /* Borders */
-  border: var(--border-width-thin) solid transparent;
+  border: 1px solid transparent;
   border-radius: var(--border-radius-md);
 
   /* Layout */
@@ -70,46 +70,47 @@
 .btn--primary {
   background-color: var(--color-action-primary);
   color: var(--color-text-inverse);
-  border-color: var(--color-action-primary);
+  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
 }
 
 .btn--primary:hover:not(:disabled) {
   background-color: var(--color-action-primary-hover);
-  border-color: var(--color-action-primary-hover);
+  border-color: color-mix(in srgb, var(--color-action-primary-hover) 30%, transparent);
 }
 
 .btn--primary:active:not(:disabled) {
   background-color: var(--color-action-primary-active);
-  border-color: var(--color-action-primary-active);
+  border-color: color-mix(in srgb, var(--color-action-primary-active) 30%, transparent);
 }
 
 /* Secondary - Less prominent actions */
 .btn--secondary {
   background-color: var(--color-action-secondary);
   color: var(--color-text-primary);
-  border-color: var(--color-action-secondary);
+  border-color: color-mix(in srgb, var(--color-action-secondary) 30%, transparent);
 }
 
 .btn--secondary:hover:not(:disabled) {
   background-color: var(--color-action-secondary-hover);
-  border-color: var(--color-action-secondary-hover);
+  border-color: color-mix(in srgb, var(--color-action-secondary-hover) 30%, transparent);
 }
 
 .btn--secondary:active:not(:disabled) {
   background-color: var(--color-action-secondary-active);
-  border-color: var(--color-action-secondary-active);
+  border-color: color-mix(in srgb, var(--color-action-secondary-active) 30%, transparent);
 }
 
 /* Outline - Subtle emphasis */
 .btn--outline {
   background-color: transparent;
   color: var(--color-action-primary);
-  border-color: var(--color-action-primary);
+  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
 }
 
 .btn--outline:hover:not(:disabled) {
   background-color: var(--color-action-primary);
   color: var(--color-text-inverse);
+  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
 }
 
 /* Ghost - Minimal style */
@@ -127,17 +128,17 @@
 .btn--danger {
   background-color: var(--color-error);
   color: var(--color-text-inverse);
-  border-color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 
 .btn--danger:hover:not(:disabled) {
   background-color: #dc2626; /* Darker red */
-  border-color: #dc2626;
+  border-color: color-mix(in srgb, #dc2626 30%, transparent);
 }
 
 .btn--danger:active:not(:disabled) {
   background-color: #b91c1c; /* Even darker */
-  border-color: #b91c1c;
+  border-color: color-mix(in srgb, #b91c1c 30%, transparent);
 }
 
 /* ===========================
@@ -174,28 +175,28 @@
   /* Create double outline effect using box-shadow */
   box-shadow:
     0 0 0 2px var(--color-background),
-    0 0 0 4px currentColor;
-  border-width: var(--border-width-medium);
+    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
+  border-width: 1px;
 }
 
 /* Adjust on hover to maintain double outline */
 .btn--double-outline:hover:not(:disabled) {
   box-shadow:
     0 0 0 2px var(--color-background),
-    0 0 0 4px currentColor;
+    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
 }
 
 /* Maintain double outline on focus */
 .btn--double-outline:focus-visible {
-  outline-offset: 6px; /* Account for double border */
+  outline-offset: 4px; /* Account for double border */
   box-shadow:
     0 0 0 2px var(--color-background),
-    0 0 0 4px currentColor;
+    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
 }
 
 /* Combine with outline variant for best effect */
 .btn--outline.btn--double-outline {
-  border-width: var(--border-width-medium);
+  border-width: 1px;
 }
 
 /* Adjust spacing for double outline on larger buttons */
@@ -315,6 +316,8 @@
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   .btn {
-    border-width: var(--border-width-medium);
+    border-width: 1px;
+    /* Increase opacity for better visibility in high contrast mode */
+    border-color: color-mix(in srgb, currentColor 50%, transparent);
   }
 }
