@@ -21,6 +21,7 @@
  * />
  */
 
+import { useState, useEffect } from 'react'
 import { Link } from '../Link'
 import Navigation from '../Navigation'
 import './Header.css'
@@ -34,6 +35,8 @@ export function Header({
   children,
   ...props
 }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   const headerClasses = [
     'header',
     sticky && 'header--sticky',
@@ -44,6 +47,26 @@ export function Header({
 
   // Determine if logo is a string (text) or React element
   const isTextLogo = typeof logo === 'string'
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen)
+  }
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false)
+  }
+
+  // Close menu on Escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && mobileMenuOpen) {
+        closeMobileMenu()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [mobileMenuOpen])
 
   return (
     <header className={headerClasses} {...props}>
@@ -56,6 +79,7 @@ export function Header({
               variant="subtle"
               underline="none"
               aria-label="Home"
+              onClick={closeMobileMenu}
             >
               {isTextLogo ? (
                 <span className="header__logo-text">{logo}</span>
@@ -75,9 +99,26 @@ export function Header({
         </div>
 
         {showNavigation && (
-          <div className="header__nav">
-            <Navigation />
-          </div>
+          <>
+            <button
+              className="header__hamburger"
+              onClick={toggleMobileMenu}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
+            >
+              <span className="header__hamburger-line"></span>
+              <span className="header__hamburger-line"></span>
+              <span className="header__hamburger-line"></span>
+            </button>
+
+            <div className="header__nav">
+              <Navigation
+                isOpen={mobileMenuOpen}
+                onLinkClick={closeMobileMenu}
+              />
+            </div>
+          </>
         )}
 
         {children && <div className="header__content">{children}</div>}

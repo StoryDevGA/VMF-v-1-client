@@ -2,8 +2,9 @@
  * Header Component Tests
  */
 
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Header } from './Header'
 
@@ -225,6 +226,130 @@ describe('Header Component', () => {
 
       expect(screen.getByText('Simple')).toBeInTheDocument()
       expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    })
+  })
+
+  // ===========================
+  // MOBILE HAMBURGER MENU
+  // ===========================
+
+  describe('Mobile Hamburger Menu', () => {
+    it('should render hamburger button when navigation is shown', () => {
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+      const hamburger = screen.getByLabelText('Open menu')
+      expect(hamburger).toBeInTheDocument()
+      expect(hamburger).toHaveClass('header__hamburger')
+    })
+
+    it('should not render hamburger button when navigation is hidden', () => {
+      render(
+        <RouterWrapper>
+          <Header showNavigation={false} />
+        </RouterWrapper>
+      )
+      const hamburger = screen.queryByLabelText('Open menu')
+      expect(hamburger).not.toBeInTheDocument()
+    })
+
+    it('should toggle menu when hamburger is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+
+      const hamburger = screen.getByLabelText('Open menu')
+      expect(hamburger).toHaveAttribute('aria-expanded', 'false')
+
+      // Click to open
+      await user.click(hamburger)
+      expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
+      expect(screen.getByLabelText('Close menu')).toHaveAttribute('aria-expanded', 'true')
+
+      // Click to close
+      await user.click(screen.getByLabelText('Close menu'))
+      expect(screen.getByLabelText('Open menu')).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    it('should close menu when Escape key is pressed', () => {
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+
+      const hamburger = screen.getByLabelText('Open menu')
+
+      // Open menu
+      fireEvent.click(hamburger)
+      expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
+
+      // Press Escape
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
+    })
+
+    it('should close menu when a navigation link is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+
+      // Open menu
+      const hamburger = screen.getByLabelText('Open menu')
+      await user.click(hamburger)
+      expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
+
+      // Click a navigation link
+      const componentsLink = screen.getByRole('menuitem', { name: /components/i })
+      await user.click(componentsLink)
+
+      // Menu should close
+      expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
+    })
+
+    it('should close menu when logo is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <RouterWrapper>
+          <Header logo="Test" />
+        </RouterWrapper>
+      )
+
+      // Open menu
+      const hamburger = screen.getByLabelText('Open menu')
+      await user.click(hamburger)
+      expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
+
+      // Click logo
+      const logoLink = screen.getByLabelText('Home')
+      await user.click(logoLink)
+
+      // Menu should close
+      expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
+    })
+
+    it('should have correct aria attributes for accessibility', () => {
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+
+      const hamburger = screen.getByLabelText('Open menu')
+      expect(hamburger).toHaveAttribute('aria-expanded', 'false')
+      expect(hamburger).toHaveAttribute('aria-controls', 'mobile-navigation')
+
+      // After clicking
+      fireEvent.click(hamburger)
+      expect(screen.getByLabelText('Close menu')).toHaveAttribute('aria-expanded', 'true')
     })
   })
 

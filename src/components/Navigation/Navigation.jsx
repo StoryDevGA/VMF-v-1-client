@@ -13,9 +13,21 @@
 import { NavLink } from 'react-router-dom'
 import './Navigation.css'
 
-function Navigation() {
+function Navigation({ isOpen = false, onLinkClick = () => {} }) {
+  const navClasses = [
+    'nav',
+    isOpen && 'nav--open'
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <nav className="nav" role="navigation" aria-label="Main navigation">
+    <nav
+      className={navClasses}
+      role="navigation"
+      aria-label="Main navigation"
+      id="mobile-navigation"
+    >
       <div className="nav__container">
         <ul className="nav__links" role="menubar">
           <li role="none">
@@ -25,6 +37,7 @@ function Navigation() {
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
               role="menuitem"
+              onClick={onLinkClick}
             >
               Components
             </NavLink>
@@ -36,6 +49,7 @@ function Navigation() {
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
               role="menuitem"
+              onClick={onLinkClick}
             >
               About
             </NavLink>

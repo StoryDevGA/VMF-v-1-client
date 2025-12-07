@@ -21,6 +21,7 @@
   font-family: var(--font-primary);
   font-weight: var(--font-weight-medium);
   text-decoration: none;
+  text-transform: uppercase;
   line-height: inherit;
 
   /* Interaction */

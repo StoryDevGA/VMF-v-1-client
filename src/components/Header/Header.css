@@ -113,6 +113,70 @@
 }
 
 /* ===========================
+   HAMBURGER MENU
+   =========================== */
+
+.header__hamburger {
+  /* Hidden on desktop, shown on mobile */
+  display: none;
+
+  /* Reset button styles */
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+
+  /* Layout */
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+
+  /* Appearance - Rounded border */
+  border-radius: 50%;
+
+  /* Transitions */
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.header__hamburger:hover {
+  background-color: var(--color-surface-secondary);
+  border-color: color-mix(in srgb, var(--color-border) 50%, transparent);
+  transform: scale(1.05);
+}
+
+.header__hamburger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-color: var(--color-border-focus);
+}
+
+.header__hamburger:active {
+  background-color: var(--color-border);
+  transform: scale(0.95);
+}
+
+.header__hamburger-line {
+  display: block;
+  width: 20px;
+  height: 1px;
+  background-color: var(--color-text-primary);
+  border-radius: 1px;
+  transition:
+    transform var(--transition-normal),
+    opacity var(--transition-normal),
+    background-color var(--transition-fast);
+}
+
+.header__hamburger:hover .header__hamburger-line {
+  background-color: var(--color-primary-600);
+}
+
+/* ===========================
    RESPONSIVE
    =========================== */
 
@@ -132,6 +196,35 @@
 
   .header__logo-custom img {
     max-height: 32px;
+  }
+
+  /* Show hamburger on mobile */
+  .header__hamburger {
+    display: flex;
+    margin-left: auto;
+  }
+
+  /* Hide navigation on mobile by default */
+  .header__nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--color-surface);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+    box-shadow: var(--shadow-md);
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      max-height var(--transition-normal),
+      opacity var(--transition-normal);
+  }
+
+  /* Show navigation when menu is open */
+  .header__nav:has(.nav--open) {
+    max-height: 500px;
+    opacity: 1;
   }
 }
 

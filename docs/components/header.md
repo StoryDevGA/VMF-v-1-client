@@ -7,10 +7,11 @@ A responsive header component that combines logo and navigation.
 - ✅ **Sticky Positioning**: Stays at top while scrolling (optional)
 - ✅ **Flexible Logo**: Text, image, or custom React element
 - ✅ **Navigation Integration**: Automatically includes Navigation component
+- ✅ **Mobile Hamburger Menu**: Automatic responsive menu for mobile devices
 - ✅ **Custom Content**: Add extra elements (search, user menu, etc.)
 - ✅ **Responsive**: Adapts to all screen sizes
 - ✅ **Theme Support**: Works with all color schemes
-- ✅ **Accessible**: Proper semantic HTML and ARIA
+- ✅ **Accessible**: Proper semantic HTML, ARIA, and keyboard support
 
 ## Basic Usage
 
@@ -71,6 +72,28 @@ function App() {
 <Header logo="My App" sticky={false} />
 ```
 
+## Mobile Hamburger Menu
+
+The Header automatically includes a responsive hamburger menu for mobile devices:
+
+### Behavior
+- **Desktop (768px+)**: Navigation links displayed horizontally
+- **Mobile (<768px)**: Hamburger icon shown, navigation hidden in collapsible menu
+- **Toggle**: Click hamburger to open/close menu
+- **Auto-close**: Menu closes when clicking navigation links or logo
+- **Keyboard**: Press `Escape` to close menu
+
+### Accessibility
+- Proper ARIA attributes (`aria-expanded`, `aria-controls`, `aria-label`)
+- Keyboard accessible (hamburger button and Escape key)
+- Screen reader friendly labels
+
+### Customization
+The hamburger menu uses design tokens and can be customized via CSS:
+- `header__hamburger` - Hamburger button
+- `header__hamburger-line` - Hamburger icon lines
+- `nav--open` - Open state modifier
+
 ## Testing
 
 Run tests:
@@ -78,7 +101,7 @@ Run tests:
 npm test Header
 ```
 
-22 comprehensive tests covering all functionality.
+26 comprehensive tests covering all functionality including mobile hamburger menu.
 
 ## Related Components
 
