@@ -18,8 +18,10 @@ import { Radio } from '../../components/Radio'
 import { Spinner } from '../../components/Spinner'
 import { Select } from '../../components/Select'
 import { Tooltip } from '../../components/Tooltip'
+import { useToaster } from '../../components/Toaster'
 
 function Components() {
+  const { addToast } = useToaster()
   const [loading, setLoading] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [sizeDialogOpen, setSizeDialogOpen] = useState(false)
@@ -72,6 +74,21 @@ function Components() {
   const handleAsyncAction = () => {
     setLoading(true)
     setTimeout(() => setLoading(false), 2000)
+  }
+
+  const triggerToast = (variant) => {
+    addToast({
+      title: variant === 'success' ? 'Success' : variant === 'error' ? 'Error' : variant === 'warning' ? 'Warning' : 'Info',
+      description:
+        variant === 'success'
+          ? 'Operation completed successfully.'
+          : variant === 'error'
+            ? 'Something went wrong. Please retry.'
+            : variant === 'warning'
+              ? 'Heads up: check the details.'
+              : 'Here is some neutral information.',
+      variant
+    })
   }
 
   return (
@@ -207,6 +224,33 @@ function Components() {
                   Default Open
                 </Button>
               </Tooltip>
+            </Card.Body>
+          </Card>
+        </div>
+      </section>
+
+      <section style={{ marginTop: '3rem' }}>
+        <h2 className="text-responsive-lg">Toaster Component</h2>
+        <p style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
+          Fire off toast notifications with variants and default durations. Positioning and limits are handled by the provider.
+        </p>
+
+        <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginTop: '1.5rem' }}>
+          <Card variant="outlined">
+            <Card.Header>Quick Triggers</Card.Header>
+            <Card.Body style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <Button size="sm" onClick={() => triggerToast('success')}>Success</Button>
+              <Button size="sm" variant="secondary" onClick={() => triggerToast('info')}>Info</Button>
+              <Button size="sm" variant="outline" onClick={() => triggerToast('warning')}>Warning</Button>
+              <Button size="sm" variant="danger" onClick={() => triggerToast('error')}>Error</Button>
+            </Card.Body>
+          </Card>
+          <Card variant="outlined">
+            <Card.Header>Example Copy</Card.Header>
+            <Card.Body>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)', lineHeight: 'var(--line-height-normal)' }}>
+                Toasts auto-dismiss after the default duration and are capped to the maximum queue size. Use them for lightweight, non-blocking feedback.
+              </p>
             </Card.Body>
           </Card>
         </div>

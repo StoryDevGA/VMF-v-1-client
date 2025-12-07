@@ -23,7 +23,8 @@ docs/
 │   ├── select.md                      # Select component
 │   ├── spinner.md                     # Spinner component
 │   ├── tickbox.md                     # Tickbox component
-│   └── tooltip.md                     # Tooltip component
+│   ├── tooltip.md                     # Tooltip component
+│   └── toaster.md                     # Toaster component
 └── design-system/                     # Design system documentation
     ├── css-design-system.md           # CSS design tokens and architecture
     ├── responsive-design.md           # Responsive design patterns and utilities
@@ -56,6 +57,7 @@ docs/
 - **[Spinner](./components/spinner.md)** - Simple, accessible loading spinner
 - **[Tickbox](./components/tickbox.md)** - Custom-styled, accessible checkbox component
 - **[Tooltip](./components/tooltip.md)** - Accessible tooltip with hover/focus triggers, positioning, and theming
+- **[Toaster](./components/toaster.md)** - Accessible toast notifications with variants and positioning
 
 ### Testing
 _(Documentation will be added as testing patterns are established)_

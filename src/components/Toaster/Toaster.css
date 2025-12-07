@@ -1,0 +1,131 @@
+/**
+ * Toaster Styles
+ *
+ * Theme-aware toast notifications.
+ */
+
+.toaster {
+  position: fixed;
+  z-index: var(--z-index-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  pointer-events: none;
+  width: min(420px, 90vw);
+}
+
+.toaster--top-left {
+  top: var(--spacing-lg);
+  left: var(--spacing-lg);
+  align-items: flex-start;
+}
+
+.toaster--top-right {
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  align-items: flex-end;
+}
+
+.toaster--bottom-left {
+  bottom: var(--spacing-lg);
+  left: var(--spacing-lg);
+  align-items: flex-start;
+}
+
+.toaster--bottom-right {
+  bottom: var(--spacing-lg);
+  right: var(--spacing-lg);
+  align-items: flex-end;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--spacing-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  pointer-events: auto;
+  animation: slide-in var(--transition-base) ease-out;
+}
+
+.toast__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.toast__title {
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: var(--font-size-sm);
+}
+
+.toast__description {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+.toast__close {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  padding: 0;
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.toast__close:hover {
+  color: var(--color-text-primary);
+  transform: scale(1.05);
+}
+
+.toast__close:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.toast--success {
+  border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
+}
+
+.toast--warning {
+  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
+.toast--error {
+  border-color: color-mix(in srgb, var(--color-error) 50%, transparent);
+}
+
+.toast--info {
+  border-color: color-mix(in srgb, var(--color-info) 50%, transparent);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .toaster {
+    left: var(--spacing-sm);
+    right: var(--spacing-sm);
+    width: auto;
+  }
+}
