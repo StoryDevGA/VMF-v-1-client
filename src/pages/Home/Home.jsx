@@ -5,7 +5,7 @@
  */
 
 import { Button } from '../../components/Button'
-import { Link } from 'react-router-dom'
+import { Link } from '../../components/Link'
 
 function Home() {
   return (

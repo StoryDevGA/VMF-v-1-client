@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import { Button } from '../../components/Button'
+import { Link } from '../../components/Link'
 
 function Components() {
   const [loading, setLoading] = useState(false)
@@ -80,6 +81,55 @@ function Components() {
           <div style={{ marginTop: '1rem' }}>
             <Button fullWidth>Full Width Button</Button>
           </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: '3rem' }}>
+        <h2>Link Component</h2>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>Variants</h3>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <Link to="/about" variant="primary">Primary Link</Link>
+            <Link to="/about" variant="secondary">Secondary Link</Link>
+            <Link to="/about" variant="subtle">Subtle Link</Link>
+            <Link to="/about" variant="danger">Danger Link</Link>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>Underline Styles</h3>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <Link to="/about" underline="none">No Underline</Link>
+            <Link to="/about" underline="hover">Hover Underline</Link>
+            <Link to="/about" underline="always">Always Underlined</Link>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>External Links</h3>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <Link href="https://react.dev">React Docs</Link>
+            <Link href="https://vitejs.dev" openInNewTab>Vite Docs</Link>
+            <Link href="https://github.com" variant="secondary" openInNewTab>GitHub</Link>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>States</h3>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <Link to="/about">Normal Link</Link>
+            <Link to="/about" disabled>Disabled Link</Link>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2rem' }}>
+          <h3>In Paragraphs</h3>
+          <p style={{ marginTop: '1rem', maxWidth: '600px', lineHeight: 'var(--line-height-relaxed)' }}>
+            Links in paragraphs automatically get subtle underlines for better readability.
+            For example, check out the <Link to="/components">components page</Link> or
+            read our <Link to="/about">about section</Link> to learn more.
+          </p>
         </div>
       </section>
 

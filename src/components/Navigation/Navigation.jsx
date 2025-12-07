@@ -11,6 +11,7 @@
  */
 
 import { NavLink } from 'react-router-dom'
+import { Link } from '../Link'
 import './Navigation.css'
 
 function Navigation() {
@@ -18,9 +19,9 @@ function Navigation() {
     <nav className="nav" role="navigation" aria-label="Main navigation">
       <div className="nav__container container">
         <div className="nav__brand">
-          <NavLink to="/" className="nav__logo">
+          <Link to="/" className="nav__logo" variant="subtle" underline="none">
             StoryLineOS
-          </NavLink>
+          </Link>
         </div>
 
         <ul className="nav__links" role="menubar">

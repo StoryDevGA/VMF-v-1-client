@@ -1,0 +1,220 @@
+/**
+ * Link Styles
+ *
+ * Uses BEM naming convention for clarity
+ * All values use design system tokens for consistency and theming support
+ */
+
+/* ===========================
+   BASE LINK STYLES
+   =========================== */
+
+.link {
+  /* Reset */
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+
+  /* Typography */
+  font-family: var(--font-primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  line-height: inherit;
+
+  /* Interaction */
+  cursor: pointer;
+  user-select: text;
+
+  /* Transitions */
+  transition:
+    color var(--transition-fast),
+    text-decoration-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+/* Focus state - accessibility */
+.link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Disabled state */
+.link--disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ===========================
+   LINK VARIANTS
+   =========================== */
+
+/* Primary - Main navigation and important links */
+.link--primary {
+  color: var(--color-action-primary);
+}
+
+.link--primary:hover:not(.link--disabled) {
+  color: var(--color-action-primary-hover);
+}
+
+.link--primary:active:not(.link--disabled) {
+  color: var(--color-action-primary-active);
+}
+
+/* Secondary - Less prominent links */
+.link--secondary {
+  color: var(--color-text-secondary);
+}
+
+.link--secondary:hover:not(.link--disabled) {
+  color: var(--color-text-primary);
+}
+
+.link--secondary:active:not(.link--disabled) {
+  color: var(--color-action-primary);
+}
+
+/* Subtle - Minimal emphasis, inherits color */
+.link--subtle {
+  color: inherit;
+}
+
+.link--subtle:hover:not(.link--disabled) {
+  color: var(--color-action-primary);
+}
+
+.link--subtle:active:not(.link--disabled) {
+  color: var(--color-action-primary-active);
+}
+
+/* Danger - Destructive or warning links */
+.link--danger {
+  color: var(--color-error);
+}
+
+.link--danger:hover:not(.link--disabled) {
+  color: #dc2626; /* Darker red */
+}
+
+.link--danger:active:not(.link--disabled) {
+  color: #b91c1c; /* Even darker */
+}
+
+/* ===========================
+   UNDERLINE VARIANTS
+   =========================== */
+
+/* No underline */
+.link--underline-none {
+  text-decoration: none;
+}
+
+/* Underline on hover only */
+.link--underline-hover {
+  text-decoration: none;
+}
+
+.link--underline-hover:hover:not(.link--disabled) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Always underlined */
+.link--underline-always {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.link--underline-always:hover:not(.link--disabled) {
+  text-decoration-color: currentColor;
+}
+
+/* ===========================
+   EXTERNAL LINK ICON
+   =========================== */
+
+.link__external-icon {
+  display: inline-block;
+  margin-left: 0.25em;
+  font-size: 0.875em;
+  vertical-align: super;
+  line-height: 1;
+}
+
+/* ===========================
+   VISITED STATE
+   =========================== */
+
+/* Only style visited state for external links to avoid confusion in SPA navigation */
+a.link[href^="http"]:visited:not(.link--disabled),
+a.link[href^="//"]:visited:not(.link--disabled) {
+  opacity: 0.8;
+}
+
+/* ===========================
+   ACCESSIBILITY
+   =========================== */
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .link {
+    transition: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .link--underline-always {
+    text-decoration-thickness: 2px;
+  }
+
+  .link:focus-visible {
+    outline-width: 3px;
+  }
+}
+
+/* ===========================
+   LINK IN HEADINGS
+   =========================== */
+
+h1 .link,
+h2 .link,
+h3 .link,
+h4 .link,
+h5 .link,
+h6 .link {
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* ===========================
+   LINK IN PARAGRAPHS
+   =========================== */
+
+p .link {
+  /* Subtle underline for better readability in body text */
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+p .link:hover:not(.link--disabled) {
+  text-decoration-color: currentColor;
+}
+
+/* Override for explicit underline-none in paragraphs */
+p .link--underline-none {
+  text-decoration: none;
+}
+
+p .link--underline-none:hover:not(.link--disabled) {
+  text-decoration: none;
+}

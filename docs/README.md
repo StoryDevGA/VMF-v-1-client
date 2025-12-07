@@ -9,7 +9,8 @@ docs/
 ├── README.md                          # This file
 ├── routing.md                         # Routing and navigation
 ├── components/                        # Component documentation
-│   └── button.md                      # Button component
+│   ├── button.md                      # Button component
+│   └── link.md                        # Link component
 └── design-system/                     # Design system documentation
     ├── css-design-system.md           # CSS design tokens and architecture
     ├── responsive-design.md           # Responsive design patterns and utilities
@@ -28,6 +29,7 @@ docs/
 
 ### Component Framework
 - **[Button](./components/button.md)** - Accessible button component with variants, sizes, and states
+- **[Link](./components/link.md)** - Smart link component for internal routing and external navigation
 
 ### Testing
 _(Documentation will be added as testing patterns are established)_
