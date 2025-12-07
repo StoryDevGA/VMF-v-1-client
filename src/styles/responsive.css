@@ -221,7 +221,12 @@
    RESPONSIVE TYPOGRAPHY
    =========================== */
 
-/* Responsive heading sizes */
+/**
+ * Responsive text utilities that scale with viewport
+ * Mobile-first approach: smaller on mobile, larger on desktop
+ */
+
+/* Extra large - For main headings (h1) */
 .text-responsive-xl {
   font-size: var(--font-size-xl);
   line-height: var(--line-height-tight);
@@ -239,6 +244,7 @@
   }
 }
 
+/* Large - For section headings (h2) */
 .text-responsive-lg {
   font-size: var(--font-size-lg);
   line-height: var(--line-height-tight);
@@ -248,6 +254,79 @@
   .text-responsive-lg {
     font-size: var(--font-size-xl);
   }
+}
+
+@media (min-width: 1024px) {
+  .text-responsive-lg {
+    font-size: var(--font-size-2xl);
+  }
+}
+
+/* Medium - For subsection headings (h3) */
+.text-responsive-md {
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+}
+
+@media (min-width: 768px) {
+  .text-responsive-md {
+    font-size: var(--font-size-lg);
+  }
+}
+
+@media (min-width: 1024px) {
+  .text-responsive-md {
+    font-size: var(--font-size-xl);
+  }
+}
+
+/* Base - For body text and smaller headings */
+.text-responsive-base {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+@media (min-width: 768px) {
+  .text-responsive-base {
+    font-size: var(--font-size-base);
+  }
+}
+
+/* Small - For captions and small text */
+.text-responsive-sm {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+@media (min-width: 768px) {
+  .text-responsive-sm {
+    font-size: var(--font-size-sm);
+  }
+}
+
+/**
+ * Fluid typography using clamp()
+ * Scales smoothly between min and max based on viewport width
+ * Better than breakpoint-based scaling for modern browsers
+ */
+.text-fluid-xl {
+  font-size: clamp(var(--font-size-xl), 5vw, var(--font-size-3xl));
+  line-height: var(--line-height-tight);
+}
+
+.text-fluid-lg {
+  font-size: clamp(var(--font-size-lg), 3.5vw, var(--font-size-2xl));
+  line-height: var(--line-height-tight);
+}
+
+.text-fluid-md {
+  font-size: clamp(var(--font-size-base), 2.5vw, var(--font-size-xl));
+  line-height: var(--line-height-normal);
+}
+
+.text-fluid-base {
+  font-size: clamp(var(--font-size-sm), 1.5vw, var(--font-size-base));
+  line-height: var(--line-height-relaxed);
 }
 
 /* ===========================

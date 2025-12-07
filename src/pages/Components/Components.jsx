@@ -18,13 +18,13 @@ function Components() {
 
   return (
     <div className="container" style={{ paddingTop: '2rem', paddingBottom: '3rem' }}>
-      <h1>Component Showcase</h1>
-      <p style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
+      <h1 className="text-fluid-xl">Component Showcase</h1>
+      <p className="text-responsive-base" style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
         Production-ready, accessible components for building modern web applications
       </p>
 
       <section style={{ marginTop: '3rem' }}>
-        <h2>Button Component</h2>
+        <h2 className="text-responsive-lg">Button Component</h2>
 
         <div style={{ marginTop: '2rem' }}>
           <h3>Variants</h3>
@@ -85,7 +85,7 @@ function Components() {
       </section>
 
       <section style={{ marginTop: '3rem' }}>
-        <h2>Link Component</h2>
+        <h2 className="text-responsive-lg">Link Component</h2>
 
         <div style={{ marginTop: '2rem' }}>
           <h3>Variants</h3>
@@ -134,7 +134,7 @@ function Components() {
       </section>
 
       <section style={{ marginTop: '4rem', padding: 'var(--spacing-xl)', backgroundColor: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-lg)' }}>
-        <h2>Coming Soon</h2>
+        <h2 className="text-responsive-lg">Coming Soon</h2>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
           More components are being built following the same production-ready standards:
         </p>
