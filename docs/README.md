@@ -18,10 +18,12 @@ docs/
 │   ├── footer.md                      # Footer component
 │   ├── header.md                      # Header component
 │   ├── input.md                       # Input component
+│   ├── link.md                        # Link component
 │   ├── radio.md                       # Radio component
+│   ├── select.md                      # Select component
 │   ├── spinner.md                     # Spinner component
 │   ├── tickbox.md                     # Tickbox component
-│   └── link.md                        # Link component
+│   └── tooltip.md                     # Tooltip component
 └── design-system/                     # Design system documentation
     ├── css-design-system.md           # CSS design tokens and architecture
     ├── responsive-design.md           # Responsive design patterns and utilities
@@ -48,10 +50,12 @@ docs/
 - **[Footer](./components/footer.md)** - Responsive footer with sections, links, and copyright
 - **[Header](./components/header.md)** - Responsive header with logo and navigation
 - **[Input](./components/input.md)** - Input component with floating label animation and very light placeholder text
+- **[Link](./components/link.md)** - Smart link component for internal routing and external navigation
 - **[Radio](./components/radio.md)** - Custom-styled, accessible radio button component
+- **[Select](./components/select.md)** - Custom-styled select dropdown with helper/error states
 - **[Spinner](./components/spinner.md)** - Simple, accessible loading spinner
 - **[Tickbox](./components/tickbox.md)** - Custom-styled, accessible checkbox component
-- **[Link](./components/link.md)** - Smart link component for internal routing and external navigation
+- **[Tooltip](./components/tooltip.md)** - Accessible tooltip with hover/focus triggers, positioning, and theming
 
 ### Testing
 _(Documentation will be added as testing patterns are established)_

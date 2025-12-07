@@ -17,6 +17,7 @@ import { Tickbox } from '../../components/Tickbox'
 import { Radio } from '../../components/Radio'
 import { Spinner } from '../../components/Spinner'
 import { Select } from '../../components/Select'
+import { Tooltip } from '../../components/Tooltip'
 
 function Components() {
   const [loading, setLoading] = useState(false)
@@ -38,6 +39,7 @@ function Components() {
   const [tickboxIndeterminateChecked, setTickboxIndeterminateChecked] = useState(false)
   const [tickboxDisabledCheckedState, setTickboxDisabledCheckedState] = useState(true) // For tick-disabled-checked
   const [tickboxDisabledIndeterminateChecked, setTickboxDisabledIndeterminateChecked] = useState(false) // For tick-disabled-indeterminate
+  const [controlledTooltipOpen, setControlledTooltipOpen] = useState(false)
 
   const handleTickboxChange = (e) => {
     const { id, checked } = e.target
@@ -137,6 +139,76 @@ function Components() {
           <div style={{ marginTop: '1rem' }}>
             <Button fullWidth>Full Width Button</Button>
           </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: '3rem' }}>
+        <h2 className="text-responsive-lg">Tooltip Component</h2>
+        <p style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)' }}>
+          Hover or focus to see contextual help. Tooltips respect themes, motion preferences, and keyboard access.
+        </p>
+
+        <div style={{ display: 'grid', gap: '1.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginTop: '1.5rem' }}>
+          <Card variant="outlined">
+            <Card.Header>Placements</Card.Header>
+            <Card.Body style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <Tooltip content="Top tooltip">
+                <Button size="sm">Top</Button>
+              </Tooltip>
+              <Tooltip content="Right tooltip" position="right">
+                <Button size="sm">Right</Button>
+              </Tooltip>
+              <Tooltip content="Bottom tooltip" position="bottom">
+                <Button size="sm">Bottom</Button>
+              </Tooltip>
+              <Tooltip content="Left tooltip" position="left">
+                <Button size="sm">Left</Button>
+              </Tooltip>
+            </Card.Body>
+          </Card>
+
+          <Card variant="outlined">
+            <Card.Header>Alignment</Card.Header>
+            <Card.Body style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <Tooltip content="Aligned start" position="bottom" align="start">
+                <Button size="sm">Start</Button>
+              </Tooltip>
+              <Tooltip content="Aligned center" position="bottom" align="center">
+                <Button size="sm">Center</Button>
+              </Tooltip>
+              <Tooltip content="Aligned end" position="bottom" align="end">
+                <Button size="sm">End</Button>
+              </Tooltip>
+            </Card.Body>
+          </Card>
+
+          <Card variant="outlined">
+            <Card.Header>Controlled</Card.Header>
+            <Card.Body style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <Tooltip content="Controlled tooltip" open={controlledTooltipOpen}>
+                <Button size="sm" onClick={() => setControlledTooltipOpen((open) => !open)}>
+                  {controlledTooltipOpen ? 'Hide Tooltip' : 'Show Tooltip'}
+                </Button>
+              </Tooltip>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
+                Click toggles visibility; hover/focus do not override controlled state.
+              </p>
+            </Card.Body>
+          </Card>
+
+          <Card variant="outlined">
+            <Card.Header>Instant / Default Open</Card.Header>
+            <Card.Body style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <Tooltip content="Opens immediately" openDelay={0} closeDelay={0}>
+                <Button size="sm">Instant</Button>
+              </Tooltip>
+              <Tooltip content="Visible by default" defaultOpen>
+                <Button size="sm" variant="secondary">
+                  Default Open
+                </Button>
+              </Tooltip>
+            </Card.Body>
+          </Card>
         </div>
       </section>
 
