@@ -7,6 +7,7 @@
 import { Button } from '../../components/Button'
 import { Link } from '../../components/Link'
 import { Card } from '../../components/Card'
+import { MdDesignServices, MdAccessibility, MdPhoneAndroid } from 'react-icons/md'
 import './Home.css'
 
 function Home() {
@@ -23,7 +24,9 @@ function Home() {
         <h2 className="text-responsive-lg">Features</h2>
         <div className="grid grid-cols-1 grid-md-3 home__features-grid">
           <Card variant="filled">
-            <Card.Header>🎨 Design System</Card.Header>
+            <Card.Header>
+              <MdDesignServices /> Design System
+            </Card.Header>
             <Card.Body>
               <p className="home__feature-card-body">
                 Comprehensive design tokens, responsive utilities, and theming support
@@ -31,7 +34,9 @@ function Home() {
             </Card.Body>
           </Card>
           <Card variant="filled">
-            <Card.Header>♿ Accessible</Card.Header>
+            <Card.Header>
+              <MdAccessibility /> Accessible
+            </Card.Header>
             <Card.Body>
               <p className="home__feature-card-body">
                 WCAG compliant, keyboard navigation, and screen reader support
@@ -39,7 +44,9 @@ function Home() {
             </Card.Body>
           </Card>
           <Card variant="filled">
-            <Card.Header>📱 Responsive</Card.Header>
+            <Card.Header>
+              <MdPhoneAndroid /> Responsive
+            </Card.Header>
             <Card.Body>
               <p className="home__feature-card-body">
                 Mobile-first design that works beautifully on all devices
