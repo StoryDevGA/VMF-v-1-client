@@ -1,0 +1,30 @@
+/**
+ * DateTime Styles
+ *
+ * Uses design tokens for typography and spacing.
+ */
+
+.datetime {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+
+.datetime__date {
+  color: var(--color-text-secondary);
+}
+
+.datetime__separator {
+  color: var(--color-text-tertiary);
+}
+
+.datetime__time {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}

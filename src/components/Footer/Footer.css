@@ -108,13 +108,22 @@
 .footer__bottom {
   border-top: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
   padding-top: var(--spacing-lg);
-  text-align: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
 }
 
 @media (min-width: 768px) {
   .footer__bottom {
-    text-align: left;
+    align-items: center;
+    flex-wrap: nowrap;
   }
+}
+
+.footer__datetime {
+  color: var(--color-text-secondary);
 }
 
 .footer__copyright {

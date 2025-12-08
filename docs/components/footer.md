@@ -7,6 +7,7 @@ A responsive footer component with flexible sections for navigation, information
 - ✅ **Responsive Layout**: Stacks on mobile (1 col), 2 cols on tablet, 4 cols on desktop
 - ✅ **Flexible Sections**: Support for navigation links, custom content, or mixed
 - ✅ **Auto Year**: Automatically displays current year in copyright
+- ✅ **Live Date & Time**: Real-time date and time display in the footer
 - ✅ **Link Integration**: Uses custom Link component for all navigation
 - ✅ **Theme Support**: Adapts to all color schemes
 - ✅ **Accessible**: Proper semantic HTML and ARIA attributes
@@ -54,6 +55,12 @@ function App() {
   copyright="My Company"
 />
 ```
+
+### Date & Time
+
+- The footer now includes a live date/time readout powered by the DateTime component.
+- Updates every second and uses design tokens for styling.
+- Time is wrapped in a `<time>` element with `aria-live="polite"` so screen readers hear updates without interruption.
 
 ## API Reference
 

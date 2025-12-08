@@ -26,6 +26,7 @@
  */
 
 import { Link } from '../Link'
+import { DateTime } from '../DateTime'
 import './Footer.css'
 
 export function Footer({
@@ -36,6 +37,7 @@ export function Footer({
   ...props
 }) {
   const currentYear = new Date().getFullYear()
+  const showCopyright = Boolean(copyright)
 
   return (
     <footer className={`footer ${className}`.trim()} {...props}>
@@ -76,14 +78,16 @@ export function Footer({
           </div>
         )}
 
-        {copyright && (
-          <div className="footer__bottom">
+        <div className="footer__bottom">
+          <DateTime className="footer__datetime" />
+
+          {showCopyright && (
             <p className="footer__copyright">
               {showYear && `© ${currentYear} `}
               {copyright}
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </footer>
   )

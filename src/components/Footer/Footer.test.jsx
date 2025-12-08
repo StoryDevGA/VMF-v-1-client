@@ -2,13 +2,18 @@
  * Footer Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { format } from 'date-fns'
 import { Footer } from './Footer'
 
 // Wrapper for React Router context
 const RouterWrapper = ({ children }) => <BrowserRouter>{children}</BrowserRouter>
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('Footer Component', () => {
   // ===========================
@@ -81,6 +86,27 @@ describe('Footer Component', () => {
         </RouterWrapper>
       )
       expect(screen.queryByText(/©/)).not.toBeInTheDocument()
+    })
+  })
+
+  // ===========================
+  // DATE & TIME
+  // ===========================
+
+  describe('Date & Time', () => {
+    it('should render the current date and time', () => {
+      vi.useFakeTimers()
+      const mockDate = new Date('2025-02-10T15:30:45Z')
+      vi.setSystemTime(mockDate)
+
+      render(
+        <RouterWrapper>
+          <Footer copyright="Date Test" />
+        </RouterWrapper>
+      )
+
+      expect(screen.getByText(format(mockDate, 'EEEE, MMMM d, yyyy'))).toBeInTheDocument()
+      expect(screen.getByText(format(mockDate, 'hh:mm:ss a'))).toBeInTheDocument()
     })
   })
 
