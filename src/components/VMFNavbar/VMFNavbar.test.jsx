@@ -38,6 +38,7 @@ describe('VMFNavbar Component', () => {
       expect(screen.getByRole('link', { name: /vmf-d/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /vmf-e/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /vmf-f/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /vmf-g/i })).toBeInTheDocument()
     })
 
     it('should render links with correct href attributes', () => {
@@ -54,6 +55,7 @@ describe('VMFNavbar Component', () => {
       expect(screen.getByRole('link', { name: /vmf-d/i })).toHaveAttribute('href', '/vmf/d')
       expect(screen.getByRole('link', { name: /vmf-e/i })).toHaveAttribute('href', '/vmf/e')
       expect(screen.getByRole('link', { name: /vmf-f/i })).toHaveAttribute('href', '/vmf/f')
+      expect(screen.getByRole('link', { name: /vmf-g/i })).toHaveAttribute('href', '/vmf/g')
     })
   })
 
@@ -187,14 +189,14 @@ describe('VMFNavbar Component', () => {
   })
 
   describe('Link Structure', () => {
-    it('should render 7 navigation links', () => {
+    it('should render 8 navigation links', () => {
       render(
         <BrowserRouter>
           <VMFNavbar />
         </BrowserRouter>
       )
       const links = screen.getAllByRole('link')
-      expect(links).toHaveLength(7)
+      expect(links).toHaveLength(8)
     })
 
     it('should render list items in correct order', () => {
@@ -212,6 +214,7 @@ describe('VMFNavbar Component', () => {
       expect(links[4]).toHaveTextContent('VMF-D')
       expect(links[5]).toHaveTextContent('VMF-E')
       expect(links[6]).toHaveTextContent('VMF-F')
+      expect(links[7]).toHaveTextContent('VMF-G')
     })
   })
 })

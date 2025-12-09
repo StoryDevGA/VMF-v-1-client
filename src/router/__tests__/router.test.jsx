@@ -54,6 +54,20 @@ describe('Router', () => {
 
       expect(await screen.findByText(/About StoryLineOS/i)).toBeInTheDocument()
     })
+
+    it('should render VMF-G page at /vmf/g', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/vmf/g'],
+      })
+
+      render(
+        <ToasterProvider>
+          <RouterProvider router={testRouter} />
+        </ToasterProvider>
+      )
+
+      expect(await screen.findByText(/VMF-G: Advanced Components/i)).toBeInTheDocument()
+    })
   })
 
   describe('Navigation', () => {

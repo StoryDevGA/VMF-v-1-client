@@ -95,6 +95,16 @@ export function VMFNavbar() {
                 VMF-F
               </NavLink>
             </li>
+            <li>
+              <NavLink
+                to="/vmf/g"
+                className={({ isActive }) =>
+                  isActive ? 'vmf-navbar__link vmf-navbar__link--active' : 'vmf-navbar__link'
+                }
+              >
+                VMF-G
+              </NavLink>
+            </li>
           </ul>
         </nav>
       </Fieldset.Content>

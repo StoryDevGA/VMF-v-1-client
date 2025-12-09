@@ -23,6 +23,7 @@ const VMFC = lazy(() => import('../pages/VMF/VMF-C'))
 const VMFD = lazy(() => import('../pages/VMF/VMF-D'))
 const VMFE = lazy(() => import('../pages/VMF/VMF-E'))
 const VMFF = lazy(() => import('../pages/VMF/VMF-F'))
+const VMFG = lazy(() => import('../pages/VMF/VMF-G'))
 
 /**
  * Loading Fallback Component
@@ -127,6 +128,10 @@ export const router = createBrowserRouter([
       {
         path: 'vmf/f',
         element: <VMFF />,
+      },
+      {
+        path: 'vmf/g',
+        element: <VMFG />,
       },
     ],
   },
