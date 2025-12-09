@@ -1,4 +1,5 @@
 .vmf-navbar {
+  width: 100%;
   background-color: var(--color-surface);
   border-bottom: var(--border-width-thin) solid var(--color-border);
   padding: var(--spacing-md) 0;
@@ -8,14 +9,24 @@
 .vmf-navbar__links {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   gap: var(--spacing-sm);
   list-style: none;
   padding: 0;
   margin: 0;
+  width: 100%;
+}
+
+.vmf-navbar__links li {
+  flex: 1;
+  display: flex;
 }
 
 .vmf-navbar__link {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
   padding: var(--spacing-sm) var(--spacing-md);
   color: var(--color-text-secondary);
   text-decoration: none;

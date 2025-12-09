@@ -16,7 +16,7 @@
 
   /* Spacing */
   margin-top: auto;
-  padding: var(--spacing-2xl) 0 var(--spacing-xl);
+  padding: var(--spacing-md) 0;
 
   /* Typography */
   font-size: var(--font-size-sm);
@@ -26,7 +26,7 @@
 .footer__container {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xl);
+  gap: var(--spacing-md);
 }
 
 /* ===========================
@@ -36,7 +36,7 @@
 .footer__sections {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
-  gap: var(--spacing-xl);
+  gap: var(--spacing-md);
 }
 
 /* Responsive grid: 2 columns on tablet, 4 on desktop */
@@ -107,7 +107,7 @@
 
 .footer__bottom {
   border-top: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
-  padding-top: var(--spacing-lg);
+  padding-top: var(--spacing-sm);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
