@@ -1,0 +1,214 @@
+/**
+ * Textarea Component Styles
+ *
+ * Follows BEM naming convention
+ */
+
+/* Container */
+.textarea-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: var(--font-family-base, Arial, Helvetica, sans-serif);
+  min-width: 0; /* Prevent flex item overflow */
+}
+
+.textarea-container--full-width {
+  width: 100%;
+}
+
+/* Wrapper */
+.textarea-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.textarea-wrapper--label-floating {
+  /* Label is floating above */
+}
+
+/* Textarea base styles */
+.textarea {
+  width: 100%;
+  padding: 1rem 0.75rem;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text, #333);
+  background-color: var(--color-background, #fff);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  outline: none;
+  min-height: 100px;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  border-color: var(--color-primary, #007bff);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.textarea:disabled {
+  background-color: var(--color-disabled-bg, #f5f5f5);
+  color: var(--color-disabled-text, #999);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.textarea::placeholder {
+  color: var(--color-placeholder, #999);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.textarea:focus::placeholder {
+  opacity: 1;
+}
+
+/* Resize options */
+.textarea--resize-both {
+  resize: both;
+}
+
+.textarea--resize-horizontal {
+  resize: horizontal;
+}
+
+.textarea--resize-vertical {
+  resize: vertical;
+}
+
+.textarea--resize-none {
+  resize: none;
+}
+
+/* Label */
+.textarea-label {
+  position: absolute;
+  top: 1rem;
+  left: 0.75rem;
+  color: var(--color-label, #666);
+  font-size: 1rem;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  background-color: transparent;
+  padding: 0 0.25rem;
+}
+
+.textarea-label--floating {
+  top: -0.5rem;
+  left: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-primary, #007bff);
+  background-color: var(--color-background, #fff);
+}
+
+.textarea-label--required::after {
+  content: ' *';
+  color: var(--color-error, #dc3545);
+}
+
+/* Error state */
+.textarea-container--error .textarea {
+  border-color: var(--color-error, #dc3545);
+}
+
+.textarea-container--error .textarea:focus {
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.textarea-container--error .textarea-label--floating {
+  color: var(--color-error, #dc3545);
+}
+
+.textarea-error {
+  font-size: 0.875rem;
+  color: var(--color-error, #dc3545);
+  margin-top: 0.25rem;
+}
+
+/* Helper text */
+.textarea-helper {
+  font-size: 0.875rem;
+  color: var(--color-helper-text, #666);
+  margin-top: 0.25rem;
+}
+
+/* Disabled state */
+.textarea-container--disabled .textarea-label {
+  color: var(--color-disabled-text, #999);
+}
+
+/* Variants */
+.textarea-container--default .textarea {
+  border: 1px solid var(--color-border, #ccc);
+  background-color: var(--color-background, #fff);
+}
+
+.textarea-container--outlined .textarea {
+  border: 2px solid var(--color-border, #ccc);
+  background-color: transparent;
+}
+
+.textarea-container--filled .textarea {
+  border: none;
+  border-bottom: 2px solid var(--color-border, #ccc);
+  border-radius: 4px 4px 0 0;
+  background-color: var(--color-input-bg, #f5f5f5);
+}
+
+.textarea-container--filled .textarea:focus {
+  border-bottom-color: var(--color-primary, #007bff);
+  box-shadow: none;
+}
+
+/* Sizes */
+.textarea-container--sm .textarea {
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  min-height: 80px;
+}
+
+.textarea-container--sm .textarea-label {
+  top: 0.5rem;
+  left: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.textarea-container--sm .textarea-label--floating {
+  font-size: 0.65rem;
+}
+
+.textarea-container--md .textarea {
+  padding: 0.75rem;
+  font-size: 1rem;
+  min-height: 100px;
+}
+
+.textarea-container--md .textarea-label {
+  top: 0.75rem;
+  left: 0.75rem;
+  font-size: 1rem;
+}
+
+.textarea-container--md .textarea-label--floating {
+  font-size: 0.75rem;
+}
+
+.textarea-container--lg .textarea {
+  padding: 1rem;
+  font-size: 1.125rem;
+  min-height: 120px;
+}
+
+.textarea-container--lg .textarea-label {
+  top: 1rem;
+  left: 1rem;
+  font-size: 1.125rem;
+}
+
+.textarea-container--lg .textarea-label--floating {
+  font-size: 0.875rem;
+}

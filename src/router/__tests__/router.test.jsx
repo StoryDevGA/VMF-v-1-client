@@ -66,7 +66,7 @@ describe('Router', () => {
         </ToasterProvider>
       )
 
-      expect(await screen.findByText(/VMF-G: Advanced Components/i)).toBeInTheDocument()
+      expect(await screen.findByText(/VMF-G: Complete Form/i)).toBeInTheDocument()
     })
   })
 
