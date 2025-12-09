@@ -1704,9 +1704,39 @@ function Components() {
         <div className="components__subsection">
           <h3>Sizes</h3>
           <div className="components__grid--narrow-max">
-            <Select id="select-sm" size="sm" label="Small" options={[]} placeholder="Small Select" />
-            <Select id="select-md" size="md" label="Medium" options={[]} placeholder="Medium Select" />
-            <Select id="select-lg" size="lg" label="Large" options={[]} placeholder="Large Select" />
+            <Select
+              id="select-sm"
+              size="sm"
+              label="Small"
+              options={[
+                { value: 'option1', label: 'Option 1' },
+                { value: 'option2', label: 'Option 2' },
+                { value: 'option3', label: 'Option 3' },
+              ]}
+              placeholder="Small Select"
+            />
+            <Select
+              id="select-md"
+              size="md"
+              label="Medium"
+              options={[
+                { value: 'option1', label: 'Option 1' },
+                { value: 'option2', label: 'Option 2' },
+                { value: 'option3', label: 'Option 3' },
+              ]}
+              placeholder="Medium Select"
+            />
+            <Select
+              id="select-lg"
+              size="lg"
+              label="Large"
+              options={[
+                { value: 'option1', label: 'Option 1' },
+                { value: 'option2', label: 'Option 2' },
+                { value: 'option3', label: 'Option 3' },
+              ]}
+              placeholder="Large Select"
+            />
           </div>
         </div>
 
@@ -1716,21 +1746,33 @@ function Components() {
             <Select
               id="select-error"
               label="Error State"
-              options={[]}
+              options={[
+                { value: 'red', label: 'Red' },
+                { value: 'blue', label: 'Blue' },
+                { value: 'green', label: 'Green' },
+              ]}
               placeholder="Select an option"
               error="This field is required"
             />
             <Select
               id="select-helper"
               label="With Helper Text"
-              options={[]}
+              options={[
+                { value: 'beginner', label: 'Beginner' },
+                { value: 'intermediate', label: 'Intermediate' },
+                { value: 'advanced', label: 'Advanced' },
+              ]}
               placeholder="Select an option"
               helperText="Choose the best option for your project."
             />
             <Select
               id="select-disabled"
               label="Disabled State"
-              options={[]}
+              options={[
+                { value: 'disabled1', label: 'Option 1' },
+                { value: 'disabled2', label: 'Option 2' },
+                { value: 'disabled3', label: 'Option 3' },
+              ]}
               placeholder="Disabled"
               disabled
             />

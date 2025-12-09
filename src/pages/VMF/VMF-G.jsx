@@ -25,6 +25,24 @@ function VMFG() {
 
   const [errors, setErrors] = useState({})
 
+  // Country options
+  const countryOptions = [
+    { value: 'us', label: 'United States' },
+    { value: 'uk', label: 'United Kingdom' },
+    { value: 'ca', label: 'Canada' },
+    { value: 'au', label: 'Australia' },
+    { value: 'de', label: 'Germany' },
+    { value: 'fr', label: 'France' },
+    { value: 'jp', label: 'Japan' },
+    { value: 'other', label: 'Other' },
+  ]
+
+  // Get country label from value
+  const getCountryLabel = (value) => {
+    const country = countryOptions.find(c => c.value === value)
+    return country ? country.label : '-'
+  }
+
   // Check if form is valid
   const isFormValid = useMemo(() => {
     // Check if there are any errors
@@ -126,7 +144,7 @@ function VMFG() {
                 <p><strong>Last Name:</strong> {formData.lastName || '-'}</p>
                 <p><strong>Email:</strong> {formData.email || '-'}</p>
                 <p><strong>Phone:</strong> {formData.phone || '-'}</p>
-                <p><strong>Country:</strong> {formData.country || '-'}</p>
+                <p><strong>Country:</strong> {getCountryLabel(formData.country)}</p>
               </div>
               <div className="vmf__form-section">
                 <h4>Account Type</h4>
@@ -202,17 +220,9 @@ function VMFG() {
                 error={errors.country}
                 required
                 fullWidth
-              >
-                <option value="">Select a country</option>
-                <option value="us">United States</option>
-                <option value="uk">United Kingdom</option>
-                <option value="ca">Canada</option>
-                <option value="au">Australia</option>
-                <option value="de">Germany</option>
-                <option value="fr">France</option>
-                <option value="jp">Japan</option>
-                <option value="other">Other</option>
-              </Select>
+                placeholder="Select a country"
+                options={countryOptions}
+              />
             </div>
 
             {/* Account Type Section */}
