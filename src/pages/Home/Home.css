@@ -9,6 +9,9 @@
 .home__header {
   text-align: center;
   margin-bottom: 3rem;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .home__subtitle {
@@ -20,12 +23,71 @@
   margin-top: 3rem;
 }
 
-.home__features-grid {
-  margin-top: 2rem;
+/* Value Proposition */
+.home__value-prop {
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-md);
 }
 
+.home__value-prop:last-child {
+  margin-bottom: 0;
+}
+
+/* What We Deliver */
+.home__delivery-grid {
+  gap: var(--spacing-lg);
+}
+
+/* Why It Works */
+.home__why-works {
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-md);
+}
+
+.home__why-works:last-child {
+  margin-bottom: 0;
+}
+
+/* Who We Help */
+.home__help-list {
+  list-style-type: disc;
+  padding-left: var(--spacing-xl);
+  color: var(--color-text);
+}
+
+.home__help-list li {
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-sm);
+}
+
+.home__help-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* The Outcome */
+.home__outcome-section {
+  margin-bottom: 3rem;
+}
+
+.home__outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.home__outcome-item {
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-relaxed);
+}
+
+/* CTA Section */
 .home__cta-section {
   margin-top: 3rem;
+  margin-bottom: 3rem;
   text-align: center;
 }
 
@@ -37,7 +99,9 @@
   flex-wrap: wrap;
 }
 
-.home__feature-card-body {
-  color: var(--color-text-secondary);
-  margin-top: var(--spacing-sm);
+/* Responsive adjustments */
+@media (min-width: 768px) {
+  .home__outcome-item {
+    font-size: var(--font-size-xl);
+  }
 }

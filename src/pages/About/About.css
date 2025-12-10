@@ -8,39 +8,37 @@
 }
 
 .about__section {
-  margin-top: 2rem;
-}
-
-.about__section--spacious {
   margin-top: 3rem;
 }
 
-.about__description {
-  color: var(--color-text-secondary);
-  margin-top: var(--spacing-md);
+.about__section:first-of-type {
+  margin-top: 2rem;
+}
+
+/* Text content */
+.about__text {
+  color: var(--color-text);
   line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-md);
 }
 
-.about__tech-grid {
-  margin-top: 1rem;
-  gap: var(--spacing-lg);
+.about__text:last-child {
+  margin-bottom: 0;
 }
 
-.about__tech-list {
-  margin-top: var(--spacing-sm);
-  color: var(--color-text-secondary);
+/* Lists */
+.about__list {
+  list-style-type: disc;
+  padding-left: var(--spacing-xl);
+  color: var(--color-text);
+  margin-bottom: var(--spacing-md);
 }
 
-.about__principles-grid {
-  margin-top: 1rem;
+.about__list li {
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--spacing-sm);
 }
 
-.about__principle-text {
-  color: var(--color-text-secondary);
-  margin-top: var(--spacing-xs);
-}
-
-.about__doc-list {
-  margin-top: var(--spacing-md);
-  color: var(--color-text-secondary);
+.about__list li:last-child {
+  margin-bottom: 0;
 }

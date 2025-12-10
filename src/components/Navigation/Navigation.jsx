@@ -44,14 +44,14 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           </li>
           <li role="none">
             <NavLink
-              to="/components"
+              to="/vmf"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
               role="menuitem"
               onClick={onLinkClick}
             >
-              Components
+              VMF
             </NavLink>
           </li>
           <li role="none">
@@ -68,14 +68,14 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           </li>
           <li role="none">
             <NavLink
-              to="/vmf"
+              to="/components"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
               role="menuitem"
               onClick={onLinkClick}
             >
-              VMF
+              Components
             </NavLink>
           </li>
         </ul>
