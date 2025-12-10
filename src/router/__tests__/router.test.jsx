@@ -24,7 +24,7 @@ describe('Router', () => {
       )
 
       // Wait for lazy-loaded component
-      expect(await screen.findByText(/Welcome to StoryLineOS/i)).toBeInTheDocument()
+      expect(await screen.findByText(/Transform the Way Your Organisation Thinks, Works, and Performs/i)).toBeInTheDocument()
     })
 
     it('should render components page at /components', async () => {
@@ -52,7 +52,7 @@ describe('Router', () => {
         </ToasterProvider>
       )
 
-      expect(await screen.findByText(/About StoryLineOS/i)).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: /^About$/i })).toBeInTheDocument()
     })
 
     it('should render VMF-G page at /vmf/g', async () => {
