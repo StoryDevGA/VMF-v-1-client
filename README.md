@@ -66,13 +66,24 @@ All components follow these principles:
 - Link (internal and external navigation)
 - Avatar (user images)
 - Spinner (loading indicators)
+- Status (circle indicators with optional text)
 - Tooltip (contextual help)
 - Toaster (notifications)
 - And more...
 
-## Recent Updates (2025-12-09)
+## Recent Updates
 
-### Added
+### 2025-12-10
+
+#### Components
+- **Status Component** with circle indicator and optional inline text
+  - Five variants (success, warning, error, info, neutral)
+  - Three sizes (sm, md, lg)
+  - Optional pulse animation
+  - Full accessibility support with role="status"
+  - Comprehensive test coverage (32 tests)
+
+### 2025-12-09
 
 #### Design System
 - Added `--spacing-2xs` (0.125rem / 2px) to the design system spacing scale for more granular spacing control

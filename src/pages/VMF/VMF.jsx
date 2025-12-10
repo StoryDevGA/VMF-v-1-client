@@ -1,5 +1,7 @@
 import { Fieldset } from '../../components/Fieldset'
 import { VMFNavbar } from '../../components/VMFNavbar'
+import { Status } from '../../components/Status'
+import { Card } from '../../components/Card'
 import './VMF.css'
 
 function VMF() {
@@ -9,6 +11,19 @@ function VMF() {
       <p className="vmf__subtitle">Virtual Management Framework</p>
 
       <VMFNavbar />
+
+      <Fieldset variant="outlined" gap="md" style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <Fieldset.Legend>System Status</Fieldset.Legend>
+        <Fieldset.Content>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-lg)', alignItems: 'flex-start' }}>
+            <Status variant="success" pulse>API Server</Status>
+            <Status variant="success">Database</Status>
+            <Status variant="warning">Cache</Status>
+            <Status variant="info" pulse>Processing</Status>
+            <Status variant="error">Email Service</Status>
+          </div>
+        </Fieldset.Content>
+      </Fieldset>
 
       <Fieldset variant="outlined">
         <Fieldset.Legend>Main Workspace</Fieldset.Legend>

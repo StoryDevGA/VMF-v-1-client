@@ -1,0 +1,162 @@
+/**
+ * Status Styles
+ *
+ * Uses BEM naming convention for clarity
+ * All values use design system tokens for consistency and theming support
+ */
+
+/* ===========================
+   BASE STATUS STYLES
+   =========================== */
+
+.status {
+  /* Layout */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+
+  /* Typography */
+  font-family: var(--font-primary);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+
+  /* Interaction */
+  user-select: none;
+}
+
+/* ===========================
+   STATUS INDICATOR (Circle)
+   =========================== */
+
+.status__indicator {
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast);
+}
+
+/* ===========================
+   STATUS TEXT
+   =========================== */
+
+.status__text {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* ===========================
+   STATUS VARIANTS
+   =========================== */
+
+/* Success - Positive status */
+.status--success .status__indicator {
+  background-color: var(--color-success);
+}
+
+.status--success .status__text {
+  color: var(--color-success);
+}
+
+/* Warning - Caution status */
+.status--warning .status__indicator {
+  background-color: var(--color-warning);
+}
+
+.status--warning .status__text {
+  color: var(--color-warning);
+}
+
+/* Error - Negative status */
+.status--error .status__indicator {
+  background-color: var(--color-error);
+}
+
+.status--error .status__text {
+  color: var(--color-error);
+}
+
+/* Info - Informational status */
+.status--info .status__indicator {
+  background-color: var(--color-action-primary);
+}
+
+.status--info .status__text {
+  color: var(--color-action-primary);
+}
+
+/* Neutral - Default status */
+.status--neutral .status__indicator {
+  background-color: var(--color-text-secondary);
+}
+
+.status--neutral .status__text {
+  color: var(--color-text-secondary);
+}
+
+/* ===========================
+   STATUS SIZES
+   =========================== */
+
+.status--sm .status__indicator {
+  width: 8px;
+  height: 8px;
+}
+
+.status--sm .status__text {
+  font-size: var(--font-size-sm);
+}
+
+.status--md .status__indicator {
+  width: 10px;
+  height: 10px;
+}
+
+.status--md .status__text {
+  font-size: var(--font-size-base);
+}
+
+.status--lg .status__indicator {
+  width: 12px;
+  height: 12px;
+}
+
+.status--lg .status__text {
+  font-size: var(--font-size-lg);
+}
+
+/* ===========================
+   PULSE ANIMATION
+   =========================== */
+
+.status--pulse .status__indicator {
+  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ===========================
+   ACCESSIBILITY
+   =========================== */
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .status--pulse .status__indicator {
+    animation: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .status__indicator {
+    /* Add border for better visibility in high contrast mode */
+    outline: 1px solid currentColor;
+    outline-offset: 1px;
+  }
+}

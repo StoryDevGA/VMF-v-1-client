@@ -16,6 +16,7 @@ import { Input } from '../../components/Input'
 import { Tickbox } from '../../components/Tickbox'
 import { Radio } from '../../components/Radio'
 import { Spinner } from '../../components/Spinner'
+import { Status } from '../../components/Status'
 import { Select } from '../../components/Select'
 import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
@@ -1673,6 +1674,140 @@ function Components() {
               <Spinner size="sm" color="inherit" /> Loading
             </Button>
           </div>
+        </div>
+      </section>
+
+      <section className="components__section">
+        <h2 className="text-responsive-lg">Status Component</h2>
+        <p className="text-responsive-base components__description">
+          A flexible status indicator with circle and optional inline text for showing states and activity.
+        </p>
+
+        <div className="components__subsection">
+          <h3>Variants</h3>
+          <div className="components__flex-column">
+            <Status variant="success">Active</Status>
+            <Status variant="warning">Pending</Status>
+            <Status variant="error">Failed</Status>
+            <Status variant="info">Processing</Status>
+            <Status variant="neutral">Inactive</Status>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Sizes</h3>
+          <div className="components__flex-column">
+            <Status variant="success" size="sm">Small Status</Status>
+            <Status variant="info" size="md">Medium Status (Default)</Status>
+            <Status variant="warning" size="lg">Large Status</Status>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Indicator Only (No Text)</h3>
+          <div className="components__flex-group">
+            <Status variant="success" />
+            <Status variant="warning" />
+            <Status variant="error" />
+            <Status variant="info" />
+            <Status variant="neutral" />
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Pulse Animation</h3>
+          <div className="components__flex-column">
+            <Status variant="success" pulse>Online</Status>
+            <Status variant="error" pulse>Alert</Status>
+            <Status variant="info" pulse>Syncing</Status>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>User Status Examples</h3>
+          <div className="components__grid--280">
+            <Card variant="outlined">
+              <Card.Body>
+                <div className="components__user-profile-avatar">
+                  <Avatar name="Sarah Johnson" size="lg" />
+                  <div>
+                    <h4 className="components__user-profile-name">Sarah Johnson</h4>
+                    <Status variant="success" size="sm">Online</Status>
+                  </div>
+                </div>
+              </Card.Body>
+            </Card>
+
+            <Card variant="outlined">
+              <Card.Body>
+                <div className="components__user-profile-avatar">
+                  <Avatar name="Michael Chen" size="lg" />
+                  <div>
+                    <h4 className="components__user-profile-name">Michael Chen</h4>
+                    <Status variant="warning" size="sm">Away</Status>
+                  </div>
+                </div>
+              </Card.Body>
+            </Card>
+
+            <Card variant="outlined">
+              <Card.Body>
+                <div className="components__user-profile-avatar">
+                  <Avatar name="Emily Rodriguez" size="lg" />
+                  <div>
+                    <h4 className="components__user-profile-name">Emily Rodriguez</h4>
+                    <Status variant="error" size="sm">Busy</Status>
+                  </div>
+                </div>
+              </Card.Body>
+            </Card>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>System Status Examples</h3>
+          <div className="components__grid">
+            <Card variant="filled">
+              <Card.Header>Server Status</Card.Header>
+              <Card.Body className="components__flex-column">
+                <Status variant="success">API Server: Running</Status>
+                <Status variant="success">Database: Connected</Status>
+                <Status variant="warning">Cache: Warming Up</Status>
+              </Card.Body>
+            </Card>
+
+            <Card variant="filled">
+              <Card.Header>Deployment Pipeline</Card.Header>
+              <Card.Body className="components__flex-column">
+                <Status variant="success">Build: Passed</Status>
+                <Status variant="info" pulse>Tests: Running</Status>
+                <Status variant="neutral">Deploy: Waiting</Status>
+              </Card.Body>
+            </Card>
+
+            <Card variant="filled">
+              <Card.Header>Service Health</Card.Header>
+              <Card.Body className="components__flex-column">
+                <Status variant="success">Authentication: Healthy</Status>
+                <Status variant="error">Email Service: Down</Status>
+                <Status variant="success">File Storage: Healthy</Status>
+              </Card.Body>
+            </Card>
+          </div>
+        </div>
+
+        <div className="components__info-box">
+          <h4 className="components__info-title">Status Features</h4>
+          <ul className="components__info-list">
+            <li>Circle indicator with optional inline text</li>
+            <li>Five variants: success, warning, error, info, neutral</li>
+            <li>Three sizes: sm, md, lg</li>
+            <li>Optional pulse animation for active states</li>
+            <li>Flexible - works with or without text label</li>
+            <li>Full accessibility with role="status" and ARIA labels</li>
+            <li>Respects prefers-reduced-motion for animations</li>
+            <li>High contrast mode support</li>
+          </ul>
         </div>
       </section>
 
