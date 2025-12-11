@@ -13,18 +13,21 @@
 
 /* Size variants */
 .logo--small .logo__image {
-  width: 100px;
+  height: 24px;
+  width: auto;
 }
 
 .logo--medium .logo__image {
-  width: 150px;
+  height: 32px;
+  width: auto;
 }
 
 .logo--large .logo__image {
-  width: 200px;
+  height: 40px;
+  width: auto;
 }
 
 .logo--full .logo__image {
-  width: 100%;
-  max-width: 435px;
+  height: 96px; /* Adjusted actual image */
+  width: auto;
 }

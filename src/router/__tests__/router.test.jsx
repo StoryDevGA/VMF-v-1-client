@@ -92,7 +92,7 @@ describe('Router', () => {
 
       // Navigation should be present
       expect(await screen.findByRole('navigation')).toBeInTheDocument()
-      expect(screen.getAllByText('StoryLineOS').length).toBeGreaterThan(0)
+      expect(screen.getByRole('img', { name: /StoryLineOS Logo/i })).toBeInTheDocument()
     })
 
     it('should have correct navigation links', async () => {

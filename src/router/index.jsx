@@ -10,6 +10,7 @@ import { createBrowserRouter, Outlet } from 'react-router-dom'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
+import { Logo } from '../components/Logo'
 import './router.css'
 
 // Lazy-loaded page components
@@ -69,7 +70,7 @@ function RootLayout() {
 
   return (
     <div className="root-layout">
-      <Header logo="StoryLineOS" />
+      <Header logo={<Logo size="full" />} />
       <main className="root-layout__main">
         <Suspense fallback={<LoadingFallback />}>
           <Outlet />
