@@ -1,0 +1,28 @@
+/**
+ * Warm Amber Brand Theme
+ *
+ * Personality: Warmth, optimism, friendly
+ * Primary: Warm Amber (#d97706)
+ * Usage: data-theme="brand-warm"
+ */
+
+[data-theme='brand-warm'] {
+  /* Amber/Orange palette - Warm and approachable */
+  --color-primary-50: #fffbeb;
+  --color-primary-100: #fef3c7;
+  --color-primary-200: #fde68a;
+  --color-primary-300: #fcd34d;
+  --color-primary-400: #fbbf24;
+  --color-primary-500: #f59e0b;
+  --color-primary-600: #d97706;
+  --color-primary-700: #b45309;
+  --color-primary-800: #92400e;
+  --color-primary-900: #78350f;
+
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+
+  --color-border-focus: var(--color-primary-500);
+  --color-info: var(--color-primary-500);
+}

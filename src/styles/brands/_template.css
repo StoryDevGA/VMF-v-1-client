@@ -1,0 +1,41 @@
+/**
+ * Brand Theme Template
+ *
+ * Copy this file to create a new brand theme.
+ *
+ * Steps:
+ * 1. Copy this file: cp _template.css newbrand.css
+ * 2. Generate color palette at https://uicolors.app/
+ * 3. Replace BRANDNAME and COLOR values below
+ * 4. Add import to brands/index.css
+ * 5. Verify WCAG AA contrast (4.5:1 minimum)
+ */
+
+[data-theme='brand-BRANDNAME'] {
+  /* Brand primary color palette */
+  /* Generate at: https://uicolors.app/ */
+  --color-primary-50: #COLOR;
+  --color-primary-100: #COLOR;
+  --color-primary-200: #COLOR;
+  --color-primary-300: #COLOR;
+  --color-primary-400: #COLOR;
+  --color-primary-500: #COLOR;  /* Your main brand color */
+  --color-primary-600: #COLOR;  /* Should have 4.5:1 contrast on white */
+  --color-primary-700: #COLOR;
+  --color-primary-800: #COLOR;
+  --color-primary-900: #COLOR;
+
+  /* Semantic mappings - typically no changes needed */
+  --color-action-primary: var(--color-primary-600);
+  --color-action-primary-hover: var(--color-primary-700);
+  --color-action-primary-active: var(--color-primary-800);
+
+  --color-border-focus: var(--color-primary-500);
+  --color-info: var(--color-primary-500);
+}
+
+/* Optional: Dark mode variant */
+/* [data-theme='brand-BRANDNAME'][data-mode='dark'] {
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+} */

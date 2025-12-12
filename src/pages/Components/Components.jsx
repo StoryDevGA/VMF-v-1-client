@@ -22,6 +22,7 @@ import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Typewriter } from '../../components/Typewriter'
+import { BrandSwitcher } from '../../components/BrandSwitcher'
 import { MdCheck, MdArrowForward, MdSettings, MdSearch } from 'react-icons/md'
 import './Components.css'
 
@@ -106,6 +107,8 @@ function Components() {
 
   return (
     <div className="container components">
+      <BrandSwitcher />
+
       <h1 className="text-fluid-xl">Component Showcase</h1>
       <p className="text-responsive-base components__description">
         Production-ready, accessible components for building modern web applications

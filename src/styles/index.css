@@ -14,7 +14,10 @@
 /* 3. Theme system (color schemes) */
 @import './themes.css';
 
-/* 4. Responsive utilities (mobile-first) */
+/* 4. Brand themes (multi-tenant color schemes) */
+@import './brands/index.css';
+
+/* 5. Responsive utilities (mobile-first) */
 @import './responsive.css';
 
 /* 5. Global base styles */

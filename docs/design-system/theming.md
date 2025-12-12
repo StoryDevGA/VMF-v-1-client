@@ -372,3 +372,101 @@ grep -r "color: #" src/components
 | Full rebrand | Update palette + test | 1 hour |
 
 The 3-layer architecture (palette → semantic → components) ensures you can swap themes without touching component code. **Change once, apply everywhere.**
+
+---
+
+## Brand-Specific Themes
+
+### Overview
+
+In addition to light/dark modes and alternative themes, the design system supports brand-specific color schemes for multi-tenant or white-label applications.
+
+### Available Brand Themes
+
+| Brand | Theme ID | Primary Color | Personality |
+|-------|----------|---------------|-------------|
+| Corporate Blue | `brand-corporate` | #2563eb | Professional, enterprise, trust |
+| Vibrant Coral | `brand-vibrant` | #e11d48 | Creative, modern, energetic |
+| Emerald Green | `brand-emerald` | #059669 | Growth, wellness, sustainable |
+| Royal Purple | `brand-royal` | #9333ea | Luxury, premium, sophisticated |
+| Warm Amber | `brand-warm` | #d97706 | Warmth, optimism, friendly |
+
+### Using Brand Themes
+
+#### HTML Attribute
+
+```html
+<html data-theme="brand-corporate">
+```
+
+#### JavaScript
+
+```javascript
+// Set brand theme
+document.documentElement.setAttribute('data-theme', 'brand-vibrant')
+
+// Remove brand theme (use default)
+document.documentElement.removeAttribute('data-theme')
+```
+
+#### React Component
+
+```jsx
+import { BrandSwitcher } from './components/BrandSwitcher'
+
+function Settings() {
+  return (
+    <div>
+      <h2>Theme Settings</h2>
+      <BrandSwitcher />
+    </div>
+  )
+}
+```
+
+### Creating New Brand Themes
+
+1. **Copy template:**
+   ```bash
+   cp client/src/styles/brands/_template.css client/src/styles/brands/newbrand.css
+   ```
+
+2. **Generate color palette:**
+   - Visit [UI Colors](https://uicolors.app/)
+   - Input your brand's primary color
+   - Generate 9-shade scale (50-900)
+
+3. **Update CSS file:**
+   - Replace `BRANDNAME` with your brand identifier
+   - Replace `#COLOR` values with generated palette
+   - Verify WCAG AA contrast (4.5:1 minimum for text)
+
+4. **Add import:**
+   ```css
+   /* In client/src/styles/brands/index.css */
+   @import './newbrand.css';
+   ```
+
+5. **Test:**
+   ```html
+   <html data-theme="brand-newbrand">
+   ```
+
+### Accessibility
+
+All brand themes meet WCAG AA contrast standards:
+- Primary-600: Minimum 4.5:1 contrast on white (for normal text)
+- Primary-700/800: 7:1+ contrast (AAA standard)
+
+### File Structure
+
+```
+client/src/styles/brands/
+├── index.css          # Imports all brands
+├── corporate.css      # Corporate Blue
+├── vibrant.css        # Vibrant Coral
+├── emerald.css        # Emerald Green
+├── royal.css          # Royal Purple
+├── warm.css           # Warm Amber
+└── _template.css      # Template for new brands
+```
