@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
+import { act } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
@@ -72,6 +73,25 @@ describe('Header Component', () => {
         </RouterWrapper>
       )
       expect(screen.getByAltText('StoryLineOS Logo')).toBeInTheDocument()
+    })
+
+    it('should use black logo in lite brand mode', async () => {
+      await act(async () => {
+        document.documentElement.setAttribute('data-mode', 'lite')
+      })
+
+      render(
+        <RouterWrapper>
+          <Header />
+        </RouterWrapper>
+      )
+
+      const logo = screen.getByAltText('StoryLineOS Logo')
+      expect(logo.getAttribute('src')).toContain('StoryLineOS%20-%20Black')
+
+      await act(async () => {
+        document.documentElement.removeAttribute('data-mode')
+      })
     })
 
     it('should render custom text logo', () => {

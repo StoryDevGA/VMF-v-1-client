@@ -22,6 +22,9 @@ export function BrandSwitcher() {
     // Load from localStorage or default
     return localStorage.getItem('selected-brand') || 'default'
   })
+  const [brandMode, setBrandMode] = useState(() => {
+    return localStorage.getItem('selected-brand-mode') || 'default'
+  })
 
   useEffect(() => {
     // Apply theme to document
@@ -35,6 +38,15 @@ export function BrandSwitcher() {
       localStorage.setItem('selected-brand', selectedBrand)
     }
   }, [selectedBrand])
+
+  useEffect(() => {
+    if (brandMode === 'lite') {
+      document.documentElement.setAttribute('data-mode', 'lite')
+    } else if (document.documentElement.getAttribute('data-mode') === 'lite') {
+      document.documentElement.removeAttribute('data-mode')
+    }
+    localStorage.setItem('selected-brand-mode', brandMode)
+  }, [brandMode])
 
   return (
     <div className="brand-switcher">
@@ -52,6 +64,19 @@ export function BrandSwitcher() {
             {brand.name}
           </option>
         ))}
+      </select>
+
+      <label htmlFor="brand-mode" className="brand-switcher__label">
+        Brand Mode
+      </label>
+      <select
+        id="brand-mode"
+        className="brand-switcher__select"
+        value={brandMode}
+        onChange={(e) => setBrandMode(e.target.value)}
+      >
+        <option value="default">Default</option>
+        <option value="lite">Lite</option>
       </select>
     </div>
   )
