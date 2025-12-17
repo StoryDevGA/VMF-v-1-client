@@ -1685,6 +1685,23 @@ function Components() {
         </div>
 
         <div className="components__subsection">
+          <h3>Types</h3>
+          <div className="components__flex-group--center-spaced">
+            <Spinner type="circle" />
+            <Spinner type="pinwheel" />
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Pinwheel Sizes</h3>
+          <div className="components__flex-group--center-spaced">
+            <Spinner type="pinwheel" size="sm" />
+            <Spinner type="pinwheel" size="md" />
+            <Spinner type="pinwheel" size="lg" />
+          </div>
+        </div>
+
+        <div className="components__subsection">
           <h3>In Buttons</h3>
           <div className="components__flex-group--center-spaced">
             <Button loading>
@@ -1696,6 +1713,70 @@ function Components() {
             <Button variant="danger" loading>
               <Spinner size="sm" color="inherit" /> Loading
             </Button>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>With Background Colors</h3>
+          <div className="components__flex-group--center-spaced">
+            <Spinner backgroundColor="rgba(0, 123, 255, 0.1)" color="primary" />
+            <Spinner backgroundColor="rgba(40, 167, 69, 0.1)" color="success" />
+            <Spinner backgroundColor="rgba(220, 53, 69, 0.1)" color="danger" />
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Round Background Options</h3>
+          <div className="components__flex-group--center-spaced">
+            <Spinner
+              backgroundColor="rgba(220, 53, 69, 0.15)"
+              color="danger"
+              style={{ borderRadius: '50%', padding: '0.5rem' }}
+            />
+            <Spinner
+              backgroundColor="rgba(0, 123, 255, 0.15)"
+              color="primary"
+              style={{ borderRadius: '50%', padding: '0.5rem' }}
+            />
+            <Spinner
+              backgroundColor="rgba(40, 167, 69, 0.15)"
+              color="success"
+              style={{ borderRadius: '50%', padding: '0.75rem' }}
+              size="lg"
+            />
+            <Spinner
+              type="pinwheel"
+              backgroundColor="rgba(40, 167, 69, 0.2)"
+              style={{ borderRadius: '50%', padding: '0.75rem' }}
+              size="lg"
+            />
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Pinwheel with Background Colors</h3>
+          <div className="components__flex-group--center-spaced">
+            <Spinner type="pinwheel" backgroundColor="#f8f9fa" />
+            <Spinner type="pinwheel" backgroundColor="rgba(0, 0, 0, 0.05)" />
+            <Spinner type="pinwheel" backgroundColor="#e9ecef" size="lg" />
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>On Dark Background</h3>
+          <div style={{ background: '#2c3e50', padding: '2rem', borderRadius: '8px' }}>
+            <div className="components__flex-group--center-spaced">
+              <Spinner color="inherit" style={{ color: '#fff' }} />
+              <Spinner
+                color="inherit"
+                backgroundColor="rgba(255, 255, 255, 0.1)"
+                style={{ color: '#fff' }}
+              />
+              <Spinner
+                type="pinwheel"
+                backgroundColor="rgba(255, 255, 255, 0.1)"
+              />
+            </div>
           </div>
         </div>
       </section>

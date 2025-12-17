@@ -4,8 +4,9 @@ A simple, accessible loading spinner for indicating ongoing processes.
 
 ## Features
 
+- ✅ **Multiple Types**: circle (default), pinwheel
 - ✅ **Multiple Sizes**: sm, md, lg
-- ✅ **Color Variants**: primary, secondary, success, danger, info, inherit
+- ✅ **Color Variants**: primary, secondary, success, danger, info, inherit (for circle type)
 - ✅ **Accessible**: `role="status"` and screen-reader-only text
 - ✅ **CSS Animation**: Smooth, performant rotation
 - ✅ **Theme Support**: Works with all color schemes
@@ -25,11 +26,29 @@ function LoadingIndicator() {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
+| `type` | `'circle' \| 'pinwheel'` | `'circle'` | Type of spinner animation |
 | `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Size of the spinner |
-| `color` | `'primary' \| 'secondary' \| 'success' \| 'danger' \| 'info' \| 'inherit'` | `'primary'` | Color of the spinner |
+| `color` | `'primary' \| 'secondary' \| 'success' \| 'danger' \| 'info' \| 'inherit'` | `'primary'` | Color of the spinner (only applies to `type="circle"`) |
 | `className` | `string` | `''` | Additional CSS classes |
 
 ## Examples
+
+### Types
+
+```jsx
+import { Spinner } from '@/components/Spinner'
+
+function SpinnerTypes() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+      <Spinner type="circle" />
+      <Spinner type="pinwheel" />
+    </div>
+  )
+}
+```
+
+The pinwheel spinner provides a unique visual alternative to the standard circle spinner, perfect for adding personality to your loading states.
 
 ### Sizes
 
@@ -71,13 +90,15 @@ function SpinnerColors() {
 ### Combined
 
 ```jsx
-import { Spinner } = '@/components/Spinner'
+import { Spinner } from '@/components/Spinner'
 
 function CombinedSpinner() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
       <Spinner size="lg" color="danger" />
       <Spinner size="sm" color="success" />
+      <Spinner type="pinwheel" size="lg" />
+      <Spinner type="pinwheel" size="sm" />
     </div>
   )
 }

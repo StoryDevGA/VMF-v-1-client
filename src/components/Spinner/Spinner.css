@@ -5,11 +5,28 @@
  */
 
 .spinner {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Circle spinner (default) */
+.spinner--circle {
   border: 4px solid rgba(0, 0, 0, 0.1);
   border-left-color: var(--color-primary); /* Default color */
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+/* Pinwheel spinner */
+.spinner--pinwheel {
+  animation: spin 1.5s linear infinite;
+}
+
+.spinner__image {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* ===========================

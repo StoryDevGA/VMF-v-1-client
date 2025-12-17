@@ -90,6 +90,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <RootLayout />,
     children: [
+      // Main Pages
       {
         index: true,
         element: <Home />,
@@ -102,40 +103,45 @@ export const router = createBrowserRouter([
         path: 'about',
         element: <About />,
       },
+
+      // VMF Section
       {
         path: 'vmf',
-        element: <VMF />,
-      },
-      {
-        path: 'vmf/a',
-        element: <VMFA />,
-      },
-      {
-        path: 'vmf/b',
-        element: <VMFB />,
-      },
-      {
-        path: 'vmf/c',
-        element: <VMFC />,
-      },
-      {
-        path: 'vmf/d',
-        element: <VMFD />,
-      },
-      {
-        path: 'vmf/e',
-        element: <VMFE />,
-      },
-      {
-        path: 'vmf/f',
-        element: <VMFF />,
-      },
-      {
-        path: 'vmf/g',
-        element: <VMFG />,
+        children: [
+          {
+            index: true,
+            element: <VMF />,
+          },
+          {
+            path: 'a',
+            element: <VMFA />,
+          },
+          {
+            path: 'b',
+            element: <VMFB />,
+          },
+          {
+            path: 'c',
+            element: <VMFC />,
+          },
+          {
+            path: 'd',
+            element: <VMFD />,
+          },
+          {
+            path: 'e',
+            element: <VMFE />,
+          },
+          {
+            path: 'f',
+            element: <VMFF />,
+          },
+          {
+            path: 'g',
+            element: <VMFG />,
+          },
+        ],
       },
     ],
   },
 ])
-
-
