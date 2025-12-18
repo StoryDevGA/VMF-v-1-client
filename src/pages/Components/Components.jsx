@@ -24,7 +24,8 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Typewriter } from '../../components/Typewriter'
 import { BrandSwitcher } from '../../components/BrandSwitcher'
 import { Stepper } from '../../components/Stepper'
-import { MdCheck, MdArrowForward, MdSettings, MdSearch } from 'react-icons/md'
+import { Table } from '../../components/Table'
+import { MdCheck, MdArrowForward, MdSettings, MdSearch, MdEdit, MdDelete } from 'react-icons/md'
 import './Components.css'
 
 const DemoSection = ({ title, description, children }) => (
@@ -65,6 +66,19 @@ function Components() {
   // Stepper state
   const [stepperHorizontalActive, setStepperHorizontalActive] = useState(0)
   const [stepperVerticalActive, setStepperVerticalActive] = useState(0)
+
+  // Table state
+  const [tableSelectedRows, setTableSelectedRows] = useState(new Set())
+  const [tableLoading, setTableLoading] = useState(false)
+
+  // Sample table data
+  const tableUsers = [
+    { id: 1, name: 'Sarah Johnson', email: 'sarah.j@example.com', role: 'Admin', status: 'Active' },
+    { id: 2, name: 'Michael Chen', email: 'michael.c@example.com', role: 'Editor', status: 'Active' },
+    { id: 3, name: 'Emily Rodriguez', email: 'emily.r@example.com', role: 'Viewer', status: 'Inactive' },
+    { id: 4, name: 'David Kim', email: 'david.k@example.com', role: 'Editor', status: 'Active' },
+    { id: 5, name: 'Lisa Anderson', email: 'lisa.a@example.com', role: 'Admin', status: 'Active' },
+  ]
 
   // Disabled tickbox states (read-only)
   const tickboxDisabledCheckedState = true
@@ -143,6 +157,28 @@ function Components() {
 
   const handleVerticalPrev = (currentIndex) => {
     setStepperVerticalActive(currentIndex - 1)
+  }
+
+  // Table handlers
+  const handleTableEdit = (row) => {
+    addToast({
+      title: 'Edit User',
+      description: `Editing ${row.name}`,
+      variant: 'info'
+    })
+  }
+
+  const handleTableDelete = (row) => {
+    addToast({
+      title: 'Delete User',
+      description: `Deleted ${row.name}`,
+      variant: 'success'
+    })
+  }
+
+  const handleTableLoadData = () => {
+    setTableLoading(true)
+    setTimeout(() => setTableLoading(false), 2000)
   }
 
   return (
@@ -2259,16 +2295,272 @@ function Components() {
         </div>
       </DemoSection>
 
+      <DemoSection
+        title="Table Component"
+        description="A professional, responsive table for displaying tabular data. Columns automatically collapse into cards on mobile devices (<768px)."
+      >
+
+        <div className="components__subsection">
+          <h3>Props-Based API</h3>
+          <p className="components__description">
+            Define columns and pass data array - the simplest approach for basic tables.
+          </p>
+
+          <Table
+            columns={[
+              { key: 'name', label: 'Name', sortable: true },
+              { key: 'email', label: 'Email', sortable: true },
+              { key: 'role', label: 'Role', sortable: true },
+              { key: 'status', label: 'Status' },
+            ]}
+            data={tableUsers}
+            variant="striped"
+            hoverable
+            ariaLabel="User list"
+          />
+        </div>
+
+        <div className="components__subsection">
+          <h3>Selectable Rows</h3>
+          <p className="components__description">
+            Enable row selection with checkboxes. Includes select-all functionality.
+          </p>
+
+          <Table
+            columns={[
+              { key: 'name', label: 'Name', sortable: true },
+              { key: 'email', label: 'Email' },
+              { key: 'role', label: 'Role' },
+            ]}
+            data={tableUsers}
+            selectable
+            selectedRows={tableSelectedRows}
+            onSelectChange={setTableSelectedRows}
+            variant="default"
+            hoverable
+          />
+
+          <div className="components__group" style={{ marginTop: 'var(--spacing-md)' }}>
+            <p className="components__card-text">
+              Selected: {tableSelectedRows.size} {tableSelectedRows.size === 1 ? 'row' : 'rows'}
+            </p>
+            {tableSelectedRows.size > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setTableSelectedRows(new Set())}
+              >
+                Clear Selection
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Row Actions</h3>
+          <p className="components__description">
+            Add action buttons to each row with custom handlers and icons.
+          </p>
+
+          <Table
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'email', label: 'Email' },
+              { key: 'role', label: 'Role' },
+            ]}
+            data={tableUsers}
+            actions={[
+              { label: 'Edit', onClick: handleTableEdit, icon: <MdEdit />, variant: 'ghost' },
+              { label: 'Delete', onClick: handleTableDelete, icon: <MdDelete />, variant: 'danger' }
+            ]}
+            variant="default"
+            hoverable
+          />
+        </div>
+
+        <div className="components__subsection">
+          <h3>JSX-Based API (Compound Components)</h3>
+          <p className="components__description">
+            Use compound components for maximum flexibility and control.
+          </p>
+
+          <Table variant="bordered" selectable hoverable>
+            <Table.Head>
+              <Table.Row>
+                <Table.SelectAllHeader />
+                <Table.Header sortable sortKey="name">Name</Table.Header>
+                <Table.Header sortable sortKey="email">Email</Table.Header>
+                <Table.Header sortable sortKey="role">Role</Table.Header>
+                <Table.Header>Actions</Table.Header>
+              </Table.Row>
+            </Table.Head>
+            <Table.Body>
+              {tableUsers.map(user => (
+                <Table.Row key={user.id} rowId={user.id}>
+                  <Table.CheckboxCell rowId={user.id} />
+                  <Table.Cell dataLabel="Name">{user.name}</Table.Cell>
+                  <Table.Cell dataLabel="Email">{user.email}</Table.Cell>
+                  <Table.Cell dataLabel="Role">{user.role}</Table.Cell>
+                  <Table.Cell dataLabel="Actions">
+                    <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
+                      <Button size="sm" variant="ghost" leftIcon={<MdEdit />} onClick={() => handleTableEdit(user)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="danger" leftIcon={<MdDelete />} onClick={() => handleTableDelete(user)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Variants</h3>
+          <div className="components__grid--gap-2">
+            <div>
+              <h4 className="components__section-label">Default</h4>
+              <Table
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'role', label: 'Role' },
+                ]}
+                data={tableUsers.slice(0, 3)}
+                variant="default"
+              />
+            </div>
+
+            <div>
+              <h4 className="components__section-label">Striped</h4>
+              <Table
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'role', label: 'Role' },
+                ]}
+                data={tableUsers.slice(0, 3)}
+                variant="striped"
+              />
+            </div>
+
+            <div>
+              <h4 className="components__section-label">Bordered</h4>
+              <Table
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'role', label: 'Role' },
+                ]}
+                data={tableUsers.slice(0, 3)}
+                variant="bordered"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Size & Hover</h3>
+          <div className="components__grid--gap-2">
+            <div>
+              <h4 className="components__section-label">Compact Size</h4>
+              <Table
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'role', label: 'Role' },
+                ]}
+                data={tableUsers.slice(0, 3)}
+                size="compact"
+                variant="outlined"
+              />
+            </div>
+
+            <div>
+              <h4 className="components__section-label">Hoverable Rows</h4>
+              <Table
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'role', label: 'Role' },
+                ]}
+                data={tableUsers.slice(0, 3)}
+                hoverable
+                variant="outlined"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Loading State</h3>
+          <p className="components__description">
+            Show skeleton rows while data is loading.
+          </p>
+
+          <Table
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'email', label: 'Email' },
+              { key: 'role', label: 'Role' },
+            ]}
+            data={tableUsers}
+            loading={tableLoading}
+            loadingRows={3}
+            variant="striped"
+          />
+
+          <div className="components__group" style={{ marginTop: 'var(--spacing-md)' }}>
+            <Button size="sm" onClick={handleTableLoadData} disabled={tableLoading}>
+              {tableLoading ? 'Loading...' : 'Simulate Loading'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Empty State</h3>
+          <p className="components__description">
+            Gracefully handle empty data with a default or custom message.
+          </p>
+
+          <Table
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'email', label: 'Email' },
+              { key: 'role', label: 'Role' },
+            ]}
+            data={[]}
+            emptyMessage="No users found. Add users to get started."
+            variant="default"
+          />
+        </div>
+
+        <div className="components__info-box">
+          <h4 className="components__info-title">Table Features</h4>
+          <ul className="components__info-list">
+            <li>Responsive design: Desktop table converts to mobile card layout below 768px</li>
+            <li>Hybrid API: Props-based (columns + data) or JSX-based (compound components)</li>
+            <li>Sortable columns with visual indicators and keyboard support</li>
+            <li>Selectable rows with checkboxes and select-all functionality</li>
+            <li>Row actions with custom buttons and handlers</li>
+            <li>Multiple variants: default, striped, bordered</li>
+            <li>Compact size option for dense layouts</li>
+            <li>Hoverable rows with smooth transitions</li>
+            <li>Loading state with skeleton rows</li>
+            <li>Empty state with customizable message</li>
+            <li>Full accessibility: ARIA labels, roles, keyboard navigation</li>
+            <li>Mobile-first CSS with data-label attributes for stacked layout</li>
+          </ul>
+        </div>
+      </DemoSection>
+
       <section className="components__coming-soon-section">
         <h2 className="text-responsive-lg">Coming Soon</h2>
         <p className="components__description">
           More components are being built following the same production-ready standards:
         </p>
         <ul className="components__list-text">
-          <li>Tables & Data Grids</li>
-          <li>Tooltips & Popovers</li>
-          <li>Select & Dropdown menus</li>
-          <li>Checkbox & Radio buttons</li>
+          <li>Data Grids with virtualization</li>
+          <li>Popovers & Dropdowns</li>
+          <li>Date & Time pickers</li>
+          <li>File upload</li>
           <li>And more...</li>
         </ul>
       </section>
