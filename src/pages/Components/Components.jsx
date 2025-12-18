@@ -25,6 +25,7 @@ import { Typewriter } from '../../components/Typewriter'
 import { BrandSwitcher } from '../../components/BrandSwitcher'
 import { Stepper } from '../../components/Stepper'
 import { Table } from '../../components/Table'
+import { TabView } from '../../components/TabView'
 import { MdCheck, MdArrowForward, MdSettings, MdSearch, MdEdit, MdDelete } from 'react-icons/md'
 import './Components.css'
 
@@ -2547,6 +2548,248 @@ function Components() {
             <li>Empty state with customizable message</li>
             <li>Full accessibility: ARIA labels, roles, keyboard navigation</li>
             <li>Mobile-first CSS with data-label attributes for stacked layout</li>
+          </ul>
+        </div>
+      </DemoSection>
+
+      <DemoSection
+        title="TabView Component"
+        description="A fully accessible, responsive tab navigation component for organizing content. Features keyboard navigation, multiple variants, and smooth transitions."
+      >
+
+        <div className="components__subsection">
+          <h3>Default Variant</h3>
+          <p className="components__description">
+            Underline style with indicator below active tab. Perfect for standard navigation.
+          </p>
+
+          <TabView defaultActiveTab={0}>
+            <TabView.Tab label="Profile">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Profile Information</h4>
+                <p className="components__card-text">
+                  View and edit your profile details, including your name, email, and avatar.
+                  Keep your information up to date for the best experience.
+                </p>
+                <Button size="sm" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  Edit Profile
+                </Button>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Settings">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Account Settings</h4>
+                <p className="components__card-text">
+                  Customize your preferences, notification settings, and privacy controls.
+                  Make the application work the way you want it to.
+                </p>
+                <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-sm)' }}>
+                  <Tickbox label="Email notifications" onChange={() => {}} />
+                  <Tickbox label="SMS alerts" onChange={() => {}} />
+                </div>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Activity">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Recent Activity</h4>
+                <p className="components__card-text">
+                  Track your recent actions and see a timeline of your activity.
+                  Monitor what's been happening with your account.
+                </p>
+                <ul className="components__list-text" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  <li>Logged in from new device - 2 hours ago</li>
+                  <li>Updated profile picture - Yesterday</li>
+                  <li>Changed password - 3 days ago</li>
+                </ul>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Notifications">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Notification Center</h4>
+                <p className="components__card-text">
+                  Stay informed with real-time updates about your account activity,
+                  messages, and system alerts.
+                </p>
+                <Status variant="info" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  You have 3 unread notifications
+                </Status>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Pills Variant</h3>
+          <p className="components__description">
+            Rounded button-style tabs with filled background. Modern and clean appearance.
+          </p>
+
+          <TabView variant="pills" defaultActiveTab={0}>
+            <TabView.Tab label="Overview">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Dashboard Overview</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-sm)' }}>
+                  <Card variant="filled">
+                    <Card.Header>Total Users</Card.Header>
+                    <Card.Body>
+                      <p style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)' }}>1,234</p>
+                    </Card.Body>
+                  </Card>
+                  <Card variant="filled">
+                    <Card.Header>Active Sessions</Card.Header>
+                    <Card.Body>
+                      <p style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)' }}>89</p>
+                    </Card.Body>
+                  </Card>
+                </div>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Analytics">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Analytics Dashboard</h4>
+                <p className="components__card-text">
+                  View detailed analytics and metrics about your application usage,
+                  user engagement, and performance indicators.
+                </p>
+                <Button size="sm" variant="outline" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  View Full Report
+                </Button>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Reports">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Generated Reports</h4>
+                <p className="components__card-text">
+                  Access and download your generated reports. Export data in various formats
+                  for further analysis.
+                </p>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Boxed Variant</h3>
+          <p className="components__description">
+            Tab buttons with borders that connect to content container. Great for documentation.
+          </p>
+
+          <TabView variant="boxed" defaultActiveTab={0}>
+            <TabView.Tab label="Code">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <pre style={{
+                  background: 'var(--color-surface)',
+                  padding: 'var(--spacing-sm)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  overflow: 'auto'
+                }}>
+{`function Example() {
+  return (
+    <TabView variant="boxed">
+      <TabView.Tab label="Tab 1">
+        Content 1
+      </TabView.Tab>
+    </TabView>
+  )
+}`}
+                </pre>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Preview">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Component Preview</h4>
+                <p className="components__card-text">
+                  See the live preview of your component with all the props applied.
+                  Test interactivity and visual appearance.
+                </p>
+                <Button size="sm" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  Try It Out
+                </Button>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Props">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Component Props</h4>
+                <ul className="components__list-text">
+                  <li><code>variant</code>: "default" | "pills" | "boxed"</li>
+                  <li><code>orientation</code>: "horizontal" | "vertical"</li>
+                  <li><code>defaultActiveTab</code>: number</li>
+                  <li><code>onTabChange</code>: (index) =&gt; void</li>
+                </ul>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Vertical Orientation</h3>
+          <p className="components__description">
+            Tabs displayed vertically beside content. Automatically converts to horizontal on mobile (&lt;768px).
+          </p>
+
+          <TabView orientation="vertical" defaultActiveTab={0}>
+            <TabView.Tab label="General">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>General Settings</h4>
+                <p className="components__card-text">
+                  Configure general application settings and preferences.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-sm)' }}>
+                  <Input label="Application Name" placeholder="My App" />
+                  <Input label="Default Language" placeholder="English" />
+                </div>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Security">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Security Settings</h4>
+                <p className="components__card-text">
+                  Manage security settings, passwords, and authentication methods.
+                </p>
+                <div style={{ marginTop: 'var(--spacing-sm)' }}>
+                  <Button size="sm" variant="outline">Change Password</Button>
+                  <Button size="sm" variant="outline" style={{ marginLeft: 'var(--spacing-xs)' }}>Enable 2FA</Button>
+                </div>
+              </div>
+            </TabView.Tab>
+
+            <TabView.Tab label="Privacy">
+              <div style={{ padding: 'var(--spacing-md)' }}>
+                <h4>Privacy Controls</h4>
+                <p className="components__card-text">
+                  Control your privacy settings and data sharing preferences.
+                </p>
+                <div style={{ marginTop: 'var(--spacing-sm)' }}>
+                  <Tickbox label="Allow data collection" onChange={() => {}} />
+                  <Tickbox label="Share analytics" onChange={() => {}} />
+                  <Tickbox label="Marketing emails" onChange={() => {}} />
+                </div>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+
+        <div className="components__subsection">
+          <h3>Features & Accessibility</h3>
+          <ul className="components__list-text">
+            <li>Full keyboard navigation (Arrow keys, Home, End)</li>
+            <li>ARIA compliant with proper tab/tabpanel roles</li>
+            <li>Active tab indicator with smooth transitions</li>
+            <li>Responsive design with horizontal scrolling on overflow</li>
+            <li>Touch-friendly with 44px minimum touch targets (48px on mobile)</li>
+            <li>Automatic orientation switching on mobile for vertical tabs</li>
+            <li>Support for custom tab change callbacks</li>
+            <li>Three visual variants: default, pills, boxed</li>
+            <li>Smooth content fade-in animation</li>
+            <li>Respects prefers-reduced-motion for animations</li>
           </ul>
         </div>
       </DemoSection>
