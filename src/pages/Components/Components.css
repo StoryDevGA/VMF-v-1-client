@@ -27,6 +27,21 @@
   overflow: visible;
 }
 
+/* Allow HorizontalScroll wrappers to shrink within the container */
+.components__section-content .components__group,
+.components__section-content .components__subsection {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep HorizontalScroll contained within the section content */
+.components__section-content .h-scroll {
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
 /* Table wrapper for horizontal scroll fallback on very small screens */
 .components__table-wrapper {
   width: 100%;
