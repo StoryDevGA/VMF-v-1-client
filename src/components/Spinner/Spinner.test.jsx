@@ -14,10 +14,10 @@ describe('Spinner Component', () => {
     expect(screen.getByText('Loading...')).toHaveClass('sr-only')
   })
 
-  it('should apply default size and color classes', () => {
+  it('should apply default size and type classes', () => {
     const { container } = render(<Spinner />)
     expect(container.firstChild).toHaveClass('spinner--md')
-    expect(container.firstChild).toHaveClass('spinner--primary')
+    expect(container.firstChild).toHaveClass('spinner--pinwheel')
   })
 
   it('should apply specified size class', () => {
@@ -26,8 +26,8 @@ describe('Spinner Component', () => {
     expect(container.firstChild).not.toHaveClass('spinner--md')
   })
 
-  it('should apply specified color class', () => {
-    const { container } = render(<Spinner color="danger" />)
+  it('should apply specified color class for circle type', () => {
+    const { container } = render(<Spinner type="circle" color="danger" />)
     expect(container.firstChild).toHaveClass('spinner--danger')
     expect(container.firstChild).not.toHaveClass('spinner--primary')
   })
@@ -39,7 +39,7 @@ describe('Spinner Component', () => {
 
   describe('Background color', () => {
     it('should apply backgroundColor to circle spinner', () => {
-      const { container } = render(<Spinner backgroundColor="#ff0000" />)
+      const { container } = render(<Spinner type="circle" backgroundColor="#ff0000" />)
       expect(container.firstChild).toHaveStyle({ backgroundColor: '#ff0000' })
     })
 
@@ -49,7 +49,7 @@ describe('Spinner Component', () => {
     })
 
     it('should not apply backgroundColor style when not provided', () => {
-      const { container } = render(<Spinner />)
+      const { container } = render(<Spinner type="circle" />)
       expect(container.firstChild).not.toHaveAttribute('style')
     })
   })

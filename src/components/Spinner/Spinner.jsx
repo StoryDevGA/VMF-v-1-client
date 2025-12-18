@@ -2,8 +2,8 @@
  * Spinner Component
  *
  * A simple, accessible loading spinner with two variants:
+ * - pinwheel: A rotating SVG image spinner (default)
  * - circle: A rotating border spinner with customizable colors
- * - pinwheel: A rotating SVG image spinner
  *
  * @param {Object} props - Component props
  * @param {'sm'|'md'|'lg'} [props.size='md'] - Spinner size
@@ -11,9 +11,9 @@
  *   - md: 32px (default)
  *   - lg: 48px
  * @param {'primary'|'secondary'|'success'|'danger'|'info'|'inherit'} [props.color='primary'] - Border color (applies only to circle type)
- * @param {'circle'|'pinwheel'} [props.type='circle'] - Spinner variant
+ * @param {'circle'|'pinwheel'} [props.type='pinwheel'] - Spinner variant
+ *   - pinwheel: SVG-based spinner (default, color prop is ignored)
  *   - circle: Border-based spinner with customizable color
- *   - pinwheel: SVG-based spinner (color prop is ignored)
  * @param {string} [props.backgroundColor] - Background color for the spinner container (applies to both circle and pinwheel types)
  *   - Accepts any valid CSS color value (hex, rgb, rgba, named colors, etc.)
  * @param {string} [props.className=''] - Additional CSS classes
@@ -21,24 +21,24 @@
  * @returns {JSX.Element} Spinner component
  *
  * @example
- * // Default circle spinner
+ * // Default pinwheel spinner
  * <Spinner />
  *
  * @example
  * // Large danger-colored circle spinner
- * <Spinner size="lg" color="danger" />
+ * <Spinner type="circle" size="lg" color="danger" />
  *
  * @example
  * // Small pinwheel spinner
- * <Spinner type="pinwheel" size="sm" />
+ * <Spinner size="sm" />
  *
  * @example
  * // Circle spinner with background color
- * <Spinner backgroundColor="rgba(0, 0, 0, 0.1)" />
+ * <Spinner type="circle" backgroundColor="rgba(0, 0, 0, 0.1)" />
  *
  * @example
  * // Pinwheel spinner with background color
- * <Spinner type="pinwheel" backgroundColor="#f0f0f0" size="lg" />
+ * <Spinner backgroundColor="#f0f0f0" size="lg" />
  */
 
 import './Spinner.css'
@@ -47,7 +47,7 @@ import pinwheelIcon from '../../assets/images/icons/pinwheel.svg'
 export function Spinner({
   size = 'md',
   color = 'primary',
-  type = 'circle',
+  type = 'pinwheel',
   backgroundColor,
   className = '',
   ...props
