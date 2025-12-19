@@ -12,7 +12,7 @@ function Home() {
   return (
     <div className="container home">
       <header className="home__header">
-        <h1 className="text-fluid-xl">Transform the Way Your Organisation Thinks, Works, and Performs</h1>
+        <h1 className="text-fluid-xl">Transform(s) the Way Your Organisation Thinks, Works, and Performs</h1>
         <p className="text-responsive-base home__subtitle">
           A smarter, measurable approach to digital adoption and operational efficiency—built to give leaders clarity, teams confidence, and organisations the ability to improve at scale.
         </p>
