@@ -65,6 +65,7 @@ export function Logo({
         alt={alt}
         className="logo__image"
       />
+      <span className="logo__subtext">The strategic go-to-market operating system</span>
     </div>
   )
 }

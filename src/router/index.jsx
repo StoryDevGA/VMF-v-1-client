@@ -70,7 +70,7 @@ function RootLayout() {
 
   return (
     <div className="root-layout">
-      <Header logo={<Logo size="full" />} />
+      <Header logo={<Logo size="medium" />} />
       <main className="root-layout__main">
         <Suspense fallback={<LoadingFallback />}>
           <Outlet />

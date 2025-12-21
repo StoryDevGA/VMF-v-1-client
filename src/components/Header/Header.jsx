@@ -29,7 +29,7 @@ import Navigation from '../Navigation'
 import './Header.css'
 
 export function Header({
-  logo = <Logo size="full" />,
+  logo = <Logo size="medium" />,
   logoLink = '/',
   showNavigation = true,
   sticky = true,
