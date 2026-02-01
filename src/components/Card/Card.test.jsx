@@ -30,6 +30,11 @@ describe('Card Component', () => {
       const { container } = render(<Card className="custom-card">Content</Card>)
       expect(container.firstChild).toHaveClass('custom-card')
     })
+
+    it('should be bordered by default', () => {
+      const { container } = render(<Card>Content</Card>)
+      expect(container.firstChild).not.toHaveClass('card--borderless')
+    })
   })
 
   // ===========================
@@ -72,6 +77,47 @@ describe('Card Component', () => {
       const { container } = render(<Card rounded={false}>Content</Card>)
       expect(container.firstChild).toHaveClass('card--square')
       expect(container.firstChild).not.toHaveClass('card--rounded')
+    })
+  })
+
+  // ===========================
+  // BORDER
+  // ===========================
+
+  describe('Border', () => {
+    it('should remove border when bordered is false', () => {
+      const { container } = render(<Card bordered={false}>Content</Card>)
+      expect(container.firstChild).toHaveClass('card--borderless')
+    })
+  })
+
+  // ===========================
+  // BACKGROUND COLOR
+  // ===========================
+
+  describe('Background Color', () => {
+    it('should apply backgroundColor style', () => {
+      const { container } = render(<Card backgroundColor="#ffffff">Content</Card>)
+      expect(container.firstChild).toHaveStyle({ backgroundColor: '#ffffff' })
+    })
+
+    it('should allow transparent background', () => {
+      const { container } = render(
+        <Card backgroundColor="transparent">Content</Card>
+      )
+      expect(container.firstChild.style.backgroundColor).toBe('transparent')
+    })
+
+    it('should merge backgroundColor with custom styles', () => {
+      const { container } = render(
+        <Card backgroundColor="#f0f0f0" style={{ padding: '12px' }}>
+          Content
+        </Card>
+      )
+      expect(container.firstChild).toHaveStyle({
+        backgroundColor: '#f0f0f0',
+        padding: '12px',
+      })
     })
   })
 

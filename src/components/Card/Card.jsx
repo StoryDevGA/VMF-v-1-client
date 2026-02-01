@@ -37,14 +37,18 @@ export function Card({
   rounded = true,
   hoverable = false,
   clickable = false,
+  bordered = true,
+  backgroundColor,
   className = '',
   onClick,
+  style,
   ...props
 }) {
   const cardClasses = [
     'card',
     `card--${variant}`,
     rounded ? 'card--rounded' : 'card--square',
+    !bordered && 'card--borderless',
     hoverable && 'card--hoverable',
     clickable && 'card--clickable',
     className
@@ -55,6 +59,9 @@ export function Card({
   const handleClick = onClick && !clickable ? undefined : onClick
   const role = clickable ? 'button' : undefined
   const tabIndex = clickable ? 0 : undefined
+  const cardStyles = backgroundColor
+    ? { ...(style || {}), backgroundColor }
+    : style
 
   return (
     <div
@@ -62,6 +69,7 @@ export function Card({
       onClick={handleClick}
       role={role}
       tabIndex={tabIndex}
+      style={cardStyles}
       {...props}
     >
       {children}

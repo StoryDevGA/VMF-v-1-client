@@ -35,6 +35,8 @@ function MyCard() {
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `variant` | `'default' \| 'outlined' \| 'elevated' \| 'filled'` | `'default'` | Card style variant |
+| `backgroundColor` | `string` | - | Overrides card background color (any valid CSS color). Use `transparent` to remove the background. |
+| `bordered` | `boolean` | `true` | Shows the card border when `true`. Set to `false` for a borderless card. |
 | `rounded` | `boolean` | `true` | Rounded (`true`) or square (`false`) corners |
 | `hoverable` | `boolean` | `false` | Enable hover lift effect |
 | `clickable` | `boolean` | `false` | Make card interactive (adds role="button") |
@@ -204,6 +206,22 @@ The Card component uses design system tokens:
 <Card className="custom-card">
   <Card.Header className="custom-header">Title</Card.Header>
   <Card.Body>Content</Card.Body>
+</Card>
+```
+
+### Background Color Override
+
+```jsx
+<Card backgroundColor="transparent">
+  <Card.Body>Transparent background card</Card.Body>
+</Card>
+```
+
+### Borderless Card
+
+```jsx
+<Card bordered={false}>
+  <Card.Body>Borderless card</Card.Body>
 </Card>
 ```
 

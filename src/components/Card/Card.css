@@ -75,6 +75,15 @@
 }
 
 /* ===========================
+   BORDER OVERRIDES
+   =========================== */
+
+/* Borderless cards */
+.card--borderless {
+  border: none;
+}
+
+/* ===========================
    INTERACTIVE STATES
    =========================== */
 
