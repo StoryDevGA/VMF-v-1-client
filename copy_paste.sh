@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SRC_DIR="dist"
-DEST_DIR="/home/gary/Documents/WebApps/prod/stroylineOS"
+DEST_DIR="C:\Users\garya\OneDrive\Documents\StoryLineOS\app\prod-v1"
 
 error() {
   echo "[error] $1" >&2
