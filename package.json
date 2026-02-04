@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:dev": "bash -lc \"npm run build || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh dev && echo '[info] Build succeeded; dev copy complete.'\"",
+    "build:staging": "bash -lc \"npm run build || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh staging && echo '[info] Build succeeded; staging copy complete.'\"",
+    "build:prod": "bash -lc \"npm run build || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh prod && echo '[info] Build succeeded; prod copy complete.'\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
