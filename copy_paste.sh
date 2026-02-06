@@ -30,7 +30,7 @@ case "${ENVIRONMENT,,}" in
     DEST_DIR="c:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/release-v1/STAGING-client-v1"
     ;;
   prod)
-    DEST_DIR="c:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/release-v1/PROD-clinet-v1"
+    DEST_DIR="c:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/release-v1/PROD-client-v1"
     ;;
   *)
     error "Unknown environment '$ENVIRONMENT'."
