@@ -1,0 +1,114 @@
+/**
+ * Edit Users Page Styles
+ *
+ * BEM naming under `.edit-users` prefix.
+ * Uses design-system tokens for spacing, color, typography.
+ */
+
+.edit-users {
+  padding: var(--spacing-xl, 2rem) var(--spacing-md, 1rem);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---- Header ---- */
+
+.edit-users__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.edit-users__title {
+  font-size: var(--font-size-2xl, 1.5rem);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-primary, #111827);
+  margin: 0;
+}
+
+/* ---- Toolbar ---- */
+
+.edit-users__toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-md, 1rem);
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  flex-wrap: wrap;
+}
+
+.edit-users__search {
+  flex: 1 1 280px;
+  min-width: 200px;
+}
+
+.edit-users__filter {
+  flex: 0 0 180px;
+}
+
+/* ---- Table wrapper ---- */
+
+.edit-users__table {
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  overflow-x: auto;
+}
+
+/* ---- Pagination ---- */
+
+.edit-users__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md, 1rem);
+  padding: var(--spacing-md, 1rem) 0;
+}
+
+.edit-users__pagination-info {
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary, #6b7280);
+  white-space: nowrap;
+}
+
+/* ---- Fetching overlay ---- */
+
+.edit-users__fetching {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-sm, 0.5rem) 0;
+}
+
+/* ---- Empty state ---- */
+
+.edit-users__empty {
+  text-align: center;
+  color: var(--color-text-secondary, #6b7280);
+  padding: var(--spacing-2xl, 3rem) 0;
+}
+
+/* ---- Confirm dialog ---- */
+
+.edit-users__confirm-title {
+  margin: 0;
+  font-size: var(--font-size-lg, 1.125rem);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .edit-users__toolbar {
+    flex-direction: column;
+  }
+
+  .edit-users__search,
+  .edit-users__filter {
+    flex: 1 1 100%;
+  }
+
+  .edit-users__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

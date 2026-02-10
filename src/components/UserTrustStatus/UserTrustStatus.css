@@ -1,0 +1,23 @@
+/**
+ * UserTrustStatus Styles
+ *
+ * BEM naming under `.user-trust-status` prefix.
+ */
+
+.user-trust-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+}
+
+.user-trust-status__dates {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+}
+
+.user-trust-status__date {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-text-secondary, #6b7280);
+  white-space: nowrap;
+}
