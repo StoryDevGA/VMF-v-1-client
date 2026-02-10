@@ -118,8 +118,25 @@ export const normalizeError = (error) => {
  * @returns {boolean}
  */
 export const isAuthError = (err) =>
-  [401].includes(err.status) ||
-  ['AUTH_TOKEN_EXPIRED', 'AUTH_TOKEN_INVALID', 'AUTH_REFRESH_FAILED'].includes(err.code)
+  [401].includes(err?.status) ||
+  ['AUTH_TOKEN_EXPIRED', 'AUTH_TOKEN_INVALID', 'AUTH_REFRESH_FAILED'].includes(err?.code)
+
+/**
+ * Check if an error is an authorization (forbidden) response.
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isAuthzError = (err) =>
+  err?.status === 403 ||
+  ['FORBIDDEN', 'AUTHZ_FORBIDDEN', 'AUTHZ_ROLE_REQUIRED'].includes(err?.code)
+
+/**
+ * Check if an error is specifically a tenant-disabled response.
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isTenantDisabledError = (err) =>
+  err?.code === 'TENANT_DISABLED' || err?.code === 'AUTHZ_TENANT_DISABLED'
 
 /**
  * Check if an error is a rate-limit response.
@@ -127,4 +144,4 @@ export const isAuthError = (err) =>
  * @returns {boolean}
  */
 export const isRateLimitError = (err) =>
-  err.status === 429 || err.code === 'RATE_LIMIT_EXCEEDED'
+  err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED'

@@ -5,6 +5,8 @@
  * - getErrorMessage mapping & fallback
  * - normalizeError for RTK Query errors, network errors, plain Errors, unknown
  * - isAuthError detection
+ * - isAuthzError detection
+ * - isTenantDisabledError detection
  * - isRateLimitError detection
  */
 
@@ -13,6 +15,8 @@ import {
   getErrorMessage,
   normalizeError,
   isAuthError,
+  isAuthzError,
+  isTenantDisabledError,
   isRateLimitError,
 } from './errors.js'
 
@@ -112,6 +116,63 @@ describe('errors', () => {
 
     it('should return false for a non-auth error', () => {
       expect(isAuthError({ status: 500, code: 'SERVER_ERROR' })).toBe(false)
+    })
+
+    it('should handle null/undefined safely', () => {
+      expect(isAuthError(null)).toBe(false)
+      expect(isAuthError(undefined)).toBe(false)
+    })
+  })
+
+  /* ---------- isAuthzError ---------- */
+
+  describe('isAuthzError', () => {
+    it('should detect a 403 status', () => {
+      expect(isAuthzError({ status: 403, code: 'SOMETHING' })).toBe(true)
+    })
+
+    it('should detect FORBIDDEN code', () => {
+      expect(isAuthzError({ status: 200, code: 'FORBIDDEN' })).toBe(true)
+    })
+
+    it('should detect AUTHZ_FORBIDDEN code', () => {
+      expect(isAuthzError({ status: undefined, code: 'AUTHZ_FORBIDDEN' })).toBe(true)
+    })
+
+    it('should detect AUTHZ_ROLE_REQUIRED code', () => {
+      expect(isAuthzError({ status: undefined, code: 'AUTHZ_ROLE_REQUIRED' })).toBe(true)
+    })
+
+    it('should return false for a non-authz error', () => {
+      expect(isAuthzError({ status: 401, code: 'AUTH_TOKEN_EXPIRED' })).toBe(false)
+    })
+
+    it('should handle null/undefined safely', () => {
+      expect(isAuthzError(null)).toBe(false)
+      expect(isAuthzError(undefined)).toBe(false)
+    })
+  })
+
+  /* ---------- isTenantDisabledError ---------- */
+
+  describe('isTenantDisabledError', () => {
+    it('should detect TENANT_DISABLED code', () => {
+      expect(isTenantDisabledError({ status: 403, code: 'TENANT_DISABLED' })).toBe(true)
+    })
+
+    it('should detect AUTHZ_TENANT_DISABLED code', () => {
+      expect(isTenantDisabledError({ status: 403, code: 'AUTHZ_TENANT_DISABLED' })).toBe(
+        true,
+      )
+    })
+
+    it('should return false for a non-tenant error', () => {
+      expect(isTenantDisabledError({ status: 403, code: 'FORBIDDEN' })).toBe(false)
+    })
+
+    it('should handle null/undefined safely', () => {
+      expect(isTenantDisabledError(null)).toBe(false)
+      expect(isTenantDisabledError(undefined)).toBe(false)
     })
   })
 

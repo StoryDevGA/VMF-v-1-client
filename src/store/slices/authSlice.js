@@ -14,12 +14,36 @@
 import { createSlice } from '@reduxjs/toolkit'
 
 /**
+ * @typedef {Object} Membership
+ * @property {string|null} customerId  - null for platform-level memberships
+ * @property {string[]}    roles       - e.g. ['SUPER_ADMIN'] or ['CUSTOMER_ADMIN']
+ */
+
+/**
+ * @typedef {Object} TenantMembership
+ * @property {string}   customerId
+ * @property {string}   tenantId
+ * @property {string[]} roles       - e.g. ['TENANT_ADMIN']
+ */
+
+/**
+ * @typedef {Object} VmfGrant
+ * @property {string}   customerId
+ * @property {string}   tenantId
+ * @property {string}   vmfId
+ * @property {string[]} permissions - e.g. ['READ', 'WRITE']
+ */
+
+/**
  * @typedef {Object} AuthUser
- * @property {string}  id
- * @property {string}  email
- * @property {string}  name
- * @property {string[]} roles          - e.g. ['SUPER_ADMIN']
- * @property {Object}  [membership]    - Active customer/tenant context
+ * @property {string}              id
+ * @property {string}              email
+ * @property {string}              name
+ * @property {boolean}             isActive
+ * @property {Object}              identityPlus
+ * @property {Membership[]}        memberships         - customer & platform roles
+ * @property {TenantMembership[]}  tenantMemberships   - tenant-level roles
+ * @property {VmfGrant[]}          vmfGrants           - VMF-level permissions
  */
 
 /**
@@ -90,5 +114,14 @@ export const selectAuthStatus = (state) => state.auth.status
 
 /** @param {import('../index').RootState} state */
 export const selectIsAuthenticated = (state) => state.auth.status === 'authenticated'
+
+/** @param {import('../index').RootState} state */
+export const selectUserMemberships = (state) => state.auth.user?.memberships ?? []
+
+/** @param {import('../index').RootState} state */
+export const selectUserTenantMemberships = (state) => state.auth.user?.tenantMemberships ?? []
+
+/** @param {import('../index').RootState} state */
+export const selectUserVmfGrants = (state) => state.auth.user?.vmfGrants ?? []
 
 export default authSlice.reducer
