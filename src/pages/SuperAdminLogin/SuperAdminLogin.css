@@ -1,0 +1,127 @@
+/**
+ * Super Admin Login Page Styles
+ *
+ * Same layout as the customer Login page but with a
+ * distinct badge to differentiate the admin console entry point.
+ */
+
+/* ===========================
+   LAYOUT
+   =========================== */
+
+.super-admin-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: var(--spacing-lg) var(--spacing-md);
+}
+
+/* ===========================
+   CARD
+   =========================== */
+
+.super-admin-login__card {
+  width: 100%;
+  max-width: 28rem;
+}
+
+/* ===========================
+   BRAND & HEADING
+   =========================== */
+
+.super-admin-login__brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.super-admin-login__badge {
+  display: inline-block;
+  margin: 0 auto var(--spacing-sm);
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-inverse);
+  background-color: var(--color-action-primary);
+  border-radius: var(--border-radius-full);
+  text-align: center;
+}
+
+.super-admin-login__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.super-admin-login__subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: var(--line-height-relaxed);
+}
+
+/* ===========================
+   FORM
+   =========================== */
+
+.super-admin-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+/* ===========================
+   FOOTER
+   =========================== */
+
+.super-admin-login__footer-text {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-login__link {
+  color: var(--color-action-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.super-admin-login__link:hover {
+  color: var(--color-action-primary-hover);
+  text-decoration: underline;
+}
+
+.super-admin-login__link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm);
+}
+
+/* ===========================
+   RESPONSIVE
+   =========================== */
+
+@media (min-width: 768px) {
+  .super-admin-login {
+    padding: var(--spacing-2xl) var(--spacing-lg);
+  }
+}
+
+/* ===========================
+   ACCESSIBILITY
+   =========================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .super-admin-login__link {
+    transition: none;
+  }
+}

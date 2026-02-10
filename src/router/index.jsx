@@ -1,8 +1,13 @@
 ﻿/**
  * Router Configuration
  *
- * Centralized routing configuration with lazy-loaded pages
- * All routes use React.lazy() for code splitting and better performance
+ * Centralized routing configuration with lazy-loaded pages.
+ * All routes use React.lazy() for code splitting and better performance.
+ *
+ * Route groups:
+ *  - Public  — landing, about, login pages
+ *  - App     — customer-level protected routes  (/app/*)
+ *  - Admin   — super-admin protected routes     (/super-admin/*)
  */
 
 import { lazy, Suspense } from 'react'
@@ -11,11 +16,23 @@ import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
+import { ProtectedRoute } from '../components/ProtectedRoute'
 import './router.css'
 
-// Lazy-loaded page components
+/* ------------------------------------------------------------------ */
+/*  Lazy-loaded page components                                       */
+/* ------------------------------------------------------------------ */
+
 const Home = lazy(() => import('../pages/Home'))
 const About = lazy(() => import('../pages/About'))
+const Login = lazy(() => import('../pages/Login/Login'))
+const SuperAdminLogin = lazy(
+  () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
+)
+
+/* ------------------------------------------------------------------ */
+/*  Shared layouts & fallbacks                                        */
+/* ------------------------------------------------------------------ */
 
 /**
  * Loading Fallback Component
@@ -48,6 +65,10 @@ function RootLayout() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Router definition                                                 */
+/* ------------------------------------------------------------------ */
+
 /**
  * Router Configuration
  * Uses createBrowserRouter for better type safety and future features
@@ -57,7 +78,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <RootLayout />,
     children: [
-      // Main Pages
+      /* ---------- Public routes ---------- */
       {
         index: true,
         element: <Home />,
@@ -65,6 +86,45 @@ export const router = createBrowserRouter([
       {
         path: 'about',
         element: <About />,
+      },
+
+      /* ---------- Auth routes (public) ---------- */
+      {
+        path: 'app/login',
+        element: <Login />,
+      },
+      {
+        path: 'super-admin/login',
+        element: <SuperAdminLogin />,
+      },
+
+      /* ---------- Protected: customer app ---------- */
+      {
+        path: 'app',
+        element: <ProtectedRoute redirectTo="/app/login" />,
+        children: [
+          {
+            path: 'dashboard',
+            element: <Home />, // placeholder until Dashboard page is built
+          },
+        ],
+      },
+
+      /* ---------- Protected: super-admin console ---------- */
+      {
+        path: 'super-admin',
+        element: (
+          <ProtectedRoute
+            redirectTo="/super-admin/login"
+            requiredRole="SUPER_ADMIN"
+          />
+        ),
+        children: [
+          {
+            path: 'customers',
+            element: <Home />, // placeholder until Customers page is built
+          },
+        ],
       },
     ],
   },
