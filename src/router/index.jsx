@@ -30,6 +30,9 @@ const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
 )
 const EditUsers = lazy(() => import('../pages/EditUsers/EditUsers'))
+const MaintainTenants = lazy(
+  () => import('../pages/MaintainTenants/MaintainTenants'),
+)
 
 /* ------------------------------------------------------------------ */
 /*  Shared layouts & fallbacks                                        */
@@ -111,6 +114,10 @@ export const router = createBrowserRouter([
           {
             path: 'administration/edit-users',
             element: <EditUsers />,
+          },
+          {
+            path: 'administration/maintain-tenants',
+            element: <MaintainTenants />,
           },
         ],
       },

@@ -1,0 +1,126 @@
+/**
+ * Maintain Tenants Page Styles
+ *
+ * BEM naming under `.maintain-tenants` prefix.
+ * Uses design-system tokens for spacing, color, typography.
+ */
+
+.maintain-tenants {
+  padding: var(--spacing-xl, 2rem) var(--spacing-md, 1rem);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---- Header ---- */
+
+.maintain-tenants__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.maintain-tenants__title {
+  font-size: var(--font-size-2xl, 1.5rem);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-primary, #111827);
+  margin: 0;
+}
+
+/* ---- Toolbar ---- */
+
+.maintain-tenants__toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-md, 1rem);
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  flex-wrap: wrap;
+}
+
+.maintain-tenants__search {
+  flex: 1 1 280px;
+  min-width: 200px;
+}
+
+.maintain-tenants__filter {
+  flex: 0 0 180px;
+}
+
+/* ---- Table wrapper ---- */
+
+.maintain-tenants__table {
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  overflow-x: auto;
+}
+
+/* ---- Website link ---- */
+
+.maintain-tenants__link {
+  color: var(--color-link, #2563eb);
+  text-decoration: none;
+  font-size: var(--font-size-sm, 0.875rem);
+}
+
+.maintain-tenants__link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Pagination ---- */
+
+.maintain-tenants__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md, 1rem);
+  padding: var(--spacing-md, 1rem) 0;
+}
+
+.maintain-tenants__pagination-info {
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary, #6b7280);
+  white-space: nowrap;
+}
+
+/* ---- Fetching overlay ---- */
+
+.maintain-tenants__fetching {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-sm, 0.5rem) 0;
+}
+
+/* ---- Empty state ---- */
+
+.maintain-tenants__empty {
+  text-align: center;
+  color: var(--color-text-secondary, #6b7280);
+  padding: var(--spacing-2xl, 3rem) 0;
+}
+
+/* ---- Confirm dialog ---- */
+
+.maintain-tenants__confirm-title {
+  margin: 0;
+  font-size: var(--font-size-lg, 1.125rem);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .maintain-tenants__toolbar {
+    flex-direction: column;
+  }
+
+  .maintain-tenants__search,
+  .maintain-tenants__filter {
+    flex: 1 1 100%;
+  }
+
+  .maintain-tenants__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
