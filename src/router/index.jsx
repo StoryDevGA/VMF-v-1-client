@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Router Configuration
  *
  * Centralized routing configuration with lazy-loaded pages
@@ -35,30 +35,6 @@ function LoadingFallback() {
  * Wraps all routes with navigation and suspense boundary
  */
 function RootLayout() {
-  const footerSections = [
-    {
-      title: 'Product',
-      links: [
-        { label: 'Features', to: '/about' },
-        { label: 'Documentation', to: '/about' }
-      ]
-    },
-    {
-      title: 'Company',
-      links: [
-        { label: 'About', to: '/about' },
-        { label: 'Contact', to: '/about' }
-      ]
-    },
-    {
-      title: 'Resources',
-      links: [
-        { label: 'Guides', to: '/about' },
-        { label: 'GitHub', href: 'https://github.com', external: true, openInNewTab: true }
-      ]
-    }
-  ]
-
   return (
     <div className="root-layout">
       <Header logo={<Logo size="medium" />} />
@@ -67,7 +43,7 @@ function RootLayout() {
           <Outlet />
         </Suspense>
       </main>
-      <Footer sections={footerSections} copyright="StoryLineOS" />
+      <Footer />
     </div>
   )
 }
@@ -93,3 +69,4 @@ export const router = createBrowserRouter([
     ],
   },
 ])
+

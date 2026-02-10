@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Footer Component Tests
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { format } from 'date-fns'
 import { Footer } from './Footer'
@@ -13,6 +13,7 @@ const RouterWrapper = ({ children }) => <BrowserRouter>{children}</BrowserRouter
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
 describe('Footer Component', () => {
@@ -78,6 +79,53 @@ describe('Footer Component', () => {
     })
   })
 
+  describe('Version Metadata', () => {
+    it('should render version from version.json when available', async () => {
+      const builtAtIso = '2026-02-10T11:52:26.009Z'
+      const builtAtDate = new Date(builtAtIso)
+      const yyyy = builtAtDate.getFullYear()
+      const mm = String(builtAtDate.getMonth() + 1).padStart(2, '0')
+      const dd = String(builtAtDate.getDate()).padStart(2, '0')
+      const hh = String(builtAtDate.getHours()).padStart(2, '0')
+      const min = String(builtAtDate.getMinutes()).padStart(2, '0')
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'
+      const expectedBuildTime = `${yyyy}-${mm}-${dd} ${hh}:${min} ${tz}`
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          version: '0.0.0',
+          builtAt: builtAtIso,
+          environment: 'staging'
+        }),
+      })
+
+      render(
+        <RouterWrapper>
+          <Footer />
+        </RouterWrapper>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(`v0.0.0 • ${expectedBuildTime} • STAGING`)).toBeInTheDocument()
+      })
+    })
+
+    it('should render fallback text when version file is unavailable', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('missing'))
+
+      render(
+        <RouterWrapper>
+          <Footer />
+        </RouterWrapper>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Version unavailable')).toBeInTheDocument()
+      })
+    })
+  })
+
   // ===========================
   // DATE & TIME
   // ===========================
@@ -94,8 +142,8 @@ describe('Footer Component', () => {
         </RouterWrapper>
       )
 
-      expect(screen.getByText(format(mockDate, 'EEEE, MMMM d, yyyy'))).toBeInTheDocument()
-      expect(screen.getByText(format(mockDate, 'hh:mm:ss a'))).toBeInTheDocument()
+      expect(screen.getByText(format(mockDate, 'MMM d, yyyy'))).toBeInTheDocument()
+      expect(screen.getByText(format(mockDate, 'hh:mm a'))).toBeInTheDocument()
     })
   })
 
@@ -115,3 +163,4 @@ describe('Footer Component', () => {
     })
   })
 })
+
