@@ -21,8 +21,8 @@
  * </Link>
  *
  * @example
- * <Link to="/components" underline="always" variant="secondary">
- *   Components
+ * <Link to="/about" underline="always" variant="secondary">
+ *   Learn More
  * </Link>
  */
 

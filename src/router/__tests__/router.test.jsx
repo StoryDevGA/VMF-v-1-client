@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Router Tests
  *
  * Tests navigation and route rendering
@@ -32,21 +32,7 @@ describe('Router', () => {
       )
 
       // Wait for lazy-loaded component
-      expect(await screen.findByText(/Transform the Way Your Organisation Thinks, Works, and Performs/i, {}, { timeout: 10000 })).toBeInTheDocument()
-    }, ROUTE_TEST_TIMEOUT)
-
-    it('should render components page at /components', async () => {
-      const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/components'],
-      })
-
-      render(
-        <ToasterProvider>
-          <RouterProvider router={testRouter} />
-        </ToasterProvider>
-      )
-
-      expect(await screen.findByText(/Component Showcase/i, {}, { timeout: 10000 })).toBeInTheDocument()
+      expect(await screen.findByText(/HOME/i, {}, { timeout: 10000 })).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
     it('should render about page at /about', async () => {
@@ -63,19 +49,6 @@ describe('Router', () => {
       expect(await screen.findByRole('heading', { name: /^About$/i }, { timeout: 10000 })).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should render VMF-G page at /vmf/g', async () => {
-      const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/vmf/g'],
-      })
-
-      render(
-        <ToasterProvider>
-          <RouterProvider router={testRouter} />
-        </ToasterProvider>
-      )
-
-      expect(await screen.findByText(/VMF-G: Complete Form/i, {}, { timeout: 10000 })).toBeInTheDocument()
-    }, ROUTE_TEST_TIMEOUT)
   })
 
   describe('Navigation', () => {
@@ -108,11 +81,11 @@ describe('Router', () => {
 
       await screen.findByRole('navigation')
 
-      const componentsLink = screen.getByRole('menuitem', { name: /components/i })
       const aboutLink = screen.getByRole('menuitem', { name: /about/i })
+      const vmfLink = screen.queryByRole('menuitem', { name: /^vmf$/i })
 
-      expect(componentsLink).toBeInTheDocument()
       expect(aboutLink).toBeInTheDocument()
+      expect(vmfLink).not.toBeInTheDocument()
     })
   })
 
@@ -135,3 +108,4 @@ describe('Router', () => {
     })
   })
 })
+

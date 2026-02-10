@@ -11,7 +11,7 @@
  */
 
 import { NavLink } from 'react-router-dom'
-import { MdHome, MdDashboardCustomize, MdInfo, MdWidgets } from 'react-icons/md'
+import { MdHome, MdInfo } from 'react-icons/md'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
@@ -48,21 +48,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           </li>
           <li role="none">
             <NavLink
-              to="/vmf"
-              className={({ isActive }) =>
-                isActive ? 'nav__link nav__link--active' : 'nav__link'
-              }
-              role="menuitem"
-              onClick={onLinkClick}
-            >
-              <span className="nav__icon" aria-hidden="true">
-                <MdDashboardCustomize />
-              </span>
-              <span className="nav__text">VMF</span>
-            </NavLink>
-          </li>
-          <li role="none">
-            <NavLink
               to="/about"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
@@ -74,21 +59,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                 <MdInfo />
               </span>
               <span className="nav__text">About</span>
-            </NavLink>
-          </li>
-          <li role="none">
-            <NavLink
-              to="/components"
-              className={({ isActive }) =>
-                isActive ? 'nav__link nav__link--active' : 'nav__link'
-              }
-              role="menuitem"
-              onClick={onLinkClick}
-            >
-              <span className="nav__icon" aria-hidden="true">
-                <MdWidgets />
-              </span>
-              <span className="nav__text">Components</span>
             </NavLink>
           </li>
         </ul>
