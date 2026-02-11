@@ -279,6 +279,17 @@ function MaintainTenants() {
     )
   }
 
+  if (!customerId && isSuperAdmin) {
+    return (
+      <section className="maintain-tenants container" aria-label="Maintain Tenants">
+        <h1 className="maintain-tenants__title">Maintain Tenants</h1>
+        <p className="maintain-tenants__empty">
+          Please select a customer from the header dropdown to manage tenants.
+        </p>
+      </section>
+    )
+  }
+
   return (
     <section className="maintain-tenants container" aria-label="Maintain Tenants">
       {/* Page header */}

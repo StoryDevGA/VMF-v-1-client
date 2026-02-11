@@ -109,17 +109,25 @@ export const normalizeError = (error) => {
   // RTK Query fetchBaseQuery error
   if (error && typeof error === 'object' && 'status' in error) {
     const data = error.data && typeof error.data === 'object' ? error.data : {}
+
+    // Backend wraps errors as { error: { code, message, … } } — unwrap it.
+    const nested =
+      data.error && typeof data.error === 'object' ? data.error : {}
+
     const status =
       typeof error.status === 'number'
         ? error.status
         : undefined
-    const code = data.code ?? (status ? `HTTP_${status}` : 'SERVER_ERROR')
-    const requestId = data.requestId ?? data.requestID ?? undefined
+    const code =
+      nested.code ?? data.code ?? (status ? `HTTP_${status}` : 'SERVER_ERROR')
+    const requestId =
+      nested.requestId ?? data.requestId ?? data.requestID ?? undefined
     const retryAfterSeconds = Number(
-      data.retryAfterSeconds ?? data.retryAfter ?? 0,
+      nested.retryAfterSeconds ?? data.retryAfterSeconds ?? data.retryAfter ?? 0,
     ) || undefined
 
-    let message = data.message ?? getErrorMessage(code) ?? ERROR_MESSAGES.SERVER_ERROR
+    let message =
+      nested.message ?? data.message ?? getErrorMessage(code) ?? ERROR_MESSAGES.SERVER_ERROR
     if (RATE_LIMIT_CODES.has(code) && retryAfterSeconds) {
       message = `${message} Try again in ${formatRetryAfter(retryAfterSeconds)}.`
     }
@@ -133,7 +141,7 @@ export const normalizeError = (error) => {
       status,
       requestId,
       retryAfterSeconds,
-      details: data.details ?? undefined,
+      details: nested.details ?? data.details ?? undefined,
     }
   }
 

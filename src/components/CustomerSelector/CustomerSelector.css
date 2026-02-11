@@ -1,0 +1,206 @@
+/**
+ * CustomerSelector Styles
+ *
+ * Compact dropdown that sits in the header bar for customer context selection.
+ * Includes inline create-customer form styles.
+ * Only visible to Super Admin users. Uses BEM naming and design system tokens.
+ */
+
+.customer-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  position: relative;
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.customer-selector:hover {
+  border-color: var(--color-primary-400);
+}
+
+.customer-selector:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-400) 25%, transparent);
+}
+
+.customer-selector__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.customer-selector__loading {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-sm);
+}
+
+.customer-selector__select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  padding-right: var(--spacing-md);
+  min-width: 120px;
+  max-width: 220px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.customer-selector__select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.customer-selector__arrow {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  position: absolute;
+  right: var(--spacing-xs);
+  pointer-events: none;
+}
+
+/* ---- Inline Create Form ---- */
+
+.customer-selector--form {
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.customer-selector__input {
+  background: var(--color-surface-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  min-width: 140px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.customer-selector__input:focus {
+  border-color: var(--color-border-focus);
+}
+
+.customer-selector__input:disabled {
+  opacity: 0.6;
+}
+
+.customer-selector__topology {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--color-surface-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.customer-selector__topology:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.customer-selector__btn {
+  border: none;
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background-color var(--transition-fast);
+}
+
+.customer-selector__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.customer-selector__btn--create {
+  background-color: var(--color-primary-500);
+  color: var(--color-text-on-primary);
+}
+
+.customer-selector__btn--create:hover:not(:disabled) {
+  background-color: var(--color-primary-600);
+}
+
+.customer-selector__btn--cancel {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.customer-selector__btn--cancel:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-secondary);
+}
+
+.customer-selector__error {
+  width: 100%;
+  font-size: var(--font-size-xs);
+  color: var(--color-error-500);
+  padding: var(--spacing-2xs) 0 0;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 767px) {
+  .customer-selector {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .customer-selector__select {
+    min-width: 0;
+    max-width: none;
+    flex: 1;
+  }
+
+  .customer-selector--form {
+    width: 100%;
+  }
+
+  .customer-selector__input {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+/* ---- Reduced Motion ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-selector {
+    transition: none;
+  }
+}
+
+/* ---- High Contrast Mode ---- */
+
+@media (prefers-contrast: more) {
+  .customer-selector {
+    border-width: 2px;
+  }
+}

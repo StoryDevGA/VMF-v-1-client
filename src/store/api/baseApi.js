@@ -221,7 +221,9 @@ async function attemptRefresh(api) {
     )
 
     if (refreshResult.data) {
-      const { accessToken, refreshToken: newRefresh } = refreshResult.data
+      // Backend wraps response as { data: { accessToken, refreshToken }, meta }
+      const tokens = refreshResult.data.data ?? refreshResult.data
+      const { accessToken, refreshToken: newRefresh } = tokens
       setTokens({ accessToken, refreshToken: newRefresh })
       api.dispatch({
         type: 'auth/tokenRefreshed',

@@ -136,6 +136,41 @@ describe('errors', () => {
       Object.defineProperty(navigator, 'onLine', { value: original, configurable: true })
     })
 
+    it('should unwrap nested backend error envelope { error: { code, message } }', () => {
+      const rtkError = {
+        status: 401,
+        data: {
+          error: {
+            code: 'AUTH_INVALID_CREDENTIALS',
+            message: 'Invalid email or password.',
+            requestId: 'req-456',
+          },
+        },
+      }
+      const result = normalizeError(rtkError)
+      expect(result.code).toBe('AUTH_INVALID_CREDENTIALS')
+      expect(result.message).toBe('Invalid email or password. (Ref: req-456)')
+      expect(result.requestId).toBe('req-456')
+      expect(result.status).toBe(401)
+    })
+
+    it('should prefer nested error fields over top-level data fields', () => {
+      const rtkError = {
+        status: 403,
+        data: {
+          code: 'WRONG_TOP',
+          message: 'Wrong top message',
+          error: {
+            code: 'AUTHZ_FORBIDDEN',
+            message: 'You do not have permission.',
+          },
+        },
+      }
+      const result = normalizeError(rtkError)
+      expect(result.code).toBe('AUTHZ_FORBIDDEN')
+      expect(result.message).toBe('You do not have permission.')
+    })
+
     it('should fallback to HTTP_<status> code when data has no code', () => {
       const result = normalizeError({ status: 503, data: { message: 'Down' } })
       expect(result.code).toBe('HTTP_503')

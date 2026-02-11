@@ -16,6 +16,7 @@ import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
+import { CustomerSelector } from '../components/CustomerSelector'
 import { TenantSwitcher } from '../components/TenantSwitcher'
 import { SystemHealthIndicator } from '../components/SystemHealthIndicator'
 import { ProtectedRoute } from '../components/ProtectedRoute'
@@ -65,6 +66,7 @@ function RootLayout() {
     <div className="root-layout">
       <Header logo={<Logo size="medium" />}>
         <SystemHealthIndicator />
+        <CustomerSelector />
         <TenantSwitcher />
       </Header>
       <main className="root-layout__main">
