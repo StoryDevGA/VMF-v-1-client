@@ -6,9 +6,15 @@
 
 import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
+import { NetworkStatusMonitor } from './components/NetworkStatusMonitor'
 
 function App() {
-  return <RouterProvider router={router} />
+  return (
+    <>
+      <NetworkStatusMonitor />
+      <RouterProvider router={router} />
+    </>
+  )
 }
 
 export default App

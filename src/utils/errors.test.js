@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getErrorMessage,
+  formatRetryAfter,
   normalizeError,
   isAuthError,
   isAuthzError,
@@ -34,6 +35,11 @@ describe('errors', () => {
       expect(getErrorMessage('SOME_UNKNOWN_CODE')).toBe('SOME_UNKNOWN_CODE')
     })
 
+    it('should resolve mapped HTTP status fallback codes', () => {
+      expect(getErrorMessage('HTTP_429')).toContain('Too many requests')
+      expect(getErrorMessage('HTTP_503')).toContain('temporarily unavailable')
+    })
+
     it('should return the server error fallback for null/undefined', () => {
       expect(getErrorMessage(null)).toBe(
         'Something went wrong. Please try again later.',
@@ -41,6 +47,29 @@ describe('errors', () => {
       expect(getErrorMessage(undefined)).toBe(
         'Something went wrong. Please try again later.',
       )
+    })
+  })
+
+  describe('formatRetryAfter', () => {
+    it('formats seconds values', () => {
+      expect(formatRetryAfter(12)).toBe('12s')
+      expect(formatRetryAfter(60)).toBe('1m')
+      expect(formatRetryAfter(75)).toBe('1m 15s')
+    })
+
+    it('returns "a moment" for zero or negative values', () => {
+      expect(formatRetryAfter(0)).toBe('a moment')
+      expect(formatRetryAfter(-5)).toBe('a moment')
+    })
+
+    it('handles non-numeric input gracefully', () => {
+      expect(formatRetryAfter(null)).toBe('a moment')
+      expect(formatRetryAfter(undefined)).toBe('a moment')
+      expect(formatRetryAfter('abc')).toBe('a moment')
+    })
+
+    it('floors fractional seconds', () => {
+      expect(formatRetryAfter(12.9)).toBe('12s')
     })
   })
 
@@ -60,9 +89,10 @@ describe('errors', () => {
       const result = normalizeError(rtkError)
       expect(result).toEqual({
         code: 'VALIDATION_FAILED',
-        message: 'Validation error',
+        message: 'Validation error (Ref: req-123)',
         status: 422,
         requestId: 'req-123',
+        retryAfterSeconds: undefined,
         details: { email: 'invalid' },
       })
     })
@@ -72,6 +102,21 @@ describe('errors', () => {
       const result = normalizeError(rtkError)
       expect(result.code).toBe('HTTP_500')
       expect(result.status).toBe(500)
+      expect(result.retryAfterSeconds).toBeUndefined()
+    })
+
+    it('should include retry hint on rate-limit errors', () => {
+      const rtkError = {
+        status: 429,
+        data: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          retryAfterSeconds: 90,
+        },
+      }
+      const result = normalizeError(rtkError)
+      expect(result.retryAfterSeconds).toBe(90)
+      expect(result.message).toContain('Try again in')
+      expect(result.message).toContain('1m 30s')
     })
 
     it('should normalize a network / fetch error', () => {
@@ -79,6 +124,23 @@ describe('errors', () => {
       const result = normalizeError(fetchError)
       expect(result.code).toBe('NETWORK_ERROR')
       expect(result.message).toContain('Unable to reach the server')
+      expect(result.retryAfterSeconds).toBeUndefined()
+    })
+
+    it('should use CLIENT_OFFLINE code when navigator.onLine is false', () => {
+      const original = navigator.onLine
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+      const result = normalizeError({ error: 'fetch failed' })
+      expect(result.code).toBe('CLIENT_OFFLINE')
+      expect(result.message).toContain('offline')
+      Object.defineProperty(navigator, 'onLine', { value: original, configurable: true })
+    })
+
+    it('should fallback to HTTP_<status> code when data has no code', () => {
+      const result = normalizeError({ status: 503, data: { message: 'Down' } })
+      expect(result.code).toBe('HTTP_503')
+      expect(result.message).toBe('Down')
+      expect(result.status).toBe(503)
     })
 
     it('should normalize a plain Error instance', () => {
@@ -187,6 +249,10 @@ describe('errors', () => {
       expect(isRateLimitError({ status: undefined, code: 'RATE_LIMIT_EXCEEDED' })).toBe(
         true,
       )
+    })
+
+    it('should detect HTTP_429 code', () => {
+      expect(isRateLimitError({ status: undefined, code: 'HTTP_429' })).toBe(true)
     })
 
     it('should return false for a non-rate-limit error', () => {

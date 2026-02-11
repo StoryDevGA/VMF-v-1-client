@@ -5,15 +5,16 @@
  * Uses the design system's Input, Button, Card, and Logo components.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Navigate, Link } from 'react-router-dom'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Logo } from '../../components/Logo'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
-import { normalizeError } from '../../utils/errors.js'
+import { isRateLimitError, normalizeError } from '../../utils/errors.js'
 import './Login.css'
 
 function Login() {
@@ -23,6 +24,17 @@ function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
+  const [authError, setAuthError] = useState(null)
+  const [retryRemainingSeconds, setRetryRemainingSeconds] = useState(0)
+  const retryLockActive = retryRemainingSeconds > 0
+
+  useEffect(() => {
+    if (retryRemainingSeconds <= 0) return undefined
+    const timer = window.setInterval(() => {
+      setRetryRemainingSeconds((seconds) => Math.max(0, seconds - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [retryRemainingSeconds])
 
   /** Basic client-side validation before submit */
   const validate = useCallback(() => {
@@ -34,7 +46,10 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (retryLockActive) return
+
     setFieldErrors({})
+    setAuthError(null)
 
     const errors = validate()
     if (Object.keys(errors).length > 0) {
@@ -56,6 +71,13 @@ function Login() {
         }
         setFieldErrors(mapped)
       }
+
+      if (isRateLimitError(appError) && appError.retryAfterSeconds) {
+        setRetryRemainingSeconds(appError.retryAfterSeconds)
+      } else {
+        setRetryRemainingSeconds(0)
+      }
+      setAuthError(appError)
 
       addToast({
         title: 'Login failed',
@@ -117,11 +139,19 @@ function Login() {
               size="lg"
               fullWidth
               loading={loginResult.isLoading}
-              disabled={loginResult.isLoading}
+              disabled={loginResult.isLoading || retryLockActive}
             >
-              Sign In
+              {retryLockActive
+                ? `Try again in ${retryRemainingSeconds}s`
+                : 'Sign In'}
             </Button>
           </form>
+
+          <ErrorSupportPanel
+            error={authError}
+            context="customer-login"
+            retryRemainingSeconds={retryRemainingSeconds}
+          />
         </Card.Body>
 
         <Card.Footer>

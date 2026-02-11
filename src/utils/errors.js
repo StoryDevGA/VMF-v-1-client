@@ -30,12 +30,49 @@ const ERROR_MESSAGES = {
 
   // Rate limiting
   RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',
+  AUTH_RATE_LIMITED: 'Too many authentication attempts. Please wait before trying again.',
 
   // Server / generic
   SERVER_ERROR: 'Something went wrong. Please try again later.',
   NETWORK_ERROR: 'Unable to reach the server. Check your connection.',
+  CLIENT_OFFLINE: 'You appear to be offline. Reconnect and try again.',
+  SERVICE_UNAVAILABLE: 'The service is temporarily unavailable. Please try again shortly.',
   NOT_FOUND: 'The requested resource was not found.',
   TIMEOUT: 'The request timed out. Please try again.',
+  HTTP_400: 'The request is invalid. Please check your input.',
+  HTTP_401: 'Your session has expired. Please sign in again.',
+  HTTP_403: 'You do not have permission to perform this action.',
+  HTTP_404: 'The requested resource was not found.',
+  HTTP_409: 'This action conflicts with the current state of the resource.',
+  HTTP_422: 'Please check the form for errors.',
+  HTTP_423: 'This tenant is currently disabled.',
+  HTTP_429: 'Too many requests. Please wait a moment and try again.',
+  HTTP_500: 'Something went wrong. Please try again later.',
+  HTTP_502: 'The service gateway returned an invalid response. Please try again.',
+  HTTP_503: 'The service is temporarily unavailable. Please try again shortly.',
+  HTTP_504: 'The service timed out. Please try again.',
+}
+
+const RATE_LIMIT_CODES = new Set([
+  'RATE_LIMIT_EXCEEDED',
+  'AUTH_RATE_LIMITED',
+  'HTTP_429',
+])
+
+/**
+ * Format seconds into short retry text.
+ * @param {number} seconds
+ * @returns {string}
+ */
+export const formatRetryAfter = (seconds) => {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0))
+  if (safeSeconds <= 0) return 'a moment'
+
+  const minutes = Math.floor(safeSeconds / 60)
+  const remaining = safeSeconds % 60
+  if (minutes === 0) return `${remaining}s`
+  if (remaining === 0) return `${minutes}m`
+  return `${minutes}m ${remaining}s`
 }
 
 /**
@@ -57,6 +94,7 @@ export const getErrorMessage = (code) =>
  * @property {string}  message   - User-friendly error message
  * @property {number}  [status]  - HTTP status code
  * @property {string}  [requestId] - X-Request-ID for support correlation
+ * @property {number}  [retryAfterSeconds] - Retry wait hint for rate-limited requests
  * @property {Object}  [details]   - Field-level validation errors, etc.
  */
 
@@ -70,23 +108,44 @@ export const getErrorMessage = (code) =>
 export const normalizeError = (error) => {
   // RTK Query fetchBaseQuery error
   if (error && typeof error === 'object' && 'status' in error) {
-    const data = error.data ?? {}
+    const data = error.data && typeof error.data === 'object' ? error.data : {}
+    const status =
+      typeof error.status === 'number'
+        ? error.status
+        : undefined
+    const code = data.code ?? (status ? `HTTP_${status}` : 'SERVER_ERROR')
+    const requestId = data.requestId ?? data.requestID ?? undefined
+    const retryAfterSeconds = Number(
+      data.retryAfterSeconds ?? data.retryAfter ?? 0,
+    ) || undefined
+
+    let message = data.message ?? getErrorMessage(code) ?? ERROR_MESSAGES.SERVER_ERROR
+    if (RATE_LIMIT_CODES.has(code) && retryAfterSeconds) {
+      message = `${message} Try again in ${formatRetryAfter(retryAfterSeconds)}.`
+    }
+    if (requestId) {
+      message = `${message} (Ref: ${requestId})`
+    }
+
     return {
-      code: data.code ?? `HTTP_${error.status}`,
-      message: data.message ?? getErrorMessage(data.code) ?? ERROR_MESSAGES.SERVER_ERROR,
-      status: typeof error.status === 'number' ? error.status : undefined,
-      requestId: data.requestId ?? undefined,
+      code,
+      message,
+      status,
+      requestId,
+      retryAfterSeconds,
       details: data.details ?? undefined,
     }
   }
 
   // Network / fetch failure
   if (error && typeof error === 'object' && 'error' in error) {
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false
     return {
-      code: 'NETWORK_ERROR',
-      message: ERROR_MESSAGES.NETWORK_ERROR,
+      code: isOffline ? 'CLIENT_OFFLINE' : 'NETWORK_ERROR',
+      message: isOffline ? ERROR_MESSAGES.CLIENT_OFFLINE : ERROR_MESSAGES.NETWORK_ERROR,
       status: undefined,
       requestId: undefined,
+      retryAfterSeconds: undefined,
       details: undefined,
     }
   }
@@ -98,6 +157,7 @@ export const normalizeError = (error) => {
       message: error.message,
       status: undefined,
       requestId: undefined,
+      retryAfterSeconds: undefined,
       details: undefined,
     }
   }
@@ -107,6 +167,7 @@ export const normalizeError = (error) => {
     message: ERROR_MESSAGES.SERVER_ERROR,
     status: undefined,
     requestId: undefined,
+    retryAfterSeconds: undefined,
     details: undefined,
   }
 }
@@ -144,4 +205,7 @@ export const isTenantDisabledError = (err) =>
  * @returns {boolean}
  */
 export const isRateLimitError = (err) =>
-  err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED'
+  err?.status === 429 ||
+  err?.code === 'RATE_LIMIT_EXCEEDED' ||
+  err?.code === 'AUTH_RATE_LIMITED' ||
+  err?.code === 'HTTP_429'
