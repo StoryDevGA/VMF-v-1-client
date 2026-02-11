@@ -113,6 +113,19 @@
 }
 
 /* ===========================
+   SEPARATOR (admin section divider)
+   =========================== */
+
+.nav__separator {
+  width: var(--border-width-thin, 1px);
+  height: 20px;
+  background-color: var(--color-border);
+  margin: 0 var(--spacing-xs);
+  align-self: center;
+  opacity: 0.5;
+}
+
+/* ===========================
    RESPONSIVE
    =========================== */
 
@@ -162,6 +175,12 @@
     padding: var(--spacing-md) var(--spacing-xl);
     font-size: var(--font-size-xl);
     border-radius: var(--border-radius-md);
+  }
+
+  .nav__separator {
+    width: 60px;
+    height: var(--border-width-thin, 1px);
+    margin: var(--spacing-xs) 0;
   }
 }
 

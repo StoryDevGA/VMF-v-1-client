@@ -29,6 +29,18 @@
   margin: 0;
 }
 
+/* ---- Tenant scope indicator ---- */
+
+.edit-users__scope-indicator {
+  margin: 0 0 var(--spacing-md, 0.75rem);
+  padding: var(--spacing-xs, 0.25rem) var(--spacing-sm, 0.5rem);
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary);
+  background-color: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
+  display: inline-block;
+}
+
 /* ---- Toolbar ---- */
 
 .edit-users__toolbar {

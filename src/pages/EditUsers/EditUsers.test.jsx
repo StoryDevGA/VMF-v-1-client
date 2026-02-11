@@ -18,6 +18,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
+import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import EditUsers from './EditUsers'
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
@@ -60,6 +61,7 @@ function createTestStore(preloadedState) {
   return configureStore({
     reducer: {
       auth: authReducer,
+      tenantContext: tenantContextReducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (gDM) => gDM().concat(baseApi.middleware),

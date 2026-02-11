@@ -1,20 +1,35 @@
 /**
  * Navigation Component
  *
- * Responsive navigation bar with active link highlighting
+ * Responsive navigation bar with active link highlighting.
+ * Shows public links (Home, About) for all visitors and
+ * administration links (Edit Users, Maintain Tenants) when the
+ * user is authenticated with appropriate roles.
  *
  * Features:
  * - Responsive design (mobile hamburger menu)
  * - Active route highlighting
+ * - Role-aware admin section (CUSTOMER_ADMIN / SUPER_ADMIN)
  * - Accessible keyboard navigation
  * - Theme-aware styling
  */
 
 import { NavLink } from 'react-router-dom'
-import { MdHome, MdInfo } from 'react-icons/md'
+import { useSelector } from 'react-redux'
+import { MdHome, MdInfo, MdPeople, MdBusiness, MdAdminPanelSettings } from 'react-icons/md'
+import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
+import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const user = useSelector(selectCurrentUser)
+
+  const isSuperAdmin = checkIsSuperAdmin(user)
+  const hasAdminAccess = isSuperAdmin || (user?.memberships ?? []).some(
+    (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
+  )
+
   const navClasses = [
     'nav',
     isOpen && 'nav--open'
@@ -61,6 +76,62 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               <span className="nav__text">About</span>
             </NavLink>
           </li>
+
+          {/* ---- Administration links (authenticated admins only) ---- */}
+          {isAuthenticated && hasAdminAccess && (
+            <>
+              <li role="none" className="nav__separator" aria-hidden="true" />
+              <li role="none">
+                <NavLink
+                  to="/app/administration/edit-users"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  role="menuitem"
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__icon" aria-hidden="true">
+                    <MdPeople />
+                  </span>
+                  <span className="nav__text">Users</span>
+                </NavLink>
+              </li>
+              <li role="none">
+                <NavLink
+                  to="/app/administration/maintain-tenants"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  role="menuitem"
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__icon" aria-hidden="true">
+                    <MdBusiness />
+                  </span>
+                  <span className="nav__text">Tenants</span>
+                </NavLink>
+              </li>
+            </>
+          )}
+
+          {/* ---- Super Admin link ---- */}
+          {isAuthenticated && isSuperAdmin && (
+            <li role="none">
+              <NavLink
+                to="/super-admin/customers"
+                className={({ isActive }) =>
+                  isActive ? 'nav__link nav__link--active' : 'nav__link'
+                }
+                role="menuitem"
+                onClick={onLinkClick}
+              >
+                <span className="nav__icon" aria-hidden="true">
+                  <MdAdminPanelSettings />
+                </span>
+                <span className="nav__text">Admin</span>
+              </NavLink>
+            </li>
+          )}
         </ul>
       </div>
     </nav>

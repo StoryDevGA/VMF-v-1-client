@@ -7,10 +7,30 @@ import { act } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
+import { Provider } from 'react-redux'
+import { configureStore } from '@reduxjs/toolkit'
 import { Header } from './Header'
+import authReducer from '../../store/slices/authSlice.js'
+import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
+import { baseApi } from '../../store/api/baseApi.js'
 
-// Wrapper for React Router context
-const RouterWrapper = ({ children }) => <BrowserRouter>{children}</BrowserRouter>
+// Create a minimal store for Navigation's Redux needs
+const createTestStore = () =>
+  configureStore({
+    reducer: {
+      auth: authReducer,
+      tenantContext: tenantContextReducer,
+      [baseApi.reducerPath]: baseApi.reducer,
+    },
+    middleware: (gDM) => gDM().concat(baseApi.middleware),
+  })
+
+// Wrapper for React Router + Redux context
+const RouterWrapper = ({ children }) => (
+  <Provider store={createTestStore()}>
+    <BrowserRouter>{children}</BrowserRouter>
+  </Provider>
+)
 
 describe('Header Component', () => {
   // ===========================

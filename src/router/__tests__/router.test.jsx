@@ -12,6 +12,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
+import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { router } from '../index'
 
 const ROUTE_TEST_TIMEOUT = 15000
@@ -21,6 +22,7 @@ function createTestStore(preloadedState) {
   return configureStore({
     reducer: {
       auth: authReducer,
+      tenantContext: tenantContextReducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (gDM) => gDM().concat(baseApi.middleware),

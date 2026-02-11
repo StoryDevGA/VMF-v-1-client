@@ -16,6 +16,7 @@ describe('Redux store', () => {
   it('should initialise with expected state keys', () => {
     const state = store.getState()
     expect(state).toHaveProperty('auth')
+    expect(state).toHaveProperty('tenantContext')
     expect(state).toHaveProperty(baseApi.reducerPath)
   })
 

@@ -16,6 +16,7 @@ import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
+import { TenantSwitcher } from '../components/TenantSwitcher'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import './router.css'
 
@@ -58,7 +59,9 @@ function LoadingFallback() {
 function RootLayout() {
   return (
     <div className="root-layout">
-      <Header logo={<Logo size="medium" />} />
+      <Header logo={<Logo size="medium" />}>
+        <TenantSwitcher />
+      </Header>
       <main className="root-layout__main">
         <Suspense fallback={<LoadingFallback />}>
           <Outlet />

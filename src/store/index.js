@@ -13,6 +13,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { baseApi } from './api/baseApi.js'
 import authReducer from './slices/authSlice.js'
+import tenantContextReducer from './slices/tenantContextSlice.js'
 
 export const store = configureStore({
   reducer: {
@@ -21,6 +22,7 @@ export const store = configureStore({
 
     // Feature slices
     auth: authReducer,
+    tenantContext: tenantContextReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(baseApi.middleware),

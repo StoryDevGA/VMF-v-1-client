@@ -22,6 +22,7 @@ import {
  * @param {string} customerId - The customer to manage users for
  * @param {Object}  [options]
  * @param {number}  [options.pageSize=20] - Page size for list queries
+ * @param {string}  [options.tenantId]    - When set, client-side filter to users visible to this tenant
  * @returns {{
  *   users: Array,
  *   pagination: { page: number, pageSize: number, total: number, totalPages: number },
@@ -47,7 +48,7 @@ import {
  * }}
  */
 export function useUsers(customerId, options = {}) {
-  const { pageSize = 20 } = options
+  const { pageSize = 20, tenantId = null } = options
 
   /* ---- Local filter / pagination state ---- */
   const [search, setSearch] = useState('')
@@ -71,7 +72,14 @@ export function useUsers(customerId, options = {}) {
     { skip: !customerId },
   )
 
-  const users = useMemo(() => listData?.data?.users ?? [], [listData])
+  const users = useMemo(() => {
+    const all = listData?.data?.users ?? []
+    if (!tenantId) return all
+    // Client-side filter: show only users whose tenantMemberships include the selected tenant
+    return all.filter((u) =>
+      (u.tenantMemberships ?? []).some((tm) => tm.tenantId === tenantId),
+    )
+  }, [listData, tenantId])
 
   const pagination = useMemo(
     () => ({

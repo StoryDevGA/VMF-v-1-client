@@ -20,6 +20,7 @@ import { Spinner } from '../../components/Spinner'
 import { useToaster } from '../../components/Toaster'
 import { useTenants } from '../../hooks/useTenants.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser } from '../../store/slices/authSlice.js'
 import { normalizeError } from '../../utils/errors.js'
 import CreateTenantWizard from './CreateTenantWizard'
@@ -52,14 +53,8 @@ function MaintainTenants() {
   const currentUser = useSelector(selectCurrentUser)
   const { isSuperAdmin } = useAuthorization()
 
-  /* ---- Resolve customer ID from current user ---- */
-  const customerId = useMemo(() => {
-    if (!currentUser) return null
-    const membership = currentUser.memberships?.find(
-      (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
-    )
-    return membership?.customerId ?? null
-  }, [currentUser])
+  /* ---- Resolve customer context from shared store ---- */
+  const { customerId } = useTenantContext()
 
   /* ---- Tenant list hook ---- */
   const {

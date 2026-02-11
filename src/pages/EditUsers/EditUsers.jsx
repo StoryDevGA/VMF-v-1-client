@@ -21,6 +21,7 @@ import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser } from '../../store/slices/authSlice.js'
 import { normalizeError } from '../../utils/errors.js'
 import CreateUserWizard from './CreateUserWizard'
@@ -45,15 +46,8 @@ function EditUsers() {
   const currentUser = useSelector(selectCurrentUser)
   const { isSuperAdmin } = useAuthorization()
 
-  /* ---- Resolve customer ID from current user ---- */
-  const customerId = useMemo(() => {
-    if (!currentUser) return null
-    // Super admins may not have a direct customer membership — handled externally
-    const membership = currentUser.memberships?.find(
-      (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
-    )
-    return membership?.customerId ?? null
-  }, [currentUser])
+  /* ---- Resolve customer / tenant context from shared store ---- */
+  const { customerId, tenantId, tenantName } = useTenantContext()
 
   /* ---- User list hook ---- */
   const {
@@ -70,7 +64,7 @@ function EditUsers() {
     disableUser,
     deleteUser,
     resendInvitation,
-  } = useUsers(customerId)
+  } = useUsers(customerId, { tenantId })
 
   /* ---- Debounced search ---- */
   const [searchInput, setSearchInput] = useState('')
@@ -308,6 +302,13 @@ function EditUsers() {
           Create User
         </Button>
       </div>
+
+      {/* Tenant scope indicator */}
+      {tenantId && tenantName && (
+        <p className="edit-users__scope-indicator" role="status">
+          Showing users for tenant: <strong>{tenantName}</strong>
+        </p>
+      )}
 
       {/* Toolbar: search + filter */}
       <div className="edit-users__toolbar">
