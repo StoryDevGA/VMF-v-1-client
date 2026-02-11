@@ -20,14 +20,12 @@ import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { useToaster } from '../../components/Toaster'
+import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useCreateTenantMutation } from '../../store/api/tenantApi.js'
 import { normalizeError } from '../../utils/errors.js'
 
 /** Wizard step count */
 const TOTAL_STEPS = 3
-
-/** Simple ObjectId-ish regex for UI validation */
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i
 
 /**
  * CreateTenantWizard Component
@@ -40,7 +38,6 @@ function CreateTenantWizard({ open, onClose, customerId }) {
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [website, setWebsite] = useState('')
-  const [adminInput, setAdminInput] = useState('')
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -49,7 +46,6 @@ function CreateTenantWizard({ open, onClose, customerId }) {
     setStep(1)
     setName('')
     setWebsite('')
-    setAdminInput('')
     setTenantAdminUserIds([])
     setFieldErrors({})
     onClose()
@@ -94,28 +90,14 @@ function CreateTenantWizard({ open, onClose, customerId }) {
     setStep((s) => Math.max(1, s - 1))
   }, [])
 
-  /* ---- Admin ID management ---- */
-  const handleAddAdmin = useCallback(() => {
-    const trimmed = adminInput.trim()
-    if (!trimmed) return
-
-    if (!OBJECT_ID_REGEX.test(trimmed)) {
-      setFieldErrors({ adminInput: 'Enter a valid user ID (24-character hex).' })
-      return
-    }
-
-    if (tenantAdminUserIds.includes(trimmed)) {
-      setFieldErrors({ adminInput: 'This user ID has already been added.' })
-      return
-    }
-
-    setTenantAdminUserIds((prev) => [...prev, trimmed])
-    setAdminInput('')
-    setFieldErrors({})
-  }, [adminInput, tenantAdminUserIds])
-
-  const handleRemoveAdmin = useCallback((id) => {
-    setTenantAdminUserIds((prev) => prev.filter((uid) => uid !== id))
+  /* ---- Admin selection handler ---- */
+  const handleAdminChange = useCallback((newIds) => {
+    setTenantAdminUserIds(newIds)
+    // Clear any existing tenantAdminUserIds error when user adds admins
+    setFieldErrors((prev) => {
+      const { tenantAdminUserIds: _, ...rest } = prev
+      return rest
+    })
   }, [])
 
   /* ---- Submit ---- */
@@ -209,56 +191,20 @@ function CreateTenantWizard({ open, onClose, customerId }) {
         {step === 2 && (
           <div className="create-wizard__step">
             <fieldset className="create-wizard__fieldset">
-              <legend className="create-wizard__legend">Tenant Admin User IDs</legend>
+              <legend className="create-wizard__legend">Assign Tenant Admins</legend>
               <p className="create-wizard__hint">
-                Add at least one user ID to serve as tenant administrator.
+                Search and select at least one user to serve as tenant administrator.
               </p>
 
-              <div className="create-wizard__admin-input-row">
-                <Input
-                  id="create-tenant-admin-id"
-                  label="User ID"
-                  placeholder="24-character hex ID"
-                  value={adminInput}
-                  onChange={(e) => setAdminInput(e.target.value)}
-                  error={fieldErrors.adminInput}
-                  fullWidth
-                  disabled={isLoading}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddAdmin}
-                  disabled={isLoading || !adminInput.trim()}
-                >
-                  Add
-                </Button>
-              </div>
-
-              {tenantAdminUserIds.length > 0 && (
-                <ul className="create-wizard__admin-list">
-                  {tenantAdminUserIds.map((uid) => (
-                    <li key={uid} className="create-wizard__admin-item">
-                      <code className="create-wizard__admin-id">{uid}</code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveAdmin(uid)}
-                        disabled={isLoading}
-                        aria-label={`Remove ${uid}`}
-                      >
-                        Remove
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {fieldErrors.tenantAdminUserIds && (
-                <p className="create-wizard__error" role="alert">
-                  {fieldErrors.tenantAdminUserIds}
-                </p>
-              )}
+              <UserSearchSelect
+                customerId={customerId}
+                selectedIds={tenantAdminUserIds}
+                onChange={handleAdminChange}
+                label="Search users by name or email"
+                error={fieldErrors.tenantAdminUserIds}
+                minRequired={1}
+                disabled={isLoading}
+              />
             </fieldset>
           </div>
         )}

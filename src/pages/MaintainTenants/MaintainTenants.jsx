@@ -386,6 +386,7 @@ function MaintainTenants() {
         open={!!editingTenant}
         onClose={() => setEditingTenant(null)}
         tenant={editingTenant}
+        customerId={customerId}
       />
 
       {/* Confirm action dialog */}

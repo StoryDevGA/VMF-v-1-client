@@ -7,7 +7,8 @@
  * - Shows default badge for default tenants
  * - Pre-fills name and website from tenant prop
  * - Validates empty name on save
- * - Renders tenant admin list
+ * - Renders UserSearchSelect for tenant admin management
+ * - Shows selected admin as chip (truncated ID fallback)
  * - Calls onClose when Cancel is clicked
  * - Returns null when tenant is null
  */
@@ -69,6 +70,7 @@ function renderDrawer(props = {}) {
     open: true,
     onClose: vi.fn(),
     tenant: sampleTenant,
+    customerId: 'cust-1',
     ...props,
   }
   const store = createTestStore()
@@ -100,8 +102,7 @@ describe('TenantEditDrawer', () => {
   })
 
   it('renders nothing when tenant is null', () => {
-    const { container } = renderDrawer({ tenant: null })
-    // Dialog should not render its body content
+    renderDrawer({ tenant: null })
     expect(
       screen.queryByRole('heading', { name: /edit tenant/i }),
     ).not.toBeInTheDocument()
@@ -129,9 +130,16 @@ describe('TenantEditDrawer', () => {
     expect(websiteInput).toHaveValue('https://acme.com')
   })
 
-  it('shows existing tenant admin user IDs', () => {
+  it('renders UserSearchSelect with combobox for admin assignment', () => {
     renderDrawer()
-    expect(screen.getByText('507f1f77bcf86cd799439011')).toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/search by name or email/i)).toBeInTheDocument()
+  })
+
+  it('shows selected admin as a chip with truncated ID fallback', () => {
+    renderDrawer()
+    // Without cached user details, UserSearchSelect falls back to first 8 chars + ellipsis
+    expect(screen.getByText('507f1f77…')).toBeInTheDocument()
   })
 
   it('shows validation error when name is cleared and Save is clicked', async () => {
@@ -156,18 +164,6 @@ describe('TenantEditDrawer', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('validates admin user ID format before adding', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-
-    await user.type(screen.getByLabelText(/user id/i), 'bad-id')
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/valid user id/i)).toBeInTheDocument()
-    })
-  })
-
   it('renders Save Changes and Cancel buttons', () => {
     renderDrawer()
     expect(
@@ -176,5 +172,10 @@ describe('TenantEditDrawer', () => {
     expect(
       screen.getByRole('button', { name: /cancel/i }),
     ).toBeInTheDocument()
+  })
+
+  it('renders Tenant Admins fieldset legend', () => {
+    renderDrawer()
+    expect(screen.getByText('Tenant Admins')).toBeInTheDocument()
   })
 })

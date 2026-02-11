@@ -1,21 +1,29 @@
 /**
  * Tenant Edit Drawer
  *
- * Dialog for editing an existing tenant's name, website, and admin user IDs.
+ * Dialog for editing an existing tenant's name, website, and admin assignments.
  * Opens as a side-sheet style dialog when a tenant row's Edit action is triggered.
  *
+ * Features:
+ * - Searchable user selection for tenant admins (replaces raw ObjectId input)
+ * - Minimum 1 admin enforcement with removal protection
+ * - Recovery hint when all current admins are inactive
+ * - Diff-based update (only sends changed fields)
+ *
  * @param {Object}  props
- * @param {boolean} props.open    — controls dialog visibility
- * @param {Function} props.onClose — called when drawer should close
- * @param {Object}  props.tenant  — the tenant object being edited
+ * @param {boolean} props.open       — controls dialog visibility
+ * @param {Function} props.onClose   — called when drawer should close
+ * @param {Object}  props.tenant     — the tenant object being edited
+ * @param {string}  props.customerId — customer scope for user lookup
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { useToaster } from '../../components/Toaster'
+import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useUpdateTenantMutation } from '../../store/api/tenantApi.js'
 import { normalizeError } from '../../utils/errors.js'
 
@@ -26,13 +34,10 @@ const STATUS_VARIANT_MAP = {
   ARCHIVED: 'neutral',
 }
 
-/** Simple ObjectId-ish regex for UI validation */
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i
-
 /**
  * TenantEditDrawer Component
  */
-function TenantEditDrawer({ open, onClose, tenant }) {
+function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const { addToast } = useToaster()
   const [updateTenantMutation, { isLoading }] = useUpdateTenantMutation()
 
@@ -40,8 +45,13 @@ function TenantEditDrawer({ open, onClose, tenant }) {
   const [name, setName] = useState('')
   const [website, setWebsite] = useState('')
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
-  const [adminInput, setAdminInput] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
+
+  /* ---- Original admin IDs for recovery detection ---- */
+  const originalAdminIds = useMemo(
+    () => tenant?.tenantAdminUserIds ?? [],
+    [tenant],
+  )
 
   /* ---- Sync from tenant prop ---- */
   useEffect(() => {
@@ -49,42 +59,17 @@ function TenantEditDrawer({ open, onClose, tenant }) {
       setName(tenant.name ?? '')
       setWebsite(tenant.website ?? '')
       setTenantAdminUserIds(tenant.tenantAdminUserIds ?? [])
-      setAdminInput('')
       setFieldErrors({})
     }
   }, [tenant])
 
-  /* ---- Admin ID management ---- */
-  const handleAddAdmin = useCallback(() => {
-    const trimmed = adminInput.trim()
-    if (!trimmed) return
-
-    if (!OBJECT_ID_REGEX.test(trimmed)) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        adminInput: 'Enter a valid user ID (24-character hex).',
-      }))
-      return
-    }
-
-    if (tenantAdminUserIds.includes(trimmed)) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        adminInput: 'This user ID has already been added.',
-      }))
-      return
-    }
-
-    setTenantAdminUserIds((prev) => [...prev, trimmed])
-    setAdminInput('')
+  /* ---- Admin selection handler ---- */
+  const handleAdminChange = useCallback((newIds) => {
+    setTenantAdminUserIds(newIds)
     setFieldErrors((prev) => {
-      const { adminInput: _, ...rest } = prev
+      const { tenantAdminUserIds: _, ...rest } = prev
       return rest
     })
-  }, [adminInput, tenantAdminUserIds])
-
-  const handleRemoveAdmin = useCallback((id) => {
-    setTenantAdminUserIds((prev) => prev.filter((uid) => uid !== id))
   }, [])
 
   /* ---- Validate ---- */
@@ -120,9 +105,9 @@ function TenantEditDrawer({ open, onClose, tenant }) {
         body.website = website.trim()
       }
       // Always send tenantAdminUserIds if changed
-      const originalIds = (tenant?.tenantAdminUserIds ?? []).sort().join(',')
-      const currentIds = [...tenantAdminUserIds].sort().join(',')
-      if (currentIds !== originalIds) {
+      const originalSorted = (tenant?.tenantAdminUserIds ?? []).sort().join(',')
+      const currentSorted = [...tenantAdminUserIds].sort().join(',')
+      if (currentSorted !== originalSorted) {
         body.tenantAdminUserIds = tenantAdminUserIds
       }
 
@@ -213,55 +198,20 @@ function TenantEditDrawer({ open, onClose, tenant }) {
           disabled={isLoading}
         />
 
-        {/* Tenant admin user IDs */}
+        {/* Tenant admin assignment */}
         <fieldset className="tenant-edit-drawer__fieldset">
           <legend className="tenant-edit-drawer__legend">Tenant Admins</legend>
 
-          <div className="tenant-edit-drawer__admin-input-row">
-            <Input
-              id="edit-tenant-admin-id"
-              label="User ID"
-              placeholder="24-character hex ID"
-              value={adminInput}
-              onChange={(e) => setAdminInput(e.target.value)}
-              error={fieldErrors.adminInput}
-              fullWidth
-              disabled={isLoading}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAddAdmin}
-              disabled={isLoading || !adminInput.trim()}
-            >
-              Add
-            </Button>
-          </div>
-
-          {tenantAdminUserIds.length > 0 && (
-            <ul className="tenant-edit-drawer__admin-list">
-              {tenantAdminUserIds.map((uid) => (
-                <li key={uid} className="tenant-edit-drawer__admin-item">
-                  <code className="tenant-edit-drawer__admin-id">{uid}</code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveAdmin(uid)}
-                    disabled={isLoading}
-                    aria-label={`Remove ${uid}`}
-                  >
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {fieldErrors.tenantAdminUserIds && (
-            <p className="tenant-edit-drawer__error" role="alert">
-              {fieldErrors.tenantAdminUserIds}
-            </p>
-          )}
+          <UserSearchSelect
+            customerId={customerId}
+            selectedIds={tenantAdminUserIds}
+            onChange={handleAdminChange}
+            label="Search users by name or email"
+            error={fieldErrors.tenantAdminUserIds}
+            minRequired={1}
+            disabled={isLoading}
+            originalIds={originalAdminIds}
+          />
         </fieldset>
       </Dialog.Body>
 
