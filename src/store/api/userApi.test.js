@@ -17,6 +17,9 @@ import {
   useDisableUserMutation,
   useDeleteUserMutation,
   useResendInvitationMutation,
+  useBulkCreateUsersMutation,
+  useBulkUpdateUsersMutation,
+  useBulkDisableUsersMutation,
 } from './userApi.js'
 
 describe('userApi', () => {
@@ -28,6 +31,9 @@ describe('userApi', () => {
     expect(endpoints).toHaveProperty('disableUser')
     expect(endpoints).toHaveProperty('deleteUser')
     expect(endpoints).toHaveProperty('resendInvitation')
+    expect(endpoints).toHaveProperty('bulkCreateUsers')
+    expect(endpoints).toHaveProperty('bulkUpdateUsers')
+    expect(endpoints).toHaveProperty('bulkDisableUsers')
   })
 
   it('should export query hooks', () => {
@@ -41,6 +47,9 @@ describe('userApi', () => {
     expect(typeof useDisableUserMutation).toBe('function')
     expect(typeof useDeleteUserMutation).toBe('function')
     expect(typeof useResendInvitationMutation).toBe('function')
+    expect(typeof useBulkCreateUsersMutation).toBe('function')
+    expect(typeof useBulkUpdateUsersMutation).toBe('function')
+    expect(typeof useBulkDisableUsersMutation).toBe('function')
   })
 
   it('listUsers endpoint should be a query', () => {
@@ -71,5 +80,20 @@ describe('userApi', () => {
   it('resendInvitation endpoint should be a mutation', () => {
     expect(userApi.endpoints.resendInvitation).toBeDefined()
     expect(typeof userApi.endpoints.resendInvitation.initiate).toBe('function')
+  })
+
+  it('bulkCreateUsers endpoint should be a mutation', () => {
+    expect(userApi.endpoints.bulkCreateUsers).toBeDefined()
+    expect(typeof userApi.endpoints.bulkCreateUsers.initiate).toBe('function')
+  })
+
+  it('bulkUpdateUsers endpoint should be a mutation', () => {
+    expect(userApi.endpoints.bulkUpdateUsers).toBeDefined()
+    expect(typeof userApi.endpoints.bulkUpdateUsers.initiate).toBe('function')
+  })
+
+  it('bulkDisableUsers endpoint should be a mutation', () => {
+    expect(userApi.endpoints.bulkDisableUsers).toBeDefined()
+    expect(typeof userApi.endpoints.bulkDisableUsers.initiate).toBe('function')
   })
 })

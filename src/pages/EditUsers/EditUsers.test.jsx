@@ -111,6 +111,13 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders the Bulk Operations button', () => {
+    renderEditUsers()
+    expect(
+      screen.getByRole('button', { name: /bulk operations/i }),
+    ).toBeInTheDocument()
+  })
+
   it('renders the search input', () => {
     renderEditUsers()
     expect(screen.getByLabelText(/search/i)).toBeInTheDocument()
@@ -156,6 +163,19 @@ describe('EditUsers page', () => {
     await waitFor(() => {
       expect(
         screen.getByRole('heading', { name: /create user/i }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('opens Bulk Operations dialog when button is clicked', async () => {
+    const user = userEvent.setup()
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /bulk operations/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /bulk operations/i }),
       ).toBeInTheDocument()
     })
   })

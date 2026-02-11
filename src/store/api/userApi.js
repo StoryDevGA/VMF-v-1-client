@@ -115,6 +115,51 @@ export const userApi = baseApi.injectEndpoints({
         { type: 'User', id: userId },
       ],
     }),
+
+    /**
+     * POST /customers/:customerId/users/bulk
+     * Bulk-create users (max 100) with per-item result reporting.
+     *
+     * @param {{ customerId: string, body: { users: Array, sendInvitations?: boolean } }} params
+     */
+    bulkCreateUsers: build.mutation({
+      query: ({ customerId, body }) => ({
+        url: `/customers/${customerId}/users/bulk`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [{ type: 'User', id: 'LIST' }],
+    }),
+
+    /**
+     * PATCH /customers/:customerId/users/bulk
+     * Bulk-update users (roles / tenant visibility) with per-item results.
+     *
+     * @param {{ customerId: string, body: { users: Array } }} params
+     */
+    bulkUpdateUsers: build.mutation({
+      query: ({ customerId, body }) => ({
+        url: `/customers/${customerId}/users/bulk`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: [{ type: 'User', id: 'LIST' }],
+    }),
+
+    /**
+     * POST /customers/:customerId/users/bulk-disable
+     * Bulk-disable users with immediate trust/session revocation.
+     *
+     * @param {{ customerId: string, body: { userIds: string[] } }} params
+     */
+    bulkDisableUsers: build.mutation({
+      query: ({ customerId, body }) => ({
+        url: `/customers/${customerId}/users/bulk-disable`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [{ type: 'User', id: 'LIST' }],
+    }),
   }),
   overrideExisting: false,
 })
@@ -127,4 +172,7 @@ export const {
   useDisableUserMutation,
   useDeleteUserMutation,
   useResendInvitationMutation,
+  useBulkCreateUsersMutation,
+  useBulkUpdateUsersMutation,
+  useBulkDisableUsersMutation,
 } = userApi

@@ -9,7 +9,6 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useSelector } from 'react-redux'
 import { Table } from '../../components/Table'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -22,10 +21,10 @@ import { useToaster } from '../../components/Toaster'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { selectCurrentUser } from '../../store/slices/authSlice.js'
 import { normalizeError } from '../../utils/errors.js'
 import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
+import BulkUserOperations from './BulkUserOperations'
 import './EditUsers.css'
 
 /** Debounce delay for search input (ms) */
@@ -43,7 +42,6 @@ const STATUS_OPTIONS = [
  */
 function EditUsers() {
   const { addToast } = useToaster()
-  const currentUser = useSelector(selectCurrentUser)
   const { isSuperAdmin } = useAuthorization()
 
   /* ---- Resolve customer / tenant context from shared store ---- */
@@ -55,7 +53,6 @@ function EditUsers() {
     pagination,
     isLoading,
     isFetching,
-    search,
     setSearch,
     statusFilter,
     setStatusFilter,
@@ -79,8 +76,10 @@ function EditUsers() {
 
   /* ---- Dialog state ---- */
   const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [showBulkOperations, setShowBulkOperations] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
+  const [selectedRows, setSelectedRows] = useState(new Set())
 
   /* ---- Action handlers ---- */
 
@@ -212,6 +211,25 @@ function EditUsers() {
     [],
   )
 
+  const tableData = useMemo(
+    () =>
+      users.map((user) => ({
+        ...user,
+        id: user._id,
+      })),
+    [users],
+  )
+
+  const visibleUserIds = useMemo(
+    () => new Set(tableData.map((row) => row.id)),
+    [tableData],
+  )
+
+  const selectedRowsSafe = useMemo(
+    () => new Set([...selectedRows].filter((id) => visibleUserIds.has(id))),
+    [selectedRows, visibleUserIds],
+  )
+
   /* ---- Row actions ---- */
   const actions = useMemo(
     () => [
@@ -294,13 +312,22 @@ function EditUsers() {
       {/* Page header */}
       <div className="edit-users__header">
         <h1 className="edit-users__title">Edit Users</h1>
-        <Button
-          variant="primary"
-          onClick={() => setShowCreateWizard(true)}
-          disabled={isFetching}
-        >
-          Create User
-        </Button>
+        <div className="edit-users__header-actions">
+          <Button
+            variant="outline"
+            onClick={() => setShowBulkOperations(true)}
+            disabled={isFetching}
+          >
+            Bulk Operations
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setShowCreateWizard(true)}
+            disabled={isFetching}
+          >
+            Create User
+          </Button>
+        </div>
       </div>
 
       {/* Tenant scope indicator */}
@@ -341,9 +368,12 @@ function EditUsers() {
       <div className="edit-users__table">
         <Table
           columns={columns}
-          data={users}
+          data={tableData}
           variant="striped"
           hoverable
+          selectable
+          selectedRows={selectedRowsSafe}
+          onSelectChange={setSelectedRows}
           loading={isLoading}
           loadingRows={5}
           actions={actions}
@@ -391,6 +421,13 @@ function EditUsers() {
         open={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         customerId={customerId}
+      />
+
+      <BulkUserOperations
+        open={showBulkOperations}
+        onClose={() => setShowBulkOperations(false)}
+        customerId={customerId}
+        selectedUserIds={Array.from(selectedRowsSafe)}
       />
 
       {/* User Edit Drawer */}

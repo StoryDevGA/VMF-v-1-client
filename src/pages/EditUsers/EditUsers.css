@@ -29,6 +29,12 @@
   margin: 0;
 }
 
+.edit-users__header-actions {
+  display: flex;
+  gap: var(--spacing-sm, 0.5rem);
+  flex-wrap: wrap;
+}
+
 /* ---- Tenant scope indicator ---- */
 
 .edit-users__scope-indicator {
@@ -122,5 +128,9 @@
   .edit-users__header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .edit-users__header-actions {
+    width: 100%;
   }
 }
