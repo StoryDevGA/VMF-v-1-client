@@ -104,14 +104,16 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('menuitem', { name: /users/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /tenants/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
   })
 
-  it('shows Users, Tenants, and Admin links for SUPER_ADMIN', () => {
+  it('shows Users, Tenants, Monitoring, and Admin links for SUPER_ADMIN', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
     expect(screen.getByRole('menuitem', { name: /users/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /tenants/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /^admin$/i })).toBeInTheDocument()
   })
 
@@ -121,6 +123,7 @@ describe('Navigation', () => {
 
     expect(screen.queryByRole('menuitem', { name: /users/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /monitoring/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 

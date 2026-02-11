@@ -17,6 +17,7 @@ import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
 import { TenantSwitcher } from '../components/TenantSwitcher'
+import { SystemHealthIndicator } from '../components/SystemHealthIndicator'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import './router.css'
 
@@ -33,6 +34,9 @@ const SuperAdminLogin = lazy(
 const EditUsers = lazy(() => import('../pages/EditUsers/EditUsers'))
 const MaintainTenants = lazy(
   () => import('../pages/MaintainTenants/MaintainTenants'),
+)
+const SystemMonitoring = lazy(
+  () => import('../pages/SystemMonitoring/SystemMonitoring'),
 )
 
 /* ------------------------------------------------------------------ */
@@ -60,6 +64,7 @@ function RootLayout() {
   return (
     <div className="root-layout">
       <Header logo={<Logo size="medium" />}>
+        <SystemHealthIndicator />
         <TenantSwitcher />
       </Header>
       <main className="root-layout__main">
@@ -121,6 +126,10 @@ export const router = createBrowserRouter([
           {
             path: 'administration/maintain-tenants',
             element: <MaintainTenants />,
+          },
+          {
+            path: 'administration/system-monitoring',
+            element: <SystemMonitoring />,
           },
         ],
       },

@@ -16,7 +16,14 @@
 
 import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { MdHome, MdInfo, MdPeople, MdBusiness, MdAdminPanelSettings } from 'react-icons/md'
+import {
+  MdHome,
+  MdInfo,
+  MdPeople,
+  MdBusiness,
+  MdAdminPanelSettings,
+  MdMonitorHeart,
+} from 'react-icons/md'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Navigation.css'
@@ -109,6 +116,21 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                     <MdBusiness />
                   </span>
                   <span className="nav__text">Tenants</span>
+                </NavLink>
+              </li>
+              <li role="none">
+                <NavLink
+                  to="/app/administration/system-monitoring"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  role="menuitem"
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__icon" aria-hidden="true">
+                    <MdMonitorHeart />
+                  </span>
+                  <span className="nav__text">Monitoring</span>
                 </NavLink>
               </li>
             </>

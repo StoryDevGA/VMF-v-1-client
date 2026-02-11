@@ -1,0 +1,45 @@
+.system-health-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: var(--font-size-xs, 0.75rem);
+  font-weight: var(--font-weight-semibold, 600);
+  line-height: 1;
+}
+
+.system-health-indicator__label {
+  letter-spacing: 0.02em;
+}
+
+.system-health-indicator--ok {
+  background: var(--color-success-50, #ecfdf5);
+  color: var(--color-success-700, #047857);
+  border-color: var(--color-success-200, #a7f3d0);
+}
+
+.system-health-indicator--warn {
+  background: var(--color-warning-50, #fffbeb);
+  color: var(--color-warning-700, #92400e);
+  border-color: var(--color-warning-200, #fde68a);
+}
+
+.system-health-indicator--error {
+  background: var(--color-danger-50, #fef2f2);
+  color: var(--color-danger-700, #b91c1c);
+  border-color: var(--color-danger-200, #fecaca);
+}
+
+.system-health-indicator--unknown {
+  background: var(--color-background-secondary, #f3f4f6);
+  color: var(--color-text-secondary, #4b5563);
+  border-color: var(--color-border-default, #d1d5db);
+}
+
+@media (max-width: 768px) {
+  .system-health-indicator__label {
+    display: none;
+  }
+}
