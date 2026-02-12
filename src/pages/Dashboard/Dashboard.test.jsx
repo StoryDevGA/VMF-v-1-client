@@ -172,4 +172,48 @@ describe('Dashboard page', () => {
     await user.click(screen.getByRole('button', { name: /sign out/i }))
     expect(mockLogout).toHaveBeenCalledTimes(1)
   })
+
+  it('displays the signed-in user name', () => {
+    mockRole({ userName: 'Alice Wonderland', isCustomerAdmin: true })
+    renderDashboard()
+
+    expect(screen.getByText('Alice Wonderland')).toBeInTheDocument()
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
+  })
+
+  it('shows "Super Administrator" role for super admins', () => {
+    mockRole({ isSuperAdmin: true })
+    renderDashboard()
+
+    expect(screen.getByText('Super Administrator')).toBeInTheDocument()
+  })
+
+  it('shows "Customer Administrator" role for customer admins', () => {
+    mockRole({ isCustomerAdmin: true })
+    renderDashboard()
+
+    expect(screen.getByText('Customer Administrator')).toBeInTheDocument()
+  })
+
+  it('shows "User" role for non-admin users', () => {
+    mockRole({ isSuperAdmin: false, isCustomerAdmin: false })
+    renderDashboard()
+
+    expect(screen.getByText('User')).toBeInTheDocument()
+  })
+
+  it('hides tenant switcher when no customer context is set', () => {
+    useTenantContext.mockReturnValue({
+      customerId: null,
+      tenantId: null,
+      tenantName: null,
+      tenants: [],
+      isLoadingTenants: false,
+    })
+    renderDashboard()
+
+    expect(
+      screen.getByText(/select a customer to unlock/i),
+    ).toBeInTheDocument()
+  })
 })

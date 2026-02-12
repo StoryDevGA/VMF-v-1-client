@@ -68,6 +68,25 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               <span className="nav__text">Home</span>
             </NavLink>
           </li>
+          {/* ---- Dashboard (all authenticated users) ---- */}
+          {isAuthenticated && (
+            <li role="none">
+              <NavLink
+                to="/app/dashboard"
+                className={({ isActive }) =>
+                  isActive ? 'nav__link nav__link--active' : 'nav__link'
+                }
+                role="menuitem"
+                onClick={onLinkClick}
+              >
+                <span className="nav__icon" aria-hidden="true">
+                  <MdDashboard />
+                </span>
+                <span className="nav__text">Dashboard</span>
+              </NavLink>
+            </li>
+          )}
+
           <li role="none">
             <NavLink
               to="/about"
@@ -136,27 +155,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             </>
           )}
 
-          {/* ---- Dashboard ---- */}
-          {isAuthenticated && (
-            <>
-              <li role="none" className="nav__separator" aria-hidden="true" />
-              <li role="none">
-                <NavLink
-                  to="/app/dashboard"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  role="menuitem"
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__icon" aria-hidden="true">
-                    <MdDashboard />
-                  </span>
-                  <span className="nav__text">Dashboard</span>
-                </NavLink>
-              </li>
-            </>
-          )}
+
         </ul>
       </div>
     </nav>

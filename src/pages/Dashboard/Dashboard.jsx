@@ -46,6 +46,17 @@ function Dashboard() {
   const hasAdminAccess = isSuperAdmin || isCustomerAdmin
   const hasCustomerContext = Boolean(customerId)
 
+  /** Derive a human-friendly primary role label. */
+  const primaryRole = useMemo(() => {
+    if (isSuperAdmin) return 'Super Administrator'
+    if (isCustomerAdmin) return 'Customer Administrator'
+    const tenantAdmin = user?.tenantMemberships?.find((m) =>
+      m.roles?.includes('TENANT_ADMIN'),
+    )
+    if (tenantAdmin) return 'Tenant Administrator'
+    return 'User'
+  }, [isSuperAdmin, isCustomerAdmin, user])
+
   const workflowTiles = useMemo(() => {
     const tiles = [
       {
@@ -163,6 +174,7 @@ function Dashboard() {
             Signed in as <strong>{user.name}</strong>
           </p>
         )}
+        <p className="dashboard__role">{primaryRole}</p>
       </header>
 
       <div className="dashboard__grid">
