@@ -2,7 +2,7 @@
  * TenantSwitcher Component
  *
  * Contextual dropdown that lets the user switch the active tenant scope.
- * Mounted in the Header to provide persistent access across all pages.
+ * Mounted in workflow context surfaces to drive scoped operations.
  *
  * Features:
  * - Shows the currently selected tenant (or "All Tenants")

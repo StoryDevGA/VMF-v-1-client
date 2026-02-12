@@ -86,7 +86,7 @@ function SuperAdminLogin() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/super-admin/customers" replace />
+    return <Navigate to="/app/dashboard" replace />
   }
 
   return (

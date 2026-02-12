@@ -1,17 +1,16 @@
 /**
  * SystemHealthIndicator Component (Phase 5.2)
  *
- * Compact health status pill rendered in the app Header for admin users.
+ * Compact health status pill rendered in admin context surfaces.
  * Polls `/health` via `useSystemMonitoring` and displays a colour-coded
  * badge (ok / warn / error / unknown) with the current overall status.
  *
  * Returns `null` for non-admin users so the indicator is invisible.
  *
  * @example
- * <Header>
+ * <Dashboard>
  *   <SystemHealthIndicator />
- *   <TenantSwitcher />
- * </Header>
+ * </Dashboard>
  */
 
 import { MdMonitorHeart } from 'react-icons/md'

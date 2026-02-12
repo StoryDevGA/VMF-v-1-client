@@ -69,6 +69,25 @@ describe('Router', () => {
       expect(await screen.findByRole('heading', { name: /^About$/i }, { timeout: 10000 })).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render dashboard page at /app/dashboard for authenticated users', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/dashboard'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: { id: 'u-1', name: 'User', email: 'user@example.com', memberships: [] },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole('heading', { name: /^dashboard$/i }, { timeout: 10000 }),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
   })
 
   describe('Navigation', () => {
@@ -98,6 +117,30 @@ describe('Router', () => {
 
       expect(aboutLink).toBeInTheDocument()
       expect(vmfLink).not.toBeInTheDocument()
+    })
+
+    it('should not render context controls in the global header', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/about'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+      await screen.findByRole('navigation')
+
+      expect(screen.queryByRole('combobox', { name: /select customer/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: /switch tenant/i })).not.toBeInTheDocument()
     })
   })
 

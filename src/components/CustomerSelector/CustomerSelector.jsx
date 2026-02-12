@@ -2,7 +2,7 @@
  * CustomerSelector Component
  *
  * Dropdown that allows Super Admin to select which customer context to operate in.
- * Mounted in the Header adjacent to the TenantSwitcher.
+ * Mounted in workflow context surfaces (for example Dashboard).
  *
  * Features:
  * - Only visible to Super Admin users
