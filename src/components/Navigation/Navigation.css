@@ -79,9 +79,21 @@
     background-color var(--transition-fast);
 }
 
+.nav__button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
 .nav__link:hover {
   color: var(--color-text-primary);
   background-color: var(--color-background-secondary);
+}
+
+.nav__button:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .nav__link:focus-visible {

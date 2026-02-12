@@ -13,11 +13,24 @@ import Navigation from './Navigation.jsx'
 import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
+import { useAuth } from '../../hooks/useAuth.js'
+
+vi.mock('../../hooks/useAuth.js', () => ({
+  useAuth: vi.fn(),
+}))
+
+const mockLogout = vi.fn()
 
 // ── Polyfills ────────────────────────────────────────────
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
+  mockLogout.mockReset()
+  mockLogout.mockResolvedValue(undefined)
+  useAuth.mockReturnValue({
+    logout: mockLogout,
+    logoutResult: { isLoading: false },
+  })
 })
 
 // ── User fixtures ────────────────────────────────────────
@@ -96,6 +109,7 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /users/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /logout/i })).not.toBeInTheDocument()
   })
 
   it('shows Users and Tenants links for CUSTOMER_ADMIN', () => {
@@ -107,14 +121,14 @@ describe('Navigation', () => {
     expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
   })
 
-  it('shows Users, Tenants, Monitoring, and Admin links for SUPER_ADMIN', () => {
+  it('shows Users, Tenants, and Monitoring links for SUPER_ADMIN', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
     expect(screen.getByRole('menuitem', { name: /users/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /tenants/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /^admin$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
   it('does NOT show admin links for basic USER role', () => {
@@ -125,6 +139,23 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /monitoring/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Logout for authenticated users', () => {
+    const store = createTestStore(basicUser)
+    renderNavigation(store)
+
+    expect(screen.getByRole('menuitem', { name: /logout/i })).toBeInTheDocument()
+  })
+
+  it('calls logout and onLinkClick when Logout is clicked', async () => {
+    const onLinkClick = vi.fn()
+    const store = createTestStore(customerAdminUser)
+    renderNavigation(store, onLinkClick)
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /logout/i }))
+    expect(mockLogout).toHaveBeenCalledTimes(1)
+    expect(onLinkClick).toHaveBeenCalled()
   })
 
   it('calls onLinkClick when a link is clicked', async () => {
