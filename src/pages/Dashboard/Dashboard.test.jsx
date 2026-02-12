@@ -140,7 +140,7 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(
-      screen.getByRole('link', { name: /open product overview/i }),
+      screen.getByRole('link', { name: /open help center/i }),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: /open manage users/i }),

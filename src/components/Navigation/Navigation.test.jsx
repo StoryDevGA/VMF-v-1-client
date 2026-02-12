@@ -80,13 +80,13 @@ function renderNavigation(store, onLinkClick) {
 
 // ── Tests ────────────────────────────────────────────────
 describe('Navigation', () => {
-  it('renders Home and About links always (unauthenticated)', () => {
+  it('renders Home and Help links always (unauthenticated)', () => {
     const store = createTestStore(anonymousUser, 'idle')
     renderNavigation(store)
 
     // Home link is inside a mobile-only wrapper (hidden on desktop viewports)
     expect(screen.getByText(/home/i)).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /about/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /help/i })).toBeInTheDocument()
   })
 
   it('does NOT show admin links for unauthenticated users', () => {
@@ -149,7 +149,7 @@ describe('Navigation', () => {
     const store = createTestStore(anonymousUser, 'idle')
     renderNavigation(store, onLinkClick)
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /about/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /help/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 
@@ -157,13 +157,13 @@ describe('Navigation', () => {
     const store = createTestStore(anonymousUser, 'idle')
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={['/about']}>
+        <MemoryRouter initialEntries={['/help']}>
           <Navigation />
         </MemoryRouter>
       </Provider>,
     )
 
-    const aboutLink = screen.getByRole('menuitem', { name: /about/i })
-    expect(aboutLink.className).toMatch(/active/i)
+    const helpLink = screen.getByRole('menuitem', { name: /help/i })
+    expect(helpLink.className).toMatch(/active/i)
   })
 })

@@ -59,14 +59,24 @@ describe('Router', () => {
       expect(await screen.findByText(/HOME/i, {}, { timeout: 10000 })).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should render about page at /about', async () => {
+    it('should render help page at /help', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/help'],
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />)
+
+      expect(await screen.findByRole('heading', { name: /^help center$/i }, { timeout: 10000 })).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render help page at legacy /about route', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/about'],
       })
 
       renderWithProviders(<RouterProvider router={testRouter} />)
 
-      expect(await screen.findByRole('heading', { name: /^About$/i }, { timeout: 10000 })).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: /^help center$/i }, { timeout: 10000 })).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
     it('should render dashboard page at /app/dashboard for authenticated users', async () => {
@@ -112,16 +122,16 @@ describe('Router', () => {
 
       await screen.findByRole('navigation')
 
-      const aboutLink = screen.getByRole('menuitem', { name: /about/i })
+      const helpLink = screen.getByRole('menuitem', { name: /help/i })
       const vmfLink = screen.queryByRole('menuitem', { name: /^vmf$/i })
 
-      expect(aboutLink).toBeInTheDocument()
+      expect(helpLink).toBeInTheDocument()
       expect(vmfLink).not.toBeInTheDocument()
     })
 
     it('should not render context controls in the global header', async () => {
       const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/about'],
+        initialEntries: ['/help'],
       })
 
       const store = createTestStore({

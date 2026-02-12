@@ -5,7 +5,7 @@
  * All routes use React.lazy() for code splitting and better performance.
  *
  * Route groups:
- *  - Public  — landing, about, login pages
+ *  - Public  — landing, help, login pages
  *  - App     — customer-level protected routes  (/app/*)
  *  - Admin   — super-admin protected routes     (/super-admin/*)
  */
@@ -24,7 +24,7 @@ import './router.css'
 /* ------------------------------------------------------------------ */
 
 const Home = lazy(() => import('../pages/Home'))
-const About = lazy(() => import('../pages/About'))
+const Help = lazy(() => import('../pages/Help'))
 const Dashboard = lazy(() => import('../pages/Dashboard'))
 const Login = lazy(() => import('../pages/Login/Login'))
 const SuperAdminLogin = lazy(
@@ -92,8 +92,12 @@ export const router = createBrowserRouter([
         element: <Home />,
       },
       {
+        path: 'help',
+        element: <Help />,
+      },
+      {
         path: 'about',
-        element: <About />,
+        element: <Help />,
       },
 
       /* ---------- Auth routes (public) ---------- */

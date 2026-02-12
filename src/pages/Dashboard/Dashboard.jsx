@@ -11,7 +11,7 @@ import {
   MdAdminPanelSettings,
   MdBusiness,
   MdGroups,
-  MdInfo,
+  MdHelpOutline,
   MdLogout,
   MdMonitorHeart,
   MdTune,
@@ -106,12 +106,12 @@ function Dashboard() {
         disabledReason: '',
       },
       {
-        key: 'product-overview',
-        title: 'Product Overview',
+        key: 'help-center',
+        title: 'Help Center',
         description:
-          'Read platform context and guidance while deeper modules are onboarded.',
-        to: '/about',
-        icon: <MdInfo aria-hidden="true" />,
+          'Access onboarding guidance, troubleshooting steps, and support escalation paths.',
+        to: '/help',
+        icon: <MdHelpOutline aria-hidden="true" />,
         visible: !hasAdminAccess,
         enabled: true,
         disabledReason: '',
@@ -122,7 +122,7 @@ function Dashboard() {
   }, [hasAdminAccess, hasCustomerContext, isSuperAdmin])
 
   const quickActions = useMemo(() => {
-    const actions = [{ key: 'about', label: 'About', to: '/about', visible: true }]
+    const actions = [{ key: 'help', label: 'Help', to: '/help', visible: true }]
 
     if (hasAdminAccess) {
       actions.push(

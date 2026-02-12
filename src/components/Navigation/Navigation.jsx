@@ -2,7 +2,7 @@
  * Navigation Component
  *
  * Responsive navigation bar with active link highlighting.
- * Shows public links (Home, About) for all visitors and
+ * Shows public links (Home, Help) for all visitors and
  * administration links (Edit Users, Maintain Tenants) when the
  * user is authenticated with appropriate roles.
  *
@@ -19,7 +19,7 @@ import { useSelector } from 'react-redux'
 import {
   MdDashboard,
   MdHome,
-  MdInfo,
+  MdHelpOutline,
   MdPeople,
   MdBusiness,
   MdMonitorHeart,
@@ -89,7 +89,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
           <li role="none">
             <NavLink
-              to="/about"
+              to="/help"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
@@ -97,9 +97,9 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               onClick={onLinkClick}
             >
               <span className="nav__icon" aria-hidden="true">
-                <MdInfo />
+                <MdHelpOutline />
               </span>
-              <span className="nav__text">About</span>
+              <span className="nav__text">Help</span>
             </NavLink>
           </li>
 

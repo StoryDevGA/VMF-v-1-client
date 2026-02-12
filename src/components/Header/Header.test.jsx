@@ -348,8 +348,8 @@ describe('Header Component', () => {
       expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
 
       // Click a navigation link
-      const aboutLink = screen.getByRole('menuitem', { name: /about/i })
-      await user.click(aboutLink)
+      const helpLink = screen.getByRole('menuitem', { name: /help/i })
+      await user.click(helpLink)
 
       // Menu should close
       expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
