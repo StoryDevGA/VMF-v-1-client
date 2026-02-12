@@ -1,0 +1,177 @@
+/**
+ * Badge Styles
+ *
+ * BEM naming convention with design tokens only.
+ * Theme-aware colors and responsive size adjustments.
+ */
+
+/* ===========================
+   BASE BADGE STYLES
+   =========================== */
+
+.badge {
+  --badge-bg: var(--color-background-tertiary);
+  --badge-text: var(--color-text-secondary);
+  --badge-border: color-mix(in srgb, var(--color-border) 75%, transparent);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2xs);
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid var(--badge-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--badge-bg);
+  color: var(--badge-text);
+  font-family: var(--font-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+  vertical-align: middle;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.badge__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.badge__icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.badge__label {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ===========================
+   BADGE VARIANTS
+   =========================== */
+
+.badge--neutral {
+  --badge-bg: var(--color-background-tertiary);
+  --badge-text: var(--color-text-secondary);
+  --badge-border: color-mix(in srgb, var(--color-border) 75%, transparent);
+}
+
+.badge--primary {
+  --badge-bg: color-mix(in srgb, var(--color-action-primary) 16%, var(--color-surface));
+  --badge-text: var(--color-action-primary);
+  --badge-border: color-mix(in srgb, var(--color-action-primary) 35%, transparent);
+}
+
+.badge--success {
+  --badge-bg: color-mix(in srgb, var(--color-success) 16%, var(--color-surface));
+  --badge-text: var(--color-success);
+  --badge-border: color-mix(in srgb, var(--color-success) 35%, transparent);
+}
+
+.badge--warning {
+  --badge-bg: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface));
+  --badge-text: color-mix(in srgb, var(--color-warning) 90%, var(--color-text-primary));
+  --badge-border: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+.badge--danger {
+  --badge-bg: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+  --badge-text: var(--color-error);
+  --badge-border: color-mix(in srgb, var(--color-error) 35%, transparent);
+}
+
+.badge--info {
+  --badge-bg: color-mix(in srgb, var(--color-info) 16%, var(--color-surface));
+  --badge-text: var(--color-info);
+  --badge-border: color-mix(in srgb, var(--color-info) 35%, transparent);
+}
+
+/* ===========================
+   BADGE SIZES
+   =========================== */
+
+.badge--sm {
+  min-height: calc(var(--spacing-md) + var(--spacing-xs));
+  padding: 0 var(--spacing-xs);
+  font-size: var(--font-size-xs);
+}
+
+.badge--md {
+  min-height: calc(var(--spacing-md) + var(--spacing-sm));
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.badge--lg {
+  min-height: calc(var(--spacing-lg) + var(--spacing-xs));
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-base);
+}
+
+/* ===========================
+   MODIFIERS
+   =========================== */
+
+.badge--pill {
+  border-radius: var(--border-radius-full);
+}
+
+.badge--outline {
+  background-color: transparent;
+}
+
+/* ===========================
+   RESPONSIVE ADJUSTMENTS
+   =========================== */
+
+@media (max-width: 767px) {
+  .badge--md {
+    padding: 0 var(--spacing-xs);
+    font-size: var(--font-size-xs);
+  }
+
+  .badge--lg {
+    min-height: calc(var(--spacing-md) + var(--spacing-sm));
+    padding: var(--spacing-2xs) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+  }
+}
+
+@media (min-width: 1024px) {
+  .badge--lg {
+    padding: var(--spacing-xs) var(--spacing-lg);
+  }
+}
+
+/* ===========================
+   ACCESSIBILITY
+   =========================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .badge {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: high) {
+  .badge {
+    border-width: 2px;
+  }
+}

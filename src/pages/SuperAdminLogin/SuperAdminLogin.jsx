@@ -11,6 +11,7 @@ import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
+import { Badge } from '../../components/Badge'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -100,7 +101,14 @@ function SuperAdminLogin() {
         </Fieldset.Legend>
         <Card variant="elevated" className="super-admin-login__card">
           <Card.Header>
-            <div className="super-admin-login__badge">Platform Administration</div>
+            <Badge
+              variant="warning"
+              size="sm"
+              pill
+              className="super-admin-login__badge"
+            >
+              Platform Administration
+            </Badge>
             <p className="super-admin-login__subtitle">
               This login is restricted to platform-level administrators.
             </p>
