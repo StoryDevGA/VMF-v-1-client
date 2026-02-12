@@ -1,0 +1,220 @@
+/**
+ * Dashboard Page Styles
+ *
+ * Central workflow and context control surface for authenticated users.
+ */
+
+.dashboard {
+  padding-top: var(--spacing-xl);
+  padding-bottom: var(--spacing-2xl);
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.dashboard__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.dashboard__title {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+}
+
+.dashboard__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.dashboard__signed-in {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.dashboard__grid {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.dashboard__section-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
+}
+
+.dashboard__section-subtitle {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dashboard__tiles {
+  display: grid;
+  gap: var(--spacing-md);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.dashboard__tile {
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-md);
+  background-color: var(--color-background-secondary);
+  display: grid;
+  gap: var(--spacing-sm);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.dashboard__tile:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard__tile--disabled {
+  opacity: 0.8;
+}
+
+.dashboard__tile-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.dashboard__tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--border-radius-full);
+  background-color: var(--color-surface);
+  color: var(--color-action-primary);
+  border: var(--border-width-thin) solid var(--color-border);
+}
+
+.dashboard__tile-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+}
+
+.dashboard__tile-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+.dashboard__tile-link {
+  justify-self: start;
+  font-size: var(--font-size-sm);
+}
+
+.dashboard__tile-reason {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.dashboard__context-controls {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.dashboard__control {
+  width: 100%;
+}
+
+.dashboard__hint {
+  margin: 0 0 var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dashboard__context-list {
+  margin: 0;
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.dashboard__context-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  border-top: var(--border-width-thin) solid var(--color-border);
+  padding-top: var(--spacing-sm);
+}
+
+.dashboard__context-item dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dashboard__context-item dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.dashboard__health-row {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+}
+
+.dashboard__quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.dashboard__quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 2.75rem;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  padding: 0 var(--spacing-md);
+  background-color: var(--color-background-secondary);
+}
+
+.dashboard__quick-link:hover {
+  border-color: var(--color-border-hover);
+  background-color: var(--color-surface);
+}
+
+.dashboard__quick-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard__logout {
+  min-width: 8rem;
+}
+
+@media (min-width: 768px) {
+  .dashboard__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard__section--workflow {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard__tile,
+  .dashboard__quick-link {
+    transition: none;
+  }
+}

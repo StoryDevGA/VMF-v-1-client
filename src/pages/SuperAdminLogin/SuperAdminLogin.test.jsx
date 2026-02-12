@@ -40,8 +40,8 @@ function renderSALogin(store) {
           <Routes>
             <Route path="/super-admin/login" element={<SuperAdminLogin />} />
             <Route
-              path="/super-admin/customers"
-              element={<div>SA Customers</div>}
+              path="/app/dashboard"
+              element={<div>Dashboard</div>}
             />
             <Route path="/app/login" element={<div>Customer Login</div>} />
           </Routes>
@@ -98,7 +98,7 @@ describe('SuperAdminLogin page', () => {
     expect(link).toHaveAttribute('href', '/app/login')
   })
 
-  it('redirects to customers page when already authenticated', async () => {
+  it('redirects to dashboard when already authenticated', async () => {
     const store = createTestStore({
       auth: {
         user: {
@@ -114,7 +114,7 @@ describe('SuperAdminLogin page', () => {
     renderSALogin(store)
 
     await waitFor(() => {
-      expect(screen.getByText('SA Customers')).toBeInTheDocument()
+      expect(screen.getByText('Dashboard')).toBeInTheDocument()
     })
   })
 })

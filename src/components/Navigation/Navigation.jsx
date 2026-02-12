@@ -14,43 +14,28 @@
  * - Theme-aware styling
  */
 
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
+  MdDashboard,
   MdHome,
   MdInfo,
   MdPeople,
   MdBusiness,
   MdMonitorHeart,
-  MdLogout,
 } from 'react-icons/md'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
-import { useAuth } from '../../hooks/useAuth.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
-  const { logout, logoutResult } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
 
   const isSuperAdmin = checkIsSuperAdmin(user)
   const hasAdminAccess = isSuperAdmin || (user?.memberships ?? []).some(
     (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
   )
-
-  const handleLogout = async () => {
-    if (logoutResult.isLoading) return
-    const redirectTo = location.pathname.startsWith('/super-admin')
-      ? '/super-admin/login'
-      : '/app/login'
-
-    onLinkClick()
-    await logout()
-    navigate(redirectTo, { replace: true })
-  }
 
   const navClasses = [
     'nav',
@@ -151,26 +136,24 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             </>
           )}
 
-          {/* ---- Logout ---- */}
+          {/* ---- Dashboard ---- */}
           {isAuthenticated && (
             <>
               <li role="none" className="nav__separator" aria-hidden="true" />
               <li role="none">
-                <button
-                  type="button"
-                  className="nav__link nav__button"
+                <NavLink
+                  to="/app/dashboard"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
                   role="menuitem"
-                  onClick={handleLogout}
-                  disabled={logoutResult.isLoading}
-                  aria-busy={logoutResult.isLoading || undefined}
+                  onClick={onLinkClick}
                 >
                   <span className="nav__icon" aria-hidden="true">
-                    <MdLogout />
+                    <MdDashboard />
                   </span>
-                  <span className="nav__text">
-                    {logoutResult.isLoading ? 'Logging out...' : 'Logout'}
-                  </span>
-                </button>
+                  <span className="nav__text">Dashboard</span>
+                </NavLink>
               </li>
             </>
           )}

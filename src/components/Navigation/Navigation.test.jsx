@@ -13,24 +13,11 @@ import Navigation from './Navigation.jsx'
 import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
-import { useAuth } from '../../hooks/useAuth.js'
-
-vi.mock('../../hooks/useAuth.js', () => ({
-  useAuth: vi.fn(),
-}))
-
-const mockLogout = vi.fn()
 
 // ── Polyfills ────────────────────────────────────────────
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
-  mockLogout.mockReset()
-  mockLogout.mockResolvedValue(undefined)
-  useAuth.mockReturnValue({
-    logout: mockLogout,
-    logoutResult: { isLoading: false },
-  })
 })
 
 // ── User fixtures ────────────────────────────────────────
@@ -109,7 +96,7 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /users/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /logout/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /dashboard/i })).not.toBeInTheDocument()
   })
 
   it('shows Users and Tenants links for CUSTOMER_ADMIN', () => {
@@ -141,20 +128,19 @@ describe('Navigation', () => {
     expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
-  it('shows Logout for authenticated users', () => {
+  it('shows Dashboard for authenticated users', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('menuitem', { name: /logout/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /dashboard/i })).toBeInTheDocument()
   })
 
-  it('calls logout and onLinkClick when Logout is clicked', async () => {
+  it('calls onLinkClick when Dashboard is clicked', async () => {
     const onLinkClick = vi.fn()
     const store = createTestStore(customerAdminUser)
     renderNavigation(store, onLinkClick)
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /logout/i }))
-    expect(mockLogout).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('menuitem', { name: /dashboard/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 

@@ -9,7 +9,6 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useSelector } from 'react-redux'
 import { Table } from '../../components/Table'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -21,7 +20,6 @@ import { useToaster } from '../../components/Toaster'
 import { useTenants } from '../../hooks/useTenants.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { selectCurrentUser } from '../../store/slices/authSlice.js'
 import { normalizeError } from '../../utils/errors.js'
 import CreateTenantWizard from './CreateTenantWizard'
 import TenantEditDrawer from './TenantEditDrawer'
@@ -50,7 +48,6 @@ const STATUS_VARIANT_MAP = {
  */
 function MaintainTenants() {
   const { addToast } = useToaster()
-  const currentUser = useSelector(selectCurrentUser)
   const { isSuperAdmin } = useAuthorization()
 
   /* ---- Resolve customer context from shared store ---- */
@@ -62,7 +59,6 @@ function MaintainTenants() {
     pagination,
     isLoading,
     isFetching,
-    search,
     setSearch,
     statusFilter,
     setStatusFilter,
@@ -284,7 +280,8 @@ function MaintainTenants() {
       <section className="maintain-tenants container" aria-label="Maintain Tenants">
         <h1 className="maintain-tenants__title">Maintain Tenants</h1>
         <p className="maintain-tenants__empty">
-          Please select a customer from the header dropdown to manage tenants.
+          Please select a customer from the dashboard context panel to manage
+          tenants.
         </p>
       </section>
     )

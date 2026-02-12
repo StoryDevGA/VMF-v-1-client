@@ -312,7 +312,8 @@ function EditUsers() {
       <section className="edit-users container" aria-label="Edit Users">
         <h1 className="edit-users__title">Edit Users</h1>
         <p className="edit-users__empty">
-          Please select a customer from the header dropdown to manage users.
+          Please select a customer from the dashboard context panel to manage
+          users.
         </p>
       </section>
     )

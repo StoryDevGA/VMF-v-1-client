@@ -16,9 +16,6 @@ import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
-import { CustomerSelector } from '../components/CustomerSelector'
-import { TenantSwitcher } from '../components/TenantSwitcher'
-import { SystemHealthIndicator } from '../components/SystemHealthIndicator'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import './router.css'
 
@@ -28,6 +25,7 @@ import './router.css'
 
 const Home = lazy(() => import('../pages/Home'))
 const About = lazy(() => import('../pages/About'))
+const Dashboard = lazy(() => import('../pages/Dashboard'))
 const Login = lazy(() => import('../pages/Login/Login'))
 const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
@@ -64,11 +62,7 @@ function LoadingFallback() {
 function RootLayout() {
   return (
     <div className="root-layout">
-      <Header logo={<Logo size="medium" />}>
-        <SystemHealthIndicator />
-        <CustomerSelector />
-        <TenantSwitcher />
-      </Header>
+      <Header logo={<Logo size="medium" />} />
       <main className="root-layout__main">
         <Suspense fallback={<LoadingFallback />}>
           <Outlet />
@@ -119,7 +113,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'dashboard',
-            element: <Home />, // placeholder until Dashboard page is built
+            element: <Dashboard />,
           },
           {
             path: 'administration/edit-users',
