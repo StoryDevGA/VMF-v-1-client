@@ -2,7 +2,7 @@
  * Login Page
  *
  * Customer user login page at `/app/login`.
- * Uses the design system's Input, Button, Card, and Logo components.
+ * Uses the design system's Input, Button, Card, and Fieldset components.
  */
 
 import { useState, useCallback, useEffect } from 'react'
@@ -10,7 +10,7 @@ import { Navigate, Link } from 'react-router-dom'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
-import { Logo } from '../../components/Logo'
+import { Fieldset } from '../../components/Fieldset'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -94,75 +94,76 @@ function Login() {
 
   return (
     <section className="login container" aria-label="Login">
-      <Card variant="elevated" className="login__card">
-        <Card.Header>
-          <div className="login__brand">
-            <Logo size="medium" />
-          </div>
+      <Fieldset className="login__fieldset">
+        <Fieldset.Legend className="login__legend">
           <h1 className="login__title">Sign In</h1>
-          <p className="login__subtitle">
-            Enter your credentials to access your account.
-          </p>
-        </Card.Header>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="login__card">
+          <Card.Header>
+            <p className="login__subtitle">
+              Enter your credentials to access your account.
+            </p>
+          </Card.Header>
 
-        <Card.Body>
-          <form className="login__form" onSubmit={handleSubmit} noValidate>
-            <Input
-              id="login-email"
-              type="email"
-              label="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-              fullWidth
-              autoComplete="email"
-              disabled={loginResult.isLoading}
+          <Card.Body>
+            <form className="login__form" onSubmit={handleSubmit} noValidate>
+              <Input
+                id="login-email"
+                type="email"
+                label="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={fieldErrors.email}
+                required
+                fullWidth
+                autoComplete="email"
+                disabled={loginResult.isLoading}
+              />
+
+              <Input
+                id="login-password"
+                type="password"
+                label="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={fieldErrors.password}
+                required
+                fullWidth
+                autoComplete="current-password"
+                disabled={loginResult.isLoading}
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={loginResult.isLoading}
+                disabled={loginResult.isLoading || retryLockActive}
+              >
+                {retryLockActive
+                  ? `Try again in ${retryRemainingSeconds}s`
+                  : 'Sign In'}
+              </Button>
+            </form>
+
+            <ErrorSupportPanel
+              error={authError}
+              context="customer-login"
+              retryRemainingSeconds={retryRemainingSeconds}
             />
+          </Card.Body>
 
-            <Input
-              id="login-password"
-              type="password"
-              label="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-              fullWidth
-              autoComplete="current-password"
-              disabled={loginResult.isLoading}
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={loginResult.isLoading}
-              disabled={loginResult.isLoading || retryLockActive}
-            >
-              {retryLockActive
-                ? `Try again in ${retryRemainingSeconds}s`
-                : 'Sign In'}
-            </Button>
-          </form>
-
-          <ErrorSupportPanel
-            error={authError}
-            context="customer-login"
-            retryRemainingSeconds={retryRemainingSeconds}
-          />
-        </Card.Body>
-
-        <Card.Footer>
-          <p className="login__footer-text">
-            Platform administrator?{' '}
-            <Link to="/super-admin/login" className="login__link">
-              Super Admin Login
-            </Link>
-          </p>
-        </Card.Footer>
-      </Card>
+          <Card.Footer>
+            <p className="login__footer-text">
+              Platform administrator?{' '}
+              <Link to="/super-admin/login" className="login__link">
+                Super Admin Login
+              </Link>
+            </p>
+          </Card.Footer>
+        </Card>
+      </Fieldset>
     </section>
   )
 }

@@ -10,7 +10,7 @@ import { Navigate, Link } from 'react-router-dom'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
-import { Logo } from '../../components/Logo'
+import { Fieldset } from '../../components/Fieldset'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -94,80 +94,81 @@ function SuperAdminLogin() {
       className="super-admin-login container"
       aria-label="Super Admin Login"
     >
-      <Card variant="elevated" className="super-admin-login__card">
-        <Card.Header>
-          <div className="super-admin-login__brand">
-            <Logo size="medium" />
-          </div>
-          <div className="super-admin-login__badge">Platform Administration</div>
+      <Fieldset className="super-admin-login__fieldset">
+        <Fieldset.Legend className="super-admin-login__legend">
           <h1 className="super-admin-login__title">Super Admin Sign In</h1>
-          <p className="super-admin-login__subtitle">
-            This login is restricted to platform-level administrators.
-          </p>
-        </Card.Header>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-login__card">
+          <Card.Header>
+            <div className="super-admin-login__badge">Platform Administration</div>
+            <p className="super-admin-login__subtitle">
+              This login is restricted to platform-level administrators.
+            </p>
+          </Card.Header>
 
-        <Card.Body>
-          <form
-            className="super-admin-login__form"
-            onSubmit={handleSubmit}
-            noValidate
-          >
-            <Input
-              id="sa-login-email"
-              type="email"
-              label="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-              fullWidth
-              autoComplete="email"
-              disabled={superAdminLoginResult.isLoading}
-            />
-
-            <Input
-              id="sa-login-password"
-              type="password"
-              label="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-              fullWidth
-              autoComplete="current-password"
-              disabled={superAdminLoginResult.isLoading}
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={superAdminLoginResult.isLoading}
-              disabled={superAdminLoginResult.isLoading || retryLockActive}
+          <Card.Body>
+            <form
+              className="super-admin-login__form"
+              onSubmit={handleSubmit}
+              noValidate
             >
-              {retryLockActive
-                ? `Try again in ${retryRemainingSeconds}s`
-                : 'Sign In'}
-            </Button>
-          </form>
+              <Input
+                id="sa-login-email"
+                type="email"
+                label="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={fieldErrors.email}
+                required
+                fullWidth
+                autoComplete="email"
+                disabled={superAdminLoginResult.isLoading}
+              />
 
-          <ErrorSupportPanel
-            error={authError}
-            context="super-admin-login"
-            retryRemainingSeconds={retryRemainingSeconds}
-          />
-        </Card.Body>
+              <Input
+                id="sa-login-password"
+                type="password"
+                label="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={fieldErrors.password}
+                required
+                fullWidth
+                autoComplete="current-password"
+                disabled={superAdminLoginResult.isLoading}
+              />
 
-        <Card.Footer>
-          <p className="super-admin-login__footer-text">
-            Not a platform admin?{' '}
-            <Link to="/app/login" className="super-admin-login__link">
-              Customer Login
-            </Link>
-          </p>
-        </Card.Footer>
-      </Card>
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={superAdminLoginResult.isLoading}
+                disabled={superAdminLoginResult.isLoading || retryLockActive}
+              >
+                {retryLockActive
+                  ? `Try again in ${retryRemainingSeconds}s`
+                  : 'Sign In'}
+              </Button>
+            </form>
+
+            <ErrorSupportPanel
+              error={authError}
+              context="super-admin-login"
+              retryRemainingSeconds={retryRemainingSeconds}
+            />
+          </Card.Body>
+
+          <Card.Footer>
+            <p className="super-admin-login__footer-text">
+              Not a platform admin?{' '}
+              <Link to="/app/login" className="super-admin-login__link">
+                Customer Login
+              </Link>
+            </p>
+          </Card.Footer>
+        </Card>
+      </Fieldset>
     </section>
   )
 }

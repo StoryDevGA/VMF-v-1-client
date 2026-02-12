@@ -36,6 +36,17 @@
   margin-bottom: var(--spacing-md);
 }
 
+.super-admin-login__legend {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.super-admin-login__legend .super-admin-login__title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  text-transform: inherit;
+}
+
 .super-admin-login__badge {
   display: inline-block;
   margin: 0 auto var(--spacing-sm);
@@ -74,6 +85,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+}
+
+.super-admin-login__fieldset {
+  width: 100%;
+  max-width: 30rem;
 }
 
 /* ===========================

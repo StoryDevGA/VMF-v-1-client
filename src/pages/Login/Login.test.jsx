@@ -104,8 +104,8 @@ describe('Login page', () => {
     })
   })
 
-  it('renders the brand logo', () => {
+  it('does not render the brand logo', () => {
     renderLogin()
-    expect(screen.getByRole('img', { name: /storylineos logo/i })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /storylineos logo/i })).not.toBeInTheDocument()
   })
 })
