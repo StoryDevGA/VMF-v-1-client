@@ -1,9 +1,8 @@
 .system-monitoring {
-  padding: var(--spacing-xl, 2rem) var(--spacing-md, 1rem);
-  max-width: 1200px;
-  margin: 0 auto;
+  padding-top: var(--spacing-xl, 2rem);
+  padding-bottom: var(--spacing-2xl, 3rem);
   display: grid;
-  gap: var(--spacing-md, 1rem);
+  gap: var(--spacing-lg, 1.5rem);
 }
 
 .system-monitoring__header {
@@ -26,7 +25,7 @@
 
 .system-monitoring__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--spacing-md, 1rem);
 }
 
@@ -85,8 +84,8 @@
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 900px) {
+@media (min-width: 1024px) {
   .system-monitoring__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

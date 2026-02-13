@@ -290,7 +290,7 @@ function MaintainTenants() {
   return (
     <section className="maintain-tenants container" aria-label="Maintain Tenants">
       {/* Page header */}
-      <div className="maintain-tenants__header">
+      <header className="maintain-tenants__header">
         <h1 className="maintain-tenants__title">Maintain Tenants</h1>
         <Button
           variant="primary"
@@ -299,7 +299,7 @@ function MaintainTenants() {
         >
           Create Tenant
         </Button>
-      </div>
+      </header>
 
       {/* Toolbar: search + filter */}
       <div className="maintain-tenants__toolbar">

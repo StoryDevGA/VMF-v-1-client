@@ -6,16 +6,16 @@
  */
 
 .edit-users {
-  padding: var(--spacing-xl, 2rem) var(--spacing-md, 1rem);
-  max-width: 1200px;
-  margin: 0 auto;
+  padding-top: var(--spacing-xl, 2rem);
+  padding-bottom: var(--spacing-xl, 2rem);
 }
 
 /* ---- Header ---- */
 
 .edit-users__header {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
   margin-bottom: var(--spacing-lg, 1.5rem);
   flex-wrap: wrap;
@@ -33,6 +33,7 @@
   display: flex;
   gap: var(--spacing-sm, 0.5rem);
   flex-wrap: wrap;
+  width: 100%;
 }
 
 /* ---- Tenant scope indicator ---- */
@@ -51,19 +52,20 @@
 
 .edit-users__toolbar {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--spacing-md, 1rem);
   margin-bottom: var(--spacing-lg, 1.5rem);
   flex-wrap: wrap;
 }
 
 .edit-users__search {
-  flex: 1 1 280px;
-  min-width: 200px;
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .edit-users__filter {
-  flex: 0 0 180px;
+  flex: 1 1 100%;
 }
 
 /* ---- Table wrapper ---- */
@@ -115,22 +117,27 @@
 
 /* ---- Responsive ---- */
 
-@media (max-width: 768px) {
-  .edit-users__toolbar {
-    flex-direction: column;
-  }
-
-  .edit-users__search,
-  .edit-users__filter {
-    flex: 1 1 100%;
-  }
-
+@media (min-width: 768px) {
   .edit-users__header {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
   }
 
   .edit-users__header-actions {
-    width: 100%;
+    width: auto;
+  }
+
+  .edit-users__toolbar {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .edit-users__search {
+    flex: 1 1 280px;
+    min-width: 200px;
+  }
+
+  .edit-users__filter {
+    flex: 0 0 180px;
   }
 }

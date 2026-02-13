@@ -15,7 +15,7 @@
   margin: 0;
   padding: var(--spacing-lg) var(--spacing-2xl);
   border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
-  border-radius: var(--radius-lg);
+  border-radius: var(--border-radius-lg);
   background: color-mix(in srgb, var(--color-surface-secondary) 75%, transparent);
   color: var(--color-text-primary);
   font-size: clamp(2rem, 8vw, 4rem);

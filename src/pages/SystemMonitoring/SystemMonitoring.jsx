@@ -55,7 +55,7 @@ function SystemMonitoring() {
 
   return (
     <section className="system-monitoring container" aria-label="System Monitoring">
-      <div className="system-monitoring__header">
+      <header className="system-monitoring__header">
         <h1 className="system-monitoring__title">System Monitoring</h1>
         <Button
           variant="outline"
@@ -64,7 +64,7 @@ function SystemMonitoring() {
         >
           Refresh
         </Button>
-      </div>
+      </header>
 
       <div className="system-monitoring__topline">
         <Status variant={statusToVariant(overallStatus)} showIcon>

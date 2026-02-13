@@ -322,7 +322,7 @@ function EditUsers() {
   return (
     <section className="edit-users container" aria-label="Edit Users">
       {/* Page header */}
-      <div className="edit-users__header">
+      <header className="edit-users__header">
         <h1 className="edit-users__title">Edit Users</h1>
         <div className="edit-users__header-actions">
           <Button
@@ -340,7 +340,7 @@ function EditUsers() {
             Create User
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* Tenant scope indicator */}
       {tenantId && tenantName && (

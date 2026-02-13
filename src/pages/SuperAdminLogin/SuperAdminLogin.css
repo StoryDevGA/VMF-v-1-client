@@ -14,7 +14,8 @@
   align-items: center;
   justify-content: center;
   min-height: 70vh;
-  padding: var(--spacing-lg) var(--spacing-md);
+  padding-top: var(--spacing-lg);
+  padding-bottom: var(--spacing-lg);
 }
 
 /* ===========================
@@ -99,7 +100,8 @@
 
 @media (min-width: 768px) {
   .super-admin-login {
-    padding: var(--spacing-2xl) var(--spacing-lg);
+    padding-top: var(--spacing-2xl);
+    padding-bottom: var(--spacing-2xl);
   }
 }
 
