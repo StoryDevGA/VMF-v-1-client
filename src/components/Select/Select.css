@@ -20,7 +20,8 @@
 
 .select-wrapper {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  width: 100%;
 }
 
 .select {
@@ -63,9 +64,11 @@
   right: var(--spacing-md);
   transform: translateY(-50%);
   pointer-events: none;
+  display: inline-block;
+  color: var(--color-text-secondary);
   width: 1em;
   height: 1em;
-  color: var(--color-text-secondary);
+  color: currentColor;
 }
 
 .select-arrow::before {
@@ -123,6 +126,11 @@
 .select-container--error .select-label,
 .select-container--error .select-error {
   color: var(--color-danger);
+}
+
+.select-container--disabled .select-label,
+.select-container--disabled .select-helper {
+  color: var(--color-disabled-text);
 }
 
 .select-error {

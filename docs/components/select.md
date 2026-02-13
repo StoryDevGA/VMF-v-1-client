@@ -7,7 +7,7 @@ A custom-styled, accessible select dropdown component.
 - ✅ **Custom Styling**: Visually consistent with other form components.
 - ✅ **Multiple Sizes**: sm, md, lg.
 - ✅ **Controlled Component**: Manages value via props.
-- ✅ **Label & Helper Text**: Supports floating labels and helper text.
+- ✅ **Label & Helper Text**: Supports standard labels and helper text.
 - ✅ **Error State**: Visual feedback for validation errors.
 - ✅ **Disabled State**: Prevents interaction.
 - ✅ **Accessible**: Built on native `<select>` element.

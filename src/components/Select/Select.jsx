@@ -4,7 +4,7 @@
  * A custom-styled, accessible select dropdown component.
  */
 
-import { forwardRef } from 'react'
+import { forwardRef, useId } from 'react'
 import './Select.css'
 
 export const Select = forwardRef(function Select(
@@ -25,6 +25,11 @@ export const Select = forwardRef(function Select(
   },
   ref
 ) {
+  const generatedId = useId()
+  const selectId = id ?? generatedId
+  const isPlaceholderValue =
+    value === '' || value === undefined || value === null
+
   const containerClasses = [
     'select-container',
     `select-container--${size}`,
@@ -38,16 +43,22 @@ export const Select = forwardRef(function Select(
   const selectClasses = [
     'select',
     `select--${size}`,
-    !value && 'select--placeholder',
-  ].join(' ')
+    placeholder && isPlaceholderValue && 'select--placeholder',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className={containerClasses}>
-      {label && <label htmlFor={id} className="select-label">{label}</label>}
+      {label && (
+        <label htmlFor={selectId} className="select-label">
+          {label}
+        </label>
+      )}
       <div className="select-wrapper">
         <select
           ref={ref}
-          id={id}
+          id={selectId}
           name={name}
           value={value}
           onChange={onChange}
@@ -55,7 +66,11 @@ export const Select = forwardRef(function Select(
           className={selectClasses}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={
-            error ? `${id}-error` : helperText ? `${id}-helper` : undefined
+            error
+              ? `${selectId}-error`
+              : helperText
+                ? `${selectId}-helper`
+                : undefined
           }
           {...props}
         >
@@ -66,15 +81,15 @@ export const Select = forwardRef(function Select(
             </option>
           ))}
         </select>
-        <span className="select-arrow" />
+        <span className="select-arrow" aria-hidden="true" />
       </div>
       {error && (
-        <span className="select-error" id={`${id}-error`} role="alert">
+        <span className="select-error" id={`${selectId}-error`} role="alert">
           {error}
         </span>
       )}
       {!error && helperText && (
-        <span className="select-helper" id={`${id}-helper`}>
+        <span className="select-helper" id={`${selectId}-helper`}>
           {helperText}
         </span>
       )}

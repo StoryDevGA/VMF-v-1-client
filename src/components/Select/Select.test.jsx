@@ -83,4 +83,60 @@ describe('Select Component', () => {
     expect(container.querySelector('.select-container')).toHaveClass('select-container--lg')
     expect(container.querySelector('.select')).toHaveClass('select--lg')
   })
+
+  it('should apply placeholder class only when placeholder is shown', () => {
+    const { container, rerender } = render(
+      <Select
+        id="test"
+        label="Test Select"
+        options={options}
+        placeholder="Select one..."
+        value=""
+        onChange={() => {}}
+      />,
+    )
+    expect(container.querySelector('.select')).toHaveClass('select--placeholder')
+
+    rerender(
+      <Select
+        id="test"
+        label="Test Select"
+        options={options}
+        placeholder="Select one..."
+        value="option1"
+        onChange={() => {}}
+      />,
+    )
+    expect(container.querySelector('.select')).not.toHaveClass('select--placeholder')
+  })
+
+  it('should not include a false class name when a value exists', () => {
+    render(
+      <Select
+        id="test"
+        label="Test Select"
+        options={options}
+        value="option1"
+        onChange={() => {}}
+      />,
+    )
+    const select = screen.getByLabelText('Test Select')
+    expect(select.className).not.toMatch(/\bfalse\b/)
+  })
+
+  it('should generate an id when one is not provided', () => {
+    render(<Select label="Test Select" options={options} helperText="Please choose an option" />)
+    const select = screen.getByLabelText('Test Select')
+    const helper = screen.getByText('Please choose an option')
+
+    expect(select).toHaveAttribute('id')
+    expect(select.id).toBeTruthy()
+    expect(helper.id).toBe(`${select.id}-helper`)
+    expect(select).toHaveAttribute('aria-describedby', helper.id)
+  })
+
+  it('should render a decorative arrow icon', () => {
+    const { container } = render(<Select id="test" label="Test Select" options={options} />)
+    expect(container.querySelector('.select-arrow')).toBeInTheDocument()
+  })
 })

@@ -1,0 +1,197 @@
+/**
+ * CustomSelect Styles
+ *
+ * Shared combobox-pattern dropdown for context selectors.
+ * BEM naming · SLOS design tokens throughout.
+ *
+ * Fixes the fragile negative-calc positioning from the old
+ * per-component CSS by making the outer container the positioning
+ * context so the dropdown simply stretches left:0 → right:0.
+ */
+
+/* ===========================
+   CONTAINER
+   =========================== */
+
+.custom-select {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  position: relative;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.custom-select:hover {
+  border-color: var(--color-border-hover);
+}
+
+.custom-select:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-400) 25%, transparent);
+}
+
+.custom-select--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===========================
+   ICON / LOADING
+   =========================== */
+
+.custom-select__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.custom-select__loading {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-sm);
+}
+
+/* ===========================
+   TRIGGER
+   =========================== */
+
+.custom-select__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  line-height: 1.4;
+  padding: var(--spacing-xs) 0;
+  cursor: pointer;
+}
+
+.custom-select__trigger[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.custom-select__trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm);
+}
+
+.custom-select__value {
+  flex: 1;
+  text-align: left;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.custom-select__arrow {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
+}
+
+.custom-select__trigger:hover .custom-select__arrow {
+  color: var(--color-text-primary);
+}
+
+/* ===========================
+   DROPDOWN PANEL
+   =========================== */
+
+.custom-select__dropdown {
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  left: 0;
+  right: 0;
+  z-index: var(--z-index-dropdown);
+  margin: 0;
+  padding: var(--spacing-xs);
+  list-style: none;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* ===========================
+   OPTION ITEMS
+   =========================== */
+
+.custom-select__option {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  user-select: none;
+}
+
+.custom-select__option:hover,
+.custom-select__option--focused {
+  background-color: var(--color-primary-900);
+}
+
+.custom-select__option--selected {
+  background-color: var(--color-primary-800);
+}
+
+.custom-select__option--selected:hover,
+.custom-select__option--selected.custom-select__option--focused {
+  background-color: var(--color-primary-800);
+}
+
+/* Action items (e.g. "+ Create …") appear after a separator */
+
+.custom-select__option--action {
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--spacing-xs);
+  padding-top: calc(var(--spacing-sm) + var(--spacing-xs));
+}
+
+.custom-select__option--action:hover {
+  color: var(--color-text-primary);
+}
+
+/* ===========================
+   MEDIA QUERIES
+   =========================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-select,
+  .custom-select__option,
+  .custom-select__arrow {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .custom-select {
+    border-width: 2px;
+  }
+
+  .custom-select__dropdown {
+    border-width: 2px;
+  }
+}

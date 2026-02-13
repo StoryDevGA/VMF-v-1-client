@@ -66,7 +66,7 @@ describe('CustomerSelector', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders the select element with aria-label for super admin', () => {
+  it('renders the combobox trigger with aria-label for super admin', () => {
     mockHooks()
     render(<CustomerSelector />)
     expect(screen.getByRole('combobox', { name: /select customer/i })).toBeInTheDocument()
@@ -78,23 +78,29 @@ describe('CustomerSelector', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
-  it('renders placeholder option when no customer selected', () => {
+  it('renders placeholder text when no customer selected', () => {
     mockHooks()
     render(<CustomerSelector />)
-    expect(screen.getByRole('option', { name: /select customer/i })).toBeInTheDocument()
+    const trigger = screen.getByRole('combobox', { name: /select customer/i })
+    expect(trigger).toHaveTextContent('Select customer...')
   })
 
-  it('renders all customers in the dropdown', () => {
+  it('renders all customers in the dropdown', async () => {
     mockHooks()
     render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
 
     expect(screen.getByRole('option', { name: 'Acme Corp' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Beta Inc' })).toBeInTheDocument()
   })
 
-  it('renders "+ Create customer…" option', () => {
+  it('renders "+ Create customer…" option', async () => {
     mockHooks()
     render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+
     expect(screen.getByRole('option', { name: /create customer/i })).toBeInTheDocument()
   })
 
@@ -102,8 +108,8 @@ describe('CustomerSelector', () => {
     mockHooks({ customerId: 'cust-1' })
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    expect(select.value).toBe('cust-1')
+    const trigger = screen.getByRole('combobox', { name: /select customer/i })
+    expect(trigger).toHaveTextContent('Acme Corp')
   })
 
   it('calls setCustomerId when selection changes', async () => {
@@ -111,8 +117,8 @@ describe('CustomerSelector', () => {
     mockHooks({ setCustomerId })
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, 'cust-2')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: 'Beta Inc' }))
 
     expect(setCustomerId).toHaveBeenCalledWith('cust-2')
   })
@@ -121,8 +127,8 @@ describe('CustomerSelector', () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, '__create__')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     expect(screen.getByLabelText(/customer name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/topology/i)).toBeInTheDocument()
@@ -134,8 +140,8 @@ describe('CustomerSelector', () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, '__create__')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
 
@@ -146,8 +152,8 @@ describe('CustomerSelector', () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, '__create__')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
@@ -159,8 +165,8 @@ describe('CustomerSelector', () => {
     const { createFn } = mockHooks({ setCustomerId })
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, '__create__')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     await userEvent.type(screen.getByLabelText(/customer name/i), 'New Corp')
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
@@ -188,8 +194,8 @@ describe('CustomerSelector', () => {
 
     render(<CustomerSelector />)
 
-    const select = screen.getByRole('combobox', { name: /select customer/i })
-    await userEvent.selectOptions(select, '__create__')
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     await userEvent.type(screen.getByLabelText(/customer name/i), 'Dup Corp')
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))

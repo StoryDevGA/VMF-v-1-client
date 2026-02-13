@@ -1,24 +1,18 @@
 /**
  * TenantSwitcher Component
  *
- * Contextual dropdown that lets the user switch the active tenant scope.
- * Mounted in workflow context surfaces to drive scoped operations.
- *
- * Features:
- * - Shows the currently selected tenant (or "All Tenants")
- * - Dropdown lists all ENABLED tenants for the customer
- * - "All Tenants" option clears tenant filtering
- * - Spinner while tenants are loading
- * - Hidden when no customer context is available
- * - Compact appearance using design tokens
+ * Composes CustomSelect to let users switch the active tenant scope.
+ * Shows only ENABLED tenants for the current customer context.
  *
  * @module components/TenantSwitcher
  */
 
 import { useCallback } from 'react'
-import { MdBusiness, MdExpandMore } from 'react-icons/md'
+import { MdBusiness } from 'react-icons/md'
+import { CustomSelect } from '../CustomSelect'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import './TenantSwitcher.css'
+
+const ALL_TENANTS_VALUE = ''
 
 /**
  * @param {Object}  props
@@ -34,9 +28,8 @@ export function TenantSwitcher({ className = '' }) {
   } = useTenantContext()
 
   const handleChange = useCallback(
-    (e) => {
-      const value = e.target.value
-      if (value === '') {
+    (value) => {
+      if (value === ALL_TENANTS_VALUE) {
         setTenantId(null, null)
       } else {
         const tenant = tenants.find((t) => t._id === value)
@@ -49,35 +42,23 @@ export function TenantSwitcher({ className = '' }) {
   // Don't render if there's no customer context
   if (!customerId) return null
 
-  const containerClasses = ['tenant-switcher', className].filter(Boolean).join(' ')
+  const enabledTenants = tenants.filter((t) => t.status === 'ENABLED')
+  const options = [
+    { value: ALL_TENANTS_VALUE, label: 'All Tenants' },
+    ...enabledTenants.map((t) => ({ value: t._id, label: t.name })),
+  ]
 
   return (
-    <div className={containerClasses}>
-      <span className="tenant-switcher__icon" aria-hidden="true">
-        <MdBusiness size={18} />
-      </span>
-
-      <select
-        className="tenant-switcher__select"
-        value={tenantId ?? ''}
-        onChange={handleChange}
-        disabled={isLoadingTenants}
-        aria-label="Switch tenant"
-      >
-        <option value="">All Tenants</option>
-        {tenants
-          .filter((t) => t.status === 'ENABLED')
-          .map((t) => (
-            <option key={t._id} value={t._id}>
-              {t.name}
-            </option>
-          ))}
-      </select>
-
-      <span className="tenant-switcher__arrow" aria-hidden="true">
-        <MdExpandMore size={16} />
-      </span>
-    </div>
+    <CustomSelect
+      value={tenantId ?? ALL_TENANTS_VALUE}
+      onChange={handleChange}
+      options={options}
+      placeholder="All Tenants"
+      icon={<MdBusiness size={18} />}
+      ariaLabel="Switch tenant"
+      disabled={isLoadingTenants}
+      className={className}
+    />
   )
 }
 

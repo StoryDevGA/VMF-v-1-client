@@ -53,21 +53,26 @@ describe('TenantSwitcher', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders the select element with aria-label', () => {
+  it('renders the combobox trigger with aria-label', () => {
     mockHook()
     render(<TenantSwitcher />)
     expect(screen.getByRole('combobox', { name: /switch tenant/i })).toBeInTheDocument()
   })
 
-  it('renders "All Tenants" default option', () => {
+  it('renders "All Tenants" option in dropdown', async () => {
     mockHook()
     render(<TenantSwitcher />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
+
     expect(screen.getByRole('option', { name: /all tenants/i })).toBeInTheDocument()
   })
 
-  it('renders ENABLED tenants only', () => {
+  it('renders ENABLED tenants only', async () => {
     mockHook({ tenants: mixedTenants })
     render(<TenantSwitcher />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
 
     expect(screen.getByRole('option', { name: 'Alpha' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Bravo' })).toBeInTheDocument()
@@ -79,8 +84,8 @@ describe('TenantSwitcher', () => {
     mockHook({ setTenantId })
     render(<TenantSwitcher />)
 
-    const select = screen.getByRole('combobox', { name: /switch tenant/i })
-    await userEvent.selectOptions(select, 'ten-1')
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
+    await userEvent.click(screen.getByRole('option', { name: 'Alpha' }))
 
     expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Alpha')
   })
@@ -90,17 +95,17 @@ describe('TenantSwitcher', () => {
     mockHook({ tenantId: 'ten-1', setTenantId })
     render(<TenantSwitcher />)
 
-    const select = screen.getByRole('combobox', { name: /switch tenant/i })
-    await userEvent.selectOptions(select, '')
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
+    await userEvent.click(screen.getByRole('option', { name: /all tenants/i }))
 
     expect(setTenantId).toHaveBeenCalledWith(null, null)
   })
 
-  it('disables select when loading', () => {
+  it('disables trigger when loading', () => {
     mockHook({ isLoadingTenants: true })
     render(<TenantSwitcher />)
 
-    const select = screen.getByRole('combobox', { name: /switch tenant/i })
-    expect(select).toBeDisabled()
+    const trigger = screen.getByRole('combobox', { name: /switch tenant/i })
+    expect(trigger).toHaveAttribute('aria-disabled', 'true')
   })
 })
