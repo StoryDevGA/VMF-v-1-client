@@ -58,7 +58,7 @@
 }
 
 .link--primary:hover:not(.link--disabled) {
-  color: var(--color-action-primary-hover);
+  color: var(--color-link, var(--color-action-primary));
 }
 
 .link--primary:active:not(.link--disabled) {

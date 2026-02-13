@@ -3,8 +3,8 @@
  */
 
 .footer {
-  background-color: var(--color-surface);
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  background-color: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 20%, transparent);
   margin-top: auto;
   padding: var(--spacing-md) 0;
   font-size: var(--font-size-sm);
@@ -18,7 +18,7 @@
 }
 
 .footer__bottom {
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  border-top: 0;
   padding-top: var(--spacing-sm);
   display: flex;
   align-items: flex-start;
@@ -58,10 +58,6 @@
 
 @media (prefers-contrast: high) {
   .footer {
-    border-top-width: 2px;
-  }
-
-  .footer__bottom {
     border-top-width: 2px;
   }
 }

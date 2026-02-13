@@ -89,22 +89,8 @@
   color: var(--color-text-secondary);
 }
 
-.super-admin-login__link {
-  color: var(--color-action-primary);
-  font-weight: var(--font-weight-semibold);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.super-admin-login__link:hover {
-  color: var(--color-action-primary-hover);
-  text-decoration: underline;
-}
-
-.super-admin-login__link:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-  border-radius: var(--border-radius-sm);
+.super-admin-login__link:hover:not(.link--disabled) {
+  color: var(--color-text-secondary);
 }
 
 /* ===========================
@@ -117,12 +103,3 @@
   }
 }
 
-/* ===========================
-   ACCESSIBILITY
-   =========================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .super-admin-login__link {
-    transition: none;
-  }
-}

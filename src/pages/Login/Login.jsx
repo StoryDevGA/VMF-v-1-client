@@ -6,11 +6,12 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import { Navigate, Link } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
+import { Link } from '../../components/Link'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -157,7 +158,7 @@ function Login() {
           <Card.Footer>
             <p className="login__footer-text">
               Platform administrator?{' '}
-              <Link to="/super-admin/login" className="login__link">
+              <Link to="/super-admin/login" className="login__link" underline="none">
                 Super Admin Login
               </Link>
             </p>

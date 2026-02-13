@@ -30,6 +30,8 @@ import { Link as RouterLink } from 'react-router-dom'
 import { MdOpenInNew } from 'react-icons/md'
 import './Link.css'
 
+const EXTERNAL_LINK_PATTERN = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i
+
 export function Link({
   children,
   to,
@@ -43,7 +45,8 @@ export function Link({
   ...props
 }) {
   // Determine if this is an external link
-  const isExternal = external || href || (to && (to.startsWith('http') || to.startsWith('//')))
+  const isExternalDestination = typeof to === 'string' && EXTERNAL_LINK_PATTERN.test(to)
+  const isExternal = external || Boolean(href) || isExternalDestination
   const destination = href || to
 
   // Build class names

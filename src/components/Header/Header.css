@@ -11,7 +11,7 @@
 
 .header {
   /* Background and borders */
-  background-color: var(--color-surface);
+  background-color: transparent;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
 
   /* Sticky positioning */

@@ -174,6 +174,28 @@ describe('Link Component', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     })
 
+    it('should detect mailto: URLs as external', () => {
+      render(
+        <RouterWrapper>
+          <Link to="mailto:test@example.com">Email</Link>
+        </RouterWrapper>
+      )
+      const link = screen.getByText('Email')
+      expect(link).toHaveAttribute('href', 'mailto:test@example.com')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
+    it('should detect tel: URLs as external', () => {
+      render(
+        <RouterWrapper>
+          <Link to="tel:+15551234567">Call</Link>
+        </RouterWrapper>
+      )
+      const link = screen.getByText('Call')
+      expect(link).toHaveAttribute('href', 'tel:+15551234567')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
     it('should use href prop for external links', () => {
       render(<Link href="https://example.com">External</Link>)
       const link = screen.getByText('External')

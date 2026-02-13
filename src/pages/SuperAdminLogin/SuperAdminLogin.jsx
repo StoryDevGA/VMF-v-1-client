@@ -6,12 +6,13 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import { Navigate, Link } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Badge } from '../../components/Badge'
+import { Link } from '../../components/Link'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -170,7 +171,7 @@ function SuperAdminLogin() {
           <Card.Footer>
             <p className="super-admin-login__footer-text">
               Not a platform admin?{' '}
-              <Link to="/app/login" className="super-admin-login__link">
+              <Link to="/app/login" className="super-admin-login__link" underline="none">
                 Customer Login
               </Link>
             </p>
