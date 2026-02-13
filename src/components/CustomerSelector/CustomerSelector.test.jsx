@@ -158,6 +158,7 @@ describe('CustomerSelector', () => {
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(/name is required/i)
+    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('calls createCustomer and setCustomerId on successful submit', async () => {
@@ -187,6 +188,7 @@ describe('CustomerSelector', () => {
     mockHooks()
     const failCreate = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
+        status: 500,
         data: { error: { message: 'Duplicate name' } },
       }),
     })
@@ -203,6 +205,87 @@ describe('CustomerSelector', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Duplicate name')
     })
+  })
+
+  it('maps 409 conflict to customer name field error', async () => {
+    mockHooks()
+    const failCreate = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'A customer with this name already exists.',
+          },
+        },
+      }),
+    })
+    useCreateCustomerMutation.mockReturnValue([failCreate, { isLoading: false }])
+
+    render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+
+    await userEvent.type(screen.getByLabelText(/customer name/i), 'ACME Corp')
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+    })
+
+    const nameInput = screen.getByLabelText(/customer name/i)
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(nameInput).toHaveAttribute('aria-describedby', 'customer-name-error')
+  })
+
+  it('maps parsing-error conflict payload to customer name field error', async () => {
+    mockHooks()
+    const failCreate = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 'PARSING_ERROR',
+        originalStatus: 409,
+        data: JSON.stringify({
+          error: {
+            code: 'CONFLICT',
+            message: 'A customer with this name already exists.',
+          },
+        }),
+      }),
+    })
+    useCreateCustomerMutation.mockReturnValue([failCreate, { isLoading: false }])
+
+    render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+
+    await userEvent.type(screen.getByLabelText(/customer name/i), ' ACME  Corp ')
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+    })
+
+    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('blocks normalized duplicate names client-side before API call', async () => {
+    const { createFn } = mockHooks()
+    render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+
+    await userEvent.type(screen.getByLabelText(/customer name/i), '  ACME   corp  ')
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+    })
+
+    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(createFn).not.toHaveBeenCalled()
   })
 
   it('skips query when user is not super admin', () => {

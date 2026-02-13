@@ -84,6 +84,28 @@ export const formatRetryAfter = (seconds) => {
 export const getErrorMessage = (code) =>
   ERROR_MESSAGES[code] ?? code ?? ERROR_MESSAGES.SERVER_ERROR
 
+/**
+ * Best-effort parser for API error payloads that may arrive as a string
+ * (e.g. RTK Query PARSING_ERROR with JSON body text).
+ *
+ * @param {unknown} data
+ * @returns {Object}
+ */
+const toErrorDataObject = (data) => {
+  if (data && typeof data === 'object') return data
+
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data)
+      if (parsed && typeof parsed === 'object') return parsed
+    } catch {
+      // Ignore invalid JSON and fall through to empty object.
+    }
+  }
+
+  return {}
+}
+
 /* ------------------------------------------------------------------ */
 /*  Standard AppError shape                                           */
 /* ------------------------------------------------------------------ */
@@ -108,7 +130,7 @@ export const getErrorMessage = (code) =>
 export const normalizeError = (error) => {
   // RTK Query fetchBaseQuery error
   if (error && typeof error === 'object' && 'status' in error) {
-    const data = error.data && typeof error.data === 'object' ? error.data : {}
+    const data = toErrorDataObject(error.data)
 
     // Backend wraps errors as { error: { code, message, … } } — unwrap it.
     const nested =
@@ -117,6 +139,8 @@ export const normalizeError = (error) => {
     const status =
       typeof error.status === 'number'
         ? error.status
+        : typeof error.originalStatus === 'number'
+          ? error.originalStatus
         : undefined
     const code =
       nested.code ?? data.code ?? (status ? `HTTP_${status}` : 'SERVER_ERROR')

@@ -40,6 +40,11 @@
   border-color: var(--color-border-focus);
 }
 
+.customer-selector__input--error,
+.customer-selector__input--error:focus {
+  border-color: var(--color-error);
+}
+
 .customer-selector__input:disabled {
   opacity: 0.6;
 }

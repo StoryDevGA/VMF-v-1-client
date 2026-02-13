@@ -178,6 +178,25 @@ describe('errors', () => {
       expect(result.status).toBe(503)
     })
 
+    it('should recover nested error payload from PARSING_ERROR JSON string data', () => {
+      const rtkError = {
+        status: 'PARSING_ERROR',
+        originalStatus: 409,
+        data: JSON.stringify({
+          error: {
+            code: 'CONFLICT',
+            message: 'A customer with this name already exists.',
+            requestId: 'req-789',
+          },
+        }),
+      }
+      const result = normalizeError(rtkError)
+      expect(result.code).toBe('CONFLICT')
+      expect(result.status).toBe(409)
+      expect(result.requestId).toBe('req-789')
+      expect(result.message).toBe('A customer with this name already exists. (Ref: req-789)')
+    })
+
     it('should normalize a plain Error instance', () => {
       const err = new Error('Something broke')
       const result = normalizeError(err)

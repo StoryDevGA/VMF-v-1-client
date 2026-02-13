@@ -19,9 +19,17 @@ import {
   useCreateCustomerMutation,
 } from '../../store/api/customerApi.js'
 import { DEFAULT_VMF_POLICY } from '../../constants/customer.js'
+import { normalizeError } from '../../utils/errors.js'
 import './CustomerSelector.css'
 
 const CREATE_ACTION = '__create__'
+const DUPLICATE_NAME_MESSAGE = 'A customer with this name already exists.'
+
+const normalizeCustomerName = (value) =>
+  String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
 
 /**
  * @param {Object}  props
@@ -34,6 +42,7 @@ export function CustomerSelector({ className = '' }) {
     { page: 1, pageSize: 100 },
     { skip: !isSuperAdmin },
   )
+  const customers = customersData?.data ?? []
 
   const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation()
 
@@ -41,6 +50,7 @@ export function CustomerSelector({ className = '' }) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newTopology, setNewTopology] = useState('SINGLE_TENANT')
+  const [nameError, setNameError] = useState('')
   const [createError, setCreateError] = useState('')
 
   /* ---- Handlers ---- */
@@ -60,11 +70,21 @@ export function CustomerSelector({ className = '' }) {
   const handleCreate = useCallback(
     async (e) => {
       e.preventDefault()
+      setNameError('')
       setCreateError('')
 
       const trimmedName = newName.trim()
       if (!trimmedName) {
-        setCreateError('Name is required')
+        setNameError('Name is required')
+        return
+      }
+
+      const normalizedNewName = normalizeCustomerName(trimmedName)
+      const duplicateExists = customers.some(
+        (customer) => normalizeCustomerName(customer?.name) === normalizedNewName,
+      )
+      if (duplicateExists) {
+        setNameError(DUPLICATE_NAME_MESSAGE)
         return
       }
 
@@ -83,19 +103,27 @@ export function CustomerSelector({ className = '' }) {
         setNewTopology('SINGLE_TENANT')
         setShowCreateForm(false)
       } catch (err) {
-        const msg =
-          err?.data?.error?.message ??
-          err?.data?.message ??
-          err?.message ??
-          'Failed to create customer'
-        setCreateError(msg)
+        const appError = normalizeError(err)
+
+        const isConflict =
+          appError.status === 409 ||
+          appError.code === 'CONFLICT' ||
+          appError.code === 'HTTP_409'
+
+        if (isConflict) {
+          setNameError(appError.message || DUPLICATE_NAME_MESSAGE)
+          return
+        }
+
+        setCreateError(appError.message)
       }
     },
-    [newName, newTopology, createCustomer, setCustomerId],
+    [newName, newTopology, createCustomer, customers, setCustomerId],
   )
 
   const handleCancelCreate = useCallback(() => {
     setShowCreateForm(false)
+    setNameError('')
     setCreateError('')
     setNewName('')
   }, [])
@@ -103,7 +131,6 @@ export function CustomerSelector({ className = '' }) {
   // Only visible to Super Admin
   if (!isSuperAdmin) return null
 
-  const customers = customersData?.data ?? []
   const options = customers.map((c) => ({ value: c._id, label: c.name }))
   const actions = [{ value: CREATE_ACTION, label: '+ Create customer…' }]
 
@@ -116,14 +143,19 @@ export function CustomerSelector({ className = '' }) {
         aria-label="Create customer"
       >
         <input
-          className="customer-selector__input"
+          className={`customer-selector__input ${nameError ? 'customer-selector__input--error' : ''}`.trim()}
           type="text"
           placeholder="Customer name"
           value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          onChange={(e) => {
+            setNewName(e.target.value)
+            if (nameError) setNameError('')
+          }}
           disabled={isCreating}
           autoFocus
           aria-label="Customer name"
+          aria-invalid={nameError ? 'true' : 'false'}
+          aria-describedby={nameError ? 'customer-name-error' : undefined}
         />
 
         <select
@@ -155,6 +187,12 @@ export function CustomerSelector({ className = '' }) {
         >
           Cancel
         </button>
+
+        {nameError && (
+          <span id="customer-name-error" className="customer-selector__error" role="alert">
+            {nameError}
+          </span>
+        )}
 
         {createError && (
           <span className="customer-selector__error" role="alert">
