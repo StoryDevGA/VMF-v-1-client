@@ -122,8 +122,8 @@ describe('Router', () => {
 
       await screen.findByRole('navigation')
 
-      const helpLink = screen.getByRole('menuitem', { name: /help/i })
-      const vmfLink = screen.queryByRole('menuitem', { name: /^vmf$/i })
+      const helpLink = screen.getByRole('link', { name: /help/i })
+      const vmfLink = screen.queryByRole('link', { name: /^vmf$/i })
 
       expect(helpLink).toBeInTheDocument()
       expect(vmfLink).not.toBeInTheDocument()
