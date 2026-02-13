@@ -26,6 +26,7 @@
 .header--sticky {
   position: sticky;
   top: 0;
+  background-color: var(--color-background, var(--slos-bg-fallback, #000000));
 }
 
 .header__container {
