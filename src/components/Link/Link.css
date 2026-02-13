@@ -97,11 +97,11 @@
 }
 
 .link--danger:hover:not(.link--disabled) {
-  color: #dc2626; /* Darker red */
+  color: var(--color-error-hover);
 }
 
 .link--danger:active:not(.link--disabled) {
-  color: #b91c1c; /* Even darker */
+  color: var(--color-error-active);
 }
 
 /* ===========================

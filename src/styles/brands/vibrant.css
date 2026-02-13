@@ -19,10 +19,11 @@
   --color-primary-800: #9f1239;
   --color-primary-900: #881337;
 
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
+  /* Dark-background action mappings */
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+  --color-action-primary-active: var(--color-primary-600);
 
-  --color-border-focus: var(--color-primary-500);
-  --color-info: var(--color-primary-500);
+  --color-border-focus: var(--color-primary-400);
+  --color-info: var(--color-primary-400);
 }

@@ -17,7 +17,7 @@
 }
 
 .user-trust-status__date {
-  font-size: var(--font-size-xs, 0.75rem);
-  color: var(--color-text-secondary, #6b7280);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }

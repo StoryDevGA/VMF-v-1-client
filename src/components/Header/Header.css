@@ -150,7 +150,7 @@
   background-color: var(--color-surface-secondary);
   border-color: color-mix(in srgb, var(--color-border) 50%, transparent);
   transform: scale(1.05);
-  color: var(--color-primary-600);
+  color: var(--color-primary-300);
 }
 
 .header__hamburger:focus-visible {
@@ -172,7 +172,7 @@
 }
 
 .header__hamburger:hover .header__hamburger-icon {
-  color: var(--color-primary-600);
+  color: var(--color-primary-300);
 }
 
 /* ===========================

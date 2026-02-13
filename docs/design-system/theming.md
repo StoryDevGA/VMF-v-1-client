@@ -2,21 +2,11 @@
 
 ## Overview
 
-The theming system makes it **extremely easy** to modify or completely swap color schemes without touching any component code. All colors are defined once and propagate automatically.
+The theming system provides easy color-scheme switching without touching component code. All colors flow from **three layers**: palette tokens → semantic tokens → components.
 
-## How Easy Is It?
+The **default theme is dark** — the StorylineOS dark aesthetic (`#000000` background, `#D6DCDC` text, silver primary palette). Brand themes and alternative palettes are layered on top via `data-theme` attributes.
 
-### ✅ Change Entire Color Scheme: **30 seconds**
-Just update the primary color values in `src/styles/variables.css`
-
-### ✅ Switch to Dark Mode: **1 line of code**
-Add `data-theme="dark"` to your `<html>` tag
-
-### ✅ Create Custom Theme: **5 minutes**
-Add a new theme variant in `src/styles/themes.css`
-
-### ✅ Runtime Theme Switching: **10 lines of JavaScript**
-Use our theme hook (shown below)
+---
 
 ## Architecture
 
@@ -24,98 +14,139 @@ Use our theme hook (shown below)
 Color System (3 Layers)
 │
 ├─ Layer 1: Color Palette (variables.css)
-│  └─ Raw color values (--color-primary-500, --color-gray-200, etc.)
+│  └─ Raw values: --color-primary-300, --color-gray-800, etc.
 │
 ├─ Layer 2: Semantic Tokens (themes.css)
-│  └─ Contextual mappings (--color-background, --color-text-primary, etc.)
+│  └─ Contextual mappings: --color-background, --color-text-primary, etc.
 │
 └─ Layer 3: Components
-   └─ Use semantic tokens only (color: var(--color-text-primary))
+   └─ Only reference semantic tokens: color: var(--color-text-primary)
 ```
 
-**Why 3 layers?**
-- Layer 1: Define all available colors once
-- Layer 2: Map colors to purpose (background, text, borders, etc.)
-- Layer 3: Components always work, regardless of theme
+**Why three layers?**
 
-## Quick Start
+- Layer 1 defines all available colors once.
+- Layer 2 maps colors to purpose (background, text, borders, actions).
+- Layer 3 always works regardless of which theme is active.
 
-### Switch to Dark Mode
+---
 
-```html
-<!-- In public/index.html or via JavaScript -->
-<html data-theme="dark">
+## Default Theme (StorylineOS Dark)
+
+The `:root` ruleset in `themes.css` defines the default palette:
+
+| Token | Value | Description |
+|-------|-------|-------------|
+| `--color-background` | `#000000` | Solid black background |
+| `--color-background-secondary` | `#0a0a0a` | Subtle depth |
+| `--color-background-tertiary` | `#141414` | Third-level depth |
+| `--color-surface` | `#111111` | Cards, panels |
+| `--color-surface-elevated` | `#1a1a1a` | Modals, dropdowns |
+| `--color-text-primary` | `#d6dcdc` | Main text |
+| `--color-text-secondary` | `#a8b0b0` | Supporting text |
+| `--color-text-tertiary` | `#7a8484` | Hints, placeholders |
+| `--color-text-inverse` | `#000000` | Text on light backgrounds |
+| `--color-border` | `#2a2a2a` | Default borders |
+| `--color-border-hover` | `#3a3a3a` | Hover borders |
+| `--color-border-focus` | `#d6dcdc` | Focus ring (primary-300) |
+| `--color-action-primary` | `#d6dcdc` | CTA button background |
+| `--color-action-primary-hover` | `transparent` | CTA hover (outline style) |
+| `--color-action-primary-active` | `#bfc5c5` | CTA pressed |
+| `--color-action-secondary` | `#1f1f1f` | Secondary button |
+| `--color-action-secondary-hover` | `#2a2a2a` | Secondary hover |
+| `--color-action-secondary-active` | `#333333` | Secondary pressed |
+
+### Shorthand Aliases
+
+| Alias | Resolves To |
+|-------|-------------|
+| `--color-primary` | `#d6dcdc` |
+| `--color-danger` | `var(--color-error)` |
+| `--color-text` | `var(--color-text-primary)` |
+| `--color-link` | `var(--color-primary-300)` |
+| `--color-border-default` | `var(--color-border)` |
+| `--color-disabled-text` | `var(--color-text-tertiary)` |
+
+---
+
+## Explicit Dark Theme
+
+`[data-theme='dark']` mirrors `:root` — it exists for JavaScript-driven theme toggling so you can explicitly set dark mode:
+
+```javascript
+document.documentElement.setAttribute('data-theme', 'dark')
 ```
 
-### Use Pre-built Themes
+Both `:root` and `[data-theme='dark']` produce the same visual result.
+
+---
+
+## System Preference
+
+The default `:root` palette is already dark, so **no `prefers-color-scheme` media query is needed**. The app looks correct in both light and dark OS modes.
+
+> Previous versions used `@media (prefers-color-scheme: dark)` to override values with Tailwind's blue-tinted gray scale. That has been removed — the neutral SLOS tokens apply unconditionally.
+
+---
+
+## Alternative Themes
+
+Three example themes are included in `themes.css`:
+
+| Theme | Attribute | Palette |
+|-------|-----------|---------|
+| Ocean | `data-theme="ocean"` | Cyan / teal |
+| Sunset | `data-theme="sunset"` | Orange / red |
+| Forest | `data-theme="forest"` | Green |
+
+These override the `--color-primary-*` scale and action colors while inheriting all other semantic tokens from `:root`.
 
 ```html
-<!-- Ocean theme (cyan/blue) -->
 <html data-theme="ocean">
-
-<!-- Sunset theme (orange/red) -->
-<html data-theme="sunset">
-
-<!-- Forest theme (green) -->
-<html data-theme="forest">
 ```
 
-### Respect System Preference
+---
 
-No code needed! The theme system automatically respects `prefers-color-scheme`:
+## Brand Themes (Multi-Tenant)
 
-```css
-/* Automatic dark mode if user's OS is set to dark */
-@media (prefers-color-scheme: dark) {
-  /* Applied automatically */
-}
-```
+Brand themes live in `src/styles/brands/` and use the selector `[data-theme='brand-xxx']`.
 
-## Creating a Custom Theme
+| Brand | Theme ID | Primary Color | Personality |
+|-------|----------|---------------|-------------|
+| Corporate Blue | `brand-corporate` | `#2563eb` | Professional, enterprise |
+| Vibrant Coral | `brand-vibrant` | `#e11d48` | Creative, energetic |
+| Emerald Green | `brand-emerald` | `#059669` | Growth, wellness |
+| Royal Purple | `brand-royal` | `#9333ea` | Luxury, premium |
+| Warm Amber | `brand-warm` | `#d97706` | Warmth, optimism |
 
-### Option 1: Modify Existing Primary Colors
+Brand themes override `--color-primary-*` and `--color-action-*` tokens. They also set action shades to `500/400/600` for sufficient contrast on the dark background.
 
-**File:** `src/styles/variables.css`
+### Applying a Brand Theme
 
-```css
-:root {
-  /* Change these 9 values to rebrand entire app */
-  --color-primary-50: #your-color;
-  --color-primary-100: #your-color;
-  --color-primary-200: #your-color;
-  --color-primary-300: #your-color;
-  --color-primary-400: #your-color;
-  --color-primary-500: #your-color;  /* Main brand color */
-  --color-primary-600: #your-color;
-  --color-primary-700: #your-color;
-  --color-primary-800: #your-color;
-  --color-primary-900: #your-color;
-}
-```
-
-**Result:** Entire app uses new brand colors instantly.
-
-### Option 2: Create Theme Variant
-
-**File:** `src/styles/themes.css`
-
-```css
-[data-theme='my-brand'] {
-  /* Override primary palette */
-  --color-primary-500: #FF6B6B;
-  --color-primary-600: #EE5A52;
-  --color-primary-700: #DC4C3F;
-
-  /* Override semantic colors if needed */
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-}
-```
-
-**Usage:**
 ```html
-<html data-theme="my-brand">
+<html data-theme="brand-royal">
 ```
+
+```javascript
+// Tenant-based theming
+const tenantThemes = {
+  acme: 'brand-corporate',
+  globex: 'brand-emerald',
+  initech: 'brand-warm',
+}
+const tenant = getCurrentTenant()
+document.documentElement.setAttribute('data-theme', tenantThemes[tenant])
+```
+
+### Creating a New Brand Theme
+
+1. Copy `src/styles/brands/_template.css`
+2. Replace `BRANDNAME` with your brand identifier
+3. Generate a 9-shade scale from your brand color ([uicolors.app](https://uicolors.app/))
+4. Verify WCAG AA contrast (4.5:1 minimum for text on `#000000` background)
+5. Import in `src/styles/brands/index.css`
+
+---
 
 ## Runtime Theme Switching
 
@@ -123,36 +154,31 @@ No code needed! The theme system automatically respects `prefers-color-scheme`:
 
 ```javascript
 // Switch theme
-document.documentElement.setAttribute('data-theme', 'dark')
+document.documentElement.setAttribute('data-theme', 'brand-royal')
 
-// Remove theme (use default)
+// Remove theme (use SLOS default)
 document.documentElement.removeAttribute('data-theme')
 
-// Get current theme
+// Read current theme
 const theme = document.documentElement.getAttribute('data-theme')
 ```
 
-### React Hook (Recommended)
-
-Create `src/hooks/useTheme.js`:
+### React Hook
 
 ```javascript
 import { useEffect, useState } from 'react'
 
 export function useTheme() {
   const [theme, setTheme] = useState(
-    () => localStorage.getItem('theme') || 'light'
+    () => localStorage.getItem('theme') || ''
   )
 
   useEffect(() => {
-    // Apply theme to document
-    if (theme === 'light') {
+    if (!theme) {
       document.documentElement.removeAttribute('data-theme')
     } else {
       document.documentElement.setAttribute('data-theme', theme)
     }
-
-    // Persist to localStorage
     localStorage.setItem('theme', theme)
   }, [theme])
 
@@ -160,145 +186,77 @@ export function useTheme() {
 }
 ```
 
-**Usage in Component:**
+---
 
-```jsx
-import { useTheme } from '../hooks/useTheme'
-
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
-
-  return (
-    <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-      {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-    </button>
-  )
-}
-```
-
-## Semantic Color Tokens
-
-Use these in your components - they automatically adapt to themes:
+## Using Semantic Tokens in Components
 
 ### Background Colors
+
 ```css
-background-color: var(--color-background);          /* Main background */
-background-color: var(--color-background-secondary); /* Subtle contrast */
-background-color: var(--color-surface);              /* Cards, panels */
+background-color: var(--color-background);           /* Main — #000000 */
+background-color: var(--color-background-secondary);  /* Subtle contrast */
+background-color: var(--color-surface);               /* Cards, panels */
+background-color: var(--color-surface-elevated);      /* Modals */
 ```
 
 ### Text Colors
+
 ```css
-color: var(--color-text-primary);    /* Main text */
-color: var(--color-text-secondary);  /* Less important text */
+color: var(--color-text-primary);    /* Main text — #d6dcdc */
+color: var(--color-text-secondary);  /* Supporting text */
 color: var(--color-text-tertiary);   /* Hints, placeholders */
-color: var(--color-text-inverse);    /* Text on dark backgrounds */
+color: var(--color-text-inverse);    /* Text on light backgrounds */
 ```
 
 ### Border Colors
+
 ```css
-border-color: var(--color-border);        /* Default borders */
-border-color: var(--color-border-hover);  /* Hover state */
-border-color: var(--color-border-focus);  /* Focus state */
+border-color: var(--color-border);        /* Default */
+border-color: var(--color-border-hover);  /* Hover */
+border-color: var(--color-border-focus);  /* Focus ring */
 ```
 
 ### Action Colors
+
 ```css
-/* Primary actions (CTA buttons, links) */
+/* Primary CTA */
 background-color: var(--color-action-primary);
 background-color: var(--color-action-primary-hover);
 
-/* Secondary actions (cancel, back buttons) */
+/* Secondary actions */
 background-color: var(--color-action-secondary);
 background-color: var(--color-action-secondary-hover);
 ```
 
+---
+
 ## Best Practices
 
-### ✅ DO
+### DO ✅
 
 ```css
-/* Use semantic tokens */
+/* Use semantic tokens — theme-aware */
 .button {
   background-color: var(--color-action-primary);
   color: var(--color-text-inverse);
 }
-
-/* Theme will switch automatically */
 ```
 
-### ❌ DON'T
+### DON'T ❌
 
 ```css
-/* Don't hardcode colors */
+/* Hardcoded colors — will not adapt to themes */
 .button {
-  background-color: #3b82f6;  /* Won't change with theme */
+  background-color: #3b82f6;
   color: white;
 }
 ```
 
-### ✅ DO
-
-```css
-/* Use palette colors for specific needs */
-.error-badge {
-  background-color: var(--color-error);
-}
-```
-
-### ❌ DON'T
-
-```css
-/* Don't create arbitrary colors */
-.custom {
-  background-color: #random123;  /* Not in design system */
-}
-```
-
-## Complete Theme Example
-
-### Custom Brand Theme
-
-**Step 1:** Generate your color palette
-Use a tool like [UI Colors](https://uicolors.app/) to generate a scale from your brand color.
-
-**Step 2:** Add to `themes.css`
-
-```css
-[data-theme='acme-corp'] {
-  /* Your brand color palette */
-  --color-primary-50: #fef2f2;
-  --color-primary-100: #fee2e2;
-  --color-primary-200: #fecaca;
-  --color-primary-300: #fca5a5;
-  --color-primary-400: #f87171;
-  --color-primary-500: #ef4444;  /* Your main brand color */
-  --color-primary-600: #dc2626;
-  --color-primary-700: #b91c1c;
-  --color-primary-800: #991b1b;
-  --color-primary-900: #7f1d1d;
-
-  /* Semantic color assignments */
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
-
-  /* Optionally override other colors */
-  --color-background: #fafafa;
-}
-```
-
-**Step 3:** Apply theme
-
-```html
-<html data-theme="acme-corp">
-```
-
-**Done!** Entire app now uses your brand colors.
+---
 
 ## Theme Transitions
 
-Smooth transitions between themes are built-in:
+Smooth transitions between themes are built in:
 
 ```css
 body {
@@ -307,166 +265,42 @@ body {
 }
 ```
 
-Components can opt into theme transitions:
+Components can opt into transitions:
 
 ```css
 .card {
   background-color: var(--color-surface);
-  color: var(--color-text-primary);
   transition: background-color 250ms, color 250ms;
 }
 ```
 
-## Advanced: Multiple Brand Themes
+---
 
-Support multiple brands in one app:
+## File Structure
 
-```javascript
-// Tenant-based theming
-const tenantThemes = {
-  'acme': 'acme-corp',
-  'globex': 'globex-theme',
-  'initech': 'initech-theme'
-}
-
-const tenant = getCurrentTenant()
-document.documentElement.setAttribute('data-theme', tenantThemes[tenant])
 ```
-
-## Testing Themes
-
-```javascript
-// Test all themes
-const themes = ['light', 'dark', 'ocean', 'sunset', 'forest']
-
-themes.forEach(theme => {
-  document.documentElement.setAttribute('data-theme', theme)
-  // Visual regression test screenshot
-  takeScreenshot(`theme-${theme}`)
-})
+src/styles/
+├── themes.css              # Default SLOS dark + dark + ocean/sunset/forest
+└── brands/
+    ├── index.css           # Imports all brands
+    ├── _template.css       # Starter for new brands
+    ├── corporate.css       # [data-theme='brand-corporate']
+    ├── vibrant.css         # [data-theme='brand-vibrant']
+    ├── emerald.css         # [data-theme='brand-emerald']
+    ├── royal.css           # [data-theme='brand-royal']
+    └── warm.css            # [data-theme='brand-warm']
 ```
-
-## Migration Path
-
-Already have hardcoded colors? Easy migration:
-
-1. **Find:** Search for `color:`, `background-color:`, `border-color:`
-2. **Replace:** Swap hardcoded values with semantic tokens
-3. **Test:** Verify with `data-theme="dark"`
-
-```bash
-# Find hardcoded colors
-grep -r "color: #" src/components
-```
-
-## Summary
-
-**Changing color scheme is incredibly easy:**
-
-| Task | Difficulty | Time |
-|------|------------|------|
-| Change brand color | Modify 9 variables | 30 seconds |
-| Enable dark mode | Add attribute | 1 line |
-| Create custom theme | Add CSS block | 5 minutes |
-| Runtime switching | Use hook | 10 lines |
-| Full rebrand | Update palette + test | 1 hour |
-
-The 3-layer architecture (palette → semantic → components) ensures you can swap themes without touching component code. **Change once, apply everywhere.**
 
 ---
 
-## Brand-Specific Themes
+## Summary
 
-### Overview
+| Task | Effort |
+|------|--------|
+| Change brand color | Update 9 variables | 30 seconds |
+| Enable explicit dark mode | `data-theme="dark"` | 1 line |
+| Create custom theme | Add CSS block | 5 minutes |
+| Runtime switching | Use hook / `setAttribute` | 10 lines |
+| Full rebrand | Update palette + test | 1 hour |
 
-In addition to light/dark modes and alternative themes, the design system supports brand-specific color schemes for multi-tenant or white-label applications.
-
-### Available Brand Themes
-
-| Brand | Theme ID | Primary Color | Personality |
-|-------|----------|---------------|-------------|
-| Corporate Blue | `brand-corporate` | #2563eb | Professional, enterprise, trust |
-| Vibrant Coral | `brand-vibrant` | #e11d48 | Creative, modern, energetic |
-| Emerald Green | `brand-emerald` | #059669 | Growth, wellness, sustainable |
-| Royal Purple | `brand-royal` | #9333ea | Luxury, premium, sophisticated |
-| Warm Amber | `brand-warm` | #d97706 | Warmth, optimism, friendly |
-
-### Using Brand Themes
-
-#### HTML Attribute
-
-```html
-<html data-theme="brand-corporate">
-```
-
-#### JavaScript
-
-```javascript
-// Set brand theme
-document.documentElement.setAttribute('data-theme', 'brand-vibrant')
-
-// Remove brand theme (use default)
-document.documentElement.removeAttribute('data-theme')
-```
-
-#### React Component
-
-```jsx
-import { BrandSwitcher } from './components/BrandSwitcher'
-
-function Settings() {
-  return (
-    <div>
-      <h2>Theme Settings</h2>
-      <BrandSwitcher />
-    </div>
-  )
-}
-```
-
-### Creating New Brand Themes
-
-1. **Copy template:**
-   ```bash
-   cp client/src/styles/brands/_template.css client/src/styles/brands/newbrand.css
-   ```
-
-2. **Generate color palette:**
-   - Visit [UI Colors](https://uicolors.app/)
-   - Input your brand's primary color
-   - Generate 9-shade scale (50-900)
-
-3. **Update CSS file:**
-   - Replace `BRANDNAME` with your brand identifier
-   - Replace `#COLOR` values with generated palette
-   - Verify WCAG AA contrast (4.5:1 minimum for text)
-
-4. **Add import:**
-   ```css
-   /* In client/src/styles/brands/index.css */
-   @import './newbrand.css';
-   ```
-
-5. **Test:**
-   ```html
-   <html data-theme="brand-newbrand">
-   ```
-
-### Accessibility
-
-All brand themes meet WCAG AA contrast standards:
-- Primary-600: Minimum 4.5:1 contrast on white (for normal text)
-- Primary-700/800: 7:1+ contrast (AAA standard)
-
-### File Structure
-
-```
-client/src/styles/brands/
-├── index.css          # Imports all brands
-├── corporate.css      # Corporate Blue
-├── vibrant.css        # Vibrant Coral
-├── emerald.css        # Emerald Green
-├── royal.css          # Royal Purple
-├── warm.css           # Warm Amber
-└── _template.css      # Template for new brands
-```
+The three-layer architecture ensures you can swap themes without touching component code. **Change once, apply everywhere.**

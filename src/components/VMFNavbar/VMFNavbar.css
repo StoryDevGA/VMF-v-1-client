@@ -38,13 +38,13 @@
 }
 
 .vmf-navbar__link--active {
-  background-color: var(--color-primary-500);
-  color: var(--color-white);
+  background-color: var(--color-primary-300);
+  color: var(--color-text-inverse);
 }
 
 .vmf-navbar__link--active:hover {
-  background-color: var(--color-primary-600);
-  color: var(--color-white);
+  background-color: var(--color-primary-200);
+  color: var(--color-text-inverse);
 }
 
 .vmf-navbar__link-icon {

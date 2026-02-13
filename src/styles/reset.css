@@ -27,6 +27,7 @@
 /* Set core root defaults */
 html {
   height: 100%;
+  background-color: #000000;
   /* Prevent font size inflation on mobile */
   -webkit-text-size-adjust: 100%;
   /* Improve text rendering */

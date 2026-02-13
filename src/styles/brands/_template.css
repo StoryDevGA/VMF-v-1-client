@@ -8,7 +8,7 @@
  * 2. Generate color palette at https://uicolors.app/
  * 3. Replace BRANDNAME and COLOR values below
  * 4. Add import to brands/index.css
- * 5. Verify WCAG AA contrast (4.5:1 minimum)
+ * 5. Verify WCAG AA contrast (4.5:1 min) against #000000 background
  */
 
 [data-theme='brand-BRANDNAME'] {
@@ -19,23 +19,18 @@
   --color-primary-200: #COLOR;
   --color-primary-300: #COLOR;
   --color-primary-400: #COLOR;
-  --color-primary-500: #COLOR;  /* Your main brand color */
-  --color-primary-600: #COLOR;  /* Should have 4.5:1 contrast on white */
+  --color-primary-500: #COLOR;  /* Your main brand color — must have 4.5:1 contrast on #000 */
+  --color-primary-600: #COLOR;
   --color-primary-700: #COLOR;
   --color-primary-800: #COLOR;
   --color-primary-900: #COLOR;
 
-  /* Semantic mappings - typically no changes needed */
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
-
-  --color-border-focus: var(--color-primary-500);
-  --color-info: var(--color-primary-500);
-}
-
-/* Optional: Dark mode variant */
-/* [data-theme='brand-BRANDNAME'][data-mode='dark'] {
+  /* Semantic mappings — dark background context
+     Use lighter shades (500/400) for visibility on #000. */
   --color-action-primary: var(--color-primary-500);
   --color-action-primary-hover: var(--color-primary-400);
-} */
+  --color-action-primary-active: var(--color-primary-600);
+
+  --color-border-focus: var(--color-primary-400);
+  --color-info: var(--color-primary-400);
+}

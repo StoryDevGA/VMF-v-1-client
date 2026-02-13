@@ -140,12 +140,12 @@
 }
 
 .customer-selector__btn--create {
-  background-color: var(--color-primary-500);
-  color: var(--color-text-on-primary);
+  background-color: var(--color-primary-300);
+  color: var(--color-text-inverse);
 }
 
 .customer-selector__btn--create:hover:not(:disabled) {
-  background-color: var(--color-primary-600);
+  background-color: var(--color-primary-200);
 }
 
 .customer-selector__btn--cancel {

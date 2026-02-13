@@ -11,34 +11,44 @@
  */
 
 /* ===========================
-   DEFAULT THEME (Light)
+   DEFAULT THEME (StorylineOS Dark)
    =========================== */
 
 :root {
-  /* Semantic color assignments - these can be easily swapped */
-  --color-background: var(--color-white);
-  --color-background-secondary: var(--color-gray-50);
-  --color-background-tertiary: var(--color-gray-100);
+  /* Semantic color assignments — StorylineOS dark-first palette
+     #000000 default; override via --slos-bg when embedding. */
+  --color-background: var(--slos-bg, #000000);
+  --color-background-secondary: #0a0a0a;
+  --color-background-tertiary: #141414;
 
-  --color-surface: var(--color-white);
-  --color-surface-elevated: var(--color-white);
+  --color-surface: #111111;
+  --color-surface-elevated: #1a1a1a;
 
-  --color-text-primary: var(--color-gray-900);
-  --color-text-secondary: var(--color-gray-600);
-  --color-text-tertiary: var(--color-gray-500);
-  --color-text-inverse: var(--color-white);
+  --color-text-primary: var(--slos-text, #d6dcdc);
+  --color-text-secondary: #a8b0b0;
+  --color-text-tertiary: #7a8484;
+  --color-text-inverse: #000000;
 
-  --color-border: var(--color-gray-200);
-  --color-border-hover: var(--color-gray-300);
-  --color-border-focus: var(--color-primary-500);
+  --color-border: #2a2a2a;
+  --color-border-hover: #3a3a3a;
+  --color-border-focus: var(--color-primary-300);
 
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
+  --color-action-primary: var(--slos-btn-bg, #d6dcdc);
+  --color-action-primary-hover: var(--slos-btn-hover-bg, transparent);
+  --color-action-primary-active: #bfc5c5;
 
-  --color-action-secondary: var(--color-gray-200);
-  --color-action-secondary-hover: var(--color-gray-300);
-  --color-action-secondary-active: var(--color-gray-400);
+  --color-action-secondary: #1f1f1f;
+  --color-action-secondary-hover: #2a2a2a;
+  --color-action-secondary-active: #333333;
+
+  /* Shorthand aliases — referenced by many components */
+  --color-primary: #d6dcdc;
+  --color-danger: var(--color-error);
+  --color-text: var(--color-text-primary);
+  --color-link: var(--color-primary-300);
+  --color-border-default: var(--color-border);
+  --color-border-subtle: color-mix(in srgb, var(--color-border) 50%, transparent);
+  --color-disabled-text: var(--color-text-tertiary);
 }
 
 /* ===========================
@@ -46,33 +56,31 @@
    =========================== */
 
 [data-theme='dark'] {
-  /* Background colors */
-  --color-background: var(--color-gray-900);
-  --color-background-secondary: var(--color-gray-800);
-  --color-background-tertiary: var(--color-gray-700);
+  /* Mirrors the default :root SLOS dark palette.
+     Kept for explicit dark-mode toggling via JS. */
+  --color-background: var(--slos-bg, #000000);
+  --color-background-secondary: #0a0a0a;
+  --color-background-tertiary: #141414;
 
-  --color-surface: var(--color-gray-800);
-  --color-surface-elevated: var(--color-gray-700);
+  --color-surface: #111111;
+  --color-surface-elevated: #1a1a1a;
 
-  /* Text colors */
-  --color-text-primary: var(--color-gray-50);
-  --color-text-secondary: var(--color-gray-300);
-  --color-text-tertiary: var(--color-gray-400);
-  --color-text-inverse: var(--color-gray-900);
+  --color-text-primary: var(--slos-text, #d6dcdc);
+  --color-text-secondary: #a8b0b0;
+  --color-text-tertiary: #7a8484;
+  --color-text-inverse: #000000;
 
-  /* Border colors */
-  --color-border: var(--color-gray-700);
-  --color-border-hover: var(--color-gray-600);
-  --color-border-focus: var(--color-primary-400);
+  --color-border: #2a2a2a;
+  --color-border-hover: #3a3a3a;
+  --color-border-focus: var(--color-primary-300);
 
-  /* Action colors */
-  --color-action-primary: var(--color-primary-500);
-  --color-action-primary-hover: var(--color-primary-400);
-  --color-action-primary-active: var(--color-primary-300);
+  --color-action-primary: var(--slos-btn-bg, #d6dcdc);
+  --color-action-primary-hover: var(--slos-btn-hover-bg, transparent);
+  --color-action-primary-active: #bfc5c5;
 
-  --color-action-secondary: var(--color-gray-700);
-  --color-action-secondary-hover: var(--color-gray-600);
-  --color-action-secondary-active: var(--color-gray-500);
+  --color-action-secondary: #1f1f1f;
+  --color-action-secondary-hover: #2a2a2a;
+  --color-action-secondary-active: #333333;
 }
 
 /* ===========================
@@ -94,9 +102,9 @@
   --color-primary-900: #164e63;
 
   /* Semantic colors use the new primary palette */
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+  --color-action-primary-active: var(--color-primary-600);
 }
 
 [data-theme='sunset'] {
@@ -112,9 +120,9 @@
   --color-primary-800: #9a3412;
   --color-primary-900: #7c2d12;
 
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+  --color-action-primary-active: var(--color-primary-600);
 }
 
 [data-theme='forest'] {
@@ -130,9 +138,9 @@
   --color-primary-800: #166534;
   --color-primary-900: #14532d;
 
-  --color-action-primary: var(--color-primary-600);
-  --color-action-primary-hover: var(--color-primary-700);
-  --color-action-primary-active: var(--color-primary-800);
+  --color-action-primary: var(--color-primary-500);
+  --color-action-primary-hover: var(--color-primary-400);
+  --color-action-primary-active: var(--color-primary-600);
 }
 
 /* ===========================
@@ -144,7 +152,8 @@
  * Applied to elements that should animate on theme change
  */
 body {
-  background-color: var(--color-background);
+  /* StorylineOS: solid black background with SLOS text color */
+  background-color: var(--color-background, var(--slos-bg-fallback, #000000));
   color: var(--color-text-primary);
   transition: background-color var(--transition-base),
               color var(--transition-base);
@@ -155,27 +164,7 @@ body {
    =========================== */
 
 /**
- * Auto dark mode based on system preference
- * Only applies if no data-theme attribute is set
+ * The default :root theme is already the SLOS dark palette,
+ * so no prefers-color-scheme override is needed.
+ * The neutral tokens apply regardless of system preference.
  */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    /* Apply dark theme colors automatically */
-    --color-background: var(--color-gray-900);
-    --color-background-secondary: var(--color-gray-800);
-    --color-background-tertiary: var(--color-gray-700);
-
-    --color-surface: var(--color-gray-800);
-    --color-surface-elevated: var(--color-gray-700);
-
-    --color-text-primary: var(--color-gray-50);
-    --color-text-secondary: var(--color-gray-300);
-    --color-text-tertiary: var(--color-gray-400);
-
-    --color-border: var(--color-gray-700);
-    --color-border-hover: var(--color-gray-600);
-
-    --color-action-primary: var(--color-primary-500);
-    --color-action-primary-hover: var(--color-primary-400);
-  }
-}

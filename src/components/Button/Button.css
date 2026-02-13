@@ -24,9 +24,9 @@
   text-transform: uppercase;
   line-height: var(--line-height-tight);
 
-  /* Borders */
-  border: 1px solid transparent;
-  border-radius: var(--border-radius-md);
+  /* Borders — 50px pill radius per StorylineOS spec */
+  border: none;
+  border-radius: var(--border-radius-pill);
 
   /* Layout */
   min-height: 44px; /* Touch-friendly minimum */
@@ -67,21 +67,25 @@
    BUTTON VARIANTS
    =========================== */
 
-/* Primary - Main call-to-action */
+/* Primary - Main call-to-action
+   Default : bg #D6DCDC, text #000, no border
+   Hover   : bg transparent, 1px solid #D6DCDC, text #D6DCDC */
 .btn--primary {
-  background-color: var(--color-action-primary);
-  color: var(--color-text-inverse);
-  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
+  background-color: var(--slos-btn-bg);
+  color: var(--slos-btn-text);
+  border: none;
 }
 
 .btn--primary:hover:not(:disabled) {
-  background-color: var(--color-action-primary-hover);
-  border-color: color-mix(in srgb, var(--color-action-primary-hover) 30%, transparent);
+  background-color: var(--slos-btn-hover-bg);
+  color: var(--slos-btn-hover-text);
+  border: var(--border-width-thin) solid var(--slos-btn-hover-border);
 }
 
 .btn--primary:active:not(:disabled) {
-  background-color: var(--color-action-primary-active);
-  border-color: color-mix(in srgb, var(--color-action-primary-active) 30%, transparent);
+  background-color: var(--slos-btn-hover-bg);
+  color: var(--slos-btn-hover-text);
+  border: var(--border-width-thin) solid var(--slos-btn-hover-border);
 }
 
 /* Secondary - Less prominent actions */
@@ -101,17 +105,17 @@
   border-color: color-mix(in srgb, var(--color-action-secondary-active) 30%, transparent);
 }
 
-/* Outline - Subtle emphasis */
+/* Outline - Subtle emphasis (hover/selected state) */
 .btn--outline {
-  background-color: transparent;
-  color: var(--color-action-primary);
-  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
+  background-color: var(--slos-btn-hover-bg);
+  color: var(--slos-btn-hover-text);
+  border: var(--border-width-thin) solid var(--slos-btn-hover-border);
 }
 
 .btn--outline:hover:not(:disabled) {
-  background-color: var(--color-action-primary);
-  color: var(--color-text-inverse);
-  border-color: color-mix(in srgb, var(--color-action-primary) 30%, transparent);
+  background-color: var(--slos-btn-bg);
+  color: var(--slos-btn-text);
+  border: none;
 }
 
 /* Ghost - Minimal style */
@@ -133,13 +137,13 @@
 }
 
 .btn--danger:hover:not(:disabled) {
-  background-color: #dc2626; /* Darker red */
-  border-color: color-mix(in srgb, #dc2626 30%, transparent);
+  background-color: var(--color-error-hover);
+  border-color: color-mix(in srgb, var(--color-error-hover) 30%, transparent);
 }
 
 .btn--danger:active:not(:disabled) {
-  background-color: #b91c1c; /* Even darker */
-  border-color: color-mix(in srgb, #b91c1c 30%, transparent);
+  background-color: var(--color-error-active);
+  border-color: color-mix(in srgb, var(--color-error-active) 30%, transparent);
 }
 
 /* ===========================

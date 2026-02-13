@@ -23,9 +23,9 @@
 }
 
 .edit-users__title {
-  font-size: var(--font-size-2xl, 1.5rem);
-  font-weight: var(--font-weight-bold, 700);
-  color: var(--color-text-primary, #111827);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -84,8 +84,8 @@
 }
 
 .edit-users__pagination-info {
-  font-size: var(--font-size-sm, 0.875rem);
-  color: var(--color-text-secondary, #6b7280);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
@@ -101,8 +101,8 @@
 
 .edit-users__empty {
   text-align: center;
-  color: var(--color-text-secondary, #6b7280);
-  padding: var(--spacing-2xl, 3rem) 0;
+  color: var(--color-text-secondary);
+  padding: var(--spacing-2xl) 0;
 }
 
 /* ---- Confirm dialog ---- */

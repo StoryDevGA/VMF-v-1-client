@@ -226,57 +226,57 @@
  * Mobile-first approach: smaller on mobile, larger on desktop
  */
 
-/* Extra large - For main headings (h1) */
+/* Extra large - For main headings (h1)
+   Mobile 23px → Desktop 40px (Sora) */
 .text-responsive-xl {
-  font-size: var(--font-size-xl);
-  line-height: var(--line-height-tight);
+  font-family: var(--font-primary);
+  font-size: var(--font-size-xl);   /* 23px */
+  line-height: var(--line-height-tight); /* 1.1 */
 }
 
 @media (min-width: 768px) {
   .text-responsive-xl {
-    font-size: var(--font-size-2xl);
+    font-size: var(--font-size-2xl); /* 35px */
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .text-responsive-xl {
-    font-size: var(--font-size-3xl);
+    font-size: var(--font-size-3xl); /* 40px */
   }
 }
 
-/* Large - For section headings (h2) */
+/* Large - For section headings (h2/h3)
+   Mobile 23px → Desktop 35px (League Spartan) */
 .text-responsive-lg {
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-tight);
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);   /* 23px */
+  line-height: var(--line-height-normal); /* 1.5 */
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1280px) {
   .text-responsive-lg {
-    font-size: var(--font-size-xl);
+    font-size: var(--font-size-2xl); /* 35px */
   }
 }
 
-@media (min-width: 1024px) {
-  .text-responsive-lg {
-    font-size: var(--font-size-2xl);
-  }
-}
-
-/* Medium - For subsection headings (h3) */
+/* Medium - For subsection headings (h3)
+   Mobile 16px → Desktop 23px (League Spartan) */
 .text-responsive-md {
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-normal);
+  font-family: var(--font-display);
+  font-size: var(--font-size-base); /* 16px */
+  line-height: var(--line-height-normal); /* 1.5 */
 }
 
 @media (min-width: 768px) {
   .text-responsive-md {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-lg);  /* 20px */
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .text-responsive-md {
-    font-size: var(--font-size-xl);
+    font-size: var(--font-size-xl);  /* 23px */
   }
 }
 
@@ -310,23 +310,27 @@
  * Better than breakpoint-based scaling for modern browsers
  */
 .text-fluid-xl {
+  font-family: var(--font-primary);
   font-size: clamp(var(--font-size-xl), 5vw, var(--font-size-3xl));
-  line-height: var(--line-height-tight);
+  line-height: var(--line-height-tight); /* 1.1 */
 }
 
 .text-fluid-lg {
-  font-size: clamp(var(--font-size-lg), 3.5vw, var(--font-size-2xl));
-  line-height: var(--line-height-tight);
+  font-family: var(--font-display);
+  font-size: clamp(var(--font-size-xl), 3.5vw, var(--font-size-2xl));
+  line-height: var(--line-height-normal); /* 1.5 */
 }
 
 .text-fluid-md {
+  font-family: var(--font-display);
   font-size: clamp(var(--font-size-base), 2.5vw, var(--font-size-xl));
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-normal); /* 1.5 */
 }
 
 .text-fluid-base {
+  font-family: var(--font-primary);
   font-size: clamp(var(--font-size-sm), 1.5vw, var(--font-size-base));
-  line-height: var(--line-height-relaxed);
+  line-height: var(--line-height-relaxed); /* 1.6 */
 }
 
 /* ===========================

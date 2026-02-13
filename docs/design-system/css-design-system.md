@@ -2,32 +2,41 @@
 
 ## Overview
 
-Production-ready CSS design system built with modern best practices. Provides a consistent, maintainable foundation for styling the application.
+Production-ready CSS design system aligned to the **StorylineOS** visual identity. Every token, color, and typographic rule references the SLOS spec so the app looks native inside the StorylineOS ecosystem.
 
 ## Architecture
 
 ```
 src/styles/
-├── index.css       # Main entry point (imports all styles)
-├── reset.css       # Modern CSS reset
-├── variables.css   # Design tokens (single source of truth)
-└── README.md       # This file
+├── index.css          # Entry point — imports everything, base body/heading rules
+├── reset.css          # Modern CSS reset (html bg: #000000, box-sizing, etc.)
+├── variables.css      # Design tokens — single source of truth
+├── themes.css         # Semantic color themes (default dark, dark, ocean, sunset, forest)
+├── responsive.css     # Mobile-first responsive utilities & grid
+└── brands/
+    ├── index.css      # Imports all brand CSS
+    ├── _template.css  # Starter template for new brands
+    ├── corporate.css  # Corporate Blue brand
+    ├── emerald.css    # Emerald Green brand
+    ├── royal.css      # Royal Purple brand
+    ├── vibrant.css    # Vibrant Coral brand
+    └── warm.css       # Warm Amber brand
 ```
 
 ## Design Principles
 
-1. **DRY (Don't Repeat Yourself)** - Design tokens eliminate duplication
-2. **Single Source of Truth** - All values defined once in `variables.css`
-3. **Modularity** - Each file has a single responsibility
-4. **Clarity** - Descriptive naming, comprehensive documentation
-5. **Accessibility** - Respects user preferences (reduced motion, etc.)
+1. **Dark-first** — Default palette is the SLOS dark aesthetic (`#000000` background, `#D6DCDC` text).
+2. **Single source of truth** — All values live in `variables.css`; components only use `var()` references.
+3. **No hardcoded hex in components** — Every color in component/page CSS must use a design token.
+4. **Three-layer color system** — Palette → Semantic tokens → Components.
+5. **Accessibility** — Respects `prefers-reduced-motion`, meets WCAG AA contrast.
 
 ## Usage
 
 ### Importing Styles
 
 ```javascript
-// Import once in main.jsx
+// Import once in main.jsx — order handled by index.css
 import './styles/index.css'
 ```
 
@@ -40,150 +49,231 @@ import './styles/index.css'
   margin-bottom: var(--spacing-lg);
 
   /* Typography */
-  font-family: var(--font-primary);
-  font-size: var(--font-size-lg);
+  font-family: var(--font-primary);       /* Sora */
+  font-size: var(--font-size-lg);         /* 20px desktop body */
   font-weight: var(--font-weight-semibold);
 
-  /* Colors */
-  color: var(--color-gray-900);
-  background-color: var(--color-primary-500);
+  /* Colors — always semantic tokens */
+  color: var(--color-text-primary);       /* #d6dcdc */
+  background-color: var(--color-surface); /* #111111 */
 
   /* Borders */
-  border: var(--border-width-thin) solid var(--color-gray-300);
-  border-radius: var(--border-radius-md);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-pill); /* 50px SLOS pill */
 
-  /* Shadows */
+  /* Shadows & transitions */
   box-shadow: var(--shadow-md);
-
-  /* Transitions */
   transition: all var(--transition-base);
 }
 ```
 
+---
+
 ## Design Tokens Reference
 
-### Spacing Scale
-Based on 8px grid system for consistent visual rhythm.
+### Spacing Scale (8 px base)
 
-- `--spacing-xs`: 4px
-- `--spacing-sm`: 8px
-- `--spacing-md`: 16px (base)
-- `--spacing-lg`: 24px
-- `--spacing-xl`: 32px
-- `--spacing-2xl`: 48px
-- `--spacing-3xl`: 64px
+| Token | Value | Pixels |
+|-------|-------|--------|
+| `--spacing-2xs` | 0.125rem | 2 px |
+| `--spacing-xs` | 0.25rem | 4 px |
+| `--spacing-sm` | 0.5rem | 8 px |
+| `--spacing-md` | 1rem | 16 px |
+| `--spacing-lg` | 1.5rem | 24 px |
+| `--spacing-xl` | 2rem | 32 px |
+| `--spacing-2xl` | 3rem | 48 px |
+| `--spacing-3xl` | 4rem | 64 px |
+
+**Layout guidance:**
+
+- Heading → paragraph: `--spacing-lg` (24 px) to `--spacing-xl` (32 px)
+- Section → section: `--spacing-2xl` (48 px) minimum
+- Card / container padding: `--spacing-md` (16 px) to `--spacing-lg` (24 px)
 
 ### Typography
 
 #### Font Families
-- `--font-primary`: System font stack (optimal performance)
-- `--font-mono`: Monospace for code
 
-#### Font Sizes
-Modular scale (1.250 ratio - Major Third) for harmonious typography.
+| Token | Font | Usage |
+|-------|------|-------|
+| `--font-primary` / `--font-sans` | **Sora** | H1 headings & body text |
+| `--font-display` | **League Spartan** | H2 / H3 sub-headings |
+| `--font-mono` | Courier New | Code blocks |
 
-- `--font-size-xs`: 12px
-- `--font-size-sm`: 14px
-- `--font-size-base`: 16px (base)
-- `--font-size-lg`: 20px
-- `--font-size-xl`: 25px
-- `--font-size-2xl`: 31px
-- `--font-size-3xl`: 39px
+Loaded via Google Fonts in `index.html`.
+
+#### Font Sizes — StorylineOS Spec
+
+| Token | rem | px | Desktop role | Mobile role |
+|-------|-----|-----|-------------|-------------|
+| `--font-size-xs` | 0.75 | 12 | Caption | Caption |
+| `--font-size-sm` | 0.875 | 14 | Small | Small |
+| `--font-size-base` | 1 | 16 | — | Body |
+| `--font-size-lg` | 1.25 | 20 | Body | — |
+| `--font-size-xl` | 1.4375 | 23 | — | H1, H2/H3 |
+| `--font-size-2xl` | 2.1875 | 35 | H2 / H3 | — |
+| `--font-size-3xl` | 2.5 | 40 | H1 | — |
+
+#### Line Heights
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--line-height-tight` | 1.1 | H1 headings |
+| `--line-height-normal` | 1.5 | H2 / H3 sub-headings |
+| `--line-height-relaxed` | 1.6 | Body text |
 
 #### Font Weights
-- `--font-weight-normal`: 400
-- `--font-weight-medium`: 500
-- `--font-weight-semibold`: 600
-- `--font-weight-bold`: 700
+
+| Token | Value |
+|-------|-------|
+| `--font-weight-normal` | 400 |
+| `--font-weight-medium` | 500 |
+| `--font-weight-semibold` | 600 |
+| `--font-weight-bold` | 700 |
 
 ### Colors
 
-#### Neutral Scale
-Grayscale palette for UI elements.
-- `--color-gray-50` through `--color-gray-900`
+#### Neutral Scale — True Neutral Grays
 
-#### Primary Brand Colors
-Blue scale for primary actions and branding.
-- `--color-primary-50` through `--color-primary-900`
+| Token | Hex |
+|-------|-----|
+| `--color-white` | `#ffffff` |
+| `--color-gray-50` | `#fafafa` |
+| `--color-gray-100` | `#f5f5f5` |
+| `--color-gray-200` | `#e5e5e5` |
+| `--color-gray-300` | `#d4d4d4` |
+| `--color-gray-400` | `#a3a3a3` |
+| `--color-gray-500` | `#737373` |
+| `--color-gray-600` | `#525252` |
+| `--color-gray-700` | `#404040` |
+| `--color-gray-800` | `#262626` |
+| `--color-gray-900` | `#171717` |
+| `--color-black` | `#000000` |
+
+> **Important:** These are intentionally true-neutral. Tailwind's default scale carries a blue tint (`#111827`, `#1f2937`) which clashes with the SLOS dark aesthetic. Never reintroduce those values.
+
+#### Primary Brand Scale — StorylineOS Silver (`#D6DCDC`)
+
+| Token | Hex | Note |
+|-------|-----|------|
+| `--color-primary-50` | `#f8f9f9` | Lightest |
+| `--color-primary-100` | `#eff1f1` | |
+| `--color-primary-200` | `#e3e7e7` | |
+| `--color-primary-300` | `#d6dcdc` | **SLOS brand accent** |
+| `--color-primary-400` | `#bfc6c6` | |
+| `--color-primary-500` | `#a8b0b0` | |
+| `--color-primary-600` | `#8a9494` | |
+| `--color-primary-700` | `#677070` | |
+| `--color-primary-800` | `#474e4e` | |
+| `--color-primary-900` | `#2a2e2e` | Darkest |
 
 #### Semantic Colors
-- `--color-success`: Green (#10b981)
-- `--color-warning`: Orange (#f59e0b)
-- `--color-error`: Red (#ef4444)
-- `--color-info`: Blue (#3b82f6)
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--color-success` | `#10b981` | Positive status |
+| `--color-warning` | `#f59e0b` | Caution |
+| `--color-error` | `#ef4444` | Destructive / error |
+| `--color-error-hover` | `#dc2626` | Error hover state |
+| `--color-error-active` | `#b91c1c` | Error active / pressed |
+| `--color-info` | `#a8b0b0` | Informational (silver) |
+
+#### StorylineOS Brand Tokens
+
+| Token | Value | Purpose |
+|-------|-------|---------|
+| `--slos-bg` | `#000000` | App background |
+| `--slos-bg-fallback` | `#000000` | Fallback when not embedded |
+| `--slos-text` | `#d6dcdc` | Default text color |
+| `--slos-btn-bg` | `#d6dcdc` | Button background |
+| `--slos-btn-text` | `#000000` | Button text |
+| `--slos-btn-hover-bg` | `transparent` | Button hover background |
+| `--slos-btn-hover-border` | `#d6dcdc` | Button hover border |
+| `--slos-btn-hover-text` | `#d6dcdc` | Button hover text |
 
 ### Borders
-- **Width**: `thin` (1px), `medium` (2px), `thick` (4px)
-- **Radius**: `sm` (4px), `md` (8px), `lg` (12px), `xl` (16px), `full` (9999px)
+
+| Token | Value |
+|-------|-------|
+| `--border-width-thin` | 1 px |
+| `--border-width-medium` | 2 px |
+| `--border-width-thick` | 4 px |
+| `--border-radius-sm` | 4 px |
+| `--border-radius-md` | 8 px |
+| `--border-radius-lg` | 12 px |
+| `--border-radius-xl` | 16 px |
+| `--border-radius-pill` | **50 px** — StorylineOS button radius |
+| `--border-radius-full` | 9999 px (circles) |
 
 ### Shadows
-Elevation system for depth and hierarchy.
-- `--shadow-sm`: Subtle depth
-- `--shadow-md`: Standard cards
-- `--shadow-lg`: Modals, dropdowns
-- `--shadow-xl`: Highest elevation
+
+| Token | Usage |
+|-------|-------|
+| `--shadow-sm` | Subtle depth |
+| `--shadow-md` | Standard cards |
+| `--shadow-lg` | Modals, dropdowns |
+| `--shadow-xl` | Highest elevation |
 
 ### Z-Index Scale
-Predictable stacking order.
-- `--z-index-dropdown`: 1000
-- `--z-index-sticky`: 1020
-- `--z-index-fixed`: 1030
-- `--z-index-modal-backdrop`: 1040
-- `--z-index-modal`: 1050
-- `--z-index-popover`: 1060
-- `--z-index-tooltip`: 1070
+
+| Token | Value |
+|-------|-------|
+| `--z-index-dropdown` | 1000 |
+| `--z-index-sticky` | 1020 |
+| `--z-index-fixed` | 1030 |
+| `--z-index-modal-backdrop` | 1040 |
+| `--z-index-modal` | 1050 |
+| `--z-index-popover` | 1060 |
+| `--z-index-tooltip` | 1070 |
 
 ### Transitions
-- `--transition-fast`: 150ms
-- `--transition-base`: 250ms
-- `--transition-slow`: 350ms
 
-## CSS Reset Features
+| Token | Duration |
+|-------|----------|
+| `--transition-fast` | 150 ms |
+| `--transition-base` | 250 ms |
+| `--transition-slow` | 350 ms |
 
-Modern CSS reset based on best practices from Josh Comeau and Andy Bell:
+---
 
-- ✅ Box-sizing set to border-box
-- ✅ Default margins/padding removed
-- ✅ Improved text rendering
-- ✅ Sensible image defaults (block, max-width: 100%)
-- ✅ Font inheritance for form elements
-- ✅ Heading optimization (shorter line-height)
-- ✅ Accessibility (respects reduced motion preference)
+## CSS Reset (`reset.css`)
+
+Modern CSS reset based on Josh Comeau & Andy Bell:
+
+- `html { background-color: #000000 }` — prevents white flash on load
+- `box-sizing: border-box` on all elements
+- Default margin / padding removed
+- Improved text rendering (`-webkit-font-smoothing: antialiased`)
+- Block-level images with `max-width: 100%`
+- Font inheritance on form elements
+- Shorter `line-height` on headings (1.2)
+- `#root { isolation: isolate }` for stacking context
+- `prefers-reduced-motion` removes all animations
+
+---
 
 ## Best Practices
 
 ### DO ✅
-- Use design tokens instead of hardcoded values
-- Follow the naming convention: `--{category}-{property}-{variant}`
-- Document component-specific styles
-- Use semantic color names for contextual colors
+
+- Use `var()` tokens for every color, spacing, and font value
+- Follow BEM naming: `.card__header`, `.card--outlined`
+- Use semantic color tokens (`--color-text-primary`) in components
+- Add new tokens to `variables.css` and update this document
 
 ### DON'T ❌
-- Hardcode colors, spacing, or font sizes
-- Override design tokens in component styles
-- Use arbitrary values without justification
-- Create new tokens without updating documentation
+
+- Hardcode hex colors in component or page CSS
+- Override design tokens in component files
+- Use Tailwind blue-tinted grays (`#111827`, `#1f2937`, etc.)
+- Create arbitrary colors not in the palette
+- Set `background: white` or `background: transparent` on body/html
+
+---
 
 ## Extending the System
 
-When adding new tokens:
-
-1. Add to `variables.css` following naming convention
-2. Update this README with the new token
-3. Ensure it fits within the existing scale/pattern
-4. Document the use case
-
-## Accessibility
-
-The design system includes:
-- Respects `prefers-reduced-motion` for animations
-- Semantic color system (success, warning, error)
-- `.sr-only` utility class for screen readers
-- High contrast color ratios (AA/AAA compliant)
-
-## Performance
-
-- Uses system fonts for optimal loading
-- CSS custom properties enable runtime theming
-- Minimal CSS footprint
-- No external dependencies
+1. Add new token to `variables.css` following naming convention
+2. Update this document with the new token
+3. Ensure it fits within the existing scale
+4. Run `npm run test:run` to verify nothing breaks

@@ -8,12 +8,12 @@
   padding-top: var(--spacing-xl);
   padding-bottom: var(--spacing-2xl);
   display: grid;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-2xl);
 }
 
 .dashboard__header {
   display: grid;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-lg);
 }
 
 .dashboard__title {
@@ -103,7 +103,7 @@
   height: 3rem;
   font-size: var(--font-size-xl);
   border-radius: var(--border-radius-full);
-  background-color: var(--color-primary-100, var(--color-surface));
+  background-color: var(--color-background-tertiary);
   color: var(--color-action-primary);
   border: var(--border-width-thin) solid var(--color-border);
 }

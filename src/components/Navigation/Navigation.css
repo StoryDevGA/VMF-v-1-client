@@ -43,7 +43,7 @@
 }
 
 .nav__logo:hover {
-  color: var(--color-primary-600);
+  color: var(--color-primary-300);
 }
 
 .nav__logo:focus-visible {
@@ -91,13 +91,13 @@
 
 /* Active link state */
 .nav__link--active {
-  color: var(--color-primary-600);
+  color: var(--color-primary-300);
   background-color: var(--color-background-secondary);
   font-weight: var(--font-weight-semibold);
 }
 
 .nav__link--active:hover {
-  color: var(--color-primary-700);
+  color: var(--color-primary-200);
 }
 
 .nav__icon {

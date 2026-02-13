@@ -20,13 +20,42 @@
 /* 5. Responsive utilities (mobile-first) */
 @import './responsive.css';
 
-/* 5. Global base styles */
+/* 6. Global base styles */
 body {
   font-family: var(--font-primary);
   font-size: var(--font-size-base);
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-relaxed);
   color: var(--color-text-primary);
-  background-color: var(--color-background);
+  background-color: var(--color-background, var(--slos-bg-fallback, #000000));
+}
+
+/* Heading hierarchy — font mapping */
+h1 {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-xl);       /* mobile-first: 23px */
+  line-height: var(--line-height-tight); /* 1.1 */
+}
+
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);       /* mobile-first: 23px */
+  line-height: var(--line-height-normal); /* 1.5 */
+}
+
+@media (min-width: 1280px) {
+  h1 {
+    font-size: var(--font-size-3xl);    /* 40px */
+  }
+
+  h2,
+  h3 {
+    font-size: var(--font-size-2xl);    /* 35px */
+  }
+
+  body {
+    font-size: var(--font-size-lg);     /* 20px */
+  }
 }
 
 code {
