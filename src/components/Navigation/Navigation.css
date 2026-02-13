@@ -27,32 +27,6 @@
 }
 
 /* ===========================
-   BRAND/LOGO
-   =========================== */
-
-.nav__brand {
-  flex-shrink: 0;
-}
-
-.nav__logo {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.nav__logo:hover {
-  color: var(--color-primary-300);
-}
-
-.nav__logo:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 4px;
-  border-radius: var(--border-radius-sm);
-}
-
-/* ===========================
    NAVIGATION LINKS
    =========================== */
 
@@ -69,6 +43,7 @@
   align-items: center;
   gap: var(--spacing-2xs);
   padding: var(--spacing-sm) var(--spacing-md);
+  border-left: var(--border-width-thin) solid transparent;
   color: var(--color-text-secondary);
   text-decoration: none;
   text-transform: uppercase;
@@ -76,7 +51,8 @@
   border-radius: var(--border-radius-md);
   transition:
     color var(--transition-fast),
-    background-color var(--transition-fast);
+    background-color var(--transition-fast),
+    border-left-color var(--transition-fast);
 }
 
 .nav__link:hover {
@@ -93,19 +69,12 @@
 .nav__link--active {
   color: var(--color-primary-300);
   background-color: var(--color-background-secondary);
+  border-left-color: color-mix(in srgb, var(--color-primary-300) 60%, transparent);
   font-weight: var(--font-weight-semibold);
 }
 
 .nav__link--active:hover {
   color: var(--color-primary-200);
-}
-
-.nav__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
 }
 
 .nav__text {
@@ -214,8 +183,7 @@
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .nav,
-  .nav__link,
-  .nav__logo {
+  .nav__link {
     transition: none;
   }
 }

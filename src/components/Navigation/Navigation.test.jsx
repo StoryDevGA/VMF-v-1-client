@@ -86,53 +86,53 @@ describe('Navigation', () => {
 
     // Home link is inside a mobile-only wrapper (hidden on desktop viewports)
     expect(screen.getByText(/home/i)).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /help/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /help/i })).toBeInTheDocument()
   })
 
   it('does NOT show admin links for unauthenticated users', () => {
     const store = createTestStore(anonymousUser, 'idle')
     renderNavigation(store)
 
-    expect(screen.queryByRole('menuitem', { name: /users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /dashboard/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument()
   })
 
-  it('shows Users and Tenants links for CUSTOMER_ADMIN', () => {
+  it('shows Users, Tenants, and Monitoring links for CUSTOMER_ADMIN', () => {
     const store = createTestStore(customerAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('menuitem', { name: /users/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /tenants/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /tenants/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /monitoring/i })).toBeInTheDocument()
   })
 
   it('shows Users, Tenants, and Monitoring links for SUPER_ADMIN', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('menuitem', { name: /users/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /tenants/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /monitoring/i })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /tenants/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /monitoring/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
   it('does NOT show admin links for basic USER role', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.queryByRole('menuitem', { name: /users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /tenants/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /monitoring/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /^admin$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /monitoring/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
   it('shows Dashboard for authenticated users', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('menuitem', { name: /dashboard/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
   })
 
   it('calls onLinkClick when Dashboard is clicked', async () => {
@@ -140,7 +140,7 @@ describe('Navigation', () => {
     const store = createTestStore(customerAdminUser)
     renderNavigation(store, onLinkClick)
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /dashboard/i }))
+    await userEvent.click(screen.getByRole('link', { name: /dashboard/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 
@@ -149,7 +149,7 @@ describe('Navigation', () => {
     const store = createTestStore(anonymousUser, 'idle')
     renderNavigation(store, onLinkClick)
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /help/i }))
+    await userEvent.click(screen.getByRole('link', { name: /help/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 
@@ -163,7 +163,7 @@ describe('Navigation', () => {
       </Provider>,
     )
 
-    const helpLink = screen.getByRole('menuitem', { name: /help/i })
+    const helpLink = screen.getByRole('link', { name: /help/i })
     expect(helpLink.className).toMatch(/active/i)
   })
 })

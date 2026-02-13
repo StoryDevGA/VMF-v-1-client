@@ -16,14 +16,6 @@
 
 import { NavLink } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import {
-  MdDashboard,
-  MdHome,
-  MdHelpOutline,
-  MdPeople,
-  MdBusiness,
-  MdMonitorHeart,
-} from 'react-icons/md'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Navigation.css'
@@ -52,53 +44,41 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       id="mobile-navigation"
     >
       <div className="nav__container">
-        <ul className="nav__links" role="menubar">
-          <li role="none" className="nav__item--mobile-only">
+        <ul className="nav__links">
+          <li className="nav__item--mobile-only">
             <NavLink
               to="/"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
-              role="menuitem"
               onClick={onLinkClick}
             >
-              <span className="nav__icon" aria-hidden="true">
-                <MdHome />
-              </span>
               <span className="nav__text">Home</span>
             </NavLink>
           </li>
           {/* ---- Dashboard (all authenticated users) ---- */}
           {isAuthenticated && (
-            <li role="none">
+            <li>
               <NavLink
                 to="/app/dashboard"
                 className={({ isActive }) =>
                   isActive ? 'nav__link nav__link--active' : 'nav__link'
                 }
-                role="menuitem"
                 onClick={onLinkClick}
               >
-                <span className="nav__icon" aria-hidden="true">
-                  <MdDashboard />
-                </span>
                 <span className="nav__text">Dashboard</span>
               </NavLink>
             </li>
           )}
 
-          <li role="none">
+          <li>
             <NavLink
               to="/help"
               className={({ isActive }) =>
                 isActive ? 'nav__link nav__link--active' : 'nav__link'
               }
-              role="menuitem"
               onClick={onLinkClick}
             >
-              <span className="nav__icon" aria-hidden="true">
-                <MdHelpOutline />
-              </span>
               <span className="nav__text">Help</span>
             </NavLink>
           </li>
@@ -106,49 +86,37 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           {/* ---- Administration links (authenticated admins only) ---- */}
           {isAuthenticated && hasAdminAccess && (
             <>
-              <li role="none" className="nav__separator" aria-hidden="true" />
-              <li role="none">
+              <li className="nav__separator" aria-hidden="true" />
+              <li>
                 <NavLink
                   to="/app/administration/edit-users"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'
                   }
-                  role="menuitem"
                   onClick={onLinkClick}
                 >
-                  <span className="nav__icon" aria-hidden="true">
-                    <MdPeople />
-                  </span>
                   <span className="nav__text">Users</span>
                 </NavLink>
               </li>
-              <li role="none">
+              <li>
                 <NavLink
                   to="/app/administration/maintain-tenants"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'
                   }
-                  role="menuitem"
                   onClick={onLinkClick}
                 >
-                  <span className="nav__icon" aria-hidden="true">
-                    <MdBusiness />
-                  </span>
                   <span className="nav__text">Tenants</span>
                 </NavLink>
               </li>
-              <li role="none">
+              <li>
                 <NavLink
                   to="/app/administration/system-monitoring"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'
                   }
-                  role="menuitem"
                   onClick={onLinkClick}
                 >
-                  <span className="nav__icon" aria-hidden="true">
-                    <MdMonitorHeart />
-                  </span>
                   <span className="nav__text">Monitoring</span>
                 </NavLink>
               </li>
