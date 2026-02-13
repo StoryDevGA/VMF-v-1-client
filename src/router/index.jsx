@@ -62,7 +62,7 @@ function LoadingFallback() {
 function RootLayout() {
   return (
     <div className="root-layout">
-      <Header logo={<Logo size="medium" />} />
+      <Header logo={<Logo size="large" />} />
       <main className="root-layout__main">
         <Suspense fallback={<LoadingFallback />}>
           <Outlet />

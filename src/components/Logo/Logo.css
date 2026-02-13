@@ -12,17 +12,6 @@
   height: auto;
 }
 
-.logo__subtext {
-  display: block;
-  margin-top: 4px;
-  font-size: 0.6em;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  position: relative;
-  top: -2px;
-  color: var(--color-error);
-}
-
 /* Size variants */
 .logo--small .logo__image {
   height: 24px;
