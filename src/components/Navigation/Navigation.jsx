@@ -71,18 +71,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             </li>
           )}
 
-          <li>
-            <NavLink
-              to="/help"
-              className={({ isActive }) =>
-                isActive ? 'nav__link nav__link--active' : 'nav__link'
-              }
-              onClick={onLinkClick}
-            >
-              <span className="nav__text">Help</span>
-            </NavLink>
-          </li>
-
           {/* ---- Administration links (authenticated admins only) ---- */}
           {isAuthenticated && hasAdminAccess && (
             <>
@@ -122,6 +110,18 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               </li>
             </>
           )}
+
+          <li>
+            <NavLink
+              to="/help"
+              className={({ isActive }) =>
+                isActive ? 'nav__link nav__link--active' : 'nav__link'
+              }
+              onClick={onLinkClick}
+            >
+              <span className="nav__text">Help</span>
+            </NavLink>
+          </li>
 
 
         </ul>
