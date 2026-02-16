@@ -1,25 +1,199 @@
-﻿/**
+/**
  * Home Page Styles
  */
 
-.home--placeholder {
-  min-height: 50vh;
+.home {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: var(--spacing-2xl);
+  flex-direction: column;
+  gap: var(--spacing-2xl);
+  padding-top: var(--spacing-xl);
   padding-bottom: var(--spacing-2xl);
+  max-width: 1400px;
+  margin-inline: auto;
 }
 
-.home__banner {
+.home__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.home__title {
   margin: 0;
-  padding: var(--spacing-lg) var(--spacing-2xl);
-  border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
-  border-radius: var(--border-radius-lg);
-  background: color-mix(in srgb, var(--color-surface-secondary) 75%, transparent);
-  color: var(--color-text-primary);
-  font-size: clamp(2rem, 8vw, 4rem);
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
-  letter-spacing: 0.08em;
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+}
+
+.home__subtitle {
+  margin: 0;
+  max-width: 70ch;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.home__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-lg);
+}
+
+.home__section {
+  margin: 0;
+}
+
+.home__section--logo {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.home__legend {
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.home__section-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: inherit;
+  color: var(--color-text-primary);
+}
+
+.home__logo-content {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.home__logo-image {
+  width: clamp(3.5rem, 8vw, 5rem);
+  height: clamp(3.5rem, 8vw, 5rem);
+  animation: home-spin 8s linear infinite;
+  filter: drop-shadow(
+    0 0.4rem 1rem color-mix(in srgb, var(--color-action-primary) 22%, transparent)
+  );
+}
+
+.home__tenant-content {
+  display: grid;
+  width: 100%;
+  gap: var(--spacing-xs);
+}
+
+.home__tenant-select {
+  max-width: 28rem;
+}
+
+.home__tenant-name {
+  margin: 0;
+  color: var(--color-action-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.home__tenant-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.home__cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
+.home__card {
+  min-height: 14rem;
+}
+
+.home__card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.home__card-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--border-radius-full);
+  border: var(--border-width-thin) solid var(--color-border);
+  color: var(--color-action-primary);
+  background-color: var(--color-surface-elevated);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.home__card-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.home__card-body {
+  color: var(--color-text-secondary);
+}
+
+.home__card-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.home__card-footer {
+  justify-content: flex-start;
+}
+
+@media (min-width: 640px) {
+  .home__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home__section--wide {
+    grid-column: 1 / -1;
+  }
+
+  .home__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .home__title {
+    font-size: var(--font-size-2xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .home__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .home__title {
+    font-size: var(--font-size-3xl);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__logo-image {
+    animation: none;
+  }
+}
+
+@keyframes home-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }

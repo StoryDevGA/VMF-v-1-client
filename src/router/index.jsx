@@ -37,6 +37,7 @@ const MaintainTenants = lazy(
 const SystemMonitoring = lazy(
   () => import('../pages/SystemMonitoring/SystemMonitoring'),
 )
+const NotFound = lazy(() => import('../pages/NotFound'))
 
 /* ------------------------------------------------------------------ */
 /*  Shared layouts & fallbacks                                        */
@@ -149,6 +150,12 @@ export const router = createBrowserRouter([
             element: <Home />, // placeholder until Customers page is built
           },
         ],
+      },
+
+      /* ---------- Catch-all: 404 page ---------- */
+      {
+        path: '*',
+        element: <NotFound />,
       },
     ],
   },
