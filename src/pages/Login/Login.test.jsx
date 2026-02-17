@@ -41,6 +41,10 @@ function renderLogin(store) {
           <Routes>
             <Route path="/app/login" element={<Login />} />
             <Route path="/app/dashboard" element={<div>Dashboard</div>} />
+            <Route
+              path="/super-admin/dashboard"
+              element={<div>Super Admin Dashboard</div>}
+            />
             <Route path="/super-admin/login" element={<div>SA Login</div>} />
           </Routes>
         </MemoryRouter>
@@ -115,6 +119,26 @@ describe('Login page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    })
+  })
+
+  it('redirects super admins to the super-admin dashboard', async () => {
+    const store = createTestStore({
+      auth: {
+        user: {
+          id: 'sa-1',
+          email: 'sa@example.com',
+          name: 'Super Admin',
+          memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+        },
+        status: 'authenticated',
+      },
+    })
+
+    renderLogin(store)
+
+    await waitFor(() => {
+      expect(screen.getByText('Super Admin Dashboard')).toBeInTheDocument()
     })
   })
 

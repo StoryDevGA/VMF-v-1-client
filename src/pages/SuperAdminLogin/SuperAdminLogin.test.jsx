@@ -40,9 +40,10 @@ function renderSALogin(store) {
           <Routes>
             <Route path="/super-admin/login" element={<SuperAdminLogin />} />
             <Route
-              path="/app/dashboard"
-              element={<div>Dashboard</div>}
+              path="/super-admin/dashboard"
+              element={<div>Super Admin Dashboard</div>}
             />
+            <Route path="/app/dashboard" element={<div>Dashboard</div>} />
             <Route path="/app/login" element={<div>Customer Login</div>} />
           </Routes>
         </MemoryRouter>
@@ -112,14 +113,34 @@ describe('SuperAdminLogin page', () => {
     expect(link).toHaveAttribute('href', '/app/login')
   })
 
-  it('redirects to dashboard when already authenticated', async () => {
+  it('redirects to super-admin dashboard when already authenticated', async () => {
     const store = createTestStore({
       auth: {
         user: {
           id: '1',
           email: 'sa@example.com',
           name: 'SA',
-          roles: ['SUPER_ADMIN'],
+          memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+        },
+        status: 'authenticated',
+      },
+    })
+
+    renderSALogin(store)
+
+    await waitFor(() => {
+      expect(screen.getByText('Super Admin Dashboard')).toBeInTheDocument()
+    })
+  })
+
+  it('redirects non-super-admin authenticated users to customer dashboard', async () => {
+    const store = createTestStore({
+      auth: {
+        user: {
+          id: '2',
+          email: 'user@example.com',
+          name: 'User',
+          memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
         },
         status: 'authenticated',
       },

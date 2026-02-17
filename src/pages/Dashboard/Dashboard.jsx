@@ -122,6 +122,18 @@ function Dashboard() {
   }, [hasAdminAccess, hasCustomerContext, isSuperAdmin])
 
   const quickActions = useMemo(() => {
+    if (isSuperAdmin) {
+      return [
+        { key: 'customers', label: 'Customers', to: '/super-admin/customers' },
+        {
+          key: 'monitoring',
+          label: 'Monitoring',
+          to: '/super-admin/system-monitoring',
+        },
+        { key: 'help', label: 'Help', to: '/help' },
+      ]
+    }
+
     const actions = [{ key: 'help', label: 'Help', to: '/help', visible: true }]
 
     if (hasAdminAccess) {
@@ -139,15 +151,6 @@ function Dashboard() {
           visible: true,
         },
       )
-    }
-
-    if (isSuperAdmin) {
-      actions.push({
-        key: 'customers',
-        label: 'Customers',
-        to: '/super-admin/customers',
-        visible: true,
-      })
     }
 
     return actions.filter((action) => action.visible)

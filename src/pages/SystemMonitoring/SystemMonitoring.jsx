@@ -1,7 +1,9 @@
 /**
  * SystemMonitoring Page (Phase 5.2)
  *
- * Full-screen admin dashboard at `/app/administration/system-monitoring`.
+ * Full-screen admin dashboard at:
+ *   - `/app/administration/system-monitoring` (customer admin)
+ *   - `/super-admin/system-monitoring` (super admin)
  * Displays:
  *   - Overall system health status badge
  *   - Dependency status list (Database, Redis, Identity Plus)

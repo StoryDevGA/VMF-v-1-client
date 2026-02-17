@@ -15,11 +15,13 @@ import { Link } from '../../components/Link'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { useToaster } from '../../components/Toaster'
 import { useAuth } from '../../hooks/useAuth.js'
+import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { isRateLimitError, normalizeError } from '../../utils/errors.js'
 import './Login.css'
 
 function Login() {
   const { isAuthenticated, login, loginResult } = useAuth()
+  const { isSuperAdmin } = useAuthorization()
   const { addToast } = useToaster()
 
   const [email, setEmail] = useState('')
@@ -90,7 +92,12 @@ function Login() {
 
   // Already authenticated — redirect to dashboard
   if (isAuthenticated) {
-    return <Navigate to="/app/dashboard" replace />
+    return (
+      <Navigate
+        to={isSuperAdmin ? '/super-admin/dashboard' : '/app/dashboard'}
+        replace
+      />
+    )
   }
 
   return (

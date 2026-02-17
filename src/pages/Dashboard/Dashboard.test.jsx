@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
@@ -121,6 +121,29 @@ describe('Dashboard page', () => {
     expect(
       screen.getByRole('link', { name: /open customer console/i }),
     ).toBeInTheDocument()
+  })
+
+  it('orders super-admin quick links as Customers, Monitoring, Help', () => {
+    mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
+    renderDashboard()
+
+    const quickActionsCard = screen
+      .getByRole('heading', { name: /^quick actions$/i })
+      .closest('.card')
+
+    if (!quickActionsCard) {
+      throw new Error('Quick actions card not found')
+    }
+
+    const quickLinks = within(quickActionsCard).getAllByRole('link')
+    expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
+      'Customers',
+      'Monitoring',
+      'Help',
+    ])
+    expect(
+      within(quickActionsCard).queryByRole('link', { name: /edit users/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('hides super-admin customer console tile for customer admins', () => {

@@ -25,9 +25,10 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const user = useSelector(selectCurrentUser)
 
   const isSuperAdmin = checkIsSuperAdmin(user)
-  const hasAdminAccess = isSuperAdmin || (user?.memberships ?? []).some(
+  const hasCustomerAdminAccess = (user?.memberships ?? []).some(
     (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
   )
+  const dashboardRoute = isSuperAdmin ? '/super-admin/dashboard' : '/app/dashboard'
 
   const navClasses = [
     'nav',
@@ -60,7 +61,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           {isAuthenticated && (
             <li>
               <NavLink
-                to="/app/dashboard"
+                to={dashboardRoute}
                 className={({ isActive }) =>
                   isActive ? 'nav__link nav__link--active' : 'nav__link'
                 }
@@ -71,8 +72,8 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             </li>
           )}
 
-          {/* ---- Administration links (authenticated admins only) ---- */}
-          {isAuthenticated && hasAdminAccess && (
+          {/* ---- Customer administration links (CUSTOMER_ADMIN only) ---- */}
+          {isAuthenticated && hasCustomerAdminAccess && (
             <>
               <li className="nav__separator" aria-hidden="true" />
               <li>
@@ -100,6 +101,35 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               <li>
                 <NavLink
                   to="/app/administration/system-monitoring"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Monitoring</span>
+                </NavLink>
+              </li>
+            </>
+          )}
+
+          {/* ---- Super-admin links (SUPER_ADMIN only) ---- */}
+          {isAuthenticated && isSuperAdmin && (
+            <>
+              <li className="nav__separator" aria-hidden="true" />
+              <li>
+                <NavLink
+                  to="/super-admin/customers"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Customers</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/super-admin/system-monitoring"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'
                   }

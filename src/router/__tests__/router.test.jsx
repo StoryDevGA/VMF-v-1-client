@@ -98,6 +98,118 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render super-admin dashboard at /super-admin/dashboard for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/dashboard'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^super admin dashboard$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render super-admin customers page at /super-admin/customers for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/customers'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-customers-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^customer invitations$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render super-admin dashboard at /super-admin root for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-2',
+            name: 'Root Super Admin',
+            email: 'root-super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^super admin dashboard$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should block SUPER_ADMIN users from /app/dashboard and render super-admin dashboard', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/dashboard'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-blocked-1',
+            name: 'Blocked Super Admin',
+            email: 'blocked-super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^super admin dashboard$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
   })
 
   describe('Navigation', () => {
@@ -110,7 +222,9 @@ describe('Router', () => {
 
       // Navigation should be present
       expect(await screen.findByRole('navigation')).toBeInTheDocument()
-      expect(screen.getByRole('img', { name: /StoryLineOS Logo/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('img', { name: 'StoryLineOS Logo' }),
+      ).toBeInTheDocument()
     })
 
     it('should have correct navigation links', async () => {

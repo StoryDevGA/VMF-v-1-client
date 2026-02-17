@@ -108,13 +108,20 @@ describe('Navigation', () => {
     expect(screen.getByRole('link', { name: /monitoring/i })).toBeInTheDocument()
   })
 
-  it('shows Users, Tenants, and Monitoring links for SUPER_ADMIN', () => {
+  it('shows super-admin links and hides customer-admin links for SUPER_ADMIN', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /tenants/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /monitoring/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /customers/i })).toHaveAttribute(
+      'href',
+      '/super-admin/customers',
+    )
+    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-monitoring',
+    )
+    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
@@ -132,7 +139,19 @@ describe('Navigation', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
+    const dashboardLink = screen.getByRole('link', { name: /dashboard/i })
+    expect(dashboardLink).toBeInTheDocument()
+    expect(dashboardLink).toHaveAttribute('href', '/app/dashboard')
+  })
+
+  it('routes SUPER_ADMIN dashboard link to the super-admin dashboard', () => {
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    expect(screen.getByRole('link', { name: /dashboard/i })).toHaveAttribute(
+      'href',
+      '/super-admin/dashboard',
+    )
   })
 
   it('calls onLinkClick when Dashboard is clicked', async () => {
