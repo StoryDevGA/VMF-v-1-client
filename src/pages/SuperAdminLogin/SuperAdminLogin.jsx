@@ -137,6 +137,7 @@ function SuperAdminLogin() {
               <Input
                 id="sa-login-password"
                 type="password"
+                showPasswordToggle
                 label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

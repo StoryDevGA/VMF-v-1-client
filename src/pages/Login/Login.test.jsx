@@ -62,7 +62,21 @@ describe('Login page', () => {
   it('renders email and password inputs', () => {
     renderLogin()
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeInTheDocument()
+  })
+
+  it('toggles password visibility', async () => {
+    const user = userEvent.setup()
+    renderLogin()
+
+    const passwordInput = screen.getByLabelText(/password/i, { selector: 'input' })
+    const toggle = screen.getByRole('button', { name: /show password/i })
+
+    expect(passwordInput).toHaveAttribute('type', 'password')
+
+    await user.click(toggle)
+    expect(passwordInput).toHaveAttribute('type', 'text')
+    expect(toggle).toHaveAttribute('aria-label', 'Hide password')
   })
 
   it('renders the sign-in button', () => {

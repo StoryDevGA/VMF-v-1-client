@@ -275,6 +275,46 @@ describe('Input Component', () => {
     })
   })
 
+  describe('Password Toggle', () => {
+    it('should render password toggle by default for password fields', () => {
+      render(<Input type="password" />)
+      expect(screen.getByRole('button', { name: /show password/i })).toBeInTheDocument()
+    })
+
+    it('should not render password toggle for non-password fields', () => {
+      render(<Input type="email" />)
+      expect(screen.queryByRole('button', { name: /show password/i })).not.toBeInTheDocument()
+    })
+
+    it('should allow disabling password toggle explicitly', () => {
+      render(<Input type="password" showPasswordToggle={false} />)
+      expect(screen.queryByRole('button', { name: /show password/i })).not.toBeInTheDocument()
+    })
+
+    it('should toggle password visibility', async () => {
+      const user = userEvent.setup()
+      render(<Input id="password-input" label="Password" type="password" showPasswordToggle />)
+
+      const input = screen.getByLabelText('Password')
+      const toggle = screen.getByRole('button', { name: /show password/i })
+
+      expect(input).toHaveAttribute('type', 'password')
+
+      await user.click(toggle)
+      expect(input).toHaveAttribute('type', 'text')
+      expect(toggle).toHaveAttribute('aria-label', 'Hide password')
+
+      await user.click(toggle)
+      expect(input).toHaveAttribute('type', 'password')
+      expect(toggle).toHaveAttribute('aria-label', 'Show password')
+    })
+
+    it('should disable the password toggle when input is disabled', () => {
+      render(<Input type="password" showPasswordToggle disabled />)
+      expect(screen.getByRole('button', { name: /show password/i })).toBeDisabled()
+    })
+  })
+
   // ===========================
   // EVENT HANDLERS
   // ===========================

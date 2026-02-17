@@ -124,6 +124,7 @@ function Login() {
               <Input
                 id="login-password"
                 type="password"
+                showPasswordToggle
                 label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

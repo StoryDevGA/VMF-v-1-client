@@ -18,6 +18,7 @@ export const Input = forwardRef(function Input(
     placeholder,
     leftIcon,
     rightIcon,
+    showPasswordToggle,
     value,
     defaultValue,
     error,
@@ -36,8 +37,13 @@ export const Input = forwardRef(function Input(
 ) {
   const [isFocused, setIsFocused] = useState(false)
   const [hasValue, setHasValue] = useState(!!defaultValue || !!value)
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
+  const passwordToggleEnabled = showPasswordToggle ?? true
+  const canTogglePassword = passwordToggleEnabled && type === 'password'
+  const inputType = canTogglePassword && isPasswordVisible ? 'text' : type
   const hasLeftIcon = Boolean(leftIcon)
   const hasRightIcon = Boolean(rightIcon)
+  const hasRightAdornment = hasRightIcon || canTogglePassword
 
   const handleFocus = (e) => {
     setIsFocused(true)
@@ -53,6 +59,10 @@ export const Input = forwardRef(function Input(
   const handleChange = (e) => {
     setHasValue(!!e.target.value)
     props.onChange?.(e)
+  }
+
+  const handleTogglePasswordVisibility = () => {
+    setIsPasswordVisible((current) => !current)
   }
 
   const isLabelFloating = isFocused || hasValue
@@ -75,7 +85,7 @@ export const Input = forwardRef(function Input(
     `input--${variant}`,
     `input--${size}`,
     hasLeftIcon && 'input--with-left-icon',
-    hasRightIcon && 'input--with-right-icon',
+    hasRightAdornment && 'input--with-right-icon',
   ]
     .filter(Boolean)
     .join(' ')
@@ -90,7 +100,7 @@ export const Input = forwardRef(function Input(
         )}
         <input
           ref={ref}
-          type={type}
+          type={inputType}
           className={inputClasses}
           value={value}
           defaultValue={defaultValue}
@@ -110,11 +120,23 @@ export const Input = forwardRef(function Input(
           }
           {...props}
         />
-        {hasRightIcon && (
+        {canTogglePassword ? (
+          <button
+            type="button"
+            className="input__action input__action--password-toggle"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={handleTogglePasswordVisibility}
+            disabled={disabled}
+            aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+            aria-pressed={isPasswordVisible}
+          >
+            {isPasswordVisible ? 'Hide' : 'Show'}
+          </button>
+        ) : hasRightIcon ? (
           <span className="input__icon input__icon--right" aria-hidden="true">
             {rightIcon}
           </span>
-        )}
+        ) : null}
         {label && (
           <label
             className={`input-label ${isLabelFloating ? 'input-label--floating' : ''}`}
