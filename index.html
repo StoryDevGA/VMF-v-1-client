@@ -2,7 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link id="app-favicon" rel="icon" type="image/svg+xml" href="%BASE_URL%favicon-light.svg" />
+    <script>
+      (() => {
+        const baseUrl = '%BASE_URL%';
+        const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const favicon = document.getElementById('app-favicon');
+
+        if (!favicon) return;
+
+        const updateFavicon = () => {
+          favicon.href = darkQuery.matches
+            ? `${baseUrl}favicon-dark.svg`
+            : `${baseUrl}favicon-light.svg`;
+        };
+
+        updateFavicon();
+        if (darkQuery.addEventListener) {
+          darkQuery.addEventListener('change', updateFavicon);
+        } else if (darkQuery.addListener) {
+          darkQuery.addListener(updateFavicon);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

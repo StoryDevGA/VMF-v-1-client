@@ -1,0 +1,8 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(50,50)">
+    <path d="M 0,0 Q 15,-15 30,-5 Q 20,5 0,0 Z" fill="#f8fafc" transform="rotate(45)"/>
+    <path d="M 0,0 Q 15,-15 30,-5 Q 20,5 0,0 Z" fill="#f8fafc" transform="rotate(135)"/>
+    <path d="M 0,0 Q 15,-15 30,-5 Q 20,5 0,0 Z" fill="#f8fafc" transform="rotate(225)"/>
+    <path d="M 0,0 Q 15,-15 30,-5 Q 20,5 0,0 Z" fill="#f8fafc" transform="rotate(315)"/>
+  </g>
+</svg>
