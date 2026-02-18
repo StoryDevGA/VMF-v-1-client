@@ -121,7 +121,7 @@ function Dashboard() {
     return tiles.filter((tile) => tile.visible)
   }, [hasAdminAccess, hasCustomerContext, isSuperAdmin])
 
-  const quickActions = useMemo(() => {
+  const quickLinks = useMemo(() => {
     if (isSuperAdmin) {
       return [
         { key: 'customers', label: 'Customers', to: '/super-admin/customers' },
@@ -296,14 +296,14 @@ function Dashboard() {
           className="dashboard__section dashboard__section--quick-actions"
         >
           <Card.Header>
-            <h2 className="dashboard__section-title">Quick Actions</h2>
+            <h2 className="dashboard__section-title">Quick Links</h2>
             <p className="dashboard__section-subtitle">
               Fast navigation and session controls.
             </p>
           </Card.Header>
           <Card.Body>
             <div className="dashboard__quick-actions">
-              {quickActions.map((action) => (
+              {quickLinks.map((action) => (
                 <Link
                   key={action.key}
                   to={action.to}

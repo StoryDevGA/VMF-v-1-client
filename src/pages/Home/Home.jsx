@@ -1,143 +1,158 @@
 /**
  * Home Page
  *
- * Structured placeholder page based on early UX wireframe.
+ * Public landing workspace with clear onboarding paths.
  */
 
-import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MdAutoGraph, MdHandshake, MdInsights } from 'react-icons/md'
+import {
+  MdAutoGraph,
+  MdHandshake,
+  MdInsights,
+  MdLaunch,
+} from 'react-icons/md'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
-import { Select } from '../../components/Select'
 import pinwheelIcon from '../../assets/images/icons/pinwheel.svg'
 import './Home.css'
 
-const TENANTS = [
+const HOME_WORKFLOWS = [
   {
-    value: 'tenant-alpha',
-    label: 'Tenant name',
-    description: 'Description of tenant/product/division',
-  },
-  {
-    value: 'tenant-beta',
-    label: 'Product division',
-    description: 'Description of tenant/product/division',
-  },
-  {
-    value: 'tenant-gamma',
-    label: 'Regional business unit',
-    description: 'Description of tenant/product/division',
-  },
-]
-
-const HOME_CARDS = [
-  {
-    title: 'Value Message Framework',
-    description: 'Your framework to better storytelling.',
-    action: 'Build Framework',
-    to: '/app/framework',
+    title: 'Narrative Framework',
+    description:
+      'Build and refine value messaging frameworks with customer context and role scope.',
+    action: 'Open Dashboard',
+    to: '/app/dashboard',
     icon: <MdAutoGraph aria-hidden="true" />,
   },
   {
-    title: 'Deal Making',
-    description: 'Analyse and improve your deal pipeline.',
-    action: 'View Pipeline',
-    to: '/app/deals',
+    title: 'Customer Administration',
+    description:
+      'Manage customer users, role assignments, and operational access controls.',
+    action: 'Manage Users',
+    to: '/app/administration/edit-users',
     icon: <MdHandshake aria-hidden="true" />,
   },
   {
-    title: 'Analytics',
-    description: 'Review performance metrics, trends, and forecasts.',
-    action: 'View Analytics',
-    to: '/app/views',
+    title: 'Platform Monitoring',
+    description:
+      'Review platform health signals, telemetry trends, and escalation readiness.',
+    action: 'View Monitoring',
+    to: '/super-admin/system-monitoring',
     icon: <MdInsights aria-hidden="true" />,
   },
 ]
 
 function Home() {
   const navigate = useNavigate()
-  const [selectedTenant, setSelectedTenant] = useState(TENANTS[0].value)
-
-  const tenant = useMemo(
-    () => TENANTS.find((item) => item.value === selectedTenant) ?? TENANTS[0],
-    [selectedTenant],
-  )
 
   return (
     <section className="home" aria-label="Home">
       <header className="home__header">
-        <h1 className="home__title">Welcome to StoryLineOS</h1>
-        <p className="home__subtitle">Streamline your value messaging and deal-making with data-driven insights.</p>
+        <p className="home__eyebrow">Platform Workspace</p>
+        <h1 className="home__title">StoryLineOS Home</h1>
+        <p className="home__subtitle">
+          Centralize customer story operations, administration workflows, and
+          platform visibility from one landing surface.
+        </p>
       </header>
 
-      <div className="home__grid">
+      <div className="home__layout">
         <Fieldset
           variant="default"
           gap="lg"
-          className="home__section home__section--logo"
+          className="home__panel home__panel--hero"
         >
-          <Fieldset.Legend className="home__legend">
-            <h2 className="home__section-title">StoryLineOS</h2>
+          <Fieldset.Legend className="home__panel-legend">
+            <h2 className="home__panel-title">Get Started</h2>
           </Fieldset.Legend>
-          <Fieldset.Content className="home__logo-content">
-            <img src={pinwheelIcon} alt="StoryLineOS logo" className="home__logo-image" />
+          <Fieldset.Content className="home__hero-content">
+            <div className="home__hero-copy">
+              <h3 className="home__hero-heading">
+                Move from story strategy to execution with less friction.
+              </h3>
+              <p className="home__hero-description">
+                Use role-aware dashboards to manage customer administration and
+                operational insights without context switching.
+              </p>
+              <div className="home__hero-actions">
+                <Button
+                  size="lg"
+                  className="home__hero-action"
+                  onClick={() => navigate('/app/dashboard')}
+                  rightIcon={<MdLaunch aria-hidden="true" />}
+                >
+                  Open Dashboard
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="home__hero-action"
+                  onClick={() => navigate('/help')}
+                >
+                  Help Center
+                </Button>
+              </div>
+            </div>
+
+            <Card variant="default" className="home__hero-card">
+              <Card.Header className="home__hero-card-header">
+                <img
+                  src={pinwheelIcon}
+                  alt="StoryLineOS logo"
+                  className="home__hero-brand-icon"
+                />
+                <h3 className="home__hero-card-title">Workspace Signal</h3>
+              </Card.Header>
+              <Card.Body className="home__hero-card-body">
+                <p className="home__hero-card-copy">
+                  Narrative clarity and execution speed improve when context and
+                  controls stay connected.
+                </p>
+                <ul className="home__hero-card-list">
+                  <li>Role-aware workflow entry points</li>
+                  <li>Customer context alignment</li>
+                  <li>Integrated operational visibility</li>
+                </ul>
+              </Card.Body>
+            </Card>
           </Fieldset.Content>
         </Fieldset>
 
         <Fieldset
           variant="default"
           gap="lg"
-          className="home__section home__section--tenant"
+          className="home__panel home__panel--workflows"
         >
-          <Fieldset.Legend className="home__legend">
-            <h2 className="home__section-title">Select Tenant</h2>
+          <Fieldset.Legend className="home__panel-legend">
+            <h2 className="home__panel-title">Core Workflows</h2>
           </Fieldset.Legend>
-          <Fieldset.Content className="home__tenant-content">
-            <Select
-              id="home-tenant"
-              label="Tenant"
-              value={selectedTenant}
-              onChange={(event) => setSelectedTenant(event.target.value)}
-              options={TENANTS.map((item) => ({ value: item.value, label: item.label }))}
-              helperText="All workflows will use this tenant's data"
-              className="home__tenant-select"
-            />
-            <p className="home__tenant-name">{tenant.label}</p>
-            <p className="home__tenant-description">{tenant.description}</p>
-          </Fieldset.Content>
-        </Fieldset>
-
-        <Fieldset
-          variant="default"
-          gap="lg"
-          className="home__section home__section--wide"
-        >
-          <Fieldset.Legend className="home__legend">
-            <h2 className="home__section-title">Core Workflows</h2>
-          </Fieldset.Legend>
-          <Fieldset.Content className="home__cards" role="list">
-            {HOME_CARDS.map((card) => (
-              <Card
-                key={card.title}
-                variant="default"
-                className="home__card"
+          <Fieldset.Content className="home__workflows" role="list">
+            {HOME_WORKFLOWS.map((workflow) => (
+              <article
+                key={workflow.title}
+                className="home__workflow-card"
                 role="listitem"
               >
-                <Card.Header className="home__card-header">
-                  <span className="home__card-icon">{card.icon}</span>
-                  <h3 className="home__card-title">{card.title}</h3>
-                </Card.Header>
-                <Card.Body className="home__card-body">
-                  <p className="home__card-description">{card.description}</p>
-                </Card.Body>
-                <Card.Footer className="home__card-footer">
-                  <Button variant="outline" size="sm" onClick={() => navigate(card.to)}>
-                    {card.action}
+                <div className="home__workflow-header">
+                  <span className="home__workflow-icon">{workflow.icon}</span>
+                  <h3 className="home__workflow-title">{workflow.title}</h3>
+                </div>
+                <p className="home__workflow-description">
+                  {workflow.description}
+                </p>
+                <div className="home__workflow-footer">
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    onClick={() => navigate(workflow.to)}
+                    rightIcon={<MdLaunch aria-hidden="true" />}
+                  >
+                    {workflow.action}
                   </Button>
-                </Card.Footer>
-              </Card>
+                </div>
+              </article>
             ))}
           </Fieldset.Content>
         </Fieldset>

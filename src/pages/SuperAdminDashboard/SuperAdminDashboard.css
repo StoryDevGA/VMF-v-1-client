@@ -113,13 +113,14 @@
 .super-admin-dashboard__quick-link {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-xs);
   min-height: var(--spacing-2xl);
   border: var(--border-width-thin) solid var(--color-border);
   border-radius: var(--border-radius-full);
   padding: 0 var(--spacing-md);
   background-color: var(--color-background-secondary);
-  width: fit-content;
+  width: 100%;
   font-size: var(--font-size-sm);
 }
 
@@ -132,6 +133,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.super-admin-dashboard__logout {
+  width: 100%;
 }
 
 @media (min-width: 768px) {

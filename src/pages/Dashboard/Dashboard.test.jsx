@@ -102,7 +102,7 @@ describe('Dashboard page', () => {
       screen.getByRole('heading', { name: /^health$/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: /^quick actions$/i }),
+      screen.getByRole('heading', { name: /^quick links$/i }),
     ).toBeInTheDocument()
   })
 
@@ -128,7 +128,7 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     const quickActionsCard = screen
-      .getByRole('heading', { name: /^quick actions$/i })
+      .getByRole('heading', { name: /^quick links$/i })
       .closest('.card')
 
     if (!quickActionsCard) {

@@ -181,21 +181,21 @@
 }
 
 .dashboard__quick-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: var(--spacing-sm);
-  align-items: center;
 }
 
 .dashboard__quick-link {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-xs);
   min-height: 2.75rem;
   border: var(--border-width-thin) solid var(--color-border);
   border-radius: var(--border-radius-full);
   padding: 0 var(--spacing-md);
   background-color: var(--color-background-secondary);
+  width: 100%;
 }
 
 .dashboard__quick-link:hover {
@@ -210,7 +210,7 @@
 }
 
 .dashboard__logout {
-  min-width: 8rem;
+  width: 100%;
 }
 
 @media (min-width: 768px) {
