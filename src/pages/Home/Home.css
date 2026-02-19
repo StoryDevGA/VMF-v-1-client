@@ -178,71 +178,6 @@
   font-size: var(--font-size-sm);
 }
 
-.fieldset__content.home__workflows {
-  display: grid;
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--spacing-lg);
-  min-width: 0;
-}
-
-.home__workflow-card {
-  border: var(--border-width-thin) solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background-color: var(--color-background-secondary);
-  padding: var(--spacing-md);
-  display: grid;
-  gap: var(--spacing-sm);
-  min-width: 0;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.home__workflow-card:hover {
-  border-color: var(--color-border-hover);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.home__workflow-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.home__workflow-icon {
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--border-radius-full);
-  border: var(--border-width-thin) solid var(--color-border);
-  color: var(--color-action-primary);
-  background-color: var(--color-surface);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: var(--font-size-lg);
-}
-
-.home__workflow-title {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-base);
-}
-
-.home__workflow-description {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
-}
-
-.home__workflow-footer {
-  margin-top: auto;
-}
-
 @media (min-width: 768px) {
   .home__panel.fieldset {
     padding: var(--spacing-lg);
@@ -263,20 +198,12 @@
   .home__hero-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .fieldset__content.home__workflows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (min-width: 1024px) {
   .fieldset__content.home__hero-content {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     align-items: start;
-  }
-
-  .fieldset__content.home__workflows {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -287,11 +214,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home__workflow-card {
+  .home * {
     transition: none;
-  }
-
-  .home__workflow-card:hover {
-    transform: none;
   }
 }

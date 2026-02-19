@@ -6,46 +6,29 @@
 
 import { useNavigate } from 'react-router-dom'
 import {
-  MdAutoGraph,
-  MdHandshake,
-  MdInsights,
   MdLaunch,
 } from 'react-icons/md'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
+import { useAuth } from '../../hooks/useAuth.js'
+import { useAuthorization } from '../../hooks/useAuthorization.js'
 import pinwheelIcon from '../../assets/images/icons/pinwheel.svg'
 import './Home.css'
 
-const HOME_WORKFLOWS = [
-  {
-    title: 'Narrative Framework',
-    description:
-      'Build and refine value messaging frameworks with customer context and role scope.',
-    action: 'Open Dashboard',
-    to: '/app/dashboard',
-    icon: <MdAutoGraph aria-hidden="true" />,
-  },
-  {
-    title: 'Customer Administration',
-    description:
-      'Manage customer users, role assignments, and operational access controls.',
-    action: 'Manage Users',
-    to: '/app/administration/edit-users',
-    icon: <MdHandshake aria-hidden="true" />,
-  },
-  {
-    title: 'Platform Monitoring',
-    description:
-      'Review platform health signals, telemetry trends, and escalation readiness.',
-    action: 'View Monitoring',
-    to: '/super-admin/system-monitoring',
-    icon: <MdInsights aria-hidden="true" />,
-  },
-]
-
 function Home() {
   const navigate = useNavigate()
+  const { isAuthenticated, status } = useAuth()
+  const { isSuperAdmin } = useAuthorization()
+
+  const handlePrimaryAction = () => {
+    if (!isAuthenticated) {
+      navigate('/app/login')
+      return
+    }
+
+    navigate(isSuperAdmin ? '/super-admin/dashboard' : '/app/dashboard')
+  }
 
   return (
     <section className="home container" aria-label="Home">
@@ -80,10 +63,11 @@ function Home() {
                 <Button
                   size="lg"
                   className="home__hero-action"
-                  onClick={() => navigate('/app/dashboard')}
+                  onClick={handlePrimaryAction}
                   rightIcon={<MdLaunch aria-hidden="true" />}
+                  disabled={status === 'loading'}
                 >
-                  Open Dashboard
+                  {isAuthenticated ? 'Open Dashboard' : 'Sign In'}
                 </Button>
                 <Button
                   variant="outline"
@@ -117,43 +101,6 @@ function Home() {
                 </ul>
               </Card.Body>
             </Card>
-          </Fieldset.Content>
-        </Fieldset>
-
-        <Fieldset
-          variant="default"
-          gap="lg"
-          className="home__panel home__panel--workflows"
-        >
-          <Fieldset.Legend className="home__panel-legend">
-            <h2 className="home__panel-title">Core Workflows</h2>
-          </Fieldset.Legend>
-          <Fieldset.Content className="home__workflows" role="list">
-            {HOME_WORKFLOWS.map((workflow) => (
-              <article
-                key={workflow.title}
-                className="home__workflow-card"
-                role="listitem"
-              >
-                <div className="home__workflow-header">
-                  <span className="home__workflow-icon">{workflow.icon}</span>
-                  <h3 className="home__workflow-title">{workflow.title}</h3>
-                </div>
-                <p className="home__workflow-description">
-                  {workflow.description}
-                </p>
-                <div className="home__workflow-footer">
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    onClick={() => navigate(workflow.to)}
-                    rightIcon={<MdLaunch aria-hidden="true" />}
-                  >
-                    {workflow.action}
-                  </Button>
-                </div>
-              </article>
-            ))}
           </Fieldset.Content>
         </Fieldset>
       </div>
