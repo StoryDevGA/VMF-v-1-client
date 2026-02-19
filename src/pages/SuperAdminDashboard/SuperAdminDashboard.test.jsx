@@ -53,10 +53,16 @@ describe('SuperAdminDashboard page', () => {
       screen.getByRole('heading', { name: /super admin dashboard/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: /open customer console/i }),
+      screen.getByRole('link', { name: /open invitation management/i }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open platform monitoring/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open system versioning/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open denied access logs/i }),
     ).toBeInTheDocument()
   })
 
@@ -66,7 +72,7 @@ describe('SuperAdminDashboard page', () => {
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
   })
 
-  it('orders quick links as Customers, Monitoring, Help Center', () => {
+  it('orders quick links as Monitoring, Invitations, Versioning, Denied Access, Help Center', () => {
     renderDashboard()
 
     const quickLinksCard = screen
@@ -79,8 +85,10 @@ describe('SuperAdminDashboard page', () => {
 
     const quickLinks = within(quickLinksCard).getAllByRole('link')
     expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
-      'Customers',
       'Monitoring',
+      'Invitations',
+      'Versioning',
+      'Denied Access',
       'Help Center',
     ])
   })

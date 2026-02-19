@@ -131,6 +131,7 @@ describe('CustomerSelector', () => {
     await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
 
     expect(screen.getByLabelText(/customer name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/website url \(optional\)/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/topology/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
@@ -182,6 +183,51 @@ describe('CustomerSelector', () => {
     await waitFor(() => {
       expect(setCustomerId).toHaveBeenCalledWith('new-cust')
     })
+  })
+
+  it('includes optional website when provided', async () => {
+    const setCustomerId = vi.fn()
+    const { createFn } = mockHooks({ setCustomerId })
+    render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+
+    await userEvent.type(screen.getByLabelText(/customer name/i), 'Website Corp')
+    await userEvent.type(
+      screen.getByLabelText(/website url \(optional\)/i),
+      'https://website.example',
+    )
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(createFn).toHaveBeenCalledWith({
+      name: 'Website Corp',
+      website: 'https://website.example',
+      topology: 'SINGLE_TENANT',
+      vmfPolicy: 'SINGLE',
+      billing: { planCode: 'FREE' },
+    })
+  })
+
+  it('blocks submit when optional website is invalid', async () => {
+    const { createFn } = mockHooks()
+    render(<CustomerSelector />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+
+    await userEvent.type(screen.getByLabelText(/customer name/i), 'Broken URL Corp')
+    await userEvent.type(
+      screen.getByLabelText(/website url \(optional\)/i),
+      'not-a-url',
+    )
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/enter a valid website url/i)
+    })
+
+    expect(createFn).not.toHaveBeenCalled()
   })
 
   it('shows error message when create API fails', async () => {

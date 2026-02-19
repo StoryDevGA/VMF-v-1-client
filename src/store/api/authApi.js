@@ -97,6 +97,19 @@ export const authApi = baseApi.injectEndpoints({
         }
       },
     }),
+
+    /**
+     * POST /auth/step-up
+     * Re-verify the current user password and issue a short-lived
+     * step-up token used for sensitive actions.
+     */
+    requestStepUp: build.mutation({
+      query: (body) => ({
+        url: '/auth/step-up',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -107,4 +120,5 @@ export const {
   useLogoutMutation,
   useGetMeQuery,
   useLazyGetMeQuery,
+  useRequestStepUpMutation,
 } = authApi

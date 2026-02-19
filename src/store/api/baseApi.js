@@ -260,6 +260,17 @@ async function attemptRefresh(api) {
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['User', 'Tenant', 'Customer', 'VMF', 'Deal', 'Role', 'System'],
+  tagTypes: [
+    'User',
+    'Tenant',
+    'Customer',
+    'VMF',
+    'Deal',
+    'Role',
+    'System',
+    'Invitation',
+    'SystemVersioningPolicy',
+    'AuditLog',
+  ],
   endpoints: () => ({}), // feature slices inject their own
 })

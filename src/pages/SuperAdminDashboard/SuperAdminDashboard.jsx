@@ -9,8 +9,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   MdHelpOutline,
   MdLogout,
+  MdMarkEmailUnread,
   MdMonitorHeart,
-  MdPeopleAlt,
+  MdSettings,
 } from 'react-icons/md'
 import { Card } from '../../components/Card'
 import { Link } from '../../components/Link'
@@ -27,19 +28,35 @@ function SuperAdminDashboard() {
   const primaryActions = useMemo(
     () => [
       {
-        key: 'customers',
-        title: 'Customer Console',
-        description:
-          'Open the platform customer workspace for customer lifecycle administration.',
-        to: '/super-admin/customers',
-        icon: <MdPeopleAlt aria-hidden="true" />,
-      },
-      {
         key: 'monitoring',
         title: 'Platform Monitoring',
         description:
           'Review platform health and operational telemetry across environments.',
         to: '/super-admin/system-monitoring',
+        icon: <MdMonitorHeart aria-hidden="true" />,
+      },
+      {
+        key: 'invitations',
+        title: 'Invitation Management',
+        description:
+          'Create, resend, and revoke onboarding invitations for customer administrators.',
+        to: '/super-admin/invitations',
+        icon: <MdMarkEmailUnread aria-hidden="true" />,
+      },
+      {
+        key: 'versioning',
+        title: 'System Versioning',
+        description:
+          'Review and update platform governance policy versions with step-up controls.',
+        to: '/super-admin/system-versioning',
+        icon: <MdSettings aria-hidden="true" />,
+      },
+      {
+        key: 'denied-access',
+        title: 'Denied Access Logs',
+        description:
+          'Review authorization denials across platform workflows for audit visibility.',
+        to: '/super-admin/denied-access-logs',
         icon: <MdMonitorHeart aria-hidden="true" />,
       },
     ],
@@ -49,15 +66,27 @@ function SuperAdminDashboard() {
   const supportActions = useMemo(
     () => [
       {
-        key: 'customers',
-        label: 'Customers',
-        to: '/super-admin/customers',
-        icon: <MdPeopleAlt aria-hidden="true" />,
-      },
-      {
         key: 'monitoring',
         label: 'Monitoring',
         to: '/super-admin/system-monitoring',
+        icon: <MdMonitorHeart aria-hidden="true" />,
+      },
+      {
+        key: 'invitations',
+        label: 'Invitations',
+        to: '/super-admin/invitations',
+        icon: <MdMarkEmailUnread aria-hidden="true" />,
+      },
+      {
+        key: 'versioning',
+        label: 'Versioning',
+        to: '/super-admin/system-versioning',
+        icon: <MdSettings aria-hidden="true" />,
+      },
+      {
+        key: 'denied-access',
+        label: 'Denied Access',
+        to: '/super-admin/denied-access-logs',
         icon: <MdMonitorHeart aria-hidden="true" />,
       },
       {

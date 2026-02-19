@@ -17,6 +17,9 @@ const ERROR_MESSAGES = {
   AUTH_TOKEN_INVALID: 'Your session is invalid. Please sign in again.',
   AUTH_REFRESH_FAILED: 'Unable to refresh session. Please sign in again.',
   AUTH_ACCOUNT_DISABLED: 'Your account has been disabled. Contact your administrator.',
+  STEP_UP_REQUIRED: 'Please re-authenticate to continue with this sensitive action.',
+  STEP_UP_INVALID: 'Step-up token expired or invalid. Re-authenticate and try again.',
+  STEP_UP_UNAVAILABLE: 'Step-up verification is unavailable right now. Try again shortly.',
 
   // Authorization
   AUTHZ_FORBIDDEN: 'You do not have permission to perform this action.',
@@ -27,6 +30,11 @@ const ERROR_MESSAGES = {
   VALIDATION_FAILED: 'Please check the form for errors.',
   VALIDATION_EMAIL_EXISTS: 'A user with this email already exists.',
   VALIDATION_REQUIRED_FIELD: 'This field is required.',
+  INVITATION_ALREADY_ACTIVE: 'An active invitation already exists for this email address.',
+  INVITATION_NOT_RESENDABLE: 'This invitation can no longer be resent.',
+  INVITATION_ALREADY_TERMINAL: 'This invitation can no longer be changed.',
+  RULES_UPDATE_NOT_ALLOWED:
+    'Policy rules cannot be edited in place. Create a new policy version instead.',
 
   // Rate limiting
   RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',

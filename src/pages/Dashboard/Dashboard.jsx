@@ -8,12 +8,13 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MdAdminPanelSettings,
   MdBusiness,
   MdGroups,
   MdHelpOutline,
   MdLogout,
+  MdMarkEmailUnread,
   MdMonitorHeart,
+  MdSettings,
   MdTune,
 } from 'react-icons/md'
 import { Card } from '../../components/Card'
@@ -95,12 +96,34 @@ function Dashboard() {
         disabledReason: '',
       },
       {
-        key: 'super-admin-customers',
-        title: 'Customer Console',
+        key: 'super-admin-invitations',
+        title: 'Invitation Management',
         description:
-          'Open the super-admin customer workspace for platform-level changes.',
-        to: '/super-admin/customers',
-        icon: <MdAdminPanelSettings aria-hidden="true" />,
+          'Manage onboarding invitations for customer administrators.',
+        to: '/super-admin/invitations',
+        icon: <MdMarkEmailUnread aria-hidden="true" />,
+        visible: isSuperAdmin,
+        enabled: true,
+        disabledReason: '',
+      },
+      {
+        key: 'super-admin-system-versioning',
+        title: 'System Versioning',
+        description:
+          'Review and update governance policy versions with step-up controls.',
+        to: '/super-admin/system-versioning',
+        icon: <MdSettings aria-hidden="true" />,
+        visible: isSuperAdmin,
+        enabled: true,
+        disabledReason: '',
+      },
+      {
+        key: 'super-admin-denied-access-logs',
+        title: 'Denied Access Logs',
+        description:
+          'Review platform-wide authorization denials for security and audit follow-up.',
+        to: '/super-admin/denied-access-logs',
+        icon: <MdMonitorHeart aria-hidden="true" />,
         visible: isSuperAdmin,
         enabled: true,
         disabledReason: '',
@@ -124,7 +147,21 @@ function Dashboard() {
   const quickLinks = useMemo(() => {
     if (isSuperAdmin) {
       return [
-        { key: 'customers', label: 'Customers', to: '/super-admin/customers' },
+        {
+          key: 'invitations',
+          label: 'Invitations',
+          to: '/super-admin/invitations',
+        },
+        {
+          key: 'versioning',
+          label: 'Versioning',
+          to: '/super-admin/system-versioning',
+        },
+        {
+          key: 'denied-access',
+          label: 'Denied Access',
+          to: '/super-admin/denied-access-logs',
+        },
         {
           key: 'monitoring',
           label: 'Monitoring',

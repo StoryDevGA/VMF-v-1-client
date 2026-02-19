@@ -114,16 +114,16 @@ describe('Dashboard page', () => {
     expect(screen.getByTestId('system-health-indicator')).toBeInTheDocument()
   })
 
-  it('shows super-admin customer console tile for super admins', () => {
+  it('shows super-admin invitation management tile for super admins', () => {
     mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
     renderDashboard()
 
     expect(
-      screen.getByRole('link', { name: /open customer console/i }),
+      screen.getByRole('link', { name: /open invitation management/i }),
     ).toBeInTheDocument()
   })
 
-  it('orders super-admin quick links as Customers, Monitoring, Help', () => {
+  it('orders super-admin quick links as Invitations, Versioning, Denied Access, Monitoring, Help', () => {
     mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
     renderDashboard()
 
@@ -137,7 +137,9 @@ describe('Dashboard page', () => {
 
     const quickLinks = within(quickActionsCard).getAllByRole('link')
     expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
-      'Customers',
+      'Invitations',
+      'Versioning',
+      'Denied Access',
       'Monitoring',
       'Help',
     ])
@@ -146,12 +148,12 @@ describe('Dashboard page', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('hides super-admin customer console tile for customer admins', () => {
+  it('hides super-admin invitation management tile for customer admins', () => {
     mockRole({ isSuperAdmin: false, isCustomerAdmin: true })
     renderDashboard()
 
     expect(
-      screen.queryByRole('link', { name: /open customer console/i }),
+      screen.queryByRole('link', { name: /open invitation management/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open manage users/i }),

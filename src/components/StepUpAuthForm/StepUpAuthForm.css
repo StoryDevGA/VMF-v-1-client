@@ -1,0 +1,16 @@
+.step-up-auth-form {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.step-up-auth-form__success {
+  margin: 0;
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+}
+
+.step-up-auth-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}

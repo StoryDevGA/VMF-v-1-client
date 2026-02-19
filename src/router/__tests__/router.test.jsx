@@ -13,6 +13,19 @@ import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
+
+vi.mock('../../pages/SuperAdminInvitations', () => ({
+  default: () => <h1>Invitation Management</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminSystemVersioning', () => ({
+  default: () => <h1>System Versioning Policy</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminDeniedAccessLogs', () => ({
+  default: () => <h1>Denied Access Logs</h1>,
+}))
+
 import { router } from '../index'
 
 const ROUTE_TEST_TIMEOUT = 15000
@@ -126,15 +139,15 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should render super-admin customers page at /super-admin/customers for super admins', async () => {
+    it('should render super-admin invitations page at /super-admin/invitations for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/super-admin/customers'],
+        initialEntries: ['/super-admin/invitations'],
       })
 
       const store = createTestStore({
         auth: {
           user: {
-            id: 'sa-customers-1',
+            id: 'sa-invitations-1',
             name: 'Super Admin',
             email: 'super@example.com',
             memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
@@ -148,7 +161,63 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^customer invitations$/i },
+          { name: /^invitation management$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render super-admin system versioning page at /super-admin/system-versioning for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/system-versioning'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-versioning-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^system versioning policy$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render super-admin denied access logs page at /super-admin/denied-access-logs for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/denied-access-logs'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-denied-logs-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^denied access logs$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()

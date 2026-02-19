@@ -112,9 +112,17 @@ describe('Navigation', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /customers/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /invitations/i })).toHaveAttribute(
       'href',
-      '/super-admin/customers',
+      '/super-admin/invitations',
+    )
+    expect(screen.getByRole('link', { name: /versioning/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-versioning',
+    )
+    expect(screen.getByRole('link', { name: /denied access/i })).toHaveAttribute(
+      'href',
+      '/super-admin/denied-access-logs',
     )
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
       'href',

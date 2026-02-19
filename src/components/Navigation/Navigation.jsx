@@ -118,13 +118,35 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               <li className="nav__separator" aria-hidden="true" />
               <li>
                 <NavLink
-                  to="/super-admin/customers"
+                  to="/super-admin/invitations"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'
                   }
                   onClick={onLinkClick}
                 >
-                  <span className="nav__text">Customers</span>
+                  <span className="nav__text">Invitations</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/super-admin/system-versioning"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Versioning</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/super-admin/denied-access-logs"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Denied Access</span>
                 </NavLink>
               </li>
               <li>

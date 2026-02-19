@@ -14,6 +14,7 @@ import {
   useLogoutMutation,
   useGetMeQuery,
   useLazyGetMeQuery,
+  useRequestStepUpMutation,
 } from './authApi.js'
 
 describe('authApi', () => {
@@ -23,12 +24,14 @@ describe('authApi', () => {
     expect(endpoints).toHaveProperty('superAdminLogin')
     expect(endpoints).toHaveProperty('logout')
     expect(endpoints).toHaveProperty('getMe')
+    expect(endpoints).toHaveProperty('requestStepUp')
   })
 
   it('should export mutation hooks', () => {
     expect(typeof useLoginMutation).toBe('function')
     expect(typeof useSuperAdminLoginMutation).toBe('function')
     expect(typeof useLogoutMutation).toBe('function')
+    expect(typeof useRequestStepUpMutation).toBe('function')
   })
 
   it('should export query hooks', () => {
@@ -57,5 +60,10 @@ describe('authApi', () => {
     expect(authApi.endpoints.getMe).toBeDefined()
     expect(typeof authApi.endpoints.getMe.initiate).toBe('function')
     expect(useGetMeQuery).toBeDefined()
+  })
+
+  it('requestStepUp endpoint should be a mutation', () => {
+    expect(authApi.endpoints.requestStepUp).toBeDefined()
+    expect(typeof authApi.endpoints.requestStepUp.initiate).toBe('function')
   })
 })

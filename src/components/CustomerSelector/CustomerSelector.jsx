@@ -49,8 +49,10 @@ export function CustomerSelector({ className = '' }) {
   /* ---- Create-form state ---- */
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newWebsite, setNewWebsite] = useState('')
   const [newTopology, setNewTopology] = useState('SINGLE_TENANT')
   const [nameError, setNameError] = useState('')
+  const [websiteError, setWebsiteError] = useState('')
   const [createError, setCreateError] = useState('')
 
   /* ---- Handlers ---- */
@@ -71,12 +73,27 @@ export function CustomerSelector({ className = '' }) {
     async (e) => {
       e.preventDefault()
       setNameError('')
+      setWebsiteError('')
       setCreateError('')
 
       const trimmedName = newName.trim()
+      const trimmedWebsite = newWebsite.trim()
       if (!trimmedName) {
         setNameError('Name is required')
         return
+      }
+
+      if (trimmedWebsite) {
+        try {
+          const url = new URL(trimmedWebsite)
+          if (!['http:', 'https:'].includes(url.protocol)) {
+            setWebsiteError('Website URL must start with http:// or https://')
+            return
+          }
+        } catch {
+          setWebsiteError('Enter a valid website URL')
+          return
+        }
       }
 
       const normalizedNewName = normalizeCustomerName(trimmedName)
@@ -91,6 +108,7 @@ export function CustomerSelector({ className = '' }) {
       try {
         const result = await createCustomer({
           name: trimmedName,
+          ...(trimmedWebsite ? { website: trimmedWebsite } : {}),
           topology: newTopology,
           vmfPolicy: DEFAULT_VMF_POLICY[newTopology],
           billing: { planCode: 'FREE' },
@@ -100,6 +118,7 @@ export function CustomerSelector({ className = '' }) {
         if (createdId) setCustomerId(createdId)
 
         setNewName('')
+        setNewWebsite('')
         setNewTopology('SINGLE_TENANT')
         setShowCreateForm(false)
       } catch (err) {
@@ -118,14 +137,16 @@ export function CustomerSelector({ className = '' }) {
         setCreateError(appError.message)
       }
     },
-    [newName, newTopology, createCustomer, customers, setCustomerId],
+    [newName, newWebsite, newTopology, createCustomer, customers, setCustomerId],
   )
 
   const handleCancelCreate = useCallback(() => {
     setShowCreateForm(false)
     setNameError('')
+    setWebsiteError('')
     setCreateError('')
     setNewName('')
+    setNewWebsite('')
   }, [])
 
   // Only visible to Super Admin
@@ -140,6 +161,7 @@ export function CustomerSelector({ className = '' }) {
       <form
         className={`customer-selector--form ${className}`.trim()}
         onSubmit={handleCreate}
+        noValidate
         aria-label="Create customer"
       >
         <input
@@ -156,6 +178,21 @@ export function CustomerSelector({ className = '' }) {
           aria-label="Customer name"
           aria-invalid={nameError ? 'true' : 'false'}
           aria-describedby={nameError ? 'customer-name-error' : undefined}
+        />
+
+        <input
+          className={`customer-selector__input ${websiteError ? 'customer-selector__input--error' : ''}`.trim()}
+          type="url"
+          placeholder="Website URL (optional)"
+          value={newWebsite}
+          onChange={(e) => {
+            setNewWebsite(e.target.value)
+            if (websiteError) setWebsiteError('')
+          }}
+          disabled={isCreating}
+          aria-label="Website URL (optional)"
+          aria-invalid={websiteError ? 'true' : 'false'}
+          aria-describedby={websiteError ? 'customer-website-error' : undefined}
         />
 
         <select
@@ -191,6 +228,12 @@ export function CustomerSelector({ className = '' }) {
         {nameError && (
           <span id="customer-name-error" className="customer-selector__error" role="alert">
             {nameError}
+          </span>
+        )}
+
+        {websiteError && (
+          <span id="customer-website-error" className="customer-selector__error" role="alert">
+            {websiteError}
           </span>
         )}
 

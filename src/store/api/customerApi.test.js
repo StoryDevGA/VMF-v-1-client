@@ -17,6 +17,7 @@ import {
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
   useAssignAdminMutation,
+  useReplaceCustomerAdminMutation,
 } from './customerApi.js'
 
 describe('customerApi', () => {
@@ -28,6 +29,7 @@ describe('customerApi', () => {
     expect(endpoints).toHaveProperty('updateCustomer')
     expect(endpoints).toHaveProperty('updateCustomerStatus')
     expect(endpoints).toHaveProperty('assignAdmin')
+    expect(endpoints).toHaveProperty('replaceCustomerAdmin')
   })
 
   it('should export query hooks', () => {
@@ -41,6 +43,7 @@ describe('customerApi', () => {
     expect(typeof useUpdateCustomerMutation).toBe('function')
     expect(typeof useUpdateCustomerStatusMutation).toBe('function')
     expect(typeof useAssignAdminMutation).toBe('function')
+    expect(typeof useReplaceCustomerAdminMutation).toBe('function')
   })
 
   it('listCustomers endpoint should be a query', () => {
@@ -71,5 +74,10 @@ describe('customerApi', () => {
   it('assignAdmin endpoint should be a mutation', () => {
     expect(customerApi.endpoints.assignAdmin).toBeDefined()
     expect(typeof customerApi.endpoints.assignAdmin.initiate).toBe('function')
+  })
+
+  it('replaceCustomerAdmin endpoint should be a mutation', () => {
+    expect(customerApi.endpoints.replaceCustomerAdmin).toBeDefined()
+    expect(typeof customerApi.endpoints.replaceCustomerAdmin.initiate).toBe('function')
   })
 })

@@ -1,0 +1,104 @@
+.super-admin-system-versioning {
+  display: grid;
+  gap: var(--spacing-xl);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-system-versioning__header {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-system-versioning__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-tight);
+}
+
+.super-admin-system-versioning__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-system-versioning__grid {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-system-versioning__section-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.super-admin-system-versioning__active-policy {
+  margin: 0;
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-system-versioning__active-policy div {
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-system-versioning__active-policy dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-system-versioning__active-policy dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.super-admin-system-versioning__form {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-system-versioning__form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-system-versioning__muted {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-system-versioning__error {
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-system-versioning__pagination {
+  margin-top: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-system-versioning__pagination-info {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-system-versioning__dialog-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+@media (min-width: 1024px) {
+  .super-admin-system-versioning__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  }
+}

@@ -11,6 +11,7 @@
  *   - updateCustomer     PATCH /api/v1/customers/:customerId
  *   - updateCustomerStatus PATCH /api/v1/customers/:customerId/status
  *   - assignAdmin        POST /api/v1/customers/:customerId/admins
+ *   - replaceCustomerAdmin POST /api/v1/customers/:customerId/admins/replace
  *
  * @module store/api/customerApi
  * @see BACKEND-SPEC.md Customer Management
@@ -93,6 +94,20 @@ export const customerApi = baseApi.injectEndpoints({
         { type: 'User', id: 'LIST' },
       ],
     }),
+
+    /* ---- Replace Customer Admin (step-up required) ---- */
+    replaceCustomerAdmin: builder.mutation({
+      query: ({ customerId, newUserId, reason, stepUpToken }) => ({
+        url: `/customers/${customerId}/admins/replace`,
+        method: 'POST',
+        body: { newUserId, reason },
+        headers: { 'X-Step-Up-Token': stepUpToken },
+      }),
+      invalidatesTags: (result, error, { customerId }) => [
+        { type: 'Customer', id: customerId },
+        { type: 'User', id: 'LIST' },
+      ],
+    }),
   }),
 })
 
@@ -104,4 +119,5 @@ export const {
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
   useAssignAdminMutation,
+  useReplaceCustomerAdminMutation,
 } = customerApi
