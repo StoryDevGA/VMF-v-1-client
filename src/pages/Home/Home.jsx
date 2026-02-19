@@ -48,7 +48,7 @@ function Home() {
   const navigate = useNavigate()
 
   return (
-    <section className="home" aria-label="Home">
+    <section className="home container" aria-label="Home">
       <header className="home__header">
         <p className="home__eyebrow">Platform Workspace</p>
         <h1 className="home__title">StoryLineOS Home</h1>
