@@ -10,6 +10,8 @@ import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Table } from '../../components/Table'
 import { Status } from '../../components/Status'
+import { Fieldset } from '../../components/Fieldset'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { useListDeniedAccessLogsQuery } from '../../store/api/superAdminAuditApi.js'
 import { normalizeError } from '../../utils/errors.js'
 import './SuperAdminDeniedAccessLogs.css'
@@ -118,130 +120,149 @@ function SuperAdminDeniedAccessLogs() {
         </p>
       </header>
 
-      <Card variant="elevated">
-        <Card.Header>
+      <Fieldset className="super-admin-denied-logs__fieldset">
+        <Fieldset.Legend className="super-admin-denied-logs__legend">
           <h2 className="super-admin-denied-logs__section-title">Filters</h2>
-          <p className="super-admin-denied-logs__section-subtitle">
-            Narrow logs by actor and date range.
-          </p>
-        </Card.Header>
-        <Card.Body>
-          <form
-            className="super-admin-denied-logs__filters"
-            onSubmit={(event) => {
-              event.preventDefault()
-              setFilters(draftFilters)
-              setPage(1)
-            }}
-            noValidate
-          >
-            <Input
-              id="denied-actor-user-id"
-              label="Actor User ID"
-              value={draftFilters.actorUserId}
-              onChange={(event) =>
-                setDraftFilters((current) => ({
-                  ...current,
-                  actorUserId: event.target.value,
-                }))
-              }
-              fullWidth
-            />
-            <Input
-              id="denied-start-date"
-              type="date"
-              label="Start Date"
-              value={draftFilters.startDate}
-              onChange={(event) =>
-                setDraftFilters((current) => ({
-                  ...current,
-                  startDate: event.target.value,
-                }))
-              }
-              fullWidth
-            />
-            <Input
-              id="denied-end-date"
-              type="date"
-              label="End Date"
-              value={draftFilters.endDate}
-              onChange={(event) =>
-                setDraftFilters((current) => ({
-                  ...current,
-                  endDate: event.target.value,
-                }))
-              }
-              fullWidth
-            />
-            <div className="super-admin-denied-logs__filter-actions">
-              <Button type="submit" disabled={isFetching}>
-                Apply
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isFetching}
-                onClick={() => {
-                  setDraftFilters(INITIAL_FILTERS)
-                  setFilters(INITIAL_FILTERS)
-                  setPage(1)
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </form>
-        </Card.Body>
-      </Card>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-denied-logs__card">
+          <Card.Body>
+            <p className="super-admin-denied-logs__section-subtitle">
+              Narrow logs by actor and date range.
+            </p>
+            <form
+              className="super-admin-denied-logs__filters"
+              onSubmit={(event) => {
+                event.preventDefault()
+                setFilters(draftFilters)
+                setPage(1)
+              }}
+              noValidate
+            >
+              <Input
+                id="denied-actor-user-id"
+                label="Actor User ID"
+                value={draftFilters.actorUserId}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    actorUserId: event.target.value,
+                  }))
+                }
+                fullWidth
+              />
+              <Input
+                id="denied-start-date"
+                type="date"
+                label="Start Date"
+                value={draftFilters.startDate}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    startDate: event.target.value,
+                  }))
+                }
+                fullWidth
+              />
+              <Input
+                id="denied-end-date"
+                type="date"
+                label="End Date"
+                value={draftFilters.endDate}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    endDate: event.target.value,
+                  }))
+                }
+                fullWidth
+              />
+              <div className="super-admin-denied-logs__filter-actions">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={isFetching}
+                >
+                  Apply
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  fullWidth
+                  disabled={isFetching}
+                  onClick={() => {
+                    setDraftFilters(INITIAL_FILTERS)
+                    setFilters(INITIAL_FILTERS)
+                    setPage(1)
+                  }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </form>
+          </Card.Body>
+        </Card>
+      </Fieldset>
 
-      <Card variant="elevated">
-        <Card.Header>
+      <Fieldset className="super-admin-denied-logs__fieldset">
+        <Fieldset.Legend className="super-admin-denied-logs__legend">
           <h2 className="super-admin-denied-logs__section-title">
             Results ({total})
           </h2>
-        </Card.Header>
-        <Card.Body>
-          {appError ? (
-            <p className="super-admin-denied-logs__error" role="alert">
-              {appError.message}
-            </p>
-          ) : null}
+        </Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-denied-logs__card">
+          <Card.Body>
+            {appError ? (
+              <p className="super-admin-denied-logs__error" role="alert">
+                {appError.message}
+              </p>
+            ) : null}
 
-          <Table
-            columns={columns}
-            data={rows}
-            loading={isLoading}
-            hoverable
-            variant="striped"
-            emptyMessage="No denied-access logs found."
-            ariaLabel="Denied access logs table"
-          />
+            <HorizontalScroll
+              className="super-admin-denied-logs__table-wrap"
+              ariaLabel="Denied access logs table"
+              gap="sm"
+            >
+              <Table
+                className="super-admin-denied-logs__results-table"
+                columns={columns}
+                data={rows}
+                loading={isLoading}
+                hoverable
+                variant="striped"
+                emptyMessage="No denied-access logs found."
+                ariaLabel="Denied access logs table"
+              />
+            </HorizontalScroll>
 
-          <div className="super-admin-denied-logs__pagination">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || isFetching}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              Previous
-            </Button>
-            <p className="super-admin-denied-logs__pagination-info">
-              Page {Number(pagination.page) || page} of {totalPages}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages || isFetching}
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-            >
-              Next
-            </Button>
-          </div>
-        </Card.Body>
-      </Card>
+            <div className="super-admin-denied-logs__pagination">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || isFetching}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </Button>
+              <p className="super-admin-denied-logs__pagination-info">
+                Page {Number(pagination.page) || page} of {totalPages}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || isFetching}
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+              >
+                Next
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+      </Fieldset>
     </section>
   )
 }

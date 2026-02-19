@@ -21,6 +21,26 @@
   color: var(--color-text-secondary);
 }
 
+.super-admin-denied-logs__fieldset {
+  width: 100%;
+  min-width: 0;
+}
+
+.super-admin-denied-logs__legend {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.super-admin-denied-logs__legend .super-admin-denied-logs__section-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  text-transform: inherit;
+}
+
+.super-admin-denied-logs__card {
+  min-width: 0;
+}
+
 .super-admin-denied-logs__section-title {
   margin: 0;
   color: var(--color-text-primary);
@@ -35,19 +55,28 @@
 
 .super-admin-denied-logs__filters {
   display: grid;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
 }
 
 .super-admin-denied-logs__filter-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
+  flex-direction: column;
+  gap: var(--spacing-lg);
 }
 
 .super-admin-denied-logs__error {
   margin: 0 0 var(--spacing-md);
   color: var(--color-error);
   font-size: var(--font-size-sm);
+}
+
+.super-admin-denied-logs__table-wrap {
+  width: 100%;
+}
+
+.super-admin-denied-logs__results-table {
+  flex: 0 0 100%;
+  min-width: 0;
 }
 
 .super-admin-denied-logs__pagination {
@@ -65,6 +94,12 @@
 }
 
 @media (min-width: 1024px) {
+  .super-admin-denied-logs__results-table {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 100%;
+  }
+
   .super-admin-denied-logs__filters {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: end;

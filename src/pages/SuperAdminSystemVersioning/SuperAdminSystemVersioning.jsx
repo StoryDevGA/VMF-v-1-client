@@ -11,6 +11,8 @@ import { Textarea } from '../../components/Textarea'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { Fieldset } from '../../components/Fieldset'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Dialog } from '../../components/Dialog'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { useToaster } from '../../components/Toaster'
@@ -277,202 +279,218 @@ function SuperAdminSystemVersioning() {
       </header>
 
       <div className="super-admin-system-versioning__grid">
-        <Card variant="elevated">
-          <Card.Header>
+        <Fieldset className="super-admin-system-versioning__fieldset super-admin-system-versioning__fieldset--active">
+          <Fieldset.Legend className="super-admin-system-versioning__legend">
             <h2 className="super-admin-system-versioning__section-title">
               Active Policy
             </h2>
-          </Card.Header>
-          <Card.Body>
-            {isActivePolicyLoading ? (
-              <p className="super-admin-system-versioning__muted">Loading active policy...</p>
-            ) : noActivePolicy ? (
-              <p className="super-admin-system-versioning__muted">
-                No active policy found. Create a policy to initialize governance rules.
-              </p>
-            ) : activePolicyAppError ? (
-              <p className="super-admin-system-versioning__error" role="alert">
-                {activePolicyAppError.message}
-              </p>
-            ) : activePolicy ? (
-              <dl className="super-admin-system-versioning__active-policy">
-                <div>
-                  <dt>Name</dt>
-                  <dd>{activePolicy.name ?? '--'}</dd>
-                </div>
-                <div>
-                  <dt>Version</dt>
-                  <dd>{activePolicy.version ?? '--'}</dd>
-                </div>
-                <div>
-                  <dt>Activated</dt>
-                  <dd>{formatDate(activePolicy.activatedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Description</dt>
-                  <dd>{activePolicy.description || '--'}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="super-admin-system-versioning__muted">
-                No active policy data available.
-              </p>
-            )}
-          </Card.Body>
-        </Card>
+          </Fieldset.Legend>
+          <Card variant="elevated" className="super-admin-system-versioning__card">
+            <Card.Body>
+              {isActivePolicyLoading ? (
+                <p className="super-admin-system-versioning__muted">Loading active policy...</p>
+              ) : noActivePolicy ? (
+                <p className="super-admin-system-versioning__muted">
+                  No active policy found. Create a policy to initialize governance rules.
+                </p>
+              ) : activePolicyAppError ? (
+                <p className="super-admin-system-versioning__error" role="alert">
+                  {activePolicyAppError.message}
+                </p>
+              ) : activePolicy ? (
+                <dl className="super-admin-system-versioning__active-policy">
+                  <div>
+                    <dt>Name</dt>
+                    <dd>{activePolicy.name ?? '--'}</dd>
+                  </div>
+                  <div>
+                    <dt>Version</dt>
+                    <dd>{activePolicy.version ?? '--'}</dd>
+                  </div>
+                  <div>
+                    <dt>Activated</dt>
+                    <dd>{formatDate(activePolicy.activatedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Description</dt>
+                    <dd>{activePolicy.description || '--'}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="super-admin-system-versioning__muted">
+                  No active policy data available.
+                </p>
+              )}
+            </Card.Body>
+          </Card>
+        </Fieldset>
 
-        <Card variant="elevated">
-          <Card.Header>
+        <Fieldset className="super-admin-system-versioning__fieldset super-admin-system-versioning__fieldset--form">
+          <Fieldset.Legend className="super-admin-system-versioning__legend">
             <h2 className="super-admin-system-versioning__section-title">
               Create New Policy Version
             </h2>
-          </Card.Header>
-          <Card.Body>
-            <form
-              className="super-admin-system-versioning__form"
-              onSubmit={handleCreatePolicy}
-              noValidate
-            >
-              <Input
-                id="policy-name"
-                label="Policy Name"
-                value={createForm.name}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, name: event.target.value }))
-                }
-                error={createErrors.name}
-                required
-                fullWidth
-              />
-              <Textarea
-                id="policy-description"
-                label="Description (Optional)"
-                value={createForm.description}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                rows={3}
-                fullWidth
-              />
-              <Textarea
-                id="policy-rules"
-                label="Rules JSON"
-                value={createForm.rules}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, rules: event.target.value }))
-                }
-                error={createErrors.rules}
-                rows={8}
-                required
-                fullWidth
-              />
-              <Textarea
-                id="policy-reason"
-                label="Change Reason"
-                value={createForm.reason}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, reason: event.target.value }))
-                }
-                error={createErrors.reason}
-                rows={3}
-                required
-                fullWidth
-              />
+          </Fieldset.Legend>
+          <Card variant="elevated" className="super-admin-system-versioning__card">
+            <Card.Body>
+              <form
+                className="super-admin-system-versioning__form"
+                onSubmit={handleCreatePolicy}
+                noValidate
+              >
+                <Input
+                  id="policy-name"
+                  label="Policy Name"
+                  value={createForm.name}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  error={createErrors.name}
+                  required
+                  fullWidth
+                />
+                <Textarea
+                  id="policy-description"
+                  label="Description (Optional)"
+                  value={createForm.description}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  fullWidth
+                />
+                <Textarea
+                  id="policy-rules"
+                  label="Rules JSON"
+                  value={createForm.rules}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, rules: event.target.value }))
+                  }
+                  error={createErrors.rules}
+                  rows={8}
+                  required
+                  fullWidth
+                />
+                <Textarea
+                  id="policy-reason"
+                  label="Change Reason"
+                  value={createForm.reason}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, reason: event.target.value }))
+                  }
+                  error={createErrors.reason}
+                  rows={3}
+                  required
+                  fullWidth
+                />
 
-              {createErrors.stepUp ? (
-                <p className="super-admin-system-versioning__error" role="alert">
-                  {createErrors.stepUp}
-                </p>
-              ) : null}
+                {createErrors.stepUp ? (
+                  <p className="super-admin-system-versioning__error" role="alert">
+                    {createErrors.stepUp}
+                  </p>
+                ) : null}
 
-              <StepUpAuthForm
-                onStepUpComplete={(token) => {
-                  setCreateStepUpToken(token)
-                  setCreateErrors((current) => {
-                    const next = { ...current }
-                    delete next.stepUp
-                    return next
-                  })
-                }}
-              />
+                <StepUpAuthForm
+                  onStepUpComplete={(token) => {
+                    setCreateStepUpToken(token)
+                    setCreateErrors((current) => {
+                      const next = { ...current }
+                      delete next.stepUp
+                      return next
+                    })
+                  }}
+                />
 
-              <div className="super-admin-system-versioning__form-actions">
-                <Button
-                  type="submit"
-                  loading={createPolicyResult.isLoading}
-                  disabled={createPolicyResult.isLoading}
-                >
-                  Create Policy Version
-                </Button>
-              </div>
-            </form>
-          </Card.Body>
-        </Card>
+                <div className="super-admin-system-versioning__form-actions">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={createPolicyResult.isLoading}
+                    disabled={createPolicyResult.isLoading}
+                  >
+                    Create Policy Version
+                  </Button>
+                </div>
+              </form>
+            </Card.Body>
+          </Card>
+        </Fieldset>
       </div>
 
-      <Card variant="elevated">
-        <Card.Header>
+      <Fieldset className="super-admin-system-versioning__fieldset super-admin-system-versioning__fieldset--history">
+        <Fieldset.Legend className="super-admin-system-versioning__legend">
           <h2 className="super-admin-system-versioning__section-title">
             Policy History
           </h2>
-        </Card.Header>
-        <Card.Body>
-          {historyAppError ? (
-            <p className="super-admin-system-versioning__error" role="alert">
-              {historyAppError.message}
-            </p>
-          ) : null}
-
-          <Table
-            columns={historyColumns}
-            data={policyHistory}
-            actions={historyActions}
-            onRowAction={(label, policy) => {
-              if (label === 'Edit Metadata') {
-                openEditDialog(policy)
-              }
-            }}
-            loading={isHistoryLoading}
-            emptyMessage="No policy history available."
-            variant="striped"
-            hoverable
-            ariaLabel="System versioning policy history"
-          />
-
-          {isHistoryFetching && !isHistoryLoading ? (
-            <p className="super-admin-system-versioning__muted">Refreshing history...</p>
-          ) : null}
-
-          {historyTotalPages > 1 ? (
-            <div className="super-admin-system-versioning__pagination">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
-                disabled={historyPage <= 1 || isHistoryFetching}
-              >
-                Previous
-              </Button>
-              <p className="super-admin-system-versioning__pagination-info">
-                Page {Number(historyMeta.page) || historyPage} of {historyTotalPages}
+        </Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-system-versioning__card">
+          <Card.Body>
+            {historyAppError ? (
+              <p className="super-admin-system-versioning__error" role="alert">
+                {historyAppError.message}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setHistoryPage((current) => Math.min(historyTotalPages, current + 1))
-                }
-                disabled={historyPage >= historyTotalPages || isHistoryFetching}
-              >
-                Next
-              </Button>
-            </div>
-          ) : null}
-        </Card.Body>
-      </Card>
+            ) : null}
+
+            <HorizontalScroll
+              className="super-admin-system-versioning__table-wrap"
+              ariaLabel="Policy history table"
+              gap="sm"
+            >
+              <Table
+                className="super-admin-system-versioning__history-table"
+                columns={historyColumns}
+                data={policyHistory}
+                actions={historyActions}
+                onRowAction={(label, policy) => {
+                  if (label === 'Edit Metadata') {
+                    openEditDialog(policy)
+                  }
+                }}
+                loading={isHistoryLoading}
+                emptyMessage="No policy history available."
+                variant="striped"
+                hoverable
+                ariaLabel="System versioning policy history"
+              />
+            </HorizontalScroll>
+
+            {isHistoryFetching && !isHistoryLoading ? (
+              <p className="super-admin-system-versioning__muted">Refreshing history...</p>
+            ) : null}
+
+            {historyTotalPages > 1 ? (
+              <div className="super-admin-system-versioning__pagination">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
+                  disabled={historyPage <= 1 || isHistoryFetching}
+                >
+                  Previous
+                </Button>
+                <p className="super-admin-system-versioning__pagination-info">
+                  Page {Number(historyMeta.page) || historyPage} of {historyTotalPages}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setHistoryPage((current) => Math.min(historyTotalPages, current + 1))
+                  }
+                  disabled={historyPage >= historyTotalPages || isHistoryFetching}
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
+          </Card.Body>
+        </Card>
+      </Fieldset>
 
       <Dialog open={editDialogOpen} onClose={closeEditDialog} size="md">
         <Dialog.Header>

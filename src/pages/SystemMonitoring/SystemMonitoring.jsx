@@ -16,6 +16,7 @@
 
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { useSystemMonitoring } from '../../hooks/useSystemMonitoring.js'
@@ -68,88 +69,115 @@ function SystemMonitoring() {
         </Button>
       </header>
 
-      <div className="system-monitoring__topline">
-        <Status variant={statusToVariant(overallStatus)} showIcon>
-          Overall: {overallStatus}
-        </Status>
-        {isFetching && <Spinner size="sm" />}
-      </div>
-
       {error && (
         <p className="system-monitoring__error" role="alert">
           Unable to load full monitoring data. Showing available results.
         </p>
       )}
 
-      <div className="system-monitoring__grid">
-        <Card className="system-monitoring__card">
-          <h2 className="system-monitoring__card-title">Dependency Status</h2>
-          {isLoading && dependencies.length === 0 ? (
-            <Spinner size="md" />
-          ) : dependencies.length > 0 ? (
-            <ul className="system-monitoring__dependency-list">
-              {dependencies.map((dep) => (
-                <li key={dep.id} className="system-monitoring__dependency-row">
-                  <span className="system-monitoring__dependency-name">{dep.name}</span>
-                  <Status variant={statusToVariant(dep.status)} size="sm" showIcon>
-                    {dep.status}
-                  </Status>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="system-monitoring__empty">No dependency data available.</p>
-          )}
+      <Fieldset className="system-monitoring__fieldset">
+        <Fieldset.Legend className="system-monitoring__legend">
+          <h2 className="system-monitoring__section-title">Overall Status</h2>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="system-monitoring__card">
+          <Card.Body>
+            <div className="system-monitoring__topline">
+              <Status variant={statusToVariant(overallStatus)} showIcon>
+                Overall: {overallStatus}
+              </Status>
+              {isFetching && <Spinner size="sm" />}
+            </div>
+          </Card.Body>
         </Card>
+      </Fieldset>
 
-        <Card className="system-monitoring__card">
-          <h2 className="system-monitoring__card-title">Performance Metrics</h2>
-          <dl className="system-monitoring__metrics">
-            <div>
-              <dt>Average response</dt>
-              <dd>{Math.round(metrics.avgResponseMs)} ms</dd>
-            </div>
-            <div>
-              <dt>P95 response</dt>
-              <dd>{Math.round(metrics.p95ResponseMs)} ms</dd>
-            </div>
-            <div>
-              <dt>Error rate</dt>
-              <dd>{formatPercent(metrics.errorRate)}</dd>
-            </div>
-            <div>
-              <dt>Requests/min</dt>
-              <dd>{Math.round(metrics.requestsPerMinute)}</dd>
-            </div>
-            <div>
-              <dt>Uptime</dt>
-              <dd>{metrics.uptimePercent.toFixed(2)}%</dd>
-            </div>
-          </dl>
-        </Card>
+      <div className="system-monitoring__grid">
+        <Fieldset className="system-monitoring__fieldset">
+          <Fieldset.Legend className="system-monitoring__legend">
+            <h2 className="system-monitoring__section-title">Dependency Status</h2>
+          </Fieldset.Legend>
+          <Card variant="elevated" className="system-monitoring__card">
+            <Card.Body>
+              {isLoading && dependencies.length === 0 ? (
+                <Spinner size="md" />
+              ) : dependencies.length > 0 ? (
+                <ul className="system-monitoring__dependency-list">
+                  {dependencies.map((dep) => (
+                    <li key={dep.id} className="system-monitoring__dependency-row">
+                      <span className="system-monitoring__dependency-name">{dep.name}</span>
+                      <Status variant={statusToVariant(dep.status)} size="sm" showIcon>
+                        {dep.status}
+                      </Status>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="system-monitoring__empty">No dependency data available.</p>
+              )}
+            </Card.Body>
+          </Card>
+        </Fieldset>
+
+        <Fieldset className="system-monitoring__fieldset">
+          <Fieldset.Legend className="system-monitoring__legend">
+            <h2 className="system-monitoring__section-title">Performance Metrics</h2>
+          </Fieldset.Legend>
+          <Card variant="elevated" className="system-monitoring__card">
+            <Card.Body>
+              <dl className="system-monitoring__metrics">
+                <div className="system-monitoring__metric-row">
+                  <dt>Average response</dt>
+                  <dd>{Math.round(metrics.avgResponseMs)} ms</dd>
+                </div>
+                <div className="system-monitoring__metric-row">
+                  <dt>P95 response</dt>
+                  <dd>{Math.round(metrics.p95ResponseMs)} ms</dd>
+                </div>
+                <div className="system-monitoring__metric-row">
+                  <dt>Error rate</dt>
+                  <dd>{formatPercent(metrics.errorRate)}</dd>
+                </div>
+                <div className="system-monitoring__metric-row">
+                  <dt>Requests/min</dt>
+                  <dd>{Math.round(metrics.requestsPerMinute)}</dd>
+                </div>
+                <div className="system-monitoring__metric-row">
+                  <dt>Uptime</dt>
+                  <dd>{metrics.uptimePercent.toFixed(2)}%</dd>
+                </div>
+              </dl>
+            </Card.Body>
+          </Card>
+        </Fieldset>
       </div>
 
-      <Card className="system-monitoring__card">
-        <h2 className="system-monitoring__card-title">Active Alerts</h2>
-        {activeAlerts.length === 0 ? (
-          <p className="system-monitoring__empty">No active alerts.</p>
-        ) : (
-          <ul className="system-monitoring__alert-list">
-            {activeAlerts.map((alert) => (
-              <li key={alert.id} className="system-monitoring__alert-row">
-                <Status
-                  variant={alert.level === 'error' ? 'error' : 'warning'}
-                  size="sm"
-                  showIcon
-                >
-                  {alert.title}
-                </Status>
-                <span>{alert.description}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <Fieldset className="system-monitoring__fieldset">
+        <Fieldset.Legend className="system-monitoring__legend">
+          <h2 className="system-monitoring__section-title">Active Alerts</h2>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="system-monitoring__card">
+          <Card.Body>
+            {activeAlerts.length === 0 ? (
+              <p className="system-monitoring__empty">No active alerts.</p>
+            ) : (
+              <ul className="system-monitoring__alert-list">
+                {activeAlerts.map((alert) => (
+                  <li key={alert.id} className="system-monitoring__alert-row">
+                    <Status
+                      variant={alert.level === 'error' ? 'error' : 'warning'}
+                      size="sm"
+                      showIcon
+                    >
+                      {alert.title}
+                    </Status>
+                    <span>{alert.description}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card.Body>
+        </Card>
+      </Fieldset>
     </section>
   )
 }
