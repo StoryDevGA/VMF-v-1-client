@@ -365,6 +365,26 @@ describe('Table Component', () => {
       expect(onRowAction).toHaveBeenCalledWith('Edit', data[0])
     })
 
+    it('should call onRowAction when action has no onClick handler', async () => {
+      const user = userEvent.setup()
+      const onRowAction = vi.fn()
+      const actionsWithoutHandlers = [{ label: 'Resend', variant: 'ghost' }]
+
+      render(
+        <Table
+          columns={columns}
+          data={data}
+          actions={actionsWithoutHandlers}
+          onRowAction={onRowAction}
+        />
+      )
+
+      const resendButtons = screen.getAllByText('Resend')
+      await user.click(resendButtons[0])
+
+      expect(onRowAction).toHaveBeenCalledWith('Resend', data[0])
+    })
+
     it('should render custom actions (JSX API)', () => {
       render(
         <Table>

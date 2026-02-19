@@ -96,18 +96,29 @@
 
 .super-admin-invitations__table-wrap {
   width: 100%;
+  min-width: 0;
+}
+
+.super-admin-invitations__table-wrap .h-scroll__track {
+  padding-inline: 0;
 }
 
 .super-admin-invitations__history-table {
   flex: 0 0 100%;
+  width: 100%;
   min-width: 0;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .super-admin-invitations__history-table {
     flex: 0 0 auto;
     width: max-content;
     min-width: 100%;
+  }
+
+  .super-admin-invitations__history-table .table__header:last-child,
+  .super-admin-invitations__history-table .table__cell--actions {
+    min-width: 12.5rem;
   }
 }
 

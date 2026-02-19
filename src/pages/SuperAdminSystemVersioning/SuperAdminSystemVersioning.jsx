@@ -498,7 +498,11 @@ function SuperAdminSystemVersioning() {
             Update Policy Metadata
           </h2>
         </Dialog.Header>
-        <Dialog.Body>
+        <Dialog.Body className="super-admin-system-versioning__dialog-body">
+          <p className="super-admin-system-versioning__dialog-subtitle">
+            Update the policy name and description for this version. Rules are
+            managed when creating a new policy version.
+          </p>
           <Input
             id="edit-policy-name"
             label="Policy Name"

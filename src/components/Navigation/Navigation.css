@@ -46,6 +46,7 @@
   border-left: var(--border-width-thin) solid transparent;
   color: var(--color-text-secondary);
   text-decoration: none;
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   font-weight: var(--font-weight-medium);
   border-radius: var(--border-radius-md);
@@ -142,7 +143,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-md) var(--spacing-xl);
-    font-size: var(--font-size-xl);
+    font-size: var(--font-size-lg);
     border-radius: var(--border-radius-md);
   }
 

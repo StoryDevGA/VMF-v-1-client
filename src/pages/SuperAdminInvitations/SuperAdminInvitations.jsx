@@ -623,7 +623,6 @@ function SuperAdminInvitations() {
               setRevokeStepUpToken(token)
               setRevokeReasonError('')
             }}
-            onCancel={closeRevokeDialog}
           />
         </Dialog.Body>
         <Dialog.Footer>
@@ -638,7 +637,11 @@ function SuperAdminInvitations() {
             variant="danger"
             onClick={handleConfirmRevoke}
             loading={revokeInvitationResult.isLoading}
-            disabled={revokeInvitationResult.isLoading}
+            disabled={
+              revokeInvitationResult.isLoading ||
+              !revokeReason.trim() ||
+              !revokeStepUpToken
+            }
           >
             Confirm Revoke
           </Button>

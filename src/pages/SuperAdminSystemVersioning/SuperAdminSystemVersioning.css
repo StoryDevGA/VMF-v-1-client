@@ -130,6 +130,17 @@
   font-size: var(--font-size-lg);
 }
 
+.super-admin-system-versioning__dialog-body {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-system-versioning__dialog-subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 @media (min-width: 1024px) {
   .super-admin-system-versioning__history-table {
     flex: 0 0 auto;
