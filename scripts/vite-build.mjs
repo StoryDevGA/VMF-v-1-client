@@ -61,6 +61,13 @@ function normalizeMode(value) {
   return lower
 }
 
+function isLocalApiUrl(value) {
+  if (!value) return false
+  return /^https?:\/\/(localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(
+    value,
+  )
+}
+
 const cliArgs = process.argv.slice(2)
 const cliMode = normalizeMode(readCliMode(cliArgs))
 const envModeHint = normalizeMode(process.env.BUILD_MODE || process.env.BUILD_ENV)
@@ -89,6 +96,20 @@ const resolutionCandidates = [
 const matchedCandidate = resolutionCandidates.find((entry) => Boolean(entry.value))
 const resolvedApiUrl = matchedCandidate?.value || ''
 const source = matchedCandidate?.source || 'unresolved'
+const buildEnv = String(process.env.BUILD_ENV || '').trim().toLowerCase()
+const isReleaseBuild = ['dev', 'staging', 'prod', 'production'].includes(buildEnv)
+const allowLocalApiBuild = process.env.ALLOW_LOCAL_API_BUILD === '1'
+
+if (isReleaseBuild && isLocalApiUrl(resolvedApiUrl) && !allowLocalApiBuild) {
+  console.error(`[build] mode=${safeMode}`)
+  console.error(
+    `[build] Refusing release build with local API URL: ${resolvedApiUrl} (${source})`,
+  )
+  console.error(
+    '[build] Set BUILD_VITE_API_URL to a deployed API endpoint, or set ALLOW_LOCAL_API_BUILD=1 to override intentionally.',
+  )
+  process.exit(1)
+}
 
 if (resolvedApiUrl) {
   // Setting process env before invoking Vite ensures dotenv files do not override it.

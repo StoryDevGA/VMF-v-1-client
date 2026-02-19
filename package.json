@@ -7,7 +7,7 @@
     "dev": "vite --mode development",
     "prebuild": "node scripts/generate-version.mjs",
     "build": "node scripts/vite-build.mjs",
-    "build:dev": "bash -lc \"BUILD_ENV=dev npm run build -- --mode development || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh dev && echo '[info] Build succeeded; dev copy complete.'\"",
+    "build:dev": "bash -lc \"BUILD_ENV=dev npm run build -- --mode staging || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh dev && echo '[info] Build succeeded; dev copy complete.'\"",
     "build:staging": "bash -lc \"BUILD_ENV=staging npm run build -- --mode staging || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh staging && echo '[info] Build succeeded; staging copy complete.'\"",
     "build:prod": "bash -lc \"BUILD_ENV=prod npm run build -- --mode production || { echo '[error] Build failed; copy skipped.'; exit 1; }; bash copy_paste.sh prod && echo '[info] Build succeeded; prod copy complete.'\"",
     "lint": "eslint .",
