@@ -30,6 +30,26 @@
   min-width: 0;
 }
 
+.super-admin-invitations__fieldset {
+  width: 100%;
+  min-width: 0;
+}
+
+.super-admin-invitations__fieldset--form {
+  max-width: 30rem;
+}
+
+.super-admin-invitations__legend {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.super-admin-invitations__legend .super-admin-invitations__section-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  text-transform: inherit;
+}
+
 .super-admin-invitations__section-title {
   margin: 0;
   color: var(--color-text-primary);
@@ -38,13 +58,13 @@
 
 .super-admin-invitations__form {
   display: grid;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
 }
 
 .super-admin-invitations__form-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
+  flex-direction: column;
+  gap: var(--spacing-lg);
 }
 
 .super-admin-invitations__toolbar {
@@ -76,90 +96,18 @@
 
 .super-admin-invitations__table-wrap {
   width: 100%;
-  overflow: hidden;
+}
+
+.super-admin-invitations__history-table {
+  flex: 0 0 100%;
+  min-width: 0;
 }
 
 @media (min-width: 1024px) {
-  .super-admin-invitations__table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* Keep invitation rows in stacked/card mode through tablet widths.
-   This prevents desktop table compression and clipping in mid-size viewports. */
-@media (min-width: 768px) and (max-width: 1023px) {
   .super-admin-invitations__history-table {
-    display: block;
-  }
-
-  .super-admin-invitations__history-table .table__head {
-    display: none;
-  }
-
-  .super-admin-invitations__history-table .table__body {
-    display: block;
-  }
-
-  .super-admin-invitations__history-table .table__row {
-    display: block;
-    margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-md);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-md);
-    background-color: var(--color-surface);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .super-admin-invitations__history-table .table__row:last-child {
-    margin-bottom: 0;
-  }
-
-  .super-admin-invitations__history-table .table__cell {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: var(--spacing-sm) 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 20%, transparent);
-  }
-
-  .super-admin-invitations__history-table .table__cell::before {
-    content: attr(data-label);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-secondary);
-    margin-right: var(--spacing-md);
-    flex-shrink: 0;
-    min-width: 120px;
-  }
-
-  .super-admin-invitations__history-table .table__cell:last-child {
-    border-bottom: none;
-  }
-
-  .super-admin-invitations__history-table .table__cell--actions {
-    display: block;
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--color-border);
-    border-bottom: none;
-    margin-top: var(--spacing-sm);
-  }
-
-  .super-admin-invitations__history-table .table__cell--actions::before {
-    display: none;
-  }
-
-  .super-admin-invitations__history-table .table__actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .super-admin-invitations__history-table.table--striped .table__row:nth-child(even) {
-    background-color: var(--color-background-secondary);
-  }
-
-  .super-admin-invitations__history-table.table--hoverable .table__row:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 100%;
   }
 }
 
@@ -197,6 +145,12 @@
 
 @media (min-width: 1280px) {
   .super-admin-invitations__grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .super-admin-invitations__card--form {
+    width: 100%;
+    max-width: 28rem;
   }
 }

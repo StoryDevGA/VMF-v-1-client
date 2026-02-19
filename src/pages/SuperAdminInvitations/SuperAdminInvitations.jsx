@@ -8,10 +8,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { Card } from '../../components/Card'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
+import { Fieldset } from '../../components/Fieldset'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { Dialog } from '../../components/Dialog'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { useToaster } from '../../components/Toaster'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import {
@@ -357,183 +359,196 @@ function SuperAdminInvitations() {
       </header>
 
       <div className="super-admin-invitations__grid">
-        <Card
-          variant="elevated"
-          className="super-admin-invitations__card super-admin-invitations__card--form"
-        >
-          <Card.Header>
+        <Fieldset className="super-admin-invitations__fieldset super-admin-invitations__fieldset--form">
+          <Fieldset.Legend className="super-admin-invitations__legend">
             <h2 className="super-admin-invitations__section-title">
               Create Invitation
             </h2>
-          </Card.Header>
-          <Card.Body>
-            <form
-              className="super-admin-invitations__form"
-              onSubmit={handleCreateInvitation}
-              noValidate
-            >
-              <Input
-                id="invitation-recipient-name"
-                label="Recipient Name"
-                value={createForm.recipientName}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    recipientName: event.target.value,
-                  }))
-                }
-                error={formErrors.recipientName}
-                required
-                fullWidth
-              />
-              <Input
-                id="invitation-recipient-email"
-                type="email"
-                label="Recipient Email"
-                value={createForm.recipientEmail}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    recipientEmail: event.target.value,
-                  }))
-                }
-                error={formErrors.recipientEmail}
-                required
-                fullWidth
-              />
-              <Input
-                id="invitation-company-name"
-                label="Company Name"
-                value={createForm.companyName}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    companyName: event.target.value,
-                  }))
-                }
-                error={formErrors.companyName}
-                required
-                fullWidth
-              />
-              <Input
-                id="invitation-company-website"
-                label="Company Website (Optional)"
-                value={createForm.website}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    website: event.target.value,
-                  }))
-                }
-                error={formErrors.website}
-                fullWidth
-              />
+          </Fieldset.Legend>
+          <Card
+            variant="elevated"
+            className="super-admin-invitations__card super-admin-invitations__card--form"
+          >
+            <Card.Body>
+              <form
+                className="super-admin-invitations__form"
+                onSubmit={handleCreateInvitation}
+                noValidate
+              >
+                <Input
+                  id="invitation-recipient-name"
+                  label="Recipient Name"
+                  value={createForm.recipientName}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      recipientName: event.target.value,
+                    }))
+                  }
+                  error={formErrors.recipientName}
+                  required
+                  fullWidth
+                />
+                <Input
+                  id="invitation-recipient-email"
+                  type="email"
+                  label="Recipient Email"
+                  value={createForm.recipientEmail}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      recipientEmail: event.target.value,
+                    }))
+                  }
+                  error={formErrors.recipientEmail}
+                  required
+                  fullWidth
+                />
+                <Input
+                  id="invitation-company-name"
+                  label="Company Name"
+                  value={createForm.companyName}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      companyName: event.target.value,
+                    }))
+                  }
+                  error={formErrors.companyName}
+                  required
+                  fullWidth
+                />
+                <Input
+                  id="invitation-company-website"
+                  label="Company Website (Optional)"
+                  value={createForm.website}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      website: event.target.value,
+                    }))
+                  }
+                  error={formErrors.website}
+                  fullWidth
+                />
 
-              <div className="super-admin-invitations__form-actions">
-                <Button
-                  type="submit"
-                  loading={createInvitationResult.isLoading}
-                  disabled={createInvitationResult.isLoading}
-                >
-                  Send Invitation
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setCreateForm(INITIAL_FORM)
-                    setFormErrors({})
-                  }}
-                  disabled={createInvitationResult.isLoading}
-                >
-                  Reset
-                </Button>
-              </div>
-            </form>
-          </Card.Body>
-        </Card>
+                <div className="super-admin-invitations__form-actions">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={createInvitationResult.isLoading}
+                    disabled={createInvitationResult.isLoading}
+                  >
+                    Send Invitation
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    fullWidth
+                    onClick={() => {
+                      setCreateForm(INITIAL_FORM)
+                      setFormErrors({})
+                    }}
+                    disabled={createInvitationResult.isLoading}
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </form>
+            </Card.Body>
+          </Card>
+        </Fieldset>
 
-        <Card
-          variant="elevated"
-          className="super-admin-invitations__card super-admin-invitations__card--list"
-        >
-          <Card.Header>
+        <Fieldset className="super-admin-invitations__fieldset super-admin-invitations__fieldset--list">
+          <Fieldset.Legend className="super-admin-invitations__legend">
             <h2 className="super-admin-invitations__section-title">
               Invitation History
             </h2>
-          </Card.Header>
-          <Card.Body>
-            <div className="super-admin-invitations__toolbar">
-              <Input
-                id="invitation-search"
-                type="search"
-                label="Search"
-                placeholder="Name or email"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
-                  setPage(1)
-                }}
-                fullWidth
-              />
-              <Select
-                id="invitation-status"
-                label="Status"
-                options={STATUS_OPTIONS}
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value)
-                  setPage(1)
-                }}
-              />
-            </div>
+          </Fieldset.Legend>
+          <Card
+            variant="elevated"
+            className="super-admin-invitations__card super-admin-invitations__card--list"
+          >
+            <Card.Body>
+              <div className="super-admin-invitations__toolbar">
+                <Input
+                  id="invitation-search"
+                  type="search"
+                  label="Search"
+                  placeholder="Name or email"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    setPage(1)
+                  }}
+                  fullWidth
+                />
+                <Select
+                  id="invitation-status"
+                  label="Status"
+                  options={STATUS_OPTIONS}
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value)
+                    setPage(1)
+                  }}
+                />
+              </div>
 
-            {normalizedListError ? (
-              <p className="super-admin-invitations__error" role="alert">
-                {normalizedListError.message}
-              </p>
-            ) : null}
+              {normalizedListError ? (
+                <p className="super-admin-invitations__error" role="alert">
+                  {normalizedListError.message}
+                </p>
+              ) : null}
 
-            <div className="super-admin-invitations__table-wrap">
-              <Table
-                className="super-admin-invitations__history-table"
-                columns={columns}
-                data={invitations}
-                actions={actions}
-                onRowAction={handleRowAction}
-                loading={isListLoading}
-                hoverable
-                variant="striped"
-                emptyMessage="No invitations found."
-                ariaLabel="Invitation table"
-              />
-            </div>
-
-            <div className="super-admin-invitations__pagination">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={page <= 1 || isListFetching}
+              <HorizontalScroll
+                className="super-admin-invitations__table-wrap"
+                ariaLabel="Invitation history table"
+                gap="sm"
               >
-                Previous
-              </Button>
-              <p className="super-admin-invitations__pagination-info">
-                Page {Number(pagination.page) || page} of {totalPages}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setPage((current) => Math.min(totalPages, current + 1))
-                }
-                disabled={page >= totalPages || isListFetching}
-              >
-                Next
-              </Button>
-            </div>
-          </Card.Body>
-        </Card>
+                <Table
+                  className="super-admin-invitations__history-table"
+                  columns={columns}
+                  data={invitations}
+                  actions={actions}
+                  onRowAction={handleRowAction}
+                  loading={isListLoading}
+                  hoverable
+                  variant="striped"
+                  emptyMessage="No invitations found."
+                  ariaLabel="Invitation table"
+                />
+              </HorizontalScroll>
+
+              <div className="super-admin-invitations__pagination">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page <= 1 || isListFetching}
+                >
+                  Previous
+                </Button>
+                <p className="super-admin-invitations__pagination-info">
+                  Page {Number(pagination.page) || page} of {totalPages}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPage((current) => Math.min(totalPages, current + 1))
+                  }
+                  disabled={page >= totalPages || isListFetching}
+                >
+                  Next
+                </Button>
+              </div>
+            </Card.Body>
+          </Card>
+        </Fieldset>
       </div>
 
       {/* Resend Confirmation Dialog */}
