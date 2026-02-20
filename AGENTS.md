@@ -13,6 +13,15 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 - prd: Generate product requirements documents (PRDs), including discovery questions and structured requirement output. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-client/.git/skills/prd-writer/SKILL.md)
 - technical-writer: Convert PRDs into implementation-ready technical specifications with architecture, API, testing, rollout, and traceability. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-client/.git/skills/technical-writer/SKILL.md)
 - ui-ux-expert: Review UI/UX design and implementation quality against VMF token system, theming, component reuse, and accessibility standards. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-client/.git/skills/ui-ux/SKILL.md)
+- api-contract-openapi-engineer: Engineer backend API contracts from requirements into OpenAPI specs and implementation plans. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/api-contract-openapi-engineer/SKILL.md)
+- auth-security-engineer: Implement and review API authentication, authorization, and security controls in Node/Express services. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/auth-security-engineer/SKILL.md)
+- backend-developer: Build and maintain backend Node/Express features, architecture, and service-layer integrations. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/backend-developer/SKILL.md)
+- lang-chain-graph-expert: Design and implement LangChain/LangGraph agent workflows, orchestration, and evaluation patterns. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/lang-chain-graph-expert/SKILL.md)
+- mongo-db-developer: Design MongoDB schemas, indexes, and query patterns for scalable backend data access. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/mongo-db-developer/SKILL.md)
+- pr-reviewer (api): Review API/backend pull requests for correctness, regressions, security, and test coverage. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/pr-reviewer/SKILL.md)
+- prd-writer (api): Produce backend-oriented PRDs with technical scope, requirements, and acceptance criteria. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/prd-writer/SKILL.md)
+- technical-writer (api): Convert backend PRDs into implementation-ready technical specs with architecture and rollout detail. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/technical-writer/SKILL.md)
+- test-engineer-node: Create and maintain Node.js backend test suites, fixtures, and quality gates. (file: C:/Users/garya/OneDrive/Documents/StoryLineOS/VMF-APP/dev-v1/VMF-v-1-api/.git/skills/test-engineer-node/SKILL.md)
 
 ### How to use skills
 - Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.

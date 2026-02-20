@@ -11,6 +11,7 @@ import { useSystemMonitoring } from '../../hooks/useSystemMonitoring.js'
 
 const makeAdminState = (overrides = {}) => ({
   isAdmin: true,
+  isSuperAdmin: true,
   overallStatus: 'HEALTHY',
   dependencies: [
     { id: 'db', name: 'Database', status: 'HEALTHY' },
@@ -21,9 +22,22 @@ const makeAdminState = (overrides = {}) => ({
     p95ResponseMs: 120,
     errorRate: 0.01,
     requestsPerMinute: 45,
+    eventLoopLagMs: 6,
+    heapUsagePercent: 54.3,
+    uptimeSeconds: 0,
     uptimePercent: 99.97,
   },
+  alertSummary: {
+    activeCount: 0,
+    resolvedCount: 0,
+    total: 0,
+  },
   activeAlerts: [],
+  resolvedAlerts: [],
+  trendPoints: [],
+  trendWindowMs: 3600000,
+  trendBucketMs: 60000,
+  trendGeneratedAt: '2026-02-20T12:00:00.000Z',
   isLoading: false,
   isFetching: false,
   error: null,
@@ -54,6 +68,12 @@ describe('SystemMonitoring page', () => {
     expect(
       screen.getByRole('heading', { name: /active alerts/i }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /resolved alerts/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /health trends/i }),
+    ).toBeInTheDocument()
   })
 
   it('displays dependencies in the dependency list', () => {
@@ -79,6 +99,14 @@ describe('SystemMonitoring page', () => {
 
     render(<SystemMonitoring />)
     expect(screen.getByText(/no active alerts/i)).toBeInTheDocument()
+  })
+
+  it('shows empty resolved alerts and trends messages when no data', () => {
+    useSystemMonitoring.mockReturnValue(makeAdminState())
+
+    render(<SystemMonitoring />)
+    expect(screen.getByText(/no resolved alerts/i)).toBeInTheDocument()
+    expect(screen.getByText(/no trend data available/i)).toBeInTheDocument()
   })
 
   it('renders active alert entries', () => {
@@ -116,6 +144,27 @@ describe('SystemMonitoring page', () => {
 
     render(<SystemMonitoring />)
     expect(screen.getByText(/no dependency data available/i)).toBeInTheDocument()
+  })
+
+  it('shows super-admin-only messages for customer admins', () => {
+    useSystemMonitoring.mockReturnValue(
+      makeAdminState({
+        isSuperAdmin: false,
+        dependencies: [],
+      }),
+    )
+
+    render(<SystemMonitoring />)
+    expect(
+      screen.getByText(/detailed dependency status is available to super admins only/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/detailed performance metrics are available to super admins only/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/alert lifecycle is available to super admins only/i).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/trends are available to super admins only/i)).toBeInTheDocument()
   })
 
   it('calls refetchAll on Refresh button click', async () => {

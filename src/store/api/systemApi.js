@@ -5,6 +5,8 @@
  * - System health status
  * - Dependency monitoring
  * - Performance metrics
+ * - Health trends
+ * - Alert lifecycle
  */
 
 import { baseApi } from './baseApi.js'
@@ -35,8 +37,37 @@ export const systemApi = baseApi.injectEndpoints({
      * Prometheus metrics endpoint (SUPER_ADMIN only).
      */
     getSystemMetrics: build.query({
-      query: () => '../../metrics',
+      query: () => ({
+        url: '../../metrics',
+        responseHandler: 'text',
+      }),
       providesTags: [{ type: 'System', id: 'METRICS' }],
+    }),
+
+    /**
+     * GET /health/trends
+     * Time-bucketed performance trends (SUPER_ADMIN only).
+     */
+    getHealthTrends: build.query({
+      query: ({ window = '1h', bucket = '1m' } = {}) => ({
+        url: '../../health/trends',
+        params: { window, bucket },
+      }),
+      providesTags: [{ type: 'System', id: 'TRENDS' }],
+    }),
+
+    /**
+     * GET /health/alerts
+     * Alert lifecycle feed (SUPER_ADMIN only).
+     */
+    getHealthAlerts: build.query({
+      query: ({ status = 'active', limit = 100 } = {}) => ({
+        url: '../../health/alerts',
+        params: { status, limit },
+      }),
+      providesTags: (_result, _error, { status = 'active' } = {}) => [
+        { type: 'System', id: `ALERTS-${String(status).toUpperCase()}` },
+      ],
     }),
   }),
   overrideExisting: false,
@@ -46,4 +77,6 @@ export const {
   useGetSystemHealthQuery,
   useGetDetailedHealthQuery,
   useGetSystemMetricsQuery,
+  useGetHealthTrendsQuery,
+  useGetHealthAlertsQuery,
 } = systemApi
