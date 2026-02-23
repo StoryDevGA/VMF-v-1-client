@@ -29,7 +29,7 @@
  * @param {Set<string|number>} [props.selectedRows] - Controlled: selected row IDs
  * @param {Array<string|number>} [props.defaultSelectedRows=[]] - Uncontrolled: initial selected rows
  * @param {Function} [props.onSelectChange] - Callback when selection changes: (Set<id>) => void
- * @param {Array<{label: string, onClick?: function, icon?: ReactNode, variant?: string}>} [props.actions] - Action buttons (props API only)
+ * @param {Array<{label: string, onClick?: function, icon?: ReactNode, variant?: string, disabled?: boolean|function}>} [props.actions] - Action buttons (props API only)
  * @param {Function} [props.onRowAction] - Callback when action clicked: (label, row) => void
  * @param {string} [props.emptyMessage='No data available'] - Message when data is empty
  * @param {ReactNode} [props.emptyComponent] - Custom empty state component
@@ -405,21 +405,29 @@ export const Table = forwardRef(function Table({
                   {actions && (
                     <td className="table__cell table__cell--actions" data-label="Actions">
                       <div className="table__actions">
-                        {actions.map((action, idx) => (
-                          <Button
-                            key={idx}
-                            variant={action.variant || 'ghost'}
-                            size="sm"
-                            onClick={() => {
-                              action.onClick?.(row)
-                              onRowAction?.(action.label, row)
-                            }}
-                            leftIcon={action.icon}
-                            aria-label={`${action.label} ${row.name || row.id || ''}`}
-                          >
-                            {action.label}
-                          </Button>
-                        ))}
+                        {actions.map((action, idx) => {
+                          const isActionDisabled = typeof action.disabled === 'function'
+                            ? action.disabled(row)
+                            : Boolean(action.disabled)
+
+                          return (
+                            <Button
+                              key={idx}
+                              variant={action.variant || 'ghost'}
+                              size="sm"
+                              disabled={isActionDisabled}
+                              onClick={() => {
+                                if (isActionDisabled) return
+                                action.onClick?.(row)
+                                onRowAction?.(action.label, row)
+                              }}
+                              leftIcon={action.icon}
+                              aria-label={`${action.label} ${row.name || row.id || ''}`}
+                            >
+                              {action.label}
+                            </Button>
+                          )
+                        })}
                       </div>
                     </td>
                   )}

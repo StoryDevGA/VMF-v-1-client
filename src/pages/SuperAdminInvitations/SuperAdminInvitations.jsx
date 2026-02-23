@@ -339,7 +339,11 @@ function SuperAdminInvitations() {
   const actions = useMemo(
     () => [
       { label: 'Resend', variant: 'ghost' },
-      { label: 'Revoke', variant: 'danger' },
+      {
+        label: 'Revoke',
+        variant: 'danger',
+        disabled: (row) => row?.status === 'revoked',
+      },
     ],
     [],
   )

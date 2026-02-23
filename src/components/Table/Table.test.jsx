@@ -385,6 +385,43 @@ describe('Table Component', () => {
       expect(onRowAction).toHaveBeenCalledWith('Resend', data[0])
     })
 
+    it('should disable row action when disabled predicate returns true', async () => {
+      const user = userEvent.setup()
+      const onRowAction = vi.fn()
+      const onRevoke = vi.fn()
+      const actionsWithDisabled = [
+        {
+          label: 'Revoke',
+          variant: 'danger',
+          onClick: onRevoke,
+          disabled: (row) => row.id === 1,
+        },
+      ]
+
+      render(
+        <Table
+          columns={columns}
+          data={data}
+          actions={actionsWithDisabled}
+          onRowAction={onRowAction}
+        />,
+      )
+
+      const revokeButtons = screen.getAllByRole('button', { name: /revoke/i })
+      expect(revokeButtons[0]).toBeDisabled()
+      expect(revokeButtons[1]).not.toBeDisabled()
+
+      await user.click(revokeButtons[0])
+      expect(onRevoke).not.toHaveBeenCalled()
+      expect(onRowAction).not.toHaveBeenCalled()
+
+      await user.click(revokeButtons[1])
+      expect(onRevoke).toHaveBeenCalledTimes(1)
+      expect(onRevoke).toHaveBeenCalledWith(data[1])
+      expect(onRowAction).toHaveBeenCalledTimes(1)
+      expect(onRowAction).toHaveBeenCalledWith('Revoke', data[1])
+    })
+
     it('should render custom actions (JSX API)', () => {
       render(
         <Table>
