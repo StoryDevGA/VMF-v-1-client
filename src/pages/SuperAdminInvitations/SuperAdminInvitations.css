@@ -154,6 +154,21 @@
   }
 }
 
+.super-admin-invitations__auth-link-box {
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary, #f3f4f6);
+  overflow-x: auto;
+}
+
+.super-admin-invitations__auth-link-code {
+  display: block;
+  font-size: var(--font-size-sm);
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+}
+
 @media (min-width: 1280px) {
   .super-admin-invitations__grid {
     grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);

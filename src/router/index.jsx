@@ -50,6 +50,7 @@ const MaintainTenants = lazy(
 const SystemMonitoring = lazy(
   () => import('../pages/SystemMonitoring/SystemMonitoring'),
 )
+const InvitationAuth = lazy(() => import('../pages/InvitationAuth'))
 const NotFound = lazy(() => import('../pages/NotFound'))
 
 /* ------------------------------------------------------------------ */
@@ -134,6 +135,12 @@ export const router = createBrowserRouter([
       {
         path: 'super-admin/login',
         element: <SuperAdminLogin />,
+      },
+
+      /* ---------- Fake auth (dev/testing) ---------- */
+      {
+        path: 'invitation-auth',
+        element: <InvitationAuth />,
       },
 
       /* ---------- Protected: customer app ---------- */

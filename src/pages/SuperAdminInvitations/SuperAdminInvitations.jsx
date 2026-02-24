@@ -75,6 +75,9 @@ function SuperAdminInvitations() {
   const [createForm, setCreateForm] = useState(INITIAL_FORM)
   const [formErrors, setFormErrors] = useState({})
 
+  const [authLinkDialogOpen, setAuthLinkDialogOpen] = useState(false)
+  const [lastAuthLink, setLastAuthLink] = useState('')
+
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [resendDialogOpen, setResendDialogOpen] = useState(false)
   const [selectedInvitation, setSelectedInvitation] = useState(null)
@@ -156,13 +159,17 @@ function SuperAdminInvitations() {
       }
 
       try {
-        await createInvitation(payload).unwrap()
+        const result = await createInvitation(payload).unwrap()
         setCreateForm(INITIAL_FORM)
         addToast({
           title: 'Invitation created',
           description: 'The invitation request was submitted successfully.',
           variant: 'success',
         })
+        if (result?.authLink) {
+          setLastAuthLink(result.authLink)
+          setAuthLinkDialogOpen(true)
+        }
       } catch (err) {
         const appError = normalizeError(err)
         addToast({
@@ -228,13 +235,17 @@ function SuperAdminInvitations() {
 
     const invitationId = selectedInvitation.id ?? selectedInvitation._id
     try {
-      await resendInvitation(invitationId).unwrap()
+      const result = await resendInvitation(invitationId).unwrap()
       addToast({
         title: 'Invitation resent',
         description: `Invitation resent to ${selectedInvitation.recipientEmail}.`,
         variant: 'success',
       })
       closeResendDialog()
+      if (result?.authLink) {
+        setLastAuthLink(result.authLink)
+        setAuthLinkDialogOpen(true)
+      }
     } catch (err) {
       const appError = normalizeError(err)
       addToast({
@@ -308,6 +319,34 @@ function SuperAdminInvitations() {
         key: 'company',
         label: 'Company',
         render: (_value, row) => row.company?.name ?? '--',
+      },
+      {
+        key: 'provisionedCustomerId',
+        label: 'Customer',
+        render: (_value, row) => {
+          const status = row.provisionedCustomerId?.status
+          if (!status) return '--'
+          const variantMap = { ACTIVE: 'success', DISABLED: 'warning', ARCHIVED: 'neutral' }
+          return (
+            <Status size="sm" showIcon variant={variantMap[status] ?? 'neutral'}>
+              {status}
+            </Status>
+          )
+        },
+      },
+      {
+        key: 'provisionedUserId',
+        label: 'User Trust',
+        render: (_value, row) => {
+          const trust = row.provisionedUserId?.identityPlus?.trustStatus
+          if (!trust) return '--'
+          const variant = trust === 'TRUSTED' ? 'success' : 'warning'
+          return (
+            <Status size="sm" showIcon variant={variant}>
+              {trust}
+            </Status>
+          )
+        },
       },
       {
         key: 'status',
@@ -648,6 +687,59 @@ function SuperAdminInvitations() {
             }
           >
             Confirm Revoke
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      {/* Auth Link Dialog (fake auth / dev mode) */}
+      <Dialog
+        open={authLinkDialogOpen}
+        onClose={() => setAuthLinkDialogOpen(false)}
+        size="md"
+      >
+        <Dialog.Header>
+          <h2 className="super-admin-invitations__dialog-title">
+            Auth Link (Dev Mode)
+          </h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p className="super-admin-invitations__dialog-subtitle">
+            Email is in mock mode. Use this link to simulate the invitation
+            auth flow:
+          </p>
+          <div className="super-admin-invitations__auth-link-box">
+            <code className="super-admin-invitations__auth-link-code">
+              {lastAuthLink}
+            </code>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            variant="outline"
+            onClick={() => setAuthLinkDialogOpen(false)}
+          >
+            Close
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(lastAuthLink)
+                addToast({
+                  title: 'Copied',
+                  description: 'Auth link copied to clipboard.',
+                  variant: 'success',
+                })
+              } catch {
+                addToast({
+                  title: 'Copy failed',
+                  description: 'Could not copy to clipboard. Select and copy manually.',
+                  variant: 'warning',
+                })
+              }
+            }}
+          >
+            Copy Link
           </Button>
         </Dialog.Footer>
       </Dialog>
