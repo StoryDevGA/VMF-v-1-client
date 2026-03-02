@@ -28,7 +28,11 @@ import {
   useBulkDisableUsersMutation,
   useBulkUpdateUsersMutation,
 } from '../../store/api/userApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isCanonicalAdminConflictError,
+  getCanonicalAdminConflictMessage,
+} from '../../utils/errors.js'
 import './BulkUserOperations.css'
 
 const OPERATION_OPTIONS = [
@@ -331,6 +335,16 @@ function BulkUserOperations({
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
+
+      if (isCanonicalAdminConflictError(appError)) {
+        addToast({
+          title: 'Bulk create blocked',
+          description: getCanonicalAdminConflictMessage(appError, 'assign'),
+          variant: 'warning',
+        })
+        return
+      }
+
       addToast({
         title: 'Bulk create failed',
         description: appError.message,
@@ -379,6 +393,16 @@ function BulkUserOperations({
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
+
+      if (isCanonicalAdminConflictError(appError)) {
+        addToast({
+          title: 'Bulk update blocked',
+          description: getCanonicalAdminConflictMessage(appError, 'update_roles'),
+          variant: 'warning',
+        })
+        return
+      }
+
       addToast({
         title: 'Bulk update failed',
         description: appError.message,
@@ -424,6 +448,16 @@ function BulkUserOperations({
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
+
+      if (isCanonicalAdminConflictError(appError)) {
+        addToast({
+          title: 'Bulk disable blocked',
+          description: getCanonicalAdminConflictMessage(appError, 'disable'),
+          variant: 'warning',
+        })
+        return
+      }
+
       addToast({
         title: 'Bulk disable failed',
         description: appError.message,

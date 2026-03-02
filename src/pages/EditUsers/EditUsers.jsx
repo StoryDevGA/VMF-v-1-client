@@ -21,7 +21,11 @@ import { useToaster } from '../../components/Toaster'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isCanonicalAdminConflictError,
+  getCanonicalAdminConflictMessage,
+} from '../../utils/errors.js'
 import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
 import BulkUserOperations from './BulkUserOperations'
@@ -94,6 +98,16 @@ function EditUsers() {
         })
       } catch (err) {
         const appError = normalizeError(err)
+
+        if (isCanonicalAdminConflictError(appError)) {
+          addToast({
+            title: 'Cannot disable user',
+            description: getCanonicalAdminConflictMessage(appError, 'disable'),
+            variant: 'warning',
+          })
+          return
+        }
+
         addToast({
           title: 'Failed to disable user',
           description: appError.message,
@@ -116,6 +130,16 @@ function EditUsers() {
         })
       } catch (err) {
         const appError = normalizeError(err)
+
+        if (isCanonicalAdminConflictError(appError)) {
+          addToast({
+            title: 'Cannot delete user',
+            description: getCanonicalAdminConflictMessage(appError, 'delete'),
+            variant: 'warning',
+          })
+          return
+        }
+
         addToast({
           title: 'Failed to delete user',
           description: appError.message,

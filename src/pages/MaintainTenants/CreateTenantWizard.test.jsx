@@ -8,6 +8,7 @@
  * - UserSearchSelect renders on step 2
  * - Validation: at least one admin required on step 2
  * - Review step displays entered data
+ * - Governance limit conflict warning on create
  * - Closes wizard on cancel
  */
 
@@ -22,8 +23,49 @@ import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import CreateTenantWizard from './CreateTenantWizard'
 
+const createTenantMutationMock = vi.fn()
+
+vi.mock('../../store/api/tenantApi.js', () => ({
+  useCreateTenantMutation: () => [createTenantMutationMock, { isLoading: false }],
+}))
+
+vi.mock('../../components/UserSearchSelect', () => {
+  function MockUserSearchSelect({ label, onChange, error, disabled }) {
+    return (
+      <div>
+        <label htmlFor="mock-user-search">{label}</label>
+        <input
+          id="mock-user-search"
+          role="combobox"
+          placeholder="Search by name or email..."
+          disabled={disabled}
+          onChange={() => {}}
+        />
+        <button
+          type="button"
+          onClick={() => onChange(['admin-user-1'])}
+          disabled={disabled}
+        >
+          Add Mock Admin
+        </button>
+        {error ? <span role="alert">{error}</span> : null}
+      </div>
+    )
+  }
+
+  return {
+    UserSearchSelect: MockUserSearchSelect,
+    default: MockUserSearchSelect,
+  }
+})
+
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
 beforeEach(() => {
+  createTenantMutationMock.mockReset()
+  createTenantMutationMock.mockReturnValue({
+    unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
+  })
+
   HTMLDialogElement.prototype.showModal = vi.fn(function () {
     this.open = true
   })
@@ -77,11 +119,17 @@ async function goToStep2(user) {
   })
 }
 
-describe('CreateTenantWizard', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
+/** Helper: navigate to review step */
+async function goToStep3(user) {
+  await goToStep2(user)
+  await user.click(screen.getByRole('button', { name: /add mock admin/i }))
+  await user.click(screen.getByRole('button', { name: /next/i }))
+  await waitFor(() => {
+    expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
   })
+}
 
+describe('CreateTenantWizard', () => {
   it('renders step 1 heading when open', () => {
     renderWizard()
     expect(
@@ -140,7 +188,6 @@ describe('CreateTenantWizard', () => {
     renderWizard()
     await goToStep2(user)
 
-    // UserSearchSelect renders a combobox input and a label
     expect(screen.getByRole('combobox')).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/search by name or email/i)).toBeInTheDocument()
     expect(screen.getByText(/search users by name or email/i)).toBeInTheDocument()
@@ -151,7 +198,6 @@ describe('CreateTenantWizard', () => {
     renderWizard()
     await goToStep2(user)
 
-    // Try to advance without selecting any admins
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
@@ -175,16 +221,17 @@ describe('CreateTenantWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    // Step 1
     await user.type(screen.getByLabelText(/tenant name/i), 'Review Tenant')
     await user.type(screen.getByLabelText(/website url/i), 'https://review.com')
     await user.click(screen.getByRole('button', { name: /next/i }))
+    await user.click(screen.getByRole('button', { name: /add mock admin/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
 
-    // Step 2 — skip forward by directly setting admins is not possible via UI
-    // without a running API, so we test that step 2 renders and back-navigation works.
-    // The review step is tested indirectly through component logic.
     await waitFor(() => {
-      expect(screen.getByText(/step 2 of 3/i)).toBeInTheDocument()
+      expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
+      expect(screen.getByText(/review details/i)).toBeInTheDocument()
+      expect(screen.getByText('Review Tenant')).toBeInTheDocument()
+      expect(screen.getByText('https://review.com')).toBeInTheDocument()
     })
   })
 
@@ -195,5 +242,39 @@ describe('CreateTenantWizard', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows governance warning toast when tenant limit is reached', async () => {
+    const user = userEvent.setup()
+    createTenantMutationMock.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'This action conflicts with the current state of the resource.',
+            details: {
+              reason: 'TENANT_LIMIT_REACHED',
+              limit: 3,
+              currentCount: 3,
+            },
+          },
+        },
+      }),
+    })
+
+    renderWizard()
+    await goToStep3(user)
+    await user.click(screen.getByRole('button', { name: /create tenant/i }))
+
+    await waitFor(() => {
+      expect(createTenantMutationMock).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/^Tenant limit reached$/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/tenant limit reached for this customer\. \(3\/3 in use\)\./i),
+      ).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText(/failed to create tenant/i)).not.toBeInTheDocument()
   })
 })

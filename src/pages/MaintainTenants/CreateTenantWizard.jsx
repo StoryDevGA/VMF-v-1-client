@@ -22,7 +22,11 @@ import { Button } from '../../components/Button'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useCreateTenantMutation } from '../../store/api/tenantApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isGovernanceLimitConflictError,
+  getGovernanceLimitConflictMessage,
+} from '../../utils/errors.js'
 
 /** Wizard step count */
 const TOTAL_STEPS = 3
@@ -119,6 +123,15 @@ function CreateTenantWizard({ open, onClose, customerId }) {
       handleClose()
     } catch (err) {
       const appError = normalizeError(err)
+
+      if (isGovernanceLimitConflictError(appError, 'TENANT_LIMIT_REACHED')) {
+        addToast({
+          title: 'Tenant limit reached',
+          description: getGovernanceLimitConflictMessage(appError),
+          variant: 'warning',
+        })
+        return
+      }
 
       if (appError.status === 422 && appError.details) {
         const mapped = {}

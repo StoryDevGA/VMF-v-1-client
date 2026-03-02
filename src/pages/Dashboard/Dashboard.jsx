@@ -107,12 +107,45 @@ function Dashboard() {
         disabledReason: '',
       },
       {
+        key: 'super-admin-license-levels',
+        title: 'Licence Levels',
+        description:
+          'Create and update governance licence tiers and feature entitlements.',
+        to: '/super-admin/license-levels',
+        icon: <MdTune aria-hidden="true" />,
+        visible: isSuperAdmin,
+        enabled: true,
+        disabledReason: '',
+      },
+      {
+        key: 'super-admin-customers',
+        title: 'Customer Governance',
+        description:
+          'Manage customer lifecycle status and canonical customer admin ownership.',
+        to: '/super-admin/customers',
+        icon: <MdBusiness aria-hidden="true" />,
+        visible: isSuperAdmin,
+        enabled: true,
+        disabledReason: '',
+      },
+      {
         key: 'super-admin-system-versioning',
         title: 'System Versioning',
         description:
           'Review and update governance policy versions with step-up controls.',
         to: '/super-admin/system-versioning',
         icon: <MdSettings aria-hidden="true" />,
+        visible: isSuperAdmin,
+        enabled: true,
+        disabledReason: '',
+      },
+      {
+        key: 'super-admin-audit-logs',
+        title: 'Audit Logs',
+        description:
+          'Query immutable audit records and run integrity verification checks.',
+        to: '/super-admin/audit-logs',
+        icon: <MdMonitorHeart aria-hidden="true" />,
         visible: isSuperAdmin,
         enabled: true,
         disabledReason: '',
@@ -158,9 +191,24 @@ function Dashboard() {
           to: '/super-admin/system-versioning',
         },
         {
+          key: 'license-levels',
+          label: 'Licence Levels',
+          to: '/super-admin/license-levels',
+        },
+        {
+          key: 'customers',
+          label: 'Customers',
+          to: '/super-admin/customers',
+        },
+        {
           key: 'denied-access',
           label: 'Denied Access',
           to: '/super-admin/denied-access-logs',
+        },
+        {
+          key: 'audit-logs',
+          label: 'Audit Logs',
+          to: '/super-admin/audit-logs',
         },
         {
           key: 'monitoring',

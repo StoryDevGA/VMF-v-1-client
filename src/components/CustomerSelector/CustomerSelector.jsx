@@ -16,20 +16,29 @@ import { Spinner } from '../Spinner'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useListCustomersQuery,
-  useCreateCustomerMutation,
+  useOnboardCustomerMutation,
 } from '../../store/api/customerApi.js'
+import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import { DEFAULT_VMF_POLICY } from '../../constants/customer.js'
 import { normalizeError } from '../../utils/errors.js'
 import './CustomerSelector.css'
 
 const CREATE_ACTION = '__create__'
 const DUPLICATE_NAME_MESSAGE = 'A customer with this name already exists.'
+const INVALID_EMAIL_MESSAGE = 'Enter a valid admin email address'
+
+const DEFAULT_GOVERNANCE_LIMITS = {
+  SINGLE_TENANT: { maxTenants: 1, maxVmfsPerTenant: 1 },
+  MULTI_TENANT: { maxTenants: 10, maxVmfsPerTenant: 5 },
+}
 
 const normalizeCustomerName = (value) =>
   String(value ?? '')
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase()
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 /**
  * @param {Object}  props
@@ -44,15 +53,28 @@ export function CustomerSelector({ className = '' }) {
   )
   const customers = customersData?.data ?? []
 
-  const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation()
+  const { data: licenseLevelsData, isLoading: isLoadingLicenseLevels } =
+    useListLicenseLevelsQuery(
+      { page: 1, pageSize: 100, isActive: true },
+      { skip: !isSuperAdmin },
+    )
+  const licenseLevels = licenseLevelsData?.data ?? []
+
+  const [onboardCustomer, { isLoading: isCreating }] = useOnboardCustomerMutation()
 
   /* ---- Create-form state ---- */
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newWebsite, setNewWebsite] = useState('')
   const [newTopology, setNewTopology] = useState('SINGLE_TENANT')
+  const [newLicenseLevelId, setNewLicenseLevelId] = useState('')
+  const [newAdminName, setNewAdminName] = useState('')
+  const [newAdminEmail, setNewAdminEmail] = useState('')
   const [nameError, setNameError] = useState('')
   const [websiteError, setWebsiteError] = useState('')
+  const [licenseLevelError, setLicenseLevelError] = useState('')
+  const [adminNameError, setAdminNameError] = useState('')
+  const [adminEmailError, setAdminEmailError] = useState('')
   const [createError, setCreateError] = useState('')
 
   /* ---- Handlers ---- */
@@ -74,12 +96,38 @@ export function CustomerSelector({ className = '' }) {
       e.preventDefault()
       setNameError('')
       setWebsiteError('')
+      setLicenseLevelError('')
+      setAdminNameError('')
+      setAdminEmailError('')
       setCreateError('')
 
       const trimmedName = newName.trim()
       const trimmedWebsite = newWebsite.trim()
+      const trimmedAdminName = newAdminName.trim()
+      const trimmedAdminEmail = newAdminEmail.trim().toLowerCase()
+
       if (!trimmedName) {
         setNameError('Name is required')
+        return
+      }
+
+      if (!newLicenseLevelId) {
+        setLicenseLevelError('License level is required')
+        return
+      }
+
+      if (!trimmedAdminName) {
+        setAdminNameError('Admin name is required')
+        return
+      }
+
+      if (!trimmedAdminEmail) {
+        setAdminEmailError('Admin email is required')
+        return
+      }
+
+      if (!isValidEmail(trimmedAdminEmail)) {
+        setAdminEmailError(INVALID_EMAIL_MESSAGE)
         return
       }
 
@@ -106,20 +154,38 @@ export function CustomerSelector({ className = '' }) {
       }
 
       try {
-        const result = await createCustomer({
-          name: trimmedName,
-          ...(trimmedWebsite ? { website: trimmedWebsite } : {}),
-          topology: newTopology,
-          vmfPolicy: DEFAULT_VMF_POLICY[newTopology],
-          billing: { planCode: 'FREE' },
+        const governanceDefaults =
+          DEFAULT_GOVERNANCE_LIMITS[newTopology] ??
+          DEFAULT_GOVERNANCE_LIMITS.SINGLE_TENANT
+
+        const result = await onboardCustomer({
+          customer: {
+            companyName: trimmedName,
+            ...(trimmedWebsite ? { website: trimmedWebsite } : {}),
+            serviceProvider: newTopology === 'MULTI_TENANT',
+            billingCycle: 'MONTHLY',
+            planCode: 'FREE',
+            licenseLevelId: newLicenseLevelId,
+            maxTenants: governanceDefaults.maxTenants,
+            maxVmfsPerTenant: governanceDefaults.maxVmfsPerTenant,
+            topology: newTopology,
+            vmfPolicy: DEFAULT_VMF_POLICY[newTopology],
+          },
+          adminUser: {
+            name: trimmedAdminName,
+            email: trimmedAdminEmail,
+          },
         }).unwrap()
 
-        const createdId = result?.data?._id ?? result?._id
+        const createdId = result?.data?.customer?._id ?? result?.customer?._id
         if (createdId) setCustomerId(createdId)
 
         setNewName('')
         setNewWebsite('')
         setNewTopology('SINGLE_TENANT')
+        setNewLicenseLevelId('')
+        setNewAdminName('')
+        setNewAdminEmail('')
         setShowCreateForm(false)
       } catch (err) {
         const appError = normalizeError(err)
@@ -130,6 +196,65 @@ export function CustomerSelector({ className = '' }) {
           appError.code === 'HTTP_409'
 
         if (isConflict) {
+          const message = appError.message || 'This onboarding request conflicts with existing data.'
+          if (/customer with this name/i.test(message)) {
+            setNameError(message)
+            return
+          }
+          if (/email/i.test(message) || /admin/i.test(message)) {
+            setAdminEmailError(message)
+            return
+          }
+          setCreateError(message)
+          return
+        }
+
+        if (
+          appError.status === 422 &&
+          appError.details &&
+          typeof appError.details === 'object' &&
+          !Array.isArray(appError.details)
+        ) {
+          const details = appError.details
+          let mappedAny = false
+
+          if (details['customer.companyName'] || details['customer.name']) {
+            setNameError(details['customer.companyName'] || details['customer.name'])
+            mappedAny = true
+          }
+          if (details['customer.website']) {
+            setWebsiteError(details['customer.website'])
+            mappedAny = true
+          }
+          if (details['customer.licenseLevelId']) {
+            setLicenseLevelError(details['customer.licenseLevelId'])
+            mappedAny = true
+          }
+          if (details['adminUser.name']) {
+            setAdminNameError(details['adminUser.name'])
+            mappedAny = true
+          }
+          if (details['adminUser.email']) {
+            setAdminEmailError(details['adminUser.email'])
+            mappedAny = true
+          }
+          if (details['customer.vmfPolicy']) {
+            setCreateError(details['customer.vmfPolicy'])
+            mappedAny = true
+          }
+          if (details['customer.topology']) {
+            setCreateError(details['customer.topology'])
+            mappedAny = true
+          }
+
+          if (mappedAny) return
+        }
+
+        if (
+          appError.status === 422 &&
+          appError.code === 'VALIDATION_FAILED' &&
+          /customer with this name/i.test(appError.message || '')
+        ) {
           setNameError(appError.message || DUPLICATE_NAME_MESSAGE)
           return
         }
@@ -137,16 +262,33 @@ export function CustomerSelector({ className = '' }) {
         setCreateError(appError.message)
       }
     },
-    [newName, newWebsite, newTopology, createCustomer, customers, setCustomerId],
+    [
+      newName,
+      newWebsite,
+      newTopology,
+      newLicenseLevelId,
+      newAdminName,
+      newAdminEmail,
+      onboardCustomer,
+      customers,
+      setCustomerId,
+    ],
   )
 
   const handleCancelCreate = useCallback(() => {
     setShowCreateForm(false)
     setNameError('')
     setWebsiteError('')
+    setLicenseLevelError('')
+    setAdminNameError('')
+    setAdminEmailError('')
     setCreateError('')
     setNewName('')
     setNewWebsite('')
+    setNewTopology('SINGLE_TENANT')
+    setNewLicenseLevelId('')
+    setNewAdminName('')
+    setNewAdminEmail('')
   }, [])
 
   // Only visible to Super Admin
@@ -196,7 +338,7 @@ export function CustomerSelector({ className = '' }) {
         />
 
         <select
-          className="customer-selector__topology"
+          className="customer-selector__select"
           value={newTopology}
           onChange={(e) => setNewTopology(e.target.value)}
           disabled={isCreating}
@@ -206,10 +348,66 @@ export function CustomerSelector({ className = '' }) {
           <option value="MULTI_TENANT">Multi Tenant</option>
         </select>
 
+        <select
+          className={`customer-selector__select ${licenseLevelError ? 'customer-selector__select--error' : ''}`.trim()}
+          value={newLicenseLevelId}
+          onChange={(e) => {
+            setNewLicenseLevelId(e.target.value)
+            if (licenseLevelError) setLicenseLevelError('')
+          }}
+          disabled={isCreating || isLoadingLicenseLevels}
+          aria-label="License level"
+          aria-invalid={licenseLevelError ? 'true' : 'false'}
+          aria-describedby={licenseLevelError ? 'customer-license-level-error' : undefined}
+        >
+          <option value="">
+            {isLoadingLicenseLevels ? 'Loading license levels...' : 'Select license level'}
+          </option>
+          {licenseLevels.map((licenseLevel) => {
+            const licenseLevelId = licenseLevel?._id ?? licenseLevel?.id
+            if (!licenseLevelId) return null
+            return (
+              <option key={licenseLevelId} value={licenseLevelId}>
+                {licenseLevel.name || licenseLevelId}
+              </option>
+            )
+          })}
+        </select>
+
+        <input
+          className={`customer-selector__input ${adminNameError ? 'customer-selector__input--error' : ''}`.trim()}
+          type="text"
+          placeholder="Admin name"
+          value={newAdminName}
+          onChange={(e) => {
+            setNewAdminName(e.target.value)
+            if (adminNameError) setAdminNameError('')
+          }}
+          disabled={isCreating}
+          aria-label="Admin name"
+          aria-invalid={adminNameError ? 'true' : 'false'}
+          aria-describedby={adminNameError ? 'customer-admin-name-error' : undefined}
+        />
+
+        <input
+          className={`customer-selector__input ${adminEmailError ? 'customer-selector__input--error' : ''}`.trim()}
+          type="email"
+          placeholder="Admin email"
+          value={newAdminEmail}
+          onChange={(e) => {
+            setNewAdminEmail(e.target.value)
+            if (adminEmailError) setAdminEmailError('')
+          }}
+          disabled={isCreating}
+          aria-label="Admin email"
+          aria-invalid={adminEmailError ? 'true' : 'false'}
+          aria-describedby={adminEmailError ? 'customer-admin-email-error' : undefined}
+        />
+
         <button
           className="customer-selector__btn customer-selector__btn--create"
           type="submit"
-          disabled={isCreating}
+          disabled={isCreating || isLoadingLicenseLevels || licenseLevels.length === 0}
           aria-label="Create"
         >
           {isCreating ? <Spinner size="small" /> : 'Create'}
@@ -234,6 +432,34 @@ export function CustomerSelector({ className = '' }) {
         {websiteError && (
           <span id="customer-website-error" className="customer-selector__error" role="alert">
             {websiteError}
+          </span>
+        )}
+
+        {licenseLevelError && (
+          <span
+            id="customer-license-level-error"
+            className="customer-selector__error"
+            role="alert"
+          >
+            {licenseLevelError}
+          </span>
+        )}
+
+        {adminNameError && (
+          <span id="customer-admin-name-error" className="customer-selector__error" role="alert">
+            {adminNameError}
+          </span>
+        )}
+
+        {adminEmailError && (
+          <span id="customer-admin-email-error" className="customer-selector__error" role="alert">
+            {adminEmailError}
+          </span>
+        )}
+
+        {!isLoadingLicenseLevels && licenseLevels.length === 0 && (
+          <span className="customer-selector__error" role="alert">
+            No active license levels available. Create one before onboarding customers.
           </span>
         )}
 

@@ -39,6 +39,8 @@ export const userApi = baseApi.injectEndpoints({
     /**
      * POST /customers/:customerId/users
      * Creates a new user and triggers an Identity Plus invitation.
+     * Returns 409 when roles include CUSTOMER_ADMIN and an active
+     * canonical admin already exists.
      *
      * @param {{ customerId: string, body: { name: string, email: string, roles: string[], tenantVisibility?: string[] } }} params
      */
@@ -54,6 +56,8 @@ export const userApi = baseApi.injectEndpoints({
     /**
      * PATCH /users/:userId
      * Updates user roles, tenant memberships, or VMF grants.
+     * Returns 409 when removing CUSTOMER_ADMIN from the canonical
+     * active admin, or assigning a second active CUSTOMER_ADMIN.
      *
      * @param {{ userId: string, body: { roles?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
      */
@@ -72,6 +76,7 @@ export const userApi = baseApi.injectEndpoints({
     /**
      * POST /users/:userId/disable
      * Disables a user and revokes Identity Plus trust.
+     * Returns 409 when the target is canonical admin for an active customer.
      *
      * @param {{ userId: string }} params
      */
@@ -89,6 +94,7 @@ export const userApi = baseApi.injectEndpoints({
     /**
      * DELETE /users/:userId
      * Permanently deletes a disabled user.
+     * Returns 409 when the target is canonical admin for an active customer.
      *
      * @param {{ userId: string }} params
      */

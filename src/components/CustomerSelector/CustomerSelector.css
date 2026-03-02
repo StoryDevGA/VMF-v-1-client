@@ -49,7 +49,7 @@
   opacity: 0.6;
 }
 
-.customer-selector__topology {
+.customer-selector__select {
   appearance: none;
   -webkit-appearance: none;
   background: var(--color-surface-elevated);
@@ -65,14 +65,19 @@
   outline: none;
 }
 
-.customer-selector__topology option {
+.customer-selector__select option {
   background-color: var(--color-surface-elevated);
   color: var(--color-text-primary);
 }
 
-.customer-selector__topology:disabled {
+.customer-selector__select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.customer-selector__select--error,
+.customer-selector__select--error:focus {
+  border-color: var(--color-error);
 }
 
 /* ---- Buttons ---- */

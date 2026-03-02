@@ -123,7 +123,7 @@ describe('Dashboard page', () => {
     ).toBeInTheDocument()
   })
 
-  it('orders super-admin quick links as Invitations, Versioning, Denied Access, Monitoring, Help', () => {
+  it('orders super-admin quick links with governance and audit entries', () => {
     mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
     renderDashboard()
 
@@ -139,7 +139,10 @@ describe('Dashboard page', () => {
     expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
       'Invitations',
       'Versioning',
+      'Licence Levels',
+      'Customers',
       'Denied Access',
+      'Audit Logs',
       'Monitoring',
       'Help',
     ])

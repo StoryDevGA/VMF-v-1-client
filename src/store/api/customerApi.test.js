@@ -10,9 +10,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   customerApi,
+  normalizeCustomerPayload,
+  normalizeCustomerStatus,
   useListCustomersQuery,
   useLazyListCustomersQuery,
   useCreateCustomerMutation,
+  useOnboardCustomerMutation,
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
@@ -25,6 +28,7 @@ describe('customerApi', () => {
     const endpoints = customerApi.endpoints
     expect(endpoints).toHaveProperty('listCustomers')
     expect(endpoints).toHaveProperty('createCustomer')
+    expect(endpoints).toHaveProperty('onboardCustomer')
     expect(endpoints).toHaveProperty('getCustomer')
     expect(endpoints).toHaveProperty('updateCustomer')
     expect(endpoints).toHaveProperty('updateCustomerStatus')
@@ -40,6 +44,7 @@ describe('customerApi', () => {
 
   it('should export mutation hooks', () => {
     expect(typeof useCreateCustomerMutation).toBe('function')
+    expect(typeof useOnboardCustomerMutation).toBe('function')
     expect(typeof useUpdateCustomerMutation).toBe('function')
     expect(typeof useUpdateCustomerStatusMutation).toBe('function')
     expect(typeof useAssignAdminMutation).toBe('function')
@@ -61,6 +66,11 @@ describe('customerApi', () => {
     expect(typeof customerApi.endpoints.getCustomer.initiate).toBe('function')
   })
 
+  it('onboardCustomer endpoint should be a mutation', () => {
+    expect(customerApi.endpoints.onboardCustomer).toBeDefined()
+    expect(typeof customerApi.endpoints.onboardCustomer.initiate).toBe('function')
+  })
+
   it('updateCustomer endpoint should be a mutation', () => {
     expect(customerApi.endpoints.updateCustomer).toBeDefined()
     expect(typeof customerApi.endpoints.updateCustomer.initiate).toBe('function')
@@ -79,5 +89,74 @@ describe('customerApi', () => {
   it('replaceCustomerAdmin endpoint should be a mutation', () => {
     expect(customerApi.endpoints.replaceCustomerAdmin).toBeDefined()
     expect(typeof customerApi.endpoints.replaceCustomerAdmin.initiate).toBe('function')
+  })
+
+  it('normalizes legacy DISABLED lifecycle status to INACTIVE', () => {
+    expect(normalizeCustomerStatus('DISABLED')).toBe('INACTIVE')
+    expect(normalizeCustomerStatus('disabled')).toBe('INACTIVE')
+    expect(normalizeCustomerStatus('INACTIVE')).toBe('INACTIVE')
+    expect(normalizeCustomerStatus('ACTIVE')).toBe('ACTIVE')
+    expect(normalizeCustomerStatus('')).toBe('')
+  })
+
+  it('preserves governance and license-level fields in customer payloads', () => {
+    expect(
+      normalizeCustomerPayload({
+        name: 'Acme',
+        licenseLevelId: '65f1f2f3f4f5f6f7f8f9a0b1',
+        governance: {
+          maxTenants: 5,
+          maxVmfsPerTenant: 3,
+          customerAdminUserId: '65f1f2f3f4f5f6f7f8f9a0b2',
+        },
+      }),
+    ).toEqual({
+      name: 'Acme',
+      licenseLevelId: '65f1f2f3f4f5f6f7f8f9a0b1',
+      governance: {
+        maxTenants: 5,
+        maxVmfsPerTenant: 3,
+        customerAdminUserId: '65f1f2f3f4f5f6f7f8f9a0b2',
+      },
+    })
+  })
+
+  it('drops empty optional governance fields from payloads', () => {
+    expect(
+      normalizeCustomerPayload({
+        name: 'Acme',
+        licenseLevelId: '',
+        governance: {
+          maxTenants: 5,
+          maxVmfsPerTenant: '',
+          customerAdminUserId: undefined,
+        },
+      }),
+    ).toEqual({
+      name: 'Acme',
+      governance: {
+        maxTenants: 5,
+      },
+    })
+  })
+
+  it('strips governance.customerAdminUserId from update payloads', () => {
+    expect(
+      normalizeCustomerPayload(
+        {
+          name: 'Acme',
+          governance: {
+            maxTenants: 5,
+            customerAdminUserId: '65f1f2f3f4f5f6f7f8f9a0b2',
+          },
+        },
+        { stripCanonicalAdminUserId: true },
+      ),
+    ).toEqual({
+      name: 'Acme',
+      governance: {
+        maxTenants: 5,
+      },
+    })
   })
 })

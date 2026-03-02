@@ -18,6 +18,11 @@ import {
   isAuthError,
   isAuthzError,
   isTenantDisabledError,
+  isCustomerInactiveError,
+  isCanonicalAdminConflictError,
+  getCanonicalAdminConflictMessage,
+  isGovernanceLimitConflictError,
+  getGovernanceLimitConflictMessage,
   isRateLimitError,
 } from './errors.js'
 
@@ -38,6 +43,11 @@ describe('errors', () => {
     it('should resolve mapped HTTP status fallback codes', () => {
       expect(getErrorMessage('HTTP_429')).toContain('Too many requests')
       expect(getErrorMessage('HTTP_503')).toContain('temporarily unavailable')
+    })
+
+    it('should resolve customer inactive error codes', () => {
+      expect(getErrorMessage('AUTH_CUSTOMER_INACTIVE')).toContain('customer is inactive')
+      expect(getErrorMessage('CUSTOMER_INACTIVE')).toContain('customer is inactive')
     })
 
     it('should return the server error fallback for null/undefined', () => {
@@ -289,6 +299,186 @@ describe('errors', () => {
     it('should handle null/undefined safely', () => {
       expect(isTenantDisabledError(null)).toBe(false)
       expect(isTenantDisabledError(undefined)).toBe(false)
+    })
+  })
+
+  /* ---------- isCustomerInactiveError ---------- */
+
+  describe('isCustomerInactiveError', () => {
+    it('detects CUSTOMER_INACTIVE with 403', () => {
+      expect(
+        isCustomerInactiveError({ status: 403, code: 'CUSTOMER_INACTIVE' }),
+      ).toBe(true)
+    })
+
+    it('detects AUTH_CUSTOMER_INACTIVE with 403', () => {
+      expect(
+        isCustomerInactiveError({ status: 403, code: 'AUTH_CUSTOMER_INACTIVE' }),
+      ).toBe(true)
+    })
+
+    it('returns false for non-403 or unrelated codes', () => {
+      expect(
+        isCustomerInactiveError({ status: 401, code: 'AUTH_CUSTOMER_INACTIVE' }),
+      ).toBe(false)
+      expect(isCustomerInactiveError({ status: 403, code: 'FORBIDDEN' })).toBe(false)
+    })
+
+    it('handles null/undefined safely', () => {
+      expect(isCustomerInactiveError(null)).toBe(false)
+      expect(isCustomerInactiveError(undefined)).toBe(false)
+    })
+  })
+
+  /* ---------- canonical Customer Admin conflict helpers ---------- */
+
+  describe('isCanonicalAdminConflictError', () => {
+    it('detects canonical conflict from detail keys', () => {
+      expect(
+        isCanonicalAdminConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          message: 'Conflict',
+          details: { canonicalAdminUserId: '507f1f77bcf86cd799439011' },
+        }),
+      ).toBe(true)
+    })
+
+    it('detects canonical conflict from backend message patterns', () => {
+      expect(
+        isCanonicalAdminConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          message:
+            'Cannot assign a second CUSTOMER_ADMIN while an active canonical admin exists. Use replace admin endpoint.',
+        }),
+      ).toBe(true)
+    })
+
+    it('returns false for generic 409 conflict', () => {
+      expect(
+        isCanonicalAdminConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          message: 'This action conflicts with the current state of the resource.',
+        }),
+      ).toBe(false)
+    })
+  })
+
+  describe('getCanonicalAdminConflictMessage', () => {
+    it('uses backend-specific message when available', () => {
+      const err = {
+        status: 409,
+        code: 'CONFLICT',
+        message:
+          'Cannot remove CUSTOMER_ADMIN role from the canonical active customer admin. Replace admin first.',
+      }
+      expect(getCanonicalAdminConflictMessage(err, 'update_roles')).toBe(err.message)
+    })
+
+    it('falls back to contextual guidance when message is generic', () => {
+      expect(
+        getCanonicalAdminConflictMessage(
+          {
+            status: 409,
+            code: 'CONFLICT',
+            message: 'This action conflicts with the current state of the resource.',
+          },
+          'disable',
+        ),
+      ).toBe(
+        'This user is the canonical Customer Admin of an active customer. Replace admin first.',
+      )
+    })
+  })
+
+  /* ---------- governance limit conflict helpers ---------- */
+
+  describe('isGovernanceLimitConflictError', () => {
+    it('detects tenant limit conflicts', () => {
+      expect(
+        isGovernanceLimitConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          details: { reason: 'TENANT_LIMIT_REACHED' },
+        }),
+      ).toBe(true)
+    })
+
+    it('detects vmf limit conflicts', () => {
+      expect(
+        isGovernanceLimitConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          details: { reason: 'VMF_LIMIT_REACHED' },
+        }),
+      ).toBe(true)
+    })
+
+    it('supports expected reason filtering', () => {
+      const err = {
+        status: 409,
+        code: 'CONFLICT',
+        details: { reason: 'TENANT_LIMIT_REACHED' },
+      }
+      expect(isGovernanceLimitConflictError(err, 'TENANT_LIMIT_REACHED')).toBe(true)
+      expect(isGovernanceLimitConflictError(err, 'VMF_LIMIT_REACHED')).toBe(false)
+    })
+
+    it('returns false for non-governance conflicts', () => {
+      expect(
+        isGovernanceLimitConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          details: { reason: 'SOME_OTHER_REASON' },
+        }),
+      ).toBe(false)
+    })
+  })
+
+  describe('getGovernanceLimitConflictMessage', () => {
+    it('uses specific backend message when provided', () => {
+      const err = {
+        status: 409,
+        code: 'CONFLICT',
+        message: 'Tenant limit reached for this customer.',
+        details: {
+          reason: 'TENANT_LIMIT_REACHED',
+          limit: 5,
+          currentCount: 5,
+        },
+      }
+      expect(getGovernanceLimitConflictMessage(err)).toBe(
+        'Tenant limit reached for this customer.',
+      )
+    })
+
+    it('falls back to reason-aware message with counts', () => {
+      const err = {
+        status: 409,
+        code: 'CONFLICT',
+        message: 'This action conflicts with the current state of the resource.',
+        details: {
+          reason: 'TENANT_LIMIT_REACHED',
+          limit: 3,
+          currentCount: 3,
+        },
+      }
+      expect(getGovernanceLimitConflictMessage(err)).toBe(
+        'Tenant limit reached for this customer. (3/3 in use).',
+      )
+    })
+
+    it('falls back to generic governance-limit message without details', () => {
+      expect(
+        getGovernanceLimitConflictMessage({
+          status: 409,
+          code: 'CONFLICT',
+          message: 'This action conflicts with the current state of the resource.',
+          details: {},
+        }),
+      ).toBe('A governance limit was reached. Update customer limits and retry.')
     })
   })
 

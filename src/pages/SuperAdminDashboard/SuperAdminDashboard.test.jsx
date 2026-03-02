@@ -72,7 +72,7 @@ describe('SuperAdminDashboard page', () => {
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
   })
 
-  it('orders quick links as Monitoring, Invitations, Versioning, Denied Access, Help Center', () => {
+  it('orders quick links with governance and audit entries', () => {
     renderDashboard()
 
     const quickLinksCard = screen
@@ -87,7 +87,10 @@ describe('SuperAdminDashboard page', () => {
     expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
       'Monitoring',
       'Invitations',
+      'Licence Levels',
+      'Customers',
       'Versioning',
+      'Audit Logs',
       'Denied Access',
       'Help Center',
     ])

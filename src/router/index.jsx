@@ -37,8 +37,17 @@ const SuperAdminDashboard = lazy(() => import('../pages/SuperAdminDashboard'))
 const SuperAdminInvitations = lazy(
   () => import('../pages/SuperAdminInvitations'),
 )
+const SuperAdminLicenseLevels = lazy(
+  () => import('../pages/SuperAdminLicenseLevels'),
+)
+const SuperAdminCustomers = lazy(
+  () => import('../pages/SuperAdminCustomers'),
+)
 const SuperAdminSystemVersioning = lazy(
   () => import('../pages/SuperAdminSystemVersioning'),
+)
+const SuperAdminAuditLogs = lazy(
+  () => import('../pages/SuperAdminAuditLogs'),
 )
 const SuperAdminDeniedAccessLogs = lazy(
   () => import('../pages/SuperAdminDeniedAccessLogs'),
@@ -195,8 +204,20 @@ export const router = createBrowserRouter([
             element: <SuperAdminInvitations />,
           },
           {
+            path: 'license-levels',
+            element: <SuperAdminLicenseLevels />,
+          },
+          {
+            path: 'customers',
+            element: <SuperAdminCustomers />,
+          },
+          {
             path: 'system-versioning',
             element: <SuperAdminSystemVersioning />,
+          },
+          {
+            path: 'audit-logs',
+            element: <SuperAdminAuditLogs />,
           },
           {
             path: 'denied-access-logs',

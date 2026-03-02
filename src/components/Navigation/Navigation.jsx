@@ -140,6 +140,39 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               </li>
               <li>
                 <NavLink
+                  to="/super-admin/license-levels"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Licence Levels</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/super-admin/customers"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Customers</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/super-admin/audit-logs"
+                  className={({ isActive }) =>
+                    isActive ? 'nav__link nav__link--active' : 'nav__link'
+                  }
+                  onClick={onLinkClick}
+                >
+                  <span className="nav__text">Audit Logs</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
                   to="/super-admin/denied-access-logs"
                   className={({ isActive }) =>
                     isActive ? 'nav__link nav__link--active' : 'nav__link'

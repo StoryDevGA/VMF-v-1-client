@@ -1,0 +1,100 @@
+.super-admin-customers {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-customers__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-customers__title,
+.super-admin-customers__section-title,
+.super-admin-customers__dialog-title {
+  margin: 0;
+}
+
+.super-admin-customers__subtitle,
+.super-admin-customers__pagination-info,
+.super-admin-customers__muted,
+.super-admin-customers__dialog-subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-customers__grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-customers__fieldset,
+.super-admin-customers__card {
+  height: 100%;
+}
+
+.super-admin-customers__legend .super-admin-customers__section-title {
+  margin: 0;
+}
+
+.super-admin-customers__form,
+.super-admin-customers__dialog-body {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-customers__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-customers__toolbar {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.super-admin-customers__form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-customers__table-wrap {
+  margin-top: var(--spacing-xs);
+}
+
+.super-admin-customers__table .table__header:last-child,
+.super-admin-customers__table .table__cell--actions {
+  width: 160px;
+}
+
+.super-admin-customers__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.super-admin-customers__error {
+  margin: 0;
+  color: var(--color-danger-700);
+}
+
+@media (max-width: 1200px) {
+  .super-admin-customers__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-customers__row,
+  .super-admin-customers__toolbar,
+  .super-admin-customers__form-actions {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -20,7 +20,11 @@ import { Status } from '../../components/Status'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
 import { useUpdateUserMutation } from '../../store/api/userApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isCanonicalAdminConflictError,
+  getCanonicalAdminConflictMessage,
+} from '../../utils/errors.js'
 
 /** Available user roles */
 const AVAILABLE_ROLES = ['CUSTOMER_ADMIN', 'TENANT_ADMIN', 'USER']
@@ -83,6 +87,25 @@ function UserEditDrawer({ open, onClose, user, customerId }) {
       onClose()
     } catch (err) {
       const appError = normalizeError(err)
+
+      if (isCanonicalAdminConflictError(appError)) {
+        const conflictMessage = getCanonicalAdminConflictMessage(
+          appError,
+          'update_roles',
+        )
+
+        setFieldErrors((prev) => ({
+          ...prev,
+          roles: conflictMessage,
+        }))
+
+        addToast({
+          title: 'Customer admin conflict',
+          description: conflictMessage,
+          variant: 'warning',
+        })
+        return
+      }
 
       if (appError.status === 422 && appError.details) {
         const mapped = {}

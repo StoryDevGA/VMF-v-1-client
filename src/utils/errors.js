@@ -17,6 +17,8 @@ const ERROR_MESSAGES = {
   AUTH_TOKEN_INVALID: 'Your session is invalid. Please sign in again.',
   AUTH_REFRESH_FAILED: 'Unable to refresh session. Please sign in again.',
   AUTH_ACCOUNT_DISABLED: 'Your account has been disabled. Contact your administrator.',
+  AUTH_CUSTOMER_INACTIVE:
+    'Your customer is inactive. Contact your Super Admin to restore access.',
   STEP_UP_REQUIRED: 'Please re-authenticate to continue with this sensitive action.',
   STEP_UP_INVALID: 'Step-up token expired or invalid. Re-authenticate and try again.',
   STEP_UP_UNAVAILABLE: 'Step-up verification is unavailable right now. Try again shortly.',
@@ -25,6 +27,8 @@ const ERROR_MESSAGES = {
   AUTHZ_FORBIDDEN: 'You do not have permission to perform this action.',
   AUTHZ_ROLE_REQUIRED: 'This action requires a higher role.',
   AUTHZ_TENANT_DISABLED: 'This tenant has been disabled.',
+  CUSTOMER_INACTIVE:
+    'This customer is inactive. Reactivate the customer to continue.',
 
   // Validation
   VALIDATION_FAILED: 'Please check the form for errors.',
@@ -66,6 +70,40 @@ const RATE_LIMIT_CODES = new Set([
   'AUTH_RATE_LIMITED',
   'HTTP_429',
 ])
+
+const CANONICAL_ADMIN_CONFLICT_PATTERNS = [
+  /canonical customer admin/i,
+  /canonical admin/i,
+  /replace admin endpoint/i,
+  /replace admin first/i,
+  /second customer_admin/i,
+  /second customer admin/i,
+]
+
+const GENERIC_CONFLICT_MESSAGE_PATTERN =
+  /conflicts with the current state of the resource/i
+
+const CANONICAL_ADMIN_CONFLICT_FALLBACKS = {
+  assign:
+    'This customer already has an active Customer Admin. Use Replace Admin to transfer ownership.',
+  update_roles:
+    'This role change conflicts with canonical Customer Admin governance. Use assign/replace admin flows.',
+  disable:
+    'This user is the canonical Customer Admin of an active customer. Replace admin first.',
+  delete:
+    'This user is the canonical Customer Admin of an active customer. Replace admin first.',
+}
+
+const GOVERNANCE_LIMIT_REASONS = new Set([
+  'TENANT_LIMIT_REACHED',
+  'VMF_LIMIT_REACHED',
+])
+
+const GOVERNANCE_LIMIT_FALLBACKS = {
+  TENANT_LIMIT_REACHED: 'Tenant limit reached for this customer.',
+  VMF_LIMIT_REACHED: 'VMF limit reached for this tenant.',
+  default: 'A governance limit was reached. Update customer limits and retry.',
+}
 
 /**
  * Format seconds into short retry text.
@@ -238,6 +276,102 @@ export const isAuthzError = (err) =>
  */
 export const isTenantDisabledError = (err) =>
   err?.code === 'TENANT_DISABLED' || err?.code === 'AUTHZ_TENANT_DISABLED'
+
+/**
+ * Check if an error is an inactive-customer response.
+ * Covers both scoped-route and login variants.
+ *
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isCustomerInactiveError = (err) =>
+  err?.status === 403 &&
+  ['CUSTOMER_INACTIVE', 'AUTH_CUSTOMER_INACTIVE'].includes(err?.code)
+
+/**
+ * Check if an error indicates canonical Customer Admin governance conflict.
+ * Uses status + known detail keys + backend conflict message patterns.
+ *
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isCanonicalAdminConflictError = (err) => {
+  if (err?.status !== 409) return false
+
+  const details = err?.details
+  if (
+    details &&
+    typeof details === 'object' &&
+    (details.canonicalAdminUserId || details.conflictingAdminUserId)
+  ) {
+    return true
+  }
+
+  const message = String(err?.message ?? '')
+  return CANONICAL_ADMIN_CONFLICT_PATTERNS.some((pattern) => pattern.test(message))
+}
+
+/**
+ * Resolve canonical Customer Admin conflict to contextual UI guidance.
+ *
+ * @param {AppError} err
+ * @param {'assign'|'update_roles'|'disable'|'delete'} [operation='update_roles']
+ * @returns {string}
+ */
+export const getCanonicalAdminConflictMessage = (err, operation = 'update_roles') => {
+  const message = String(err?.message ?? '').trim()
+  const fallback =
+    CANONICAL_ADMIN_CONFLICT_FALLBACKS[operation] ??
+    CANONICAL_ADMIN_CONFLICT_FALLBACKS.update_roles
+
+  if (message && !GENERIC_CONFLICT_MESSAGE_PATTERN.test(message)) {
+    return message
+  }
+
+  return fallback
+}
+
+/**
+ * Check if an error represents governance limit enforcement conflict.
+ *
+ * @param {AppError} err
+ * @param {'TENANT_LIMIT_REACHED'|'VMF_LIMIT_REACHED'} [expectedReason]
+ * @returns {boolean}
+ */
+export const isGovernanceLimitConflictError = (err, expectedReason) => {
+  if (err?.status !== 409 || err?.code !== 'CONFLICT') return false
+
+  const reason = err?.details?.reason
+  if (!reason || !GOVERNANCE_LIMIT_REASONS.has(reason)) return false
+  if (expectedReason) return reason === expectedReason
+
+  return true
+}
+
+/**
+ * Build contextual message for governance limit conflicts.
+ *
+ * @param {AppError} err
+ * @returns {string}
+ */
+export const getGovernanceLimitConflictMessage = (err) => {
+  const reason = err?.details?.reason
+  const fallback =
+    GOVERNANCE_LIMIT_FALLBACKS[reason] ?? GOVERNANCE_LIMIT_FALLBACKS.default
+
+  const baseMessage = String(err?.message ?? '').trim()
+  if (baseMessage && !GENERIC_CONFLICT_MESSAGE_PATTERN.test(baseMessage)) {
+    return baseMessage
+  }
+
+  const limit = Number(err?.details?.limit)
+  const currentCount = Number(err?.details?.currentCount)
+  if (Number.isFinite(limit) && Number.isFinite(currentCount)) {
+    return `${fallback} (${currentCount}/${limit} in use).`
+  }
+
+  return fallback
+}
 
 /**
  * Check if an error is a rate-limit response.

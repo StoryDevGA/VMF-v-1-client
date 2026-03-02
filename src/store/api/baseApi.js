@@ -269,6 +269,7 @@ export const baseApi = createApi({
     'Role',
     'System',
     'Invitation',
+    'LicenseLevel',
     'SystemVersioningPolicy',
     'AuditLog',
   ],

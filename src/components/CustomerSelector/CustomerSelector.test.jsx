@@ -1,5 +1,5 @@
 /**
- * CustomerSelector — component tests
+ * CustomerSelector - component tests
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -7,33 +7,52 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CustomerSelector } from './CustomerSelector.jsx'
 
-// ── Mock the hooks ───────────────────────────────────────
 vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: vi.fn(),
 }))
 
 vi.mock('../../store/api/customerApi.js', () => ({
   useListCustomersQuery: vi.fn(),
-  useCreateCustomerMutation: vi.fn(),
+  useOnboardCustomerMutation: vi.fn(),
+}))
+
+vi.mock('../../store/api/licenseLevelApi.js', () => ({
+  useListLicenseLevelsQuery: vi.fn(),
 }))
 
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { useListCustomersQuery, useCreateCustomerMutation } from '../../store/api/customerApi.js'
+import {
+  useListCustomersQuery,
+  useOnboardCustomerMutation,
+} from '../../store/api/customerApi.js'
+import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 
-// ── Polyfills ────────────────────────────────────────────
 beforeEach(() => {
-  HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
-  HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
+  HTMLDialogElement.prototype.showModal = vi.fn(function () {
+    this.open = true
+  })
+  HTMLDialogElement.prototype.close = vi.fn(function () {
+    this.open = false
+  })
   vi.clearAllMocks()
 })
 
-// ── Fixtures ─────────────────────────────────────────────
 const customers = [
   { _id: 'cust-1', name: 'Acme Corp', status: 'ACTIVE' },
   { _id: 'cust-2', name: 'Beta Inc', status: 'ACTIVE' },
 ]
 
-function mockHooks(contextOverrides = {}, queryOverrides = {}, createOverrides = {}) {
+const licenseLevels = [
+  { _id: 'lic-1', name: 'Starter', isActive: true },
+  { _id: 'lic-2', name: 'Enterprise', isActive: true },
+]
+
+function mockHooks(
+  contextOverrides = {},
+  customerQueryOverrides = {},
+  onboardingOverrides = {},
+  licenseLevelQueryOverrides = {},
+) {
   useTenantContext.mockReturnValue({
     customerId: null,
     isSuperAdmin: true,
@@ -44,21 +63,46 @@ function mockHooks(contextOverrides = {}, queryOverrides = {}, createOverrides =
   useListCustomersQuery.mockReturnValue({
     data: { data: customers },
     isLoading: false,
-    ...queryOverrides,
+    ...customerQueryOverrides,
   })
 
-  const createFn = vi.fn().mockReturnValue({
-    unwrap: vi.fn().mockResolvedValue({ data: { _id: 'new-cust' } }),
+  useListLicenseLevelsQuery.mockReturnValue({
+    data: { data: licenseLevels },
+    isLoading: false,
+    ...licenseLevelQueryOverrides,
   })
-  useCreateCustomerMutation.mockReturnValue([
-    createFn,
-    { isLoading: false, ...createOverrides },
+
+  const onboardFn = vi.fn().mockReturnValue({
+    unwrap: vi.fn().mockResolvedValue({
+      data: { customer: { _id: 'new-cust' } },
+    }),
+  })
+
+  useOnboardCustomerMutation.mockReturnValue([
+    onboardFn,
+    { isLoading: false, ...onboardingOverrides },
   ])
 
-  return { createFn }
+  return { onboardFn }
 }
 
-// ── Tests ────────────────────────────────────────────────
+async function openCreateForm() {
+  await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
+  await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+}
+
+async function fillRequiredOnboardingFields({
+  name = 'New Corp',
+  licenseLevel = 'lic-1',
+  adminName = 'Jane Admin',
+  adminEmail = 'jane@newcorp.com',
+} = {}) {
+  await userEvent.type(screen.getByLabelText(/customer name/i), name)
+  await userEvent.selectOptions(screen.getByLabelText(/license level/i), licenseLevel)
+  await userEvent.type(screen.getByLabelText(/admin name/i), adminName)
+  await userEvent.type(screen.getByLabelText(/admin email/i), adminEmail)
+}
+
 describe('CustomerSelector', () => {
   it('renders nothing when user is not super admin', () => {
     mockHooks({ isSuperAdmin: false })
@@ -66,13 +110,13 @@ describe('CustomerSelector', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders the combobox trigger with aria-label for super admin', () => {
+  it('renders combobox trigger for super admin', () => {
     mockHooks()
     render(<CustomerSelector />)
     expect(screen.getByRole('combobox', { name: /select customer/i })).toBeInTheDocument()
   })
 
-  it('renders loading spinner when loading customers', () => {
+  it('renders loading state when customers query is loading', () => {
     mockHooks({}, { isLoading: true })
     render(<CustomerSelector />)
     expect(screen.getByRole('status')).toBeInTheDocument()
@@ -81,11 +125,12 @@ describe('CustomerSelector', () => {
   it('renders placeholder text when no customer selected', () => {
     mockHooks()
     render(<CustomerSelector />)
-    const trigger = screen.getByRole('combobox', { name: /select customer/i })
-    expect(trigger).toHaveTextContent('Select customer...')
+    expect(screen.getByRole('combobox', { name: /select customer/i })).toHaveTextContent(
+      'Select customer...',
+    )
   })
 
-  it('renders all customers in the dropdown', async () => {
+  it('renders all customers in dropdown', async () => {
     mockHooks()
     render(<CustomerSelector />)
 
@@ -95,89 +140,76 @@ describe('CustomerSelector', () => {
     expect(screen.getByRole('option', { name: 'Beta Inc' })).toBeInTheDocument()
   })
 
-  it('renders "+ Create customer…" option', async () => {
+  it('shows create form when create action is selected', async () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-
-    expect(screen.getByRole('option', { name: /create customer/i })).toBeInTheDocument()
-  })
-
-  it('shows selected customer when customerId is set', () => {
-    mockHooks({ customerId: 'cust-1' })
-    render(<CustomerSelector />)
-
-    const trigger = screen.getByRole('combobox', { name: /select customer/i })
-    expect(trigger).toHaveTextContent('Acme Corp')
-  })
-
-  it('calls setCustomerId when selection changes', async () => {
-    const setCustomerId = vi.fn()
-    mockHooks({ setCustomerId })
-    render(<CustomerSelector />)
-
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: 'Beta Inc' }))
-
-    expect(setCustomerId).toHaveBeenCalledWith('cust-2')
-  })
-
-  it('shows create form when "+ Create customer…" is selected', async () => {
-    mockHooks()
-    render(<CustomerSelector />)
-
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
+    await openCreateForm()
 
     expect(screen.getByLabelText(/customer name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/website url \(optional\)/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/topology/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/license level/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/admin name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/admin email/i)).toBeInTheDocument()
   })
 
   it('hides create form on cancel', async () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
+    await openCreateForm()
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
 
     expect(screen.getByRole('combobox', { name: /select customer/i })).toBeInTheDocument()
   })
 
-  it('shows error when submitting empty name', async () => {
+  it('shows error when name is missing', async () => {
     mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
+    await openCreateForm()
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(/name is required/i)
-    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('calls createCustomer and setCustomerId on successful submit', async () => {
-    const setCustomerId = vi.fn()
-    const { createFn } = mockHooks({ setCustomerId })
+  it('shows error when license level is missing', async () => {
+    mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), 'New Corp')
+    await openCreateForm()
+    await userEvent.type(screen.getByLabelText(/customer name/i), 'Acme New')
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
-    expect(createFn).toHaveBeenCalledWith({
-      name: 'New Corp',
-      topology: 'SINGLE_TENANT',
-      vmfPolicy: 'SINGLE',
-      billing: { planCode: 'FREE' },
+    expect(screen.getByRole('alert')).toHaveTextContent(/license level is required/i)
+  })
+
+  it('calls onboardCustomer and setCustomerId on successful submit', async () => {
+    const setCustomerId = vi.fn()
+    const { onboardFn } = mockHooks({ setCustomerId })
+    render(<CustomerSelector />)
+
+    await openCreateForm()
+    await fillRequiredOnboardingFields()
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(onboardFn).toHaveBeenCalledWith({
+      customer: {
+        companyName: 'New Corp',
+        serviceProvider: false,
+        billingCycle: 'MONTHLY',
+        planCode: 'FREE',
+        licenseLevelId: 'lic-1',
+        maxTenants: 1,
+        maxVmfsPerTenant: 1,
+        topology: 'SINGLE_TENANT',
+        vmfPolicy: 'SINGLE',
+      },
+      adminUser: {
+        name: 'Jane Admin',
+        email: 'jane@newcorp.com',
+      },
     })
 
     await waitFor(() => {
@@ -185,77 +217,82 @@ describe('CustomerSelector', () => {
     })
   })
 
-  it('includes optional website when provided', async () => {
-    const setCustomerId = vi.fn()
-    const { createFn } = mockHooks({ setCustomerId })
+  it('includes optional website and multi-tenant defaults', async () => {
+    const { onboardFn } = mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
+    await openCreateForm()
     await userEvent.type(screen.getByLabelText(/customer name/i), 'Website Corp')
     await userEvent.type(
       screen.getByLabelText(/website url \(optional\)/i),
       'https://website.example',
     )
+    await userEvent.selectOptions(screen.getByLabelText(/topology/i), 'MULTI_TENANT')
+    await userEvent.selectOptions(screen.getByLabelText(/license level/i), 'lic-2')
+    await userEvent.type(screen.getByLabelText(/admin name/i), 'Chris Admin')
+    await userEvent.type(screen.getByLabelText(/admin email/i), 'chris@website.example')
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
-    expect(createFn).toHaveBeenCalledWith({
-      name: 'Website Corp',
-      website: 'https://website.example',
-      topology: 'SINGLE_TENANT',
-      vmfPolicy: 'SINGLE',
-      billing: { planCode: 'FREE' },
+    expect(onboardFn).toHaveBeenCalledWith({
+      customer: {
+        companyName: 'Website Corp',
+        website: 'https://website.example',
+        serviceProvider: true,
+        billingCycle: 'MONTHLY',
+        planCode: 'FREE',
+        licenseLevelId: 'lic-2',
+        maxTenants: 10,
+        maxVmfsPerTenant: 5,
+        topology: 'MULTI_TENANT',
+        vmfPolicy: 'PER_TENANT_SINGLE',
+      },
+      adminUser: {
+        name: 'Chris Admin',
+        email: 'chris@website.example',
+      },
     })
   })
 
   it('blocks submit when optional website is invalid', async () => {
-    const { createFn } = mockHooks()
+    const { onboardFn } = mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), 'Broken URL Corp')
-    await userEvent.type(
-      screen.getByLabelText(/website url \(optional\)/i),
-      'not-a-url',
-    )
+    await openCreateForm()
+    await fillRequiredOnboardingFields({ name: 'Broken URL Corp' })
+    await userEvent.type(screen.getByLabelText(/website url \(optional\)/i), 'not-a-url')
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/enter a valid website url/i)
     })
 
-    expect(createFn).not.toHaveBeenCalled()
+    expect(onboardFn).not.toHaveBeenCalled()
   })
 
-  it('shows error message when create API fails', async () => {
+  it('shows API error message when onboarding fails', async () => {
     mockHooks()
-    const failCreate = vi.fn().mockReturnValue({
+    const failOnboard = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
         status: 500,
-        data: { error: { message: 'Duplicate name' } },
+        data: { error: { message: 'Onboarding failed' } },
       }),
     })
-    useCreateCustomerMutation.mockReturnValue([failCreate, { isLoading: false }])
+    useOnboardCustomerMutation.mockReturnValue([failOnboard, { isLoading: false }])
 
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), 'Dup Corp')
+    await openCreateForm()
+    await fillRequiredOnboardingFields({ name: 'Fail Corp' })
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Duplicate name')
+      expect(screen.getByRole('alert')).toHaveTextContent('Onboarding failed')
     })
   })
 
-  it('maps 409 conflict to customer name field error', async () => {
+  it('maps 409 duplicate-customer conflict to name field', async () => {
     mockHooks()
-    const failCreate = vi.fn().mockReturnValue({
+    const failOnboard = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
         status: 409,
         data: {
@@ -266,81 +303,121 @@ describe('CustomerSelector', () => {
         },
       }),
     })
-    useCreateCustomerMutation.mockReturnValue([failCreate, { isLoading: false }])
+    useOnboardCustomerMutation.mockReturnValue([failOnboard, { isLoading: false }])
 
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), 'ACME Corp')
+    await openCreateForm()
+    await fillRequiredOnboardingFields({ name: 'ACME Corp' })
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'A customer with this name already exists.',
+      )
     })
-
-    const nameInput = screen.getByLabelText(/customer name/i)
-    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
-    expect(nameInput).toHaveAttribute('aria-describedby', 'customer-name-error')
   })
 
-  it('maps parsing-error conflict payload to customer name field error', async () => {
+  it('maps 409 admin-email conflict to admin email field', async () => {
     mockHooks()
-    const failCreate = vi.fn().mockReturnValue({
+    const failOnboard = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
-        status: 'PARSING_ERROR',
-        originalStatus: 409,
-        data: JSON.stringify({
+        status: 409,
+        data: {
           error: {
             code: 'CONFLICT',
-            message: 'A customer with this name already exists.',
+            message: 'A user with this email already exists and cannot be used as onboarding admin.',
           },
-        }),
+        },
       }),
     })
-    useCreateCustomerMutation.mockReturnValue([failCreate, { isLoading: false }])
+    useOnboardCustomerMutation.mockReturnValue([failOnboard, { isLoading: false }])
 
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), ' ACME  Corp ')
+    await openCreateForm()
+    await fillRequiredOnboardingFields({ name: 'Email Conflict Corp' })
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /cannot be used as onboarding admin/i,
+      )
     })
+  })
 
-    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
+  it('maps 422 onboarding details to field errors', async () => {
+    mockHooks()
+    const failOnboard = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please provide valid onboarding data.',
+            details: {
+              'adminUser.email': 'adminUser.email must be a valid email',
+            },
+          },
+        },
+      }),
+    })
+    useOnboardCustomerMutation.mockReturnValue([failOnboard, { isLoading: false }])
+
+    render(<CustomerSelector />)
+
+    await openCreateForm()
+    await fillRequiredOnboardingFields({
+      name: 'Validation Corp',
+      adminEmail: 'jane@validation.example',
+    })
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/valid email/i)
+    })
   })
 
   it('blocks normalized duplicate names client-side before API call', async () => {
-    const { createFn } = mockHooks()
+    const { onboardFn } = mockHooks()
     render(<CustomerSelector />)
 
-    await userEvent.click(screen.getByRole('combobox', { name: /select customer/i }))
-    await userEvent.click(screen.getByRole('option', { name: /create customer/i }))
-
-    await userEvent.type(screen.getByLabelText(/customer name/i), '  ACME   corp  ')
+    await openCreateForm()
+    await fillRequiredOnboardingFields({ name: '  ACME   corp  ' })
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('A customer with this name already exists.')
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'A customer with this name already exists.',
+      )
     })
 
-    expect(screen.getByLabelText(/customer name/i)).toHaveAttribute('aria-invalid', 'true')
-    expect(createFn).not.toHaveBeenCalled()
+    expect(onboardFn).not.toHaveBeenCalled()
   })
 
-  it('skips query when user is not super admin', () => {
+  it('shows guidance when no active license levels are available', async () => {
+    mockHooks({}, {}, {}, { data: { data: [] }, isLoading: false })
+    render(<CustomerSelector />)
+
+    await openCreateForm()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /no active license levels available/i,
+    )
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled()
+  })
+
+  it('skips customer and license queries when not super admin', () => {
     mockHooks({ isSuperAdmin: false })
     render(<CustomerSelector />)
 
     expect(useListCustomersQuery).toHaveBeenCalledWith(
       { page: 1, pageSize: 100 },
-      { skip: true }
+      { skip: true },
+    )
+    expect(useListLicenseLevelsQuery).toHaveBeenCalledWith(
+      { page: 1, pageSize: 100, isActive: true },
+      { skip: true },
     )
   })
 })

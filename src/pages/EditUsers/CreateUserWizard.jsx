@@ -23,7 +23,11 @@ import { Button } from '../../components/Button'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import { useCreateUserMutation } from '../../store/api/userApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isCanonicalAdminConflictError,
+  getCanonicalAdminConflictMessage,
+} from '../../utils/errors.js'
 import './EditUsers.css'
 
 /** Available user roles (matches backend Role catalogue) */
@@ -122,6 +126,24 @@ function CreateUserWizard({ open, onClose, customerId }) {
       handleClose()
     } catch (err) {
       const appError = normalizeError(err)
+
+      if (
+        selectedRoles.includes('CUSTOMER_ADMIN') &&
+        isCanonicalAdminConflictError(appError)
+      ) {
+        const conflictMessage = getCanonicalAdminConflictMessage(appError, 'assign')
+        setFieldErrors((prev) => ({
+          ...prev,
+          roles: conflictMessage,
+        }))
+        setStep(2)
+        addToast({
+          title: 'Customer admin conflict',
+          description: conflictMessage,
+          variant: 'warning',
+        })
+        return
+      }
 
       if (appError.status === 422 && appError.details) {
         const mapped = {}
