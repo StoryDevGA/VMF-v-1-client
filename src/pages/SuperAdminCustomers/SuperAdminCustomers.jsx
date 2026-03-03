@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
@@ -9,9 +10,11 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { Dialog } from '../../components/Dialog'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
+import { TabView } from '../../components/TabView'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
+import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
 import {
   useListCustomersQuery,
   useCreateCustomerMutation,
@@ -70,6 +73,12 @@ const INITIAL_FORM = {
   planCode: 'FREE',
   billingCycle: 'MONTHLY',
 }
+
+const VIEW_CUSTOMERS = 'customers'
+const VIEW_INVITATIONS = 'invitations'
+
+const normalizeWorkspaceView = (value) =>
+  value === VIEW_INVITATIONS ? VIEW_INVITATIONS : VIEW_CUSTOMERS
 
 const getCustomerId = (customer) => customer?.id ?? customer?._id
 const displayStatus = (value) => (value === 'DISABLED' ? 'INACTIVE' : value || '--')
@@ -143,7 +152,7 @@ const validateForm = (form) => {
   return { errors, payload }
 }
 
-function SuperAdminCustomers() {
+export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const { addToast } = useToaster()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -379,6 +388,9 @@ function SuperAdminCustomers() {
         description: `Canonical admin updated for ${adminCustomer.name}.`,
         variant: 'success',
       })
+      if (adminMode === 'assign') {
+        onAssignAdminSuccess?.()
+      }
       closeAdminDialog()
     } catch (err) {
       const appError = normalizeError(err)
@@ -402,6 +414,7 @@ function SuperAdminCustomers() {
     adminUserId,
     assignAdmin,
     closeAdminDialog,
+    onAssignAdminSuccess,
     replaceCustomerAdmin,
   ])
 
@@ -465,9 +478,9 @@ function SuperAdminCustomers() {
     assignAdminResult.isLoading || replaceAdminResult.isLoading
 
   return (
-    <section className="super-admin-customers container" aria-label="Super admin customers">
+    <section className="super-admin-customers" aria-label="Super admin customers">
       <header className="super-admin-customers__header">
-        <h1 className="super-admin-customers__title">Customers</h1>
+        <h2 className="super-admin-customers__title">Customers</h2>
         <p className="super-admin-customers__subtitle">
           Manage customer lifecycle, governance limits, and canonical customer admin flows.
         </p>
@@ -895,6 +908,74 @@ function SuperAdminCustomers() {
       {updateStatusResult.isLoading ? (
         <p className="super-admin-customers__muted">Updating customer status...</p>
       ) : null}
+    </section>
+  )
+}
+
+function SuperAdminCustomers() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedView = searchParams.get('view')
+  const activeView = normalizeWorkspaceView(requestedView)
+  const activeTab = activeView === VIEW_INVITATIONS ? 1 : 0
+
+  const updateWorkspaceView = useCallback(
+    (nextView, { replace = false } = {}) => {
+      const normalizedView = normalizeWorkspaceView(nextView)
+      if (normalizedView === requestedView) return
+
+      const nextSearchParams = new URLSearchParams(searchParams)
+      nextSearchParams.set('view', normalizedView)
+      setSearchParams(nextSearchParams, { replace })
+    },
+    [requestedView, searchParams, setSearchParams],
+  )
+
+  useEffect(() => {
+    // Only normalize when an explicit but invalid ?view param is present.
+    // A missing param (null) is left as-is so the base URL stays clean.
+    if (requestedView === null) return
+    if (requestedView === activeView) return
+    updateWorkspaceView(activeView, { replace: true })
+  }, [activeView, requestedView, updateWorkspaceView])
+
+  const handleTabChange = useCallback(
+    (tabIndex) => {
+      // Tab 0 = Customers, Tab 1 = Invitations — matches TabView.Tab declaration order below.
+      updateWorkspaceView(tabIndex === 1 ? VIEW_INVITATIONS : VIEW_CUSTOMERS)
+    },
+    [updateWorkspaceView],
+  )
+
+  const handleAssignAdminSuccess = useCallback(() => {
+    updateWorkspaceView(VIEW_INVITATIONS)
+  }, [updateWorkspaceView])
+
+  return (
+    <section className="super-admin-customer-admin container" aria-label="Customer admin workspace">
+      <header className="super-admin-customer-admin__header">
+        <h1 className="super-admin-customer-admin__title">Customer Admin</h1>
+        <p className="super-admin-customer-admin__subtitle">
+          Manage customers and invitations in one workspace.
+        </p>
+      </header>
+
+      <TabView
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        variant="pills"
+        className="super-admin-customer-admin__tabs"
+        aria-label="Customer admin views"
+      >
+        <TabView.Tab label="Customers">
+          <SuperAdminCustomersPanel onAssignAdminSuccess={handleAssignAdminSuccess} />
+        </TabView.Tab>
+        <TabView.Tab label="Invitations">
+          <SuperAdminInvitationsPanel
+            isActive={activeView === VIEW_INVITATIONS}
+            embedded
+          />
+        </TabView.Tab>
+      </TabView>
     </section>
   )
 }

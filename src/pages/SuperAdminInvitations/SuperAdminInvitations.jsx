@@ -67,7 +67,26 @@ const formatDate = (value) => {
 }
 
 function SuperAdminInvitations() {
+  return (
+    <section className="container" aria-label="Super admin invitations">
+      <SuperAdminInvitationsPanel headingLevel={1} />
+    </section>
+  )
+}
+
+export function SuperAdminInvitationsPanel({
+  isActive = true,
+  headingLevel = 2,
+  embedded = false,
+}) {
   const { addToast } = useToaster()
+  const HeadingTag = headingLevel === 1 ? 'h1' : 'h2'
+  const panelClasses = [
+    'super-admin-invitations',
+    embedded && 'super-admin-invitations--embedded',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -97,7 +116,7 @@ function SuperAdminInvitations() {
     pageSize: 20,
     q: debouncedSearch.trim(),
     status: statusFilter,
-  })
+  }, { skip: !isActive })
 
   const [createInvitation, createInvitationResult] = useCreateInvitationMutation()
   const [resendInvitation, resendInvitationResult] = useResendInvitationMutation()
@@ -390,12 +409,9 @@ function SuperAdminInvitations() {
   const normalizedListError = listError ? normalizeError(listError) : null
 
   return (
-    <section
-      className="super-admin-invitations container"
-      aria-label="Super admin invitations"
-    >
+    <div className={panelClasses}>
       <header className="super-admin-invitations__header">
-        <h1 className="super-admin-invitations__title">Invitation Management</h1>
+        <HeadingTag className="super-admin-invitations__title">Invitation Management</HeadingTag>
         <p className="super-admin-invitations__subtitle">
           Create, resend, and revoke customer onboarding invitations.
         </p>
@@ -743,7 +759,7 @@ function SuperAdminInvitations() {
           </Button>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </div>
   )
 }
 

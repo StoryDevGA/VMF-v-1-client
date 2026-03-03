@@ -1,3 +1,26 @@
+.super-admin-customer-admin {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-customer-admin__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-customer-admin__title,
+.super-admin-customer-admin__subtitle {
+  margin: 0;
+}
+
+.super-admin-customer-admin__subtitle {
+  color: var(--color-text-secondary);
+}
+
+.super-admin-customer-admin__tabs .tabview__panel {
+  padding: var(--spacing-md) 0 0;
+}
+
 .super-admin-customers {
   display: grid;
   gap: var(--spacing-lg);
@@ -97,4 +120,3 @@
     grid-template-columns: 1fr;
   }
 }
-

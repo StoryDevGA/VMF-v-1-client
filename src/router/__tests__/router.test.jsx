@@ -140,33 +140,14 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should render super-admin invitations page at /super-admin/invitations for super admins', async () => {
-      const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/super-admin/invitations'],
-      })
+    it('should configure /super-admin/invitations as a redirect to the unified customer admin invitations view', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const superAdminRoute = rootRoute?.children?.find((route) => route.path === 'super-admin')
+      const invitationsRoute = superAdminRoute?.children?.find((route) => route.path === 'invitations')
 
-      const store = createTestStore({
-        auth: {
-          user: {
-            id: 'sa-invitations-1',
-            name: 'Super Admin',
-            email: 'super@example.com',
-            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
-          },
-          status: 'authenticated',
-        },
-      })
-
-      renderWithProviders(<RouterProvider router={testRouter} />, { store })
-
-      expect(
-        await screen.findByRole(
-          'heading',
-          { name: /^invitation management$/i },
-          { timeout: 10000 },
-        ),
-      ).toBeInTheDocument()
-    }, ROUTE_TEST_TIMEOUT)
+      expect(invitationsRoute?.element?.props?.to).toBe('/super-admin/customers?view=invitations')
+      expect(invitationsRoute?.element?.props?.replace).toBe(true)
+    })
 
     it('should render super-admin system versioning page at /super-admin/system-versioning for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {

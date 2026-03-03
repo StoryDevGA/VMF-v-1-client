@@ -4,6 +4,10 @@
   padding-block: var(--spacing-xl);
 }
 
+.super-admin-invitations--embedded {
+  padding-block: 0;
+}
+
 .super-admin-invitations__header {
   display: grid;
   gap: var(--spacing-sm);

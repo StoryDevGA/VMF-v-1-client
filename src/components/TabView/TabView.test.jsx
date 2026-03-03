@@ -106,6 +106,39 @@ describe('TabView Component', () => {
     })
   })
 
+  describe('Controlled Mode', () => {
+    it('should respect activeTab prop in controlled mode', () => {
+      render(
+        <TabView activeTab={1}>
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+          <TabView.Tab label="Tab 2">Content 2</TabView.Tab>
+        </TabView>
+      )
+
+      expect(screen.getByRole('tab', { name: 'Tab 2' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByText('Content 2')).toBeVisible()
+    })
+
+    it('should emit onTabChange but not switch active content without parent update', async () => {
+      const user = userEvent.setup()
+      const handleTabChange = vi.fn()
+
+      render(
+        <TabView activeTab={0} onTabChange={handleTabChange}>
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+          <TabView.Tab label="Tab 2">Content 2</TabView.Tab>
+        </TabView>
+      )
+
+      await user.click(screen.getByRole('tab', { name: 'Tab 2' }))
+
+      expect(handleTabChange).toHaveBeenCalledWith(1)
+      expect(screen.getByRole('tab', { name: 'Tab 1' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByText('Content 1')).toBeVisible()
+      expect(screen.getByText('Content 2')).not.toBeVisible()
+    })
+  })
+
   describe('Tab Switching', () => {
     it('should switch tabs when clicked', async () => {
       const user = userEvent.setup()

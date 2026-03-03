@@ -11,7 +11,7 @@
  */
 
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Outlet } from 'react-router-dom'
+import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
@@ -33,9 +33,6 @@ const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
 )
 const SuperAdminDashboard = lazy(() => import('../pages/SuperAdminDashboard'))
-const SuperAdminInvitations = lazy(
-  () => import('../pages/SuperAdminInvitations'),
-)
 const SuperAdminLicenseLevels = lazy(
   () => import('../pages/SuperAdminLicenseLevels'),
 )
@@ -200,7 +197,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'invitations',
-            element: <SuperAdminInvitations />,
+            element: <Navigate to="/super-admin/customers?view=invitations" replace />,
           },
           {
             path: 'license-levels',

@@ -31,30 +31,62 @@
  * </TabView>
  */
 
-import { useState, useRef, Children } from 'react'
+import { useEffect, useRef, useState, Children } from 'react'
 import './TabView.css'
+
+const clampTabIndex = (index, tabCount) => {
+  if (tabCount <= 0) return 0
+  const normalizedIndex = Number.isInteger(index) ? index : 0
+  return Math.min(Math.max(normalizedIndex, 0), tabCount - 1)
+}
 
 export function TabView({
   children,
   defaultActiveTab = 0,
+  activeTab: controlledActiveTab,
   variant = 'default',
   orientation = 'horizontal',
   onTabChange,
   className = '',
   ...props
 }) {
-  const [activeTab, setActiveTab] = useState(defaultActiveTab)
-  const tabRefs = useRef([])
-
   const tabs = Children.toArray(children)
   const totalTabs = tabs.length
+  const isControlled = controlledActiveTab !== undefined
+  const [internalActiveTab, setInternalActiveTab] = useState(
+    clampTabIndex(defaultActiveTab, totalTabs),
+  )
+  const tabRefs = useRef([])
+
+  useEffect(() => {
+    if (isControlled) return
+    setInternalActiveTab((previousIndex) => clampTabIndex(previousIndex, totalTabs))
+  }, [isControlled, totalTabs])
+
+  const activeTab = clampTabIndex(
+    isControlled ? controlledActiveTab : internalActiveTab,
+    totalTabs,
+  )
+
+  const selectTab = (index) => {
+    if (totalTabs === 0) return
+    const nextIndex = clampTabIndex(index, totalTabs)
+
+    if (!isControlled) {
+      setInternalActiveTab(nextIndex)
+    }
+
+    onTabChange?.(nextIndex)
+    return nextIndex
+  }
 
   const handleTabClick = (index) => {
-    setActiveTab(index)
-    onTabChange?.(index)
+    selectTab(index)
   }
 
   const handleKeyDown = (event, currentIndex) => {
+    if (totalTabs === 0) return
+
     let newIndex = currentIndex
 
     switch (event.key) {
@@ -94,9 +126,10 @@ export function TabView({
         return
     }
 
-    setActiveTab(newIndex)
-    onTabChange?.(newIndex)
-    tabRefs.current[newIndex]?.focus()
+    const selectedIndex = selectTab(newIndex)
+    if (selectedIndex !== undefined) {
+      tabRefs.current[selectedIndex]?.focus()
+    }
   }
 
   const tabViewClasses = [
