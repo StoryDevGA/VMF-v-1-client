@@ -323,6 +323,7 @@ describe('Router', () => {
         '/super-admin/customers',
       )
       expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
     })
 
     it('should not render context controls in the global header', async () => {

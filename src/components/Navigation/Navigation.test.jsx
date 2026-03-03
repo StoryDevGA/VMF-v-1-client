@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -83,11 +83,14 @@ describe('Navigation', () => {
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('does not render admin menus for basic users', () => {
+  it('renders a help-only navigation for basic users', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /system health/i })).not.toBeInTheDocument()
   })
 
   it('shows system health submenu with monitoring for CUSTOMER_ADMIN', async () => {
@@ -98,6 +101,7 @@ describe('Navigation', () => {
     expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^customer admin$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
 
     await user.click(screen.getByRole('button', { name: /system health/i }))
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
@@ -118,6 +122,7 @@ describe('Navigation', () => {
       'href',
       '/super-admin/customers',
     )
+    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
     await user.click(screen.getByRole('button', { name: /system admin/i }))
 
     expect(screen.getByRole('link', { name: /versioning/i })).toHaveAttribute(
@@ -192,6 +197,20 @@ describe('Navigation', () => {
     expect(screen.getByRole('button', { name: /system admin/i })).toHaveAttribute(
       'aria-expanded',
       'false',
+    )
+  })
+
+  it('renders Help as the last top-level navigation item', () => {
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    const primaryMenu = screen.getByRole('list', { name: /primary menu/i })
+    const topLevelItems = Array.from(primaryMenu.children)
+    const lastItem = topLevelItems[topLevelItems.length - 1]
+
+    expect(within(lastItem).getByRole('link', { name: /^help$/i })).toHaveAttribute(
+      'href',
+      '/help',
     )
   })
 })

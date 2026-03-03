@@ -78,6 +78,13 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       })
     }
 
+    entries.push({
+      type: 'link',
+      key: 'help',
+      label: 'Help',
+      to: '/help',
+    })
+
     return entries
   }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin])
 
