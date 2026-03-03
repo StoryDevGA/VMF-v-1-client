@@ -14,8 +14,8 @@ import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
 
-// Create a minimal store for Navigation's Redux needs
-const createTestStore = () =>
+// Create a minimal store for Header + Navigation Redux needs
+const createTestStore = (authState) =>
   configureStore({
     reducer: {
       auth: authReducer,
@@ -23,11 +23,12 @@ const createTestStore = () =>
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (gDM) => gDM().concat(baseApi.middleware),
+    preloadedState: authState ? { auth: authState } : undefined,
   })
 
 // Wrapper for React Router + Redux context
-const RouterWrapper = ({ children }) => (
-  <Provider store={createTestStore()}>
+const RouterWrapper = ({ children, authState }) => (
+  <Provider store={createTestStore(authState)}>
     <BrowserRouter>{children}</BrowserRouter>
   </Provider>
 )
@@ -133,14 +134,40 @@ describe('Header Component', () => {
       expect(screen.getByTestId('custom-logo')).toBeInTheDocument()
     })
 
-    it('should link logo to home by default', () => {
+    it('should link logo to customer dashboard by default', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'user-1',
+              memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header logo="Company" />
         </RouterWrapper>
       )
       const logoLink = screen.getByLabelText('Home')
-      expect(logoLink).toHaveAttribute('href', '/')
+      expect(logoLink).toHaveAttribute('href', '/app/dashboard')
+    })
+
+    it('should link logo to super-admin dashboard for super admins', () => {
+      render(
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
+          <Header logo="Company" />
+        </RouterWrapper>
+      )
+      const logoLink = screen.getByLabelText('Home')
+      expect(logoLink).toHaveAttribute('href', '/super-admin/dashboard')
     })
 
     it('should link logo to custom path', () => {
@@ -169,9 +196,17 @@ describe('Header Component', () => {
   // ===========================
 
   describe('Navigation', () => {
-    it('should render navigation by default', () => {
+    it('should render navigation for users with admin menu access', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )
@@ -227,7 +262,15 @@ describe('Header Component', () => {
   describe('Complex Scenarios', () => {
     it('should render complete header with all features', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header
             logo="Acme Corp"
             logoLink="/home"
@@ -276,7 +319,15 @@ describe('Header Component', () => {
   describe('Mobile Hamburger Menu', () => {
     it('should render hamburger button when navigation is shown', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )
@@ -298,7 +349,15 @@ describe('Header Component', () => {
     it('should toggle menu when hamburger is clicked', async () => {
       const user = userEvent.setup()
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )
@@ -318,7 +377,15 @@ describe('Header Component', () => {
 
     it('should close menu when Escape key is pressed', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )
@@ -337,7 +404,15 @@ describe('Header Component', () => {
     it('should close menu when a navigation link is clicked', async () => {
       const user = userEvent.setup()
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )
@@ -348,8 +423,8 @@ describe('Header Component', () => {
       expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
 
       // Click a navigation link
-      const helpLink = screen.getByRole('link', { name: /help/i })
-      await user.click(helpLink)
+      await user.click(screen.getByRole('button', { name: /system admin/i }))
+      await user.click(screen.getByRole('link', { name: /versioning/i }))
 
       // Menu should close
       expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
@@ -358,7 +433,15 @@ describe('Header Component', () => {
     it('should close menu when logo is clicked', async () => {
       const user = userEvent.setup()
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header logo="Test" />
         </RouterWrapper>
       )
@@ -378,7 +461,15 @@ describe('Header Component', () => {
 
     it('should have correct aria attributes for accessibility', () => {
       render(
-        <RouterWrapper>
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'super-1',
+              memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
           <Header />
         </RouterWrapper>
       )

@@ -26,7 +26,6 @@ import './router.css'
 /*  Lazy-loaded page components                                       */
 /* ------------------------------------------------------------------ */
 
-const Home = lazy(() => import('../pages/Home'))
 const Help = lazy(() => import('../pages/Help'))
 const Dashboard = lazy(() => import('../pages/Dashboard'))
 const Login = lazy(() => import('../pages/Login/Login'))
@@ -125,7 +124,7 @@ export const router = createBrowserRouter([
       /* ---------- Public routes ---------- */
       {
         index: true,
-        element: <Home />,
+        element: <Login />,
       },
       {
         path: 'help',

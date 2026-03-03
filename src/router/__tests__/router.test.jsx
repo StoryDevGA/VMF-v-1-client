@@ -61,15 +61,16 @@ beforeEach(() => {
 
 describe('Router', () => {
   describe('Route Configuration', () => {
-    it('should render home page at root path', async () => {
+    it('should redirect root path to login when unauthenticated', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/'],
       })
 
       renderWithProviders(<RouterProvider router={testRouter} />)
 
-      // Wait for lazy-loaded component
-      expect(await screen.findByText(/HOME/i, {}, { timeout: 10000 })).toBeInTheDocument()
+      expect(
+        await screen.findByRole('heading', { name: /^sign in$/i }, { timeout: 10000 }),
+      ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
     it('should render help page at /help', async () => {
@@ -282,34 +283,46 @@ describe('Router', () => {
   })
 
   describe('Navigation', () => {
-    it('should render navigation on all pages', async () => {
+    it('should render header logo on public pages', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/'],
       })
 
       renderWithProviders(<RouterProvider router={testRouter} />)
 
-      // Navigation should be present
-      expect(await screen.findByRole('navigation')).toBeInTheDocument()
+      await screen.findByRole('heading', { name: /^sign in$/i })
       expect(
         screen.getByRole('img', { name: 'StoryLineOS Logo' }),
       ).toBeInTheDocument()
     })
 
-    it('should have correct navigation links', async () => {
+    it('should show grouped admin navigation for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/'],
+        initialEntries: ['/super-admin/dashboard'],
       })
 
-      renderWithProviders(<RouterProvider router={testRouter} />)
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-nav-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
 
       await screen.findByRole('navigation')
 
-      const helpLink = screen.getByRole('link', { name: /help/i })
-      const vmfLink = screen.queryByRole('link', { name: /^vmf$/i })
-
-      expect(helpLink).toBeInTheDocument()
-      expect(vmfLink).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /system admin/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
+        'href',
+        '/super-admin/customers',
+      )
+      expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
     })
 
     it('should not render context controls in the global header', async () => {

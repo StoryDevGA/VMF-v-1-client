@@ -23,14 +23,17 @@
 
 import { useState, useEffect } from 'react'
 import { MdMenu } from 'react-icons/md'
+import { useSelector } from 'react-redux'
 import { Link } from '../Link'
 import { Logo } from '../Logo'
 import Navigation from '../Navigation'
+import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
+import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Header.css'
 
 export function Header({
   logo = <Logo size="large" />,
-  logoLink = '/',
+  logoLink,
   showNavigation = true,
   sticky = true,
   className = '',
@@ -38,6 +41,19 @@ export function Header({
   ...props
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const user = useSelector(selectCurrentUser)
+  const isSuperAdmin = checkIsSuperAdmin(user)
+  const hasCustomerAdminAccess = (user?.memberships ?? []).some(
+    (membership) => membership.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
+  )
+  const canAccessNavigation = isSuperAdmin || hasCustomerAdminAccess
+  const shouldShowNavigation = showNavigation && canAccessNavigation
+  const resolvedLogoLink = logoLink === undefined
+    ? (isAuthenticated
+      ? (isSuperAdmin ? '/super-admin/dashboard' : '/app/dashboard')
+      : '/app/login')
+    : logoLink
 
   const headerClasses = [
     'header',
@@ -74,9 +90,9 @@ export function Header({
     <header className={headerClasses} {...props}>
       <div className="header__container container">
         <div className="header__brand">
-          {logoLink ? (
+          {resolvedLogoLink ? (
             <Link
-              to={logoLink}
+              to={resolvedLogoLink}
               className="header__logo-link"
               variant="subtle"
               underline="none"
@@ -100,7 +116,7 @@ export function Header({
           )}
         </div>
 
-        {showNavigation && (
+        {shouldShowNavigation && (
           <>
             <button
               className="header__hamburger"

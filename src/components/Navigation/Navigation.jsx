@@ -1,21 +1,14 @@
 /**
  * Navigation Component
  *
- * Responsive navigation bar with active link highlighting.
- * Shows public links (Home, Help) for all visitors and
- * administration links (Edit Users, Maintain Tenants) when the
- * user is authenticated with appropriate roles.
- *
- * Features:
- * - Responsive design (mobile hamburger menu)
- * - Active route highlighting
- * - Role-aware admin section (CUSTOMER_ADMIN / SUPER_ADMIN)
- * - Accessible keyboard navigation
- * - Theme-aware styling
+ * Role-aware grouped navigation with accessible submenus.
+ * Dashboard is the application home and is reached via the logo.
  */
 
-import { NavLink } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
+import { MdExpandMore } from 'react-icons/md'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Navigation.css'
@@ -23,19 +16,107 @@ import './Navigation.css'
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
+  const location = useLocation()
 
   const isSuperAdmin = checkIsSuperAdmin(user)
   const hasCustomerAdminAccess = (user?.memberships ?? []).some(
-    (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
+    (membership) => membership.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
   )
-  const dashboardRoute = isSuperAdmin ? '/super-admin/dashboard' : '/app/dashboard'
 
-  const navClasses = [
-    'nav',
-    isOpen && 'nav--open'
-  ]
-    .filter(Boolean)
-    .join(' ')
+  const menuEntries = useMemo(() => {
+    if (!isAuthenticated) return []
+
+    const entries = []
+
+    if (isSuperAdmin) {
+      entries.push({
+        type: 'group',
+        key: 'system-admin',
+        label: 'System Admin',
+        links: [
+          { key: 'versioning', label: 'Versioning', to: '/super-admin/system-versioning' },
+          {
+            key: 'licence-maintenance',
+            label: 'Licence Maintenance',
+            to: '/super-admin/license-levels',
+          },
+        ],
+      })
+
+      entries.push({
+        type: 'link',
+        key: 'customer-admin',
+        label: 'Customer Admin',
+        to: '/super-admin/customers',
+      })
+    }
+
+    if (isSuperAdmin || hasCustomerAdminAccess) {
+      entries.push({
+        type: 'group',
+        key: 'system-health',
+        label: 'System Health',
+        links: [
+          {
+            key: 'monitoring',
+            label: 'Monitoring',
+            to: isSuperAdmin
+              ? '/super-admin/system-monitoring'
+              : '/app/administration/system-monitoring',
+          },
+          ...(isSuperAdmin
+            ? [
+                { key: 'audit-logs', label: 'Audit Logs', to: '/super-admin/audit-logs' },
+                {
+                  key: 'denied-access',
+                  label: 'Denied Access',
+                  to: '/super-admin/denied-access-logs',
+                },
+              ]
+            : []),
+        ],
+      })
+    }
+
+    return entries
+  }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin])
+
+  const [openMenuKey, setOpenMenuKey] = useState(null)
+
+  useEffect(() => {
+    if (!isOpen) setOpenMenuKey(null)
+  }, [isOpen])
+
+  useEffect(() => {
+    setOpenMenuKey(null)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setOpenMenuKey(null)
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [])
+
+  if (menuEntries.length === 0) return null
+
+  const navClasses = ['nav', isOpen && 'nav--open'].filter(Boolean).join(' ')
+
+  const toggleMenuGroup = (groupKey) => {
+    setOpenMenuKey((previous) => (previous === groupKey ? null : groupKey))
+  }
+
+  const handleSubmenuLinkClick = () => {
+    setOpenMenuKey(null)
+    onLinkClick()
+  }
+
+  const isGroupActive = (links) =>
+    links.some(
+      (link) => location.pathname === link.to || location.pathname.startsWith(`${link.to}/`),
+    )
 
   return (
     <nav
@@ -45,170 +126,76 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       id="mobile-navigation"
     >
       <div className="nav__container">
-        <ul className="nav__links">
-          <li className="nav__item--mobile-only">
-            <NavLink
-              to="/"
-              className={({ isActive }) =>
-                isActive ? 'nav__link nav__link--active' : 'nav__link'
-              }
-              onClick={onLinkClick}
-            >
-              <span className="nav__text">Home</span>
-            </NavLink>
-          </li>
-          {/* ---- Dashboard (all authenticated users) ---- */}
-          {isAuthenticated && (
-            <li>
-              <NavLink
-                to={dashboardRoute}
-                className={({ isActive }) =>
-                  isActive ? 'nav__link nav__link--active' : 'nav__link'
-                }
-                onClick={onLinkClick}
+        <ul className="nav__links" aria-label="Primary menu">
+          {menuEntries.map((entry) => {
+            if (entry.type === 'link') {
+              return (
+                <li key={entry.key} className="nav__item nav__item--link">
+                  <NavLink
+                    to={entry.to}
+                    className={({ isActive }) =>
+                      isActive ? 'nav__link nav__link--active' : 'nav__link'
+                    }
+                    onClick={handleSubmenuLinkClick}
+                  >
+                    <span className="nav__text">{entry.label}</span>
+                  </NavLink>
+                </li>
+              )
+            }
+
+            const isOpenGroup = openMenuKey === entry.key
+            const activeGroup = isGroupActive(entry.links)
+            const submenuId = `nav-submenu-${entry.key}`
+
+            const groupClasses = ['nav__item', 'nav__item--group', activeGroup && 'nav__item--active']
+              .filter(Boolean)
+              .join(' ')
+
+            return (
+              <li
+                key={entry.key}
+                className={groupClasses}
               >
-                <span className="nav__text">Dashboard</span>
-              </NavLink>
-            </li>
-          )}
+                <button
+                  type="button"
+                  className="nav__group-toggle"
+                  onClick={() => toggleMenuGroup(entry.key)}
+                  aria-expanded={isOpenGroup}
+                  aria-controls={submenuId}
+                >
+                  <span className="nav__text">{entry.label}</span>
+                  <MdExpandMore
+                    className={`nav__group-icon ${isOpenGroup ? 'nav__group-icon--open' : ''}`}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                </button>
 
-          {/* ---- Customer administration links (CUSTOMER_ADMIN only) ---- */}
-          {isAuthenticated && hasCustomerAdminAccess && (
-            <>
-              <li className="nav__separator" aria-hidden="true" />
-              <li>
-                <NavLink
-                  to="/app/administration/edit-users"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
+                <div
+                  id={submenuId}
+                  className="nav__submenu-panel"
+                  hidden={!isOpenGroup}
                 >
-                  <span className="nav__text">Users</span>
-                </NavLink>
+                  <ul className="nav__submenu">
+                    {entry.links.map((link) => (
+                      <li key={link.key} className="nav__submenu-item">
+                        <NavLink
+                          to={link.to}
+                          className={({ isActive }) =>
+                            isActive ? 'nav__submenu-link nav__submenu-link--active' : 'nav__submenu-link'
+                          }
+                          onClick={handleSubmenuLinkClick}
+                        >
+                          <span className="nav__text">{link.label}</span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </li>
-              <li>
-                <NavLink
-                  to="/app/administration/maintain-tenants"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Tenants</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/app/administration/system-monitoring"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Monitoring</span>
-                </NavLink>
-              </li>
-            </>
-          )}
-
-          {/* ---- Super-admin links (SUPER_ADMIN only) ---- */}
-          {isAuthenticated && isSuperAdmin && (
-            <>
-              <li className="nav__separator" aria-hidden="true" />
-              <li>
-                <NavLink
-                  to="/super-admin/invitations"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Invitations</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/system-versioning"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Versioning</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/license-levels"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Licence Levels</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/customers"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Customers</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/audit-logs"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Audit Logs</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/denied-access-logs"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Denied Access</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/super-admin/system-monitoring"
-                  className={({ isActive }) =>
-                    isActive ? 'nav__link nav__link--active' : 'nav__link'
-                  }
-                  onClick={onLinkClick}
-                >
-                  <span className="nav__text">Monitoring</span>
-                </NavLink>
-              </li>
-            </>
-          )}
-
-          <li>
-            <NavLink
-              to="/help"
-              className={({ isActive }) =>
-                isActive ? 'nav__link nav__link--active' : 'nav__link'
-              }
-              onClick={onLinkClick}
-            >
-              <span className="nav__text">Help</span>
-            </NavLink>
-          </li>
-
-
+            )
+          })}
         </ul>
       </div>
     </nav>

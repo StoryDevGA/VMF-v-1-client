@@ -1,5 +1,5 @@
 /**
- * Navigation — component tests
+ * Navigation component tests
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -14,13 +14,11 @@ import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
 
-// ── Polyfills ────────────────────────────────────────────
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
 })
 
-// ── User fixtures ────────────────────────────────────────
 const anonymousUser = null
 
 const customerAdminUser = {
@@ -53,7 +51,6 @@ const basicUser = {
   vmfGrants: [],
 }
 
-// ── Helpers ──────────────────────────────────────────────
 function createTestStore(user, status = 'authenticated') {
   return configureStore({
     reducer: {
@@ -68,129 +65,133 @@ function createTestStore(user, status = 'authenticated') {
   })
 }
 
-function renderNavigation(store, onLinkClick) {
+function renderNavigation(store, onLinkClick, initialEntries = ['/']) {
   return render(
     <Provider store={store}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <Navigation onLinkClick={onLinkClick} />
       </MemoryRouter>
     </Provider>,
   )
 }
 
-// ── Tests ────────────────────────────────────────────────
 describe('Navigation', () => {
-  it('renders Home and Help links always (unauthenticated)', () => {
+  it('does not render admin menus for unauthenticated users', () => {
     const store = createTestStore(anonymousUser, 'idle')
     renderNavigation(store)
 
-    // Home link is inside a mobile-only wrapper (hidden on desktop viewports)
-    expect(screen.getByText(/home/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /help/i })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('does NOT show admin links for unauthenticated users', () => {
-    const store = createTestStore(anonymousUser, 'idle')
+  it('does not render admin menus for basic users', () => {
+    const store = createTestStore(basicUser)
     renderNavigation(store)
 
-    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('shows Users, Tenants, and Monitoring links for CUSTOMER_ADMIN', () => {
+  it('shows system health submenu with monitoring for CUSTOMER_ADMIN', async () => {
+    const user = userEvent.setup()
     const store = createTestStore(customerAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /tenants/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /monitoring/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^customer admin$/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /system health/i }))
+    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
+      'href',
+      '/app/administration/system-monitoring',
+    )
+    expect(screen.queryByRole('link', { name: /audit logs/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /denied access/i })).not.toBeInTheDocument()
   })
 
-  it('shows super-admin links and hides customer-admin links for SUPER_ADMIN', () => {
+  it('shows system admin submenu links for SUPER_ADMIN', async () => {
+    const user = userEvent.setup()
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /invitations/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /system admin/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
       'href',
-      '/super-admin/invitations',
+      '/super-admin/customers',
     )
+    await user.click(screen.getByRole('button', { name: /system admin/i }))
+
     expect(screen.getByRole('link', { name: /versioning/i })).toHaveAttribute(
       'href',
       '/super-admin/system-versioning',
+    )
+    expect(screen.getByRole('link', { name: /licence maintenance/i })).toHaveAttribute(
+      'href',
+      '/super-admin/license-levels',
+    )
+  })
+
+  it('shows system health submenu links for SUPER_ADMIN', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /system health/i }))
+    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-monitoring',
+    )
+    expect(screen.getByRole('link', { name: /audit logs/i })).toHaveAttribute(
+      'href',
+      '/super-admin/audit-logs',
     )
     expect(screen.getByRole('link', { name: /denied access/i })).toHaveAttribute(
       'href',
       '/super-admin/denied-access-logs',
     )
-    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
-      'href',
-      '/super-admin/system-monitoring',
-    )
-    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
   })
 
-  it('does NOT show admin links for basic USER role', () => {
-    const store = createTestStore(basicUser)
-    renderNavigation(store)
+  it('calls onLinkClick when submenu link is clicked', async () => {
+    const user = userEvent.setup()
+    const onLinkClick = vi.fn()
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store, onLinkClick)
 
-    expect(screen.queryByRole('link', { name: /users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /tenants/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /monitoring/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^admin$/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /system admin/i }))
+    await user.click(screen.getByRole('link', { name: /versioning/i }))
+    expect(onLinkClick).toHaveBeenCalled()
   })
 
-  it('shows Dashboard for authenticated users', () => {
-    const store = createTestStore(basicUser)
-    renderNavigation(store)
+  it('marks active submenu link with correct class', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store, undefined, ['/super-admin/system-versioning'])
 
-    const dashboardLink = screen.getByRole('link', { name: /dashboard/i })
-    expect(dashboardLink).toBeInTheDocument()
-    expect(dashboardLink).toHaveAttribute('href', '/app/dashboard')
+    await user.click(screen.getByRole('button', { name: /system admin/i }))
+    const versioningLink = screen.getByRole('link', { name: /versioning/i })
+    expect(versioningLink.className).toMatch(/active/i)
   })
 
-  it('routes SUPER_ADMIN dashboard link to the super-admin dashboard', () => {
+  it('closes an open submenu when Escape is pressed', async () => {
+    const user = userEvent.setup()
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('link', { name: /dashboard/i })).toHaveAttribute(
-      'href',
-      '/super-admin/dashboard',
+    await user.click(screen.getByRole('button', { name: /system admin/i }))
+    expect(screen.getByRole('link', { name: /versioning/i })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('link', { name: /versioning/i })).not.toBeInTheDocument()
+  })
+
+  it('renders navigation with expected accessibility attributes', () => {
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    const navigation = screen.getByRole('navigation', { name: /main navigation/i })
+    expect(navigation).toHaveAttribute('id', 'mobile-navigation')
+    expect(screen.getByRole('button', { name: /system admin/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
     )
-  })
-
-  it('calls onLinkClick when Dashboard is clicked', async () => {
-    const onLinkClick = vi.fn()
-    const store = createTestStore(customerAdminUser)
-    renderNavigation(store, onLinkClick)
-
-    await userEvent.click(screen.getByRole('link', { name: /dashboard/i }))
-    expect(onLinkClick).toHaveBeenCalled()
-  })
-
-  it('calls onLinkClick when a link is clicked', async () => {
-    const onLinkClick = vi.fn()
-    const store = createTestStore(anonymousUser, 'idle')
-    renderNavigation(store, onLinkClick)
-
-    await userEvent.click(screen.getByRole('link', { name: /help/i }))
-    expect(onLinkClick).toHaveBeenCalled()
-  })
-
-  it('marks active link with correct class', () => {
-    const store = createTestStore(anonymousUser, 'idle')
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={['/help']}>
-          <Navigation />
-        </MemoryRouter>
-      </Provider>,
-    )
-
-    const helpLink = screen.getByRole('link', { name: /help/i })
-    expect(helpLink.className).toMatch(/active/i)
   })
 })
