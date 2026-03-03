@@ -135,6 +135,33 @@ describe('Navigation', () => {
     )
   })
 
+  it('renders the super-admin top-level menu in locked order', () => {
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    const primaryMenu = screen.getByRole('list', { name: /primary menu/i })
+    const topLevelItems = Array.from(primaryMenu.children)
+
+    expect(within(topLevelItems[0]).getByRole('button', { name: /^system admin$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[1]).getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
+      'href',
+      '/super-admin/customers',
+    )
+    expect(within(topLevelItems[2]).getByRole('button', { name: /^system health$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[3]).getByRole('link', { name: /^help$/i })).toHaveAttribute(
+      'href',
+      '/help',
+    )
+  })
+
+  it('does not render a Dashboard top-level menu item for SUPER_ADMIN', () => {
+    const store = createTestStore(superAdminUser)
+    renderNavigation(store)
+
+    expect(screen.queryByRole('link', { name: /^dashboard$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^dashboard$/i })).not.toBeInTheDocument()
+  })
+
   it('shows system health submenu links for SUPER_ADMIN', async () => {
     const user = userEvent.setup()
     const store = createTestStore(superAdminUser)

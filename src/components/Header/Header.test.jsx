@@ -2,7 +2,7 @@
  * Header Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { act } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -150,6 +150,22 @@ describe('Header Component', () => {
       )
       const logoLink = screen.getByLabelText('Home')
       expect(logoLink).toHaveAttribute('href', '/app/dashboard')
+    })
+
+    it('should link logo to app login when unauthenticated', () => {
+      render(
+        <RouterWrapper
+          authState={{
+            user: null,
+            status: 'unauthenticated',
+          }}
+        >
+          <Header logo="Company" />
+        </RouterWrapper>
+      )
+
+      const logoLink = screen.getByLabelText('Home')
+      expect(logoLink).toHaveAttribute('href', '/app/login')
     })
 
     it('should link logo to super-admin dashboard for super admins', () => {

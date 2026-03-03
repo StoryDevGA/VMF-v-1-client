@@ -15,6 +15,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
+    "test:shell": "vitest run src/components/Header/Header.test.jsx src/components/Navigation/Navigation.test.jsx src/router/__tests__/router.test.jsx src/pages/Login/Login.test.jsx src/pages/SuperAdminLogin/SuperAdminLogin.test.jsx",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

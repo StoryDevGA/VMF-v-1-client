@@ -261,6 +261,14 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should require SUPER_ADMIN role on /super-admin route group', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const superAdminRoute = rootRoute?.children?.find((route) => route.path === 'super-admin')
+
+      expect(superAdminRoute?.element?.props?.requiredRole).toBe('SUPER_ADMIN')
+      expect(superAdminRoute?.element?.props?.redirectTo).toBe('/super-admin/login')
+    })
+
   })
 
   describe('Navigation', () => {
