@@ -3,7 +3,6 @@ import {
   invitationApi,
   useListInvitationsQuery,
   useLazyListInvitationsQuery,
-  useCreateInvitationMutation,
   useGetInvitationQuery,
   useResendInvitationMutation,
   useRevokeInvitationMutation,
@@ -12,7 +11,6 @@ import {
 describe('invitationApi', () => {
   it('exposes invitation endpoints', () => {
     expect(invitationApi.endpoints).toHaveProperty('listInvitations')
-    expect(invitationApi.endpoints).toHaveProperty('createInvitation')
     expect(invitationApi.endpoints).toHaveProperty('getInvitation')
     expect(invitationApi.endpoints).toHaveProperty('resendInvitation')
     expect(invitationApi.endpoints).toHaveProperty('revokeInvitation')
@@ -25,7 +23,6 @@ describe('invitationApi', () => {
   })
 
   it('exports mutation hooks', () => {
-    expect(typeof useCreateInvitationMutation).toBe('function')
     expect(typeof useResendInvitationMutation).toBe('function')
     expect(typeof useRevokeInvitationMutation).toBe('function')
   })

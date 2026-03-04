@@ -39,10 +39,6 @@
   min-width: 0;
 }
 
-.super-admin-invitations__fieldset--form {
-  max-width: 30rem;
-}
-
 .super-admin-invitations__legend {
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -58,17 +54,6 @@
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-lg);
-}
-
-.super-admin-invitations__form {
-  display: grid;
-  gap: var(--spacing-lg);
-}
-
-.super-admin-invitations__form-actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
 }
 
 .super-admin-invitations__toolbar {
@@ -171,16 +156,4 @@
   word-break: break-all;
   white-space: pre-wrap;
   color: var(--color-text-primary);
-}
-
-@media (min-width: 1280px) {
-  .super-admin-invitations__grid {
-    grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .super-admin-invitations__card--form {
-    width: 100%;
-    max-width: 28rem;
-  }
 }

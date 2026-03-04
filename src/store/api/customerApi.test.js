@@ -19,6 +19,7 @@ import {
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
+  useCreateCustomerAdminInvitationMutation,
   useAssignAdminMutation,
   useReplaceCustomerAdminMutation,
 } from './customerApi.js'
@@ -32,6 +33,7 @@ describe('customerApi', () => {
     expect(endpoints).toHaveProperty('getCustomer')
     expect(endpoints).toHaveProperty('updateCustomer')
     expect(endpoints).toHaveProperty('updateCustomerStatus')
+    expect(endpoints).toHaveProperty('createCustomerAdminInvitation')
     expect(endpoints).toHaveProperty('assignAdmin')
     expect(endpoints).toHaveProperty('replaceCustomerAdmin')
   })
@@ -47,6 +49,7 @@ describe('customerApi', () => {
     expect(typeof useOnboardCustomerMutation).toBe('function')
     expect(typeof useUpdateCustomerMutation).toBe('function')
     expect(typeof useUpdateCustomerStatusMutation).toBe('function')
+    expect(typeof useCreateCustomerAdminInvitationMutation).toBe('function')
     expect(typeof useAssignAdminMutation).toBe('function')
     expect(typeof useReplaceCustomerAdminMutation).toBe('function')
   })
@@ -79,6 +82,11 @@ describe('customerApi', () => {
   it('updateCustomerStatus endpoint should be a mutation', () => {
     expect(customerApi.endpoints.updateCustomerStatus).toBeDefined()
     expect(typeof customerApi.endpoints.updateCustomerStatus.initiate).toBe('function')
+  })
+
+  it('createCustomerAdminInvitation endpoint should be a mutation', () => {
+    expect(customerApi.endpoints.createCustomerAdminInvitation).toBeDefined()
+    expect(typeof customerApi.endpoints.createCustomerAdminInvitation.initiate).toBe('function')
   })
 
   it('assignAdmin endpoint should be a mutation', () => {

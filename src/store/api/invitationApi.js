@@ -34,15 +34,6 @@ export const invitationApi = baseApi.injectEndpoints({
           : [listTag],
     }),
 
-    createInvitation: build.mutation({
-      query: (body) => ({
-        url: '/super-admin/invitations',
-        method: 'POST',
-        body,
-      }),
-      invalidatesTags: [listTag],
-    }),
-
     getInvitation: build.query({
       query: (invitationId) => `/super-admin/invitations/${invitationId}`,
       providesTags: (_result, _error, invitationId) => [
@@ -80,7 +71,6 @@ export const invitationApi = baseApi.injectEndpoints({
 export const {
   useListInvitationsQuery,
   useLazyListInvitationsQuery,
-  useCreateInvitationMutation,
   useGetInvitationQuery,
   useResendInvitationMutation,
   useRevokeInvitationMutation,

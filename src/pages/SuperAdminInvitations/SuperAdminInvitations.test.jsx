@@ -6,7 +6,6 @@ import SuperAdminInvitations from './SuperAdminInvitations'
 
 vi.mock('../../store/api/invitationApi.js', () => ({
   useListInvitationsQuery: vi.fn(),
-  useCreateInvitationMutation: vi.fn(),
   useResendInvitationMutation: vi.fn(),
   useRevokeInvitationMutation: vi.fn(),
 }))
@@ -17,7 +16,6 @@ vi.mock('../../components/StepUpAuthForm', () => ({
 
 import {
   useListInvitationsQuery,
-  useCreateInvitationMutation,
   useResendInvitationMutation,
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
@@ -41,19 +39,19 @@ describe('SuperAdminInvitations page', () => {
       error: null,
     })
 
-    useCreateInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useResendInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useRevokeInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
-  it('renders heading and create form', () => {
+  it('renders heading and invitation history without create form', () => {
     renderPage()
 
     expect(
       screen.getByRole('heading', { name: /invitation management/i }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /send invitation/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /invitation history/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /create invitation/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /send invitation/i })).not.toBeInTheDocument()
   })
 
   it('disables Revoke action for revoked invitations', async () => {

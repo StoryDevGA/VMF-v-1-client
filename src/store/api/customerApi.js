@@ -11,6 +11,7 @@
  *   - getCustomer        GET  /api/v1/customers/:customerId
  *   - updateCustomer     PATCH /api/v1/customers/:customerId
  *   - updateCustomerStatus PATCH /api/v1/customers/:customerId/status
+ *   - createCustomerAdminInvitation POST /api/v1/customers/:customerId/admin-invitations
  *   - assignAdmin        POST /api/v1/customers/:customerId/admins
  *   - replaceCustomerAdmin POST /api/v1/customers/:customerId/admins/replace
  *
@@ -171,6 +172,19 @@ export const customerApi = baseApi.injectEndpoints({
       ],
     }),
 
+    /* ---- Create Customer Admin Invitation ---- */
+    createCustomerAdminInvitation: builder.mutation({
+      query: ({ customerId, recipientName, recipientEmail }) => ({
+        url: `/customers/${customerId}/admin-invitations`,
+        method: 'POST',
+        body: {
+          recipientName: String(recipientName ?? '').trim(),
+          recipientEmail: String(recipientEmail ?? '').trim().toLowerCase(),
+        },
+      }),
+      invalidatesTags: [{ type: 'Invitation', id: 'LIST' }],
+    }),
+
     /* ---- Assign Customer Admin ----
      * Returns 409 when active canonical admin already exists.
      * Success payload includes `canonicalAdminUserId`.
@@ -213,6 +227,7 @@ export const {
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
+  useCreateCustomerAdminInvitationMutation,
   useAssignAdminMutation,
   useReplaceCustomerAdminMutation,
 } = customerApi

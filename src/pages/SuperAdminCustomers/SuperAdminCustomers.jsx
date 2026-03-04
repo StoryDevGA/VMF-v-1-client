@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -21,12 +21,13 @@ import {
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
-  useAssignAdminMutation,
+  useCreateCustomerAdminInvitationMutation,
   useReplaceCustomerAdminMutation,
 } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import {
   normalizeError,
+  getErrorMessage,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
 } from '../../utils/errors.js'
@@ -51,15 +52,16 @@ const BILLING_CYCLE_OPTIONS = [
   { value: 'ANNUAL', label: 'Annual' },
 ]
 
-const VMF_POLICY_OPTIONS = {
-  SINGLE_TENANT: [
-    { value: 'SINGLE', label: 'Single VMF' },
-    { value: 'MULTI', label: 'Multiple VMFs' },
-  ],
-  MULTI_TENANT: [
-    { value: 'PER_TENANT_SINGLE', label: 'Per Tenant Single VMF' },
-    { value: 'PER_TENANT_MULTI', label: 'Per Tenant Multi VMF' },
-  ],
+const EMAIL_REGEX = /^\S+@\S+\.\S+$/
+const ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE =
+  'An active invitation for this email is already tied to another user and is not linked to this customer yet. Revoke that invitation or wait for expiry, then retry.'
+const ASSIGN_INVITATION_ALREADY_ACTIVE_FALLBACK_MESSAGE =
+  'An active invitation for this email already exists. Review Invitation Management before retrying.'
+const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
+  DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
+  ACTIVE_INVITATION_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
+  INVITATION_ALREADY_ACTIVE_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
+  EMAIL_ACTIVE_FOR_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
 }
 
 const INITIAL_FORM = {
@@ -82,8 +84,6 @@ const normalizeWorkspaceView = (value) =>
 
 const getCustomerId = (customer) => customer?.id ?? customer?._id
 const displayStatus = (value) => (value === 'DISABLED' ? 'INACTIVE' : value || '--')
-const getDefaultVmfPolicy = (topology) =>
-  topology === 'MULTI_TENANT' ? 'PER_TENANT_SINGLE' : 'SINGLE'
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -93,6 +93,22 @@ const formatDate = (value) => {
 }
 
 const parsePositiveInt = (value) => Number.parseInt(String(value ?? '').trim(), 10)
+
+const getRowActionMenuId = (row) => {
+  const rawId = String(getCustomerId(row) ?? row?.name ?? 'customer').toLowerCase()
+  const safeId = rawId.replace(/[^a-z0-9_-]/g, '-')
+  return `sa-customer-row-actions-${safeId}`
+}
+
+const getVmfPolicyForCount = (topology, vmfCount) => {
+  const parsedCount = parsePositiveInt(vmfCount)
+  const normalizedCount = Number.isInteger(parsedCount) && parsedCount > 1 ? parsedCount : 1
+
+  if (topology === 'MULTI_TENANT') {
+    return normalizedCount > 1 ? 'PER_TENANT_MULTI' : 'PER_TENANT_SINGLE'
+  }
+  return normalizedCount > 1 ? 'MULTI' : 'SINGLE'
+}
 
 const isValidUrl = (value) => {
   if (!value) return true
@@ -108,7 +124,10 @@ const createFormFromCustomer = (customer) => ({
   name: customer?.name ?? '',
   website: customer?.website ?? '',
   topology: customer?.topology ?? 'SINGLE_TENANT',
-  vmfPolicy: customer?.vmfPolicy ?? getDefaultVmfPolicy(customer?.topology),
+  vmfPolicy: customer?.vmfPolicy ?? getVmfPolicyForCount(
+    customer?.topology ?? 'SINGLE_TENANT',
+    customer?.governance?.maxVmfsPerTenant ?? 1,
+  ),
   licenseLevelId: customer?.licenseLevelId ?? '',
   maxTenants: String(customer?.governance?.maxTenants ?? 1),
   maxVmfsPerTenant: String(customer?.governance?.maxVmfsPerTenant ?? 1),
@@ -131,17 +150,21 @@ const validateForm = (form) => {
   if (!form.licenseLevelId) errors.licenseLevelId = 'Licence level is required.'
   else payload.licenseLevelId = form.licenseLevelId
 
-  const maxTenants = parsePositiveInt(form.maxTenants)
-  const maxVmfsPerTenant = parsePositiveInt(form.maxVmfsPerTenant)
-  if (!Number.isInteger(maxTenants) || maxTenants < 1) {
-    errors.maxTenants = 'Max tenants must be at least 1.'
+  let maxTenants = 1
+  if (form.topology === 'MULTI_TENANT') {
+    maxTenants = parsePositiveInt(form.maxTenants)
+    if (!Number.isInteger(maxTenants) || maxTenants < 1) {
+      errors.maxTenants = 'Max tenants must be at least 1.'
+    }
   }
+
+  const maxVmfsPerTenant = parsePositiveInt(form.maxVmfsPerTenant)
   if (!Number.isInteger(maxVmfsPerTenant) || maxVmfsPerTenant < 1) {
-    errors.maxVmfsPerTenant = 'Max VMFs per tenant must be at least 1.'
+    errors.maxVmfsPerTenant = 'VMF count must be at least 1.'
   }
 
   payload.topology = form.topology
-  payload.vmfPolicy = form.vmfPolicy
+  payload.vmfPolicy = getVmfPolicyForCount(form.topology, maxVmfsPerTenant)
   payload.isServiceProvider = form.topology === 'MULTI_TENANT'
   payload.governance = { maxTenants, maxVmfsPerTenant }
   payload.billing = {
@@ -152,6 +175,148 @@ const validateForm = (form) => {
   return { errors, payload }
 }
 
+const getFirstErrorDetailMessage = (details) => {
+  if (!details || typeof details !== 'object') return ''
+
+  const stack = [details]
+  while (stack.length > 0) {
+    const current = stack.shift()
+
+    if (typeof current === 'string' && current.trim()) {
+      return current.trim()
+    }
+
+    if (Array.isArray(current)) {
+      stack.push(...current)
+      continue
+    }
+
+    if (current && typeof current === 'object') {
+      if (typeof current.message === 'string' && current.message.trim()) {
+        return current.message.trim()
+      }
+      stack.push(...Object.values(current))
+    }
+  }
+
+  return ''
+}
+
+const getAssignAdminErrorMessage = (appError) => {
+  if (appError?.status === 409 && appError?.code === 'INVITATION_ALREADY_ACTIVE') {
+    const reason = String(appError?.details?.reason ?? '')
+      .trim()
+      .toUpperCase()
+    if (reason && INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP[reason]) {
+      return INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP[reason]
+    }
+
+    const detailMessage = getFirstErrorDetailMessage(appError?.details)
+    if (detailMessage && detailMessage.trim().toUpperCase() !== reason) {
+      return detailMessage
+    }
+
+    const backendMessage = String(appError?.message ?? '').trim()
+    const genericMessage = getErrorMessage('INVITATION_ALREADY_ACTIVE')
+    const backendMessageIsGeneric =
+      !backendMessage ||
+      backendMessage === genericMessage ||
+      backendMessage.startsWith(`${genericMessage} (Ref:`)
+
+    if (!backendMessageIsGeneric) {
+      return backendMessage
+    }
+
+    return ASSIGN_INVITATION_ALREADY_ACTIVE_FALLBACK_MESSAGE
+  }
+
+  const detailMessage = getFirstErrorDetailMessage(appError?.details)
+  if (detailMessage) return detailMessage
+
+  return appError?.message || getErrorMessage(appError?.code)
+}
+
+function CustomerRowActionsMenu({ row, actions, onAction }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+  const menuId = getRowActionMenuId(row)
+  const rowName = row?.name || row?.id || 'customer'
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+
+    const handleDocumentPointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [isOpen])
+
+  return (
+    <div className="super-admin-customers__row-actions" ref={containerRef}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="super-admin-customers__row-actions-trigger"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        aria-label={`Actions for ${rowName}`}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        Actions
+      </Button>
+      {isOpen ? (
+        <div
+          id={menuId}
+          className="super-admin-customers__row-actions-menu"
+          role="menu"
+          aria-label={`Actions for ${rowName}`}
+        >
+          {actions.map((action) => {
+            const isDisabled = typeof action.disabled === 'function'
+              ? action.disabled(row)
+              : Boolean(action.disabled)
+
+            return (
+              <button
+                key={action.label}
+                type="button"
+                className="super-admin-customers__row-action"
+                role="menuitem"
+                disabled={isDisabled}
+                aria-label={`${action.label} ${rowName}`}
+                onClick={() => {
+                  if (isDisabled) return
+                  onAction(action.label, row)
+                  setIsOpen(false)
+                }}
+              >
+                {action.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const { addToast } = useToaster()
   const [search, setSearch] = useState('')
@@ -159,6 +324,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [topologyFilter, setTopologyFilter] = useState('')
   const [page, setPage] = useState(1)
 
+  const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState(INITIAL_FORM)
   const [createErrors, setCreateErrors] = useState({})
 
@@ -170,10 +336,15 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [adminDialogOpen, setAdminDialogOpen] = useState(false)
   const [adminMode, setAdminMode] = useState('assign')
   const [adminCustomer, setAdminCustomer] = useState(null)
+  const [adminRecipientName, setAdminRecipientName] = useState('')
+  const [adminRecipientEmail, setAdminRecipientEmail] = useState('')
   const [adminUserId, setAdminUserId] = useState('')
   const [adminReason, setAdminReason] = useState('')
   const [adminStepUpToken, setAdminStepUpToken] = useState('')
   const [adminError, setAdminError] = useState('')
+  const [authLinkDialogOpen, setAuthLinkDialogOpen] = useState(false)
+  const [lastAuthLink, setLastAuthLink] = useState('')
+  const [pendingInvitationTabSwitch, setPendingInvitationTabSwitch] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -210,7 +381,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [createCustomer, createResult] = useCreateCustomerMutation()
   const [updateCustomer, updateResult] = useUpdateCustomerMutation()
   const [updateCustomerStatus, updateStatusResult] = useUpdateCustomerStatusMutation()
-  const [assignAdmin, assignAdminResult] = useAssignAdminMutation()
+  const [createCustomerAdminInvitation, createAdminInvitationResult] =
+    useCreateCustomerAdminInvitationMutation()
   const [replaceCustomerAdmin, replaceAdminResult] = useReplaceCustomerAdminMutation()
 
   const rows = listResponse?.data ?? []
@@ -242,6 +414,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       try {
         await createCustomer(payload).unwrap()
         setCreateForm(INITIAL_FORM)
+        setCreateErrors({})
+        setCreateOpen(false)
         addToast({
           title: 'Customer created',
           description: `${payload.name} was created successfully.`,
@@ -262,6 +436,17 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     },
     [createCustomer, createForm, addToast],
   )
+
+  const openCreateDialog = useCallback(() => {
+    setCreateErrors({})
+    setCreateOpen(true)
+  }, [])
+
+  const closeCreateDialog = useCallback(() => {
+    setCreateOpen(false)
+    setCreateForm(INITIAL_FORM)
+    setCreateErrors({})
+  }, [])
 
   const openEditDialog = useCallback((row) => {
     const customerId = getCustomerId(row)
@@ -336,6 +521,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const openAdminDialog = useCallback((mode, row) => {
     setAdminMode(mode)
     setAdminCustomer(row)
+    setAdminRecipientName('')
+    setAdminRecipientEmail('')
     setAdminUserId('')
     setAdminReason('')
     setAdminStepUpToken('')
@@ -346,22 +533,46 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const closeAdminDialog = useCallback(() => {
     setAdminDialogOpen(false)
     setAdminCustomer(null)
+    setAdminRecipientName('')
+    setAdminRecipientEmail('')
     setAdminUserId('')
     setAdminReason('')
     setAdminStepUpToken('')
     setAdminError('')
   }, [])
 
+  const closeAuthLinkDialog = useCallback(() => {
+    setAuthLinkDialogOpen(false)
+    setLastAuthLink('')
+    if (pendingInvitationTabSwitch) {
+      setPendingInvitationTabSwitch(false)
+      onAssignAdminSuccess?.()
+    }
+  }, [onAssignAdminSuccess, pendingInvitationTabSwitch])
+
   const handleAdminMutation = useCallback(async () => {
     if (!adminCustomer) return
     const customerId = getCustomerId(adminCustomer)
     if (!customerId) return
 
-    if (!adminUserId.trim()) {
-      setAdminError('User ID is required.')
-      return
-    }
-    if (adminMode === 'replace') {
+    if (adminMode === 'assign') {
+      if (!adminRecipientName.trim()) {
+        setAdminError('User name is required.')
+        return
+      }
+      if (!adminRecipientEmail.trim()) {
+        setAdminError('Email is required.')
+        return
+      }
+      if (!EMAIL_REGEX.test(adminRecipientEmail.trim())) {
+        setAdminError('Please enter a valid email address.')
+        return
+      }
+    } else {
+      if (!adminUserId.trim()) {
+        setAdminError('New User ID is required.')
+        return
+      }
       if (!adminReason.trim()) {
         setAdminError('Reason is required.')
         return
@@ -374,7 +585,42 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
 
     try {
       if (adminMode === 'assign') {
-        await assignAdmin({ customerId, userId: adminUserId.trim() }).unwrap()
+        const result = await createCustomerAdminInvitation({
+          customerId,
+          recipientName: adminRecipientName.trim(),
+          recipientEmail: adminRecipientEmail.trim(),
+        }).unwrap()
+
+        const outcome = result?.outcome ?? result?.data?.outcome
+        if (outcome === 'send_failed') {
+          addToast({
+            title: 'Invitation created',
+            description:
+              'Invitation was created, but email delivery failed. Check Invitation Management for status.',
+            variant: 'warning',
+          })
+        } else if (outcome === 'linked_existing') {
+          addToast({
+            title: 'Existing invitation linked',
+            description: `An active invitation is already available for ${adminCustomer.name}.`,
+            variant: 'success',
+          })
+        } else {
+          addToast({
+            title: 'Invitation created',
+            description: `Invitation sent for ${adminCustomer.name}.`,
+            variant: 'success',
+          })
+        }
+
+        const authLink = result?.authLink ?? result?.data?.authLink
+        if (authLink) {
+          setLastAuthLink(authLink)
+          setAuthLinkDialogOpen(true)
+          setPendingInvitationTabSwitch(true)
+        } else {
+          onAssignAdminSuccess?.()
+        }
       } else {
         await replaceCustomerAdmin({
           customerId,
@@ -382,45 +628,95 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           reason: adminReason.trim(),
           stepUpToken: adminStepUpToken,
         }).unwrap()
-      }
-      addToast({
-        title: adminMode === 'assign' ? 'Customer admin assigned' : 'Customer admin replaced',
-        description: `Canonical admin updated for ${adminCustomer.name}.`,
-        variant: 'success',
-      })
-      if (adminMode === 'assign') {
-        onAssignAdminSuccess?.()
+        addToast({
+          title: 'Customer admin replaced',
+          description: `Canonical admin updated for ${adminCustomer.name}.`,
+          variant: 'success',
+        })
       }
       closeAdminDialog()
     } catch (err) {
       const appError = normalizeError(err)
-      if (isCanonicalAdminConflictError(appError)) {
+      if (adminMode === 'replace' && isCanonicalAdminConflictError(appError)) {
         setAdminError(
           getCanonicalAdminConflictMessage(
             appError,
-            adminMode === 'assign' ? 'assign' : 'update_roles',
+            'update_roles',
           ),
         )
         return
       }
+
+      if (adminMode === 'assign') {
+        setAdminError(getAssignAdminErrorMessage(appError))
+        return
+      }
+
       setAdminError(appError.message)
     }
   }, [
     addToast,
     adminCustomer,
     adminMode,
+    adminRecipientEmail,
+    adminRecipientName,
     adminReason,
     adminStepUpToken,
     adminUserId,
-    assignAdmin,
     closeAdminDialog,
+    createCustomerAdminInvitation,
     onAssignAdminSuccess,
     replaceCustomerAdmin,
   ])
 
+  const rowActions = useMemo(
+    () => [
+      { label: 'Edit' },
+      {
+        label: 'Set Active',
+        disabled: (row) => displayStatus(row?.status) === 'ACTIVE',
+      },
+      {
+        label: 'Set Inactive',
+        disabled: (row) => displayStatus(row?.status) === 'INACTIVE',
+      },
+      { label: 'Assign Admin' },
+      { label: 'Replace Admin' },
+    ],
+    [],
+  )
+
+  const handleRowAction = useCallback(
+    (label, row) => {
+      if (label === 'Edit') openEditDialog(row)
+      if (label === 'Set Active') handleUpdateStatus(row, 'ACTIVE')
+      if (label === 'Set Inactive') handleUpdateStatus(row, 'INACTIVE')
+      if (label === 'Assign Admin') openAdminDialog('assign', row)
+      if (label === 'Replace Admin') openAdminDialog('replace', row)
+    },
+    [handleUpdateStatus, openAdminDialog, openEditDialog],
+  )
+
   const columns = useMemo(
     () => [
-      { key: 'name', label: 'Name' },
+      {
+        key: 'name',
+        label: 'Name',
+        render: (value, row) => {
+          const customerId = getCustomerId(row)
+          if (!customerId) return value || '--'
+
+          return (
+            <button
+              type="button"
+              className="super-admin-customers__name-button"
+              onClick={() => openEditDialog(row)}
+            >
+              {value || '--'}
+            </button>
+          )
+        },
+      },
       {
         key: 'status',
         label: 'Status',
@@ -451,31 +747,20 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Updated',
         render: (value) => formatDate(value),
       },
-    ],
-    [],
-  )
-
-  const actions = useMemo(
-    () => [
-      { label: 'Edit', variant: 'ghost' },
       {
-        label: 'Set Active',
-        variant: 'ghost',
-        disabled: (row) => displayStatus(row?.status) === 'ACTIVE',
+        key: 'rowActions',
+        label: 'Actions',
+        width: '168px',
+        render: (_value, row) => (
+          <CustomerRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+        ),
       },
-      {
-        label: 'Set Inactive',
-        variant: 'ghost',
-        disabled: (row) => displayStatus(row?.status) === 'INACTIVE',
-      },
-      { label: 'Assign Admin', variant: 'ghost' },
-      { label: 'Replace Admin', variant: 'ghost' },
     ],
-    [],
+    [handleRowAction, openEditDialog, rowActions],
   )
 
   const adminMutationLoading =
-    assignAdminResult.isLoading || replaceAdminResult.isLoading
+    createAdminInvitationResult.isLoading || replaceAdminResult.isLoading
 
   return (
     <section className="super-admin-customers" aria-label="Super admin customers">
@@ -486,236 +771,226 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         </p>
       </header>
 
-      <div className="super-admin-customers__grid">
-        <Fieldset className="super-admin-customers__fieldset">
-          <Fieldset.Legend className="super-admin-customers__legend">
-            <h2 className="super-admin-customers__section-title">Create Customer</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="super-admin-customers__card">
-            <Card.Body>
-              <form className="super-admin-customers__form" onSubmit={handleCreate} noValidate>
-                <Input
-                  id="sa-customer-name"
-                  label="Customer Name"
-                  value={createForm.name}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
-                  error={createErrors.name}
-                  required
-                  fullWidth
-                />
-                <Input
-                  id="sa-customer-website"
-                  label="Website (Optional)"
-                  value={createForm.website}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, website: event.target.value }))}
-                  error={createErrors.website}
-                  fullWidth
-                />
-                <div className="super-admin-customers__row">
-                  <Select
-                    id="sa-customer-topology"
-                    label="Topology"
-                    value={createForm.topology}
-                    options={[
-                      { value: 'SINGLE_TENANT', label: 'Single Tenant' },
-                      { value: 'MULTI_TENANT', label: 'Multi Tenant' },
-                    ]}
-                    onChange={(event) =>
-                      setCreateForm((current) => ({
-                        ...current,
-                        topology: event.target.value,
-                        vmfPolicy: getDefaultVmfPolicy(event.target.value),
-                      }))
-                    }
-                  />
-                  <Select
-                    id="sa-customer-vmf-policy"
-                    label="VMF Policy"
-                    value={createForm.vmfPolicy}
-                    options={VMF_POLICY_OPTIONS[createForm.topology]}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, vmfPolicy: event.target.value }))}
-                  />
-                </div>
-                <Select
-                  id="sa-customer-license"
-                  label="Licence Level"
-                  value={createForm.licenseLevelId}
-                  options={[
-                    { value: '', label: isLoadingLicenseLevels ? 'Loading...' : 'Select licence level' },
-                    ...licenseLevels
-                      .map((level) => {
-                        const levelId = level.id ?? level._id
-                        if (!levelId) return null
-                        return { value: levelId, label: level.name ?? levelId }
-                      })
-                      .filter(Boolean),
-                  ]}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, licenseLevelId: event.target.value }))}
-                  error={createErrors.licenseLevelId}
-                />
-                <div className="super-admin-customers__row">
-                  <Input
-                    id="sa-customer-max-tenants"
-                    type="number"
-                    min={1}
-                    label="Max Tenants"
-                    value={createForm.maxTenants}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, maxTenants: event.target.value }))}
-                    error={createErrors.maxTenants}
-                    fullWidth
-                  />
-                  <Input
-                    id="sa-customer-max-vmfs"
-                    type="number"
-                    min={1}
-                    label="Max VMFs Per Tenant"
-                    value={createForm.maxVmfsPerTenant}
-                    onChange={(event) =>
-                      setCreateForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
-                    }
-                    error={createErrors.maxVmfsPerTenant}
-                    fullWidth
-                  />
-                </div>
-                <div className="super-admin-customers__row">
-                  <Input
-                    id="sa-customer-plan"
-                    label="Plan Code"
-                    value={createForm.planCode}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, planCode: event.target.value }))}
-                    fullWidth
-                  />
-                  <Select
-                    id="sa-customer-billing"
-                    label="Billing Cycle"
-                    value={createForm.billingCycle}
-                    options={BILLING_CYCLE_OPTIONS}
-                    onChange={(event) =>
-                      setCreateForm((current) => ({ ...current, billingCycle: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="super-admin-customers__form-actions">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    fullWidth
-                    loading={createResult.isLoading}
-                    disabled={createResult.isLoading || licenseLevels.length === 0}
-                  >
-                    Create Customer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    fullWidth
-                    disabled={createResult.isLoading}
-                    onClick={() => {
-                      setCreateForm(INITIAL_FORM)
-                      setCreateErrors({})
-                    }}
-                  >
-                    Reset
-                  </Button>
-                </div>
-              </form>
-            </Card.Body>
-          </Card>
-        </Fieldset>
-
-        <Fieldset className="super-admin-customers__fieldset">
-          <Fieldset.Legend className="super-admin-customers__legend">
-            <h2 className="super-admin-customers__section-title">Customer Catalogue</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="super-admin-customers__card">
-            <Card.Body>
-              <div className="super-admin-customers__toolbar">
-                <Input
-                  id="sa-customer-search"
-                  label="Search"
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value)
-                    setPage(1)
-                  }}
-                  fullWidth
-                />
-                <Select
-                  id="sa-customer-status-filter"
-                  label="Status"
-                  value={statusFilter}
-                  options={STATUS_FILTER_OPTIONS}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value)
-                    setPage(1)
-                  }}
-                />
-                <Select
-                  id="sa-customer-topology-filter"
-                  label="Topology"
-                  value={topologyFilter}
-                  options={TOPOLOGY_FILTER_OPTIONS}
-                  onChange={(event) => {
-                    setTopologyFilter(event.target.value)
-                    setPage(1)
-                  }}
-                />
-              </div>
-              {listAppError ? (
-                <p className="super-admin-customers__error" role="alert">
-                  {listAppError.message}
+      <Fieldset className="super-admin-customers__fieldset">
+        <Fieldset.Legend className="super-admin-customers__legend">
+          <h2 className="super-admin-customers__section-title">Customer Catalogue</h2>
+        </Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-customers__card">
+          <Card.Body>
+            <div className="super-admin-customers__catalogue-actions">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={openCreateDialog}
+                disabled={createResult.isLoading}
+              >
+                Create
+              </Button>
+            </div>
+            <div className="super-admin-customers__toolbar">
+              <Input
+                id="sa-customer-search"
+                label="Search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
+                fullWidth
+              />
+              <Select
+                id="sa-customer-status-filter"
+                label="Status"
+                value={statusFilter}
+                options={STATUS_FILTER_OPTIONS}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value)
+                  setPage(1)
+                }}
+              />
+              <Select
+                id="sa-customer-topology-filter"
+                label="Topology"
+                value={topologyFilter}
+                options={TOPOLOGY_FILTER_OPTIONS}
+                onChange={(event) => {
+                  setTopologyFilter(event.target.value)
+                  setPage(1)
+                }}
+              />
+            </div>
+            {listAppError ? (
+              <p className="super-admin-customers__error" role="alert">
+                {listAppError.message}
+              </p>
+            ) : null}
+            <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
+              <Table
+                className="super-admin-customers__table"
+                columns={columns}
+                data={rows}
+                loading={isListLoading}
+                variant="striped"
+                hoverable
+                emptyMessage="No customers found."
+                ariaLabel="Customers"
+              />
+            </HorizontalScroll>
+            {isListFetching && !isListLoading ? (
+              <p className="super-admin-customers__muted">Refreshing list...</p>
+            ) : null}
+            {totalPages > 1 ? (
+              <div className="super-admin-customers__pagination">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1 || isListFetching}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  Previous
+                </Button>
+                <p className="super-admin-customers__pagination-info">
+                  Page {Number(meta.page) || page} of {totalPages}
                 </p>
-              ) : null}
-              <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
-                <Table
-                  className="super-admin-customers__table"
-                  columns={columns}
-                  data={rows}
-                  actions={actions}
-                  onRowAction={(label, row) => {
-                    if (label === 'Edit') openEditDialog(row)
-                    if (label === 'Set Active') handleUpdateStatus(row, 'ACTIVE')
-                    if (label === 'Set Inactive') handleUpdateStatus(row, 'INACTIVE')
-                    if (label === 'Assign Admin') openAdminDialog('assign', row)
-                    if (label === 'Replace Admin') openAdminDialog('replace', row)
-                  }}
-                  loading={isListLoading}
-                  variant="striped"
-                  hoverable
-                  emptyMessage="No customers found."
-                  ariaLabel="Customers"
-                />
-              </HorizontalScroll>
-              {isListFetching && !isListLoading ? (
-                <p className="super-admin-customers__muted">Refreshing list...</p>
-              ) : null}
-              {totalPages > 1 ? (
-                <div className="super-admin-customers__pagination">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1 || isListFetching}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <p className="super-admin-customers__pagination-info">
-                    Page {Number(meta.page) || page} of {totalPages}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages || isListFetching}
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              ) : null}
-            </Card.Body>
-          </Card>
-        </Fieldset>
-      </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages || isListFetching}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
+          </Card.Body>
+        </Card>
+      </Fieldset>
+
+      <Dialog open={createOpen} onClose={closeCreateDialog} size="lg">
+        <Dialog.Header>
+          <h2 className="super-admin-customers__dialog-title">Create Customer</h2>
+        </Dialog.Header>
+        <Dialog.Body className="super-admin-customers__dialog-body">
+          <form className="super-admin-customers__form" onSubmit={handleCreate} noValidate>
+            <Input
+              id="sa-customer-name"
+              label="Customer Name"
+              value={createForm.name}
+              onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
+              error={createErrors.name}
+              required
+              fullWidth
+            />
+            <Input
+              id="sa-customer-website"
+              label="Website (Optional)"
+              value={createForm.website}
+              onChange={(event) => setCreateForm((current) => ({ ...current, website: event.target.value }))}
+              error={createErrors.website}
+              fullWidth
+            />
+            <div className="super-admin-customers__row">
+              <Select
+                id="sa-customer-topology"
+                label="Topology"
+                value={createForm.topology}
+                options={[
+                  { value: 'SINGLE_TENANT', label: 'Single Tenant' },
+                  { value: 'MULTI_TENANT', label: 'Multi Tenant' },
+                ]}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    topology: event.target.value,
+                  }))
+                }
+              />
+              <Input
+                id="sa-customer-vmf-count"
+                type="number"
+                min={1}
+                label="VMF Count"
+                value={createForm.maxVmfsPerTenant}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
+                }
+                error={createErrors.maxVmfsPerTenant}
+                fullWidth
+              />
+            </div>
+            {createForm.topology === 'MULTI_TENANT' ? (
+              <Input
+                id="sa-customer-max-tenants"
+                type="number"
+                min={1}
+                label="Max Tenants"
+                value={createForm.maxTenants}
+                onChange={(event) => setCreateForm((current) => ({ ...current, maxTenants: event.target.value }))}
+                error={createErrors.maxTenants}
+                fullWidth
+              />
+            ) : null}
+            <Select
+              id="sa-customer-license"
+              label="Licence Level"
+              value={createForm.licenseLevelId}
+              options={[
+                { value: '', label: isLoadingLicenseLevels ? 'Loading...' : 'Select licence level' },
+                ...licenseLevels
+                  .map((level) => {
+                    const levelId = level.id ?? level._id
+                    if (!levelId) return null
+                    return { value: levelId, label: level.name ?? levelId }
+                  })
+                  .filter(Boolean),
+              ]}
+              onChange={(event) => setCreateForm((current) => ({ ...current, licenseLevelId: event.target.value }))}
+              error={createErrors.licenseLevelId}
+            />
+            <div className="super-admin-customers__row">
+              <Select
+                id="sa-customer-billing"
+                label="Billing Cycle"
+                value={createForm.billingCycle}
+                options={BILLING_CYCLE_OPTIONS}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, billingCycle: event.target.value }))
+                }
+              />
+              <Input
+                id="sa-customer-plan"
+                label="Plan Code"
+                value={createForm.planCode}
+                onChange={(event) => setCreateForm((current) => ({ ...current, planCode: event.target.value }))}
+                fullWidth
+              />
+            </div>
+            <div className="super-admin-customers__form-actions">
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                loading={createResult.isLoading}
+                disabled={createResult.isLoading || licenseLevels.length === 0}
+              >
+                Create Customer
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                fullWidth
+                disabled={createResult.isLoading}
+                onClick={() => {
+                  setCreateForm(INITIAL_FORM)
+                  setCreateErrors({})
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </form>
+        </Dialog.Body>
+      </Dialog>
 
       <Dialog open={editOpen} onClose={closeEditDialog} size="lg">
         <Dialog.Header>
@@ -758,18 +1033,34 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 setEditForm((current) => ({
                   ...current,
                   topology: event.target.value,
-                  vmfPolicy: getDefaultVmfPolicy(event.target.value),
                 }))
               }
             />
-            <Select
-              id="sa-customer-edit-vmf-policy"
-              label="VMF Policy"
-              value={editForm.vmfPolicy}
-              options={VMF_POLICY_OPTIONS[editForm.topology]}
-              onChange={(event) => setEditForm((current) => ({ ...current, vmfPolicy: event.target.value }))}
+            <Input
+              id="sa-customer-edit-vmf-count"
+              type="number"
+              min={1}
+              label="VMF Count"
+              value={editForm.maxVmfsPerTenant}
+              onChange={(event) =>
+                setEditForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
+              }
+              error={editErrors.maxVmfsPerTenant}
+              fullWidth
             />
           </div>
+          {editForm.topology === 'MULTI_TENANT' ? (
+            <Input
+              id="sa-customer-edit-max-tenants"
+              type="number"
+              min={1}
+              label="Max Tenants"
+              value={editForm.maxTenants}
+              onChange={(event) => setEditForm((current) => ({ ...current, maxTenants: event.target.value }))}
+              error={editErrors.maxTenants}
+              fullWidth
+            />
+          ) : null}
           <Select
             id="sa-customer-edit-license"
             label="Licence Level"
@@ -788,43 +1079,19 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             error={editErrors.licenseLevelId}
           />
           <div className="super-admin-customers__row">
-            <Input
-              id="sa-customer-edit-max-tenants"
-              type="number"
-              min={1}
-              label="Max Tenants"
-              value={editForm.maxTenants}
-              onChange={(event) => setEditForm((current) => ({ ...current, maxTenants: event.target.value }))}
-              error={editErrors.maxTenants}
-              fullWidth
-            />
-            <Input
-              id="sa-customer-edit-max-vmfs"
-              type="number"
-              min={1}
-              label="Max VMFs Per Tenant"
-              value={editForm.maxVmfsPerTenant}
-              onChange={(event) =>
-                setEditForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
-              }
-              error={editErrors.maxVmfsPerTenant}
-              fullWidth
-            />
-          </div>
-          <div className="super-admin-customers__row">
-            <Input
-              id="sa-customer-edit-plan"
-              label="Plan Code"
-              value={editForm.planCode}
-              onChange={(event) => setEditForm((current) => ({ ...current, planCode: event.target.value }))}
-              fullWidth
-            />
             <Select
               id="sa-customer-edit-billing"
               label="Billing Cycle"
               value={editForm.billingCycle}
               options={BILLING_CYCLE_OPTIONS}
               onChange={(event) => setEditForm((current) => ({ ...current, billingCycle: event.target.value }))}
+            />
+            <Input
+              id="sa-customer-edit-plan"
+              label="Plan Code"
+              value={editForm.planCode}
+              onChange={(event) => setEditForm((current) => ({ ...current, planCode: event.target.value }))}
+              fullWidth
             />
           </div>
         </Dialog.Body>
@@ -853,16 +1120,42 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           <p className="super-admin-customers__dialog-subtitle">
             Customer: <strong>{adminCustomer?.name ?? '--'}</strong>
           </p>
-          <Input
-            id="sa-admin-user-id"
-            label={adminMode === 'assign' ? 'User ID' : 'New User ID'}
-            value={adminUserId}
-            onChange={(event) => {
-              setAdminUserId(event.target.value)
-              setAdminError('')
-            }}
-            fullWidth
-          />
+          {adminMode === 'assign' ? (
+            <>
+              <Input
+                id="sa-admin-recipient-name"
+                label="User Name"
+                value={adminRecipientName}
+                onChange={(event) => {
+                  setAdminRecipientName(event.target.value)
+                  setAdminError('')
+                }}
+                fullWidth
+              />
+              <Input
+                id="sa-admin-recipient-email"
+                type="email"
+                label="Email"
+                value={adminRecipientEmail}
+                onChange={(event) => {
+                  setAdminRecipientEmail(event.target.value)
+                  setAdminError('')
+                }}
+                fullWidth
+              />
+            </>
+          ) : (
+            <Input
+              id="sa-admin-user-id"
+              label="New User ID"
+              value={adminUserId}
+              onChange={(event) => {
+                setAdminUserId(event.target.value)
+                setAdminError('')
+              }}
+              fullWidth
+            />
+          )}
           {adminMode === 'replace' ? (
             <>
               <Textarea
@@ -900,7 +1193,50 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             loading={adminMutationLoading}
             disabled={adminMutationLoading || (adminMode === 'replace' && !adminStepUpToken)}
           >
-            {adminMode === 'assign' ? 'Assign Admin' : 'Replace Admin'}
+            {adminMode === 'assign' ? 'Send Invitation' : 'Replace Admin'}
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <Dialog open={authLinkDialogOpen} onClose={closeAuthLinkDialog} size="md">
+        <Dialog.Header>
+          <h2 className="super-admin-customers__dialog-title">Auth Link (Dev Mode)</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p className="super-admin-customers__dialog-subtitle">
+            Email is in mock mode. Use this link to simulate the invitation auth flow:
+          </p>
+          <div className="super-admin-customers__auth-link-box">
+            <code className="super-admin-customers__auth-link-code">
+              {lastAuthLink}
+            </code>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button variant="outline" onClick={closeAuthLinkDialog}>
+            Close
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(lastAuthLink)
+                addToast({
+                  title: 'Copied',
+                  description: 'Auth link copied to clipboard.',
+                  variant: 'success',
+                })
+              } catch {
+                addToast({
+                  title: 'Copy failed',
+                  description: 'Could not copy to clipboard. Select and copy manually.',
+                  variant: 'warning',
+                })
+              }
+            }}
+            disabled={!lastAuthLink}
+          >
+            Copy Link
           </Button>
         </Dialog.Footer>
       </Dialog>

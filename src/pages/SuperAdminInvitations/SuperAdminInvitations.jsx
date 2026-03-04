@@ -17,7 +17,6 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { useToaster } from '../../components/Toaster'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import {
-  useCreateInvitationMutation,
   useListInvitationsQuery,
   useResendInvitationMutation,
   useRevokeInvitationMutation,
@@ -25,13 +24,6 @@ import {
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { normalizeError } from '../../utils/errors.js'
 import './SuperAdminInvitations.css'
-
-const INITIAL_FORM = {
-  recipientName: '',
-  recipientEmail: '',
-  companyName: '',
-  website: '',
-}
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -56,8 +48,6 @@ const STATUS_VARIANTS = {
 
 const NON_RESENDABLE_STATUSES = new Set(['authenticated', 'expired', 'revoked'])
 const NON_REVOCABLE_STATUSES = new Set(['authenticated', 'expired', 'revoked'])
-
-const EMAIL_REGEX = /^\S+@\S+\.\S+$/
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -91,8 +81,6 @@ export function SuperAdminInvitationsPanel({
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
-  const [createForm, setCreateForm] = useState(INITIAL_FORM)
-  const [formErrors, setFormErrors] = useState({})
 
   const [authLinkDialogOpen, setAuthLinkDialogOpen] = useState(false)
   const [lastAuthLink, setLastAuthLink] = useState('')
@@ -118,88 +106,12 @@ export function SuperAdminInvitationsPanel({
     status: statusFilter,
   }, { skip: !isActive })
 
-  const [createInvitation, createInvitationResult] = useCreateInvitationMutation()
   const [resendInvitation, resendInvitationResult] = useResendInvitationMutation()
   const [revokeInvitation, revokeInvitationResult] = useRevokeInvitationMutation()
 
   const invitations = listResponse?.data ?? []
   const pagination = listResponse?.meta ?? {}
   const totalPages = Number(pagination.totalPages) || 1
-
-  const validateCreateForm = useCallback(() => {
-    const nextErrors = {}
-
-    if (!createForm.recipientName.trim()) {
-      nextErrors.recipientName = 'Recipient name is required.'
-    }
-    if (!createForm.recipientEmail.trim()) {
-      nextErrors.recipientEmail = 'Recipient email is required.'
-    } else if (!EMAIL_REGEX.test(createForm.recipientEmail.trim())) {
-      nextErrors.recipientEmail = 'Please enter a valid email address.'
-    }
-    if (!createForm.companyName.trim()) {
-      nextErrors.companyName = 'Company name is required.'
-    }
-
-    if (createForm.website.trim()) {
-      try {
-        const url = new URL(createForm.website.trim())
-        if (!['http:', 'https:'].includes(url.protocol)) {
-          nextErrors.website = 'Website must start with http:// or https://.'
-        }
-      } catch {
-        nextErrors.website = 'Website must be a valid URL.'
-      }
-    }
-
-    return nextErrors
-  }, [createForm])
-
-  const handleCreateInvitation = useCallback(
-    async (event) => {
-      event.preventDefault()
-      setFormErrors({})
-
-      const validationErrors = validateCreateForm()
-      if (Object.keys(validationErrors).length > 0) {
-        setFormErrors(validationErrors)
-        return
-      }
-
-      const payload = {
-        recipientEmail: createForm.recipientEmail.trim().toLowerCase(),
-        recipientName: createForm.recipientName.trim(),
-        company: {
-          name: createForm.companyName.trim(),
-          ...(createForm.website.trim()
-            ? { website: createForm.website.trim() }
-            : {}),
-        },
-      }
-
-      try {
-        const result = await createInvitation(payload).unwrap()
-        setCreateForm(INITIAL_FORM)
-        addToast({
-          title: 'Invitation created',
-          description: 'The invitation request was submitted successfully.',
-          variant: 'success',
-        })
-        if (result?.authLink) {
-          setLastAuthLink(result.authLink)
-          setAuthLinkDialogOpen(true)
-        }
-      } catch (err) {
-        const appError = normalizeError(err)
-        addToast({
-          title: 'Failed to create invitation',
-          description: appError.message,
-          variant: 'error',
-        })
-      }
-    },
-    [createForm, validateCreateForm, createInvitation, addToast],
-  )
 
   const closeRevokeDialog = useCallback(() => {
     setRevokeDialogOpen(false)
@@ -413,114 +325,11 @@ export function SuperAdminInvitationsPanel({
       <header className="super-admin-invitations__header">
         <HeadingTag className="super-admin-invitations__title">Invitation Management</HeadingTag>
         <p className="super-admin-invitations__subtitle">
-          Create, resend, and revoke customer onboarding invitations.
+          Track, resend, and revoke customer onboarding invitations.
         </p>
       </header>
 
       <div className="super-admin-invitations__grid">
-        <Fieldset className="super-admin-invitations__fieldset super-admin-invitations__fieldset--form">
-          <Fieldset.Legend className="super-admin-invitations__legend">
-            <h2 className="super-admin-invitations__section-title">
-              Create Invitation
-            </h2>
-          </Fieldset.Legend>
-          <Card
-            variant="elevated"
-            className="super-admin-invitations__card super-admin-invitations__card--form"
-          >
-            <Card.Body>
-              <form
-                className="super-admin-invitations__form"
-                onSubmit={handleCreateInvitation}
-                noValidate
-              >
-                <Input
-                  id="invitation-recipient-name"
-                  label="Recipient Name"
-                  value={createForm.recipientName}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({
-                      ...current,
-                      recipientName: event.target.value,
-                    }))
-                  }
-                  error={formErrors.recipientName}
-                  required
-                  fullWidth
-                />
-                <Input
-                  id="invitation-recipient-email"
-                  type="email"
-                  label="Recipient Email"
-                  value={createForm.recipientEmail}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({
-                      ...current,
-                      recipientEmail: event.target.value,
-                    }))
-                  }
-                  error={formErrors.recipientEmail}
-                  required
-                  fullWidth
-                />
-                <Input
-                  id="invitation-company-name"
-                  label="Company Name"
-                  value={createForm.companyName}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({
-                      ...current,
-                      companyName: event.target.value,
-                    }))
-                  }
-                  error={formErrors.companyName}
-                  required
-                  fullWidth
-                />
-                <Input
-                  id="invitation-company-website"
-                  label="Company Website (Optional)"
-                  value={createForm.website}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({
-                      ...current,
-                      website: event.target.value,
-                    }))
-                  }
-                  error={formErrors.website}
-                  fullWidth
-                />
-
-                <div className="super-admin-invitations__form-actions">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    loading={createInvitationResult.isLoading}
-                    disabled={createInvitationResult.isLoading}
-                  >
-                    Send Invitation
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    fullWidth
-                    onClick={() => {
-                      setCreateForm(INITIAL_FORM)
-                      setFormErrors({})
-                    }}
-                    disabled={createInvitationResult.isLoading}
-                  >
-                    Reset
-                  </Button>
-                </div>
-              </form>
-            </Card.Body>
-          </Card>
-        </Fieldset>
-
         <Fieldset className="super-admin-invitations__fieldset super-admin-invitations__fieldset--list">
           <Fieldset.Legend className="super-admin-invitations__legend">
             <h2 className="super-admin-invitations__section-title">
@@ -707,7 +516,7 @@ export function SuperAdminInvitationsPanel({
         </Dialog.Footer>
       </Dialog>
 
-      {/* Auth Link Dialog (fake auth / dev mode) */}
+      {/* Auth Link Dialog (fake auth / dev mode, from resend responses) */}
       <Dialog
         open={authLinkDialogOpen}
         onClose={() => setAuthLinkDialogOpen(false)}

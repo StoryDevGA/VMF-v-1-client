@@ -269,6 +269,24 @@ describe('Router', () => {
       expect(superAdminRoute?.element?.props?.redirectTo).toBe('/super-admin/login')
     })
 
+    it('should keep super-admin child routes in the expected order', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const superAdminRoute = rootRoute?.children?.find((route) => route.path === 'super-admin')
+      const childPaths = (superAdminRoute?.children ?? []).map((route) => route.path ?? 'index')
+
+      expect(childPaths).toEqual([
+        'index',
+        'dashboard',
+        'invitations',
+        'license-levels',
+        'customers',
+        'system-versioning',
+        'audit-logs',
+        'denied-access-logs',
+        'system-monitoring',
+      ])
+    })
+
   })
 
   describe('Navigation', () => {

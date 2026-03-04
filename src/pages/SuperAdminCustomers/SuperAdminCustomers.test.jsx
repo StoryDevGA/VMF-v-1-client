@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
@@ -11,7 +11,7 @@ vi.mock('../../store/api/customerApi.js', () => ({
   useGetCustomerQuery: vi.fn(),
   useUpdateCustomerMutation: vi.fn(),
   useUpdateCustomerStatusMutation: vi.fn(),
-  useAssignAdminMutation: vi.fn(),
+  useCreateCustomerAdminInvitationMutation: vi.fn(),
   useReplaceCustomerAdminMutation: vi.fn(),
 }))
 
@@ -21,7 +21,6 @@ vi.mock('../../store/api/licenseLevelApi.js', () => ({
 
 vi.mock('../../store/api/invitationApi.js', () => ({
   useListInvitationsQuery: vi.fn(),
-  useCreateInvitationMutation: vi.fn(),
   useResendInvitationMutation: vi.fn(),
   useRevokeInvitationMutation: vi.fn(),
 }))
@@ -36,13 +35,12 @@ import {
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
-  useAssignAdminMutation,
+  useCreateCustomerAdminInvitationMutation,
   useReplaceCustomerAdminMutation,
 } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import {
   useListInvitationsQuery,
-  useCreateInvitationMutation,
   useResendInvitationMutation,
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
@@ -82,7 +80,7 @@ describe('SuperAdminCustomers page', () => {
     useCreateCustomerMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useUpdateCustomerMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useUpdateCustomerStatusMutation.mockReturnValue([vi.fn(), { isLoading: false }])
-    useAssignAdminMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useReplaceCustomerAdminMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useListInvitationsQuery.mockReturnValue({
       data: { data: [], meta: { page: 1, totalPages: 1 } },
@@ -90,20 +88,111 @@ describe('SuperAdminCustomers page', () => {
       isFetching: false,
       error: null,
     })
-    useCreateInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useResendInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useRevokeInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
-  it('renders customer admin workspace and defaults to customers view', () => {
+  it('renders customer admin workspace in list-first mode by default', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /customer admin/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('heading', { name: /^customers$/i })).toBeInTheDocument()
-    expect(screen.getAllByLabelText(/customer name/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByLabelText(/licence level/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: /create customer/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /customer catalogue/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
+  })
+
+  it('opens create customer dialog from the catalogue create button', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(screen.getByRole('heading', { name: /^create customer$/i })).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/customer name/i, { selector: 'input#sa-customer-name' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/vmf count/i, { selector: 'input#sa-customer-vmf-count' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/licence level/i, { selector: 'select#sa-customer-license' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/vmf policy/i)).not.toBeInTheDocument()
+  })
+
+  it('supports dialog cancel events and exposes a labelled close control in create flow', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    const closeDialogButton = screen.getByRole('button', { name: /close dialog/i })
+    expect(closeDialogButton).toHaveAttribute('aria-label', 'Close dialog')
+
+    const createDialog = closeDialogButton.closest('dialog')
+    expect(createDialog).not.toBeNull()
+    fireEvent(
+      createDialog,
+      new Event('cancel', { bubbles: true, cancelable: true }),
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('closes create customer dialog and resets form state', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    const customerNameInput = screen.getByLabelText(/customer name/i, { selector: 'input#sa-customer-name' })
+    await user.type(customerNameInput, 'Temporary Name')
+
+    await user.click(screen.getByRole('button', { name: /close dialog/i }))
+    expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    expect(
+      screen.getByLabelText(/customer name/i, { selector: 'input#sa-customer-name' }),
+    ).toHaveValue('')
+  })
+
+  it('shows max tenants only when create-customer topology is multi tenant', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(
+      screen.queryByLabelText(/max tenants/i, { selector: 'input#sa-customer-max-tenants' }),
+    ).not.toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByLabelText(/topology/i, { selector: 'select#sa-customer-topology' }),
+      'MULTI_TENANT',
+    )
+
+    expect(
+      screen.getByLabelText(/max tenants/i, { selector: 'input#sa-customer-max-tenants' }),
+    ).toBeInTheDocument()
+  })
+
+  it('enforces required fields when creating a customer', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomer = vi.fn()
+      .mockReturnValue({ unwrap: vi.fn().mockResolvedValue({}) })
+    useCreateCustomerMutation.mockReturnValue([mockCreateCustomer, { isLoading: false }])
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create customer$/i }))
+
+    expect(screen.getByText(/name is required/i)).toBeInTheDocument()
+    expect(screen.getByText(/licence level is required/i)).toBeInTheDocument()
+    expect(mockCreateCustomer).not.toHaveBeenCalled()
   })
 
   it('shows invitations tab when view=invitations is in the URL', () => {
@@ -126,10 +215,103 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByRole('heading', { name: /^customers$/i })).toBeInTheDocument()
   })
 
-  it('switches to invitations tab after a successful assign-admin action', async () => {
+  it('opens update dialog with preloaded values when customer name is clicked', async () => {
     const user = userEvent.setup()
-    const mockAssignAdmin = vi.fn().mockReturnValue({ unwrap: vi.fn().mockResolvedValue({}) })
-    useAssignAdminMutation.mockReturnValue([mockAssignAdmin, { isLoading: false }])
+    const emptyDetailsResult = { data: null, isFetching: false, error: null }
+    const populatedDetailsResult = {
+      data: {
+        data: {
+          id: 'c-1',
+          name: 'Acme Corp Updated',
+          website: 'https://acme.example',
+          topology: 'MULTI_TENANT',
+          vmfPolicy: 'PER_TENANT_MULTI',
+          licenseLevelId: 'lic-1',
+          governance: { maxTenants: 3, maxVmfsPerTenant: 2 },
+          billing: { planCode: 'PRO', cycle: 'ANNUAL' },
+        },
+      },
+      isFetching: false,
+      error: null,
+    }
+
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'MULTI_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetCustomerQuery.mockImplementation((customerId) => {
+      if (!customerId) return emptyDetailsResult
+      return populatedDetailsResult
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^acme corp$/i }))
+
+    expect(screen.getByRole('heading', { name: /update customer/i })).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('Acme Corp Updated')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('https://acme.example')).toBeInTheDocument()
+  })
+
+  it('requires customer name before saving edit dialog changes', async () => {
+    const user = userEvent.setup()
+    const mockUpdateCustomer = vi.fn()
+      .mockReturnValue({ unwrap: vi.fn().mockResolvedValue({}) })
+    const emptyDetailsResult = { data: null, isFetching: false, error: null }
+    const populatedDetailsResult = {
+      data: {
+        data: {
+          id: 'c-1',
+          name: 'Acme Corp',
+          website: 'https://acme.example',
+          topology: 'SINGLE_TENANT',
+          vmfPolicy: 'SINGLE',
+          licenseLevelId: 'lic-1',
+          governance: { maxTenants: 1, maxVmfsPerTenant: 1 },
+          billing: { planCode: 'FREE', cycle: 'MONTHLY' },
+        },
+      },
+      isFetching: false,
+      error: null,
+    }
+
+    useUpdateCustomerMutation.mockReturnValue([mockUpdateCustomer, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetCustomerQuery.mockImplementation((customerId) => {
+      if (!customerId) return emptyDetailsResult
+      return populatedDetailsResult
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^acme corp$/i }))
+    const editNameInput = await screen.findByLabelText(
+      /customer name/i,
+      { selector: 'input#sa-customer-edit-name' },
+    )
+
+    await user.clear(editNameInput)
+    await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(screen.getByText(/name is required/i)).toBeInTheDocument()
+    expect(mockUpdateCustomer).not.toHaveBeenCalled()
+  })
+
+  it('renders customer row actions inside a compact overflow menu', async () => {
+    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -142,19 +324,396 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    // Open the assign admin dialog from the customer row
-    await user.click(screen.getByRole('button', { name: /assign admin acme corp/i }))
+    expect(
+      screen.queryByRole('menuitem', { name: /assign admin acme corp/i }),
+    ).not.toBeInTheDocument()
 
-    // Fill in the required User ID field
-    await user.type(screen.getByLabelText(/^user id$/i), 'user-abc-123')
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+
+    expect(screen.getByRole('menu', { name: /actions for acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /assign admin acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /replace admin acme corp/i })).toBeInTheDocument()
+  })
+
+  it('supports keyboard access for row action menu with explicit screen-reader labels', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    const menuTrigger = screen.getByRole('button', { name: /actions for acme corp/i })
+    expect(menuTrigger).toHaveAttribute('aria-haspopup', 'menu')
+    expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
+
+    menuTrigger.focus()
+    await user.keyboard('{Enter}')
+
+    const menu = await screen.findByRole('menu', { name: /actions for acme corp/i })
+    expect(menuTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(menuTrigger).toHaveAttribute('aria-controls', menu.getAttribute('id'))
+    expect(screen.getByRole('menuitem', { name: /edit acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /assign admin acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /replace admin acme corp/i })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menu', { name: /actions for acme corp/i })).not.toBeInTheDocument()
+    })
+    expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows assign-invitation validation error for invalid email and blocks submit', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({ unwrap: vi.fn().mockResolvedValue({ outcome: 'created' }) })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'not-an-email')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid email address/i)
+    expect(mockCreateCustomerAdminInvitation).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('shows reason-based guidance for 409 INVITATION_ALREADY_ACTIVE different-user case', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({
+        unwrap: vi.fn().mockRejectedValue({
+          status: 409,
+          data: {
+            error: {
+              code: 'INVITATION_ALREADY_ACTIVE',
+              message: 'An active invitation already exists for this email address.',
+              details: {
+                reason: 'DIFFERENT_USER',
+              },
+            },
+          },
+        }),
+      })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(mockCreateCustomerAdminInvitation).toHaveBeenCalledWith({
+      customerId: 'c-1',
+      recipientName: 'Alex Admin',
+      recipientEmail: 'alex@example.com',
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /already tied to another user/i,
+    )
+    expect(screen.getByRole('heading', { name: /assign customer admin/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('preserves backend-specific INVITATION_ALREADY_ACTIVE message when provided', async () => {
+    const user = userEvent.setup()
+    const backendConflictMessage =
+      'An active invitation already exists for this email in another customer. Revoke it there first.'
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({
+        unwrap: vi.fn().mockRejectedValue({
+          status: 409,
+          data: {
+            error: {
+              code: 'INVITATION_ALREADY_ACTIVE',
+              message: backendConflictMessage,
+            },
+          },
+        }),
+      })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(backendConflictMessage)
+    expect(screen.queryByRole('alert')).not.toHaveTextContent(/already tied to another user/i)
+  })
+
+  it('shows neutral fallback guidance for generic INVITATION_ALREADY_ACTIVE without reason', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({
+        unwrap: vi.fn().mockRejectedValue({
+          status: 409,
+          data: {
+            error: {
+              code: 'INVITATION_ALREADY_ACTIVE',
+              message: 'An active invitation already exists for this email address.',
+            },
+          },
+        }),
+      })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /review invitation management before retrying/i,
+    )
+    expect(screen.queryByRole('alert')).not.toHaveTextContent(/already tied to another user/i)
+  })
+
+  it('keeps replace-admin submit disabled until step-up verification is present', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+
+    await user.type(screen.getByLabelText(/^new user id$/i), 'new-user-1')
+    await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
+
+    expect(screen.getByRole('button', { name: /^replace admin$/i })).toBeDisabled()
+  })
+
+  it('switches to invitations tab after successful assign-admin invitation creation', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({ unwrap: vi.fn().mockResolvedValue({ outcome: 'created' }) })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    // Open the assign admin dialog from the customer row overflow menu
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+
+    // Fill invite form fields
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
 
     // Submit the dialog
-    await user.click(screen.getByRole('button', { name: /^assign admin$/i }))
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(mockCreateCustomerAdminInvitation).toHaveBeenCalledWith({
+      customerId: 'c-1',
+      recipientName: 'Alex Admin',
+      recipientEmail: 'alex@example.com',
+    })
 
     // After success the workspace should switch to the Invitations tab
     expect(screen.getByRole('tab', { name: /invitations/i })).toHaveAttribute(
       'aria-selected',
       'true',
     )
+  })
+
+  it('shows auth-link dialog for dev-mode invite responses and switches tab after closing it', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({
+        unwrap: vi.fn().mockResolvedValue({
+          outcome: 'created',
+          authLink: 'http://localhost:5173/invitation-auth?invitationId=inv-123',
+        }),
+      })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    const authLinkHeading = await screen.findByRole('heading', { name: /auth link \(dev mode\)/i })
+    const authLinkDialog = authLinkHeading.closest('dialog')
+    expect(authLinkDialog).not.toBeNull()
+    expect(
+      within(authLinkDialog).getByText(
+        'http://localhost:5173/invitation-auth?invitationId=inv-123',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+
+    await user.click(within(authLinkDialog).getByRole('button', { name: /^close$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /invitations/i })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+    })
+  })
+
+  it('shows invited user in invitations list after successful assign-admin submit', async () => {
+    const user = userEvent.setup()
+    const mockCreateCustomerAdminInvitation = vi.fn()
+      .mockReturnValue({ unwrap: vi.fn().mockResolvedValue({ outcome: 'created' }) })
+    useCreateCustomerAdminInvitationMutation.mockReturnValue([
+      mockCreateCustomerAdminInvitation,
+      { isLoading: false },
+    ])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListInvitationsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'inv-1',
+            recipientName: 'Alex Admin',
+            recipientEmail: 'alex@example.com',
+            company: { name: 'Acme Corp' },
+            status: 'created',
+            updatedAt: '2026-03-04T10:00:00.000Z',
+            expiresAt: '2026-03-11T10:00:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
+    await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
+
+    expect(screen.getByRole('tab', { name: /invitations/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(await screen.findByText('alex@example.com')).toBeInTheDocument()
   })
 })
