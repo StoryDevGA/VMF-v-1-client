@@ -71,8 +71,15 @@ describe('SuperAdminLogin page', () => {
 
   it('renders email and password inputs', () => {
     renderSALogin()
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i, { selector: 'input' })).toBeInTheDocument()
+    const emailInput = screen.getByLabelText(/email/i)
+    const passwordInput = screen.getByLabelText(/password/i, { selector: 'input' })
+
+    expect(emailInput).toBeInTheDocument()
+    expect(passwordInput).toBeInTheDocument()
+    expect(emailInput).toHaveAttribute('name', 'email')
+    expect(emailInput).toHaveAttribute('autocomplete', 'username')
+    expect(passwordInput).toHaveAttribute('name', 'password')
+    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password')
   })
 
   it('toggles password visibility', async () => {

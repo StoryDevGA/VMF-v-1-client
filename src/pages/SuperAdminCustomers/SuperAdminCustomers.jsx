@@ -1140,16 +1140,19 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             <>
               <Input
                 id="sa-admin-recipient-name"
+                name="sa-admin-recipient-name"
                 label="User Name"
                 value={adminRecipientName}
                 onChange={(event) => {
                   setAdminRecipientName(event.target.value)
                   setAdminError('')
                 }}
+                autoComplete="off"
                 fullWidth
               />
               <Input
                 id="sa-admin-recipient-email"
+                name="sa-admin-recipient-email"
                 type="email"
                 label="Email"
                 value={adminRecipientEmail}
@@ -1157,6 +1160,10 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   setAdminRecipientEmail(event.target.value)
                   setAdminError('')
                 }}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 fullWidth
               />
             </>

@@ -431,6 +431,35 @@ describe('SuperAdminCustomers page', () => {
     )
   })
 
+  it('suppresses browser autofill on assign-admin invitation inputs', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+
+    const nameInput = screen.getByLabelText(/^user name$/i, { selector: 'input' })
+    const emailInput = screen.getByLabelText(/^email$/i, { selector: 'input' })
+
+    expect(nameInput).toHaveAttribute('name', 'sa-admin-recipient-name')
+    expect(nameInput).toHaveAttribute('autocomplete', 'off')
+    expect(emailInput).toHaveAttribute('name', 'sa-admin-recipient-email')
+    expect(emailInput).toHaveAttribute('autocomplete', 'off')
+    expect(emailInput).toHaveAttribute('autocorrect', 'off')
+    expect(emailInput).toHaveAttribute('autocapitalize', 'none')
+    expect(emailInput).toHaveAttribute('spellcheck', 'false')
+  })
+
   it('shows reason-based guidance for 409 INVITATION_ALREADY_ACTIVE different-user case', async () => {
     const user = userEvent.setup()
     const mockCreateCustomerAdminInvitation = vi.fn()

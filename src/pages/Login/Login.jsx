@@ -117,6 +117,7 @@ function Login() {
             <form className="login__form" onSubmit={handleSubmit} noValidate>
               <Input
                 id="login-email"
+                name="email"
                 type="email"
                 label="Email"
                 value={email}
@@ -124,12 +125,13 @@ function Login() {
                 error={fieldErrors.email}
                 required
                 fullWidth
-                autoComplete="email"
+                autoComplete="username"
                 disabled={loginResult.isLoading}
               />
 
               <Input
                 id="login-password"
+                name="password"
                 type="password"
                 showPasswordToggle
                 label="Password"

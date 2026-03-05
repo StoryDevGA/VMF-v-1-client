@@ -342,16 +342,21 @@ export function SuperAdminInvitationsPanel({
           >
             <Card.Body>
               <div className="super-admin-invitations__toolbar">
+                {/* Extra browser hints reduce sticky search autofill in Safari/iOS beyond autocomplete=off. */}
                 <Input
                   id="invitation-search"
+                  name="invitation-search"
                   type="search"
                   label="Search"
-                  placeholder="Name or email"
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value)
                     setPage(1)
                   }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   fullWidth
                 />
                 <Select
@@ -475,12 +480,14 @@ export function SuperAdminInvitationsPanel({
 
           <Input
             id="revoke-invitation-reason"
+            name="revoke-invitation-reason"
             label="Reason"
             value={revokeReason}
             onChange={(event) => {
               setRevokeReason(event.target.value)
               setRevokeReasonError('')
             }}
+            autoComplete="off"
             error={revokeReasonError}
             required
             fullWidth

@@ -54,6 +54,17 @@ describe('SuperAdminInvitations page', () => {
     expect(screen.queryByRole('button', { name: /send invitation/i })).not.toBeInTheDocument()
   })
 
+  it('disables browser autofill for invitation search input', () => {
+    renderPage()
+
+    const searchInput = screen.getByLabelText(/search/i, { selector: 'input' })
+    expect(searchInput).not.toHaveAttribute('placeholder')
+    expect(searchInput).toHaveAttribute('autocomplete', 'off')
+    expect(searchInput).toHaveAttribute('autocorrect', 'off')
+    expect(searchInput).toHaveAttribute('autocapitalize', 'none')
+    expect(searchInput).toHaveAttribute('spellcheck', 'false')
+  })
+
   it('disables Revoke action for revoked invitations', async () => {
     const user = userEvent.setup()
 

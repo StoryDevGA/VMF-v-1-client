@@ -130,6 +130,7 @@ function SuperAdminLogin() {
             >
               <Input
                 id="sa-login-email"
+                name="email"
                 type="email"
                 label="Email"
                 value={email}
@@ -137,12 +138,13 @@ function SuperAdminLogin() {
                 error={fieldErrors.email}
                 required
                 fullWidth
-                autoComplete="email"
+                autoComplete="username"
                 disabled={superAdminLoginResult.isLoading}
               />
 
               <Input
                 id="sa-login-password"
+                name="password"
                 type="password"
                 showPasswordToggle
                 label="Password"
