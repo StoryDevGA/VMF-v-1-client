@@ -493,7 +493,7 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
 
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'not-an-email')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 
@@ -522,7 +522,7 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
 
-    const nameInput = screen.getByLabelText(/^user name$/i, { selector: 'input' })
+    const nameInput = screen.getByLabelText(/^full name$/i, { selector: 'input' })
     const emailInput = screen.getByLabelText(/^email$/i, { selector: 'input' })
 
     expect(nameInput).toHaveAttribute('name', 'sa-admin-recipient-name')
@@ -569,7 +569,7 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 
@@ -622,7 +622,7 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 
@@ -662,7 +662,7 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 
@@ -842,7 +842,7 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
 
     // Fill invite form fields
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
 
     // Submit the dialog
@@ -888,7 +888,7 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 
@@ -956,7 +956,7 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
-    await user.type(screen.getByLabelText(/^user name$/i), 'Alex Admin')
+    await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
 

@@ -597,7 +597,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
 
     if (adminMode === 'assign') {
       if (!adminRecipientName.trim()) {
-        setAdminError('User name is required.')
+        setAdminError('Full name is required.')
         return
       }
       if (!adminRecipientEmail.trim()) {
@@ -1190,7 +1190,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
               <Input
                 id="sa-admin-recipient-name"
                 name="sa-admin-recipient-name"
-                label="User Name"
+                label="Full Name"
                 value={adminRecipientName}
                 onChange={(event) => {
                   setAdminRecipientName(event.target.value)
