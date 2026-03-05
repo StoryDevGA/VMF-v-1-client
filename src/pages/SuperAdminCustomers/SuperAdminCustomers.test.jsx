@@ -121,6 +121,24 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByLabelText(/vmf policy/i)).not.toBeInTheDocument()
   })
 
+  it('keeps create dialog open when interacting with customer name input', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    const customerNameInput = screen.getByLabelText(
+      /customer name/i,
+      { selector: 'input#sa-customer-name' },
+    )
+
+    // Simulate Safari-like misreported click coordinates on an in-dialog target.
+    fireEvent.click(customerNameInput, { clientX: -999, clientY: -999 })
+
+    expect(screen.getByRole('heading', { name: /^create customer$/i })).toBeInTheDocument()
+    expect(customerNameInput).toBeInTheDocument()
+  })
+
   it('supports dialog cancel events and exposes a labelled close control in create flow', async () => {
     const user = userEvent.setup()
     renderPage()

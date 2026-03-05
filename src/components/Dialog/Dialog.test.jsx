@@ -315,6 +315,27 @@ describe('Dialog Component', () => {
       expect(handleClose).toHaveBeenCalled()
     })
 
+    it('should not call onClose when clicking inside dialog content', () => {
+      const handleClose = vi.fn()
+      render(
+        <Dialog open={true} onClose={handleClose}>
+          <Dialog.Body>
+            <button type="button">Inside Action</button>
+          </Dialog.Body>
+        </Dialog>,
+      )
+
+      const insideButton = screen.getByRole('button', { name: /inside action/i })
+      const clickEvent = new MouseEvent('click', {
+        bubbles: true,
+        clientX: -999,
+        clientY: -999,
+      })
+
+      insideButton.dispatchEvent(clickEvent)
+      expect(handleClose).not.toHaveBeenCalled()
+    })
+
     it('should not call onClose on backdrop click when closeOnBackdropClick is false', () => {
       const handleClose = vi.fn()
       const { container } = render(

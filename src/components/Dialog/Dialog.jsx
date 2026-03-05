@@ -47,15 +47,11 @@ export function Dialog({
     if (!closeOnBackdropClick) return
 
     const dialog = dialogRef.current
-    const rect = dialog.getBoundingClientRect()
+    if (!dialog) return
 
-    const isInDialog =
-      rect.top <= e.clientY &&
-      e.clientY <= rect.top + rect.height &&
-      rect.left <= e.clientX &&
-      e.clientX <= rect.left + rect.width
-
-    if (!isInDialog) {
+    // Native dialog backdrop clicks target the <dialog> element itself.
+    // This is more reliable than coordinate checks in Safari.
+    if (e.target === dialog) {
       onClose?.()
     }
   }

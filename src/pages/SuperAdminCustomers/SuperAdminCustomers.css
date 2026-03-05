@@ -66,6 +66,10 @@
   gap: var(--spacing-sm);
 }
 
+.super-admin-customers__dialog-body .super-admin-customers__row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .super-admin-customers__toolbar {
   display: grid;
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
