@@ -905,18 +905,22 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   }))
                 }
               />
-              <Input
-                id="sa-customer-vmf-count"
-                type="number"
-                min={1}
-                label="VMF Count"
-                value={createForm.maxVmfsPerTenant}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
-                }
-                error={createErrors.maxVmfsPerTenant}
-                fullWidth
-              />
+              <div className="super-admin-customers__field">
+                <label htmlFor="sa-customer-vmf-count" className="super-admin-customers__field-label">
+                  VMF Count
+                </label>
+                <Input
+                  id="sa-customer-vmf-count"
+                  type="number"
+                  min={1}
+                  value={createForm.maxVmfsPerTenant}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
+                  }
+                  error={createErrors.maxVmfsPerTenant}
+                  fullWidth
+                />
+              </div>
             </div>
             {createForm.topology === 'MULTI_TENANT' ? (
               <Input
@@ -957,13 +961,17 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   setCreateForm((current) => ({ ...current, billingCycle: event.target.value }))
                 }
               />
-              <Input
-                id="sa-customer-plan"
-                label="Plan Code"
-                value={createForm.planCode}
-                onChange={(event) => setCreateForm((current) => ({ ...current, planCode: event.target.value }))}
-                fullWidth
-              />
+              <div className="super-admin-customers__field">
+                <label htmlFor="sa-customer-plan" className="super-admin-customers__field-label">
+                  Plan Code
+                </label>
+                <Input
+                  id="sa-customer-plan"
+                  value={createForm.planCode}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, planCode: event.target.value }))}
+                  fullWidth
+                />
+              </div>
             </div>
             <div className="super-admin-customers__form-actions">
               <Button
@@ -1036,18 +1044,22 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 }))
               }
             />
-            <Input
-              id="sa-customer-edit-vmf-count"
-              type="number"
-              min={1}
-              label="VMF Count"
-              value={editForm.maxVmfsPerTenant}
-              onChange={(event) =>
-                setEditForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
-              }
-              error={editErrors.maxVmfsPerTenant}
-              fullWidth
-            />
+            <div className="super-admin-customers__field">
+              <label htmlFor="sa-customer-edit-vmf-count" className="super-admin-customers__field-label">
+                VMF Count
+              </label>
+              <Input
+                id="sa-customer-edit-vmf-count"
+                type="number"
+                min={1}
+                value={editForm.maxVmfsPerTenant}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, maxVmfsPerTenant: event.target.value }))
+                }
+                error={editErrors.maxVmfsPerTenant}
+                fullWidth
+              />
+            </div>
           </div>
           {editForm.topology === 'MULTI_TENANT' ? (
             <Input
@@ -1086,13 +1098,17 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
               options={BILLING_CYCLE_OPTIONS}
               onChange={(event) => setEditForm((current) => ({ ...current, billingCycle: event.target.value }))}
             />
-            <Input
-              id="sa-customer-edit-plan"
-              label="Plan Code"
-              value={editForm.planCode}
-              onChange={(event) => setEditForm((current) => ({ ...current, planCode: event.target.value }))}
-              fullWidth
-            />
+            <div className="super-admin-customers__field">
+              <label htmlFor="sa-customer-edit-plan" className="super-admin-customers__field-label">
+                Plan Code
+              </label>
+              <Input
+                id="sa-customer-edit-plan"
+                value={editForm.planCode}
+                onChange={(event) => setEditForm((current) => ({ ...current, planCode: event.target.value }))}
+                fullWidth
+              />
+            </div>
           </div>
         </Dialog.Body>
         <Dialog.Footer>

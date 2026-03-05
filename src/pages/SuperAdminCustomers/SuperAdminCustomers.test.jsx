@@ -274,6 +274,13 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByRole('heading', { name: /update customer/i })).toBeInTheDocument()
     expect(await screen.findByDisplayValue('Acme Corp Updated')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://acme.example')).toBeInTheDocument()
+
+    const editNameInput = screen.getByLabelText(/customer name/i, {
+      selector: 'input#sa-customer-edit-name',
+    })
+    const editNameContainer = editNameInput.closest('.input-container')
+    const editNameLabel = editNameContainer?.querySelector('.input-label')
+    expect(editNameLabel).toHaveClass('input-label--floating')
   })
 
   it('requires customer name before saving edit dialog changes', async () => {

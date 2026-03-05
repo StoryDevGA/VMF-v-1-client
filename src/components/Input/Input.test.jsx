@@ -89,6 +89,16 @@ describe('Input Component', () => {
       const label = container.querySelector('.input-label')
       expect(label).toHaveClass('input-label--floating')
     })
+
+    it('should float label when controlled value is populated after initial render', () => {
+      const { container, rerender } = render(<Input label="Email" id="email" value="" onChange={() => {}} />)
+
+      const label = container.querySelector('.input-label')
+      expect(label).not.toHaveClass('input-label--floating')
+
+      rerender(<Input label="Email" id="email" value="test@example.com" onChange={() => {}} />)
+      expect(label).toHaveClass('input-label--floating')
+    })
   })
 
   describe('Icons', () => {

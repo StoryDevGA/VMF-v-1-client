@@ -5,8 +5,10 @@
  * that reduces in size and moves outside when focused or filled.
  */
 
-import { useState, forwardRef } from 'react'
+import { useEffect, useState, forwardRef } from 'react'
 import './Input.css'
+
+const hasRenderableValue = (candidate) => String(candidate ?? '').trim().length > 0
 
 /**
  * Main Input Component
@@ -35,8 +37,12 @@ export const Input = forwardRef(function Input(
   },
   ref
 ) {
+  const isControlled = value !== undefined
+
   const [isFocused, setIsFocused] = useState(false)
-  const [hasValue, setHasValue] = useState(!!defaultValue || !!value)
+  const [hasValue, setHasValue] = useState(
+    isControlled ? hasRenderableValue(value) : hasRenderableValue(defaultValue),
+  )
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const passwordToggleEnabled = showPasswordToggle ?? true
   const canTogglePassword = passwordToggleEnabled && type === 'password'
@@ -45,6 +51,11 @@ export const Input = forwardRef(function Input(
   const hasRightIcon = Boolean(rightIcon)
   const hasRightAdornment = hasRightIcon || canTogglePassword
 
+  useEffect(() => {
+    if (value === undefined) return
+    setHasValue(hasRenderableValue(value))
+  }, [value])
+
   const handleFocus = (e) => {
     setIsFocused(true)
     onFocus?.(e)
@@ -52,12 +63,12 @@ export const Input = forwardRef(function Input(
 
   const handleBlur = (e) => {
     setIsFocused(false)
-    setHasValue(!!e.target.value)
+    setHasValue(hasRenderableValue(e.target.value))
     onBlur?.(e)
   }
 
   const handleChange = (e) => {
-    setHasValue(!!e.target.value)
+    setHasValue(hasRenderableValue(e.target.value))
     props.onChange?.(e)
   }
 
