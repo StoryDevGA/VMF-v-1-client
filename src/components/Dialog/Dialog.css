@@ -10,6 +10,7 @@
    =========================== */
 
 .dialog {
+  display: block;
   box-sizing: border-box;
   margin: auto;
   padding: 0;
@@ -17,10 +18,26 @@
   border-radius: var(--border-radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-2xl);
+  height: auto;
   max-width: calc(100vw - var(--spacing-lg) * 2);
   max-height: calc(100vh - var(--spacing-lg) * 2);
   min-width: min(320px, calc(100vw - var(--spacing-lg) * 2));
-  overflow: visible;
+  overflow: hidden;
+}
+
+.dialog:not([open]) {
+  display: none;
+}
+
+/* Fallback layout when native showModal is unavailable (for example Safari <= 15.3). */
+.dialog[data-fallback-modal='true'][open] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-index-modal, 1050);
+  animation: none;
 }
 
 /* Reset default dialog styles */
@@ -105,10 +122,15 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   min-width: 0;
-  min-height: 0;
+  overflow: hidden;
   max-height: calc(100vh - var(--spacing-lg) * 2);
+}
+
+.dialog--full .dialog__container {
+  min-height: 100%;
 }
 
 /* ===========================
@@ -182,8 +204,10 @@
 .dialog__body {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: var(--spacing-lg) var(--spacing-xl);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
 }

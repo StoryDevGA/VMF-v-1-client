@@ -10,6 +10,58 @@ import { MdClose } from 'react-icons/md'
 import './Dialog.css'
 
 /**
+ * Opens a dialog element, falling back to the open attribute when
+ * the native showModal API is unavailable (Safari <= 15.3).
+ */
+function openDialog(dialog) {
+  if (!dialog) return
+
+  // Safari <= 15.3 does not support the modal API.
+  if (typeof dialog.showModal !== 'function') {
+    dialog.dataset.fallbackModal = 'true'
+    dialog.setAttribute('open', '')
+    return
+  }
+
+  if (dialog.open) return
+
+  try {
+    delete dialog.dataset.fallbackModal
+    dialog.showModal()
+  } catch {
+    // Guard against transient InvalidStateError from imperative API timing.
+    dialog.dataset.fallbackModal = 'true'
+    dialog.setAttribute('open', '')
+  }
+}
+
+/**
+ * Closes a dialog element, falling back to removeAttribute when
+ * the native close API is unavailable (Safari <= 15.3).
+ */
+function closeDialog(dialog, backdropPointerDownRef) {
+  if (!dialog) return
+  if (backdropPointerDownRef) backdropPointerDownRef.current = false
+
+  // Safari <= 15.3 fallback path.
+  if (typeof dialog.close !== 'function') {
+    delete dialog.dataset.fallbackModal
+    dialog.removeAttribute('open')
+    return
+  }
+
+  if (!dialog.open && !dialog.hasAttribute('open')) return
+
+  try {
+    dialog.close()
+  } catch {
+    dialog.removeAttribute('open')
+  } finally {
+    delete dialog.dataset.fallbackModal
+  }
+}
+
+/**
  * Main Dialog Component
  */
 export function Dialog({
@@ -25,6 +77,7 @@ export function Dialog({
   ...props
 }) {
   const dialogRef = useRef(null)
+  const backdropPointerDownRef = useRef(false)
 
   // Open/close the dialog when `open` prop changes
   useEffect(() => {
@@ -32,36 +85,52 @@ export function Dialog({
     if (!dialog) return
 
     if (open) {
-      if (!dialog.open) {
-        dialog.showModal()
-      }
+      openDialog(dialog)
     } else {
-      if (dialog.open) {
-        dialog.close()
-      }
+      closeDialog(dialog, backdropPointerDownRef)
     }
   }, [open])
 
+  const handleBackdropPointerDownCapture = (e) => {
+    const dialog = dialogRef.current
+    if (!dialog) {
+      backdropPointerDownRef.current = false
+      return
+    }
+
+    // Safari can occasionally retarget click events during dialog interactions.
+    // Only allow backdrop-close when the pointer-down also began on the backdrop.
+    backdropPointerDownRef.current = e.target === dialog
+  }
+
   // Handle backdrop click
   const handleBackdropClick = (e) => {
-    if (!closeOnBackdropClick) return
-
     const dialog = dialogRef.current
-    if (!dialog) return
+    if (!dialog) {
+      backdropPointerDownRef.current = false
+      return
+    }
+
+    if (!closeOnBackdropClick) {
+      backdropPointerDownRef.current = false
+      return
+    }
+
+    const wasBackdropPointerDown = backdropPointerDownRef.current
+    backdropPointerDownRef.current = false
 
     // Native dialog backdrop clicks target the <dialog> element itself.
-    // This is more reliable than coordinate checks in Safari.
-    if (e.target === dialog) {
+    // Require pointer-down to also start on backdrop to avoid Safari false positives.
+    if (e.target === dialog && wasBackdropPointerDown) {
       onClose?.()
     }
   }
 
-  // Handle ESC key
+  // Handle ESC key — always prevent the browser's native close so React
+  // controls the dialog lifecycle via the `open` prop (avoids double-close).
   const handleCancel = (e) => {
-    if (!closeOnEscape) {
-      e.preventDefault()
-      return
-    }
+    e.preventDefault()
+    if (!closeOnEscape) return
     onClose?.()
   }
 
@@ -79,10 +148,15 @@ export function Dialog({
     .filter(Boolean)
     .join(' ')
 
+  // mousedown is a fallback for environments without PointerEvent support
   return (
     <dialog
       ref={dialogRef}
       className={dialogClasses}
+      role="dialog"
+      aria-modal="true"
+      onMouseDownCapture={handleBackdropPointerDownCapture}
+      onPointerDownCapture={handleBackdropPointerDownCapture}
       onClick={handleBackdropClick}
       onCancel={handleCancel}
       {...props}
@@ -91,11 +165,11 @@ export function Dialog({
         {showCloseButton && (
           <button
             type="button"
-          className="dialog__close"
-          onClick={handleCloseClick}
-          aria-label="Close dialog"
-        >
-          <MdClose size={24} aria-hidden="true" focusable="false" />
+            className="dialog__close"
+            onClick={handleCloseClick}
+            aria-label="Close dialog"
+          >
+            <MdClose size={24} aria-hidden="true" focusable="false" />
           </button>
         )}
         {children}

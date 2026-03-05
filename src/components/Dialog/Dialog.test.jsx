@@ -222,6 +222,76 @@ describe('Dialog Component', () => {
         expect(dialog.close).toHaveBeenCalled()
       })
     })
+
+    it('should fall back to open attribute when showModal API is unavailable', () => {
+      const originalShowModal = HTMLDialogElement.prototype.showModal
+      const originalClose = HTMLDialogElement.prototype.close
+
+      Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+        configurable: true,
+        writable: true,
+        value: undefined,
+      })
+      Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+        configurable: true,
+        writable: true,
+        value: undefined,
+      })
+
+      try {
+        const { container, rerender } = render(
+          <Dialog open={true}>
+            <Dialog.Body>Content</Dialog.Body>
+          </Dialog>
+        )
+
+        const dialog = container.querySelector('dialog')
+        expect(dialog).toHaveAttribute('open')
+        expect(dialog).toHaveAttribute('data-fallback-modal', 'true')
+
+        rerender(
+          <Dialog open={false}>
+            <Dialog.Body>Content</Dialog.Body>
+          </Dialog>
+        )
+        expect(dialog).not.toHaveAttribute('open')
+        expect(dialog).not.toHaveAttribute('data-fallback-modal')
+      } finally {
+        Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+          configurable: true,
+          writable: true,
+          value: originalShowModal,
+        })
+        Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+          configurable: true,
+          writable: true,
+          value: originalClose,
+        })
+      }
+    })
+
+    it('should recover when showModal throws during open', () => {
+      const showModalSpy = vi.fn(() => {
+        throw new Error('InvalidStateError')
+      })
+      const closeSpy = vi.fn(function () {
+        this.open = false
+        this.removeAttribute('open')
+      })
+      HTMLDialogElement.prototype.showModal = showModalSpy
+      HTMLDialogElement.prototype.close = closeSpy
+
+      const { container } = render(
+        <Dialog open={true}>
+          <Dialog.Body>Content</Dialog.Body>
+        </Dialog>
+      )
+
+      const dialog = container.querySelector('dialog')
+      expect(showModalSpy).toHaveBeenCalled()
+      expect(dialog).toHaveAttribute('open')
+      expect(dialog).toHaveAttribute('data-fallback-modal', 'true')
+    })
   })
 
   // ===========================
@@ -293,24 +363,14 @@ describe('Dialog Component', () => {
       )
 
       const dialog = container.querySelector('dialog')
-
-      // Simulate backdrop click with proper coordinates
+      const pointerDownEvent = new MouseEvent('mousedown', {
+        bubbles: true,
+      })
       const clickEvent = new MouseEvent('click', {
         bubbles: true,
-        clientX: 0,
-        clientY: 0,
       })
 
-      // Mock getBoundingClientRect to simulate click outside dialog
-      dialog.getBoundingClientRect = vi.fn(() => ({
-        top: 100,
-        left: 100,
-        bottom: 400,
-        right: 400,
-        width: 300,
-        height: 300,
-      }))
-
+      dialog.dispatchEvent(pointerDownEvent)
       dialog.dispatchEvent(clickEvent)
       expect(handleClose).toHaveBeenCalled()
     })
@@ -326,13 +386,34 @@ describe('Dialog Component', () => {
       )
 
       const insideButton = screen.getByRole('button', { name: /inside action/i })
+      const pointerDownEvent = new MouseEvent('mousedown', {
+        bubbles: true,
+      })
       const clickEvent = new MouseEvent('click', {
         bubbles: true,
-        clientX: -999,
-        clientY: -999,
       })
 
+      insideButton.dispatchEvent(pointerDownEvent)
       insideButton.dispatchEvent(clickEvent)
+      expect(handleClose).not.toHaveBeenCalled()
+    })
+
+    it('should not close when pointer starts inside content but click is retargeted to dialog', () => {
+      const handleClose = vi.fn()
+      const { container } = render(
+        <Dialog open={true} onClose={handleClose}>
+          <Dialog.Body>
+            <button type="button">Inside Action</button>
+          </Dialog.Body>
+        </Dialog>,
+      )
+
+      const dialog = container.querySelector('dialog')
+      const insideButton = screen.getByRole('button', { name: /inside action/i })
+
+      insideButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
       expect(handleClose).not.toHaveBeenCalled()
     })
 
@@ -345,22 +426,14 @@ describe('Dialog Component', () => {
       )
 
       const dialog = container.querySelector('dialog')
-
+      const pointerDownEvent = new MouseEvent('mousedown', {
+        bubbles: true,
+      })
       const clickEvent = new MouseEvent('click', {
         bubbles: true,
-        clientX: 0,
-        clientY: 0,
       })
 
-      dialog.getBoundingClientRect = vi.fn(() => ({
-        top: 100,
-        left: 100,
-        bottom: 400,
-        right: 400,
-        width: 300,
-        height: 300,
-      }))
-
+      dialog.dispatchEvent(pointerDownEvent)
       dialog.dispatchEvent(clickEvent)
       expect(handleClose).not.toHaveBeenCalled()
     })
