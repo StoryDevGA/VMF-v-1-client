@@ -73,4 +73,68 @@ describe('StepUpAuthForm', () => {
 
     expect(onStepUpComplete).toHaveBeenCalledWith('token-123', 900)
   })
+
+  it('supports custom password label and helper text', () => {
+    renderForm({
+      passwordLabel: 'Current Super Admin Password',
+      passwordHelperText: 'Enter your current Super Admin password to verify this replacement.',
+    })
+
+    expect(screen.getByLabelText(/current super admin password/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/verify this replacement/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows actionable guidance for expired step-up tokens', async () => {
+    const user = userEvent.setup()
+    mockRequestStepUp.mockReturnValue({
+      unwrap: () =>
+        Promise.reject({
+          status: 401,
+          data: {
+            error: {
+              code: 'STEP_UP_INVALID',
+              message: 'Step-up token expired or invalid. Re-authenticate and try again.',
+              requestId: 'step-up-invalid-1',
+            },
+          },
+        }),
+    })
+
+    renderForm()
+
+    await user.type(screen.getByLabelText(/re-enter password/i), 'incorrect-password')
+    await user.click(screen.getByRole('button', { name: /verify identity/i }))
+
+    const errorAlert = await screen.findByRole('alert')
+    expect(errorAlert).toHaveTextContent(/step-up verification has expired/i)
+    expect(errorAlert).toHaveTextContent(/\(Ref: step-up-invalid-1\)/i)
+  })
+
+  it('shows actionable guidance when step-up verification is unavailable', async () => {
+    const user = userEvent.setup()
+    mockRequestStepUp.mockReturnValue({
+      unwrap: () =>
+        Promise.reject({
+          status: 503,
+          data: {
+            error: {
+              code: 'STEP_UP_UNAVAILABLE',
+              message: 'Step-up verification is unavailable right now. Try again shortly.',
+              requestId: 'step-up-unavailable-1',
+            },
+          },
+        }),
+    })
+
+    renderForm()
+
+    await user.type(screen.getByLabelText(/re-enter password/i), 'password')
+    await user.click(screen.getByRole('button', { name: /verify identity/i }))
+
+    const errorAlert = await screen.findByRole('alert')
+    expect(errorAlert).toHaveTextContent(/step-up verification is temporarily unavailable/i)
+    expect(errorAlert).toHaveTextContent(/\(Ref: step-up-unavailable-1\)/i)
+  })
 })

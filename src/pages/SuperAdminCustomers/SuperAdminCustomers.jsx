@@ -12,6 +12,7 @@ import { Dialog } from '../../components/Dialog'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { TabView } from '../../components/TabView'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
+import { Accordion } from '../../components/Accordion'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
@@ -26,6 +27,8 @@ import {
 } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import {
+  appendRequestReference,
+  getStepUpErrorSignal,
   normalizeError,
   getErrorMessage,
   isCanonicalAdminConflictError,
@@ -57,6 +60,29 @@ const ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE =
   'An active invitation for this email is already tied to another user and is not linked to this customer yet. Revoke that invitation or wait for expiry, then retry.'
 const ASSIGN_INVITATION_ALREADY_ACTIVE_FALLBACK_MESSAGE =
   'An active invitation for this email already exists. Review Invitation Management before retrying.'
+const REPLACE_ADMIN_HELP_ITEMS = [
+  {
+    id: 'replace-admin-when',
+    title: 'When to use Replace Admin',
+    detail: 'Use only when the replacement person already has an account. This updates canonical ownership immediately.',
+  },
+  {
+    id: 'assign-admin-when',
+    title: 'When to use Assign Admin',
+    detail: 'If no account exists yet, invite first with Assign Admin. Canonical ownership stays unchanged until onboarding completes.',
+  },
+  {
+    id: 'replace-admin-user-id-verification',
+    title: 'User ID and Verification',
+    detail: 'Enter an existing User ID and verify with your current Super Admin password before replacing.',
+  },
+]
+const REPLACE_ADMIN_STEP_UP_REQUIRED_MESSAGE =
+  'Step-up verification is required. Verify using your current Super Admin password before replacing admin.'
+const REPLACE_ADMIN_STEP_UP_INVALID_MESSAGE =
+  'Step-up verification has expired. Verify again using your current Super Admin password, then retry Replace Admin.'
+const REPLACE_ADMIN_STEP_UP_UNAVAILABLE_MESSAGE =
+  'Step-up verification is temporarily unavailable. Wait a moment, then verify using your current Super Admin password and retry.'
 const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
   DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
   ACTIVE_INVITATION_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
@@ -228,6 +254,24 @@ const getAssignAdminErrorMessage = (appError) => {
     }
 
     return ASSIGN_INVITATION_ALREADY_ACTIVE_FALLBACK_MESSAGE
+  }
+
+  const detailMessage = getFirstErrorDetailMessage(appError?.details)
+  if (detailMessage) return detailMessage
+
+  return appError?.message || getErrorMessage(appError?.code)
+}
+
+const getReplaceAdminErrorMessage = (appError) => {
+  const signal = getStepUpErrorSignal(appError)
+  if (signal === 'required') {
+    return appendRequestReference(REPLACE_ADMIN_STEP_UP_REQUIRED_MESSAGE, appError?.requestId)
+  }
+  if (signal === 'invalid') {
+    return appendRequestReference(REPLACE_ADMIN_STEP_UP_INVALID_MESSAGE, appError?.requestId)
+  }
+  if (signal === 'unavailable') {
+    return appendRequestReference(REPLACE_ADMIN_STEP_UP_UNAVAILABLE_MESSAGE, appError?.requestId)
   }
 
   const detailMessage = getFirstErrorDetailMessage(appError?.details)
@@ -570,7 +614,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       }
     } else {
       if (!adminUserId.trim()) {
-        setAdminError('New User ID is required.')
+        setAdminError('Existing User ID is required.')
         return
       }
       if (!adminReason.trim()) {
@@ -652,7 +696,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         return
       }
 
-      setAdminError(appError.message)
+      setAdminError(getReplaceAdminErrorMessage(appError))
     }
   }, [
     addToast,
@@ -1168,16 +1212,43 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
               />
             </>
           ) : (
-            <Input
-              id="sa-admin-user-id"
-              label="New User ID"
-              value={adminUserId}
-              onChange={(event) => {
-                setAdminUserId(event.target.value)
-                setAdminError('')
-              }}
-              fullWidth
-            />
+            <>
+              <Accordion
+                variant="outlined"
+                className="super-admin-customers__replace-help"
+              >
+                {REPLACE_ADMIN_HELP_ITEMS.map((item) => (
+                  <Accordion.Item
+                    key={item.id}
+                    id={item.id}
+                    className="super-admin-customers__replace-help-item"
+                  >
+                    <Accordion.Header
+                      itemId={item.id}
+                      className="super-admin-customers__replace-help-header"
+                    >
+                      {item.title}
+                    </Accordion.Header>
+                    <Accordion.Content
+                      itemId={item.id}
+                      className="super-admin-customers__replace-help-content"
+                    >
+                      <p className="super-admin-customers__replace-help-detail">{item.detail}</p>
+                    </Accordion.Content>
+                  </Accordion.Item>
+                ))}
+              </Accordion>
+              <Input
+                id="sa-admin-user-id"
+                label="Existing User ID"
+                value={adminUserId}
+                onChange={(event) => {
+                  setAdminUserId(event.target.value)
+                  setAdminError('')
+                }}
+                fullWidth
+              />
+            </>
           )}
           {adminMode === 'replace' ? (
             <>
@@ -1193,6 +1264,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 fullWidth
               />
               <StepUpAuthForm
+                passwordLabel="Current Super Admin Password"
+                passwordHelperText="Enter your current Super Admin password to verify this replacement."
                 onStepUpComplete={(token) => {
                   setAdminStepUpToken(token)
                   setAdminError('')

@@ -11,14 +11,37 @@ import { Input } from '../Input'
 import { Button } from '../Button'
 import { useToaster } from '../Toaster'
 import { useRequestStepUpMutation } from '../../store/api/authApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  appendRequestReference,
+  getStepUpErrorSignal,
+  normalizeError,
+} from '../../utils/errors.js'
 import './StepUpAuthForm.css'
+
+const STEP_UP_INVALID_GUIDANCE =
+  'Step-up verification has expired. Re-enter your current password and verify again.'
+const STEP_UP_UNAVAILABLE_GUIDANCE =
+  'Step-up verification is temporarily unavailable. Wait a moment, then verify again.'
+
+const getStepUpErrorMessage = (appError) => {
+  const signal = getStepUpErrorSignal(appError)
+  if (signal === 'invalid') {
+    return appendRequestReference(STEP_UP_INVALID_GUIDANCE, appError?.requestId)
+  }
+  if (signal === 'unavailable') {
+    return appendRequestReference(STEP_UP_UNAVAILABLE_GUIDANCE, appError?.requestId)
+  }
+
+  return appError?.message || 'Step-up verification failed. Please try again.'
+}
 
 function StepUpAuthForm({
   onStepUpComplete,
   onCancel,
   onError,
   submitLabel = 'Verify Identity',
+  passwordLabel = 'Re-enter Password',
+  passwordHelperText = '',
   className = '',
 }) {
   const { addToast } = useToaster()
@@ -61,11 +84,12 @@ function StepUpAuthForm({
         )
       } catch (err) {
         const appError = normalizeError(err)
-        setFieldError(appError.message)
+        const resolvedMessage = getStepUpErrorMessage(appError)
+        setFieldError(resolvedMessage)
         onError?.(appError)
         addToast({
           title: 'Step-up verification failed',
-          description: appError.message,
+          description: resolvedMessage,
           variant: 'error',
         })
       }
@@ -91,12 +115,13 @@ function StepUpAuthForm({
       <Input
         id={inputId}
         type="password"
-        label="Re-enter Password"
+        label={passwordLabel}
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         autoComplete="current-password"
         required
         fullWidth
+        helperText={!fieldError && !verified ? passwordHelperText : undefined}
         error={fieldError}
         disabled={verified}
       />

@@ -131,6 +131,45 @@ export const getErrorMessage = (code) =>
   ERROR_MESSAGES[code] ?? code ?? ERROR_MESSAGES.SERVER_ERROR
 
 /**
+ * Append request reference to a message when available.
+ *
+ * @param {string} message
+ * @param {string | undefined} requestId
+ * @returns {string}
+ */
+export const appendRequestReference = (message, requestId) => {
+  const normalizedMessage = String(message ?? '').trim()
+  if (!requestId) return normalizedMessage
+  if (normalizedMessage.includes(`(Ref: ${requestId})`)) return normalizedMessage
+  return `${normalizedMessage} (Ref: ${requestId})`
+}
+
+/**
+ * Derive normalized step-up error signal from code/message.
+ *
+ * @param {{ code?: string, message?: string } | undefined} err
+ * @returns {'required' | 'invalid' | 'unavailable' | null}
+ */
+export const getStepUpErrorSignal = (err) => {
+  const code = String(err?.code ?? '').trim().toUpperCase()
+  const message = String(err?.message ?? '').toUpperCase()
+  const hasStepUpMarker = /STEP[\s-]?UP/.test(message)
+
+  if (code === 'STEP_UP_REQUIRED') return 'required'
+  if (
+    code === 'STEP_UP_INVALID' ||
+    (hasStepUpMarker && (message.includes('EXPIRED') || message.includes('INVALID')))
+  ) {
+    return 'invalid'
+  }
+  if (code === 'STEP_UP_UNAVAILABLE' || (hasStepUpMarker && message.includes('UNAVAILABLE'))) {
+    return 'unavailable'
+  }
+
+  return null
+}
+
+/**
  * Best-effort parser for API error payloads that may arrive as a string
  * (e.g. RTK Query PARSING_ERROR with JSON body text).
  *

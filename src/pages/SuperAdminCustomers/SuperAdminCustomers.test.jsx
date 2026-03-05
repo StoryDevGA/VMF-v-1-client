@@ -26,7 +26,16 @@ vi.mock('../../store/api/invitationApi.js', () => ({
 }))
 
 vi.mock('../../components/StepUpAuthForm', () => ({
-  StepUpAuthForm: () => <div>StepUpAuthForm</div>,
+  StepUpAuthForm: ({ onStepUpComplete, passwordLabel, passwordHelperText }) => (
+    <div>
+      <div>StepUpAuthForm</div>
+      <div data-testid="step-up-password-label">{passwordLabel}</div>
+      <div data-testid="step-up-password-helper">{passwordHelperText}</div>
+      <button type="button" onClick={() => onStepUpComplete?.('mock-step-up-token', 900)}>
+        Mock Step-up Complete
+      </button>
+    </div>
+  ),
 }))
 
 import {
@@ -615,10 +624,132 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
 
-    await user.type(screen.getByLabelText(/^new user id$/i), 'new-user-1')
+    expect(screen.queryByRole('heading', { name: /before you continue/i })).not.toBeInTheDocument()
+    const replaceDialogHeading = screen.getByRole('heading', { name: /replace customer admin/i })
+    const replaceDialog = replaceDialogHeading.closest('dialog')
+    expect(replaceDialog).not.toBeNull()
+    const replaceDialogScreen = within(replaceDialog)
+    expect(replaceDialogScreen.getByTestId('step-up-password-label')).toHaveTextContent(
+      /current super admin password/i,
+    )
+    expect(replaceDialogScreen.getByTestId('step-up-password-helper')).toHaveTextContent(
+      /verify this replacement/i,
+    )
+    const replaceAdminHelpTrigger = screen.getByRole('button', { name: /when to use replace admin/i })
+    expect(replaceAdminHelpTrigger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: /when to use assign admin/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.getByRole('button', { name: /user id and verification/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    const replaceAdminHelpPanel = document.getElementById('accordion-content-replace-admin-when')
+    expect(replaceAdminHelpPanel).toHaveAttribute('aria-hidden', 'true')
+
+    await user.click(replaceAdminHelpTrigger)
+    expect(replaceAdminHelpTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(replaceAdminHelpPanel).toHaveAttribute('aria-hidden', 'false')
+    expect(
+      screen.getByText(/updates canonical ownership immediately/i),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
     await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
 
     expect(screen.getByRole('button', { name: /^replace admin$/i })).toBeDisabled()
+  })
+
+  it('shows actionable guidance when replace-admin step-up token is expired', async () => {
+    const user = userEvent.setup()
+    const mockReplaceCustomerAdmin = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 401,
+        data: {
+          error: {
+            code: 'STEP_UP_INVALID',
+            message: 'Step-up token expired or invalid. Re-authenticate and try again.',
+            requestId: 'stepup-expired-1',
+          },
+        },
+      }),
+    })
+    useReplaceCustomerAdminMutation.mockReturnValue([mockReplaceCustomerAdmin, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
+    await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
+    await user.click(screen.getByRole('button', { name: /mock step-up complete/i }))
+    await user.click(screen.getByRole('button', { name: /^replace admin$/i }))
+
+    const errorAlert = await screen.findByRole('alert')
+    expect(errorAlert).toHaveTextContent(
+      /verify again using your current super admin password, then retry replace admin/i,
+    )
+    expect(errorAlert).toHaveTextContent(/\(Ref: stepup-expired-1\)/i)
+    expect(mockReplaceCustomerAdmin).toHaveBeenCalledWith({
+      customerId: 'c-1',
+      newUserId: 'new-user-1',
+      reason: 'Ownership transfer',
+      stepUpToken: 'mock-step-up-token',
+    })
+  })
+
+  it('shows actionable guidance when step-up verification service is unavailable during replace-admin', async () => {
+    const user = userEvent.setup()
+    const mockReplaceCustomerAdmin = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 503,
+        data: {
+          error: {
+            code: 'STEP_UP_UNAVAILABLE',
+            message: 'Step-up verification is unavailable right now. Try again shortly.',
+            requestId: 'stepup-unavailable-1',
+          },
+        },
+      }),
+    })
+    useReplaceCustomerAdminMutation.mockReturnValue([mockReplaceCustomerAdmin, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+    await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
+    await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
+    await user.click(screen.getByRole('button', { name: /mock step-up complete/i }))
+    await user.click(screen.getByRole('button', { name: /^replace admin$/i }))
+
+    const errorAlert = await screen.findByRole('alert')
+    expect(errorAlert).toHaveTextContent(
+      /step-up verification is temporarily unavailable/i,
+    )
+    expect(errorAlert).toHaveTextContent(
+      /verify using your current super admin password and retry/i,
+    )
+    expect(errorAlert).toHaveTextContent(/\(Ref: stepup-unavailable-1\)/i)
   })
 
   it('switches to invitations tab after successful assign-admin invitation creation', async () => {
