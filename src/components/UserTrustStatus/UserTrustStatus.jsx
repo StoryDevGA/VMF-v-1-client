@@ -19,6 +19,7 @@
  */
 
 import { Status } from '../Status'
+import { formatDateTime } from '../../utils/dateTime.js'
 import './UserTrustStatus.css'
 
 /**
@@ -29,24 +30,6 @@ const TRUST_CONFIG = {
   UNTRUSTED: { variant: 'warning', label: 'Untrusted', pulse: true },
   TRUSTED: { variant: 'success', label: 'Trusted', pulse: false },
   REVOKED: { variant: 'error', label: 'Revoked', pulse: false },
-}
-
-/**
- * Format a date string for display (short date).
- * @param {string|Date|null} date
- * @returns {string}
- */
-function formatDate(date) {
-  if (!date) return ''
-  try {
-    return new Date(date).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  } catch {
-    return ''
-  }
 }
 
 /**
@@ -85,12 +68,12 @@ export function UserTrustStatus({
         <span className="user-trust-status__dates">
           {trustStatus === 'UNTRUSTED' && invitedAt && (
             <span className="user-trust-status__date">
-              Invited {formatDate(invitedAt)}
+              Invited {formatDateTime(invitedAt, '')}
             </span>
           )}
           {trustStatus === 'TRUSTED' && trustedAt && (
             <span className="user-trust-status__date">
-              Trusted {formatDate(trustedAt)}
+              Trusted {formatDateTime(trustedAt, '')}
             </span>
           )}
           {trustStatus === 'REVOKED' && trustedAt && (

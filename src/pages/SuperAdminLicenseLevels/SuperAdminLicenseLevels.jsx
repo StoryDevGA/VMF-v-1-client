@@ -13,6 +13,7 @@ import { Select } from '../../components/Select'
 import { Tickbox } from '../../components/Tickbox'
 import { Button } from '../../components/Button'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { Status } from '../../components/Status'
 import { Dialog } from '../../components/Dialog'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
@@ -39,13 +40,6 @@ const INITIAL_FORM = {
   description: '',
   entitlements: '',
   isActive: true,
-}
-
-const formatDate = (value) => {
-  if (!value) return '--'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '--'
-  return parsed.toLocaleString()
 }
 
 const normalizeEntitlementToken = (value) =>
@@ -344,7 +338,8 @@ function SuperAdminLicenseLevels() {
       {
         key: 'updatedAt',
         label: 'Updated',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
     ],
     [],

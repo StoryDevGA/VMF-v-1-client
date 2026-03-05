@@ -11,6 +11,7 @@ import { Textarea } from '../../components/Textarea'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Dialog } from '../../components/Dialog'
@@ -23,6 +24,7 @@ import {
   useUpdatePolicyMetadataMutation,
 } from '../../store/api/systemVersioningApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { formatDateTime } from '../../utils/dateTime.js'
 import './SuperAdminSystemVersioning.css'
 
 const INITIAL_CREATE_FORM = {
@@ -30,13 +32,6 @@ const INITIAL_CREATE_FORM = {
   description: '',
   rules: '{\n  \n}',
   reason: '',
-}
-
-const formatDate = (value) => {
-  if (!value) return '--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '--'
-  return date.toLocaleString()
 }
 
 function SuperAdminSystemVersioning() {
@@ -243,12 +238,14 @@ function SuperAdminSystemVersioning() {
       {
         key: 'activatedAt',
         label: 'Activated',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
       {
         key: 'createdAt',
         label: 'Created',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
     ],
     [],
@@ -309,7 +306,7 @@ function SuperAdminSystemVersioning() {
                   </div>
                   <div>
                     <dt>Activated</dt>
-                    <dd>{formatDate(activePolicy.activatedAt)}</dd>
+                    <dd>{formatDateTime(activePolicy.activatedAt)}</dd>
                   </div>
                   <div>
                     <dt>Description</dt>

@@ -11,8 +11,8 @@
  *
  * @example
  * <DateTime
- *   dateFormat="MMMM d, yyyy"
- *   timeFormat="HH:mm:ss"
+ *   dateFormat="yyyy-MM-dd"
+ *   timeFormat="HH:mm"
  *   updateInterval={1000}
  * />
  */
@@ -23,8 +23,8 @@ import './DateTime.css'
 
 export function DateTime({
   className = '',
-  dateFormat = 'EEEE, MMMM d, yyyy',
-  timeFormat = 'hh:mm:ss a',
+  dateFormat = 'yyyy-MM-dd',
+  timeFormat = 'HH:mm',
   updateInterval = 1000
 }) {
   const [now, setNow] = useState(() => new Date())

@@ -16,6 +16,7 @@ import {
   useCompleteFakeAuthMutation,
 } from '../../store/api/fakeAuthApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { formatDateTime } from '../../utils/dateTime.js'
 import './InvitationAuth.css'
 
 const STATUS_VARIANTS = {
@@ -143,9 +144,7 @@ function InvitationAuth() {
             <div className="invitation-auth__detail">
               <span className="invitation-auth__detail-label">Expires</span>
               <span className="invitation-auth__detail-value">
-                {invitation.expiresAt
-                  ? new Date(invitation.expiresAt).toLocaleString()
-                  : '--'}
+                {formatDateTime(invitation.expiresAt)}
               </span>
             </div>
           </div>

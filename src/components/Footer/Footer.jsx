@@ -74,8 +74,8 @@ export function Footer({
           <div className="footer__meta">
             <DateTime
               className="footer__datetime"
-              dateFormat="MMM d, yyyy"
-              timeFormat="hh:mm a"
+              dateFormat="yyyy-MM-dd"
+              timeFormat="HH:mm"
             />
             <p className="footer__version">{versionLabel}</p>
           </div>

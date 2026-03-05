@@ -13,6 +13,7 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { TabView } from '../../components/TabView'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { Accordion } from '../../components/Accordion'
+import { TableDateTime } from '../../components/TableDateTime'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
@@ -89,6 +90,8 @@ const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
   INVITATION_ALREADY_ACTIVE_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
   EMAIL_ACTIVE_FOR_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
 }
+const CANONICAL_ADMIN_HELP_TEXT =
+  'Canonical Admin shows the governance owner user ID for each customer. It changes only after Replace Admin succeeds.'
 
 const INITIAL_FORM = {
   name: '',
@@ -110,13 +113,6 @@ const normalizeWorkspaceView = (value) =>
 
 const getCustomerId = (customer) => customer?.id ?? customer?._id
 const displayStatus = (value) => (value === 'DISABLED' ? 'INACTIVE' : value || '--')
-
-const formatDate = (value) => {
-  if (!value) return '--'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '--'
-  return parsed.toLocaleString()
-}
 
 const parsePositiveInt = (value) => Number.parseInt(String(value ?? '').trim(), 10)
 
@@ -784,12 +780,20 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       {
         key: 'customerAdminUserId',
         label: 'Canonical Admin',
-        render: (_value, row) => row?.governance?.customerAdminUserId ?? '--',
+        width: '220px',
+        render: (_value, row) => {
+          const canonicalAdminUserId = row?.governance?.customerAdminUserId
+          if (!canonicalAdminUserId) {
+            return <span className="super-admin-customers__canonical-admin-empty">Not assigned</span>
+          }
+          return <code className="super-admin-customers__canonical-admin-id">{canonicalAdminUserId}</code>
+        },
       },
       {
         key: 'updatedAt',
         label: 'Updated',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
       {
         key: 'rowActions',
@@ -868,6 +872,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 {listAppError.message}
               </p>
             ) : null}
+            <p className="super-admin-customers__table-note">{CANONICAL_ADMIN_HELP_TEXT}</p>
             <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
               <Table
                 className="super-admin-customers__table"

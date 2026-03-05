@@ -1,0 +1,21 @@
+.table-date-time {
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.table-date-time__date,
+.table-date-time__time {
+  display: block;
+  white-space: nowrap;
+}
+
+.table-date-time__date {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.table-date-time__time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+

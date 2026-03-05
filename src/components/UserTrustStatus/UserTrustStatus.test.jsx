@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { UserTrustStatus } from './UserTrustStatus'
+import { formatDateTime } from '../../utils/dateTime.js'
 
 describe('UserTrustStatus', () => {
   it('renders UNTRUSTED state with warning variant', () => {
@@ -37,28 +38,31 @@ describe('UserTrustStatus', () => {
   })
 
   it('shows invitation date when showDates is true and UNTRUSTED', () => {
+    const invitedAt = '2026-01-15T10:00:00Z'
     render(
       <UserTrustStatus
         trustStatus="UNTRUSTED"
-        invitedAt="2026-01-15T10:00:00Z"
+        invitedAt={invitedAt}
         showDates
       />,
     )
     expect(screen.getByText(/Invited/)).toBeInTheDocument()
-    expect(screen.getByText(/Jan/)).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(formatDateTime(invitedAt)))).toBeInTheDocument()
   })
 
   it('shows trusted date when showDates is true and TRUSTED', () => {
+    const trustedAt = '2026-02-01T14:30:00Z'
     render(
       <UserTrustStatus
         trustStatus="TRUSTED"
-        trustedAt="2026-02-01T14:30:00Z"
+        trustedAt={trustedAt}
         showDates
       />,
     )
     // "Trusted" appears in both the Status label and the date span
     const allTrusted = screen.getAllByText(/Trusted/)
     expect(allTrusted.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(new RegExp(formatDateTime(trustedAt)))).toBeInTheDocument()
   })
 
   it('does not show dates when showDates is false', () => {

@@ -20,8 +20,8 @@ describe('DateTime Component', () => {
 
     render(<DateTime />)
 
-    expect(screen.getByText(format(mockDate, 'EEEE, MMMM d, yyyy'))).toBeInTheDocument()
-    expect(screen.getByText(format(mockDate, 'hh:mm:ss a'))).toBeInTheDocument()
+    expect(screen.getByText(format(mockDate, 'yyyy-MM-dd'))).toBeInTheDocument()
+    expect(screen.getByText(format(mockDate, 'HH:mm'))).toBeInTheDocument()
   })
 
   it('should update the time on the provided interval', async () => {
@@ -31,7 +31,7 @@ describe('DateTime Component', () => {
 
     render(<DateTime updateInterval={1000} />)
 
-    const firstTime = format(start, 'hh:mm:ss a')
+    const firstTime = format(start, 'HH:mm')
     expect(screen.getByText(firstTime)).toBeInTheDocument()
 
     await act(async () => {
@@ -39,7 +39,7 @@ describe('DateTime Component', () => {
     })
 
     const next = new Date(start.getTime() + 1000)
-    expect(screen.getByText(format(next, 'hh:mm:ss a'))).toBeInTheDocument()
+    expect(screen.getByText(format(next, 'HH:mm'))).toBeInTheDocument()
   })
 
   it('should apply custom className', () => {
@@ -49,7 +49,7 @@ describe('DateTime Component', () => {
 
     render(<DateTime className="custom-class" />)
     const wrapper = screen
-      .getByText(format(mockDate, 'hh:mm:ss a'))
+      .getByText(format(mockDate, 'HH:mm'))
       .closest('.datetime')
     expect(wrapper).toHaveClass('custom-class')
   })

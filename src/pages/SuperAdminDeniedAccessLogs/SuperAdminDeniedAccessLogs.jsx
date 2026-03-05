@@ -9,6 +9,7 @@ import { Card } from '../../components/Card'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { Status } from '../../components/Status'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
@@ -32,12 +33,6 @@ const toEndOfDayIso = (dateValue) => {
   if (!dateValue) return ''
   const date = new Date(`${dateValue}T23:59:59.999Z`)
   return Number.isNaN(date.getTime()) ? '' : date.toISOString()
-}
-
-const formatDateTime = (value) => {
-  if (!value) return '--'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '--' : date.toLocaleString()
 }
 
 const getActorDisplay = (row) => {
@@ -77,7 +72,8 @@ function SuperAdminDeniedAccessLogs() {
       {
         key: 'createdAt',
         label: 'Timestamp',
-        render: (value) => formatDateTime(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
       {
         key: 'actor',

@@ -21,6 +21,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { useSystemMonitoring } from '../../hooks/useSystemMonitoring.js'
+import { formatDateTime } from '../../utils/dateTime.js'
 import './SystemMonitoring.css'
 
 function statusToVariant(status) {
@@ -35,10 +36,7 @@ function formatPercent(decimal) {
 }
 
 function formatTimestamp(isoValue) {
-  if (!isoValue) return 'Unknown'
-  const parsed = new Date(isoValue)
-  if (Number.isNaN(parsed.getTime())) return 'Unknown'
-  return parsed.toLocaleString()
+  return formatDateTime(isoValue, 'Unknown')
 }
 
 function formatDurationMs(durationMs) {

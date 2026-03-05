@@ -4,6 +4,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
@@ -41,13 +42,6 @@ const RESOURCE_TYPE_OPTIONS = [
   { value: 'Invitation', label: 'Invitation' },
   { value: 'AuditLog', label: 'AuditLog' },
 ]
-
-const formatDate = (value) => {
-  if (!value) return '--'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '--'
-  return parsed.toLocaleString()
-}
 
 const actorLabel = (row) => {
   if (row?.actorUserId?.name) return row.actorUserId.name
@@ -127,7 +121,7 @@ function SuperAdminAuditLogs() {
 
   const columns = useMemo(
     () => [
-      { key: 'ts', label: 'Timestamp', render: (value) => formatDate(value) },
+      { key: 'ts', label: 'Timestamp', width: '156px', render: (value) => <TableDateTime value={value} /> },
       { key: 'action', label: 'Action' },
       {
         key: 'resourceType',
@@ -275,4 +269,3 @@ function SuperAdminAuditLogs() {
 }
 
 export default SuperAdminAuditLogs
-

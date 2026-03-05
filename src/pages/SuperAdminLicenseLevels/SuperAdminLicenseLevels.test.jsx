@@ -19,6 +19,16 @@ import {
 } from '../../store/api/licenseLevelApi.js'
 
 const createLicenseLevelMock = vi.fn()
+const padTwoDigits = (value) => String(value).padStart(2, '0')
+
+const getExpectedDateTimeParts = (value) => {
+  const parsed = new Date(value)
+  return {
+    iso: parsed.toISOString(),
+    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
+    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
+  }
+}
 
 function renderPage() {
   return render(
@@ -88,5 +98,37 @@ describe('SuperAdminLicenseLevels page', () => {
         featureEntitlements: ['FEATURE_A', 'FEATURE_B'],
       }),
     )
+  })
+
+  it('renders updated timestamp in catalogue rows using standardized two-line format', () => {
+    const updatedAt = '2026-03-05T14:30:00.000Z'
+    const parts = getExpectedDateTimeParts(updatedAt)
+
+    useListLicenseLevelsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'lic-1',
+            name: 'Enterprise',
+            isActive: true,
+            customerCount: 12,
+            featureEntitlements: ['FEATURE_A'],
+            updatedAt,
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    const timestampNode = document.querySelector('.table-date-time')
+    expect(timestampNode).not.toBeNull()
+    expect(timestampNode).toHaveAttribute('datetime', parts.iso)
+    expect(timestampNode.querySelector('.table-date-time__date')).toHaveTextContent(parts.dateLabel)
+    expect(timestampNode.querySelector('.table-date-time__time')).toHaveTextContent(parts.timeLabel)
   })
 })

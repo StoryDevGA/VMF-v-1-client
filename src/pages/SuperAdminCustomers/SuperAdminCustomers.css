@@ -156,6 +156,23 @@
   margin-top: var(--spacing-xs);
 }
 
+.super-admin-customers__table-note {
+  margin: var(--spacing-xs) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-customers__canonical-admin-id {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.super-admin-customers__canonical-admin-empty {
+  color: var(--color-text-secondary);
+}
+
 .super-admin-customers__table .table__header:last-child,
 .super-admin-customers__table .table__cell:last-child {
   width: 168px;

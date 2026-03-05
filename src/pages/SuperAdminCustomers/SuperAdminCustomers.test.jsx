@@ -111,6 +111,71 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
   })
 
+  it('clarifies canonical-admin meaning and normalizes updated timestamp rendering in customer rows', () => {
+    const updatedAt = '2026-03-05T14:30:00.000Z'
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'c-1',
+            name: 'Acme Corp',
+            status: 'ACTIVE',
+            topology: 'SINGLE_TENANT',
+            governance: {
+              maxTenants: 1,
+              maxVmfsPerTenant: 4,
+              customerAdminUserId: 'admin-user-123',
+            },
+            updatedAt,
+          },
+          {
+            id: 'c-2',
+            name: 'Beta Corp',
+            status: 'ACTIVE',
+            topology: 'SINGLE_TENANT',
+            governance: {
+              maxTenants: 1,
+              maxVmfsPerTenant: 2,
+            },
+            updatedAt: null,
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 2 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByText(/canonical admin shows the governance owner user id for each customer/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText('admin-user-123', { selector: 'code' })).toBeInTheDocument()
+    expect(screen.getByText(/not assigned/i)).toBeInTheDocument()
+
+    const parsedUpdatedAt = new Date(updatedAt)
+    const padTwoDigits = (value) => String(value).padStart(2, '0')
+    const updatedDateLabel = `${parsedUpdatedAt.getFullYear()}-${padTwoDigits(
+      parsedUpdatedAt.getMonth() + 1,
+    )}-${padTwoDigits(parsedUpdatedAt.getDate())}`
+    const updatedTimeLabel = `${padTwoDigits(parsedUpdatedAt.getHours())}:${padTwoDigits(
+      parsedUpdatedAt.getMinutes(),
+    )}`
+    const updatedTimestamp = document.querySelector('.table-date-time')
+    expect(updatedTimestamp).not.toBeNull()
+    expect(updatedTimestamp).toHaveAttribute('datetime', parsedUpdatedAt.toISOString())
+    expect(updatedTimestamp).toHaveTextContent(updatedDateLabel)
+    expect(updatedTimestamp).toHaveTextContent(updatedTimeLabel)
+    expect(updatedTimestamp.querySelector('.table-date-time__date')).toHaveTextContent(
+      /^\d{4}-\d{2}-\d{2}$/,
+    )
+    expect(updatedTimestamp.querySelector('.table-date-time__time')).toHaveTextContent(
+      /^\d{2}:\d{2}$/,
+    )
+  })
+
   it('opens create customer dialog from the catalogue create button', async () => {
     const user = userEvent.setup()
     renderPage()

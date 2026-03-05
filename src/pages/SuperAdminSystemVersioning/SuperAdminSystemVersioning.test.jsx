@@ -21,6 +21,17 @@ import {
   useUpdatePolicyMetadataMutation,
 } from '../../store/api/systemVersioningApi.js'
 
+const padTwoDigits = (value) => String(value).padStart(2, '0')
+
+const getExpectedDateTimeParts = (value) => {
+  const parsed = new Date(value)
+  return {
+    iso: parsed.toISOString(),
+    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
+    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
+  }
+}
+
 function renderPage() {
   return render(
     <ToasterProvider>
@@ -62,5 +73,41 @@ describe('SuperAdminSystemVersioning page', () => {
     expect(
       screen.getByRole('heading', { name: /policy history/i }),
     ).toBeInTheDocument()
+  })
+
+  it('renders policy history activated/created timestamps in standardized two-line format', () => {
+    const activatedAt = '2026-03-05T14:30:00.000Z'
+    const createdAt = '2026-03-01T10:15:00.000Z'
+    const activatedParts = getExpectedDateTimeParts(activatedAt)
+    const createdParts = getExpectedDateTimeParts(createdAt)
+
+    useGetPolicyHistoryQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'p-1',
+            version: 3,
+            name: 'Policy v3',
+            isActive: true,
+            activatedAt,
+            createdAt,
+          },
+        ],
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    const timestampNodes = Array.from(document.querySelectorAll('.table-date-time'))
+    expect(timestampNodes).toHaveLength(2)
+    expect(document.querySelector(`.table-date-time[datetime="${activatedParts.iso}"]`)).not.toBeNull()
+    expect(document.querySelector(`.table-date-time[datetime="${createdParts.iso}"]`)).not.toBeNull()
+    expect(screen.getByText(activatedParts.dateLabel)).toBeInTheDocument()
+    expect(screen.getByText(activatedParts.timeLabel)).toBeInTheDocument()
+    expect(screen.getByText(createdParts.dateLabel)).toBeInTheDocument()
+    expect(screen.getByText(createdParts.timeLabel)).toBeInTheDocument()
   })
 })

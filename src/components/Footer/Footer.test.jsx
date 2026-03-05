@@ -142,8 +142,8 @@ describe('Footer Component', () => {
         </RouterWrapper>
       )
 
-      expect(screen.getByText(format(mockDate, 'MMM d, yyyy'))).toBeInTheDocument()
-      expect(screen.getByText(format(mockDate, 'hh:mm a'))).toBeInTheDocument()
+      expect(screen.getByText(format(mockDate, 'yyyy-MM-dd'))).toBeInTheDocument()
+      expect(screen.getByText(format(mockDate, 'HH:mm'))).toBeInTheDocument()
     })
   })
 

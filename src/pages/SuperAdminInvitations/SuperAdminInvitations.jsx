@@ -12,6 +12,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { Dialog } from '../../components/Dialog'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { useToaster } from '../../components/Toaster'
@@ -48,13 +49,6 @@ const STATUS_VARIANTS = {
 
 const NON_RESENDABLE_STATUSES = new Set(['authenticated', 'expired', 'revoked'])
 const NON_REVOCABLE_STATUSES = new Set(['authenticated', 'expired', 'revoked'])
-
-const formatDate = (value) => {
-  if (!value) return '--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '--'
-  return date.toLocaleString()
-}
 
 function SuperAdminInvitations() {
   return (
@@ -295,12 +289,14 @@ export function SuperAdminInvitationsPanel({
       {
         key: 'expiresAt',
         label: 'Expires',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
       {
         key: 'updatedAt',
         label: 'Updated',
-        render: (value) => formatDate(value),
+        width: '156px',
+        render: (value) => <TableDateTime value={value} />,
       },
     ],
     [],

@@ -20,6 +20,17 @@ import {
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
 
+const padTwoDigits = (value) => String(value).padStart(2, '0')
+
+const getExpectedDateTimeParts = (value) => {
+  const parsed = new Date(value)
+  return {
+    iso: parsed.toISOString(),
+    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
+    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
+  }
+}
+
 function renderPage() {
   return render(
     <ToasterProvider>
@@ -63,6 +74,49 @@ describe('SuperAdminInvitations page', () => {
     expect(searchInput).toHaveAttribute('autocorrect', 'off')
     expect(searchInput).toHaveAttribute('autocapitalize', 'none')
     expect(searchInput).toHaveAttribute('spellcheck', 'false')
+  })
+
+  it('renders expires and updated table timestamps in standardized two-line format', () => {
+    const expiresAt = '2026-03-11T10:00:00.000Z'
+    const updatedAt = '2026-03-05T14:30:00.000Z'
+    const expiresParts = getExpectedDateTimeParts(expiresAt)
+    const updatedParts = getExpectedDateTimeParts(updatedAt)
+
+    useListInvitationsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'inv-1',
+            recipientName: 'Alpha User',
+            recipientEmail: 'alpha@example.com',
+            company: { name: 'Alpha Co' },
+            status: 'created',
+            expiresAt,
+            updatedAt,
+          },
+        ],
+        meta: { page: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    const dateTimeNodes = Array.from(document.querySelectorAll('.table-date-time'))
+    expect(dateTimeNodes).toHaveLength(2)
+    for (const dateTimeNode of dateTimeNodes) {
+      expect(dateTimeNode.querySelector('.table-date-time__date')).toHaveTextContent(/^\d{4}-\d{2}-\d{2}$/)
+      expect(dateTimeNode.querySelector('.table-date-time__time')).toHaveTextContent(/^\d{2}:\d{2}$/)
+    }
+
+    expect(document.querySelector(`.table-date-time[datetime="${expiresParts.iso}"]`)).not.toBeNull()
+    expect(document.querySelector(`.table-date-time[datetime="${updatedParts.iso}"]`)).not.toBeNull()
+    expect(screen.getByText(expiresParts.dateLabel)).toBeInTheDocument()
+    expect(screen.getByText(expiresParts.timeLabel)).toBeInTheDocument()
+    expect(screen.getByText(updatedParts.dateLabel)).toBeInTheDocument()
+    expect(screen.getByText(updatedParts.timeLabel)).toBeInTheDocument()
   })
 
   it('disables Revoke action for revoked invitations', async () => {
