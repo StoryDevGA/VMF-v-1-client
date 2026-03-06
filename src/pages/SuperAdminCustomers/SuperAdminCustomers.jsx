@@ -14,6 +14,7 @@ import { TabView } from '../../components/TabView'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { Accordion } from '../../components/Accordion'
 import { TableDateTime } from '../../components/TableDateTime'
+import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
@@ -27,6 +28,7 @@ import {
   useReplaceCustomerAdminMutation,
 } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
+import { useListUsersQuery } from '../../store/api/userApi.js'
 import {
   appendRequestReference,
   getStepUpErrorSignal,
@@ -48,6 +50,19 @@ const TOPOLOGY_FILTER_OPTIONS = [
   { value: '', label: 'All topologies' },
   { value: 'SINGLE_TENANT', label: 'Single Tenant' },
   { value: 'MULTI_TENANT', label: 'Multi Tenant' },
+]
+
+const USER_STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
+]
+
+const USER_ROLE_FILTER_OPTIONS = [
+  { value: '', label: 'All roles' },
+  { value: 'CUSTOMER_ADMIN', label: 'Customer Admin' },
+  { value: 'TENANT_ADMIN', label: 'Tenant Admin' },
+  { value: 'USER', label: 'User' },
 ]
 
 const BILLING_CYCLE_OPTIONS = [
@@ -130,6 +145,33 @@ const getVmfPolicyForCount = (topology, vmfCount) => {
     return normalizedCount > 1 ? 'PER_TENANT_MULTI' : 'PER_TENANT_SINGLE'
   }
   return normalizedCount > 1 ? 'MULTI' : 'SINGLE'
+}
+
+const normalizeUserStatus = (row) => {
+  const explicitStatus = String(row?.status ?? '')
+    .trim()
+    .toUpperCase()
+  if (explicitStatus) return explicitStatus
+  return row?.isActive ? 'ACTIVE' : 'INACTIVE'
+}
+
+const getUserTrustStatus = (row) =>
+  String(row?.trustStatus ?? row?.identityPlus?.trustStatus ?? 'UNTRUSTED')
+    .trim()
+    .toUpperCase()
+
+const getCustomerUserRoles = (row, customerId) => {
+  if (Array.isArray(row?.customerRoles) && row.customerRoles.length > 0) {
+    return row.customerRoles
+  }
+
+  if (!Array.isArray(row?.memberships)) return []
+  const targetCustomerId = String(customerId ?? '')
+  const membership = row.memberships.find((item) =>
+    String(item?.customerId ?? '') === targetCustomerId,
+  )
+
+  return Array.isArray(membership?.roles) ? membership.roles : []
 }
 
 const isValidUrl = (value) => {
@@ -385,8 +427,15 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [authLinkDialogOpen, setAuthLinkDialogOpen] = useState(false)
   const [lastAuthLink, setLastAuthLink] = useState('')
   const [pendingInvitationTabSwitch, setPendingInvitationTabSwitch] = useState(false)
+  const [usersWorkspaceCustomer, setUsersWorkspaceCustomer] = useState(null)
+  const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState('')
+  const [userStatusFilter, setUserStatusFilter] = useState('')
+  const [userPage, setUserPage] = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
+  const debouncedUserSearch = useDebounce(userSearch, 300)
+  const usersWorkspaceCustomerId = getCustomerId(usersWorkspaceCustomer)
 
   const {
     data: listResponse,
@@ -425,10 +474,40 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     useCreateCustomerAdminInvitationMutation()
   const [replaceCustomerAdmin, replaceAdminResult] = useReplaceCustomerAdminMutation()
 
+  const {
+    data: listUsersResponse,
+    isLoading: isListUsersLoading,
+    isFetching: isListUsersFetching,
+    error: listUsersError,
+  } = useListUsersQuery(
+    {
+      customerId: usersWorkspaceCustomerId,
+      page: userPage,
+      pageSize: 20,
+      q: debouncedUserSearch.trim(),
+      role: userRoleFilter,
+      status: userStatusFilter,
+    },
+    { skip: !usersWorkspaceCustomerId },
+  )
+
   const rows = listResponse?.data ?? []
   const meta = listResponse?.meta ?? {}
   const totalPages = Number(meta.totalPages) || 1
   const licenseLevels = licenseLevelsResponse?.data ?? []
+  const userRows = useMemo(
+    () =>
+      (listUsersResponse?.data?.users ?? []).map((row, index) => ({
+        ...row,
+        id: row?.id ?? row?._id ?? `customer-user-${index}`,
+      })),
+    [listUsersResponse],
+  )
+  const userMeta = listUsersResponse?.meta ?? {}
+  const userTotalPages = Number(userMeta.totalPages) || 1
+  const userCurrentPage = Number(userMeta.page) || userPage
+  const userTotal = Number(userMeta.total)
+  const userTotalCount = Number.isFinite(userTotal) ? userTotal : userRows.length
 
   useEffect(() => {
     if (!customerDetailsResponse?.data) return
@@ -436,6 +515,10 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   }, [customerDetailsResponse])
 
   const listAppError = listError ? normalizeError(listError) : null
+  const listUsersAppError = listUsersError ? normalizeError(listUsersError) : null
+  const listUsersErrorMessage = getFirstErrorDetailMessage(listUsersAppError?.details)
+    || listUsersAppError?.message
+    || ''
   const customerDetailsAppError = customerDetailsError
     ? normalizeError(customerDetailsError)
     : null
@@ -557,6 +640,24 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     },
     [addToast, updateCustomerStatus],
   )
+
+  const openUsersWorkspace = useCallback((row) => {
+    const customerId = getCustomerId(row)
+    if (!customerId) return
+    setUsersWorkspaceCustomer(row)
+    setUserSearch('')
+    setUserRoleFilter('')
+    setUserStatusFilter('')
+    setUserPage(1)
+  }, [])
+
+  const closeUsersWorkspace = useCallback(() => {
+    setUsersWorkspaceCustomer(null)
+    setUserSearch('')
+    setUserRoleFilter('')
+    setUserStatusFilter('')
+    setUserPage(1)
+  }, [])
 
   const openAdminDialog = useCallback((mode, row) => {
     setAdminMode(mode)
@@ -712,6 +813,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const rowActions = useMemo(
     () => [
       { label: 'Edit' },
+      { label: 'View Users' },
       {
         label: 'Set Active',
         disabled: (row) => displayStatus(row?.status) === 'ACTIVE',
@@ -729,12 +831,13 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') openEditDialog(row)
+      if (label === 'View Users') openUsersWorkspace(row)
       if (label === 'Set Active') handleUpdateStatus(row, 'ACTIVE')
       if (label === 'Set Inactive') handleUpdateStatus(row, 'INACTIVE')
       if (label === 'Assign Admin') openAdminDialog('assign', row)
       if (label === 'Replace Admin') openAdminDialog('replace', row)
     },
-    [handleUpdateStatus, openAdminDialog, openEditDialog],
+    [handleUpdateStatus, openAdminDialog, openEditDialog, openUsersWorkspace],
   )
 
   const columns = useMemo(
@@ -807,111 +910,278 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     [handleRowAction, openEditDialog, rowActions],
   )
 
+  const userColumns = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Name',
+        render: (value) => value || '--',
+      },
+      {
+        key: 'email',
+        label: 'Email',
+        render: (value) => value || '--',
+      },
+      {
+        key: 'customerRoles',
+        label: 'Roles',
+        render: (_value, row) => {
+          const roles = getCustomerUserRoles(row, usersWorkspaceCustomerId)
+          return roles.length > 0 ? roles.join(', ') : '--'
+        },
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (_value, row) => {
+          const status = normalizeUserStatus(row)
+          return (
+            <Status size="sm" showIcon variant={status === 'ACTIVE' ? 'success' : 'neutral'}>
+              {status}
+            </Status>
+          )
+        },
+      },
+      {
+        key: 'trustStatus',
+        label: 'Trust',
+        render: (_value, row) => (
+          <UserTrustStatus trustStatus={getUserTrustStatus(row)} size="sm" />
+        ),
+      },
+      {
+        key: 'isCanonicalAdmin',
+        label: 'Canonical Admin',
+        width: '180px',
+        render: (_value, row) =>
+          row?.isCanonicalAdmin
+            ? (
+              <Status size="sm" showIcon variant="info">
+                Canonical
+              </Status>
+            )
+            : <span className="super-admin-customers__canonical-admin-empty">--</span>,
+      },
+    ],
+    [usersWorkspaceCustomerId],
+  )
+
   const adminMutationLoading =
     createAdminInvitationResult.isLoading || replaceAdminResult.isLoading
+  const isUsersWorkspaceOpen = Boolean(usersWorkspaceCustomerId)
 
   return (
     <section className="super-admin-customers" aria-label="Super admin customers">
-      <header className="super-admin-customers__header">
-        <h2 className="super-admin-customers__title">Customers</h2>
-        <p className="super-admin-customers__subtitle">
-          Customers - Manage customer lifecycle, governance limits, and canonical customer admin flows.
-        </p>
-      </header>
+      {isUsersWorkspaceOpen ? (
+        <>
+          <header className="super-admin-customers__header">
+            <h2 className="super-admin-customers__title">Customer Users</h2>
+            <p className="super-admin-customers__subtitle">
+              View users, trust state, and customer-role assignments for{' '}
+              <strong>{usersWorkspaceCustomer?.name ?? '--'}</strong>.
+            </p>
+          </header>
 
-      <Fieldset className="super-admin-customers__fieldset">
-        <Fieldset.Legend className="sr-only">Customer catalogue</Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-customers__card">
-          <Card.Body>
-            <div className="super-admin-customers__catalogue-actions">
-              <Button
-                type="button"
-                variant="primary"
-                onClick={openCreateDialog}
-                disabled={createResult.isLoading}
-              >
-                Create
-              </Button>
-            </div>
-            <div className="super-admin-customers__toolbar">
-              <Input
-                id="sa-customer-search"
-                label="Search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
-                  setPage(1)
-                }}
-                fullWidth
-              />
-              <Select
-                id="sa-customer-status-filter"
-                label="Status"
-                value={statusFilter}
-                options={STATUS_FILTER_OPTIONS}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value)
-                  setPage(1)
-                }}
-              />
-              <Select
-                id="sa-customer-topology-filter"
-                label="Topology"
-                value={topologyFilter}
-                options={TOPOLOGY_FILTER_OPTIONS}
-                onChange={(event) => {
-                  setTopologyFilter(event.target.value)
-                  setPage(1)
-                }}
-              />
-            </div>
-            {listAppError ? (
-              <p className="super-admin-customers__error" role="alert">
-                {listAppError.message}
-              </p>
-            ) : null}
-            <p className="super-admin-customers__table-note">{CANONICAL_ADMIN_HELP_TEXT}</p>
-            <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
-              <Table
-                className="super-admin-customers__table"
-                columns={columns}
-                data={rows}
-                loading={isListLoading}
-                variant="striped"
-                hoverable
-                emptyMessage="No customers found."
-                ariaLabel="Customers"
-              />
-            </HorizontalScroll>
-            {isListFetching && !isListLoading ? (
-              <p className="super-admin-customers__muted">Refreshing list...</p>
-            ) : null}
-            {totalPages > 1 ? (
-              <div className="super-admin-customers__pagination">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || isListFetching}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Previous
-                </Button>
-                <p className="super-admin-customers__pagination-info">
-                  Page {Number(meta.page) || page} of {totalPages}
+          <Fieldset className="super-admin-customers__fieldset">
+            <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>
+            <Card variant="elevated" className="super-admin-customers__card">
+              <Card.Body>
+                <div className="super-admin-customers__catalogue-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeUsersWorkspace}
+                  >
+                    Back to Customers
+                  </Button>
+                </div>
+                <p className="super-admin-customers__users-note">
+                  Showing users for <strong>{usersWorkspaceCustomer?.name ?? '--'}</strong>.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || isListFetching}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            ) : null}
-          </Card.Body>
-        </Card>
-      </Fieldset>
+                <div className="super-admin-customers__toolbar super-admin-customers__users-toolbar">
+                  <Input
+                    id="sa-customer-user-search"
+                    label="Search"
+                    value={userSearch}
+                    onChange={(event) => {
+                      setUserSearch(event.target.value)
+                      setUserPage(1)
+                    }}
+                    fullWidth
+                  />
+                  <Select
+                    id="sa-customer-user-role-filter"
+                    label="Role"
+                    value={userRoleFilter}
+                    options={USER_ROLE_FILTER_OPTIONS}
+                    onChange={(event) => {
+                      setUserRoleFilter(event.target.value)
+                      setUserPage(1)
+                    }}
+                  />
+                  <Select
+                    id="sa-customer-user-status-filter"
+                    label="Status"
+                    value={userStatusFilter}
+                    options={USER_STATUS_FILTER_OPTIONS}
+                    onChange={(event) => {
+                      setUserStatusFilter(event.target.value)
+                      setUserPage(1)
+                    }}
+                  />
+                </div>
+                {listUsersAppError ? (
+                  <p className="super-admin-customers__error" role="alert">
+                    {listUsersErrorMessage}
+                  </p>
+                ) : null}
+                <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customer users table" gap="sm">
+                  <Table
+                    className="super-admin-customers__table super-admin-customers__users-table"
+                    columns={userColumns}
+                    data={userRows}
+                    loading={isListUsersLoading}
+                    variant="striped"
+                    hoverable
+                    emptyMessage="No users found for this customer."
+                    ariaLabel={`Users for ${usersWorkspaceCustomer?.name ?? 'customer'}`}
+                  />
+                </HorizontalScroll>
+                {isListUsersFetching && !isListUsersLoading ? (
+                  <p className="super-admin-customers__muted">Refreshing users...</p>
+                ) : null}
+                {userTotalPages > 1 ? (
+                  <div className="super-admin-customers__pagination">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={userPage <= 1 || isListUsersFetching}
+                      onClick={() => setUserPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <p className="super-admin-customers__pagination-info">
+                      Page {userCurrentPage} of {userTotalPages}
+                      {userTotalCount > 0 ? ` (${userTotalCount} users)` : ''}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={userPage >= userTotalPages || isListUsersFetching}
+                      onClick={() => setUserPage((current) => Math.min(userTotalPages, current + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                ) : null}
+              </Card.Body>
+            </Card>
+          </Fieldset>
+        </>
+      ) : (
+        <>
+          <header className="super-admin-customers__header">
+            <h2 className="super-admin-customers__title">Customers</h2>
+            <p className="super-admin-customers__subtitle">
+              Customers - Manage customer lifecycle, governance limits, and canonical customer admin flows.
+            </p>
+          </header>
+
+          <Fieldset className="super-admin-customers__fieldset">
+            <Fieldset.Legend className="sr-only">Customer catalogue</Fieldset.Legend>
+            <Card variant="elevated" className="super-admin-customers__card">
+              <Card.Body>
+                <div className="super-admin-customers__catalogue-actions">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={openCreateDialog}
+                    disabled={createResult.isLoading}
+                  >
+                    Create
+                  </Button>
+                </div>
+                <div className="super-admin-customers__toolbar">
+                  <Input
+                    id="sa-customer-search"
+                    label="Search"
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value)
+                      setPage(1)
+                    }}
+                    fullWidth
+                  />
+                  <Select
+                    id="sa-customer-status-filter"
+                    label="Status"
+                    value={statusFilter}
+                    options={STATUS_FILTER_OPTIONS}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value)
+                      setPage(1)
+                    }}
+                  />
+                  <Select
+                    id="sa-customer-topology-filter"
+                    label="Topology"
+                    value={topologyFilter}
+                    options={TOPOLOGY_FILTER_OPTIONS}
+                    onChange={(event) => {
+                      setTopologyFilter(event.target.value)
+                      setPage(1)
+                    }}
+                  />
+                </div>
+                {listAppError ? (
+                  <p className="super-admin-customers__error" role="alert">
+                    {listAppError.message}
+                  </p>
+                ) : null}
+                <p className="super-admin-customers__table-note">{CANONICAL_ADMIN_HELP_TEXT}</p>
+                <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
+                  <Table
+                    className="super-admin-customers__table"
+                    columns={columns}
+                    data={rows}
+                    loading={isListLoading}
+                    variant="striped"
+                    hoverable
+                    emptyMessage="No customers found."
+                    ariaLabel="Customers"
+                  />
+                </HorizontalScroll>
+                {isListFetching && !isListLoading ? (
+                  <p className="super-admin-customers__muted">Refreshing list...</p>
+                ) : null}
+                {totalPages > 1 ? (
+                  <div className="super-admin-customers__pagination">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || isListFetching}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <p className="super-admin-customers__pagination-info">
+                      Page {Number(meta.page) || page} of {totalPages}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages || isListFetching}
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                ) : null}
+              </Card.Body>
+            </Card>
+          </Fieldset>
+        </>
+      )}
 
       <Dialog open={createOpen} onClose={closeCreateDialog} size="lg">
         <Dialog.Header>

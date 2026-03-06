@@ -162,6 +162,12 @@
   color: var(--color-text-secondary);
 }
 
+.super-admin-customers__users-note {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .super-admin-customers__canonical-admin-id {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);

@@ -10,27 +10,111 @@
 
 import { baseApi } from './baseApi.js'
 
+const getListUsersRows = (result) => {
+  if (!result || typeof result !== 'object') return []
+
+  const payload = result.data
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.users)) return payload.users
+
+  return []
+}
+
+const getListUsersMeta = (result) => {
+  if (!result || typeof result !== 'object') {
+    return {}
+  }
+
+  if (result.meta && typeof result.meta === 'object') {
+    return result.meta
+  }
+
+  const payload = result.data
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {}
+  }
+
+  const meta = { ...payload }
+  delete meta.users
+  delete meta.data
+  return meta
+}
+
+const parsePositiveInt = (value, fallback) => {
+  const parsedValue = Number.parseInt(String(value ?? ''), 10)
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : fallback
+}
+
+const normalizeListUsersResponse = (
+  response,
+  { defaultPage = 1, defaultPageSize = 20 } = {},
+) => {
+  const users = getListUsersRows(response)
+  const rawMeta = getListUsersMeta(response)
+  const page = parsePositiveInt(rawMeta.page, defaultPage)
+  const pageSize = parsePositiveInt(rawMeta.pageSize, defaultPageSize)
+  const total = Number.isFinite(Number(rawMeta.total))
+    ? Number(rawMeta.total)
+    : users.length
+  const totalPages = parsePositiveInt(
+    rawMeta.totalPages,
+    Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize))),
+  )
+  const filters = rawMeta.filters && typeof rawMeta.filters === 'object'
+    ? rawMeta.filters
+    : {}
+
+  return {
+    data: {
+      users,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      filters,
+    },
+    meta: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      filters,
+    },
+  }
+}
+
+const getUserRowId = (row) => row?._id ?? row?.id ?? null
+
 export const userApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     /**
      * GET /customers/:customerId/users
-     * Paginated user list with optional search and status filter.
+     * Paginated user list with optional search, role, and status filters.
      *
-     * @param {{ customerId: string, q?: string, status?: string, page?: number, pageSize?: number }} params
+     * @param {{ customerId: string, q?: string, role?: string, status?: string, page?: number, pageSize?: number }} params
      */
     listUsers: build.query({
-      query: ({ customerId, q, status, page = 1, pageSize = 20 }) => {
+      query: ({ customerId, q, role, status, page = 1, pageSize = 20 }) => {
         const params = new URLSearchParams()
         if (q) params.set('q', q)
+        if (role) params.set('role', role)
         if (status) params.set('status', status)
         params.set('page', String(page))
         params.set('pageSize', String(pageSize))
         return `/customers/${customerId}/users?${params.toString()}`
       },
+      transformResponse: (response, _meta, arg) =>
+        normalizeListUsersResponse(response, {
+          defaultPage: parsePositiveInt(arg?.page, 1),
+          defaultPageSize: parsePositiveInt(arg?.pageSize, 20),
+        }),
       providesTags: (result) =>
-        result?.data?.users
+        (result?.data?.users?.length ?? 0) > 0
           ? [
-              ...result.data.users.map((u) => ({ type: 'User', id: u._id })),
+              ...result.data.users
+                .map((row) => getUserRowId(row))
+                .filter(Boolean)
+                .map((id) => ({ type: 'User', id })),
               { type: 'User', id: 'LIST' },
             ]
           : [{ type: 'User', id: 'LIST' }],

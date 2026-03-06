@@ -25,6 +25,10 @@ vi.mock('../../store/api/invitationApi.js', () => ({
   useRevokeInvitationMutation: vi.fn(),
 }))
 
+vi.mock('../../store/api/userApi.js', () => ({
+  useListUsersQuery: vi.fn(),
+}))
+
 vi.mock('../../components/StepUpAuthForm', () => ({
   StepUpAuthForm: ({ onStepUpComplete, passwordLabel, passwordHelperText }) => (
     <div>
@@ -53,6 +57,7 @@ import {
   useResendInvitationMutation,
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
+import { useListUsersQuery } from '../../store/api/userApi.js'
 
 function renderPage(initialEntry = '/super-admin/customers') {
   return render(
@@ -93,6 +98,15 @@ describe('SuperAdminCustomers page', () => {
     useReplaceCustomerAdminMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useListInvitationsQuery.mockReturnValue({
       data: { data: [], meta: { page: 1, totalPages: 1 } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: { users: [], page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+      },
       isLoading: false,
       isFetching: false,
       error: null,
@@ -315,6 +329,291 @@ describe('SuperAdminCustomers page', () => {
       'true',
     )
     expect(screen.getByRole('heading', { name: /^customers$/i })).toBeInTheDocument()
+  })
+
+  it('opens customer-level users workspace from row actions', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(screen.getByRole('heading', { name: /customer users/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /back to customers/i })).toBeInTheDocument()
+    expect(screen.getByText(/showing users for/i)).toHaveTextContent(/acme corp/i)
+    expect(useListUsersQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'c-1',
+        q: '',
+        role: '',
+        status: '',
+        page: 1,
+        pageSize: 20,
+      }),
+      { skip: false },
+    )
+  })
+
+  it('renders customer users table with roles, trust, status, and canonical-admin marker', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              status: 'ACTIVE',
+              trustStatus: 'TRUSTED',
+              customerRoles: ['CUSTOMER_ADMIN', 'TENANT_ADMIN'],
+              isCanonicalAdmin: true,
+            },
+            {
+              id: 'u-2',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              status: 'INACTIVE',
+              trustStatus: 'UNTRUSTED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 2,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(screen.getByText('alex@example.com')).toBeInTheDocument()
+    expect(screen.getByText('CUSTOMER_ADMIN, TENANT_ADMIN')).toBeInTheDocument()
+    expect(screen.getByText('USER')).toBeInTheDocument()
+    expect(screen.getByText(/^trusted$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^untrusted$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^INACTIVE$/)).toBeInTheDocument()
+    expect(screen.getByText('Canonical')).toBeInTheDocument()
+  })
+
+  it('applies server-driven search/role/status filters and pagination in customer users workspace', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockImplementation(({ page = 1 }) => ({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              status: 'ACTIVE',
+              trustStatus: 'TRUSTED',
+              customerRoles: ['CUSTOMER_ADMIN'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page,
+          pageSize: 20,
+          total: 41,
+          totalPages: 3,
+          filters: {},
+        },
+        meta: { page, pageSize: 20, total: 41, totalPages: 3, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.type(
+      screen.getByLabelText(/^search$/i, { selector: 'input#sa-customer-user-search' }),
+      'alex',
+    )
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: '',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+
+    await user.selectOptions(
+      screen.getByLabelText(/^role$/i, { selector: 'select#sa-customer-user-role-filter' }),
+      'TENANT_ADMIN',
+    )
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: 'TENANT_ADMIN',
+          status: '',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+
+    await user.selectOptions(
+      screen.getByLabelText(/^status$/i, { selector: 'select#sa-customer-user-status-filter' }),
+      'INACTIVE',
+    )
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: 'TENANT_ADMIN',
+          status: 'INACTIVE',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+
+    await user.selectOptions(
+      screen.getByLabelText(/^role$/i, { selector: 'select#sa-customer-user-role-filter' }),
+      '',
+    )
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: 'INACTIVE',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+
+    await user.selectOptions(
+      screen.getByLabelText(/^status$/i, { selector: 'select#sa-customer-user-status-filter' }),
+      '',
+    )
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: '',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: '',
+          page: 2,
+        }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument()
+  })
+
+  it('shows backend validation guidance when customer users query returns 422', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: { users: [], page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: {
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Validation failed',
+            details: {
+              status: ['status must be one of ACTIVE or INACTIVE'],
+            },
+          },
+        },
+      },
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /status must be one of active or inactive/i,
+    )
   })
 
   it('opens update dialog with preloaded values when customer name is clicked', async () => {
