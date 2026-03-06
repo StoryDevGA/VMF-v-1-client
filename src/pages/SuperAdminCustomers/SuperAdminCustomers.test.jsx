@@ -27,6 +27,7 @@ vi.mock('../../store/api/invitationApi.js', () => ({
 
 vi.mock('../../store/api/userApi.js', () => ({
   useListUsersQuery: vi.fn(),
+  useCreateUserMutation: vi.fn(),
 }))
 
 vi.mock('../../components/StepUpAuthForm', () => ({
@@ -57,7 +58,10 @@ import {
   useResendInvitationMutation,
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
-import { useListUsersQuery } from '../../store/api/userApi.js'
+import {
+  useListUsersQuery,
+  useCreateUserMutation,
+} from '../../store/api/userApi.js'
 
 function renderPage(initialEntry = '/super-admin/customers') {
   return render(
@@ -111,6 +115,7 @@ describe('SuperAdminCustomers page', () => {
       isFetching: false,
       error: null,
     })
+    useCreateUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useResendInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useRevokeInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
@@ -614,6 +619,372 @@ describe('SuperAdminCustomers page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /status must be one of active or inactive/i,
     )
+  })
+
+  it('opens create-user dialog from customer users workspace and enforces required fields', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { outcome: 'invited_new', invitationOutcome: 'sent' } }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    expect(createUserScreen.getByText(/full name is required/i)).toBeInTheDocument()
+    expect(createUserScreen.getByText(/email is required/i)).toBeInTheDocument()
+    expect(createUserScreen.getByText(/select at least one role/i)).toBeInTheDocument()
+    expect(mockCreateUser).not.toHaveBeenCalled()
+  })
+
+  it('creates invited_new customer user and shows invitation success guidance', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+          invitationDispatched: true,
+          invitationOutcome: 'sent',
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByLabelText(/^user$/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    expect(mockCreateUser).toHaveBeenCalledWith({
+      customerId: 'c-1',
+      body: {
+        name: 'Taylor User',
+        email: 'taylor@example.com',
+        roles: ['USER'],
+      },
+    })
+    expect(await screen.findByText(/invitation sent to taylor@example\.com/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /create customer user/i })).not.toBeInTheDocument()
+  })
+
+  it('creates invited_new customer user and surfaces send_failed outcome guidance', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+          invitationDispatched: true,
+          invitationOutcome: 'send_failed',
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByLabelText(/^user$/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    expect(
+      await screen.findByText(/user created for taylor@example\.com, but invitation email delivery failed/i),
+    ).toBeInTheDocument()
+  })
+
+  it('assigns existing customer user without invitation when outcome is assigned_existing', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'assigned_existing',
+          invitationDispatched: false,
+          invitationOutcome: 'none',
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.selectOptions(
+      createUserScreen.getByLabelText(/^create mode$/i, { selector: 'select#sa-customer-user-create-mode' }),
+      'assign_existing',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(
+        /^existing user id$/i,
+        { selector: 'input#sa-customer-user-create-existing-id' },
+      ),
+      'user-42',
+    )
+    await user.click(createUserScreen.getByLabelText(/tenant admin/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^assign user$/i }))
+
+    expect(mockCreateUser).toHaveBeenCalledWith({
+      customerId: 'c-1',
+      body: {
+        existingUserId: 'user-42',
+        roles: ['TENANT_ADMIN'],
+      },
+    })
+    expect(await screen.findByText(/existing user assigned to this customer/i)).toBeInTheDocument()
+  })
+
+  it('maps USER_ALREADY_EXISTS create-user conflicts using reason/details guidance', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'USER_ALREADY_EXISTS',
+            message: 'Generic conflict message from server',
+            requestId: 'user-exists-1',
+            details: {
+              reason: 'already-in-customer',
+              existingUserId: 'usr-123',
+            },
+          },
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByLabelText(/^user$/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    expect(await createUserScreen.findByText(/already exists in this customer/i)).toBeInTheDocument()
+    expect(createUserScreen.getByText(/\(User ID: usr-123\)\. \(Ref: user-exists-1\)/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /create customer user/i })).toBeInTheDocument()
+  })
+
+  it('maps USER_CUSTOMER_CONFLICT for existing-user assignment mode', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'USER_CUSTOMER_CONFLICT',
+            message: 'Generic conflict message from server',
+            requestId: 'user-conflict-1',
+            details: {
+              reason: 'other-customer',
+            },
+          },
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.selectOptions(
+      createUserScreen.getByLabelText(/^create mode$/i, { selector: 'select#sa-customer-user-create-mode' }),
+      'assign_existing',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(
+        /^existing user id$/i,
+        { selector: 'input#sa-customer-user-create-existing-id' },
+      ),
+      'user-42',
+    )
+    await user.click(createUserScreen.getByLabelText(/tenant admin/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^assign user$/i }))
+
+    expect(
+      await createUserScreen.findByText(/belongs to another customer and cannot be assigned to this customer/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows form-level create-user error when validation fields are not mappable', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Validation failed',
+            requestId: 'create-user-422-1',
+            details: {
+              tenantVisibility: ['Tenant visibility is not allowed in this mode.'],
+            },
+          },
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByLabelText(/^user$/i))
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    expect(
+      await createUserScreen.findByText(/tenant visibility is not allowed in this mode/i),
+    ).toBeInTheDocument()
   })
 
   it('opens update dialog with preloaded values when customer name is clicked', async () => {

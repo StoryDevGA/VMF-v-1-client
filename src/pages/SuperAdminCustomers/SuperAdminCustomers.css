@@ -138,6 +138,10 @@
   margin-bottom: var(--spacing-sm);
 }
 
+.super-admin-customers__users-actions {
+  justify-content: space-between;
+}
+
 .super-admin-customers__toolbar {
   display: grid;
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
@@ -267,6 +271,27 @@
   color: var(--color-danger-700);
 }
 
+.super-admin-customers__roles-fieldset {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-customers__roles-legend {
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-customers__roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-xs);
+}
+
 .super-admin-customers__auth-link-box {
   margin-top: var(--spacing-sm);
   padding: var(--spacing-sm);
@@ -290,6 +315,13 @@
 
   .super-admin-customers__catalogue-actions {
     justify-content: stretch;
+  }
+
+  .super-admin-customers__users-actions {
+    flex-direction: column;
+    justify-content: stretch;
+    align-items: stretch;
+    gap: var(--spacing-sm);
   }
 
   .super-admin-customers__catalogue-actions .btn {

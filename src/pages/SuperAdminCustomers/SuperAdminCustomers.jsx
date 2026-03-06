@@ -5,6 +5,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
 import { Select } from '../../components/Select'
+import { Tickbox } from '../../components/Tickbox'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
@@ -28,7 +29,10 @@ import {
   useReplaceCustomerAdminMutation,
 } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
-import { useListUsersQuery } from '../../store/api/userApi.js'
+import {
+  useListUsersQuery,
+  useCreateUserMutation,
+} from '../../store/api/userApi.js'
 import {
   appendRequestReference,
   getStepUpErrorSignal,
@@ -63,6 +67,12 @@ const USER_ROLE_FILTER_OPTIONS = [
   { value: 'CUSTOMER_ADMIN', label: 'Customer Admin' },
   { value: 'TENANT_ADMIN', label: 'Tenant Admin' },
   { value: 'USER', label: 'User' },
+]
+
+const USER_CREATE_ROLE_OPTIONS = USER_ROLE_FILTER_OPTIONS.filter((option) => option.value)
+const USER_CREATE_MODE_OPTIONS = [
+  { value: 'invite_new', label: 'Invite New User' },
+  { value: 'assign_existing', label: 'Assign Existing User' },
 ]
 
 const BILLING_CYCLE_OPTIONS = [
@@ -266,6 +276,128 @@ const getFirstErrorDetailMessage = (details) => {
   return ''
 }
 
+const normalizeCreateUserErrorField = (candidate) => {
+  const normalized = String(candidate ?? '')
+    .trim()
+    .toLowerCase()
+  if (!normalized) return ''
+
+  const compact = normalized.replace(/[^a-z]/g, '')
+  if (!compact) return ''
+
+  if (compact.includes('existinguserid')) return 'existingUserId'
+  if (compact.includes('email')) return 'email'
+  if (compact.includes('roles') || compact.includes('customerroles')) return 'roles'
+  if (compact.endsWith('name')) return 'name'
+
+  return ''
+}
+
+const getFieldDetailMessage = (value) => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim()
+      if (
+        entry
+        && typeof entry === 'object'
+        && typeof entry.message === 'string'
+        && entry.message.trim()
+      ) {
+        return entry.message.trim()
+      }
+    }
+    return ''
+  }
+
+  if (value && typeof value === 'object' && typeof value.message === 'string') {
+    const message = value.message.trim()
+    if (message) return message
+  }
+
+  return ''
+}
+
+const mapFieldErrorsFromDetails = (details) => {
+  const mapped = {}
+
+  if (Array.isArray(details)) {
+    for (const detail of details) {
+      if (!detail || typeof detail !== 'object') continue
+      const field = normalizeCreateUserErrorField(detail.field)
+      const message = getFieldDetailMessage(detail.message)
+      if (!field || !message) continue
+      mapped[field] = message
+    }
+    return mapped
+  }
+
+  if (!details || typeof details !== 'object') return mapped
+
+  for (const [field, value] of Object.entries(details)) {
+    const normalizedField = normalizeCreateUserErrorField(field)
+    const message = getFieldDetailMessage(value)
+    if (!normalizedField || !message) continue
+    mapped[normalizedField] = message
+  }
+
+  return mapped
+}
+
+const normalizeMutationData = (result) => {
+  if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+    return result.data
+  }
+
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return result
+  }
+
+  return {}
+}
+
+const getCreateUserConflictMessage = (appError) => {
+  const reason = String(appError?.details?.reason ?? '')
+    .trim()
+    .toLowerCase()
+  const existingUserId = String(appError?.details?.existingUserId ?? '').trim()
+  const existingUserSuffix = existingUserId ? ` (User ID: ${existingUserId})` : ''
+
+  if (appError?.code === 'USER_ALREADY_EXISTS') {
+    if (reason === 'already-in-customer') {
+      return appendRequestReference(
+        `A user with this email already exists in this customer${existingUserSuffix}.`,
+        appError?.requestId,
+      )
+    }
+    if (reason === 'other-customer') {
+      return appendRequestReference(
+        'This email belongs to a user in another customer and cannot be invited here.',
+        appError?.requestId,
+      )
+    }
+    if (reason === 'existing-identity') {
+      return appendRequestReference(
+        `An existing identity already uses this email${existingUserSuffix}.`,
+        appError?.requestId,
+      )
+    }
+  }
+
+  if (appError?.code === 'USER_CUSTOMER_CONFLICT' && reason === 'other-customer') {
+    return appendRequestReference(
+      'This user belongs to another customer and cannot be assigned to this customer.',
+      appError?.requestId,
+    )
+  }
+
+  const detailMessage = getFirstErrorDetailMessage(appError?.details)
+  if (detailMessage) return detailMessage
+
+  return appError?.message || getErrorMessage(appError?.code)
+}
+
 const getAssignAdminErrorMessage = (appError) => {
   if (appError?.status === 409 && appError?.code === 'INVITATION_ALREADY_ACTIVE') {
     const reason = String(appError?.details?.reason ?? '')
@@ -432,6 +564,13 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [userRoleFilter, setUserRoleFilter] = useState('')
   const [userStatusFilter, setUserStatusFilter] = useState('')
   const [userPage, setUserPage] = useState(1)
+  const [userCreateOpen, setUserCreateOpen] = useState(false)
+  const [userCreateMode, setUserCreateMode] = useState('invite_new')
+  const [userCreateName, setUserCreateName] = useState('')
+  const [userCreateEmail, setUserCreateEmail] = useState('')
+  const [userCreateExistingUserId, setUserCreateExistingUserId] = useState('')
+  const [userCreateRoles, setUserCreateRoles] = useState([])
+  const [userCreateErrors, setUserCreateErrors] = useState({})
 
   const debouncedSearch = useDebounce(search, 300)
   const debouncedUserSearch = useDebounce(userSearch, 300)
@@ -473,6 +612,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [createCustomerAdminInvitation, createAdminInvitationResult] =
     useCreateCustomerAdminInvitationMutation()
   const [replaceCustomerAdmin, replaceAdminResult] = useReplaceCustomerAdminMutation()
+  const [createUser, createUserResult] = useCreateUserMutation()
 
   const {
     data: listUsersResponse,
@@ -641,6 +781,15 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     [addToast, updateCustomerStatus],
   )
 
+  const resetUserCreateForm = useCallback(() => {
+    setUserCreateMode('invite_new')
+    setUserCreateName('')
+    setUserCreateEmail('')
+    setUserCreateExistingUserId('')
+    setUserCreateRoles([])
+    setUserCreateErrors({})
+  }, [])
+
   const openUsersWorkspace = useCallback((row) => {
     const customerId = getCustomerId(row)
     if (!customerId) return
@@ -649,7 +798,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserRoleFilter('')
     setUserStatusFilter('')
     setUserPage(1)
-  }, [])
+    setUserCreateOpen(false)
+    resetUserCreateForm()
+  }, [resetUserCreateForm])
 
   const closeUsersWorkspace = useCallback(() => {
     setUsersWorkspaceCustomer(null)
@@ -657,7 +808,176 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserRoleFilter('')
     setUserStatusFilter('')
     setUserPage(1)
+    setUserCreateOpen(false)
+    resetUserCreateForm()
+  }, [resetUserCreateForm])
+
+  const openUserCreateDialog = useCallback(() => {
+    if (!usersWorkspaceCustomerId) return
+    resetUserCreateForm()
+    setUserCreateOpen(true)
+  }, [resetUserCreateForm, usersWorkspaceCustomerId])
+
+  const closeUserCreateDialog = useCallback(() => {
+    setUserCreateOpen(false)
+    resetUserCreateForm()
+  }, [resetUserCreateForm])
+
+  const toggleUserCreateRole = useCallback((role) => {
+    setUserCreateRoles((previousRoles) => (
+      previousRoles.includes(role)
+        ? previousRoles.filter((currentRole) => currentRole !== role)
+        : [...previousRoles, role]
+    ))
+    setUserCreateErrors((currentErrors) => {
+      if (!currentErrors.roles && !currentErrors.form) return currentErrors
+      const nextErrors = { ...currentErrors }
+      delete nextErrors.roles
+      delete nextErrors.form
+      return nextErrors
+    })
   }, [])
+
+  const handleUserCreateMutation = useCallback(async () => {
+    if (!usersWorkspaceCustomerId) return
+
+    const validationErrors = {}
+    if (userCreateMode === 'assign_existing') {
+      if (!userCreateExistingUserId.trim()) {
+        validationErrors.existingUserId = 'Existing User ID is required.'
+      }
+    } else {
+      if (!userCreateName.trim()) {
+        validationErrors.name = 'Full name is required.'
+      }
+      if (!userCreateEmail.trim()) {
+        validationErrors.email = 'Email is required.'
+      } else if (!EMAIL_REGEX.test(userCreateEmail.trim())) {
+        validationErrors.email = 'Please enter a valid email address.'
+      }
+    }
+
+    if (userCreateRoles.length === 0) {
+      validationErrors.roles = 'Select at least one role.'
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setUserCreateErrors(validationErrors)
+      return
+    }
+
+    const body = {
+      roles: userCreateRoles,
+    }
+
+    if (userCreateMode === 'assign_existing') {
+      body.existingUserId = userCreateExistingUserId.trim()
+    } else {
+      body.name = userCreateName.trim()
+      body.email = userCreateEmail.trim()
+    }
+
+    try {
+      const result = await createUser({
+        customerId: usersWorkspaceCustomerId,
+        body,
+      }).unwrap()
+      const outcomeData = normalizeMutationData(result)
+      const outcome = String(outcomeData?.outcome ?? '')
+        .trim()
+        .toLowerCase()
+      const invitationOutcome = String(outcomeData?.invitationOutcome ?? '')
+        .trim()
+        .toLowerCase()
+
+      if (outcome === 'assigned_existing') {
+        addToast({
+          title: 'User assigned',
+          description: 'Existing user assigned to this customer.',
+          variant: 'success',
+        })
+      } else if (outcome === 'invited_new' && invitationOutcome === 'send_failed') {
+        addToast({
+          title: 'User created',
+          description: `User created for ${userCreateEmail.trim()}, but invitation email delivery failed.`,
+          variant: 'warning',
+        })
+      } else if (outcome === 'invited_new') {
+        addToast({
+          title: 'User created',
+          description: `Invitation sent to ${userCreateEmail.trim()}.`,
+          variant: 'success',
+        })
+      } else {
+        addToast({
+          title: 'User created',
+          description: 'User created successfully.',
+          variant: 'success',
+        })
+      }
+
+      const authLink = String(outcomeData?.authLink ?? '').trim()
+      if (outcome === 'invited_new' && authLink) {
+        setLastAuthLink(authLink)
+        setAuthLinkDialogOpen(true)
+        setPendingInvitationTabSwitch(false)
+      }
+
+      closeUserCreateDialog()
+    } catch (err) {
+      const appError = normalizeError(err)
+
+      if (
+        userCreateRoles.includes('CUSTOMER_ADMIN')
+        && isCanonicalAdminConflictError(appError)
+      ) {
+        setUserCreateErrors({
+          roles: getCanonicalAdminConflictMessage(appError, 'assign'),
+        })
+        return
+      }
+
+      if (
+        appError.status === 409
+        && (appError.code === 'USER_ALREADY_EXISTS' || appError.code === 'USER_CUSTOMER_CONFLICT')
+      ) {
+        const conflictMessage = getCreateUserConflictMessage(appError)
+        const targetField =
+          userCreateMode === 'assign_existing'
+            ? 'existingUserId'
+            : appError.code === 'USER_ALREADY_EXISTS'
+              ? 'email'
+              : 'form'
+        setUserCreateErrors({
+          [targetField]: conflictMessage,
+        })
+        return
+      }
+
+      if (appError.status === 422 && appError.details) {
+        const mappedErrors = mapFieldErrorsFromDetails(appError.details)
+        if (Object.keys(mappedErrors).length > 0) {
+          setUserCreateErrors(mappedErrors)
+          return
+        }
+      }
+
+      const detailMessage = getFirstErrorDetailMessage(appError?.details)
+      setUserCreateErrors({
+        form: detailMessage || appError.message || getErrorMessage(appError?.code),
+      })
+    }
+  }, [
+    addToast,
+    closeUserCreateDialog,
+    createUser,
+    userCreateEmail,
+    userCreateExistingUserId,
+    userCreateMode,
+    userCreateName,
+    userCreateRoles,
+    usersWorkspaceCustomerId,
+  ])
 
   const openAdminDialog = useCallback((mode, row) => {
     setAdminMode(mode)
@@ -986,13 +1306,21 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>
             <Card variant="elevated" className="super-admin-customers__card">
               <Card.Body>
-                <div className="super-admin-customers__catalogue-actions">
+                <div className="super-admin-customers__catalogue-actions super-admin-customers__users-actions">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={closeUsersWorkspace}
                   >
                     Back to Customers
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={openUserCreateDialog}
+                    disabled={createUserResult.isLoading}
+                  >
+                    Create User
                   </Button>
                 </div>
                 <p className="super-admin-customers__users-note">
@@ -1439,6 +1767,131 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             disabled={updateResult.isLoading}
           >
             Save Changes
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <Dialog open={userCreateOpen} onClose={closeUserCreateDialog} size="md">
+        <Dialog.Header>
+          <h2 className="super-admin-customers__dialog-title">Create Customer User</h2>
+        </Dialog.Header>
+        <Dialog.Body className="super-admin-customers__dialog-body">
+          <p className="super-admin-customers__dialog-subtitle">
+            Customer: <strong>{usersWorkspaceCustomer?.name ?? '--'}</strong>
+          </p>
+          <Select
+            id="sa-customer-user-create-mode"
+            label="Create Mode"
+            value={userCreateMode}
+            options={USER_CREATE_MODE_OPTIONS}
+            onChange={(event) => {
+              setUserCreateMode(event.target.value)
+              setUserCreateErrors({})
+            }}
+          />
+          {userCreateMode === 'assign_existing' ? (
+            <Input
+              id="sa-customer-user-create-existing-id"
+              label="Existing User ID"
+              value={userCreateExistingUserId}
+              onChange={(event) => {
+                setUserCreateExistingUserId(event.target.value)
+                setUserCreateErrors((currentErrors) => {
+                  if (!currentErrors.existingUserId && !currentErrors.form) return currentErrors
+                  const nextErrors = { ...currentErrors }
+                  delete nextErrors.existingUserId
+                  delete nextErrors.form
+                  return nextErrors
+                })
+              }}
+              error={userCreateErrors.existingUserId}
+              fullWidth
+            />
+          ) : (
+            <>
+              <Input
+                id="sa-customer-user-create-name"
+                label="User Full Name"
+                value={userCreateName}
+                onChange={(event) => {
+                  setUserCreateName(event.target.value)
+                  setUserCreateErrors((currentErrors) => {
+                    if (!currentErrors.name && !currentErrors.form) return currentErrors
+                    const nextErrors = { ...currentErrors }
+                    delete nextErrors.name
+                    delete nextErrors.form
+                    return nextErrors
+                  })
+                }}
+                error={userCreateErrors.name}
+                autoComplete="off"
+                fullWidth
+              />
+              <Input
+                id="sa-customer-user-create-email"
+                type="email"
+                label="User Email"
+                value={userCreateEmail}
+                onChange={(event) => {
+                  setUserCreateEmail(event.target.value)
+                  setUserCreateErrors((currentErrors) => {
+                    if (!currentErrors.email && !currentErrors.form) return currentErrors
+                    const nextErrors = { ...currentErrors }
+                    delete nextErrors.email
+                    delete nextErrors.form
+                    return nextErrors
+                  })
+                }}
+                error={userCreateErrors.email}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                fullWidth
+              />
+            </>
+          )}
+          <fieldset className="super-admin-customers__roles-fieldset">
+            <legend className="super-admin-customers__roles-legend">Roles</legend>
+            <div className="super-admin-customers__roles-grid">
+              {USER_CREATE_ROLE_OPTIONS.map((roleOption) => (
+                <Tickbox
+                  key={roleOption.value}
+                  id={`sa-customer-user-role-${String(roleOption.value).toLowerCase()}`}
+                  label={roleOption.label}
+                  checked={userCreateRoles.includes(roleOption.value)}
+                  onChange={() => toggleUserCreateRole(roleOption.value)}
+                  disabled={createUserResult.isLoading}
+                />
+              ))}
+            </div>
+          </fieldset>
+          {userCreateErrors.roles ? (
+            <p className="super-admin-customers__error" role="alert">
+              {userCreateErrors.roles}
+            </p>
+          ) : null}
+          {userCreateErrors.form ? (
+            <p className="super-admin-customers__error" role="alert">
+              {userCreateErrors.form}
+            </p>
+          ) : null}
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            variant="outline"
+            onClick={closeUserCreateDialog}
+            disabled={createUserResult.isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleUserCreateMutation}
+            loading={createUserResult.isLoading}
+            disabled={createUserResult.isLoading}
+          >
+            {userCreateMode === 'assign_existing' ? 'Assign User' : 'Create User'}
           </Button>
         </Dialog.Footer>
       </Dialog>
