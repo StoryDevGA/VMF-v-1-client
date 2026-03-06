@@ -20,6 +20,11 @@ import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import CreateUserWizard from './CreateUserWizard'
+import { useCreateUserMutation } from '../../store/api/userApi.js'
+
+vi.mock('../../store/api/userApi.js', () => ({
+  useCreateUserMutation: vi.fn(),
+}))
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
 beforeEach(() => {
@@ -66,9 +71,38 @@ function renderWizard(props = {}) {
   }
 }
 
+async function completeWizardToReview(user, values = {}) {
+  const name = values.name ?? 'Jane Doe'
+  const email = values.email ?? 'jane@acme.com'
+  const roleLabel = values.roleLabel ?? /^user$/i
+
+  await user.type(screen.getByLabelText(/full name/i), name)
+  await user.type(screen.getByLabelText(/email address/i), email)
+  await user.click(screen.getByRole('button', { name: /next/i }))
+
+  await waitFor(() => screen.getByText(/step 2 of 4/i))
+  await user.click(screen.getByLabelText(roleLabel))
+  await user.click(screen.getByRole('button', { name: /next/i }))
+
+  await waitFor(() => screen.getByText(/step 3 of 4/i))
+  await user.click(screen.getByRole('button', { name: /next/i }))
+
+  await waitFor(() => screen.getByText(/step 4 of 4/i))
+}
+
 describe('CreateUserWizard', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+          invitationDispatched: true,
+          invitationOutcome: 'sent',
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
   })
 
   it('renders step 1 heading when open', () => {
@@ -213,6 +247,125 @@ describe('CreateUserWizard', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('branches success UX using data.outcome=assigned_existing', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'assigned_existing',
+          invitationDispatched: false,
+          invitationOutcome: 'none',
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+    const { onClose } = renderWizard()
+
+    await completeWizardToReview(user)
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(
+        screen.getByText(/existing user assigned to this customer/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('shows warning messaging for invited_new with invitationOutcome=send_failed', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+          invitationDispatched: true,
+          invitationOutcome: 'send_failed',
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+    const { onClose } = renderWizard()
+
+    await completeWizardToReview(user)
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(
+        screen.getByText(/invitation email delivery failed/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('maps USER_ALREADY_EXISTS using error.details.reason and existingUserId', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'USER_ALREADY_EXISTS',
+            message: 'Generic conflict message from server',
+            requestId: 'req-user-exists-1',
+            details: {
+              reason: 'already-in-customer',
+              existingUserId: 'usr-123',
+            },
+          },
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+    const { onClose } = renderWizard()
+
+    await completeWizardToReview(user)
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(onClose).not.toHaveBeenCalled()
+      expect(
+        screen.getByText(
+          /already exists in this customer \(user id: usr-123\)/i,
+          { selector: '#create-user-email-error' },
+        ),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('maps USER_CUSTOMER_CONFLICT using error.details.reason=other-customer', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'USER_CUSTOMER_CONFLICT',
+            message: 'Generic conflict message from server',
+            requestId: 'req-user-conflict-1',
+            details: {
+              reason: 'other-customer',
+            },
+          },
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+    const { onClose } = renderWizard()
+
+    await completeWizardToReview(user)
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(onClose).not.toHaveBeenCalled()
+      expect(
+        screen.getByText(
+          /belongs to another customer and cannot be assigned to this customer/i,
+          { selector: '#create-user-email-error' },
+        ),
+      ).toBeInTheDocument()
+    })
   })
 
   it('does not render when open is false', () => {

@@ -24,6 +24,7 @@ import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import { useCreateUserMutation } from '../../store/api/userApi.js'
 import {
+  appendRequestReference,
   normalizeError,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
@@ -35,6 +36,88 @@ const AVAILABLE_ROLES = ['CUSTOMER_ADMIN', 'TENANT_ADMIN', 'USER']
 
 /** Wizard step count */
 const TOTAL_STEPS = 4
+
+const getCreateUserOutcomeData = (result) => {
+  if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+    return result.data
+  }
+
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return result
+  }
+
+  return {}
+}
+
+const normalizeCreateUserReason = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+
+const mapCreateUserValidationErrors = (details) => {
+  const mapped = {}
+
+  if (Array.isArray(details)) {
+    for (const detail of details) {
+      if (!detail || typeof detail !== 'object') continue
+      if (detail.field && detail.message) {
+        mapped[detail.field] = String(detail.message)
+      }
+    }
+    return mapped
+  }
+
+  if (!details || typeof details !== 'object') return mapped
+
+  for (const [field, value] of Object.entries(details)) {
+    if (!field) continue
+    if (typeof value === 'string' && value.trim()) {
+      mapped[field] = value.trim()
+      continue
+    }
+    if (value && typeof value === 'object' && typeof value.message === 'string') {
+      mapped[field] = value.message
+    }
+  }
+
+  return mapped
+}
+
+const getCreateUserConflictMessage = (appError) => {
+  const reason = normalizeCreateUserReason(appError?.details?.reason)
+  const existingUserId = String(appError?.details?.existingUserId ?? '').trim()
+  const existingUserSuffix = existingUserId ? ` (User ID: ${existingUserId})` : ''
+
+  if (appError?.code === 'USER_ALREADY_EXISTS') {
+    if (reason === 'already-in-customer') {
+      return appendRequestReference(
+        `A user with this email already exists in this customer${existingUserSuffix}.`,
+        appError?.requestId,
+      )
+    }
+    if (reason === 'other-customer') {
+      return appendRequestReference(
+        'This email belongs to a user in another customer and cannot be invited here.',
+        appError?.requestId,
+      )
+    }
+    if (reason === 'existing-identity') {
+      return appendRequestReference(
+        `An existing identity already uses this email${existingUserSuffix}.`,
+        appError?.requestId,
+      )
+    }
+  }
+
+  if (appError?.code === 'USER_CUSTOMER_CONFLICT' && reason === 'other-customer') {
+    return appendRequestReference(
+      'This user belongs to another customer and cannot be assigned to this customer.',
+      appError?.requestId,
+    )
+  }
+
+  return appError?.message
+}
 
 /**
  * CreateUserWizard Component
@@ -116,13 +199,41 @@ function CreateUserWizard({ open, onClose, customerId }) {
         body.tenantVisibility = tenantVisibility
       }
 
-      await createUserMutation({ customerId, body }).unwrap()
+      const result = await createUserMutation({ customerId, body }).unwrap()
+      const outcomeData = getCreateUserOutcomeData(result)
+      const outcome = String(outcomeData?.outcome ?? '')
+        .trim()
+        .toLowerCase()
+      const invitationOutcome = String(outcomeData?.invitationOutcome ?? '')
+        .trim()
+        .toLowerCase()
 
-      addToast({
-        title: 'User created',
-        description: `Invitation sent to ${email.trim()}.`,
-        variant: 'success',
-      })
+      if (outcome === 'assigned_existing') {
+        addToast({
+          title: 'User assigned',
+          description: 'Existing user assigned to this customer.',
+          variant: 'success',
+        })
+      } else if (outcome === 'invited_new' && invitationOutcome === 'send_failed') {
+        addToast({
+          title: 'User created',
+          description: `User created for ${email.trim()}, but invitation email delivery failed.`,
+          variant: 'warning',
+        })
+      } else if (outcome === 'invited_new') {
+        addToast({
+          title: 'User created',
+          description: `Invitation sent to ${email.trim()}.`,
+          variant: 'success',
+        })
+      } else {
+        addToast({
+          title: 'User created',
+          description: `${name.trim()} was created successfully.`,
+          variant: 'success',
+        })
+      }
+
       handleClose()
     } catch (err) {
       const appError = normalizeError(err)
@@ -145,15 +256,33 @@ function CreateUserWizard({ open, onClose, customerId }) {
         return
       }
 
+      if (
+        appError.status === 409 &&
+        (appError.code === 'USER_ALREADY_EXISTS' || appError.code === 'USER_CUSTOMER_CONFLICT')
+      ) {
+        const conflictMessage = getCreateUserConflictMessage(appError)
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: conflictMessage,
+        }))
+        setStep(1)
+        addToast({
+          title: 'Cannot create user',
+          description: conflictMessage,
+          variant: 'warning',
+        })
+        return
+      }
+
       if (appError.status === 422 && appError.details) {
-        const mapped = {}
-        for (const detail of appError.details) {
-          if (detail.field) mapped[detail.field] = detail.message
+        const mapped = mapCreateUserValidationErrors(appError.details)
+        if (Object.keys(mapped).length > 0) {
+          setFieldErrors(mapped)
+          // Go back to the relevant step
+          if (mapped.name || mapped.email) setStep(1)
+          else if (mapped.roles) setStep(2)
+          return
         }
-        setFieldErrors(mapped)
-        // Go back to the relevant step
-        if (mapped.name || mapped.email) setStep(1)
-        else if (mapped.roles) setStep(2)
       }
 
       addToast({
