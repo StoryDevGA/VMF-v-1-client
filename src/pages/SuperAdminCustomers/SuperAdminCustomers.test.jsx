@@ -28,6 +28,9 @@ vi.mock('../../store/api/invitationApi.js', () => ({
 vi.mock('../../store/api/userApi.js', () => ({
   useListUsersQuery: vi.fn(),
   useCreateUserMutation: vi.fn(),
+  useDisableUserMutation: vi.fn(),
+  useEnableUserMutation: vi.fn(),
+  useDeleteUserMutation: vi.fn(),
 }))
 
 vi.mock('../../components/StepUpAuthForm', () => ({
@@ -61,6 +64,9 @@ import {
 import {
   useListUsersQuery,
   useCreateUserMutation,
+  useDisableUserMutation,
+  useEnableUserMutation,
+  useDeleteUserMutation,
 } from '../../store/api/userApi.js'
 
 function renderPage(initialEntry = '/super-admin/customers') {
@@ -116,6 +122,9 @@ describe('SuperAdminCustomers page', () => {
       error: null,
     })
     useCreateUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useDisableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useEnableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useDeleteUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useResendInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useRevokeInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
@@ -1769,6 +1778,323 @@ describe('SuperAdminCustomers page', () => {
       'true',
     )
     expect(await screen.findByText('alex@example.com')).toBeInTheDocument()
+  })
+
+  it('deactivates an active customer user after confirmation', async () => {
+    const user = userEvent.setup()
+    const mockDisableUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { id: 'u-1', status: 'INACTIVE' } }),
+    })
+    useDisableUserMutation.mockReturnValue([mockDisableUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              status: 'ACTIVE',
+              trustStatus: 'TRUSTED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /deactivate alex admin/i }))
+
+    const confirmHeading = screen.getByRole('heading', { name: /deactivate user/i })
+    const confirmDialog = confirmHeading.closest('dialog')
+    expect(confirmDialog).not.toBeNull()
+
+    await user.click(within(confirmDialog).getByRole('button', { name: /^deactivate$/i }))
+
+    expect(mockDisableUser).toHaveBeenCalledWith({ userId: 'u-1' })
+    expect(await screen.findByText(/alex admin is now inactive\./i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /deactivate user/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('reactivates an inactive user and surfaces untrusted trust-status guidance', async () => {
+    const user = userEvent.setup()
+    const mockEnableUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          id: 'u-2',
+          status: 'ACTIVE',
+          trustStatus: 'UNTRUSTED',
+        },
+      }),
+    })
+    useEnableUserMutation.mockReturnValue([mockEnableUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-2',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              status: 'INACTIVE',
+              trustStatus: 'REVOKED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /reactivate taylor user/i }))
+
+    const confirmHeading = screen.getByRole('heading', { name: /reactivate user/i })
+    const confirmDialog = confirmHeading.closest('dialog')
+    expect(confirmDialog).not.toBeNull()
+
+    await user.click(within(confirmDialog).getByRole('button', { name: /^reactivate$/i }))
+
+    expect(mockEnableUser).toHaveBeenCalledWith({ userId: 'u-2' })
+    expect(
+      await screen.findByText(/taylor user is active, but trust is untrusted\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('archives an inactive user after confirmation', async () => {
+    const user = userEvent.setup()
+    const mockDeleteUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({}),
+    })
+    useDeleteUserMutation.mockReturnValue([mockDeleteUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-2',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              status: 'INACTIVE',
+              trustStatus: 'UNTRUSTED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /archive taylor user/i }))
+
+    const confirmHeading = screen.getByRole('heading', { name: /archive user/i })
+    const confirmDialog = confirmHeading.closest('dialog')
+    expect(confirmDialog).not.toBeNull()
+
+    await user.click(within(confirmDialog).getByRole('button', { name: /^archive$/i }))
+
+    expect(mockDeleteUser).toHaveBeenCalledWith({ userId: 'u-2' })
+    expect(await screen.findByText(/taylor user has been permanently removed\./i)).toBeInTheDocument()
+  })
+
+  it('shows canonical-admin governance guidance when deactivation is blocked', async () => {
+    const user = userEvent.setup()
+    const mockDisableUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'Request conflicts with the current state of the resource.',
+            details: {
+              canonicalAdminUserId: 'u-1',
+            },
+          },
+        },
+      }),
+    })
+    useDisableUserMutation.mockReturnValue([mockDisableUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              status: 'ACTIVE',
+              trustStatus: 'TRUSTED',
+              customerRoles: ['CUSTOMER_ADMIN'],
+              isCanonicalAdmin: true,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /deactivate alex admin/i }))
+
+    const confirmHeading = screen.getByRole('heading', { name: /deactivate user/i })
+    const confirmDialog = confirmHeading.closest('dialog')
+    expect(confirmDialog).not.toBeNull()
+    await user.click(within(confirmDialog).getByRole('button', { name: /^deactivate$/i }))
+
+    expect(mockDisableUser).toHaveBeenCalledWith({ userId: 'u-1' })
+    expect(await screen.findByText(/cannot deactivate user/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/this user is the canonical customer admin of an active customer\. replace admin first\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('status-gates lifecycle row actions in users workspace', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              status: 'ACTIVE',
+              trustStatus: 'TRUSTED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+            {
+              id: 'u-2',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              status: 'INACTIVE',
+              trustStatus: 'UNTRUSTED',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 2,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(screen.getByRole('button', { name: /deactivate alex admin/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /reactivate alex admin/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /archive alex admin/i })).toBeDisabled()
+
+    expect(screen.getByRole('button', { name: /deactivate taylor user/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /reactivate taylor user/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /archive taylor user/i })).toBeEnabled()
   })
 })
 

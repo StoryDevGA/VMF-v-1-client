@@ -32,6 +32,9 @@ import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import {
   useListUsersQuery,
   useCreateUserMutation,
+  useDisableUserMutation,
+  useEnableUserMutation,
+  useDeleteUserMutation,
 } from '../../store/api/userApi.js'
 import {
   appendRequestReference,
@@ -182,6 +185,17 @@ const getCustomerUserRoles = (row, customerId) => {
   )
 
   return Array.isArray(membership?.roles) ? membership.roles : []
+}
+
+const getUserId = (row) => String(row?.id ?? row?._id ?? '').trim()
+
+const getUserDisplayName = (row) =>
+  String(row?.name ?? row?.email ?? getUserId(row) ?? 'User').trim() || 'User'
+
+const getLifecycleActionVerb = (actionType) => {
+  if (actionType === 'enable') return 'Reactivate'
+  if (actionType === 'archive') return 'Archive'
+  return 'Deactivate'
 }
 
 const isValidUrl = (value) => {
@@ -571,6 +585,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [userCreateExistingUserId, setUserCreateExistingUserId] = useState('')
   const [userCreateRoles, setUserCreateRoles] = useState([])
   const [userCreateErrors, setUserCreateErrors] = useState({})
+  const [userLifecycleConfirm, setUserLifecycleConfirm] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
   const debouncedUserSearch = useDebounce(userSearch, 300)
@@ -613,6 +628,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     useCreateCustomerAdminInvitationMutation()
   const [replaceCustomerAdmin, replaceAdminResult] = useReplaceCustomerAdminMutation()
   const [createUser, createUserResult] = useCreateUserMutation()
+  const [disableUser, disableUserResult] = useDisableUserMutation()
+  const [enableUser, enableUserResult] = useEnableUserMutation()
+  const [deleteUser, deleteUserResult] = useDeleteUserMutation()
 
   const {
     data: listUsersResponse,
@@ -807,6 +825,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserStatusFilter('')
     setUserPage(1)
     setUserCreateOpen(false)
+    setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
 
@@ -817,6 +836,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserStatusFilter('')
     setUserPage(1)
     setUserCreateOpen(false)
+    setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
 
@@ -986,6 +1006,178 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     userCreateRoles,
     usersWorkspaceCustomerId,
   ])
+
+  const closeUserLifecycleConfirm = useCallback(() => {
+    setUserLifecycleConfirm(null)
+  }, [])
+
+  const handleUserLifecycleAction = useCallback(
+    (label, row) => {
+      if (!usersWorkspaceCustomerId) return
+
+      const userId = getUserId(row)
+      if (!userId) {
+        addToast({
+          title: 'Action unavailable',
+          description: 'This user row is missing an ID and cannot be updated.',
+          variant: 'warning',
+        })
+        return
+      }
+
+      const status = normalizeUserStatus(row)
+      const userName = getUserDisplayName(row)
+
+      if (label === 'Deactivate') {
+        if (status !== 'ACTIVE') {
+          addToast({
+            title: 'Already inactive',
+            description: `${userName} is already inactive.`,
+            variant: 'info',
+          })
+          return
+        }
+        setUserLifecycleConfirm({
+          type: 'disable',
+          userId,
+          userName,
+        })
+        return
+      }
+
+      if (label === 'Reactivate') {
+        if (status !== 'INACTIVE') {
+          addToast({
+            title: 'Already active',
+            description: `${userName} is already active.`,
+            variant: 'info',
+          })
+          return
+        }
+        setUserLifecycleConfirm({
+          type: 'enable',
+          userId,
+          userName,
+        })
+        return
+      }
+
+      if (label === 'Archive') {
+        if (status === 'ACTIVE') {
+          addToast({
+            title: 'Cannot archive active user',
+            description: 'Deactivate the user before archiving.',
+            variant: 'warning',
+          })
+          return
+        }
+        setUserLifecycleConfirm({
+          type: 'archive',
+          userId,
+          userName,
+        })
+      }
+    },
+    [addToast, usersWorkspaceCustomerId],
+  )
+
+  const handleUserLifecycleConfirm = useCallback(async () => {
+    if (!userLifecycleConfirm) return
+
+    const { type, userId, userName } = userLifecycleConfirm
+
+    try {
+      if (type === 'enable') {
+        const result = await enableUser({ userId }).unwrap()
+        const enabledUser = normalizeMutationData(result)
+        const trustStatus = getUserTrustStatus(enabledUser)
+        if (trustStatus === 'UNTRUSTED') {
+          addToast({
+            title: 'User reactivated',
+            description: `${userName} is active, but trust is UNTRUSTED. Ask them to complete sign-in again.`,
+            variant: 'warning',
+          })
+        } else {
+          addToast({
+            title: 'User reactivated',
+            description: `${userName} is active again.`,
+            variant: 'success',
+          })
+        }
+      } else if (type === 'archive') {
+        await deleteUser({ userId }).unwrap()
+        addToast({
+          title: 'User archived',
+          description: `${userName} has been permanently removed.`,
+          variant: 'success',
+        })
+      } else {
+        await disableUser({ userId }).unwrap()
+        addToast({
+          title: 'User deactivated',
+          description: `${userName} is now inactive.`,
+          variant: 'success',
+        })
+      }
+      setUserLifecycleConfirm(null)
+    } catch (err) {
+      const appError = normalizeError(err)
+
+      if (type !== 'enable' && isCanonicalAdminConflictError(appError)) {
+        addToast({
+          title: type === 'archive' ? 'Cannot archive user' : 'Cannot deactivate user',
+          description: getCanonicalAdminConflictMessage(
+            appError,
+            type === 'archive' ? 'delete' : 'disable',
+          ),
+          variant: 'warning',
+        })
+        setUserLifecycleConfirm(null)
+        return
+      }
+
+      const detailMessage = getFirstErrorDetailMessage(appError?.details)
+      addToast({
+        title: `${getLifecycleActionVerb(type)} failed`,
+        description: detailMessage || appError.message || getErrorMessage(appError?.code),
+        variant: 'error',
+      })
+      setUserLifecycleConfirm(null)
+    }
+  }, [addToast, deleteUser, disableUser, enableUser, userLifecycleConfirm])
+
+  const userLifecycleActions = useMemo(
+    () => [
+      {
+        label: 'Deactivate',
+        variant: 'ghost',
+        disabled: (row) =>
+          disableUserResult.isLoading
+          || enableUserResult.isLoading
+          || deleteUserResult.isLoading
+          || normalizeUserStatus(row) !== 'ACTIVE',
+      },
+      {
+        label: 'Reactivate',
+        variant: 'ghost',
+        disabled: (row) =>
+          disableUserResult.isLoading
+          || enableUserResult.isLoading
+          || deleteUserResult.isLoading
+          || normalizeUserStatus(row) !== 'INACTIVE',
+      },
+      {
+        label: 'Archive',
+        variant: 'ghost',
+        disabled: (row) =>
+          disableUserResult.isLoading
+          || enableUserResult.isLoading
+          || deleteUserResult.isLoading
+          || normalizeUserStatus(row) === 'ACTIVE',
+      },
+    ],
+    [deleteUserResult.isLoading, disableUserResult.isLoading, enableUserResult.isLoading],
+  )
 
   const openAdminDialog = useCallback((mode, row) => {
     setAdminMode(mode)
@@ -1292,6 +1484,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
 
   const adminMutationLoading =
     createAdminInvitationResult.isLoading || replaceAdminResult.isLoading
+  const userLifecycleMutationLoading =
+    disableUserResult.isLoading || enableUserResult.isLoading || deleteUserResult.isLoading
   const isUsersWorkspaceOpen = Boolean(usersWorkspaceCustomerId)
 
   return (
@@ -1383,6 +1577,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                     columns={userColumns}
                     data={userRows}
                     loading={isListUsersLoading}
+                    actions={userLifecycleActions}
+                    onRowAction={handleUserLifecycleAction}
                     variant="striped"
                     hoverable
                     emptyMessage="No users found for this customer."
@@ -2030,6 +2226,40 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             disabled={adminMutationLoading || (adminMode === 'replace' && !adminStepUpToken)}
           >
             {adminMode === 'assign' ? 'Send Invitation' : 'Replace Admin'}
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <Dialog open={Boolean(userLifecycleConfirm)} onClose={closeUserLifecycleConfirm} size="sm">
+        <Dialog.Header>
+          <h2 className="super-admin-customers__dialog-title">
+            {`${getLifecycleActionVerb(userLifecycleConfirm?.type)} User`}
+          </h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p className="super-admin-customers__dialog-subtitle">
+            {userLifecycleConfirm?.type === 'enable'
+              ? `Reactivate ${userLifecycleConfirm?.userName ?? 'this user'}? They will regain customer access immediately.`
+              : userLifecycleConfirm?.type === 'archive'
+                ? `Archive ${userLifecycleConfirm?.userName ?? 'this user'}? This permanently deletes the account and cannot be undone.`
+                : `Deactivate ${userLifecycleConfirm?.userName ?? 'this user'}? This immediately removes customer access.`}
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            variant="outline"
+            onClick={closeUserLifecycleConfirm}
+            disabled={userLifecycleMutationLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={userLifecycleConfirm?.type === 'archive' ? 'danger' : 'primary'}
+            onClick={handleUserLifecycleConfirm}
+            loading={userLifecycleMutationLoading}
+            disabled={userLifecycleMutationLoading}
+          >
+            {getLifecycleActionVerb(userLifecycleConfirm?.type)}
           </Button>
         </Dialog.Footer>
       </Dialog>

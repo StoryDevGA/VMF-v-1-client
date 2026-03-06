@@ -2,7 +2,7 @@
  * User API Slice (RTK Query)
  *
  * Injects user-management endpoints into the base API.
- * Handles listing, creating, updating, disabling, deleting users,
+ * Handles listing, creating, updating, disabling, enabling, deleting users,
  * and resending Identity Plus invitations.
  *
  * All user endpoints align with BACKEND-SPEC §9.3.
@@ -176,6 +176,24 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * POST /users/:userId/enable
+     * Re-enables an inactive user.
+     * Returns 422 when the user is already active.
+     *
+     * @param {{ userId: string }} params
+     */
+    enableUser: build.mutation({
+      query: ({ userId }) => ({
+        url: `/users/${userId}/enable`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { userId }) => [
+        { type: 'User', id: userId },
+        { type: 'User', id: 'LIST' },
+      ],
+    }),
+
+    /**
      * DELETE /users/:userId
      * Permanently deletes a disabled user.
      * Returns 409 when the target is canonical admin for an active customer.
@@ -260,6 +278,7 @@ export const {
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,
+  useEnableUserMutation,
   useDeleteUserMutation,
   useResendInvitationMutation,
   useBulkCreateUsersMutation,

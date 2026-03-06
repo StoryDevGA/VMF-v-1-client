@@ -15,6 +15,7 @@ import {
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,
+  useEnableUserMutation,
   useDeleteUserMutation,
   useResendInvitationMutation,
   useBulkCreateUsersMutation,
@@ -29,6 +30,7 @@ describe('userApi', () => {
     expect(endpoints).toHaveProperty('createUser')
     expect(endpoints).toHaveProperty('updateUser')
     expect(endpoints).toHaveProperty('disableUser')
+    expect(endpoints).toHaveProperty('enableUser')
     expect(endpoints).toHaveProperty('deleteUser')
     expect(endpoints).toHaveProperty('resendInvitation')
     expect(endpoints).toHaveProperty('bulkCreateUsers')
@@ -45,6 +47,7 @@ describe('userApi', () => {
     expect(typeof useCreateUserMutation).toBe('function')
     expect(typeof useUpdateUserMutation).toBe('function')
     expect(typeof useDisableUserMutation).toBe('function')
+    expect(typeof useEnableUserMutation).toBe('function')
     expect(typeof useDeleteUserMutation).toBe('function')
     expect(typeof useResendInvitationMutation).toBe('function')
     expect(typeof useBulkCreateUsersMutation).toBe('function')
@@ -70,6 +73,11 @@ describe('userApi', () => {
   it('disableUser endpoint should be a mutation', () => {
     expect(userApi.endpoints.disableUser).toBeDefined()
     expect(typeof userApi.endpoints.disableUser.initiate).toBe('function')
+  })
+
+  it('enableUser endpoint should be a mutation', () => {
+    expect(userApi.endpoints.enableUser).toBeDefined()
+    expect(typeof userApi.endpoints.enableUser.initiate).toBe('function')
   })
 
   it('deleteUser endpoint should be a mutation', () => {
