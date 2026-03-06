@@ -340,7 +340,13 @@ describe('SuperAdminCustomers page', () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -373,7 +379,13 @@ describe('SuperAdminCustomers page', () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -434,7 +446,13 @@ describe('SuperAdminCustomers page', () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -1110,8 +1128,10 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
 
     expect(screen.getByRole('menu', { name: /actions for acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /assign admin acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /replace admin acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /edit acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /view users acme corp/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /assign admin acme corp/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /replace admin acme corp/i })).not.toBeInTheDocument()
   })
 
   it('supports keyboard access for row action menu with explicit screen-reader labels', async () => {
@@ -1139,8 +1159,9 @@ describe('SuperAdminCustomers page', () => {
     expect(menuTrigger).toHaveAttribute('aria-expanded', 'true')
     expect(menuTrigger).toHaveAttribute('aria-controls', menu.getAttribute('id'))
     expect(screen.getByRole('menuitem', { name: /edit acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /assign admin acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /replace admin acme corp/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /view users acme corp/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /assign admin acme corp/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /replace admin acme corp/i })).not.toBeInTheDocument()
 
     await user.keyboard('{Escape}')
 
@@ -1148,6 +1169,80 @@ describe('SuperAdminCustomers page', () => {
       expect(screen.queryByRole('menu', { name: /actions for acme corp/i })).not.toBeInTheDocument()
     })
     expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows assign-admin entry in users workspace when no canonical admin exists', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(screen.getByRole('button', { name: /assign customer admin/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /replace customer admin/i })).not.toBeInTheDocument()
+  })
+
+  it('shows replace-admin entry in users workspace when canonical admin exists', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'c-1',
+            name: 'Acme Corp',
+            status: 'ACTIVE',
+            topology: 'SINGLE_TENANT',
+            governance: { customerAdminUserId: 'admin-1' },
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    expect(screen.getByRole('button', { name: /replace customer admin/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
   })
 
   it('shows assign-invitation validation error for invalid email and blocks submit', async () => {
@@ -1171,7 +1266,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'not-an-email')
@@ -1200,7 +1296,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     const nameInput = screen.getByLabelText(/^full name$/i, { selector: 'input' })
     const emailInput = screen.getByLabelText(/^email$/i, { selector: 'input' })
@@ -1248,7 +1345,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
@@ -1301,7 +1399,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
@@ -1341,7 +1440,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
@@ -1356,7 +1456,13 @@ describe('SuperAdminCustomers page', () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -1367,7 +1473,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
 
     expect(screen.queryByRole('heading', { name: /before you continue/i })).not.toBeInTheDocument()
     const replaceDialogHeading = screen.getByRole('heading', { name: /replace customer admin/i })
@@ -1423,7 +1530,13 @@ describe('SuperAdminCustomers page', () => {
     useReplaceCustomerAdminMutation.mockReturnValue([mockReplaceCustomerAdmin, { isLoading: false }])
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -1434,7 +1547,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
     await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
     await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
     await user.click(screen.getByRole('button', { name: /mock step-up complete/i }))
@@ -1470,7 +1584,13 @@ describe('SuperAdminCustomers page', () => {
     useReplaceCustomerAdminMutation.mockReturnValue([mockReplaceCustomerAdmin, { isLoading: false }])
     useListCustomersQuery.mockReturnValue({
       data: {
-        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
         meta: { page: 1, totalPages: 1, total: 1 },
       },
       isLoading: false,
@@ -1481,7 +1601,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /replace admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
     await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
     await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
     await user.click(screen.getByRole('button', { name: /mock step-up complete/i }))
@@ -1517,9 +1638,10 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    // Open the assign admin dialog from the customer row overflow menu
+    // Open the assign-admin dialog from the customer users workspace
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     // Fill invite form fields
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
@@ -1567,7 +1689,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
@@ -1635,7 +1758,8 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /assign admin acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
     await user.click(screen.getByRole('button', { name: /^send invitation$/i }))
@@ -1647,3 +1771,4 @@ describe('SuperAdminCustomers page', () => {
     expect(await screen.findByText('alex@example.com')).toBeInTheDocument()
   })
 })
+

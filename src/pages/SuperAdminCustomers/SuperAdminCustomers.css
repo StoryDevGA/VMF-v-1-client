@@ -139,7 +139,10 @@
 }
 
 .super-admin-customers__users-actions {
-  justify-content: space-between;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .super-admin-customers__toolbar {

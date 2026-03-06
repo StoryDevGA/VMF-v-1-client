@@ -648,6 +648,14 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const userCurrentPage = Number(userMeta.page) || userPage
   const userTotal = Number(userMeta.total)
   const userTotalCount = Number.isFinite(userTotal) ? userTotal : userRows.length
+  const hasCanonicalAdmin = useMemo(() => {
+    if (userRows.some((row) => Boolean(row?.isCanonicalAdmin))) {
+      return true
+    }
+
+    return Boolean(String(usersWorkspaceCustomer?.governance?.customerAdminUserId ?? '').trim())
+  }, [userRows, usersWorkspaceCustomer?.governance?.customerAdminUserId])
+  const usersWorkspaceAdminMode = hasCanonicalAdmin ? 'replace' : 'assign'
 
   useEffect(() => {
     if (!customerDetailsResponse?.data) return
@@ -1142,8 +1150,6 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Set Inactive',
         disabled: (row) => displayStatus(row?.status) === 'INACTIVE',
       },
-      { label: 'Assign Admin' },
-      { label: 'Replace Admin' },
     ],
     [],
   )
@@ -1154,10 +1160,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       if (label === 'View Users') openUsersWorkspace(row)
       if (label === 'Set Active') handleUpdateStatus(row, 'ACTIVE')
       if (label === 'Set Inactive') handleUpdateStatus(row, 'INACTIVE')
-      if (label === 'Assign Admin') openAdminDialog('assign', row)
-      if (label === 'Replace Admin') openAdminDialog('replace', row)
     },
-    [handleUpdateStatus, openAdminDialog, openEditDialog, openUsersWorkspace],
+    [handleUpdateStatus, openEditDialog, openUsersWorkspace],
   )
 
   const columns = useMemo(
@@ -1321,6 +1325,16 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                     disabled={createUserResult.isLoading}
                   >
                     Create User
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => openAdminDialog(usersWorkspaceAdminMode, usersWorkspaceCustomer)}
+                    disabled={adminMutationLoading}
+                  >
+                    {usersWorkspaceAdminMode === 'assign'
+                      ? 'Assign Customer Admin'
+                      : 'Replace Customer Admin'}
                   </Button>
                 </div>
                 <p className="super-admin-customers__users-note">
