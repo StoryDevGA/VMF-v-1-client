@@ -106,7 +106,12 @@ describe('SuperAdminCustomers page', () => {
 
     expect(screen.getByRole('heading', { name: /customer admin/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('heading', { name: /customer catalogue/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /customers - manage customer lifecycle, governance limits, and canonical customer admin flows\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /customer catalogue/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^create$/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
   })
@@ -295,6 +300,11 @@ describe('SuperAdminCustomers page', () => {
       'true',
     )
     expect(screen.getByRole('heading', { name: /invitation management/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /invitation management - track, resend, and revoke customer onboarding invitations\./i,
+      ),
+    ).toBeInTheDocument()
   })
 
   it('normalizes unknown view query values to customers', () => {

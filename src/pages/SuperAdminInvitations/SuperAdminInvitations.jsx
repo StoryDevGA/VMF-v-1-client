@@ -321,7 +321,7 @@ export function SuperAdminInvitationsPanel({
       <header className="super-admin-invitations__header">
         <HeadingTag className="super-admin-invitations__title">Invitation Management</HeadingTag>
         <p className="super-admin-invitations__subtitle">
-          Track, resend, and revoke customer onboarding invitations.
+          Invitation Management - Track, resend, and revoke customer onboarding invitations.
         </p>
       </header>
 

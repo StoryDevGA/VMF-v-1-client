@@ -815,14 +815,12 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       <header className="super-admin-customers__header">
         <h2 className="super-admin-customers__title">Customers</h2>
         <p className="super-admin-customers__subtitle">
-          Manage customer lifecycle, governance limits, and canonical customer admin flows.
+          Customers - Manage customer lifecycle, governance limits, and canonical customer admin flows.
         </p>
       </header>
 
       <Fieldset className="super-admin-customers__fieldset">
-        <Fieldset.Legend className="super-admin-customers__legend">
-          <h2 className="super-admin-customers__section-title">Customer Catalogue</h2>
-        </Fieldset.Legend>
+        <Fieldset.Legend className="sr-only">Customer catalogue</Fieldset.Legend>
         <Card variant="elevated" className="super-admin-customers__card">
           <Card.Body>
             <div className="super-admin-customers__catalogue-actions">
@@ -1389,12 +1387,7 @@ function SuperAdminCustomers() {
 
   return (
     <section className="super-admin-customer-admin container" aria-label="Customer admin workspace">
-      <header className="super-admin-customer-admin__header">
-        <h1 className="super-admin-customer-admin__title">Customer Admin</h1>
-        <p className="super-admin-customer-admin__subtitle">
-          Manage customers and invitations in one workspace.
-        </p>
-      </header>
+      <h1 className="sr-only">Customer Admin</h1>
 
       <TabView
         activeTab={activeTab}
