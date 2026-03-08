@@ -118,6 +118,7 @@ function SuperAdminAuditLogs() {
   const rows = auditListResponse?.data ?? []
   const meta = auditListResponse?.meta ?? {}
   const totalPages = Number(meta.totalPages) || 1
+  const currentPage = Number(meta.page) || page
 
   const columns = useMemo(
     () => [
@@ -171,10 +172,16 @@ function SuperAdminAuditLogs() {
             </HorizontalScroll>
             {isAuditListFetching && !isAuditListLoading ? <p className="super-admin-audit-logs__muted">Refreshing query...</p> : null}
             {totalPages > 1 ? (
-              <div className="super-admin-audit-logs__pagination">
-                <Button variant="outline" size="sm" disabled={page <= 1 || isAuditListFetching} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
-                <p className="super-admin-audit-logs__pagination-info">Page {Number(meta.page) || page} of {totalPages}</p>
-                <Button variant="outline" size="sm" disabled={page >= totalPages || isAuditListFetching} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</Button>
+              <div className="super-admin-audit-logs__pagination" role="navigation" aria-label="Audit logs pagination">
+                <div className="super-admin-audit-logs__pagination-controls">
+                  <Button variant="outline" size="sm" disabled={currentPage <= 1 || isAuditListFetching} onClick={() => setPage(1)}>First</Button>
+                  <Button variant="outline" size="sm" disabled={currentPage <= 1 || isAuditListFetching} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
+                </div>
+                <p className="super-admin-audit-logs__pagination-info">Page {currentPage} of {totalPages}</p>
+                <div className="super-admin-audit-logs__pagination-controls">
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages || isAuditListFetching} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</Button>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages || isAuditListFetching} onClick={() => setPage(totalPages)}>Last</Button>
+                </div>
               </div>
             ) : null}
           </Card.Body>

@@ -5,7 +5,17 @@
 }
 
 .super-admin-invitations--embedded {
+  gap: var(--spacing-lg);
   padding-block: 0;
+}
+
+.super-admin-invitations--embedded .super-admin-invitations__header {
+  gap: var(--spacing-xs);
+}
+
+.super-admin-invitations--embedded .super-admin-invitations__title {
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-normal);
 }
 
 .super-admin-invitations__header {
@@ -119,6 +129,12 @@
   gap: var(--spacing-sm);
 }
 
+.super-admin-invitations__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .super-admin-invitations__pagination-info {
   margin: 0;
   color: var(--color-text-secondary);
@@ -140,6 +156,28 @@
   .super-admin-invitations__toolbar {
     grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
     align-items: end;
+  }
+}
+
+@media (min-width: 1280px) {
+  .super-admin-invitations--embedded .super-admin-invitations__title {
+    font-size: var(--font-size-2xl);
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-invitations__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .super-admin-invitations__pagination-info {
+    text-align: center;
+  }
+
+  .super-admin-invitations__pagination-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 

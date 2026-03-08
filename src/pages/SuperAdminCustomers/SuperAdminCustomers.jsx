@@ -122,6 +122,8 @@ const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
 }
 const CANONICAL_ADMIN_HELP_TEXT =
   'Canonical Admin shows the governance owner user ID for each customer. It changes only after Replace Admin succeeds.'
+const CANONICAL_ADMIN_USERS_HELP_TEXT =
+  'Canonical Admin marks the governance owner user for this customer. Use Replace Customer Admin to transfer ownership.'
 
 const INITIAL_FORM = {
   name: '',
@@ -683,6 +685,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const rows = listResponse?.data ?? []
   const meta = listResponse?.meta ?? {}
   const totalPages = Number(meta.totalPages) || 1
+  const currentPage = Number(meta.page) || page
   const licenseLevels = licenseLevelsResponse?.data ?? []
   const userRows = useMemo(
     () =>
@@ -1806,6 +1809,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                     {listUsersErrorMessage}
                   </p>
                 ) : null}
+                <p className="super-admin-customers__users-note">{CANONICAL_ADMIN_USERS_HELP_TEXT}</p>
                 <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customer users table" gap="sm">
                   <Table
                     className="super-admin-customers__table super-admin-customers__users-table"
@@ -1824,27 +1828,47 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <p className="super-admin-customers__muted">Refreshing users...</p>
                 ) : null}
                 {userTotalPages > 1 ? (
-                  <div className="super-admin-customers__pagination">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={userPage <= 1 || isListUsersFetching}
-                      onClick={() => setUserPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </Button>
+                  <div className="super-admin-customers__pagination" role="navigation" aria-label="Customer users pagination">
+                    <div className="super-admin-customers__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={userCurrentPage <= 1 || isListUsersFetching}
+                        onClick={() => setUserPage(1)}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={userCurrentPage <= 1 || isListUsersFetching}
+                        onClick={() => setUserPage((current) => Math.max(1, current - 1))}
+                      >
+                        Previous
+                      </Button>
+                    </div>
                     <p className="super-admin-customers__pagination-info">
                       Page {userCurrentPage} of {userTotalPages}
                       {userTotalCount > 0 ? ` (${userTotalCount} users)` : ''}
                     </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={userPage >= userTotalPages || isListUsersFetching}
-                      onClick={() => setUserPage((current) => Math.min(userTotalPages, current + 1))}
-                    >
-                      Next
-                    </Button>
+                    <div className="super-admin-customers__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={userCurrentPage >= userTotalPages || isListUsersFetching}
+                        onClick={() => setUserPage((current) => Math.min(userTotalPages, current + 1))}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={userCurrentPage >= userTotalPages || isListUsersFetching}
+                        onClick={() => setUserPage(userTotalPages)}
+                      >
+                        Last
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </Card.Body>
@@ -1928,26 +1952,46 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <p className="super-admin-customers__muted">Refreshing list...</p>
                 ) : null}
                 {totalPages > 1 ? (
-                  <div className="super-admin-customers__pagination">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page <= 1 || isListFetching}
-                      onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </Button>
+                  <div className="super-admin-customers__pagination" role="navigation" aria-label="Customers pagination">
+                    <div className="super-admin-customers__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1 || isListFetching}
+                        onClick={() => setPage(1)}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1 || isListFetching}
+                        onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      >
+                        Previous
+                      </Button>
+                    </div>
                     <p className="super-admin-customers__pagination-info">
-                      Page {Number(meta.page) || page} of {totalPages}
+                      Page {currentPage} of {totalPages}
                     </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= totalPages || isListFetching}
-                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    >
-                      Next
-                    </Button>
+                    <div className="super-admin-customers__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages || isListFetching}
+                        onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages || isListFetching}
+                        onClick={() => setPage(totalPages)}
+                      >
+                        Last
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </Card.Body>
@@ -2276,31 +2320,36 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             </p>
           ) : null}
         </Dialog.Body>
-        <Dialog.Footer>
+        <Dialog.Footer className="super-admin-customers__user-edit-footer">
           <Button
             variant="outline"
+            size="sm"
             onClick={closeUserEditDialog}
             disabled={adminMutationLoading || updateUserResult.isLoading}
           >
             Cancel
           </Button>
-          {!hasCanonicalAdmin ? (
+          <div className="super-admin-customers__user-edit-footer-actions">
+            {!hasCanonicalAdmin ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleOpenAssignAdminFromUserEdit}
+                disabled={!canAssignAdminFromUserEdit || adminMutationLoading || updateUserResult.isLoading}
+              >
+                Assign Customer Admin
+              </Button>
+            ) : null}
             <Button
-              variant="secondary"
-              onClick={handleOpenAssignAdminFromUserEdit}
-              disabled={!canAssignAdminFromUserEdit || adminMutationLoading || updateUserResult.isLoading}
+              variant="primary"
+              size="sm"
+              onClick={handleUserEditMutation}
+              loading={updateUserResult.isLoading}
+              disabled={adminMutationLoading || updateUserResult.isLoading}
             >
-              Assign Customer Admin
+              Save Changes
             </Button>
-          ) : null}
-          <Button
-            variant="primary"
-            onClick={handleUserEditMutation}
-            loading={updateUserResult.isLoading}
-            disabled={adminMutationLoading || updateUserResult.isLoading}
-          >
-            Save Changes
-          </Button>
+          </div>
         </Dialog.Footer>
       </Dialog>
 

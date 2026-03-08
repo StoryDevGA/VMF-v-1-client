@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminInvitations from './SuperAdminInvitations'
@@ -158,5 +158,50 @@ describe('SuperAdminInvitations page', () => {
     expect(
       screen.queryByRole('heading', { name: /revoke invitation/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('supports first/last pagination controls for invitation history', async () => {
+    const user = userEvent.setup()
+    useListInvitationsQuery.mockImplementation(({ page = 1 }) => ({
+      data: {
+        data: [],
+        meta: { page, totalPages: 3 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useListInvitationsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 3 }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText(/page 3 of 3/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useListInvitationsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1 }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument()
   })
 })

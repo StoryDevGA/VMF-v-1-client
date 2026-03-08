@@ -71,6 +71,7 @@ function SuperAdminSystemVersioning() {
   const policyHistory = historyResponse?.data ?? []
   const historyMeta = historyResponse?.meta ?? {}
   const historyTotalPages = Number(historyMeta.totalPages) || 1
+  const historyCurrentPage = Number(historyMeta.page) || historyPage
   const activePolicyAppError = activePolicyError
     ? normalizeError(activePolicyError)
     : null
@@ -461,28 +462,48 @@ function SuperAdminSystemVersioning() {
             ) : null}
 
             {historyTotalPages > 1 ? (
-              <div className="super-admin-system-versioning__pagination">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
-                  disabled={historyPage <= 1 || isHistoryFetching}
-                >
-                  Previous
-                </Button>
+              <div className="super-admin-system-versioning__pagination" role="navigation" aria-label="Policy history pagination">
+                <div className="super-admin-system-versioning__pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHistoryPage(1)}
+                    disabled={historyCurrentPage <= 1 || isHistoryFetching}
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHistoryPage((current) => Math.max(1, current - 1))}
+                    disabled={historyCurrentPage <= 1 || isHistoryFetching}
+                  >
+                    Previous
+                  </Button>
+                </div>
                 <p className="super-admin-system-versioning__pagination-info">
-                  Page {Number(historyMeta.page) || historyPage} of {historyTotalPages}
+                  Page {historyCurrentPage} of {historyTotalPages}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setHistoryPage((current) => Math.min(historyTotalPages, current + 1))
-                  }
-                  disabled={historyPage >= historyTotalPages || isHistoryFetching}
-                >
-                  Next
-                </Button>
+                <div className="super-admin-system-versioning__pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setHistoryPage((current) => Math.min(historyTotalPages, current + 1))
+                    }
+                    disabled={historyCurrentPage >= historyTotalPages || isHistoryFetching}
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setHistoryPage(historyTotalPages)}
+                    disabled={historyCurrentPage >= historyTotalPages || isHistoryFetching}
+                  >
+                    Last
+                  </Button>
+                </div>
               </div>
             ) : null}
           </Card.Body>

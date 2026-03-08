@@ -131,4 +131,47 @@ describe('SuperAdminLicenseLevels page', () => {
     expect(timestampNode.querySelector('.table-date-time__date')).toHaveTextContent(parts.dateLabel)
     expect(timestampNode.querySelector('.table-date-time__time')).toHaveTextContent(parts.timeLabel)
   })
+
+  it('supports first/last pagination controls in licence levels catalogue', async () => {
+    const user = userEvent.setup()
+    useListLicenseLevelsQuery.mockImplementation(({ page = 1 }) => ({
+      data: {
+        data: [],
+        meta: { page, totalPages: 4, total: 64 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useListLicenseLevelsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 4 }),
+      )
+    })
+    expect(screen.getByText(/page 4 of 4/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useListLicenseLevelsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1 }),
+      )
+    })
+    expect(screen.getByText(/page 1 of 4/i)).toBeInTheDocument()
+  })
 })

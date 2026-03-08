@@ -78,6 +78,12 @@
   margin-top: var(--spacing-md);
 }
 
+.super-admin-license-levels__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .super-admin-license-levels__pagination-info {
   margin: 0;
   color: var(--color-text-secondary);
@@ -116,5 +122,18 @@
   .super-admin-license-levels__form-actions {
     grid-template-columns: 1fr;
   }
-}
 
+  .super-admin-license-levels__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .super-admin-license-levels__pagination-info {
+    text-align: center;
+  }
+
+  .super-admin-license-levels__pagination-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

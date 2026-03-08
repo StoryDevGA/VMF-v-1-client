@@ -338,6 +338,17 @@ describe('SuperAdminCustomers page', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders invitations in embedded tab context with shared heading hierarchy', () => {
+    renderPage('/super-admin/customers?view=invitations')
+
+    const invitationHeading = screen.getByRole('heading', { name: /invitation management/i })
+    expect(invitationHeading.tagName).toBe('H2')
+
+    const invitationPanel = invitationHeading.closest('.super-admin-invitations')
+    expect(invitationPanel).not.toBeNull()
+    expect(invitationPanel).toHaveClass('super-admin-invitations--embedded')
+  })
+
   it('normalizes unknown view query values to customers', () => {
     renderPage('/super-admin/customers?view=unknown')
 
@@ -346,6 +357,55 @@ describe('SuperAdminCustomers page', () => {
       'true',
     )
     expect(screen.getByRole('heading', { name: /^customers$/i })).toBeInTheDocument()
+  })
+
+  it('supports first/last pagination controls in customer catalogue', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockImplementation(({ page = 1 }) => ({
+      data: {
+        data: [{
+          id: 'c-1',
+          name: 'Acme Corp',
+          status: 'ACTIVE',
+          topology: 'SINGLE_TENANT',
+          governance: { customerAdminUserId: 'admin-1' },
+        }],
+        meta: { page, totalPages: 3, total: 41 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useListCustomersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 3 }),
+      )
+    })
+    expect(screen.getByText(/page 3 of 3/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useListCustomersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1 }),
+      )
+    })
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument()
   })
 
   it('opens customer-level users workspace from row actions', async () => {
@@ -373,6 +433,9 @@ describe('SuperAdminCustomers page', () => {
 
     expect(screen.getByRole('heading', { name: /customer users/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back to customers/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(/canonical admin marks the governance owner user for this customer\./i),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/showing users for/i)).not.toBeInTheDocument()
     expect(useListUsersQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -502,6 +565,17 @@ describe('SuperAdminCustomers page', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
     await user.type(
       screen.getByLabelText(/^search$/i, { selector: 'input#sa-customer-user-search' }),
       'alex',
@@ -607,6 +681,38 @@ describe('SuperAdminCustomers page', () => {
       )
     })
     expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: '',
+          page: 3,
+        }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText(/page 3 of 3/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useListUsersQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'c-1',
+          q: 'alex',
+          role: '',
+          status: '',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument()
   })
 
   it('shows backend validation guidance when customer users query returns 422', async () => {
@@ -1443,12 +1549,18 @@ describe('SuperAdminCustomers page', () => {
     const editDialog = editHeading.closest('dialog')
     expect(editDialog).not.toBeNull()
     const editDialogScreen = within(editDialog)
+    const editDialogFooter = editDialog.querySelector('.super-admin-customers__user-edit-footer')
+    expect(editDialogFooter).not.toBeNull()
+    const footerActions = editDialogFooter.querySelector('.super-admin-customers__user-edit-footer-actions')
+    expect(footerActions).not.toBeNull()
     expect(
       editDialogScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-edit-name' }),
     ).toHaveValue('Taylor User')
     expect(
       editDialogScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-edit-email' }),
     ).toHaveValue('taylor@example.com')
+    expect(within(footerActions).getByRole('button', { name: /assign customer admin/i })).toBeInTheDocument()
+    expect(within(footerActions).getByRole('button', { name: /save changes/i })).toBeInTheDocument()
 
     await user.click(editDialogScreen.getByRole('button', { name: /assign customer admin/i }))
 

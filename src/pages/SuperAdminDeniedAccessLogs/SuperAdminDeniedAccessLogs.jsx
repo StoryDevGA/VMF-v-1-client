@@ -64,6 +64,7 @@ function SuperAdminDeniedAccessLogs() {
   const rows = logsResponse?.data ?? []
   const pagination = logsResponse?.meta ?? {}
   const totalPages = Number(pagination.totalPages) || 1
+  const currentPage = Number(pagination.page) || page
   const total = Number(pagination.total) || 0
   const appError = error ? normalizeError(error) : null
 
@@ -233,28 +234,48 @@ function SuperAdminDeniedAccessLogs() {
               />
             </HorizontalScroll>
 
-            <div className="super-admin-denied-logs__pagination">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || isFetching}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                Previous
-              </Button>
+            <div className="super-admin-denied-logs__pagination" role="navigation" aria-label="Denied access logs pagination">
+              <div className="super-admin-denied-logs__pagination-controls">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1 || isFetching}
+                  onClick={() => setPage(1)}
+                >
+                  First
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1 || isFetching}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  Previous
+                </Button>
+              </div>
               <p className="super-admin-denied-logs__pagination-info">
-                Page {Number(pagination.page) || page} of {totalPages}
+                Page {currentPage} of {totalPages}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages || isFetching}
-                onClick={() =>
-                  setPage((current) => Math.min(totalPages, current + 1))
-                }
-              >
-                Next
-              </Button>
+              <div className="super-admin-denied-logs__pagination-controls">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages || isFetching}
+                  onClick={() =>
+                    setPage((current) => Math.min(totalPages, current + 1))
+                  }
+                >
+                  Next
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages || isFetching}
+                  onClick={() => setPage(totalPages)}
+                >
+                  Last
+                </Button>
+              </div>
             </div>
           </Card.Body>
         </Card>

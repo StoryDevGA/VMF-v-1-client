@@ -87,6 +87,12 @@
   gap: var(--spacing-sm);
 }
 
+.super-admin-denied-logs__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .super-admin-denied-logs__pagination-info {
   margin: 0;
   color: var(--color-text-secondary);
@@ -107,5 +113,21 @@
 
   .super-admin-denied-logs__filter-actions {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-denied-logs__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .super-admin-denied-logs__pagination-info {
+    text-align: center;
+  }
+
+  .super-admin-denied-logs__pagination-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }

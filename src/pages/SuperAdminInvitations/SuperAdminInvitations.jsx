@@ -106,6 +106,7 @@ export function SuperAdminInvitationsPanel({
   const invitations = listResponse?.data ?? []
   const pagination = listResponse?.meta ?? {}
   const totalPages = Number(pagination.totalPages) || 1
+  const currentPage = Number(pagination.page) || page
 
   const closeRevokeDialog = useCallback(() => {
     setRevokeDialogOpen(false)
@@ -392,28 +393,48 @@ export function SuperAdminInvitationsPanel({
                 />
               </HorizontalScroll>
 
-              <div className="super-admin-invitations__pagination">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  disabled={page <= 1 || isListFetching}
-                >
-                  Previous
-                </Button>
+              <div className="super-admin-invitations__pagination" role="navigation" aria-label="Invitation history pagination">
+                <div className="super-admin-invitations__pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(1)}
+                    disabled={currentPage <= 1 || isListFetching}
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={currentPage <= 1 || isListFetching}
+                  >
+                    Previous
+                  </Button>
+                </div>
                 <p className="super-admin-invitations__pagination-info">
-                  Page {Number(pagination.page) || page} of {totalPages}
+                  Page {currentPage} of {totalPages}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
-                  disabled={page >= totalPages || isListFetching}
-                >
-                  Next
-                </Button>
+                <div className="super-admin-invitations__pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setPage((current) => Math.min(totalPages, current + 1))
+                    }
+                    disabled={currentPage >= totalPages || isListFetching}
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(totalPages)}
+                    disabled={currentPage >= totalPages || isListFetching}
+                  >
+                    Last
+                  </Button>
+                </div>
               </div>
             </Card.Body>
           </Card>

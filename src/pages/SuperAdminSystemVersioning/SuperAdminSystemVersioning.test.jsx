@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminSystemVersioning from './SuperAdminSystemVersioning'
 
@@ -109,5 +110,48 @@ describe('SuperAdminSystemVersioning page', () => {
     expect(screen.getByText(activatedParts.timeLabel)).toBeInTheDocument()
     expect(screen.getByText(createdParts.dateLabel)).toBeInTheDocument()
     expect(screen.getByText(createdParts.timeLabel)).toBeInTheDocument()
+  })
+
+  it('supports first/last pagination controls in policy history', async () => {
+    const user = userEvent.setup()
+    useGetPolicyHistoryQuery.mockImplementation(({ page = 1 }) => ({
+      data: {
+        data: [],
+        meta: { page, totalPages: 5 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useGetPolicyHistoryQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 5, pageSize: 20 }),
+      )
+    })
+    expect(screen.getByText(/page 5 of 5/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useGetPolicyHistoryQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 20 }),
+      )
+    })
+    expect(screen.getByText(/page 1 of 5/i)).toBeInTheDocument()
   })
 })

@@ -118,6 +118,12 @@
   gap: var(--spacing-sm);
 }
 
+.super-admin-system-versioning__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .super-admin-system-versioning__pagination-info {
   margin: 0;
   color: var(--color-text-secondary);
@@ -153,5 +159,21 @@
   .super-admin-system-versioning__grid {
     grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
     align-items: start;
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-system-versioning__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .super-admin-system-versioning__pagination-info {
+    text-align: center;
+  }
+
+  .super-admin-system-versioning__pagination-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }

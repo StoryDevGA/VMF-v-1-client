@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminAuditLogs from './SuperAdminAuditLogs'
 
@@ -94,5 +95,45 @@ describe('SuperAdminAuditLogs page', () => {
     expect(timestampNode).toHaveAttribute('datetime', timestampParts.iso)
     expect(timestampNode.querySelector('.table-date-time__date')).toHaveTextContent(timestampParts.dateLabel)
     expect(timestampNode.querySelector('.table-date-time__time')).toHaveTextContent(timestampParts.timeLabel)
+  })
+
+  it('supports first/last pagination controls in audit log query results', async () => {
+    const user = userEvent.setup()
+    useQueryAuditLogsQuery.mockImplementation(({ page = 1 }) => ({
+      data: { data: [], meta: { page, totalPages: 4, totalCount: 80 } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const firstButton = screen.getByRole('button', { name: /^first$/i })
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    const lastButton = screen.getByRole('button', { name: /^last$/i })
+
+    expect(firstButton).toBeDisabled()
+    expect(previousButton).toBeDisabled()
+    expect(nextButton).not.toBeDisabled()
+    expect(lastButton).not.toBeDisabled()
+
+    await user.click(lastButton)
+
+    await waitFor(() => {
+      expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 4, pageSize: 20 }),
+      )
+    })
+    expect(screen.getByText(/page 4 of 4/i)).toBeInTheDocument()
+
+    await user.click(firstButton)
+
+    await waitFor(() => {
+      expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 20 }),
+      )
+    })
+    expect(screen.getByText(/page 1 of 4/i)).toBeInTheDocument()
   })
 })

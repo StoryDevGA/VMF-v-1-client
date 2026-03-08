@@ -159,6 +159,7 @@ function SuperAdminLicenseLevels() {
   const rows = listResponse?.data ?? []
   const meta = listResponse?.meta ?? {}
   const totalPages = Number(meta.totalPages) || 1
+  const currentPage = Number(meta.page) || page
 
   useEffect(() => {
     if (!selectedResponse?.data) return
@@ -516,28 +517,48 @@ function SuperAdminLicenseLevels() {
               ) : null}
 
               {totalPages > 1 ? (
-                <div className="super-admin-license-levels__pagination">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1 || isListFetching}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  >
-                    Previous
-                  </Button>
+                <div className="super-admin-license-levels__pagination" role="navigation" aria-label="Licence levels pagination">
+                  <div className="super-admin-license-levels__pagination-controls">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage <= 1 || isListFetching}
+                      onClick={() => setPage(1)}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage <= 1 || isListFetching}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                  </div>
                   <p className="super-admin-license-levels__pagination-info">
-                    Page {Number(meta.page) || page} of {totalPages}
+                    Page {currentPage} of {totalPages}
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages || isListFetching}
-                    onClick={() =>
-                      setPage((current) => Math.min(totalPages, current + 1))
-                    }
-                  >
-                    Next
-                  </Button>
+                  <div className="super-admin-license-levels__pagination-controls">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage >= totalPages || isListFetching}
+                      onClick={() =>
+                        setPage((current) => Math.min(totalPages, current + 1))
+                      }
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage >= totalPages || isListFetching}
+                      onClick={() => setPage(totalPages)}
+                    >
+                      Last
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </Card.Body>
