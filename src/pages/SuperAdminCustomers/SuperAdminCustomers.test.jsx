@@ -1180,7 +1180,7 @@ describe('SuperAdminCustomers page', () => {
     expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('shows assign-admin entry in users workspace when no canonical admin exists', async () => {
+  it('hides assign-admin toolbar CTA when row-level edit path is available', async () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
@@ -1221,8 +1221,72 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
     await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
 
-    expect(screen.getByRole('button', { name: /assign customer admin/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /edit user taylor user/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /replace customer admin/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
+  })
+
+  it('opens edit-user dialog from row action and seeds assign-admin dialog with row values', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user taylor user/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+    expect(
+      editDialogScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-edit-name' }),
+    ).toHaveValue('Taylor User')
+    expect(
+      editDialogScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-edit-email' }),
+    ).toHaveValue('taylor@example.com')
+
+    await user.click(editDialogScreen.getByRole('button', { name: /assign customer admin/i }))
+
+    const assignHeading = await screen.findByRole('heading', { name: /assign customer admin/i })
+    const assignDialog = assignHeading.closest('dialog')
+    expect(assignDialog).not.toBeNull()
+    const assignDialogScreen = within(assignDialog)
+    expect(assignDialogScreen.getByLabelText(/^full name$/i)).toHaveValue('Taylor User')
+    expect(assignDialogScreen.getByLabelText(/^email$/i)).toHaveValue('taylor@example.com')
   })
 
   it('shows replace-admin entry in users workspace when canonical admin exists', async () => {

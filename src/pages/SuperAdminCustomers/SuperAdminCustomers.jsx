@@ -192,6 +192,8 @@ const getUserId = (row) => String(row?.id ?? row?._id ?? '').trim()
 const getUserDisplayName = (row) =>
   String(row?.name ?? row?.email ?? getUserId(row) ?? 'User').trim() || 'User'
 
+const getUserEmail = (row) => String(row?.email ?? '').trim()
+
 const getLifecycleActionVerb = (actionType) => {
   if (actionType === 'enable') return 'Reactivate'
   if (actionType === 'archive') return 'Archive'
@@ -585,6 +587,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [userCreateExistingUserId, setUserCreateExistingUserId] = useState('')
   const [userCreateRoles, setUserCreateRoles] = useState([])
   const [userCreateErrors, setUserCreateErrors] = useState({})
+  const [userEditOpen, setUserEditOpen] = useState(false)
+  const [userEditTarget, setUserEditTarget] = useState(null)
   const [userLifecycleConfirm, setUserLifecycleConfirm] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
@@ -825,6 +829,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserStatusFilter('')
     setUserPage(1)
     setUserCreateOpen(false)
+    setUserEditOpen(false)
+    setUserEditTarget(null)
     setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
@@ -836,6 +842,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserStatusFilter('')
     setUserPage(1)
     setUserCreateOpen(false)
+    setUserEditOpen(false)
+    setUserEditTarget(null)
     setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
@@ -850,6 +858,17 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserCreateOpen(false)
     resetUserCreateForm()
   }, [resetUserCreateForm])
+
+  const openUserEditDialog = useCallback((row) => {
+    if (!row) return
+    setUserEditTarget(row)
+    setUserEditOpen(true)
+  }, [])
+
+  const closeUserEditDialog = useCallback(() => {
+    setUserEditOpen(false)
+    setUserEditTarget(null)
+  }, [])
 
   const toggleUserCreateRole = useCallback((role) => {
     setUserCreateRoles((previousRoles) => (
@@ -1028,6 +1047,11 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       const status = normalizeUserStatus(row)
       const userName = getUserDisplayName(row)
 
+      if (label === 'Edit User') {
+        openUserEditDialog(row)
+        return
+      }
+
       if (label === 'Deactivate') {
         if (status !== 'ACTIVE') {
           addToast({
@@ -1078,7 +1102,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         })
       }
     },
-    [addToast, usersWorkspaceCustomerId],
+    [addToast, openUserEditDialog, usersWorkspaceCustomerId],
   )
 
   const handleUserLifecycleConfirm = useCallback(async () => {
@@ -1149,6 +1173,15 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const userLifecycleActions = useMemo(
     () => [
       {
+        label: 'Edit User',
+        variant: 'ghost',
+        disabled: (row) =>
+          disableUserResult.isLoading
+          || enableUserResult.isLoading
+          || deleteUserResult.isLoading
+          || !getUserId(row),
+      },
+      {
         label: 'Deactivate',
         variant: 'ghost',
         disabled: (row) =>
@@ -1179,17 +1212,41 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     [deleteUserResult.isLoading, disableUserResult.isLoading, enableUserResult.isLoading],
   )
 
-  const openAdminDialog = useCallback((mode, row) => {
+  const openAdminDialog = useCallback((mode, row, defaults = {}) => {
+    const recipientName = String(defaults.recipientName ?? '')
+    const recipientEmail = String(defaults.recipientEmail ?? '')
     setAdminMode(mode)
     setAdminCustomer(row)
-    setAdminRecipientName('')
-    setAdminRecipientEmail('')
+    setAdminRecipientName(mode === 'assign' ? recipientName : '')
+    setAdminRecipientEmail(mode === 'assign' ? recipientEmail : '')
     setAdminUserId('')
     setAdminReason('')
     setAdminStepUpToken('')
     setAdminError('')
     setAdminDialogOpen(true)
   }, [])
+
+  const handleOpenAssignAdminFromUserEdit = useCallback(() => {
+    if (!usersWorkspaceCustomer) return
+
+    const recipientName = String(userEditTarget?.name ?? '').trim()
+    const recipientEmail = getUserEmail(userEditTarget)
+
+    if (!recipientEmail) {
+      addToast({
+        title: 'Cannot assign admin',
+        description: 'Selected user is missing an email address required for invitation.',
+        variant: 'warning',
+      })
+      return
+    }
+
+    closeUserEditDialog()
+    openAdminDialog('assign', usersWorkspaceCustomer, {
+      recipientName,
+      recipientEmail,
+    })
+  }, [addToast, closeUserEditDialog, openAdminDialog, userEditTarget, usersWorkspaceCustomer])
 
   const closeAdminDialog = useCallback(() => {
     setAdminDialogOpen(false)
@@ -1486,6 +1543,10 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     createAdminInvitationResult.isLoading || replaceAdminResult.isLoading
   const userLifecycleMutationLoading =
     disableUserResult.isLoading || enableUserResult.isLoading || deleteUserResult.isLoading
+  const showUsersAssignAdminAction = usersWorkspaceAdminMode === 'assign' && userRows.length === 0
+  const showUsersReplaceAdminAction = usersWorkspaceAdminMode === 'replace'
+  const userEditEmail = getUserEmail(userEditTarget)
+  const canAssignAdminFromUserEdit = !hasCanonicalAdmin && Boolean(userEditEmail)
   const isUsersWorkspaceOpen = Boolean(usersWorkspaceCustomerId)
 
   return (
@@ -1520,16 +1581,18 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   >
                     Create User
                   </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => openAdminDialog(usersWorkspaceAdminMode, usersWorkspaceCustomer)}
-                    disabled={adminMutationLoading}
-                  >
-                    {usersWorkspaceAdminMode === 'assign'
-                      ? 'Assign Customer Admin'
-                      : 'Replace Customer Admin'}
-                  </Button>
+                  {showUsersAssignAdminAction || showUsersReplaceAdminAction ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => openAdminDialog(usersWorkspaceAdminMode, usersWorkspaceCustomer)}
+                      disabled={adminMutationLoading}
+                    >
+                      {usersWorkspaceAdminMode === 'assign'
+                        ? 'Assign Customer Admin'
+                        : 'Replace Customer Admin'}
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="super-admin-customers__toolbar super-admin-customers__users-toolbar">
                   <Input
@@ -1975,6 +2038,50 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           >
             Save Changes
           </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <Dialog open={userEditOpen} onClose={closeUserEditDialog} size="md">
+        <Dialog.Header>
+          <h2 className="super-admin-customers__dialog-title">Edit Customer User</h2>
+        </Dialog.Header>
+        <Dialog.Body className="super-admin-customers__dialog-body">
+          <p className="super-admin-customers__dialog-subtitle">
+            Customer: <strong>{usersWorkspaceCustomer?.name ?? '--'}</strong>
+          </p>
+          <Input
+            id="sa-customer-user-edit-name"
+            label="User Full Name"
+            value={String(userEditTarget?.name ?? '')}
+            readOnly
+            fullWidth
+          />
+          <Input
+            id="sa-customer-user-edit-email"
+            type="email"
+            label="User Email"
+            value={userEditEmail}
+            readOnly
+            fullWidth
+          />
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            variant="outline"
+            onClick={closeUserEditDialog}
+            disabled={adminMutationLoading}
+          >
+            Close
+          </Button>
+          {!hasCanonicalAdmin ? (
+            <Button
+              variant="secondary"
+              onClick={handleOpenAssignAdminFromUserEdit}
+              disabled={!canAssignAdminFromUserEdit || adminMutationLoading}
+            >
+              Assign Customer Admin
+            </Button>
+          ) : null}
         </Dialog.Footer>
       </Dialog>
 
