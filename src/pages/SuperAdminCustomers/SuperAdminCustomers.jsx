@@ -32,6 +32,7 @@ import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
 import {
   useListUsersQuery,
   useCreateUserMutation,
+  useUpdateUserMutation,
   useDisableUserMutation,
   useEnableUserMutation,
   useDeleteUserMutation,
@@ -193,6 +194,12 @@ const getUserDisplayName = (row) =>
   String(row?.name ?? row?.email ?? getUserId(row) ?? 'User').trim() || 'User'
 
 const getUserEmail = (row) => String(row?.email ?? '').trim()
+
+const normalizeRoles = (roles) => (
+  Array.isArray(roles)
+    ? [...new Set(roles.filter((role) => typeof role === 'string' && role.trim()))]
+    : []
+)
 
 const getLifecycleActionVerb = (actionType) => {
   if (actionType === 'enable') return 'Reactivate'
@@ -359,6 +366,16 @@ const mapFieldErrorsFromDetails = (details) => {
   }
 
   return mapped
+}
+
+const mapEditUserFieldErrorsFromDetails = (details) => {
+  const mapped = mapFieldErrorsFromDetails(details)
+  const editErrors = {}
+
+  if (mapped.name) editErrors.name = mapped.name
+  if (mapped.roles) editErrors.roles = mapped.roles
+
+  return editErrors
 }
 
 const normalizeMutationData = (result) => {
@@ -589,6 +606,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [userCreateErrors, setUserCreateErrors] = useState({})
   const [userEditOpen, setUserEditOpen] = useState(false)
   const [userEditTarget, setUserEditTarget] = useState(null)
+  const [userEditName, setUserEditName] = useState('')
+  const [userEditRoles, setUserEditRoles] = useState([])
+  const [userEditErrors, setUserEditErrors] = useState({})
   const [userLifecycleConfirm, setUserLifecycleConfirm] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
@@ -632,6 +652,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     useCreateCustomerAdminInvitationMutation()
   const [replaceCustomerAdmin, replaceAdminResult] = useReplaceCustomerAdminMutation()
   const [createUser, createUserResult] = useCreateUserMutation()
+  const [updateUser, updateUserResult] = useUpdateUserMutation()
   const [disableUser, disableUserResult] = useDisableUserMutation()
   const [enableUser, enableUserResult] = useEnableUserMutation()
   const [deleteUser, deleteUserResult] = useDeleteUserMutation()
@@ -831,6 +852,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserCreateOpen(false)
     setUserEditOpen(false)
     setUserEditTarget(null)
+    setUserEditName('')
+    setUserEditRoles([])
+    setUserEditErrors({})
     setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
@@ -844,6 +868,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserCreateOpen(false)
     setUserEditOpen(false)
     setUserEditTarget(null)
+    setUserEditName('')
+    setUserEditRoles([])
+    setUserEditErrors({})
     setUserLifecycleConfirm(null)
     resetUserCreateForm()
   }, [resetUserCreateForm])
@@ -862,12 +889,18 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const openUserEditDialog = useCallback((row) => {
     if (!row) return
     setUserEditTarget(row)
+    setUserEditName(String(row?.name ?? ''))
+    setUserEditRoles(normalizeRoles(getCustomerUserRoles(row, usersWorkspaceCustomerId)))
+    setUserEditErrors({})
     setUserEditOpen(true)
-  }, [])
+  }, [usersWorkspaceCustomerId])
 
   const closeUserEditDialog = useCallback(() => {
     setUserEditOpen(false)
     setUserEditTarget(null)
+    setUserEditName('')
+    setUserEditRoles([])
+    setUserEditErrors({})
   }, [])
 
   const toggleUserCreateRole = useCallback((role) => {
@@ -884,6 +917,98 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       return nextErrors
     })
   }, [])
+
+  const toggleUserEditRole = useCallback((role) => {
+    setUserEditRoles((previousRoles) => (
+      previousRoles.includes(role)
+        ? previousRoles.filter((currentRole) => currentRole !== role)
+        : [...previousRoles, role]
+    ))
+    setUserEditErrors((currentErrors) => {
+      if (!currentErrors.roles && !currentErrors.form) return currentErrors
+      const nextErrors = { ...currentErrors }
+      delete nextErrors.roles
+      delete nextErrors.form
+      return nextErrors
+    })
+  }, [])
+
+  const handleUserEditMutation = useCallback(async () => {
+    if (!usersWorkspaceCustomerId || !userEditTarget) return
+
+    const userId = getUserId(userEditTarget)
+    if (!userId) {
+      setUserEditErrors({
+        form: 'This user row is missing an ID and cannot be updated.',
+      })
+      return
+    }
+
+    const trimmedName = userEditName.trim()
+    const normalizedRoles = normalizeRoles(userEditRoles)
+    const validationErrors = {}
+
+    if (!trimmedName) {
+      validationErrors.name = 'Full name is required.'
+    }
+    if (normalizedRoles.length === 0) {
+      validationErrors.roles = 'Select at least one role.'
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setUserEditErrors(validationErrors)
+      return
+    }
+
+    try {
+      await updateUser({
+        userId,
+        body: {
+          name: trimmedName,
+          roles: normalizedRoles,
+        },
+      }).unwrap()
+      addToast({
+        title: 'User updated',
+        description: `${trimmedName} was updated successfully.`,
+        variant: 'success',
+      })
+      closeUserEditDialog()
+    } catch (err) {
+      const appError = normalizeError(err)
+
+      if (
+        normalizedRoles.includes('CUSTOMER_ADMIN')
+        && isCanonicalAdminConflictError(appError)
+      ) {
+        setUserEditErrors({
+          roles: getCanonicalAdminConflictMessage(appError, 'update_roles'),
+        })
+        return
+      }
+
+      if (appError.status === 422 && appError.details) {
+        const mappedErrors = mapEditUserFieldErrorsFromDetails(appError.details)
+        if (Object.keys(mappedErrors).length > 0) {
+          setUserEditErrors(mappedErrors)
+          return
+        }
+      }
+
+      const detailMessage = getFirstErrorDetailMessage(appError?.details)
+      setUserEditErrors({
+        form: detailMessage || appError.message || getErrorMessage(appError?.code),
+      })
+    }
+  }, [
+    addToast,
+    closeUserEditDialog,
+    updateUser,
+    userEditName,
+    userEditRoles,
+    userEditTarget,
+    usersWorkspaceCustomerId,
+  ])
 
   const handleUserCreateMutation = useCallback(async () => {
     if (!usersWorkspaceCustomerId) return
@@ -1176,7 +1301,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Edit User',
         variant: 'ghost',
         disabled: (row) =>
-          disableUserResult.isLoading
+          updateUserResult.isLoading
+          || createUserResult.isLoading
+          || disableUserResult.isLoading
           || enableUserResult.isLoading
           || deleteUserResult.isLoading
           || !getUserId(row),
@@ -1185,7 +1312,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Deactivate',
         variant: 'ghost',
         disabled: (row) =>
-          disableUserResult.isLoading
+          updateUserResult.isLoading
+          || createUserResult.isLoading
+          || disableUserResult.isLoading
           || enableUserResult.isLoading
           || deleteUserResult.isLoading
           || normalizeUserStatus(row) !== 'ACTIVE',
@@ -1194,7 +1323,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Reactivate',
         variant: 'ghost',
         disabled: (row) =>
-          disableUserResult.isLoading
+          updateUserResult.isLoading
+          || createUserResult.isLoading
+          || disableUserResult.isLoading
           || enableUserResult.isLoading
           || deleteUserResult.isLoading
           || normalizeUserStatus(row) !== 'INACTIVE',
@@ -1203,13 +1334,21 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         label: 'Archive',
         variant: 'ghost',
         disabled: (row) =>
-          disableUserResult.isLoading
+          updateUserResult.isLoading
+          || createUserResult.isLoading
+          || disableUserResult.isLoading
           || enableUserResult.isLoading
           || deleteUserResult.isLoading
           || normalizeUserStatus(row) === 'ACTIVE',
       },
     ],
-    [deleteUserResult.isLoading, disableUserResult.isLoading, enableUserResult.isLoading],
+    [
+      createUserResult.isLoading,
+      deleteUserResult.isLoading,
+      disableUserResult.isLoading,
+      enableUserResult.isLoading,
+      updateUserResult.isLoading,
+    ],
   )
 
   const openAdminDialog = useCallback((mode, row, defaults = {}) => {
@@ -1229,7 +1368,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const handleOpenAssignAdminFromUserEdit = useCallback(() => {
     if (!usersWorkspaceCustomer) return
 
-    const recipientName = String(userEditTarget?.name ?? '').trim()
+    const recipientName = userEditName.trim() || String(userEditTarget?.name ?? '').trim()
     const recipientEmail = getUserEmail(userEditTarget)
 
     if (!recipientEmail) {
@@ -1246,7 +1385,14 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       recipientName,
       recipientEmail,
     })
-  }, [addToast, closeUserEditDialog, openAdminDialog, userEditTarget, usersWorkspaceCustomer])
+  }, [
+    addToast,
+    closeUserEditDialog,
+    openAdminDialog,
+    userEditName,
+    userEditTarget,
+    usersWorkspaceCustomer,
+  ])
 
   const closeAdminDialog = useCallback(() => {
     setAdminDialogOpen(false)
@@ -2052,8 +2198,18 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           <Input
             id="sa-customer-user-edit-name"
             label="User Full Name"
-            value={String(userEditTarget?.name ?? '')}
-            readOnly
+            value={userEditName}
+            onChange={(event) => {
+              setUserEditName(event.target.value)
+              setUserEditErrors((currentErrors) => {
+                if (!currentErrors.name && !currentErrors.form) return currentErrors
+                const nextErrors = { ...currentErrors }
+                delete nextErrors.name
+                delete nextErrors.form
+                return nextErrors
+              })
+            }}
+            error={userEditErrors.name}
             fullWidth
           />
           <Input
@@ -2062,26 +2218,60 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             label="User Email"
             value={userEditEmail}
             readOnly
+            helperText="Email cannot be changed here. If incorrect, archive this user and create a new user with the correct email."
             fullWidth
           />
+          <fieldset className="super-admin-customers__roles-fieldset">
+            <legend className="super-admin-customers__roles-legend">Roles</legend>
+            <div className="super-admin-customers__roles-grid">
+              {USER_CREATE_ROLE_OPTIONS.map((roleOption) => (
+                <Tickbox
+                  key={roleOption.value}
+                  id={`sa-customer-user-edit-role-${String(roleOption.value).toLowerCase()}`}
+                  label={roleOption.label}
+                  checked={userEditRoles.includes(roleOption.value)}
+                  onChange={() => toggleUserEditRole(roleOption.value)}
+                  disabled={updateUserResult.isLoading}
+                />
+              ))}
+            </div>
+          </fieldset>
+          {userEditErrors.roles ? (
+            <p className="super-admin-customers__error" role="alert">
+              {userEditErrors.roles}
+            </p>
+          ) : null}
+          {userEditErrors.form ? (
+            <p className="super-admin-customers__error" role="alert">
+              {userEditErrors.form}
+            </p>
+          ) : null}
         </Dialog.Body>
         <Dialog.Footer>
           <Button
             variant="outline"
             onClick={closeUserEditDialog}
-            disabled={adminMutationLoading}
+            disabled={adminMutationLoading || updateUserResult.isLoading}
           >
-            Close
+            Cancel
           </Button>
           {!hasCanonicalAdmin ? (
             <Button
               variant="secondary"
               onClick={handleOpenAssignAdminFromUserEdit}
-              disabled={!canAssignAdminFromUserEdit || adminMutationLoading}
+              disabled={!canAssignAdminFromUserEdit || adminMutationLoading || updateUserResult.isLoading}
             >
               Assign Customer Admin
             </Button>
           ) : null}
+          <Button
+            variant="primary"
+            onClick={handleUserEditMutation}
+            loading={updateUserResult.isLoading}
+            disabled={adminMutationLoading || updateUserResult.isLoading}
+          >
+            Save Changes
+          </Button>
         </Dialog.Footer>
       </Dialog>
 

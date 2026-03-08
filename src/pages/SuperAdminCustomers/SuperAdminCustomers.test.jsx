@@ -28,6 +28,7 @@ vi.mock('../../store/api/invitationApi.js', () => ({
 vi.mock('../../store/api/userApi.js', () => ({
   useListUsersQuery: vi.fn(),
   useCreateUserMutation: vi.fn(),
+  useUpdateUserMutation: vi.fn(),
   useDisableUserMutation: vi.fn(),
   useEnableUserMutation: vi.fn(),
   useDeleteUserMutation: vi.fn(),
@@ -64,6 +65,7 @@ import {
 import {
   useListUsersQuery,
   useCreateUserMutation,
+  useUpdateUserMutation,
   useDisableUserMutation,
   useEnableUserMutation,
   useDeleteUserMutation,
@@ -122,6 +124,7 @@ describe('SuperAdminCustomers page', () => {
       error: null,
     })
     useCreateUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useUpdateUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useDisableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useEnableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useDeleteUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
@@ -1287,6 +1290,334 @@ describe('SuperAdminCustomers page', () => {
     const assignDialogScreen = within(assignDialog)
     expect(assignDialogScreen.getByLabelText(/^full name$/i)).toHaveValue('Taylor User')
     expect(assignDialogScreen.getByLabelText(/^email$/i)).toHaveValue('taylor@example.com')
+  })
+
+  it('keeps email immutable and shows remediation guidance in edit-user dialog', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user taylor user/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+    const emailInput = editDialogScreen.getByLabelText(
+      /^user email$/i,
+      { selector: 'input#sa-customer-user-edit-email' },
+    )
+    expect(emailInput).toHaveAttribute('readonly')
+    expect(editDialogScreen.getByText(/email cannot be changed here/i)).toBeInTheDocument()
+    expect(editDialogScreen.getByText(/archive this user and create a new user/i)).toBeInTheDocument()
+  })
+
+  it('validates required name and roles before submitting edit-user changes', async () => {
+    const user = userEvent.setup()
+    const mockUpdateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { id: 'u-1', name: 'Taylor User' } }),
+    })
+    useUpdateUserMutation.mockReturnValue([mockUpdateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user taylor user/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+
+    await user.clear(
+      editDialogScreen.getByLabelText(/^user full name$/i, {
+        selector: 'input#sa-customer-user-edit-name',
+      }),
+    )
+    await user.click(editDialogScreen.getByLabelText(/^user$/i))
+    await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(editDialogScreen.getByText(/full name is required/i)).toBeInTheDocument()
+    expect(editDialogScreen.getByText(/select at least one role/i)).toBeInTheDocument()
+    expect(mockUpdateUser).not.toHaveBeenCalled()
+  })
+
+  it('submits edit-user updates with name and roles via updateUser mutation', async () => {
+    const user = userEvent.setup()
+    const mockUpdateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { id: 'u-1', name: 'Taylor Updated' } }),
+    })
+    useUpdateUserMutation.mockReturnValue([mockUpdateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user taylor user/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+
+    const fullNameInput = editDialogScreen.getByLabelText(/^user full name$/i, {
+      selector: 'input#sa-customer-user-edit-name',
+    })
+    await user.clear(fullNameInput)
+    await user.type(fullNameInput, 'Taylor Updated')
+    await user.click(editDialogScreen.getByLabelText(/^customer admin$/i))
+    await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateUser).toHaveBeenCalledWith({
+        userId: 'u-1',
+        body: {
+          name: 'Taylor Updated',
+          roles: ['USER', 'CUSTOMER_ADMIN'],
+        },
+      })
+    })
+    expect(await screen.findByText(/taylor updated was updated successfully/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /edit customer user/i })).not.toBeInTheDocument()
+  })
+
+  it('maps edit-user 422 errors to field-level guidance', async () => {
+    const user = userEvent.setup()
+    const mockUpdateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Validation failed',
+            details: {
+              name: ['Name must be at least 2 characters.'],
+              roles: ['Select at least one role.'],
+            },
+          },
+        },
+      }),
+    })
+    useUpdateUserMutation.mockReturnValue([mockUpdateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user taylor user/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+    await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(mockUpdateUser).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText(/name must be at least 2 characters/i)).toBeInTheDocument()
+    expect(screen.getByText(/select at least one role/i)).toBeInTheDocument()
+  })
+
+  it('maps canonical-admin role conflicts to actionable edit-user guidance', async () => {
+    const user = userEvent.setup()
+    const mockUpdateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'Request conflicts with the current state of the resource.',
+            details: {
+              canonicalAdminUserId: 'u-1',
+            },
+          },
+        },
+      }),
+    })
+    useUpdateUserMutation.mockReturnValue([mockUpdateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Alex Admin',
+              email: 'alex@example.com',
+              customerRoles: ['CUSTOMER_ADMIN'],
+              isCanonicalAdmin: true,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /edit user alex admin/i }))
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+    await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
+
+    expect(mockUpdateUser).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText(/canonical customer admin governance/i)).toBeInTheDocument()
+    expect(screen.getByText(/assign\/replace admin flows/i)).toBeInTheDocument()
   })
 
   it('shows replace-admin entry in users workspace when canonical admin exists', async () => {

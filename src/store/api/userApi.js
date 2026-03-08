@@ -139,11 +139,11 @@ export const userApi = baseApi.injectEndpoints({
 
     /**
      * PATCH /users/:userId
-     * Updates user roles, tenant memberships, or VMF grants.
+     * Updates user profile and authorization grants.
      * Returns 409 when removing CUSTOMER_ADMIN from the canonical
      * active admin, or assigning a second active CUSTOMER_ADMIN.
      *
-     * @param {{ userId: string, body: { roles?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
+     * @param {{ userId: string, body: { name?: string, roles?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
      */
     updateUser: build.mutation({
       query: ({ userId, body }) => ({
