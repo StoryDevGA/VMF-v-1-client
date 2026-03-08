@@ -370,7 +370,7 @@ describe('SuperAdminCustomers page', () => {
 
     expect(screen.getByRole('heading', { name: /customer users/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back to customers/i })).toBeInTheDocument()
-    expect(screen.getByText(/showing users for/i)).toHaveTextContent(/acme corp/i)
+    expect(screen.queryByText(/showing users for/i)).not.toBeInTheDocument()
     expect(useListUsersQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'c-1',

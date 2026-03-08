@@ -1531,9 +1531,6 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                       : 'Replace Customer Admin'}
                   </Button>
                 </div>
-                <p className="super-admin-customers__users-note">
-                  Showing users for <strong>{usersWorkspaceCustomer?.name ?? '--'}</strong>.
-                </p>
                 <div className="super-admin-customers__toolbar super-admin-customers__users-toolbar">
                   <Input
                     id="sa-customer-user-search"

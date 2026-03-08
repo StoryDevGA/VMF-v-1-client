@@ -139,7 +139,7 @@
 }
 
 .super-admin-customers__users-actions {
-  justify-content: flex-start;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
