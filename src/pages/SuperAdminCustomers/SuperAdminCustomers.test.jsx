@@ -738,7 +738,7 @@ describe('SuperAdminCustomers page', () => {
     expect(createUserScreen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
   })
 
-  it('creates invited_new customer user and shows invitation success guidance', async () => {
+  it('creates invited_new customer user and shows explicit sent outcome guidance', async () => {
     const user = userEvent.setup()
     const mockCreateUser = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
@@ -789,11 +789,13 @@ describe('SuperAdminCustomers page', () => {
         roles: ['USER'],
       },
     })
-    expect(await screen.findByText(/invitation sent to taylor@example\.com/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/user account created for taylor@example\.com\. invitation email sent\./i),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /create customer user/i })).not.toBeInTheDocument()
   })
 
-  it('creates invited_new customer user and surfaces send_failed outcome guidance', async () => {
+  it('creates invited_new customer user and surfaces explicit send_failed outcome guidance', async () => {
     const user = userEvent.setup()
     const mockCreateUser = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
@@ -836,9 +838,129 @@ describe('SuperAdminCustomers page', () => {
     )
     await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
 
+    expect(await screen.findByText(/user account created for taylor@example\.com\./i)).toBeInTheDocument()
+    expect(screen.getByText(/invitation email delivery failed/i)).toBeInTheDocument()
+    expect(screen.getByText(/check invitation management for status/i)).toBeInTheDocument()
+  })
+
+  it('creates invited_new customer user and surfaces unknown invitation status guidance when invitationOutcome is missing', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
     expect(
-      await screen.findByText(/user created for taylor@example\.com, but invitation email delivery failed/i),
+      await screen.findByText(
+        /user account created for taylor@example\.com\. invitation delivery status is unavailable\./i,
+      ),
     ).toBeInTheDocument()
+    expect(screen.getByText(/check invitation management for status/i)).toBeInTheDocument()
+  })
+
+  it('keeps create-user dev-mode auth-link behavior unchanged for invited_new outcomes', async () => {
+    const user = userEvent.setup()
+    const mockCreateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          outcome: 'invited_new',
+          invitationOutcome: 'sent',
+          authLink: 'http://localhost:5173/invitation-auth?invitationId=inv-create-1',
+        },
+      }),
+    })
+    useCreateUserMutation.mockReturnValue([mockCreateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    await user.type(
+      createUserScreen.getByLabelText(/^user full name$/i, { selector: 'input#sa-customer-user-create-name' }),
+      'Taylor User',
+    )
+    await user.type(
+      createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
+      'taylor@example.com',
+    )
+    await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
+
+    const authLinkHeading = await screen.findByRole('heading', { name: /auth link \(dev mode\)/i })
+    const authLinkDialog = authLinkHeading.closest('dialog')
+    expect(authLinkDialog).not.toBeNull()
+    expect(
+      within(authLinkDialog).getByText(
+        'http://localhost:5173/invitation-auth?invitationId=inv-create-1',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: /invitations/i })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
+
+    await user.click(within(authLinkDialog).getByRole('button', { name: /^close$/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /auth link \(dev mode\)/i })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('assigns existing customer user without invitation when outcome is assigned_existing', async () => {

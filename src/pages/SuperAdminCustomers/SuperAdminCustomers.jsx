@@ -1081,6 +1081,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       const invitationOutcome = String(outcomeData?.invitationOutcome ?? '')
         .trim()
         .toLowerCase()
+      const inviteEmail = userCreateEmail.trim()
 
       if (outcome === 'assigned_existing') {
         addToast({
@@ -1088,18 +1089,26 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           description: 'Existing user assigned to this customer.',
           variant: 'success',
         })
-      } else if (outcome === 'invited_new' && invitationOutcome === 'send_failed') {
-        addToast({
-          title: 'User created',
-          description: `User created for ${userCreateEmail.trim()}, but invitation email delivery failed.`,
-          variant: 'warning',
-        })
       } else if (outcome === 'invited_new') {
-        addToast({
-          title: 'User created',
-          description: `Invitation sent to ${userCreateEmail.trim()}.`,
-          variant: 'success',
-        })
+        if (invitationOutcome === 'send_failed') {
+          addToast({
+            title: 'User created, invitation not sent',
+            description: `User account created for ${inviteEmail}. Invitation email delivery failed. Check Invitation Management for status.`,
+            variant: 'warning',
+          })
+        } else if (invitationOutcome === 'sent') {
+          addToast({
+            title: 'User created and invited',
+            description: `User account created for ${inviteEmail}. Invitation email sent.`,
+            variant: 'success',
+          })
+        } else {
+          addToast({
+            title: 'User created, invitation status unknown',
+            description: `User account created for ${inviteEmail}. Invitation delivery status is unavailable. Check Invitation Management for status.`,
+            variant: 'warning',
+          })
+        }
       } else {
         addToast({
           title: 'User created',
