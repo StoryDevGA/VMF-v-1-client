@@ -78,6 +78,7 @@ const USER_CREATE_MODE_OPTIONS = [
   { value: 'invite_new', label: 'Invite New User' },
   { value: 'assign_existing', label: 'Assign Existing User' },
 ]
+const DEFAULT_USER_CREATE_ROLES = ['USER']
 
 const BILLING_CYCLE_OPTIONS = [
   { value: 'MONTHLY', label: 'Monthly' },
@@ -200,6 +201,11 @@ const normalizeRoles = (roles) => (
     ? [...new Set(roles.filter((role) => typeof role === 'string' && role.trim()))]
     : []
 )
+
+const isSingleTenantTopology = (topology) =>
+  String(topology ?? '')
+    .trim()
+    .toUpperCase() !== 'MULTI_TENANT'
 
 const getLifecycleActionVerb = (actionType) => {
   if (actionType === 'enable') return 'Reactivate'
@@ -602,7 +608,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   const [userCreateName, setUserCreateName] = useState('')
   const [userCreateEmail, setUserCreateEmail] = useState('')
   const [userCreateExistingUserId, setUserCreateExistingUserId] = useState('')
-  const [userCreateRoles, setUserCreateRoles] = useState([])
+  const [userCreateRoles, setUserCreateRoles] = useState(DEFAULT_USER_CREATE_ROLES)
   const [userCreateErrors, setUserCreateErrors] = useState({})
   const [userEditOpen, setUserEditOpen] = useState(false)
   const [userEditTarget, setUserEditTarget] = useState(null)
@@ -699,6 +705,20 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     return Boolean(String(usersWorkspaceCustomer?.governance?.customerAdminUserId ?? '').trim())
   }, [userRows, usersWorkspaceCustomer?.governance?.customerAdminUserId])
   const usersWorkspaceAdminMode = hasCanonicalAdmin ? 'replace' : 'assign'
+  const createUserRoleOptions = useMemo(() => (
+    isSingleTenantTopology(usersWorkspaceCustomer?.topology)
+      ? USER_CREATE_ROLE_OPTIONS.filter((option) => option.value !== 'TENANT_ADMIN')
+      : USER_CREATE_ROLE_OPTIONS
+  ), [usersWorkspaceCustomer?.topology])
+
+  useEffect(() => {
+    const allowedRoles = new Set(createUserRoleOptions.map((option) => option.value))
+    setUserCreateRoles((currentRoles) => {
+      const nextRoles = currentRoles.filter((role) => allowedRoles.has(role))
+      if (nextRoles.length > 0) return nextRoles
+      return DEFAULT_USER_CREATE_ROLES.filter((role) => allowedRoles.has(role))
+    })
+  }, [createUserRoleOptions])
 
   useEffect(() => {
     if (!customerDetailsResponse?.data) return
@@ -837,7 +857,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     setUserCreateName('')
     setUserCreateEmail('')
     setUserCreateExistingUserId('')
-    setUserCreateRoles([])
+    setUserCreateRoles(DEFAULT_USER_CREATE_ROLES)
     setUserCreateErrors({})
   }, [])
 
@@ -2358,7 +2378,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           <fieldset className="super-admin-customers__roles-fieldset">
             <legend className="super-admin-customers__roles-legend">Roles</legend>
             <div className="super-admin-customers__roles-grid">
-              {USER_CREATE_ROLE_OPTIONS.map((roleOption) => (
+              {createUserRoleOptions.map((roleOption) => (
                 <Tickbox
                   key={roleOption.value}
                   id={`sa-customer-user-role-${String(roleOption.value).toLowerCase()}`}

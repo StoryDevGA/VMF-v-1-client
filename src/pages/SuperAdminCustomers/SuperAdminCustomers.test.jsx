@@ -682,8 +682,60 @@ describe('SuperAdminCustomers page', () => {
 
     expect(createUserScreen.getByText(/full name is required/i)).toBeInTheDocument()
     expect(createUserScreen.getByText(/email is required/i)).toBeInTheDocument()
-    expect(createUserScreen.getByText(/select at least one role/i)).toBeInTheDocument()
     expect(mockCreateUser).not.toHaveBeenCalled()
+  })
+
+  it('defaults create-user role to USER and hides TENANT_ADMIN for single-tenant customers', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    expect(createUserScreen.getByLabelText(/^user$/i)).toBeChecked()
+    expect(createUserScreen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
+  })
+
+  it('shows TENANT_ADMIN role option for multi-tenant customers', async () => {
+    const user = userEvent.setup()
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'MULTI_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
+    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+
+    const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
+    const createUserDialog = createUserHeading.closest('dialog')
+    expect(createUserDialog).not.toBeNull()
+    const createUserScreen = within(createUserDialog)
+
+    expect(createUserScreen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
   })
 
   it('creates invited_new customer user and shows invitation success guidance', async () => {
@@ -727,7 +779,6 @@ describe('SuperAdminCustomers page', () => {
       createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
       'taylor@example.com',
     )
-    await user.click(createUserScreen.getByLabelText(/^user$/i))
     await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
 
     expect(mockCreateUser).toHaveBeenCalledWith({
@@ -783,7 +834,6 @@ describe('SuperAdminCustomers page', () => {
       createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
       'taylor@example.com',
     )
-    await user.click(createUserScreen.getByLabelText(/^user$/i))
     await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
 
     expect(
@@ -835,14 +885,13 @@ describe('SuperAdminCustomers page', () => {
       ),
       'user-42',
     )
-    await user.click(createUserScreen.getByLabelText(/tenant admin/i))
     await user.click(createUserScreen.getByRole('button', { name: /^assign user$/i }))
 
     expect(mockCreateUser).toHaveBeenCalledWith({
       customerId: 'c-1',
       body: {
         existingUserId: 'user-42',
-        roles: ['TENANT_ADMIN'],
+        roles: ['USER'],
       },
     })
     expect(await screen.findByText(/existing user assigned to this customer/i)).toBeInTheDocument()
@@ -896,7 +945,6 @@ describe('SuperAdminCustomers page', () => {
       createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
       'taylor@example.com',
     )
-    await user.click(createUserScreen.getByLabelText(/^user$/i))
     await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
 
     expect(await createUserScreen.findByText(/already exists in this customer/i)).toBeInTheDocument()
@@ -954,7 +1002,6 @@ describe('SuperAdminCustomers page', () => {
       ),
       'user-42',
     )
-    await user.click(createUserScreen.getByLabelText(/tenant admin/i))
     await user.click(createUserScreen.getByRole('button', { name: /^assign user$/i }))
 
     expect(
@@ -1009,7 +1056,6 @@ describe('SuperAdminCustomers page', () => {
       createUserScreen.getByLabelText(/^user email$/i, { selector: 'input#sa-customer-user-create-email' }),
       'taylor@example.com',
     )
-    await user.click(createUserScreen.getByLabelText(/^user$/i))
     await user.click(createUserScreen.getByRole('button', { name: /^create user$/i }))
 
     expect(
