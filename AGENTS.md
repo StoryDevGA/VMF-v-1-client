@@ -1,5 +1,11 @@
 # AGENTS.md instructions for C:\Users\garya\OneDrive\Documents\StoryLineOS\VMF-APP\dev-v1\VMF-v-1-client
 
+## Super Admin Page Standard
+
+- Super Admin management and catalogue pages must follow `docs/design-system/super-admin-management-page-standard.md`.
+- Use `src/pages/SuperAdminCustomers/` as the reference implementation for layout, interaction, component decomposition, modal workflows, table behavior, responsive behavior, and regression scope unless a documented exception is explicitly approved.
+- Prefer adapting that standard over creating a new page-specific pattern.
+
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 
