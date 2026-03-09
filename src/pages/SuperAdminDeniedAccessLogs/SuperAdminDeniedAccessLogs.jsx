@@ -4,106 +4,13 @@
  * Displays audited access-denied events across the platform.
  */
 
-import { useMemo, useState } from 'react'
-import { Card } from '../../components/Card'
-import { Input } from '../../components/Input'
-import { Button } from '../../components/Button'
-import { Table } from '../../components/Table'
-import { TableDateTime } from '../../components/TableDateTime'
-import { Status } from '../../components/Status'
-import { Fieldset } from '../../components/Fieldset'
-import { HorizontalScroll } from '../../components/HorizontalScroll'
-import { useListDeniedAccessLogsQuery } from '../../store/api/superAdminAuditApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import { useDeniedAccessLogManagement } from './useDeniedAccessLogManagement.js'
+import { DeniedAccessFilters } from './DeniedAccessFilters.jsx'
+import { DeniedAccessResultsView } from './DeniedAccessResultsView.jsx'
 import './SuperAdminDeniedAccessLogs.css'
 
-const INITIAL_FILTERS = {
-  actorUserId: '',
-  startDate: '',
-  endDate: '',
-}
-
-const toStartOfDayIso = (dateValue) => {
-  if (!dateValue) return ''
-  const date = new Date(`${dateValue}T00:00:00.000Z`)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
-}
-
-const toEndOfDayIso = (dateValue) => {
-  if (!dateValue) return ''
-  const date = new Date(`${dateValue}T23:59:59.999Z`)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
-}
-
-const getActorDisplay = (row) => {
-  if (row?.actor?.name) return row.actor.name
-  if (row?.actor?.email) return row.actor.email
-  if (typeof row?.actorUserId === 'string' && row.actorUserId) return row.actorUserId
-  if (row?.actorUserId?._id) return row.actorUserId._id
-  return '--'
-}
-
 function SuperAdminDeniedAccessLogs() {
-  const [draftFilters, setDraftFilters] = useState(INITIAL_FILTERS)
-  const [filters, setFilters] = useState(INITIAL_FILTERS)
-  const [page, setPage] = useState(1)
-
-  const {
-    data: logsResponse,
-    isLoading,
-    isFetching,
-    error,
-  } = useListDeniedAccessLogsQuery({
-    page,
-    pageSize: 20,
-    actorUserId: filters.actorUserId.trim(),
-    startDate: toStartOfDayIso(filters.startDate),
-    endDate: toEndOfDayIso(filters.endDate),
-  })
-
-  const rows = logsResponse?.data ?? []
-  const pagination = logsResponse?.meta ?? {}
-  const totalPages = Number(pagination.totalPages) || 1
-  const currentPage = Number(pagination.page) || page
-  const total = Number(pagination.total) || 0
-  const appError = error ? normalizeError(error) : null
-
-  const columns = useMemo(
-    () => [
-      {
-        key: 'createdAt',
-        label: 'Timestamp',
-        width: '156px',
-        render: (value) => <TableDateTime value={value} />,
-      },
-      {
-        key: 'actor',
-        label: 'Actor',
-        render: (_value, row) => getActorDisplay(row),
-      },
-      {
-        key: 'action',
-        label: 'Action',
-        render: (value) => (
-          <Status size="sm" variant="warning" showIcon>
-            {value ?? 'ACCESS_DENIED'}
-          </Status>
-        ),
-      },
-      {
-        key: 'resourceType',
-        label: 'Resource',
-        render: (value, row) =>
-          value ? `${value}${row?.resourceId ? `:${row.resourceId}` : ''}` : '--',
-      },
-      {
-        key: 'requestId',
-        label: 'Request ID',
-        render: (value) => value ?? '--',
-      },
-    ],
-    [],
-  )
+  const mgmt = useDeniedAccessLogManagement()
 
   return (
     <section
@@ -117,169 +24,24 @@ function SuperAdminDeniedAccessLogs() {
         </p>
       </header>
 
-      <Fieldset className="super-admin-denied-logs__fieldset">
-        <Fieldset.Legend className="super-admin-denied-logs__legend">
-          <h2 className="super-admin-denied-logs__section-title">Filters</h2>
-        </Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-denied-logs__card">
-          <Card.Body>
-            <p className="super-admin-denied-logs__section-subtitle">
-              Narrow logs by actor and date range.
-            </p>
-            <form
-              className="super-admin-denied-logs__filters"
-              onSubmit={(event) => {
-                event.preventDefault()
-                setFilters(draftFilters)
-                setPage(1)
-              }}
-              noValidate
-            >
-              <Input
-                id="denied-actor-user-id"
-                label="Actor User ID"
-                value={draftFilters.actorUserId}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    actorUserId: event.target.value,
-                  }))
-                }
-                fullWidth
-              />
-              <Input
-                id="denied-start-date"
-                type="date"
-                label="Start Date"
-                value={draftFilters.startDate}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    startDate: event.target.value,
-                  }))
-                }
-                fullWidth
-              />
-              <Input
-                id="denied-end-date"
-                type="date"
-                label="End Date"
-                value={draftFilters.endDate}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    endDate: event.target.value,
-                  }))
-                }
-                fullWidth
-              />
-              <div className="super-admin-denied-logs__filter-actions">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  disabled={isFetching}
-                >
-                  Apply
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  fullWidth
-                  disabled={isFetching}
-                  onClick={() => {
-                    setDraftFilters(INITIAL_FILTERS)
-                    setFilters(INITIAL_FILTERS)
-                    setPage(1)
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
-            </form>
-          </Card.Body>
-        </Card>
-      </Fieldset>
+      <DeniedAccessFilters
+        draftFilters={mgmt.draftFilters}
+        setDraftFilters={mgmt.setDraftFilters}
+        isFetching={mgmt.isFetching}
+        onApply={mgmt.applyFilters}
+        onReset={mgmt.resetFilters}
+      />
 
-      <Fieldset className="super-admin-denied-logs__fieldset">
-        <Fieldset.Legend className="super-admin-denied-logs__legend">
-          <h2 className="super-admin-denied-logs__section-title">
-            Results ({total})
-          </h2>
-        </Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-denied-logs__card">
-          <Card.Body>
-            {appError ? (
-              <p className="super-admin-denied-logs__error" role="alert">
-                {appError.message}
-              </p>
-            ) : null}
-
-            <HorizontalScroll
-              className="super-admin-denied-logs__table-wrap"
-              ariaLabel="Denied access logs table"
-              gap="sm"
-            >
-              <Table
-                className="super-admin-denied-logs__results-table"
-                columns={columns}
-                data={rows}
-                loading={isLoading}
-                hoverable
-                variant="striped"
-                emptyMessage="No denied-access logs found."
-                ariaLabel="Denied access logs table"
-              />
-            </HorizontalScroll>
-
-            <div className="super-admin-denied-logs__pagination" role="navigation" aria-label="Denied access logs pagination">
-              <div className="super-admin-denied-logs__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isFetching}
-                  onClick={() => setPage(1)}
-                >
-                  First
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isFetching}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Previous
-                </Button>
-              </div>
-              <p className="super-admin-denied-logs__pagination-info">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="super-admin-denied-logs__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isFetching}
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
-                >
-                  Next
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isFetching}
-                  onClick={() => setPage(totalPages)}
-                >
-                  Last
-                </Button>
-              </div>
-            </div>
-          </Card.Body>
-        </Card>
-      </Fieldset>
+      <DeniedAccessResultsView
+        rows={mgmt.rows}
+        total={mgmt.total}
+        currentPage={mgmt.currentPage}
+        totalPages={mgmt.totalPages}
+        isLoading={mgmt.isLoading}
+        isFetching={mgmt.isFetching}
+        appError={mgmt.appError}
+        setPage={mgmt.setPage}
+      />
     </section>
   )
 }
