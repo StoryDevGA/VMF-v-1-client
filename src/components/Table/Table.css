@@ -40,25 +40,45 @@
 
 /* Each cell becomes a stacked row within the card */
 .table__cell {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr;
   align-items: flex-start;
+  gap: var(--spacing-2xs);
+  min-width: 0;
   padding: var(--spacing-sm) 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 20%, transparent);
-}
-
-.table__cell:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* CRITICAL: data-label creates column name on mobile */
 .table__cell::before {
+  display: block;
   content: attr(data-label);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
-  margin-right: var(--spacing-md);
-  flex-shrink: 0;
-  min-width: 120px;
+  width: 100%;
+  padding-right: 0;
+  min-width: 0;
+}
+
+.table__cell > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table__cell > :last-child {
+  text-align: left;
+}
+
+.table__cell code,
+.table__cell kbd,
+.table__cell samp {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Checkbox cell: no label, block display */
@@ -163,6 +183,12 @@
   .table__header--checkbox {
     width: 48px;
     text-align: center;
+  }
+}
+
+@media (max-width: 767px) {
+  .table__cell:last-child {
+    border-bottom: none;
   }
 }
 

@@ -15,8 +15,10 @@ import { TabView } from '../../components/TabView'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { Accordion } from '../../components/Accordion'
 import { TableDateTime } from '../../components/TableDateTime'
+import { Tooltip } from '../../components/Tooltip'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
+import { MdInfoOutline } from 'react-icons/md'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
 import {
@@ -120,10 +122,12 @@ const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
   INVITATION_ALREADY_ACTIVE_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
   EMAIL_ACTIVE_FOR_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
 }
+const CANONICAL_ADMIN_TOOLTIP_TEXT =
+  'Canonical Admin identifies the governance owner user for the customer. Use Replace Customer Admin to transfer ownership.'
 const CANONICAL_ADMIN_HELP_TEXT =
-  'Canonical Admin shows the governance owner user ID for each customer. It changes only after Replace Admin succeeds.'
+  'Canonical Admin shows the governance owner user ID for each customer.'
 const CANONICAL_ADMIN_USERS_HELP_TEXT =
-  'Canonical Admin marks the governance owner user for this customer. Use Replace Customer Admin to transfer ownership.'
+  'Use Replace Customer Admin to transfer ownership when needed.'
 
 const INITIAL_FORM = {
   name: '',
@@ -569,6 +573,31 @@ function CustomerRowActionsMenu({ row, actions, onAction }) {
         </div>
       ) : null}
     </div>
+  )
+}
+
+function CanonicalAdminHeaderLabel() {
+  return (
+    <span className="super-admin-customers__canonical-header">
+      <span>Canonical Admin</span>
+      <Tooltip
+        content={CANONICAL_ADMIN_TOOLTIP_TEXT}
+        position="bottom"
+        align="end"
+        openDelay={0}
+        closeDelay={0}
+        className="super-admin-customers__canonical-tooltip"
+      >
+        <button
+          type="button"
+          className="super-admin-customers__canonical-help-trigger"
+          aria-label="Explain Canonical Admin"
+        >
+          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <span className="sr-only">Explain Canonical Admin</span>
+        </button>
+      </Tooltip>
+    </span>
   )
 }
 
@@ -1633,7 +1662,8 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       },
       {
         key: 'customerAdminUserId',
-        label: 'Canonical Admin',
+        label: <CanonicalAdminHeaderLabel />,
+        mobileLabel: 'Canonical Admin',
         width: '220px',
         render: (_value, row) => {
           const canonicalAdminUserId = row?.governance?.customerAdminUserId
@@ -1702,12 +1732,13 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       },
       {
         key: 'isCanonicalAdmin',
-        label: 'Canonical Admin',
+        label: <CanonicalAdminHeaderLabel />,
+        mobileLabel: 'Canonical Admin',
         width: '180px',
         render: (_value, row) =>
           row?.isCanonicalAdmin
             ? (
-              <Status size="sm" showIcon variant="info">
+              <Status size="sm" variant="info" className="super-admin-customers__canonical-status">
                 Canonical
               </Status>
             )
@@ -1715,6 +1746,25 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       },
     ],
     [usersWorkspaceCustomerId],
+  )
+
+  const userColumnsWithActions = useMemo(
+    () => [
+      ...userColumns,
+      {
+        key: 'rowActions',
+        label: 'Actions',
+        width: '168px',
+        render: (_value, row) => (
+          <CustomerRowActionsMenu
+            row={row}
+            actions={userLifecycleActions}
+            onAction={handleUserLifecycleAction}
+          />
+        ),
+      },
+    ],
+    [handleUserLifecycleAction, userColumns, userLifecycleActions],
   )
 
   const adminMutationLoading =
@@ -1742,11 +1792,12 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           <Fieldset className="super-admin-customers__fieldset">
             <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>
             <Card variant="elevated" className="super-admin-customers__card">
-              <Card.Body>
+              <Card.Body className="super-admin-customers__card-body super-admin-customers__card-body--compact">
                 <div className="super-admin-customers__catalogue-actions super-admin-customers__users-actions">
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={closeUsersWorkspace}
                   >
                     Back to Customers
@@ -1754,6 +1805,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Button
                     type="button"
                     variant="primary"
+                    size="sm"
                     onClick={openUserCreateDialog}
                     disabled={createUserResult.isLoading}
                   >
@@ -1763,6 +1815,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                     <Button
                       type="button"
                       variant="secondary"
+                      size="sm"
                       onClick={() => openAdminDialog(usersWorkspaceAdminMode, usersWorkspaceCustomer)}
                       disabled={adminMutationLoading}
                     >
@@ -1776,6 +1829,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Input
                     id="sa-customer-user-search"
                     label="Search"
+                    size="sm"
                     value={userSearch}
                     onChange={(event) => {
                       setUserSearch(event.target.value)
@@ -1786,6 +1840,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Select
                     id="sa-customer-user-role-filter"
                     label="Role"
+                    size="sm"
                     value={userRoleFilter}
                     options={USER_ROLE_FILTER_OPTIONS}
                     onChange={(event) => {
@@ -1796,6 +1851,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Select
                     id="sa-customer-user-status-filter"
                     label="Status"
+                    size="sm"
                     value={userStatusFilter}
                     options={USER_STATUS_FILTER_OPTIONS}
                     onChange={(event) => {
@@ -1813,11 +1869,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customer users table" gap="sm">
                   <Table
                     className="super-admin-customers__table super-admin-customers__users-table"
-                    columns={userColumns}
+                    columns={userColumnsWithActions}
                     data={userRows}
                     loading={isListUsersLoading}
-                    actions={userLifecycleActions}
-                    onRowAction={handleUserLifecycleAction}
                     variant="striped"
                     hoverable
                     emptyMessage="No users found for this customer."
@@ -1887,11 +1941,12 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
           <Fieldset className="super-admin-customers__fieldset">
             <Fieldset.Legend className="sr-only">Customer catalogue</Fieldset.Legend>
             <Card variant="elevated" className="super-admin-customers__card">
-              <Card.Body>
+              <Card.Body className="super-admin-customers__card-body super-admin-customers__card-body--compact">
                 <div className="super-admin-customers__catalogue-actions">
                   <Button
                     type="button"
                     variant="primary"
+                    size="sm"
                     onClick={openCreateDialog}
                     disabled={createResult.isLoading}
                   >
@@ -1902,6 +1957,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Input
                     id="sa-customer-search"
                     label="Search"
+                    size="sm"
                     value={search}
                     onChange={(event) => {
                       setSearch(event.target.value)
@@ -1912,6 +1968,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Select
                     id="sa-customer-status-filter"
                     label="Status"
+                    size="sm"
                     value={statusFilter}
                     options={STATUS_FILTER_OPTIONS}
                     onChange={(event) => {
@@ -1922,6 +1979,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   <Select
                     id="sa-customer-topology-filter"
                     label="Topology"
+                    size="sm"
                     value={topologyFilter}
                     options={TOPOLOGY_FILTER_OPTIONS}
                     onChange={(event) => {
@@ -2478,7 +2536,16 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         </Dialog.Footer>
       </Dialog>
 
-      <Dialog open={adminDialogOpen} onClose={closeAdminDialog} size="md">
+      <Dialog
+        open={adminDialogOpen}
+        onClose={closeAdminDialog}
+        size={adminMode === 'replace' ? 'lg' : 'md'}
+        className={[
+          'super-admin-customers__admin-dialog',
+          adminMode === 'replace' ? 'super-admin-customers__admin-dialog--replace' : '',
+        ].filter(Boolean).join(' ')}
+        closeOnBackdropClick={!adminMutationLoading}
+      >
         <Dialog.Header>
           <h2 className="super-admin-customers__dialog-title">
             {adminMode === 'assign' ? 'Assign Customer Admin' : 'Replace Customer Admin'}
@@ -2520,7 +2587,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
               />
             </>
           ) : (
-            <>
+            <div className="super-admin-customers__replace-admin-layout">
               <Accordion
                 variant="outlined"
                 className="super-admin-customers__replace-help"
@@ -2546,20 +2613,22 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                   </Accordion.Item>
                 ))}
               </Accordion>
-              <Input
-                id="sa-admin-user-id"
-                label="Existing User ID"
-                value={adminUserId}
-                onChange={(event) => {
-                  setAdminUserId(event.target.value)
-                  setAdminError('')
-                }}
-                fullWidth
-              />
-            </>
+              <div className="super-admin-customers__replace-admin-fields">
+                <Input
+                  id="sa-admin-user-id"
+                  label="Existing User ID"
+                  value={adminUserId}
+                  onChange={(event) => {
+                    setAdminUserId(event.target.value)
+                    setAdminError('')
+                  }}
+                  fullWidth
+                />
+              </div>
+            </div>
           )}
           {adminMode === 'replace' ? (
-            <>
+            <div className="super-admin-customers__replace-admin-fields">
               <Textarea
                 id="sa-admin-reason"
                 label="Reason"
@@ -2571,15 +2640,17 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
                 rows={3}
                 fullWidth
               />
-              <StepUpAuthForm
-                passwordLabel="Current Super Admin Password"
-                passwordHelperText="Enter your current Super Admin password to verify this replacement."
-                onStepUpComplete={(token) => {
-                  setAdminStepUpToken(token)
-                  setAdminError('')
-                }}
-              />
-            </>
+              <div className="super-admin-customers__replace-admin-step-up">
+                <StepUpAuthForm
+                  passwordLabel="Current Super Admin Password"
+                  passwordHelperText="Enter your current Super Admin password to verify this replacement."
+                  onStepUpComplete={(token) => {
+                    setAdminStepUpToken(token)
+                    setAdminError('')
+                  }}
+                />
+              </div>
+            </div>
           ) : null}
           {adminError ? (
             <p className="super-admin-customers__error" role="alert">
@@ -2587,7 +2658,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
             </p>
           ) : null}
         </Dialog.Body>
-        <Dialog.Footer>
+        <Dialog.Footer className="super-admin-customers__admin-dialog-footer">
           <Button variant="outline" onClick={closeAdminDialog} disabled={adminMutationLoading}>
             Cancel
           </Button>

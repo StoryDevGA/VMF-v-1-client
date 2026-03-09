@@ -324,6 +324,13 @@ export const Table = forwardRef(function Table({
     return classes.join(' ')
   }
 
+  const getColumnDataLabel = (col) => {
+    if (typeof col.mobileLabel === 'string' && col.mobileLabel.trim()) return col.mobileLabel
+    if (typeof col.label === 'string' && col.label.trim()) return col.label
+    if (typeof col.key === 'string' && col.key.trim()) return col.key
+    return ''
+  }
+
   // Render props-based table
   const renderPropsBasedTable = () => {
     return (
@@ -395,7 +402,7 @@ export const Table = forwardRef(function Table({
                     <td
                       key={col.key}
                       className="table__cell"
-                      data-label={col.label}
+                      data-label={getColumnDataLabel(col)}
                       style={{ textAlign: col.align }}
                       role="cell"
                     >
