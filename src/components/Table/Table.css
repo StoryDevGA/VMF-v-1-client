@@ -103,7 +103,8 @@
 }
 
 .table__cell--actions::before {
-  display: none;
+  display: block;
+  margin-bottom: var(--spacing-2xs);
 }
 
 .table__actions {

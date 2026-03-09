@@ -34,6 +34,8 @@ const STATUS_OPTIONS = [
   { value: 'true', label: 'Active' },
   { value: 'false', label: 'Inactive' },
 ]
+const LICENSE_LEVELS_HELP_TEXT =
+  'Licence levels are catalogue items. Create them here, then assign them during customer create or edit. The Customers column shows current usage.'
 
 const INITIAL_FORM = {
   name: '',
@@ -122,6 +124,7 @@ function SuperAdminLicenseLevels() {
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
 
+  const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState(INITIAL_FORM)
   const [createErrors, setCreateErrors] = useState({})
 
@@ -190,6 +193,8 @@ function SuperAdminLicenseLevels() {
       try {
         await createLicenseLevel(payload).unwrap()
         setCreateForm(INITIAL_FORM)
+        setCreateErrors({})
+        setCreateOpen(false)
         addToast({
           title: 'Licence level created',
           description: `${payload.name} is now available for customer governance.`,
@@ -218,6 +223,17 @@ function SuperAdminLicenseLevels() {
     },
     [createForm, createLicenseLevel, addToast],
   )
+
+  const openCreateDialog = useCallback(() => {
+    setCreateErrors({})
+    setCreateOpen(true)
+  }, [])
+
+  const closeCreateDialog = useCallback(() => {
+    setCreateOpen(false)
+    setCreateForm(INITIAL_FORM)
+    setCreateErrors({})
+  }, [])
 
   const openEditDialog = useCallback((row) => {
     const id = row.id ?? row._id
@@ -367,204 +383,213 @@ function SuperAdminLicenseLevels() {
         many customers currently use each level.
       </p>
 
-      <div className="super-admin-license-levels__grid">
-        <Fieldset className="super-admin-license-levels__fieldset">
-          <Fieldset.Legend className="super-admin-license-levels__legend">
-            <h2 className="super-admin-license-levels__section-title">Create Licence Level</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="super-admin-license-levels__card">
-            <Card.Body>
-              <form
-                className="super-admin-license-levels__form"
-                onSubmit={handleCreateSubmit}
-                noValidate
+      <Fieldset className="super-admin-license-levels__fieldset">
+        <Fieldset.Legend className="sr-only">Licence level catalogue</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-license-levels__card">
+          <Card.Body className="super-admin-license-levels__card-body--compact">
+            <div className="super-admin-license-levels__catalogue-actions">
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={openCreateDialog}
+                disabled={createResult.isLoading}
               >
-                <Input
-                  id="license-level-name"
-                  label="Name"
-                  value={createForm.name}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  error={createErrors.name}
-                  required
-                  fullWidth
-                />
+                Create
+              </Button>
+            </div>
 
-                <Textarea
-                  id="license-level-description"
-                  label="Description (Optional)"
-                  value={createForm.description}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, description: event.target.value }))
-                  }
-                  error={createErrors.description}
-                  rows={3}
-                  fullWidth
-                />
+            <div className="super-admin-license-levels__toolbar">
+              <Input
+                id="license-level-search"
+                label="Search"
+                size="sm"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
+                placeholder="Search by name or description"
+                fullWidth
+              />
+              <Select
+                id="license-level-status"
+                label="Status"
+                size="sm"
+                value={statusFilter}
+                options={STATUS_OPTIONS}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value)
+                  setPage(1)
+                }}
+              />
+            </div>
 
-                <Textarea
-                  id="license-level-entitlements"
-                  label="Feature Entitlements"
-                  helperText="Use commas/new lines. Optional brackets/quotes are ignored."
-                  value={createForm.entitlements}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, entitlements: event.target.value }))
-                  }
-                  error={createErrors.entitlements}
-                  rows={6}
-                  fullWidth
-                />
+            {listAppError ? (
+              <p className="super-admin-license-levels__error" role="alert">
+                {listAppError.message}
+              </p>
+            ) : null}
+            <p className="super-admin-license-levels__table-note">{LICENSE_LEVELS_HELP_TEXT}</p>
 
-                <Tickbox
-                  id="license-level-is-active"
-                  label="Active"
-                  checked={createForm.isActive}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, isActive: event.target.checked }))
+            <HorizontalScroll
+              className="super-admin-license-levels__table-wrap"
+              ariaLabel="Licence levels table"
+              gap="sm"
+            >
+              <Table
+                className="super-admin-license-levels__table"
+                columns={columns}
+                data={rows}
+                actions={[{ label: 'Edit', variant: 'ghost' }]}
+                onRowAction={(label, row) => {
+                  if (label === 'Edit') {
+                    openEditDialog(row)
                   }
-                />
+                }}
+                loading={isListLoading}
+                hoverable
+                variant="striped"
+                emptyMessage="No licence levels found."
+                ariaLabel="Licence levels"
+              />
+            </HorizontalScroll>
 
-                <div className="super-admin-license-levels__form-actions">
+            {isListFetching && !isListLoading ? (
+              <p className="super-admin-license-levels__muted">Refreshing list...</p>
+            ) : null}
+
+            {totalPages > 1 ? (
+              <div className="super-admin-license-levels__pagination" role="navigation" aria-label="Licence levels pagination">
+                <div className="super-admin-license-levels__pagination-controls">
                   <Button
-                    type="submit"
-                    variant="primary"
-                    fullWidth
-                    loading={createResult.isLoading}
-                    disabled={createResult.isLoading}
-                  >
-                    Create Licence Level
-                  </Button>
-                  <Button
-                    type="button"
                     variant="outline"
-                    fullWidth
-                    disabled={createResult.isLoading}
-                    onClick={() => {
-                      setCreateForm(INITIAL_FORM)
-                      setCreateErrors({})
-                    }}
+                    size="sm"
+                    disabled={currentPage <= 1 || isListFetching}
+                    onClick={() => setPage(1)}
                   >
-                    Reset
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1 || isListFetching}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
                   </Button>
                 </div>
-              </form>
-            </Card.Body>
-          </Card>
-        </Fieldset>
-
-        <Fieldset className="super-admin-license-levels__fieldset">
-          <Fieldset.Legend className="super-admin-license-levels__legend">
-            <h2 className="super-admin-license-levels__section-title">Catalogue</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="super-admin-license-levels__card">
-            <Card.Body>
-              <div className="super-admin-license-levels__toolbar">
-                <Input
-                  id="license-level-search"
-                  label="Search"
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value)
-                    setPage(1)
-                  }}
-                  placeholder="Search by name or description"
-                  fullWidth
-                />
-                <Select
-                  id="license-level-status"
-                  label="Status"
-                  value={statusFilter}
-                  options={STATUS_OPTIONS}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value)
-                    setPage(1)
-                  }}
-                />
-              </div>
-
-              {listAppError ? (
-                <p className="super-admin-license-levels__error" role="alert">
-                  {listAppError.message}
+                <p className="super-admin-license-levels__pagination-info">
+                  Page {currentPage} of {totalPages}
                 </p>
-              ) : null}
-
-              <HorizontalScroll
-                className="super-admin-license-levels__table-wrap"
-                ariaLabel="Licence levels table"
-                gap="sm"
-              >
-                <Table
-                  className="super-admin-license-levels__table"
-                  columns={columns}
-                  data={rows}
-                  actions={[{ label: 'Edit', variant: 'ghost' }]}
-                  onRowAction={(label, row) => {
-                    if (label === 'Edit') {
-                      openEditDialog(row)
+                <div className="super-admin-license-levels__pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages || isListFetching}
+                    onClick={() =>
+                      setPage((current) => Math.min(totalPages, current + 1))
                     }
-                  }}
-                  loading={isListLoading}
-                  hoverable
-                  variant="striped"
-                  emptyMessage="No licence levels found."
-                  ariaLabel="Licence levels"
-                />
-              </HorizontalScroll>
-
-              {isListFetching && !isListLoading ? (
-                <p className="super-admin-license-levels__muted">Refreshing list...</p>
-              ) : null}
-
-              {totalPages > 1 ? (
-                <div className="super-admin-license-levels__pagination" role="navigation" aria-label="Licence levels pagination">
-                  <div className="super-admin-license-levels__pagination-controls">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage <= 1 || isListFetching}
-                      onClick={() => setPage(1)}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage <= 1 || isListFetching}
-                      onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </Button>
-                  </div>
-                  <p className="super-admin-license-levels__pagination-info">
-                    Page {currentPage} of {totalPages}
-                  </p>
-                  <div className="super-admin-license-levels__pagination-controls">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage >= totalPages || isListFetching}
-                      onClick={() =>
-                        setPage((current) => Math.min(totalPages, current + 1))
-                      }
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={currentPage >= totalPages || isListFetching}
-                      onClick={() => setPage(totalPages)}
-                    >
-                      Last
-                    </Button>
-                  </div>
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages || isListFetching}
+                    onClick={() => setPage(totalPages)}
+                  >
+                    Last
+                  </Button>
                 </div>
-              ) : null}
-            </Card.Body>
-          </Card>
-        </Fieldset>
-      </div>
+              </div>
+            ) : null}
+          </Card.Body>
+        </Card>
+      </Fieldset>
+
+      <Dialog open={createOpen} onClose={closeCreateDialog} size="lg">
+        <Dialog.Header>
+          <h2 className="super-admin-license-levels__dialog-title">Create Licence Level</h2>
+        </Dialog.Header>
+        <Dialog.Body className="super-admin-license-levels__dialog-body">
+          <form
+            className="super-admin-license-levels__form"
+            onSubmit={handleCreateSubmit}
+            noValidate
+          >
+            <Input
+              id="license-level-name"
+              label="Name"
+              value={createForm.name}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, name: event.target.value }))
+              }
+              error={createErrors.name}
+              required
+              fullWidth
+            />
+
+            <Textarea
+              id="license-level-description"
+              label="Description (Optional)"
+              value={createForm.description}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, description: event.target.value }))
+              }
+              error={createErrors.description}
+              rows={3}
+              fullWidth
+            />
+
+            <Textarea
+              id="license-level-entitlements"
+              label="Feature Entitlements"
+              helperText="Use commas/new lines. Optional brackets/quotes are ignored."
+              value={createForm.entitlements}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, entitlements: event.target.value }))
+              }
+              error={createErrors.entitlements}
+              rows={6}
+              fullWidth
+            />
+
+            <Tickbox
+              id="license-level-is-active"
+              label="Active"
+              checked={createForm.isActive}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, isActive: event.target.checked }))
+              }
+            />
+
+            <div className="super-admin-license-levels__form-actions">
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                loading={createResult.isLoading}
+                disabled={createResult.isLoading}
+              >
+                Create Licence Level
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                fullWidth
+                disabled={createResult.isLoading}
+                onClick={() => {
+                  setCreateForm(INITIAL_FORM)
+                  setCreateErrors({})
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </form>
+        </Dialog.Body>
+      </Dialog>
 
       <Dialog open={editOpen} onClose={closeEditDialog} size="md">
         <Dialog.Header>

@@ -61,12 +61,17 @@ describe('SuperAdminLicenseLevels page', () => {
     useUpdateLicenseLevelMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
-  it('renders heading and create form fields', () => {
+  it('renders heading and opens create dialog from the catalogue action', async () => {
+    const user = userEvent.setup()
     renderPage()
 
     expect(
       screen.getByRole('heading', { name: /licence levels/i }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
     expect(screen.getAllByLabelText(/name/i).length).toBeGreaterThan(0)
     expect(screen.getAllByLabelText(/feature entitlements/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /create licence level/i })).toBeInTheDocument()
@@ -75,6 +80,8 @@ describe('SuperAdminLicenseLevels page', () => {
   it('normalizes bracketed feature entitlement input before submit', async () => {
     const user = userEvent.setup()
     renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await user.type(
       screen.getByLabelText(/^name/i, { selector: 'input#license-level-name' }),
