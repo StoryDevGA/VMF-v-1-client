@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -19,90 +19,34 @@ import {
 import {
   getCustomerId,
   displayStatus,
-  getRowActionMenuId,
 } from './superAdminCustomers.utils.js'
 import './CustomerListView.css'
 
 export function CustomerRowActionsMenu({ row, actions, onAction, className = '' }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const containerRef = useRef(null)
-  const menuId = getRowActionMenuId(row)
   const rowName = row?.name || row?.id || 'customer'
 
-  useEffect(() => {
-    if (!isOpen) return undefined
-
-    const handleDocumentPointerDown = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        setIsOpen(false)
-      }
-    }
-
-    const handleDocumentKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleDocumentPointerDown)
-    document.addEventListener('keydown', handleDocumentKeyDown)
-
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentPointerDown)
-      document.removeEventListener('keydown', handleDocumentKeyDown)
-    }
-  }, [isOpen])
+  const options = actions
+    .filter((action) => {
+      const isDisabled = typeof action.disabled === 'function'
+        ? action.disabled(row)
+        : Boolean(action.disabled)
+      return !isDisabled
+    })
+    .map((action) => ({ value: action.label, label: action.label }))
 
   return (
-    <div
-      className={['super-admin-customers__row-actions', className].filter(Boolean).join(' ')}
-      ref={containerRef}
-    >
-      <Button
-        type="button"
-        variant="ghost"
+    <div className={['super-admin-customers__row-actions', className].filter(Boolean).join(' ')}>
+      <Select
         size="sm"
-        className="super-admin-customers__row-actions-trigger"
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
+        value=""
+        placeholder="Actions"
+        options={options}
+        onChange={(event) => {
+          const label = event.target.value
+          if (label) onAction(label, row)
+        }}
         aria-label={`Actions for ${rowName}`}
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        Actions
-      </Button>
-      {isOpen ? (
-        <div
-          id={menuId}
-          className="super-admin-customers__row-actions-menu"
-          role="menu"
-          aria-label={`Actions for ${rowName}`}
-        >
-          {actions.map((action) => {
-            const isDisabled = typeof action.disabled === 'function'
-              ? action.disabled(row)
-              : Boolean(action.disabled)
-
-            return (
-              <button
-                key={action.label}
-                type="button"
-                className="super-admin-customers__row-action"
-                role="menuitem"
-                disabled={isDisabled}
-                aria-label={`${action.label} ${rowName}`}
-                onClick={() => {
-                  if (isDisabled) return
-                  onAction(action.label, row)
-                  setIsOpen(false)
-                }}
-              >
-                {action.label}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
+      />
     </div>
   )
 }
@@ -243,6 +187,7 @@ export function CustomerListView({
       {
         key: 'rowActions',
         label: 'Actions',
+        align: 'center',
         width: '168px',
         render: (_value, row) => (
           <CustomerRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />

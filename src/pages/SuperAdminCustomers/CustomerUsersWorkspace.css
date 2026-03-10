@@ -93,14 +93,3 @@
     padding: var(--spacing-xs) var(--spacing-sm);
   }
 }
-
-@media (min-width: 768px) {
-  .super-admin-customers__users-actions-header {
-    display: inline-block;
-    padding-left: var(--spacing-xs);
-  }
-
-  .super-admin-customers__row-actions--leading {
-    justify-items: start;
-  }
-}

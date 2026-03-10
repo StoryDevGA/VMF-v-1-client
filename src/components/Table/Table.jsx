@@ -321,6 +321,8 @@ export const Table = forwardRef(function Table({
     if (currentSortColumn === col.key) {
       classes.push(`table__header--sorted-${currentSortDirection}`)
     }
+    if (col.align === 'center') classes.push('table__header--align-center')
+    if (col.align === 'right') classes.push('table__header--align-right')
     return classes.join(' ')
   }
 
@@ -353,7 +355,7 @@ export const Table = forwardRef(function Table({
               <th
                 key={col.key}
                 className={getHeaderClasses(col)}
-                style={{ width: col.width, textAlign: col.align }}
+                style={{ width: col.width }}
                 onClick={col.sortable ? () => handleSort(col.key) : undefined}
                 onKeyDown={col.sortable ? handleHeaderKeyDown(col.key) : undefined}
                 role="columnheader"
@@ -366,7 +368,7 @@ export const Table = forwardRef(function Table({
                 </span>
               </th>
             ))}
-            {actions && <th className="table__header">Actions</th>}
+            {actions && <th className="table__header table__header--actions">Actions</th>}
           </tr>
         </thead>
 
@@ -398,17 +400,24 @@ export const Table = forwardRef(function Table({
                       />
                     </td>
                   )}
-                  {columns.map(col => (
+                  {columns.map(col => {
+                    const cellClasses = [
+                      'table__cell',
+                      col.align === 'center' && 'table__cell--align-center',
+                      col.align === 'right' && 'table__cell--align-right',
+                    ].filter(Boolean).join(' ')
+
+                    return (
                     <td
                       key={col.key}
-                      className="table__cell"
+                      className={cellClasses}
                       data-label={getColumnDataLabel(col)}
-                      style={{ textAlign: col.align }}
                       role="cell"
                     >
                       {col.render ? col.render(row[col.key], row) : row[col.key]}
                     </td>
-                  ))}
+                    )
+                  })}
                   {actions && (
                     <td className="table__cell table__cell--actions" data-label="Actions">
                       <div className="table__actions">
@@ -555,6 +564,8 @@ Table.Header = function TableHeader({
     'table__header',
     sortable && 'table__header--sortable',
     isSorted && `table__header--sorted-${sortDirection}`,
+    align === 'center' && 'table__header--align-center',
+    align === 'right' && 'table__header--align-right',
     className
   ].filter(Boolean).join(' ')
 
@@ -597,7 +608,7 @@ Table.Header = function TableHeader({
   return (
     <th
       className={headerClasses}
-      style={{ width, textAlign: align }}
+      style={{ width }}
       onClick={sortable ? handleClick : undefined}
       onKeyDown={sortable ? handleKeyDown : undefined}
       role="columnheader"
@@ -623,11 +634,17 @@ Table.Cell = function TableCell({
   className = '',
   ...props
 }) {
+  const cellClasses = [
+    'table__cell',
+    align === 'center' && 'table__cell--align-center',
+    align === 'right' && 'table__cell--align-right',
+    className,
+  ].filter(Boolean).join(' ')
+
   return (
     <td
-      className={`table__cell ${className}`}
+      className={cellClasses}
       data-label={dataLabel}
-      style={{ textAlign: align }}
       role="cell"
       {...props}
     >

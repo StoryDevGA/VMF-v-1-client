@@ -81,13 +81,12 @@ function renderPage(initialEntry = '/super-admin/customers') {
   )
 }
 
-async function openCustomerUsersWorkspace(user) {
-  await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-  await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+function openCustomerUsersWorkspace() {
+  fireEvent.change(screen.getByRole('combobox', { name: /actions for acme corp/i }), { target: { value: 'View Users' } })
 }
 
-async function openUserRowActions(user, rowName) {
-  await user.click(screen.getByRole('button', { name: new RegExp(`actions for ${rowName}`, 'i') }))
+function selectRowAction(rowName, actionLabel) {
+  fireEvent.change(screen.getByRole('combobox', { name: new RegExp(`actions for ${rowName}`, 'i') }), { target: { value: actionLabel } })
 }
 
 describe('SuperAdminCustomers page', () => {
@@ -281,7 +280,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
+    openCustomerUsersWorkspace()
 
     expect(
       screen.getByText(/use replace customer admin to transfer ownership when needed\./i),
@@ -510,8 +509,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('heading', { name: /customer users/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back to customers/i })).toHaveClass('btn--sm')
@@ -591,12 +589,11 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('columnheader', { name: /^user$/i })).toBeInTheDocument()
     const actionsHeader = screen.getByRole('columnheader', { name: /^actions$/i })
-    expect(within(actionsHeader).getByText(/^actions$/i)).toHaveClass('super-admin-customers__users-actions-header')
+    expect(actionsHeader).toHaveClass('table__header--align-center')
     expect(screen.queryByRole('columnheader', { name: /^name$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /^email$/i })).not.toBeInTheDocument()
     expect(screen.getByText('Alex Admin')).toHaveClass('super-admin-customers__user-name')
@@ -619,10 +616,7 @@ describe('SuperAdminCustomers page', () => {
     await user.click(screen.getByRole('heading', { name: /customer users/i }))
     expect(seeAllRolesTrigger).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByText('USER')).toBeInTheDocument()
-    const rowActionsContainer = screen
-      .getByRole('button', { name: /actions for alex admin/i })
-      .closest('.super-admin-customers__row-actions')
-    expect(rowActionsContainer).toHaveClass('super-admin-customers__row-actions--leading')
+    expect(screen.getByRole('combobox', { name: /actions for alex admin/i })).toBeInTheDocument()
     expect(screen.getByText(/^trusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^untrusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^INACTIVE$/)).toBeInTheDocument()
@@ -676,8 +670,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
 
     const firstButton = screen.getByRole('button', { name: /^first$/i })
     const previousButton = screen.getByRole('button', { name: /^previous$/i })
@@ -862,8 +855,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /status must be one of active or inactive/i,
@@ -888,8 +880,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -918,8 +909,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -945,8 +935,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -981,8 +970,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1038,8 +1026,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1084,8 +1071,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1135,8 +1121,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1206,8 +1191,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1269,8 +1253,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1323,8 +1306,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1380,8 +1362,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /^create user$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
@@ -1520,17 +1501,12 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    expect(
-      screen.queryByRole('menuitem', { name: /assign admin acme corp/i }),
-    ).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-
-    expect(screen.getByRole('menu', { name: /actions for acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /edit acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /view users acme corp/i })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /assign admin acme corp/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /replace admin acme corp/i })).not.toBeInTheDocument()
+    const actionsSelect = screen.getByRole('combobox', { name: /actions for acme corp/i })
+    expect(actionsSelect).toBeInTheDocument()
+    expect(within(actionsSelect).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(actionsSelect).getByRole('option', { name: /view users/i })).toBeInTheDocument()
+    expect(within(actionsSelect).queryByRole('option', { name: /assign admin/i })).not.toBeInTheDocument()
+    expect(within(actionsSelect).queryByRole('option', { name: /replace admin/i })).not.toBeInTheDocument()
   })
 
   it('supports keyboard access for row action menu with explicit screen-reader labels', async () => {
@@ -1547,27 +1523,12 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    const menuTrigger = screen.getByRole('button', { name: /actions for acme corp/i })
-    expect(menuTrigger).toHaveAttribute('aria-haspopup', 'menu')
-    expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
-
-    menuTrigger.focus()
-    await user.keyboard('{Enter}')
-
-    const menu = await screen.findByRole('menu', { name: /actions for acme corp/i })
-    expect(menuTrigger).toHaveAttribute('aria-expanded', 'true')
-    expect(menuTrigger).toHaveAttribute('aria-controls', menu.getAttribute('id'))
-    expect(screen.getByRole('menuitem', { name: /edit acme corp/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /view users acme corp/i })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /assign admin acme corp/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: /replace admin acme corp/i })).not.toBeInTheDocument()
-
-    await user.keyboard('{Escape}')
-
-    await waitFor(() => {
-      expect(screen.queryByRole('menu', { name: /actions for acme corp/i })).not.toBeInTheDocument()
-    })
-    expect(menuTrigger).toHaveAttribute('aria-expanded', 'false')
+    const actionsSelect = screen.getByRole('combobox', { name: /actions for acme corp/i })
+    expect(actionsSelect).toBeInTheDocument()
+    expect(within(actionsSelect).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(actionsSelect).getByRole('option', { name: /view users/i })).toBeInTheDocument()
+    expect(within(actionsSelect).queryByRole('option', { name: /assign admin/i })).not.toBeInTheDocument()
+    expect(within(actionsSelect).queryByRole('option', { name: /replace admin/i })).not.toBeInTheDocument()
   })
 
   it('hides assign-admin toolbar CTA when row-level edit path is available', async () => {
@@ -1608,10 +1569,10 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
+    openCustomerUsersWorkspace()
 
-    expect(screen.getByRole('menuitem', { name: /edit user taylor user/i })).toBeInTheDocument()
+    const taylorSelect = screen.getByRole('combobox', { name: /actions for taylor user/i })
+    expect(within(taylorSelect).getByRole('option', { name: /edit user/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /replace customer admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
   })
@@ -1654,9 +1615,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /edit user taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -1723,9 +1683,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /edit user taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -1782,9 +1741,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /edit user taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -1846,9 +1804,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /edit user taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -1930,9 +1887,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /edit user taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -1998,9 +1954,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Alex Admin')
-    await user.click(screen.getByRole('menuitem', { name: /edit user alex admin/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Alex Admin', 'Edit User')
 
     const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
     const editDialog = editHeading.closest('dialog')
@@ -2035,8 +1990,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('button', { name: /replace customer admin/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
@@ -2062,8 +2016,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
@@ -2092,8 +2045,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     const nameInput = screen.getByLabelText(/^full name$/i, { selector: 'input' })
@@ -2141,8 +2093,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
@@ -2195,8 +2146,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
@@ -2236,8 +2186,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
@@ -2269,8 +2218,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
 
     expect(screen.queryByRole('heading', { name: /before you continue/i })).not.toBeInTheDocument()
@@ -2349,8 +2297,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
     await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
     await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
@@ -2403,8 +2350,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /replace customer admin/i }))
     await user.type(screen.getByLabelText(/^existing user id$/i), 'new-user-1')
     await user.type(screen.getByLabelText(/^reason$/i), 'Ownership transfer')
@@ -2442,8 +2388,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     // Open the assign-admin dialog from the customer users workspace
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
 
     // Fill invite form fields
@@ -2491,8 +2436,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
@@ -2560,8 +2504,7 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /actions for acme corp/i }))
-    await user.click(screen.getByRole('menuitem', { name: /view users acme corp/i }))
+    selectRowAction('acme corp', 'View Users')
     await user.click(screen.getByRole('button', { name: /assign customer admin/i }))
     await user.type(screen.getByLabelText(/^full name$/i), 'Alex Admin')
     await user.type(screen.getByLabelText(/^email$/i), 'alex@example.com')
@@ -2618,9 +2561,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Alex Admin')
-    await user.click(screen.getByRole('menuitem', { name: /deactivate alex admin/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Alex Admin', 'Deactivate')
 
     const confirmHeading = screen.getByRole('heading', { name: /deactivate user/i })
     const confirmDialog = confirmHeading.closest('dialog')
@@ -2685,9 +2627,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /reactivate taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Reactivate')
 
     const confirmHeading = screen.getByRole('heading', { name: /reactivate user/i })
     const confirmDialog = confirmHeading.closest('dialog')
@@ -2745,9 +2686,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Taylor User')
-    await user.click(screen.getByRole('menuitem', { name: /archive taylor user/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Archive')
 
     const confirmHeading = screen.getByRole('heading', { name: /archive user/i })
     const confirmDialog = confirmHeading.closest('dialog')
@@ -2814,9 +2754,8 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
-    await openUserRowActions(user, 'Alex Admin')
-    await user.click(screen.getByRole('menuitem', { name: /deactivate alex admin/i }))
+    openCustomerUsersWorkspace()
+    selectRowAction('Alex Admin', 'Deactivate')
 
     const confirmHeading = screen.getByRole('heading', { name: /deactivate user/i })
     const confirmDialog = confirmHeading.closest('dialog')
@@ -2879,19 +2818,17 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
-    await openCustomerUsersWorkspace(user)
+    openCustomerUsersWorkspace()
 
-    await openUserRowActions(user, 'Alex Admin')
-    expect(screen.getByRole('menuitem', { name: /deactivate alex admin/i })).toBeEnabled()
-    expect(screen.getByRole('menuitem', { name: /reactivate alex admin/i })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: /archive alex admin/i })).toBeDisabled()
+    const alexSelect = screen.getByRole('combobox', { name: /actions for alex admin/i })
+    expect(within(alexSelect).getByRole('option', { name: /deactivate/i })).toBeInTheDocument()
+    expect(within(alexSelect).queryByRole('option', { name: /reactivate/i })).not.toBeInTheDocument()
+    expect(within(alexSelect).queryByRole('option', { name: /archive/i })).not.toBeInTheDocument()
 
-    fireEvent.mouseDown(document.body)
-
-    await openUserRowActions(user, 'Taylor User')
-    expect(screen.getByRole('menuitem', { name: /deactivate taylor user/i })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: /reactivate taylor user/i })).toBeEnabled()
-    expect(screen.getByRole('menuitem', { name: /archive taylor user/i })).toBeEnabled()
+    const taylorSelect = screen.getByRole('combobox', { name: /actions for taylor user/i })
+    expect(within(taylorSelect).queryByRole('option', { name: /deactivate/i })).not.toBeInTheDocument()
+    expect(within(taylorSelect).getByRole('option', { name: /reactivate/i })).toBeInTheDocument()
+    expect(within(taylorSelect).getByRole('option', { name: /archive/i })).toBeInTheDocument()
   })
 })
 

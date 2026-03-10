@@ -180,8 +180,33 @@
     margin-top: 0;
   }
 
-  .table__actions {
+  .table__header--align-center,
+  .table__header--actions {
+    text-align: center;
+  }
+
+  .table__header--align-center .table__header-content {
+    justify-content: center;
+  }
+
+  .table__header--align-right {
+    text-align: right;
+  }
+
+  .table__header--align-right .table__header-content {
     justify-content: flex-end;
+  }
+
+  .table__cell--align-center {
+    text-align: center;
+  }
+
+  .table__cell--align-right {
+    text-align: right;
+  }
+
+  .table__actions {
+    justify-content: center;
   }
 
   .table__header--checkbox {

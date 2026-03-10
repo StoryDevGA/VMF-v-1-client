@@ -203,14 +203,14 @@ export function CustomerUsersWorkspace({
       ...userColumns,
       {
         key: 'rowActions',
-        label: <span className="super-admin-customers__users-actions-header">Actions</span>,
+        label: 'Actions',
+        align: 'center',
         width: '168px',
         render: (_value, row) => (
           <CustomerRowActionsMenu
             row={row}
             actions={userLifecycleActions}
             onAction={onUserLifecycleAction}
-            className="super-admin-customers__row-actions--leading"
           />
         ),
       },

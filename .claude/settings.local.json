@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx vitest run:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(find:*)"
     ]
   }
 }
