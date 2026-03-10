@@ -13,7 +13,7 @@
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm);
   border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
   border-radius: var(--border-radius-md);
 }
