@@ -66,7 +66,6 @@ function CustomerUserRolesCell({ row, customerId }) {
 
   return (
     <div className="super-admin-customers__roles-summary" ref={containerRef}>
-      <span className="super-admin-customers__roles-preview">{roles[0]}</span>
       <Tooltip
         id={tooltipId}
         content={(
@@ -100,7 +99,11 @@ function CustomerUserRolesCell({ row, customerId }) {
           onMouseEnter={() => setIsTooltipOpen(true)}
           onMouseLeave={() => setIsTooltipOpen(false)}
         >
-          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <MdInfoOutline
+            aria-hidden="true"
+            focusable="false"
+            className="super-admin-customers__roles-trigger-icon"
+          />
           <span>see all</span>
         </button>
       </Tooltip>

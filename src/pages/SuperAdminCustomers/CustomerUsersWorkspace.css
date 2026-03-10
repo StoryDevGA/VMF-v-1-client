@@ -30,12 +30,6 @@
   min-width: 0;
 }
 
-.super-admin-customers__roles-preview {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
 .super-admin-customers__roles-trigger {
   display: inline-flex;
   align-items: center;
@@ -51,6 +45,12 @@
   text-transform: lowercase;
   cursor: help;
   transition: color var(--transition-fast);
+}
+
+.super-admin-customers__roles-trigger-icon {
+  width: var(--tooltip-trigger-icon-size);
+  height: var(--tooltip-trigger-icon-size);
+  flex-shrink: 0;
 }
 
 .super-admin-customers__roles-trigger:hover {

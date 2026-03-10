@@ -602,10 +602,12 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByText('Alex Admin')).toHaveClass('super-admin-customers__user-name')
     expect(screen.getByText('alex@example.com')).toHaveClass('super-admin-customers__user-email')
     expect(screen.queryByText('CUSTOMER_ADMIN, TENANT_ADMIN')).not.toBeInTheDocument()
-    const rolesPreview = document.querySelector('.super-admin-customers__roles-preview')
-    expect(rolesPreview).toHaveTextContent('CUSTOMER_ADMIN')
+    expect(document.querySelector('.super-admin-customers__roles-preview')).toBeNull()
     const seeAllRolesTrigger = screen.getByRole('button', { name: /see all roles for alex admin/i })
     expect(seeAllRolesTrigger).toHaveTextContent(/see all/i)
+    expect(
+      seeAllRolesTrigger.querySelector('.super-admin-customers__roles-trigger-icon'),
+    ).not.toBeNull()
     expect(seeAllRolesTrigger).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('button', { name: /see all roles for taylor user/i })).not.toBeInTheDocument()
     await user.click(seeAllRolesTrigger)

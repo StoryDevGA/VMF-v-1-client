@@ -8,6 +8,7 @@
 :root {
   --tooltip-offset: var(--spacing-xs);
   --tooltip-translate: 6px;
+  --tooltip-trigger-icon-size: 1.375rem;
 }
 
 .tooltip {
@@ -15,6 +16,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.tooltip > :first-child svg {
+  width: var(--tooltip-trigger-icon-size);
+  height: var(--tooltip-trigger-icon-size);
+  flex-shrink: 0;
 }
 
 .tooltip__bubble {
