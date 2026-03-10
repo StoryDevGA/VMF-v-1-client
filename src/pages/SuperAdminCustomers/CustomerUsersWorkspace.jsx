@@ -181,7 +181,7 @@ export function CustomerUsersWorkspace({
         key: 'isCanonicalAdmin',
         label: <CanonicalAdminHeaderLabel />,
         mobileLabel: 'Canonical Admin',
-        width: '180px',
+        width: '220px',
         render: (_value, row) =>
           row?.isCanonicalAdmin
             ? (

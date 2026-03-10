@@ -120,6 +120,7 @@
 @media (min-width: 768px) {
   .table {
     display: table;
+    table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
   }
@@ -146,6 +147,8 @@
   .table__cell {
     display: table-cell;
     padding: var(--spacing-md);
+    font-size: inherit;
+    line-height: inherit;
     vertical-align: middle;
     border-bottom: 1px solid var(--color-border);
   }

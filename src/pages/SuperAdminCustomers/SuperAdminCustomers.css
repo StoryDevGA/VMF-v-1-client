@@ -226,6 +226,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  white-space: nowrap;
 }
 
 .super-admin-customers__canonical-help-trigger {
