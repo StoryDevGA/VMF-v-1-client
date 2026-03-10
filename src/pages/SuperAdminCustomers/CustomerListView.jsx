@@ -23,7 +23,7 @@ import {
 } from './superAdminCustomers.utils.js'
 import './CustomerListView.css'
 
-export function CustomerRowActionsMenu({ row, actions, onAction }) {
+export function CustomerRowActionsMenu({ row, actions, onAction, className = '' }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
   const menuId = getRowActionMenuId(row)
@@ -54,7 +54,10 @@ export function CustomerRowActionsMenu({ row, actions, onAction }) {
   }, [isOpen])
 
   return (
-    <div className="super-admin-customers__row-actions" ref={containerRef}>
+    <div
+      className={['super-admin-customers__row-actions', className].filter(Boolean).join(' ')}
+      ref={containerRef}
+    >
       <Button
         type="button"
         variant="ghost"

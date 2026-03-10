@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -7,7 +7,9 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { Tooltip } from '../../components/Tooltip'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
+import { MdInfoOutline } from 'react-icons/md'
 import {
   USER_ROLE_FILTER_OPTIONS,
   USER_STATUS_FILTER_OPTIONS,
@@ -20,6 +22,91 @@ import {
 } from './superAdminCustomers.utils.js'
 import { CustomerRowActionsMenu, CanonicalAdminHeaderLabel } from './CustomerListView.jsx'
 import './CustomerUsersWorkspace.css'
+
+function CustomerUserRolesCell({ row, customerId }) {
+  const roles = getCustomerUserRoles(row, customerId)
+  const userName = row?.name || row?.email || 'user'
+  const tooltipId = useId()
+  const containerRef = useRef(null)
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+
+  useEffect(() => {
+    if (!isTooltipOpen) return undefined
+
+    const handleDocumentPointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentPointerDown)
+    document.addEventListener('touchstart', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentPointerDown)
+      document.removeEventListener('touchstart', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [isTooltipOpen])
+
+  if (roles.length === 0) {
+    return '--'
+  }
+
+  if (roles.length === 1) {
+    return roles[0]
+  }
+
+  return (
+    <div className="super-admin-customers__roles-summary" ref={containerRef}>
+      <span className="super-admin-customers__roles-preview">{roles[0]}</span>
+      <Tooltip
+        id={tooltipId}
+        content={(
+          <span className="super-admin-customers__roles-tooltip-list">
+            {roles.map((role) => (
+              <span key={role} className="super-admin-customers__roles-tooltip-item">
+                {role}
+              </span>
+            ))}
+          </span>
+        )}
+        position="top"
+        align="start"
+        open={isTooltipOpen}
+        openDelay={0}
+        closeDelay={0}
+        className="super-admin-customers__roles-tooltip"
+      >
+        <button
+          type="button"
+          className="super-admin-customers__roles-trigger"
+          aria-label={`See all roles for ${userName}`}
+          aria-controls={tooltipId}
+          aria-expanded={isTooltipOpen}
+          onClick={() => setIsTooltipOpen(true)}
+          onFocus={() => setIsTooltipOpen(true)}
+          onBlur={(event) => {
+            if (containerRef.current?.contains(event.relatedTarget)) return
+            setIsTooltipOpen(false)
+          }}
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <span>see all</span>
+        </button>
+      </Tooltip>
+    </div>
+  )
+}
 
 export function CustomerUsersWorkspace({
   customer,
@@ -56,22 +143,20 @@ export function CustomerUsersWorkspace({
   const userColumns = useMemo(
     () => [
       {
-        key: 'name',
-        label: 'Name',
-        render: (value) => value || '--',
-      },
-      {
-        key: 'email',
-        label: 'Email',
-        render: (value) => value || '--',
+        key: 'userIdentity',
+        label: 'User',
+        width: '260px',
+        render: (_value, row) => (
+          <div className="super-admin-customers__user-identity">
+            <strong className="super-admin-customers__user-name">{row?.name || '--'}</strong>
+            <span className="super-admin-customers__user-email">{row?.email || '--'}</span>
+          </div>
+        ),
       },
       {
         key: 'customerRoles',
         label: 'Roles',
-        render: (_value, row) => {
-          const roles = getCustomerUserRoles(row, customerId)
-          return roles.length > 0 ? roles.join(', ') : '--'
-        },
+        render: (_value, row) => <CustomerUserRolesCell row={row} customerId={customerId} />,
       },
       {
         key: 'status',
@@ -115,13 +200,14 @@ export function CustomerUsersWorkspace({
       ...userColumns,
       {
         key: 'rowActions',
-        label: 'Actions',
+        label: <span className="super-admin-customers__users-actions-header">Actions</span>,
         width: '168px',
         render: (_value, row) => (
           <CustomerRowActionsMenu
             row={row}
             actions={userLifecycleActions}
             onAction={onUserLifecycleAction}
+            className="super-admin-customers__row-actions--leading"
           />
         ),
       },
