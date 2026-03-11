@@ -30,6 +30,7 @@ import {
   normalizeError,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
+  getUserLifecycleMessage,
 } from '../../utils/errors.js'
 import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
@@ -52,6 +53,95 @@ const CANONICAL_ADMIN_TOOLTIP_TEXT =
 
 const CUSTOMER_ADMIN_GOVERNANCE_NOTE =
   'Canonical Admin marks the governed owner for this customer. Create or update the replacement user first, then use Transfer Ownership from that user\'s row. Generic role edits do not transfer ownership.'
+
+const USER_LIFECYCLE_NOTE =
+  'Active users with UNTRUSTED trust can receive Resend Invitation. Disabled users must be reactivated before invitation recovery is available again.'
+
+const getMutationPayload = (result) => {
+  if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+    return result.data
+  }
+
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return result
+  }
+
+  return {}
+}
+
+const getUserTrustStatus = (user) =>
+  String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
+    .trim()
+    .toUpperCase()
+
+const getUserInvitedAt = (user) => user?.identityPlus?.invitedAt ?? user?.invitedAt ?? null
+
+const getUserTrustedAt = (user) => user?.identityPlus?.trustedAt ?? user?.trustedAt ?? null
+
+const getUserLifecycleCopy = (user) => {
+  const trustStatus = getUserTrustStatus(user)
+  const invitedAt = getUserInvitedAt(user)
+
+  if (!user?.isActive) {
+    return {
+      title: 'Disabled',
+      detail: 'Reactivate first to make invitation recovery available again.',
+      variant: 'muted',
+    }
+  }
+
+  if (trustStatus === 'TRUSTED') {
+    return {
+      title: 'Access ready',
+      detail: 'User has completed sign-in and currently has active access.',
+      variant: 'success',
+    }
+  }
+
+  if (trustStatus === 'UNTRUSTED' && invitedAt) {
+    return {
+      title: 'Invitation pending',
+      detail: 'Invitation was sent. Resend is available if the user still needs it.',
+      variant: 'warning',
+    }
+  }
+
+  if (trustStatus === 'UNTRUSTED') {
+    return {
+      title: 'Invitation required',
+      detail: 'User is active but not trusted yet. Resend Invitation is available now.',
+      variant: 'warning',
+    }
+  }
+
+  return {
+    title: 'Needs attention',
+    detail: 'This lifecycle and trust combination is outside the expected contract.',
+    variant: 'error',
+  }
+}
+
+function UserLifecycleState({ user }) {
+  const lifecycleCopy = getUserLifecycleCopy(user)
+
+  return (
+    <div className="edit-users__trust-cell">
+      <UserTrustStatus
+        trustStatus={getUserTrustStatus(user)}
+        invitedAt={getUserInvitedAt(user)}
+        trustedAt={getUserTrustedAt(user)}
+        size="sm"
+        showDates
+      />
+      <span className={`edit-users__trust-title edit-users__trust-title--${lifecycleCopy.variant}`}>
+        {lifecycleCopy.title}
+      </span>
+      <span className="edit-users__trust-detail">
+        {lifecycleCopy.detail}
+      </span>
+    </div>
+  )
+}
 
 function CanonicalAdminHeaderLabel() {
   return (
@@ -142,8 +232,13 @@ function EditUsers() {
     page,
     setPage,
     disableUser,
+    enableUser,
     deleteUser,
     resendInvitation,
+    disableUserResult,
+    enableUserResult,
+    deleteUserResult,
+    resendInvitationResult,
   } = useUsers(customerId)
 
   /* ---- Debounced search ---- */
@@ -218,7 +313,7 @@ function EditUsers() {
 
         addToast({
           title: 'Failed to disable user',
-          description: appError.message,
+          description: getUserLifecycleMessage(appError, 'Failed to disable user.'),
           variant: 'error',
         })
       }
@@ -250,13 +345,47 @@ function EditUsers() {
 
         addToast({
           title: 'Failed to delete user',
-          description: appError.message,
+          description: getUserLifecycleMessage(appError, 'Failed to delete user.'),
           variant: 'error',
         })
       }
       setConfirmAction(null)
     },
     [deleteUser, addToast],
+  )
+
+  const handleEnable = useCallback(
+    async (user) => {
+      try {
+        const result = await enableUser(user._id)
+        const enabledUser = getMutationPayload(result)
+        const enabledUserName = String(enabledUser?.name ?? user?.name ?? 'User').trim() || 'User'
+        const enabledTrustStatus = getUserTrustStatus(enabledUser)
+
+        if (enabledTrustStatus === 'UNTRUSTED') {
+          addToast({
+            title: 'User reactivated',
+            description: `${enabledUserName} is active again. Trust is UNTRUSTED, so Resend Invitation is available if the user still needs a new invite.`,
+            variant: 'warning',
+          })
+        } else {
+          addToast({
+            title: 'User reactivated',
+            description: `${enabledUserName} is active again.`,
+            variant: 'success',
+          })
+        }
+      } catch (err) {
+        const appError = normalizeError(err)
+        addToast({
+          title: 'Failed to reactivate user',
+          description: getUserLifecycleMessage(appError, 'Failed to reactivate user.'),
+          variant: 'error',
+        })
+      }
+      setConfirmAction(null)
+    },
+    [enableUser, addToast],
   )
 
   const handleResendInvitation = useCallback(
@@ -272,7 +401,7 @@ function EditUsers() {
         const appError = normalizeError(err)
         addToast({
           title: 'Failed to resend invitation',
-          description: appError.message,
+          description: getUserLifecycleMessage(appError, 'Failed to resend invitation.'),
           variant: 'error',
         })
       }
@@ -284,10 +413,12 @@ function EditUsers() {
     if (!confirmAction) return
     if (confirmAction.type === 'disable') {
       handleDisable(confirmAction.user)
+    } else if (confirmAction.type === 'enable') {
+      handleEnable(confirmAction.user)
     } else if (confirmAction.type === 'delete') {
       handleDelete(confirmAction.user)
     }
-  }, [confirmAction, handleDisable, handleDelete])
+  }, [confirmAction, handleDisable, handleDelete, handleEnable])
 
   /* ---- Table columns ---- */
   const columns = useMemo(
@@ -331,12 +462,7 @@ function EditUsers() {
         key: 'trustStatus',
         label: 'Trust',
         render: (_value, row) => (
-          <UserTrustStatus
-            trustStatus={row.identityPlus?.trustStatus ?? 'UNTRUSTED'}
-            invitedAt={row.identityPlus?.invitedAt}
-            trustedAt={row.identityPlus?.trustedAt}
-            size="sm"
-          />
+          <UserLifecycleState user={row} />
         ),
       },
       {
@@ -381,23 +507,56 @@ function EditUsers() {
     [selectedRows, visibleUserIds],
   )
 
+  const isLifecycleMutationLoading =
+    Boolean(disableUserResult?.isLoading)
+    || Boolean(enableUserResult?.isLoading)
+    || Boolean(deleteUserResult?.isLoading)
+
+  const isRowActionMutationLoading =
+    isLifecycleMutationLoading || Boolean(resendInvitationResult?.isLoading)
+
   /* ---- Row actions ---- */
   const actions = useMemo(
     () => [
-      { label: 'Edit', variant: 'ghost' },
+      {
+        label: 'Edit',
+        variant: 'ghost',
+        disabled: isRowActionMutationLoading,
+      },
       {
         label: 'Transfer Ownership',
         variant: 'ghost',
         disabled: (row) =>
+          isRowActionMutationLoading ||
           !canonicalAdminUser ||
           !row?.isActive ||
           Boolean(row?.isCanonicalAdmin),
       },
-      { label: 'Disable', variant: 'ghost' },
-      { label: 'Delete', variant: 'ghost' },
-      { label: 'Resend Invitation', variant: 'ghost' },
+      {
+        label: 'Disable',
+        variant: 'ghost',
+        disabled: (row) => isRowActionMutationLoading || !row?.isActive,
+      },
+      {
+        label: 'Reactivate',
+        variant: 'ghost',
+        disabled: (row) => isRowActionMutationLoading || Boolean(row?.isActive),
+      },
+      {
+        label: 'Delete',
+        variant: 'ghost',
+        disabled: (row) => isRowActionMutationLoading || Boolean(row?.isActive),
+      },
+      {
+        label: 'Resend Invitation',
+        variant: 'ghost',
+        disabled: (row) =>
+          isRowActionMutationLoading
+          || !row?.isActive
+          || getUserTrustStatus(row) !== 'UNTRUSTED',
+      },
     ],
-    [canonicalAdminUser],
+    [canonicalAdminUser, isRowActionMutationLoading],
   )
 
   const handleRowAction = useCallback(
@@ -421,6 +580,17 @@ function EditUsers() {
           }
           setConfirmAction({ type: 'disable', user: row })
           break
+        case 'Reactivate':
+          if (row.isActive) {
+            addToast({
+              title: 'Already active',
+              description: `${row.name} is already active.`,
+              variant: 'info',
+            })
+            return
+          }
+          setConfirmAction({ type: 'enable', user: row })
+          break
         case 'Delete':
           if (row.isActive) {
             addToast({
@@ -433,10 +603,18 @@ function EditUsers() {
           setConfirmAction({ type: 'delete', user: row })
           break
         case 'Resend Invitation':
-          if (row.identityPlus?.trustStatus !== 'UNTRUSTED') {
+          if (!row.isActive) {
             addToast({
               title: 'Invitation not applicable',
-              description: 'Invitations can only be resent for untrusted users.',
+              description: 'Invitations can only be resent for active users. Reactivate the user first.',
+              variant: 'info',
+            })
+            return
+          }
+          if (getUserTrustStatus(row) !== 'UNTRUSTED') {
+            addToast({
+              title: 'Invitation not applicable',
+              description: 'Invitations can only be resent when trust is UNTRUSTED.',
               variant: 'info',
             })
             return
@@ -565,6 +743,15 @@ function EditUsers() {
               <p className="edit-users__governance-text">{CUSTOMER_ADMIN_GOVERNANCE_NOTE}</p>
             </div>
 
+            <div
+              className="edit-users__lifecycle-note"
+              role="note"
+              aria-label="User lifecycle and invitation guidance"
+            >
+              <p className="edit-users__lifecycle-title">User lifecycle and invitations</p>
+              <p className="edit-users__lifecycle-text">{USER_LIFECYCLE_NOTE}</p>
+            </div>
+
             {listUsersAppError && (
               <ErrorSupportPanel
                 error={listUsersAppError}
@@ -669,6 +856,7 @@ function EditUsers() {
         open={!!editingUser}
         onClose={() => setEditingUser(null)}
         user={editingUser}
+        customerId={customerId}
         onStartOwnershipTransfer={(user) => {
           setEditingUser(null)
           setOwnershipTransferTarget(user)
@@ -694,28 +882,39 @@ function EditUsers() {
           <h2 className="edit-users__confirm-title">
             {confirmAction?.type === 'disable'
               ? 'Disable User'
-              : 'Delete User'}
+              : confirmAction?.type === 'enable'
+                ? 'Reactivate User'
+                : 'Delete User'}
           </h2>
         </Dialog.Header>
         <Dialog.Body>
           <p>
             {confirmAction?.type === 'disable'
               ? `Are you sure you want to disable ${confirmAction?.user?.name}? This will immediately revoke their access.`
-              : `Are you sure you want to permanently delete ${confirmAction?.user?.name}? This action cannot be undone.`}
+              : confirmAction?.type === 'enable'
+                ? `Are you sure you want to reactivate ${confirmAction?.user?.name}? They will regain access immediately. If trust returns as UNTRUSTED, Resend Invitation becomes available again.`
+                : `Are you sure you want to permanently delete ${confirmAction?.user?.name}? This action cannot be undone.`}
           </p>
         </Dialog.Body>
         <Dialog.Footer>
           <Button
             variant="outline"
             onClick={() => setConfirmAction(null)}
+            disabled={isLifecycleMutationLoading}
           >
             Cancel
           </Button>
           <Button
             variant={confirmAction?.type === 'delete' ? 'danger' : 'primary'}
             onClick={handleConfirmAction}
+            loading={isLifecycleMutationLoading}
+            disabled={isLifecycleMutationLoading}
           >
-            {confirmAction?.type === 'disable' ? 'Disable' : 'Delete'}
+            {confirmAction?.type === 'disable'
+              ? 'Disable'
+              : confirmAction?.type === 'enable'
+                ? 'Reactivate'
+                : 'Delete'}
           </Button>
         </Dialog.Footer>
       </Dialog>

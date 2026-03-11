@@ -21,6 +21,8 @@ import {
   isCustomerInactiveError,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
+  getUserEmailConflictMessage,
+  getUserLifecycleMessage,
   isGovernanceLimitConflictError,
   getGovernanceLimitConflictMessage,
   isRateLimitError,
@@ -413,6 +415,63 @@ describe('errors', () => {
       ).toBe(
         'This user is the Canonical Admin for an active customer. Transfer ownership before disabling access.',
       )
+    })
+  })
+
+  describe('getUserEmailConflictMessage', () => {
+    it('maps USER_ALREADY_EXISTS reasons to stable email guidance', () => {
+      expect(
+        getUserEmailConflictMessage({
+          status: 409,
+          code: 'USER_ALREADY_EXISTS',
+          requestId: 'req-email-1',
+          details: {
+            reason: 'already-in-customer',
+            existingUserId: 'user-99',
+          },
+        }),
+      ).toBe(
+        'A user with this email already exists in this customer (User ID: user-99). (Ref: req-email-1)',
+      )
+    })
+
+    it('falls back to the normalized message when no mapped reason is present', () => {
+      expect(
+        getUserEmailConflictMessage({
+          status: 409,
+          code: 'USER_ALREADY_EXISTS',
+          message: 'A user with this email already exists. (Ref: req-email-2)',
+          requestId: 'req-email-2',
+          details: { reason: 'SOME_OTHER_REASON' },
+        }),
+      ).toBe('A user with this email already exists. (Ref: req-email-2)')
+    })
+  })
+
+  describe('getUserLifecycleMessage', () => {
+    it('maps stable resend lifecycle reasons to guidance', () => {
+      expect(
+        getUserLifecycleMessage({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          requestId: 'req-life-1',
+          details: { reason: 'INVITATION_RESEND_REQUIRES_ACTIVE_USER' },
+        }),
+      ).toBe(
+        'Invitation resend is only available for active users. Reactivate the user first. (Ref: req-life-1)',
+      )
+    })
+
+    it('falls back to the normalized app error message', () => {
+      expect(
+        getUserLifecycleMessage({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          message: 'Please check the form for errors. (Ref: req-life-2)',
+          requestId: 'req-life-2',
+          details: { reason: 'SOME_OTHER_REASON' },
+        }),
+      ).toBe('Please check the form for errors. (Ref: req-life-2)')
     })
   })
 

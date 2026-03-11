@@ -2,9 +2,10 @@
  * UserEditDrawer Tests
  *
  * Covers:
- * - Renders user info (name, email) as read-only
+ * - Renders editable name/email fields and scoped role controls
  * - Displays user status and trust status
- * - Shows role checkboxes with current roles checked
+ * - Submits partial update payloads for changed fields only
+ * - Surfaces contract-aligned post-save and error guidance
  * - Cancel closes the drawer
  * - Does not render when user is null
  */
@@ -19,6 +20,14 @@ import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import UserEditDrawer from './UserEditDrawer'
+
+const { mockUseUpdateUserMutation } = vi.hoisted(() => ({
+  mockUseUpdateUserMutation: vi.fn(),
+}))
+
+vi.mock('../../store/api/userApi.js', () => ({
+  useUpdateUserMutation: (...args) => mockUseUpdateUserMutation(...args),
+}))
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
 beforeEach(() => {
@@ -106,6 +115,18 @@ function renderDrawer(props = {}) {
 describe('UserEditDrawer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'user-1',
+          name: 'Jane Doe',
+          email: 'jane@acme.com',
+          isActive: true,
+          trustStatus: 'TRUSTED',
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
   })
 
   it('renders the Edit User heading', () => {
@@ -115,19 +136,19 @@ describe('UserEditDrawer', () => {
     ).toBeInTheDocument()
   })
 
-  it('displays user name as disabled input', () => {
+  it('displays user name as editable input', () => {
     renderDrawer()
     const nameInput = screen.getByLabelText(/name/i)
     expect(nameInput).toBeInTheDocument()
-    expect(nameInput).toBeDisabled()
+    expect(nameInput).toBeEnabled()
     expect(nameInput).toHaveValue('Jane Doe')
   })
 
-  it('displays user email as disabled input', () => {
+  it('displays user email as editable input', () => {
     renderDrawer()
     const emailInput = screen.getByLabelText(/email/i)
     expect(emailInput).toBeInTheDocument()
-    expect(emailInput).toBeDisabled()
+    expect(emailInput).toBeEnabled()
     expect(emailInput).toHaveValue('jane@acme.com')
   })
 
@@ -173,6 +194,13 @@ describe('UserEditDrawer', () => {
     ).toBeInTheDocument()
   })
 
+  it('disables save until an editable field changes', () => {
+    renderDrawer()
+    expect(
+      screen.getByRole('button', { name: /save changes/i }),
+    ).toBeDisabled()
+  })
+
   it('shows governed customer-admin guidance and transfer action for eligible users', () => {
     const onStartOwnershipTransfer = vi.fn()
     renderDrawer({ hasCanonicalAdmin: true, onStartOwnershipTransfer })
@@ -197,6 +225,97 @@ describe('UserEditDrawer', () => {
     expect(
       screen.queryByRole('button', { name: /transfer ownership to this user/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('submits only the changed email field and shows resend guidance when trust resets', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'user-1',
+          name: 'Jane Doe',
+          email: 'jane.updated@acme.com',
+          isActive: true,
+          trustStatus: 'UNTRUSTED',
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDrawer({ onClose })
+
+    await user.clear(screen.getByLabelText(/email/i))
+    await user.type(screen.getByLabelText(/email/i), 'jane.updated@acme.com')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith({
+        userId: 'user-1',
+        body: { email: 'jane.updated@acme.com' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/trust reset to untrusted/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows reactivation guidance after updating a disabled user email', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'user-2',
+          name: 'Jane Doe',
+          email: 'disabled.updated@acme.com',
+          isActive: false,
+          trustStatus: 'REVOKED',
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDrawer({ user: disabledUser })
+
+    await user.clear(screen.getByLabelText(/email/i))
+    await user.type(screen.getByLabelText(/email/i), 'disabled.updated@acme.com')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(
+      await screen.findByText(/resend invitation stays unavailable until reactivation succeeds/i),
+    ).toBeInTheDocument()
+  })
+
+  it('maps reason-based email conflicts to the email field', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'USER_ALREADY_EXISTS',
+            requestId: 'req-email-conflict-1',
+            details: {
+              reason: 'already-in-customer',
+              existingUserId: 'user-99',
+            },
+          },
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDrawer()
+
+    await user.clear(screen.getByLabelText(/email/i))
+    await user.type(screen.getByLabelText(/email/i), 'duplicate@acme.com')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    const conflictMessages = await screen.findAllByText(/already exists in this customer/i)
+    expect(conflictMessages.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText(/\(Ref: req-email-conflict-1\)/i).length).toBeGreaterThanOrEqual(2)
   })
 
   it('does not render when user is null', () => {

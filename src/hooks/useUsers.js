@@ -14,6 +14,7 @@ import {
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,
+  useEnableUserMutation,
   useDeleteUserMutation,
   useResendInvitationMutation,
 } from '../store/api/userApi.js'
@@ -40,6 +41,8 @@ import {
  *   updateUserResult: object,
  *   disableUser: Function,
  *   disableUserResult: object,
+ *   enableUser: Function,
+ *   enableUserResult: object,
  *   deleteUser: Function,
  *   deleteUserResult: object,
  *   resendInvitation: Function,
@@ -90,6 +93,7 @@ export function useUsers(customerId, options = {}) {
   const [createUserMutation, createUserResult] = useCreateUserMutation()
   const [updateUserMutation, updateUserResult] = useUpdateUserMutation()
   const [disableUserMutation, disableUserResult] = useDisableUserMutation()
+  const [enableUserMutation, enableUserResult] = useEnableUserMutation()
   const [deleteUserMutation, deleteUserResult] = useDeleteUserMutation()
   const [resendInvitationMutation, resendInvitationResult] =
     useResendInvitationMutation()
@@ -110,6 +114,12 @@ export function useUsers(customerId, options = {}) {
   const disableUser = useCallback(
     (userId) => disableUserMutation({ userId }).unwrap(),
     [disableUserMutation],
+  )
+
+  /** Reactivate user by ID */
+  const enableUser = useCallback(
+    (userId) => enableUserMutation({ userId }).unwrap(),
+    [enableUserMutation],
   )
 
   /** Delete user by ID (must be disabled first) */
@@ -147,6 +157,8 @@ export function useUsers(customerId, options = {}) {
     updateUserResult,
     disableUser,
     disableUserResult,
+    enableUser,
+    enableUserResult,
     deleteUser,
     deleteUserResult,
     resendInvitation,

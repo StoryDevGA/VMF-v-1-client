@@ -1,8 +1,12 @@
-import { renderHook } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockUseListUsersQuery } = vi.hoisted(() => ({
+const {
+  mockUseListUsersQuery,
+  mockUseEnableUserMutation,
+} = vi.hoisted(() => ({
   mockUseListUsersQuery: vi.fn(),
+  mockUseEnableUserMutation: vi.fn(),
 }))
 
 vi.mock('../store/api/userApi.js', () => ({
@@ -10,6 +14,7 @@ vi.mock('../store/api/userApi.js', () => ({
   useCreateUserMutation: () => [vi.fn(), {}],
   useUpdateUserMutation: () => [vi.fn(), {}],
   useDisableUserMutation: () => [vi.fn(), {}],
+  useEnableUserMutation: (...args) => mockUseEnableUserMutation(...args),
   useDeleteUserMutation: () => [vi.fn(), {}],
   useResendInvitationMutation: () => [vi.fn(), {}],
 }))
@@ -19,6 +24,7 @@ import { useUsers } from './useUsers.js'
 describe('useUsers', () => {
   beforeEach(() => {
     mockUseListUsersQuery.mockReset()
+    mockUseEnableUserMutation.mockReset()
     mockUseListUsersQuery.mockReturnValue({
       data: {
         data: {
@@ -36,6 +42,7 @@ describe('useUsers', () => {
       isFetching: false,
       error: null,
     })
+    mockUseEnableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
   it('returns the full customer-scoped user list without client-side tenant filtering', () => {
@@ -55,5 +62,21 @@ describe('useUsers', () => {
       },
       { skip: false },
     )
+  })
+
+  it('exposes the enableUser mutation facade', async () => {
+    const enableUserMutation = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'user-2', isActive: true } }),
+    })
+    mockUseEnableUserMutation.mockReturnValue([enableUserMutation, { isLoading: false }])
+
+    const { result } = renderHook(() => useUsers('cust-1'))
+
+    await act(async () => {
+      await result.current.enableUser('user-2')
+    })
+
+    expect(enableUserMutation).toHaveBeenCalledWith({ userId: 'user-2' })
+    expect(result.current.enableUserResult.isLoading).toBe(false)
   })
 })

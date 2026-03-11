@@ -85,7 +85,7 @@ const canonicalManagedUser = {
   ],
   tenantMemberships: [],
   vmfGrants: [],
-  identityPlus: { trustStatus: 'TRUSTED' },
+  identityPlus: { trustStatus: 'TRUSTED', trustedAt: '2026-01-15T14:00:00Z' },
 }
 
 const standardManagedUser = {
@@ -99,7 +99,35 @@ const standardManagedUser = {
   ],
   tenantMemberships: [],
   vmfGrants: [],
+  identityPlus: { trustStatus: 'UNTRUSTED', invitedAt: '2026-01-16T09:30:00Z' },
+}
+
+const invitationRequiredUser = {
+  _id: 'user-4',
+  email: 'reset@acme.com',
+  name: 'Reset User',
+  isActive: true,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
   identityPlus: { trustStatus: 'UNTRUSTED' },
+}
+
+const disabledManagedUser = {
+  _id: 'user-3',
+  email: 'disabled@acme.com',
+  name: 'Disabled User',
+  isActive: false,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'REVOKED' },
 }
 
 /** Create a fresh store */
@@ -128,8 +156,13 @@ function buildUseUsersResult(overrides = {}) {
     page: 1,
     setPage: vi.fn(),
     disableUser: vi.fn(),
+    enableUser: vi.fn(),
     deleteUser: vi.fn(),
     resendInvitation: vi.fn(),
+    disableUserResult: { isLoading: false },
+    enableUserResult: { isLoading: false },
+    deleteUserResult: { isLoading: false },
+    resendInvitationResult: { isLoading: false },
     ...overrides,
   }
 }
@@ -162,8 +195,8 @@ describe('EditUsers page', () => {
     vi.restoreAllMocks()
     mockUseUsers.mockReturnValue(
       buildUseUsersResult({
-        users: [canonicalManagedUser, standardManagedUser],
-        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        users: [canonicalManagedUser, standardManagedUser, invitationRequiredUser],
+        pagination: { page: 1, pageSize: 20, total: 3, totalPages: 1 },
       }),
     )
     mockUseListTenantsQuery.mockReturnValue({
@@ -294,6 +327,46 @@ describe('EditUsers page', () => {
     expect(
       screen.getByRole('button', { name: /transfer ownership owner user/i }),
     ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /resend invitation member user/i }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /resend invitation owner user/i }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /reactivate member user/i }),
+    ).toBeDisabled()
+  })
+
+  it('shows lifecycle and invitation guidance before the table actions', () => {
+    renderEditUsers()
+
+    expect(
+      screen.getByLabelText(/user lifecycle and invitation guidance/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/active users with untrusted trust can receive resend invitation/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/disabled users must be reactivated before invitation recovery is available again/i),
+    ).toBeInTheDocument()
+  })
+
+  it('renders row-level lifecycle summaries for trusted, invited, invitation-required, and disabled users', () => {
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, standardManagedUser, invitationRequiredUser, disabledManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 4, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    expect(screen.getByText(/access ready/i)).toBeInTheDocument()
+    expect(screen.getByText(/invitation pending/i)).toBeInTheDocument()
+    expect(screen.getByText(/invitation required/i)).toBeInTheDocument()
+    expect(screen.getByText(/reactivate first to make invitation recovery available again/i)).toBeInTheDocument()
+    expect(screen.getByText(/resend invitation is available now/i)).toBeInTheDocument()
   })
 
   it('opens Create User wizard when button is clicked', async () => {
@@ -366,5 +439,146 @@ describe('EditUsers page', () => {
     expect(setSearch).toHaveBeenCalledWith('')
     expect(setStatusFilter).toHaveBeenCalledWith('')
     expect(setPage).toHaveBeenCalledWith(1)
+  })
+
+  it('enables the disabled-user lifecycle actions coherently', () => {
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, disabledManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    expect(
+      screen.getByRole('button', { name: /disable disabled user/i }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /reactivate disabled user/i }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /delete disabled user/i }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /resend invitation disabled user/i }),
+    ).toBeDisabled()
+  })
+
+  it('disables an active user through the confirm dialog', async () => {
+    const user = userEvent.setup()
+    const disableUser = vi.fn().mockResolvedValue({})
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, standardManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        disableUser,
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /disable member user/i }))
+
+    expect(
+      screen.getByRole('heading', { name: /disable user/i }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^disable$/i }))
+
+    await waitFor(() => {
+      expect(disableUser).toHaveBeenCalledWith('user-2')
+      expect(screen.getByText(/member user has been disabled/i)).toBeInTheDocument()
+    })
+  })
+
+  it('deletes a disabled user through the confirm dialog', async () => {
+    const user = userEvent.setup()
+    const deleteUser = vi.fn().mockResolvedValue({})
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, disabledManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        deleteUser,
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /delete disabled user/i }))
+
+    expect(
+      screen.getByRole('heading', { name: /delete user/i }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    await waitFor(() => {
+      expect(deleteUser).toHaveBeenCalledWith('user-3')
+      expect(screen.getByText(/disabled user has been permanently deleted/i)).toBeInTheDocument()
+    })
+  })
+
+  it('resends invitation for an active untrusted user', async () => {
+    const user = userEvent.setup()
+    const resendInvitation = vi.fn().mockResolvedValue({})
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, standardManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        resendInvitation,
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /resend invitation member user/i }))
+
+    await waitFor(() => {
+      expect(resendInvitation).toHaveBeenCalledWith('user-2')
+      expect(screen.getByText(/invitation resent to member@acme.com/i)).toBeInTheDocument()
+    })
+  })
+
+  it('reactivates a disabled user and surfaces untrusted trust guidance', async () => {
+    const user = userEvent.setup()
+    const enableUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-3',
+        name: 'Disabled User',
+        isActive: true,
+        trustStatus: 'UNTRUSTED',
+      },
+    })
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, disabledManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        enableUser,
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /reactivate disabled user/i }))
+
+    expect(
+      screen.getByRole('heading', { name: /reactivate user/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/if trust returns as untrusted, resend invitation becomes available again/i),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^reactivate$/i }))
+
+    await waitFor(() => {
+      expect(enableUser).toHaveBeenCalledWith('user-3')
+      expect(screen.getByText(/trust is untrusted/i)).toBeInTheDocument()
+      expect(screen.getByText(/resend invitation is available/i)).toBeInTheDocument()
+    })
   })
 })

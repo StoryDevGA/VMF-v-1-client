@@ -130,6 +130,28 @@ const GOVERNANCE_LIMIT_FALLBACKS = {
   default: 'A governance limit was reached. Update customer limits and retry.',
 }
 
+const USER_EMAIL_CONFLICT_REASON_MESSAGES = {
+  'already-in-customer': (existingUserSuffix) =>
+    `A user with this email already exists in this customer${existingUserSuffix}.`,
+  'other-customer': () =>
+    'This email belongs to a user in another customer and cannot be used here.',
+  'existing-identity': (existingUserSuffix) =>
+    `An existing identity already uses this email${existingUserSuffix}.`,
+}
+
+const USER_LIFECYCLE_REASON_MESSAGES = {
+  USER_INVALID_CUSTOMER_MEMBERSHIP:
+    'This user is no longer valid for the current customer context. Refresh and retry.',
+  USER_ALREADY_ACTIVE: 'This user is already active.',
+  USER_ALREADY_DISABLED: 'This user is already disabled.',
+  USER_DELETE_REQUIRES_DISABLED:
+    'Disable the user before deleting this account.',
+  INVITATION_RESEND_REQUIRES_ACTIVE_USER:
+    'Invitation resend is only available for active users. Reactivate the user first.',
+  INVITATION_RESEND_REQUIRES_UNTRUSTED:
+    'Invitation resend is only available when trust is UNTRUSTED.',
+}
+
 /**
  * Format seconds into short retry text.
  * @param {number} seconds
@@ -214,6 +236,33 @@ const toErrorDataObject = (data) => {
   }
 
   return {}
+}
+
+const getFirstDetailMessage = (details) => {
+  if (!details || typeof details !== 'object') return ''
+
+  const stack = [details]
+  while (stack.length > 0) {
+    const current = stack.shift()
+
+    if (typeof current === 'string' && current.trim()) {
+      return current.trim()
+    }
+
+    if (Array.isArray(current)) {
+      stack.push(...current)
+      continue
+    }
+
+    if (current && typeof current === 'object') {
+      if (typeof current.message === 'string' && current.message.trim()) {
+        return current.message.trim()
+      }
+      stack.push(...Object.values(current))
+    }
+  }
+
+  return ''
 }
 
 /* ------------------------------------------------------------------ */
@@ -396,6 +445,63 @@ export const getCanonicalAdminConflictMessage = (err, operation = 'update_roles'
   const reasonMessage = CANONICAL_ADMIN_CONFLICT_REASON_MESSAGES[operation]?.[reason]
 
   return appendRequestReference(reasonMessage ?? fallback, err?.requestId)
+}
+
+/**
+ * Resolve stable email-conflict payloads to field guidance.
+ *
+ * @param {AppError} err
+ * @returns {string}
+ */
+export const getUserEmailConflictMessage = (err) => {
+  const reason = String(err?.details?.reason ?? '')
+    .trim()
+    .toLowerCase()
+  const existingUserId = String(err?.details?.existingUserId ?? '').trim()
+  const existingUserSuffix = existingUserId ? ` (User ID: ${existingUserId})` : ''
+
+  if (err?.code === 'USER_ALREADY_EXISTS' && USER_EMAIL_CONFLICT_REASON_MESSAGES[reason]) {
+    return appendRequestReference(
+      USER_EMAIL_CONFLICT_REASON_MESSAGES[reason](existingUserSuffix),
+      err?.requestId,
+    )
+  }
+
+  if (err?.code === 'USER_CUSTOMER_CONFLICT' && reason === 'other-customer') {
+    return appendRequestReference(
+      'This user belongs to another customer and cannot be assigned to this customer.',
+      err?.requestId,
+    )
+  }
+
+  const detailMessage = getFirstDetailMessage(err?.details)
+  if (detailMessage && detailMessage.trim().toLowerCase() !== reason) {
+    return appendRequestReference(detailMessage, err?.requestId)
+  }
+
+  return err?.message || getErrorMessage(err?.code)
+}
+
+/**
+ * Resolve stable lifecycle reasons to actionable UI guidance.
+ *
+ * @param {AppError} err
+ * @param {string} [fallbackMessage]
+ * @returns {string}
+ */
+export const getUserLifecycleMessage = (err, fallbackMessage) => {
+  const reason = String(err?.details?.reason ?? '').trim().toUpperCase()
+
+  if (reason && USER_LIFECYCLE_REASON_MESSAGES[reason]) {
+    return appendRequestReference(USER_LIFECYCLE_REASON_MESSAGES[reason], err?.requestId)
+  }
+
+  const detailMessage = getFirstDetailMessage(err?.details)
+  if (detailMessage && detailMessage.trim().toUpperCase() !== reason) {
+    return appendRequestReference(detailMessage, err?.requestId)
+  }
+
+  return err?.message || fallbackMessage || getErrorMessage(err?.code)
 }
 
 /**

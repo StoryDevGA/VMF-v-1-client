@@ -143,7 +143,7 @@ export const userApi = baseApi.injectEndpoints({
      * Returns 409 when removing CUSTOMER_ADMIN from the canonical
      * active admin, or assigning a second active CUSTOMER_ADMIN.
      *
-     * @param {{ userId: string, body: { name?: string, roles?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
+     * @param {{ userId: string, body: { name?: string, email?: string, roles?: string[], tenantVisibility?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
      */
     updateUser: build.mutation({
       query: ({ userId, body }) => ({
