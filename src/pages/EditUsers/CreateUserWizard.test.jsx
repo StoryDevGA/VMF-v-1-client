@@ -170,9 +170,12 @@ describe('CreateUserWizard', () => {
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/customer admin/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+      expect(screen.queryByLabelText(/customer admin/i)).not.toBeInTheDocument()
+      expect(
+        screen.getByText(/customer admin ownership is transferred separately/i),
+      ).toBeInTheDocument()
     })
   })
 

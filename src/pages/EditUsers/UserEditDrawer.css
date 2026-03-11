@@ -1,0 +1,40 @@
+.user-edit-drawer__info,
+.user-edit-drawer__fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.25rem);
+}
+
+.user-edit-drawer__label,
+.user-edit-drawer__legend,
+.user-edit-drawer__governance-title {
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.user-edit-drawer__governance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+  padding: var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) solid var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-secondary);
+}
+
+.user-edit-drawer__governance-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.user-edit-drawer__error {
+  margin: 0;
+  color: var(--color-error);
+}

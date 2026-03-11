@@ -74,6 +74,32 @@
   gap: var(--spacing-xs, 0.25rem);
 }
 
+/* ---- Governance note ---- */
+
+.edit-users__governance-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.25rem);
+  padding: var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) solid var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-secondary);
+}
+
+.edit-users__governance-title {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.edit-users__governance-text {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+  color: var(--color-text-secondary);
+}
+
 /* ---- Toolbar ---- */
 
 .edit-users__toolbar {
@@ -97,6 +123,42 @@
 
 .edit-users__table {
   overflow-x: auto;
+}
+
+.edit-users__canonical-header {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+}
+
+.edit-users__canonical-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--spacing-xl, 2rem) + var(--spacing-md, 1rem));
+  min-height: calc(var(--spacing-xl, 2rem) + var(--spacing-md, 1rem));
+  padding: var(--spacing-xs, 0.25rem);
+  border: 0;
+  border-radius: var(--border-radius-full, 9999px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.edit-users__canonical-help-trigger:hover {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.edit-users__canonical-help-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.edit-users__canonical-empty {
+  color: var(--color-text-secondary);
 }
 
 /* ---- Pagination ---- */
@@ -181,5 +243,11 @@
 
   .edit-users__filter {
     flex: 0 0 180px;
+  }
+}
+
+@media (forced-colors: active) {
+  .edit-users__canonical-help-trigger {
+    border: var(--border-width-thin, 1px) solid ButtonText;
   }
 }

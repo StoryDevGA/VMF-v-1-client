@@ -32,10 +32,13 @@ import {
 import './EditUsers.css'
 
 /** Available user roles (matches backend Role catalogue) */
-const AVAILABLE_ROLES = ['CUSTOMER_ADMIN', 'TENANT_ADMIN', 'USER']
+const AVAILABLE_ROLES = ['TENANT_ADMIN', 'USER']
 
 /** Wizard step count */
 const TOTAL_STEPS = 4
+
+const CUSTOMER_ADMIN_CREATE_GUIDANCE =
+  'Customer Admin ownership is transferred separately. Create the replacement user first, then use Transfer Ownership from that user\'s row after the account is active.'
 
 const getCreateUserOutcomeData = (result) => {
   if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
@@ -349,6 +352,9 @@ function CreateUserWizard({ open, onClose, customerId }) {
           <div className="create-wizard__step">
             <fieldset className="create-wizard__fieldset">
               <legend className="create-wizard__legend">Select Roles</legend>
+              <p className="create-wizard__info" role="note">
+                {CUSTOMER_ADMIN_CREATE_GUIDANCE}
+              </p>
               {AVAILABLE_ROLES.map((role) => (
                 <Tickbox
                   key={role}

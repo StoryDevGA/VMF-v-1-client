@@ -71,28 +71,53 @@ const RATE_LIMIT_CODES = new Set([
   'HTTP_429',
 ])
 
-const CANONICAL_ADMIN_CONFLICT_PATTERNS = [
-  /canonical customer admin/i,
-  /canonical admin/i,
-  /replace admin endpoint/i,
-  /replace admin first/i,
-  /second customer_admin/i,
-  /second customer admin/i,
-]
+const CANONICAL_ADMIN_CONFLICT_FALLBACKS = {
+  assign:
+    'This customer already has a Canonical Admin. Use Transfer Ownership to move ownership to an existing active user.',
+  update_roles:
+    'Customer Admin ownership is governed separately. Use Transfer Ownership instead of changing this role here.',
+  disable:
+    'This user is the Canonical Admin for an active customer. Transfer ownership before disabling access.',
+  delete:
+    'This user is the Canonical Admin for an active customer. Transfer ownership before deleting this account.',
+}
+
+const CANONICAL_ADMIN_CONFLICT_REASONS = new Set([
+  'CANONICAL_ADMIN_EXISTS',
+  'SECOND_CUSTOMER_ADMIN_BLOCKED',
+  'CANONICAL_ADMIN_ROLE_REMOVAL_BLOCKED',
+  'CANONICAL_ADMIN_PROTECTED',
+])
+
+const CANONICAL_ADMIN_CONFLICT_REASON_MESSAGES = {
+  assign: {
+    CANONICAL_ADMIN_EXISTS:
+      'This customer already has a Canonical Admin. Use Transfer Ownership to move ownership to an existing active user.',
+    SECOND_CUSTOMER_ADMIN_BLOCKED:
+      'A second Customer Admin cannot be assigned while canonical ownership is active. Use Transfer Ownership instead.',
+  },
+  update_roles: {
+    CANONICAL_ADMIN_EXISTS:
+      'Customer Admin ownership is governed separately. Use Transfer Ownership instead of changing this role here.',
+    SECOND_CUSTOMER_ADMIN_BLOCKED:
+      'Customer Admin ownership is governed separately. Use Transfer Ownership instead of changing this role here.',
+    CANONICAL_ADMIN_ROLE_REMOVAL_BLOCKED:
+      'You cannot remove the governed Customer Admin role here. Transfer ownership first.',
+    CANONICAL_ADMIN_PROTECTED:
+      'This user is protected by canonical ownership governance. Transfer ownership first.',
+  },
+  disable: {
+    CANONICAL_ADMIN_PROTECTED:
+      'This user is the Canonical Admin for an active customer. Transfer ownership before disabling access.',
+  },
+  delete: {
+    CANONICAL_ADMIN_PROTECTED:
+      'This user is the Canonical Admin for an active customer. Transfer ownership before deleting this account.',
+  },
+}
 
 const GENERIC_CONFLICT_MESSAGE_PATTERN =
   /conflicts with the current state of the resource/i
-
-const CANONICAL_ADMIN_CONFLICT_FALLBACKS = {
-  assign:
-    'This customer already has an active Customer Admin. Use Replace Admin to transfer ownership.',
-  update_roles:
-    'This role change conflicts with canonical Customer Admin governance. Use assign/replace admin flows.',
-  disable:
-    'This user is the canonical Customer Admin of an active customer. Replace admin first.',
-  delete:
-    'This user is the canonical Customer Admin of an active customer. Replace admin first.',
-}
 
 const GOVERNANCE_LIMIT_REASONS = new Set([
   'TENANT_LIMIT_REACHED',
@@ -324,8 +349,10 @@ export const isTenantDisabledError = (err) =>
  * @returns {boolean}
  */
 export const isCustomerInactiveError = (err) =>
-  err?.status === 403 &&
-  ['CUSTOMER_INACTIVE', 'AUTH_CUSTOMER_INACTIVE'].includes(err?.code)
+  ['CUSTOMER_INACTIVE', 'AUTH_CUSTOMER_INACTIVE'].includes(
+    String(err?.code ?? '').trim().toUpperCase(),
+  ) ||
+  String(err?.details?.reason ?? '').trim().toUpperCase() === 'CUSTOMER_INACTIVE'
 
 /**
  * Check if an error indicates canonical Customer Admin governance conflict.
@@ -337,6 +364,11 @@ export const isCustomerInactiveError = (err) =>
 export const isCanonicalAdminConflictError = (err) => {
   if (err?.status !== 409) return false
 
+  const reason = String(err?.details?.reason ?? '').trim().toUpperCase()
+  if (reason && CANONICAL_ADMIN_CONFLICT_REASONS.has(reason)) {
+    return true
+  }
+
   const details = err?.details
   if (
     details &&
@@ -346,8 +378,7 @@ export const isCanonicalAdminConflictError = (err) => {
     return true
   }
 
-  const message = String(err?.message ?? '')
-  return CANONICAL_ADMIN_CONFLICT_PATTERNS.some((pattern) => pattern.test(message))
+  return false
 }
 
 /**
@@ -358,16 +389,13 @@ export const isCanonicalAdminConflictError = (err) => {
  * @returns {string}
  */
 export const getCanonicalAdminConflictMessage = (err, operation = 'update_roles') => {
-  const message = String(err?.message ?? '').trim()
+  const reason = String(err?.details?.reason ?? '').trim().toUpperCase()
   const fallback =
     CANONICAL_ADMIN_CONFLICT_FALLBACKS[operation] ??
     CANONICAL_ADMIN_CONFLICT_FALLBACKS.update_roles
+  const reasonMessage = CANONICAL_ADMIN_CONFLICT_REASON_MESSAGES[operation]?.[reason]
 
-  if (message && !GENERIC_CONFLICT_MESSAGE_PATTERN.test(message)) {
-    return message
-  }
-
-  return fallback
+  return appendRequestReference(reasonMessage ?? fallback, err?.requestId)
 }
 
 /**

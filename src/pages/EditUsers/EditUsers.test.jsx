@@ -51,6 +51,7 @@ beforeEach(() => {
 /** Customer admin user shape */
 const customerAdminUser = {
   id: 'user-1',
+  _id: 'user-1',
   email: 'admin@acme.com',
   name: 'Admin User',
   isActive: true,
@@ -71,6 +72,34 @@ const noCustomerUser = {
   memberships: [],
   tenantMemberships: [],
   vmfGrants: [],
+}
+
+const canonicalManagedUser = {
+  _id: 'user-1',
+  email: 'owner@acme.com',
+  name: 'Owner User',
+  isActive: true,
+  isCanonicalAdmin: true,
+  memberships: [
+    { customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'TRUSTED' },
+}
+
+const standardManagedUser = {
+  _id: 'user-2',
+  email: 'member@acme.com',
+  name: 'Member User',
+  isActive: true,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'UNTRUSTED' },
 }
 
 /** Create a fresh store */
@@ -131,7 +160,12 @@ function renderEditUsers(store) {
 describe('EditUsers page', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    mockUseUsers.mockReturnValue(buildUseUsersResult())
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, standardManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      }),
+    )
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [{ _id: 'ten-1', name: 'Alpha Tenant' }],
@@ -169,7 +203,9 @@ describe('EditUsers page', () => {
 
   it('renders the status filter', () => {
     renderEditUsers()
-    expect(screen.getByLabelText(/status/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', { name: /status/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders the users table region', () => {
@@ -236,6 +272,28 @@ describe('EditUsers page', () => {
     const statusElements = screen.getAllByText('Status')
     expect(statusElements.length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Trust')).toBeInTheDocument()
+  })
+
+  it('shows governance guidance and canonical-admin visibility before mutating actions', () => {
+    renderEditUsers()
+
+    expect(
+      screen.getAllByLabelText(/customer admin governance guidance/i).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(
+      screen.getByText(/generic role edits do not transfer ownership/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Canonical Admin')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /explain canonical admin/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Canonical')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /transfer ownership member user/i }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /transfer ownership owner user/i }),
+    ).toBeDisabled()
   })
 
   it('opens Create User wizard when button is clicked', async () => {

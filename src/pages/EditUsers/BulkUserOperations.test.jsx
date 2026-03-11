@@ -75,6 +75,9 @@ describe('BulkUserOperations', () => {
   it('shows input mode select when operation is create', () => {
     renderDialog()
     expect(screen.getByLabelText(/input mode/i)).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/customer admin governance guidance/i),
+    ).toBeInTheDocument()
   })
 
   it('shows roles and tenant visibility inputs when operation is update', async () => {
@@ -85,6 +88,9 @@ describe('BulkUserOperations', () => {
 
     expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant visibility/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/supported bulk roles: tenant_admin, user\./i),
+    ).toBeInTheDocument()
   })
 
   it('shows disable warning when operation is disable', async () => {
@@ -162,6 +168,27 @@ describe('BulkUserOperations', () => {
     await waitFor(() => {
       expect(bulkCreateMock).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('blocks bulk create preview when rows include CUSTOMER_ADMIN', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.selectOptions(
+      screen.getByLabelText(/input mode/i),
+      'manual',
+    )
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Jane Doe,jane@example.com,CUSTOMER_ADMIN,tenant-1',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /bulk operations cannot assign or remove customer admin ownership/i,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
+    expect(screen.queryByText(/preview \(1\)/i)).not.toBeInTheDocument()
   })
 
   it('shows batch results after successful create', async () => {
@@ -243,7 +270,7 @@ describe('BulkUserOperations', () => {
 
   // ---- Bulk Update ----
 
-  it('calls bulkUpdateUsers with roles', async () => {
+  it('calls bulkUpdateUsers with supported roles', async () => {
     const user = userEvent.setup()
     bulkUpdateMock.mockReturnValue({
       unwrap: async () => ({
@@ -255,12 +282,40 @@ describe('BulkUserOperations', () => {
     renderDialog({ selectedUserIds: ['u1'] })
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
-    await user.type(screen.getByLabelText(/roles/i), 'CUSTOMER_ADMIN')
+    await user.type(screen.getByLabelText(/roles/i), 'TENANT_ADMIN')
     await user.click(screen.getByRole('button', { name: /update selected/i }))
 
     await waitFor(() => {
       expect(bulkUpdateMock).toHaveBeenCalledTimes(1)
+      expect(bulkUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            users: [
+              {
+                userId: 'u1',
+                roles: ['TENANT_ADMIN'],
+              },
+            ],
+          },
+        }),
+      )
     })
+  })
+
+  it('blocks bulk update when roles include CUSTOMER_ADMIN', async () => {
+    const user = userEvent.setup()
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.type(screen.getByLabelText(/roles/i), 'CUSTOMER_ADMIN')
+    await user.click(screen.getByRole('button', { name: /update selected/i }))
+
+    expect(bulkUpdateMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /bulk operations cannot assign or remove customer admin ownership/i,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
   })
 
   // ---- Close / reset ----

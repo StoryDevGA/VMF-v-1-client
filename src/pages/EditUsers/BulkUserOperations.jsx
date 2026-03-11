@@ -48,7 +48,47 @@ const SOURCE_OPTIONS = [
 
 const BULK_LIMIT = 100
 
-const AVAILABLE_ROLES = ['CUSTOMER_ADMIN', 'TENANT_ADMIN', 'USER']
+const BULK_EDITABLE_ROLES = ['TENANT_ADMIN', 'USER']
+const GOVERNED_CUSTOMER_ADMIN_ROLE = 'CUSTOMER_ADMIN'
+
+const BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE =
+  'Bulk operations cannot assign or remove Customer Admin ownership. Use Transfer Ownership from Edit Users after the replacement user is active.'
+
+const BULK_SUPPORTED_ROLES_MESSAGE =
+  `Supported bulk roles: ${BULK_EDITABLE_ROLES.join(', ')}.`
+
+function BulkGovernanceNote() {
+  return (
+    <div
+      className="bulk-users__governance"
+      role="note"
+      aria-label="Customer Admin governance guidance"
+    >
+      <p className="bulk-users__governance-title">Customer Admin governance</p>
+      <p className="bulk-users__governance-text">{BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE}</p>
+      <p className="bulk-users__governance-text">{BULK_SUPPORTED_ROLES_MESSAGE}</p>
+    </div>
+  )
+}
+
+function getRestrictedBulkRoleRows(users, rowOffset = 1) {
+  return users.flatMap((user, index) =>
+    user.roles.includes(GOVERNED_CUSTOMER_ADMIN_ROLE) ? [index + rowOffset] : [],
+  )
+}
+
+function getBulkGovernanceErrorMessage(rowNumbers = []) {
+  if (rowNumbers.length === 0) {
+    return BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE
+  }
+
+  const rowLabel =
+    rowNumbers.length === 1
+      ? `row ${rowNumbers[0]}`
+      : `rows ${rowNumbers.join(', ')}`
+
+  return `Bulk operations cannot assign or remove Customer Admin ownership. Remove CUSTOMER_ADMIN from ${rowLabel} and retry. Use Transfer Ownership from Edit Users after the replacement user is active.`
+}
 
 function parseCsvLine(line) {
   const out = []
@@ -193,7 +233,9 @@ function BulkUserOperations({
     if (!file) return
     const content = await file.text()
     setCsvText(content)
+    setPreviewUsers([])
     setFieldError('')
+    setResultSummary(null)
   }, [])
 
   const parsePreview = useCallback(() => {
@@ -229,6 +271,13 @@ function BulkUserOperations({
           tenantVisibility: parseTenantVisibility(tenantVisibility),
         }
       })
+
+      const restrictedRoleRows = getRestrictedBulkRoleRows(users, 1)
+      if (restrictedRoleRows.length > 0) {
+        setFieldError(getBulkGovernanceErrorMessage(restrictedRoleRows))
+        setPreviewUsers([])
+        return
+      }
 
       setPreviewUsers(users)
       return
@@ -288,6 +337,13 @@ function BulkUserOperations({
         ),
       }
     })
+
+    const restrictedRoleRows = getRestrictedBulkRoleRows(users, 2)
+    if (restrictedRoleRows.length > 0) {
+      setFieldError(getBulkGovernanceErrorMessage(restrictedRoleRows))
+      setPreviewUsers([])
+      return
+    }
 
     setPreviewUsers(users)
   }, [sourceMode, manualText, csvText, mapping])
@@ -363,13 +419,20 @@ function BulkUserOperations({
 
   const runBulkUpdate = useCallback(async () => {
     if (!canRunUpdate) return
+    const roles = parseRoles(bulkRoles)
+    const tenantVisibility = parseTenantVisibility(bulkTenantVisibility)
+
+    if (roles.includes(GOVERNED_CUSTOMER_ADMIN_ROLE)) {
+      setFieldError(getBulkGovernanceErrorMessage())
+      setResultSummary(null)
+      return
+    }
+
     startProgress('Updating selected users...')
     setResultSummary(null)
+    setFieldError('')
 
     try {
-      const roles = parseRoles(bulkRoles)
-      const tenantVisibility = parseTenantVisibility(bulkTenantVisibility)
-
       const users = selectedUserIds.map((userId) => ({
         userId,
         ...(roles.length > 0 ? { roles } : {}),
@@ -507,6 +570,7 @@ function BulkUserOperations({
 
         {operation === 'create' && (
           <div className="bulk-users__panel">
+            <BulkGovernanceNote />
             <Select
               id="bulk-source-mode"
               label="Input mode"
@@ -515,6 +579,7 @@ function BulkUserOperations({
                 setSourceMode(event.target.value)
                 setPreviewUsers([])
                 setFieldError('')
+                setResultSummary(null)
               }}
               options={SOURCE_OPTIONS}
               disabled={isProcessing}
@@ -535,11 +600,16 @@ function BulkUserOperations({
                   id="bulk-csv-text"
                   label="CSV content"
                   value={csvText}
-                  onChange={(event) => setCsvText(event.target.value)}
+                  onChange={(event) => {
+                    setCsvText(event.target.value)
+                    setPreviewUsers([])
+                    setFieldError('')
+                    setResultSummary(null)
+                  }}
                   rows={7}
                   fullWidth
                   disabled={isProcessing}
-                  helperText="Include headers for name, email, roles, and optional tenantVisibility."
+                  helperText={`Include headers for name, email, roles, and optional tenantVisibility. ${BULK_SUPPORTED_ROLES_MESSAGE}`}
                 />
                 {headers.length > 0 && (
                   <div className="bulk-users__mapping">
@@ -547,9 +617,12 @@ function BulkUserOperations({
                       id="map-name"
                       label="Name column"
                       value={mapping.name}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setMapping((prev) => ({ ...prev, name: event.target.value }))
-                      }
+                        setPreviewUsers([])
+                        setFieldError('')
+                        setResultSummary(null)
+                      }}
                       options={[
                         { value: '', label: 'Select column' },
                         ...headers.map((header) => ({ value: header, label: header })),
@@ -560,9 +633,12 @@ function BulkUserOperations({
                       id="map-email"
                       label="Email column"
                       value={mapping.email}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setMapping((prev) => ({ ...prev, email: event.target.value }))
-                      }
+                        setPreviewUsers([])
+                        setFieldError('')
+                        setResultSummary(null)
+                      }}
                       options={[
                         { value: '', label: 'Select column' },
                         ...headers.map((header) => ({ value: header, label: header })),
@@ -573,9 +649,12 @@ function BulkUserOperations({
                       id="map-roles"
                       label="Roles column"
                       value={mapping.roles}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setMapping((prev) => ({ ...prev, roles: event.target.value }))
-                      }
+                        setPreviewUsers([])
+                        setFieldError('')
+                        setResultSummary(null)
+                      }}
                       options={[
                         { value: '', label: 'Select column' },
                         ...headers.map((header) => ({ value: header, label: header })),
@@ -586,12 +665,15 @@ function BulkUserOperations({
                       id="map-tenant-visibility"
                       label="Tenant visibility column (optional)"
                       value={mapping.tenantVisibility}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setMapping((prev) => ({
                           ...prev,
                           tenantVisibility: event.target.value,
                         }))
-                      }
+                        setPreviewUsers([])
+                        setFieldError('')
+                        setResultSummary(null)
+                      }}
                       options={[
                         { value: '', label: 'None' },
                         ...headers.map((header) => ({ value: header, label: header })),
@@ -606,11 +688,16 @@ function BulkUserOperations({
                 id="bulk-manual"
                 label="Manual rows"
                 value={manualText}
-                onChange={(event) => setManualText(event.target.value)}
+                onChange={(event) => {
+                  setManualText(event.target.value)
+                  setPreviewUsers([])
+                  setFieldError('')
+                  setResultSummary(null)
+                }}
                 rows={7}
                 fullWidth
                 disabled={isProcessing}
-                helperText="One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |)."
+                helperText={`One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${BULK_SUPPORTED_ROLES_MESSAGE}`}
               />
             )}
 
@@ -636,12 +723,17 @@ function BulkUserOperations({
 
         {operation === 'update' && (
           <div className="bulk-users__panel">
+            <BulkGovernanceNote />
             <Input
               id="bulk-update-roles"
               label="Roles (comma, pipe, or semicolon separated)"
               value={bulkRoles}
-              onChange={(event) => setBulkRoles(event.target.value)}
-              placeholder={AVAILABLE_ROLES.join(', ')}
+              onChange={(event) => {
+                setBulkRoles(event.target.value)
+                setFieldError('')
+                setResultSummary(null)
+              }}
+              placeholder={BULK_EDITABLE_ROLES.join(', ')}
               disabled={isProcessing}
               fullWidth
             />
@@ -649,7 +741,11 @@ function BulkUserOperations({
               id="bulk-update-tenants"
               label="Tenant visibility IDs (optional)"
               value={bulkTenantVisibility}
-              onChange={(event) => setBulkTenantVisibility(event.target.value)}
+              onChange={(event) => {
+                setBulkTenantVisibility(event.target.value)
+                setFieldError('')
+                setResultSummary(null)
+              }}
               placeholder="tenantA|tenantB"
               disabled={isProcessing}
               fullWidth

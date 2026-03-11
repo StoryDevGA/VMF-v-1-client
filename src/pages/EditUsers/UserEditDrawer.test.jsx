@@ -56,6 +56,17 @@ const disabledUser = {
   identityPlus: { trustStatus: 'REVOKED' },
 }
 
+const canonicalAdminUser = {
+  ...mockUser,
+  _id: 'user-3',
+  name: 'Owner User',
+  email: 'owner@acme.com',
+  isCanonicalAdmin: true,
+  memberships: [
+    { customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] },
+  ],
+}
+
 /** Create a fresh store */
 function createTestStore() {
   return configureStore({
@@ -137,9 +148,9 @@ describe('UserEditDrawer', () => {
 
   it('renders role checkboxes', () => {
     renderDrawer()
-    expect(screen.getByLabelText(/customer admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/customer admin/i)).not.toBeInTheDocument()
   })
 
   it('pre-checks the USER role from user memberships', () => {
@@ -160,6 +171,32 @@ describe('UserEditDrawer', () => {
     expect(
       screen.getByRole('button', { name: /save changes/i }),
     ).toBeInTheDocument()
+  })
+
+  it('shows governed customer-admin guidance and transfer action for eligible users', () => {
+    const onStartOwnershipTransfer = vi.fn()
+    renderDrawer({ hasCanonicalAdmin: true, onStartOwnershipTransfer })
+
+    expect(
+      screen.getByText(/customer admin ownership is managed through transfer ownership/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /transfer ownership to this user/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows canonical-admin protection guidance for the current owner', () => {
+    renderDrawer({ user: canonicalAdminUser, hasCanonicalAdmin: true })
+
+    expect(
+      screen.getByText(/generic role edits here do not add or remove the governed customer admin assignment/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/this user is the current canonical admin/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /transfer ownership to this user/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not render when user is null', () => {

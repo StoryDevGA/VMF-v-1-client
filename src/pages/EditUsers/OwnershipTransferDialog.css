@@ -1,0 +1,89 @@
+.ownership-transfer-dialog .dialog__body.ownership-transfer-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg, 1.5rem);
+}
+
+.ownership-transfer-dialog__title {
+  margin: 0;
+  font-size: var(--font-size-lg, 1.25rem);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+.ownership-transfer-dialog__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.ownership-transfer-dialog__summary {
+  display: grid;
+  gap: var(--spacing-md, 1rem);
+}
+
+.ownership-transfer-dialog__summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.25rem);
+  padding: var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) solid var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-secondary);
+}
+
+.ownership-transfer-dialog__summary-label {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.ownership-transfer-dialog__summary-value {
+  margin: 0;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-text-primary);
+}
+
+.ownership-transfer-dialog__summary-meta {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary);
+}
+
+.ownership-transfer-dialog__help {
+  margin: 0;
+  padding: var(--spacing-md, 1rem);
+  border-left: var(--border-width-medium, 2px) solid var(--color-primary);
+  border-radius: var(--border-radius-sm, 0.25rem);
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.ownership-transfer-dialog__step-up {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.ownership-transfer-dialog__error {
+  margin: 0;
+  color: var(--color-error);
+}
+
+.ownership-transfer-dialog__footer {
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+@media (min-width: 768px) {
+  .ownership-transfer-dialog__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (forced-colors: active) {
+  .ownership-transfer-dialog__summary-card,
+  .ownership-transfer-dialog__help {
+    border-color: CanvasText;
+  }
+}

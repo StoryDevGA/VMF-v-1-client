@@ -25,14 +25,27 @@ import {
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
 } from '../../utils/errors.js'
+import './UserEditDrawer.css'
 
 /** Available user roles */
-const AVAILABLE_ROLES = ['CUSTOMER_ADMIN', 'TENANT_ADMIN', 'USER']
+const EDITABLE_ROLES = ['TENANT_ADMIN', 'USER']
+
+const CUSTOMER_ADMIN_EDIT_GUIDANCE =
+  'Customer Admin ownership is governed separately. Generic role edits here do not add or remove the governed Customer Admin assignment.'
+
+const CUSTOMER_ADMIN_TRANSFER_GUIDANCE =
+  'Use Transfer Ownership when this user should become the Canonical Admin.'
 
 /**
  * UserEditDrawer Component
  */
-function UserEditDrawer({ open, onClose, user, customerId }) {
+function UserEditDrawer({
+  open,
+  onClose,
+  user,
+  onStartOwnershipTransfer,
+  hasCanonicalAdmin = false,
+}) {
   const { addToast } = useToaster()
   const [updateUserMutation, { isLoading }] = useUpdateUserMutation()
 
@@ -125,6 +138,22 @@ function UserEditDrawer({ open, onClose, user, customerId }) {
 
   if (!user) return null
 
+  const hasGovernedCustomerAdminRole =
+    user.isCanonicalAdmin || selectedRoles.includes('CUSTOMER_ADMIN')
+  const canStartOwnershipTransfer =
+    Boolean(onStartOwnershipTransfer) &&
+    hasCanonicalAdmin &&
+    !user.isCanonicalAdmin &&
+    user.isActive
+
+  const transferAvailabilityMessage = !hasCanonicalAdmin
+    ? 'Ownership transfer is unavailable until a Canonical Admin is present for this customer.'
+    : user.isCanonicalAdmin
+      ? 'This user is the current Canonical Admin. Choose another active user to transfer ownership.'
+      : !user.isActive
+        ? 'Only active users can receive customer ownership.'
+        : CUSTOMER_ADMIN_TRANSFER_GUIDANCE
+
   return (
     <Dialog open={open} onClose={onClose} size="md">
       <Dialog.Header>
@@ -176,8 +205,31 @@ function UserEditDrawer({ open, onClose, user, customerId }) {
 
         {/* Role editing */}
         <fieldset className="user-edit-drawer__fieldset">
-          <legend className="user-edit-drawer__legend">Roles</legend>
-          {AVAILABLE_ROLES.map((role) => (
+          <legend className="user-edit-drawer__legend">Editable Roles</legend>
+          <div className="user-edit-drawer__governance" role="note">
+            <p className="user-edit-drawer__governance-title">Customer Admin governance</p>
+            <p className="user-edit-drawer__governance-text">
+              {hasGovernedCustomerAdminRole
+                ? CUSTOMER_ADMIN_EDIT_GUIDANCE
+                : 'Customer Admin ownership is managed through Transfer Ownership rather than this role editor.'}
+            </p>
+            <p className="user-edit-drawer__governance-text">
+              {transferAvailabilityMessage}
+            </p>
+            {canStartOwnershipTransfer ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  onStartOwnershipTransfer?.(user)
+                  onClose?.()
+                }}
+              >
+                Transfer Ownership to This User
+              </Button>
+            ) : null}
+          </div>
+          {EDITABLE_ROLES.map((role) => (
             <Tickbox
               key={role}
               id={`edit-role-${role}`}

@@ -317,11 +317,28 @@ describe('errors', () => {
       ).toBe(true)
     })
 
-    it('returns false for non-403 or unrelated codes', () => {
+    it('detects CUSTOMER_INACTIVE from details.reason', () => {
+      expect(
+        isCustomerInactiveError({
+          status: 403,
+          code: 'AUTHZ_FORBIDDEN',
+          details: { reason: 'CUSTOMER_INACTIVE' },
+        }),
+      ).toBe(true)
+    })
+
+    it('returns false for unrelated codes and reasons', () => {
       expect(
         isCustomerInactiveError({ status: 401, code: 'AUTH_CUSTOMER_INACTIVE' }),
-      ).toBe(false)
+      ).toBe(true)
       expect(isCustomerInactiveError({ status: 403, code: 'FORBIDDEN' })).toBe(false)
+      expect(
+        isCustomerInactiveError({
+          status: 403,
+          code: 'AUTHZ_FORBIDDEN',
+          details: { reason: 'TENANT_DISABLED' },
+        }),
+      ).toBe(false)
     })
 
     it('handles null/undefined safely', () => {
@@ -344,13 +361,13 @@ describe('errors', () => {
       ).toBe(true)
     })
 
-    it('detects canonical conflict from backend message patterns', () => {
+    it('detects canonical conflict from stable reason codes', () => {
       expect(
         isCanonicalAdminConflictError({
           status: 409,
           code: 'CONFLICT',
-          message:
-            'Cannot assign a second CUSTOMER_ADMIN while an active canonical admin exists. Use replace admin endpoint.',
+          message: 'Generic conflict message from server.',
+          details: { reason: 'SECOND_CUSTOMER_ADMIN_BLOCKED' },
         }),
       ).toBe(true)
     })
@@ -367,17 +384,23 @@ describe('errors', () => {
   })
 
   describe('getCanonicalAdminConflictMessage', () => {
-    it('uses backend-specific message when available', () => {
-      const err = {
-        status: 409,
-        code: 'CONFLICT',
-        message:
-          'Cannot remove CUSTOMER_ADMIN role from the canonical active customer admin. Replace admin first.',
-      }
-      expect(getCanonicalAdminConflictMessage(err, 'update_roles')).toBe(err.message)
+    it('maps governance reasons to ownership-transfer guidance', () => {
+      expect(
+        getCanonicalAdminConflictMessage(
+          {
+            status: 409,
+            code: 'CONFLICT',
+            requestId: 'req-governance-1',
+            details: { reason: 'CANONICAL_ADMIN_ROLE_REMOVAL_BLOCKED' },
+          },
+          'update_roles',
+        ),
+      ).toBe(
+        'You cannot remove the governed Customer Admin role here. Transfer ownership first. (Ref: req-governance-1)',
+      )
     })
 
-    it('falls back to contextual guidance when message is generic', () => {
+    it('falls back to contextual guidance when no governance reason is present', () => {
       expect(
         getCanonicalAdminConflictMessage(
           {
@@ -388,7 +411,7 @@ describe('errors', () => {
           'disable',
         ),
       ).toBe(
-        'This user is the canonical Customer Admin of an active customer. Replace admin first.',
+        'This user is the Canonical Admin for an active customer. Transfer ownership before disabling access.',
       )
     })
   })

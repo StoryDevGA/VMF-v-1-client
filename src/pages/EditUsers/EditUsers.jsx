@@ -19,8 +19,10 @@ import { Status } from '../../components/Status'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Spinner } from '../../components/Spinner'
+import { Tooltip } from '../../components/Tooltip'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
+import { MdInfoOutline } from 'react-icons/md'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
@@ -32,6 +34,7 @@ import {
 import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
 import BulkUserOperations from './BulkUserOperations'
+import OwnershipTransferDialog from './OwnershipTransferDialog'
 import './EditUsers.css'
 
 /** Debounce delay for search input (ms) */
@@ -43,6 +46,37 @@ const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'disabled', label: 'Disabled' },
 ]
+
+const CANONICAL_ADMIN_TOOLTIP_TEXT =
+  'Canonical Admin identifies the governed owner for this customer. Ownership changes use the dedicated transfer workflow.'
+
+const CUSTOMER_ADMIN_GOVERNANCE_NOTE =
+  'Canonical Admin marks the governed owner for this customer. Create or update the replacement user first, then use Transfer Ownership from that user\'s row. Generic role edits do not transfer ownership.'
+
+function CanonicalAdminHeaderLabel() {
+  return (
+    <span className="edit-users__canonical-header">
+      <span>Canonical Admin</span>
+      <Tooltip
+        content={CANONICAL_ADMIN_TOOLTIP_TEXT}
+        position="bottom"
+        align="end"
+        openDelay={0}
+        closeDelay={0}
+        className="edit-users__canonical-tooltip"
+      >
+        <button
+          type="button"
+          className="edit-users__canonical-help-trigger"
+          aria-label="Explain Canonical Admin"
+        >
+          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <span className="sr-only">Explain Canonical Admin</span>
+        </button>
+      </Tooltip>
+    </span>
+  )
+}
 
 function EditUsersBoundaryState({
   title = 'Edit Users',
@@ -127,6 +161,7 @@ function EditUsers() {
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [showBulkOperations, setShowBulkOperations] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
   const [selectedRows, setSelectedRows] = useState(new Set())
   const previousContextKeyRef = useRef(`${customerId ?? ''}::${tenantId ?? ''}`)
@@ -149,6 +184,7 @@ function EditUsers() {
     setShowCreateWizard(false)
     setShowBulkOperations(false)
     setEditingUser(null)
+    setOwnershipTransferTarget(null)
     setConfirmAction(null)
     setSelectedRows(new Set())
     setSearchInput('')
@@ -303,6 +339,20 @@ function EditUsers() {
           />
         ),
       },
+      {
+        key: 'isCanonicalAdmin',
+        label: <CanonicalAdminHeaderLabel />,
+        mobileLabel: 'Canonical Admin',
+        width: '220px',
+        render: (_value, row) =>
+          row?.isCanonicalAdmin
+            ? (
+              <Status size="sm" variant="info" className="edit-users__canonical-status">
+                Canonical
+              </Status>
+            )
+            : <span className="edit-users__canonical-empty">--</span>,
+      },
     ],
     [],
   )
@@ -321,6 +371,11 @@ function EditUsers() {
     [tableData],
   )
 
+  const canonicalAdminUser = useMemo(
+    () => tableData.find((row) => row?.isCanonicalAdmin) ?? null,
+    [tableData],
+  )
+
   const selectedRowsSafe = useMemo(
     () => new Set([...selectedRows].filter((id) => visibleUserIds.has(id))),
     [selectedRows, visibleUserIds],
@@ -330,11 +385,19 @@ function EditUsers() {
   const actions = useMemo(
     () => [
       { label: 'Edit', variant: 'ghost' },
+      {
+        label: 'Transfer Ownership',
+        variant: 'ghost',
+        disabled: (row) =>
+          !canonicalAdminUser ||
+          !row?.isActive ||
+          Boolean(row?.isCanonicalAdmin),
+      },
       { label: 'Disable', variant: 'ghost' },
       { label: 'Delete', variant: 'ghost' },
       { label: 'Resend Invitation', variant: 'ghost' },
     ],
-    [],
+    [canonicalAdminUser],
   )
 
   const handleRowAction = useCallback(
@@ -342,6 +405,10 @@ function EditUsers() {
       switch (label) {
         case 'Edit':
           setEditingUser(row)
+          break
+        case 'Transfer Ownership':
+          setEditingUser(null)
+          setOwnershipTransferTarget(row)
           break
         case 'Disable':
           if (!row.isActive) {
@@ -489,6 +556,15 @@ function EditUsers() {
               />
             )}
 
+            <div
+              className="edit-users__governance-note"
+              role="note"
+              aria-label="Customer Admin governance guidance"
+            >
+              <p className="edit-users__governance-title">Customer Admin governance</p>
+              <p className="edit-users__governance-text">{CUSTOMER_ADMIN_GOVERNANCE_NOTE}</p>
+            </div>
+
             {listUsersAppError && (
               <ErrorSupportPanel
                 error={listUsersAppError}
@@ -593,7 +669,19 @@ function EditUsers() {
         open={!!editingUser}
         onClose={() => setEditingUser(null)}
         user={editingUser}
+        onStartOwnershipTransfer={(user) => {
+          setEditingUser(null)
+          setOwnershipTransferTarget(user)
+        }}
+        hasCanonicalAdmin={Boolean(canonicalAdminUser)}
+      />
+
+      <OwnershipTransferDialog
+        open={!!ownershipTransferTarget}
+        onClose={() => setOwnershipTransferTarget(null)}
         customerId={customerId}
+        currentCanonicalUser={canonicalAdminUser}
+        targetUser={ownershipTransferTarget}
       />
 
       {/* Confirm action dialog */}
