@@ -92,6 +92,25 @@ export const hasCustomerAccess = (user, customerId) => {
   return getUserCustomerRoles(user, customerId).length > 0
 }
 
+/**
+ * Check whether the user holds a specific role for any customer
+ * membership.
+ *
+ * @param {Object} user
+ * @param {string} role
+ * @returns {boolean}
+ */
+export const hasAnyCustomerRole = (user, role) => {
+  if (!user?.memberships || !role) return false
+
+  return user.memberships.some(
+    (membership) =>
+      membership?.customerId !== null
+      && membership?.customerId !== undefined
+      && (membership.roles ?? []).includes(role),
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /*  Tenant                                                            */
 /* ------------------------------------------------------------------ */

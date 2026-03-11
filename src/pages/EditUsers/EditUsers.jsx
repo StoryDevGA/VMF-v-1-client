@@ -8,13 +8,16 @@
  * Requires CUSTOMER_ADMIN role.
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
 import { Table } from '../../components/Table'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { Dialog } from '../../components/Dialog'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Spinner } from '../../components/Spinner'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
@@ -41,15 +44,56 @@ const STATUS_OPTIONS = [
   { value: 'disabled', label: 'Disabled' },
 ]
 
+function EditUsersBoundaryState({
+  title = 'Edit Users',
+  message,
+  actions = null,
+  isLoading = false,
+}) {
+  return (
+    <section className="edit-users container" aria-label="Edit Users">
+      <header className="edit-users__header">
+        <h1 className="edit-users__title">{title}</h1>
+      </header>
+
+      <Fieldset className="edit-users__fieldset">
+        <Fieldset.Legend className="sr-only">Edit users context state</Fieldset.Legend>
+        <Card variant="elevated" className="edit-users__card edit-users__card--state">
+          <Card.Body className="edit-users__card-body edit-users__card-body--state">
+            {isLoading ? (
+              <div className="edit-users__state-loading" role="status" aria-live="polite">
+                <Spinner size="sm" />
+                <span>{message}</span>
+              </div>
+            ) : (
+              <p className="edit-users__state-message">{message}</p>
+            )}
+            {actions}
+          </Card.Body>
+        </Card>
+      </Fieldset>
+    </section>
+  )
+}
+
 /**
  * EditUsers Page Component
  */
 function EditUsers() {
   const { addToast } = useToaster()
-  const { isSuperAdmin } = useAuthorization()
+  const { isSuperAdmin, accessibleCustomerIds } = useAuthorization()
 
   /* ---- Resolve customer / tenant context from shared store ---- */
-  const { customerId, tenantId, tenantName } = useTenantContext()
+  const {
+    customerId,
+    tenantId,
+    tenantName,
+    resolvedTenantName,
+    isResolvingSelectedTenantContext,
+    hasInvalidTenantContext,
+    tenantsError,
+    setTenantId,
+  } = useTenantContext()
 
   /* ---- User list hook ---- */
   const {
@@ -57,6 +101,7 @@ function EditUsers() {
     pagination,
     isLoading,
     isFetching,
+    error: usersError,
     setSearch,
     statusFilter,
     setStatusFilter,
@@ -65,7 +110,7 @@ function EditUsers() {
     disableUser,
     deleteUser,
     resendInvitation,
-  } = useUsers(customerId, { tenantId })
+  } = useUsers(customerId)
 
   /* ---- Debounced search ---- */
   const [searchInput, setSearchInput] = useState('')
@@ -84,6 +129,33 @@ function EditUsers() {
   const [editingUser, setEditingUser] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
   const [selectedRows, setSelectedRows] = useState(new Set())
+  const previousContextKeyRef = useRef(`${customerId ?? ''}::${tenantId ?? ''}`)
+
+  const listUsersAppError = useMemo(
+    () => (usersError ? normalizeError(usersError) : null),
+    [usersError],
+  )
+
+  const tenantContextAppError = useMemo(
+    () => (tenantsError ? normalizeError(tenantsError) : null),
+    [tenantsError],
+  )
+
+  useEffect(() => {
+    const nextContextKey = `${customerId ?? ''}::${tenantId ?? ''}`
+    if (previousContextKeyRef.current === nextContextKey) return
+
+    previousContextKeyRef.current = nextContextKey
+    setShowCreateWizard(false)
+    setShowBulkOperations(false)
+    setEditingUser(null)
+    setConfirmAction(null)
+    setSelectedRows(new Set())
+    setSearchInput('')
+    setSearch('')
+    setStatusFilter('')
+    setPage(1)
+  }, [customerId, tenantId, setPage, setSearch, setStatusFilter])
 
   /* ---- Action handlers ---- */
 
@@ -320,26 +392,52 @@ function EditUsers() {
     setPage((p) => Math.min(pagination.totalPages, p + 1))
   }, [setPage, pagination.totalPages])
 
-  /* ---- No customer ID guard ---- */
-  if (!customerId && !isSuperAdmin) {
+  /* ---- Context guards ---- */
+  if (!customerId && isSuperAdmin) {
     return (
-      <section className="edit-users container" aria-label="Edit Users">
-        <p className="edit-users__empty">
-          No customer context available. Please contact your administrator.
-        </p>
-      </section>
+      <EditUsersBoundaryState
+        message="Please select a customer from the dashboard context panel to manage users."
+      />
     )
   }
 
-  if (!customerId && isSuperAdmin) {
+  if (!customerId && accessibleCustomerIds.length > 0) {
     return (
-      <section className="edit-users container" aria-label="Edit Users">
-        <h1 className="edit-users__title">Edit Users</h1>
-        <p className="edit-users__empty">
-          Please select a customer from the dashboard context panel to manage
-          users.
-        </p>
-      </section>
+      <EditUsersBoundaryState
+        message="Resolving your customer context…"
+        isLoading
+      />
+    )
+  }
+
+  if (!customerId) {
+    return (
+      <EditUsersBoundaryState
+        message="No customer context available. Please contact your administrator."
+      />
+    )
+  }
+
+  if (hasInvalidTenantContext) {
+    return (
+      <EditUsersBoundaryState
+        message={
+          tenantName
+            ? `The selected tenant context "${tenantName}" is no longer available for this customer.`
+            : 'The selected tenant context is no longer available for this customer.'
+        }
+        actions={(
+          <div className="edit-users__state-actions">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTenantId(null, null)}
+            >
+              Clear Tenant Scope
+            </Button>
+          </div>
+        )}
+      />
     )
   }
 
@@ -366,91 +464,115 @@ function EditUsers() {
         </div>
       </header>
 
-      {/* Tenant scope indicator */}
-      {tenantId && tenantName && (
-        <p className="edit-users__scope-indicator" role="status">
-          Showing users for tenant: <strong>{tenantName}</strong>
-        </p>
-      )}
+      <Fieldset className="edit-users__fieldset">
+        <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>
+        <Card variant="elevated" className="edit-users__card">
+          <Card.Body className="edit-users__card-body">
+            {tenantId && (
+              <p className="edit-users__scope-indicator" role="status">
+                {isResolvingSelectedTenantContext
+                  ? 'Checking selected tenant context…'
+                  : (
+                    <>
+                      Selected tenant context:{' '}
+                      <strong>{resolvedTenantName ?? tenantName ?? tenantId}</strong>. The
+                      current user list remains scoped to the active customer.
+                    </>
+                  )}
+              </p>
+            )}
 
-      {/* Toolbar: search + filter */}
-      <div className="edit-users__toolbar">
-        <div className="edit-users__search">
-          <Input
-            id="user-search"
-            type="search"
-            label="Search"
-            placeholder="Search by name or email…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            fullWidth
-          />
-        </div>
-        <div className="edit-users__filter">
-          <Select
-            id="user-status-filter"
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setPage(1)
-            }}
-            options={STATUS_OPTIONS}
-          />
-        </div>
-      </div>
+            {tenantContextAppError && (
+              <ErrorSupportPanel
+                error={tenantContextAppError}
+                context="edit-users-tenant-context"
+              />
+            )}
 
-      {/* Data table */}
-      <div className="edit-users__table">
-        <Table
-          columns={columns}
-          data={tableData}
-          variant="striped"
-          hoverable
-          selectable
-          selectedRows={selectedRowsSafe}
-          onSelectChange={setSelectedRows}
-          loading={isLoading}
-          loadingRows={5}
-          actions={actions}
-          onRowAction={handleRowAction}
-          emptyMessage="No users found."
-          ariaLabel="Users table"
-        />
-      </div>
+            {listUsersAppError && (
+              <ErrorSupportPanel
+                error={listUsersAppError}
+                context="edit-users-list"
+              />
+            )}
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="edit-users__pagination">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrevPage}
-            disabled={page <= 1 || isFetching}
-          >
-            Previous
-          </Button>
-          <span className="edit-users__pagination-info">
-            Page {pagination.page} of {pagination.totalPages}
-            {pagination.total > 0 && ` (${pagination.total} users)`}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNextPage}
-            disabled={page >= pagination.totalPages || isFetching}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+            <div className="edit-users__toolbar">
+              <div className="edit-users__search">
+                <Input
+                  id="user-search"
+                  type="search"
+                  label="Search"
+                  placeholder="Search by name or email…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  fullWidth
+                />
+              </div>
+              <div className="edit-users__filter">
+                <Select
+                  id="user-status-filter"
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value)
+                    setPage(1)
+                  }}
+                  options={STATUS_OPTIONS}
+                />
+              </div>
+            </div>
 
-      {/* Fetching indicator */}
-      {isFetching && !isLoading && (
-        <div className="edit-users__fetching" role="status" aria-label="Updating">
-          <Spinner size="sm" />
-        </div>
-      )}
+            <div className="edit-users__table">
+              <Table
+                columns={columns}
+                data={tableData}
+                variant="striped"
+                hoverable
+                selectable
+                selectedRows={selectedRowsSafe}
+                onSelectChange={setSelectedRows}
+                loading={isLoading}
+                loadingRows={5}
+                actions={actions}
+                onRowAction={handleRowAction}
+                emptyMessage="No users found."
+                ariaLabel="Users table"
+              />
+            </div>
+
+            {pagination.totalPages > 1 && (
+              <div className="edit-users__pagination">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={page <= 1 || isFetching}
+                >
+                  Previous
+                </Button>
+                <span className="edit-users__pagination-info">
+                  Page {pagination.page} of {pagination.totalPages}
+                  {pagination.total > 0 && ` (${pagination.total} users)`}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={page >= pagination.totalPages || isFetching}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+
+            {isFetching && !isLoading && (
+              <div className="edit-users__fetching" role="status" aria-label="Updating">
+                <Spinner size="sm" />
+              </div>
+            )}
+          </Card.Body>
+        </Card>
+      </Fieldset>
 
       {/* Create User Wizard */}
       <CreateUserWizard

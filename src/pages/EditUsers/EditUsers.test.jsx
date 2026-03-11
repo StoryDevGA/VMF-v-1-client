@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -18,7 +18,24 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
-import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
+import tenantContextReducer, { setTenant } from '../../store/slices/tenantContextSlice.js'
+
+const {
+  mockUseUsers,
+  mockUseListTenantsQuery,
+} = vi.hoisted(() => ({
+  mockUseUsers: vi.fn(),
+  mockUseListTenantsQuery: vi.fn(),
+}))
+
+vi.mock('../../hooks/useUsers.js', () => ({
+  useUsers: (...args) => mockUseUsers(...args),
+}))
+
+vi.mock('../../store/api/tenantApi.js', () => ({
+  useListTenantsQuery: (...args) => mockUseListTenantsQuery(...args),
+}))
+
 import EditUsers from './EditUsers'
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
@@ -69,6 +86,25 @@ function createTestStore(preloadedState) {
   })
 }
 
+function buildUseUsersResult(overrides = {}) {
+  return {
+    users: [],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    setSearch: vi.fn(),
+    statusFilter: '',
+    setStatusFilter: vi.fn(),
+    page: 1,
+    setPage: vi.fn(),
+    disableUser: vi.fn(),
+    deleteUser: vi.fn(),
+    resendInvitation: vi.fn(),
+    ...overrides,
+  }
+}
+
 /** Render wrapper with all providers */
 function renderEditUsers(store) {
   const testStore =
@@ -95,6 +131,14 @@ function renderEditUsers(store) {
 describe('EditUsers page', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    mockUseUsers.mockReturnValue(buildUseUsersResult())
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [{ _id: 'ten-1', name: 'Alpha Tenant' }],
+      },
+      isLoading: false,
+      error: undefined,
+    })
   })
 
   it('renders the page heading', () => {
@@ -143,6 +187,46 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows tenant context guidance without pretending the list is tenant-filtered', () => {
+    const store = createTestStore({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-1', tenantName: 'Alpha Tenant' },
+    })
+
+    renderEditUsers(store)
+
+    expect(
+      screen.getByText(/selected tenant context:/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/current user list remains scoped to the active customer/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a wrong-context state when the selected tenant is not valid for the active customer', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [{ _id: 'ten-1', name: 'Alpha Tenant' }],
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const store = createTestStore({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-404', tenantName: 'Ghost Tenant' },
+    })
+
+    renderEditUsers(store)
+
+    expect(
+      screen.getByText(/selected tenant context "ghost tenant" is no longer available/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /clear tenant scope/i }),
+    ).toBeInTheDocument()
+  })
+
   it('renders table with column headers', () => {
     renderEditUsers()
     expect(screen.getByText('Name')).toBeInTheDocument()
@@ -178,5 +262,51 @@ describe('EditUsers page', () => {
         screen.getByRole('heading', { name: /bulk operations/i }),
       ).toBeInTheDocument()
     })
+  })
+
+  it('resets transient UI state when tenant context changes at runtime', async () => {
+    const user = userEvent.setup()
+    const setSearch = vi.fn()
+    const setStatusFilter = vi.fn()
+    const setPage = vi.fn()
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        setSearch,
+        setStatusFilter,
+        setPage,
+      }),
+    )
+
+    const store = createTestStore({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    renderEditUsers(store)
+
+    await user.type(screen.getByLabelText(/search/i), 'alice')
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /create user/i }),
+      ).toBeInTheDocument()
+    })
+
+    act(() => {
+      store.dispatch(setTenant({ tenantId: 'ten-1', tenantName: 'Alpha Tenant' }))
+    })
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /create user/i }),
+      ).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByLabelText(/search/i)).toHaveValue('')
+    expect(setSearch).toHaveBeenCalledWith('')
+    expect(setStatusFilter).toHaveBeenCalledWith('')
+    expect(setPage).toHaveBeenCalledWith(1)
   })
 })

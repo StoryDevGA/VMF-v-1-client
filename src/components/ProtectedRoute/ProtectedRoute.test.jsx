@@ -19,6 +19,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
+import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { ProtectedRoute } from './ProtectedRoute'
 
 /* ------------------------------------------------------------------ */
@@ -80,6 +81,7 @@ function createTestStore(preloadedState) {
   return configureStore({
     reducer: {
       auth: authReducer,
+      tenantContext: tenantContextReducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (gDM) => gDM().concat(baseApi.middleware),
@@ -92,11 +94,14 @@ function renderProtected({
   requiredRole,
   requiredPlatformRole,
   requiredCustomerRole,
+  requiredSelectedCustomerRole,
   requiredTenantRole,
   unauthorizedRedirect,
+  tenantContextState,
 } = {}) {
   const store = createTestStore({
     auth: authState ?? { user: null, status: 'idle' },
+    tenantContext: tenantContextState,
   })
 
   return render(
@@ -111,6 +116,7 @@ function renderProtected({
                 requiredRole={requiredRole}
                 requiredPlatformRole={requiredPlatformRole}
                 requiredCustomerRole={requiredCustomerRole}
+                requiredSelectedCustomerRole={requiredSelectedCustomerRole}
                 requiredTenantRole={requiredTenantRole}
                 unauthorizedRedirect={unauthorizedRedirect}
               />
@@ -206,6 +212,34 @@ describe('ProtectedRoute', () => {
     renderProtected({
       authState: { user: customerAdminUser, status: 'authenticated' },
       requiredCustomerRole: { customerId: CUSTOMER_ID, role: 'CUSTOMER_ADMIN' },
+    })
+    expect(screen.getByText('Protected Content')).toBeInTheDocument()
+  })
+
+  // --- requiredSelectedCustomerRole ---
+
+  it('renders when requiredSelectedCustomerRole is satisfied for the selected customer', () => {
+    renderProtected({
+      authState: { user: customerAdminUser, status: 'authenticated' },
+      tenantContextState: { customerId: CUSTOMER_ID, tenantId: null, tenantName: null },
+      requiredSelectedCustomerRole: 'CUSTOMER_ADMIN',
+    })
+    expect(screen.getByText('Protected Content')).toBeInTheDocument()
+  })
+
+  it('redirects when selected customer context does not match a customer-admin membership', () => {
+    renderProtected({
+      authState: { user: customerAdminUser, status: 'authenticated' },
+      tenantContextState: { customerId: 'other-customer', tenantId: null, tenantName: null },
+      requiredSelectedCustomerRole: 'CUSTOMER_ADMIN',
+    })
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+  })
+
+  it('falls back to any customer-admin membership when customer context is not initialized', () => {
+    renderProtected({
+      authState: { user: customerAdminUser, status: 'authenticated' },
+      requiredSelectedCustomerRole: 'CUSTOMER_ADMIN',
     })
     expect(screen.getByText('Protected Content')).toBeInTheDocument()
   })

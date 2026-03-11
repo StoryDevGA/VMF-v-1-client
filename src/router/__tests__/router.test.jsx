@@ -26,6 +26,18 @@ vi.mock('../../pages/SuperAdminDeniedAccessLogs', () => ({
   default: () => <h1>Denied Access Logs</h1>,
 }))
 
+vi.mock('../../pages/EditUsers/EditUsers', () => ({
+  default: () => <h1>Edit Users</h1>,
+}))
+
+vi.mock('../../pages/MaintainTenants/MaintainTenants', () => ({
+  default: () => <h1>Maintain Tenants</h1>,
+}))
+
+vi.mock('../../pages/Dashboard', () => ({
+  default: () => <h1>Dashboard</h1>,
+}))
+
 import { router } from '../index'
 
 const ROUTE_TEST_TIMEOUT = 15000
@@ -112,6 +124,86 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should require the customer-admin route guard on edit-users and maintain-tenants', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
+      const customerAppRoute = appRoute?.children?.[0]
+      const administrationRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'administration',
+      )
+      const guardedAdminGroup = administrationRoute?.children?.find(
+        (route) => route.element?.props?.requiredSelectedCustomerRole === 'CUSTOMER_ADMIN',
+      )
+      const guardedPaths = (guardedAdminGroup?.children ?? []).map((route) => route.path)
+
+      expect(guardedAdminGroup?.element?.props?.requiredSelectedCustomerRole).toBe(
+        'CUSTOMER_ADMIN',
+      )
+      expect(guardedAdminGroup?.element?.props?.unauthorizedRedirect).toBe('/app/dashboard')
+      expect(guardedPaths).toEqual(['edit-users', 'maintain-tenants'])
+    })
+
+    it('should render edit-users for customer admins when the selected customer context matches', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/administration/edit-users'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'customer-admin-1',
+            name: 'Customer Admin',
+            email: 'admin@example.com',
+            memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
+          },
+          status: 'authenticated',
+        },
+        tenantContext: {
+          customerId: 'cust-1',
+          tenantId: null,
+          tenantName: null,
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole('heading', { name: /^edit users$/i }, { timeout: 10000 }),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should allow customer-admin routes before customer context initialization when the user has a customer-admin membership', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/administration/maintain-tenants'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'customer-admin-2',
+            name: 'Customer Admin',
+            email: 'admin2@example.com',
+            memberships: [{ customerId: 'cust-2', roles: ['CUSTOMER_ADMIN'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^maintain tenants$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render super-admin dashboard at /super-admin/dashboard for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/dashboard'],
@@ -124,6 +216,36 @@ describe('Router', () => {
             name: 'Super Admin',
             email: 'super@example.com',
             memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^super admin dashboard$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should keep blocking SUPER_ADMIN users from customer-admin routes', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/administration/edit-users'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-customer-admin-route-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
           },
           status: 'authenticated',
         },

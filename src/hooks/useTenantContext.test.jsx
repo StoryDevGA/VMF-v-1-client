@@ -7,6 +7,14 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
 
+const { mockUseListTenantsQuery } = vi.hoisted(() => ({
+  mockUseListTenantsQuery: vi.fn(),
+}))
+
+vi.mock('../store/api/tenantApi.js', () => ({
+  useListTenantsQuery: (...args) => mockUseListTenantsQuery(...args),
+}))
+
 import useTenantContext from './useTenantContext.js'
 import authReducer from '../store/slices/authSlice.js'
 import tenantContextReducer from '../store/slices/tenantContextSlice.js'
@@ -16,6 +24,11 @@ import { baseApi } from '../store/api/baseApi.js'
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
+  mockUseListTenantsQuery.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: undefined,
+  })
 })
 
 // ── User fixtures ────────────────────────────────────────
@@ -138,5 +151,49 @@ describe('useTenantContext', () => {
     expect(result.current.customerId).toBeNull()
     expect(result.current.tenantId).toBeNull()
     expect(result.current.tenantName).toBeNull()
+  })
+
+  it('resolves selected tenant details from the active customer tenant list', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [
+          { _id: 'ten-1', name: 'Alpha Tenant' },
+          { _id: 'ten-2', name: 'Beta Tenant' },
+        ],
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const wrapper = createWrapper({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-2', tenantName: null },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.selectedTenant?._id).toBe('ten-2')
+    expect(result.current.resolvedTenantName).toBe('Beta Tenant')
+    expect(result.current.hasInvalidTenantContext).toBe(false)
+  })
+
+  it('flags invalid tenant context when the selected tenant is not in the active customer tenant list', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [{ _id: 'ten-1', name: 'Alpha Tenant' }],
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const wrapper = createWrapper({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-404', tenantName: 'Ghost' },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.selectedTenant).toBeNull()
+    expect(result.current.hasInvalidTenantContext).toBe(true)
   })
 })

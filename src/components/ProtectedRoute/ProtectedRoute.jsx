@@ -23,7 +23,13 @@ import {
   selectIsAuthenticated,
   selectCurrentUser,
 } from '../../store/slices/authSlice.js'
-import { hasPlatformRole, hasCustomerRole, hasTenantRole } from '../../utils/authorization.js'
+import { selectSelectedCustomerId } from '../../store/slices/tenantContextSlice.js'
+import {
+  hasPlatformRole,
+  hasCustomerRole,
+  hasAnyCustomerRole,
+  hasTenantRole,
+} from '../../utils/authorization.js'
 import { Spinner } from '../Spinner'
 import './ProtectedRoute.css'
 
@@ -41,12 +47,14 @@ export function ProtectedRoute({
   requiredRole,
   requiredPlatformRole,
   requiredCustomerRole,
+  requiredSelectedCustomerRole,
   requiredTenantRole,
   unauthorizedRedirect = '/app/dashboard',
 }) {
   const status = useSelector(selectAuthStatus)
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
+  const selectedCustomerId = useSelector(selectSelectedCustomerId)
   const location = useLocation()
 
   // Still resolving session — show a full-screen spinner
@@ -82,6 +90,18 @@ export function ProtectedRoute({
     !hasCustomerRole(user, requiredCustomerRole.customerId, requiredCustomerRole.role)
   ) {
     return <Navigate to={unauthorizedRedirect} replace />
+  }
+
+  // Selected customer role gate. If customer context is not initialized
+  // yet, fall back to any matching customer role.
+  if (requiredSelectedCustomerRole) {
+    const hasRequiredSelectedCustomerRole = selectedCustomerId
+      ? hasCustomerRole(user, selectedCustomerId, requiredSelectedCustomerRole)
+      : hasAnyCustomerRole(user, requiredSelectedCustomerRole)
+
+    if (!hasRequiredSelectedCustomerRole) {
+      return <Navigate to={unauthorizedRedirect} replace />
+    }
   }
 
   // Tenant role gate

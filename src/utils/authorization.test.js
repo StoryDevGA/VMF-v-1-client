@@ -18,6 +18,7 @@ import {
   getUserCustomerRoles,
   hasCustomerRole,
   hasCustomerAccess,
+  hasAnyCustomerRole,
   getUserTenantRoles,
   hasTenantRole,
   hasTenantAccess,
@@ -185,6 +186,20 @@ describe('Customer role helpers', () => {
 
     it('denies access when user has no membership', () => {
       expect(hasCustomerAccess(customerAdminUser, CUSTOMER_ID_2)).toBe(false)
+    })
+  })
+
+  describe('hasAnyCustomerRole', () => {
+    it('returns true when the user holds the role on at least one customer', () => {
+      expect(hasAnyCustomerRole(multiCustomerUser, 'CUSTOMER_ADMIN')).toBe(true)
+    })
+
+    it('returns false when the user lacks the role across all customers', () => {
+      expect(hasAnyCustomerRole(multiCustomerUser, 'TENANT_ADMIN')).toBe(false)
+    })
+
+    it('returns false for null user', () => {
+      expect(hasAnyCustomerRole(null, 'CUSTOMER_ADMIN')).toBe(false)
     })
   })
 })

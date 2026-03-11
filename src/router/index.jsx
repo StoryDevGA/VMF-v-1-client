@@ -161,16 +161,32 @@ export const router = createBrowserRouter([
                 element: <Dashboard />,
               },
               {
-                path: 'administration/edit-users',
-                element: <EditUsers />,
-              },
-              {
-                path: 'administration/maintain-tenants',
-                element: <MaintainTenants />,
-              },
-              {
-                path: 'administration/system-monitoring',
-                element: <SystemMonitoring />,
+                path: 'administration',
+                children: [
+                  {
+                    element: (
+                      <ProtectedRoute
+                        redirectTo="/app/login"
+                        requiredSelectedCustomerRole="CUSTOMER_ADMIN"
+                        unauthorizedRedirect="/app/dashboard"
+                      />
+                    ),
+                    children: [
+                      {
+                        path: 'edit-users',
+                        element: <EditUsers />,
+                      },
+                      {
+                        path: 'maintain-tenants',
+                        element: <MaintainTenants />,
+                      },
+                    ],
+                  },
+                  {
+                    path: 'system-monitoring',
+                    element: <SystemMonitoring />,
+                  },
+                ],
               },
             ],
           },

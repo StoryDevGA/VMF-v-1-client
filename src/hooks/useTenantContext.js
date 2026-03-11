@@ -43,7 +43,11 @@ export function useTenantContext() {
   }, [user, customerId, dispatch])
 
   /* ---- Fetch tenant list for the active customer ---- */
-  const { data: tenantsData, isLoading: isLoadingTenants } = useListTenantsQuery(
+  const {
+    data: tenantsData,
+    isLoading: isLoadingTenants,
+    error: tenantsError,
+  } = useListTenantsQuery(
     { customerId, page: 1, pageSize: 100 },
     { skip: !customerId },
   )
@@ -53,6 +57,28 @@ export function useTenantContext() {
   /* ---- Derived state ---- */
   const isSuperAdminUser = useMemo(() => checkIsSuperAdmin(user), [user])
   const accessibleCustomerIds = useMemo(() => getAccessibleCustomerIds(user), [user])
+  const hasSelectedCustomerAccess = useMemo(() => {
+    if (!customerId) return false
+    if (isSuperAdminUser) return true
+    return accessibleCustomerIds.includes(String(customerId))
+  }, [accessibleCustomerIds, customerId, isSuperAdminUser])
+  const selectedTenant = useMemo(() => {
+    if (!tenantId) return null
+
+    return tenants.find((tenant) => {
+      const tenantRowId = String(tenant?._id ?? tenant?.id ?? '')
+      return tenantRowId === String(tenantId)
+    }) ?? null
+  }, [tenantId, tenants])
+  const resolvedTenantName = selectedTenant?.name ?? tenantName
+  const isResolvingSelectedTenantContext = Boolean(customerId && tenantId && isLoadingTenants)
+  const hasInvalidTenantContext = Boolean(
+    customerId
+      && tenantId
+      && !isLoadingTenants
+      && !tenantsError
+      && !selectedTenant,
+  )
 
   /* ---- Actions ---- */
 
@@ -75,10 +101,16 @@ export function useTenantContext() {
     customerId,
     tenantId,
     tenantName,
+    resolvedTenantName,
     tenants,
     isLoadingTenants,
+    tenantsError,
     isSuperAdmin: isSuperAdminUser,
     accessibleCustomerIds,
+    hasSelectedCustomerAccess,
+    selectedTenant,
+    isResolvingSelectedTenantContext,
+    hasInvalidTenantContext,
     setCustomerId,
     setTenantId,
     clearContext,

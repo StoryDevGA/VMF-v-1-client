@@ -10,6 +10,30 @@
   padding-bottom: var(--spacing-xl, 2rem);
 }
 
+.edit-users__fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.edit-users__card {
+  margin: 0;
+}
+
+.edit-users__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg, 1.5rem);
+}
+
+.edit-users__card-body--state {
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  text-align: center;
+}
+
 /* ---- Header ---- */
 
 .edit-users__header {
@@ -39,13 +63,15 @@
 /* ---- Tenant scope indicator ---- */
 
 .edit-users__scope-indicator {
-  margin: 0 0 var(--spacing-md, 0.75rem);
-  padding: var(--spacing-xs, 0.25rem) var(--spacing-sm, 0.5rem);
+  margin: 0;
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 0.75rem);
   font-size: var(--font-size-sm, 0.875rem);
   color: var(--color-text-secondary);
   background-color: var(--color-background-secondary);
   border-radius: var(--border-radius-sm);
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
 }
 
 /* ---- Toolbar ---- */
@@ -55,7 +81,6 @@
   flex-direction: column;
   align-items: stretch;
   gap: var(--spacing-md, 1rem);
-  margin-bottom: var(--spacing-lg, 1.5rem);
   flex-wrap: wrap;
 }
 
@@ -71,7 +96,6 @@
 /* ---- Table wrapper ---- */
 
 .edit-users__table {
-  margin-bottom: var(--spacing-lg, 1.5rem);
   overflow-x: auto;
 }
 
@@ -105,6 +129,24 @@
   text-align: center;
   color: var(--color-text-secondary);
   padding: var(--spacing-2xl) 0;
+}
+
+.edit-users__state-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm, 0.5rem);
+  color: var(--color-text-secondary);
+}
+
+.edit-users__state-message {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.edit-users__state-actions {
+  display: flex;
+  justify-content: center;
 }
 
 /* ---- Confirm dialog ---- */
