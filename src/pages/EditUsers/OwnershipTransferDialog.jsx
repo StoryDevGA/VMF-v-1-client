@@ -195,6 +195,7 @@ function OwnershipTransferDialog({
       size="lg"
       className="ownership-transfer-dialog"
       closeOnBackdropClick={!replaceCustomerAdminResult.isLoading}
+      closeOnEscape={!replaceCustomerAdminResult.isLoading}
     >
       <Dialog.Header>
         <h2 className="ownership-transfer-dialog__title">Transfer Customer Admin Ownership</h2>

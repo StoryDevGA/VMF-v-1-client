@@ -380,6 +380,42 @@ describe('CreateUserWizard', () => {
     })
   })
 
+  it('selects all available tenant-visibility entries from the guided toolbar', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByLabelText(/full name/i), 'Jane Doe')
+    await user.type(screen.getByLabelText(/email address/i), 'jane@acme.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => screen.getByText(/step 2 of 4/i))
+    await user.click(screen.getByLabelText(/^user$/i))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => screen.getByText(/step 3 of 4/i))
+    await user.click(screen.getByRole('button', { name: /select all available/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 4 of 4/i)).toBeInTheDocument()
+      expect(screen.getByText(/north hub, south hub/i)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        body: {
+          name: 'Jane Doe',
+          email: 'jane@acme.com',
+          roles: ['USER'],
+          tenantVisibility: ['ten-1', 'ten-2'],
+        },
+      })
+    })
+  })
+
   it('hides the tenant-visibility step when the topology does not allow it', async () => {
     const user = userEvent.setup()
     useTenantContext.mockReturnValue(

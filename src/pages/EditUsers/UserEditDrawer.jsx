@@ -596,7 +596,13 @@ function UserEditDrawer({
         : CUSTOMER_ADMIN_TRANSFER_GUIDANCE
 
   return (
-    <Dialog open={open} onClose={onClose} size="md">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      size="md"
+      closeOnBackdropClick={!isLoading}
+      closeOnEscape={!isLoading}
+    >
       <Dialog.Header>
         <h2 className="user-edit-drawer__title">Edit User</h2>
       </Dialog.Header>
@@ -657,7 +663,11 @@ function UserEditDrawer({
 
         <fieldset className="user-edit-drawer__fieldset">
           <legend className="user-edit-drawer__legend">Editable Roles</legend>
-          <div className="user-edit-drawer__governance" role="note">
+          <div
+            className="user-edit-drawer__governance"
+            role="note"
+            aria-label="Customer admin governance guidance"
+          >
             <p className="user-edit-drawer__governance-title">Customer Admin governance</p>
             <p className="user-edit-drawer__governance-text">
               {hasGovernedCustomerAdminRole
@@ -836,7 +846,7 @@ function UserEditDrawer({
         )}
       </Dialog.Body>
 
-      <Dialog.Footer>
+      <Dialog.Footer className="user-edit-drawer__footer">
         <Button variant="outline" onClick={onClose} disabled={isLoading}>
           Cancel
         </Button>

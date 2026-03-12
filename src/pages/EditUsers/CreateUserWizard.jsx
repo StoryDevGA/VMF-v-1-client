@@ -615,10 +615,16 @@ function CreateUserWizard({ open, onClose, customerId }) {
     || (currentStepKey === 'tenantVisibility' && (isLoadingTenants || Boolean(normalizedTenantsError)))
 
   return (
-    <Dialog open={open} onClose={handleClose} size="md">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      size="md"
+      closeOnBackdropClick={!isLoading}
+      closeOnEscape={!isLoading}
+    >
       <Dialog.Header>
         <h2 className="create-wizard__title">Create User</h2>
-        <p className="create-wizard__step-indicator">
+        <p className="create-wizard__step-indicator" aria-live="polite">
           Step {step} of {totalSteps}: {currentStep.label}
         </p>
       </Dialog.Header>
@@ -816,7 +822,7 @@ function CreateUserWizard({ open, onClose, customerId }) {
         )}
       </Dialog.Body>
 
-      <Dialog.Footer>
+      <Dialog.Footer className="edit-users__dialog-footer">
         {step > 1 && (
           <Button variant="outline" onClick={handleBack} disabled={isLoading}>
             Back

@@ -236,6 +236,30 @@ describe('CreateTenantWizard', () => {
     })
   })
 
+  it('submits tenant details and selected admins on successful create', async () => {
+    const user = userEvent.setup()
+    const { onClose } = renderWizard()
+
+    await goToStep3(user)
+    await user.click(screen.getByRole('button', { name: /create tenant/i }))
+
+    await waitFor(() => {
+      expect(createTenantMutationMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        body: {
+          name: 'Test Tenant',
+          website: 'https://test.com',
+          tenantAdminUserIds: ['admin-user-1'],
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/test tenant has been created successfully/i)).toBeInTheDocument()
+    })
+  })
+
   it('calls onClose when Cancel is clicked', async () => {
     const user = userEvent.setup()
     const { onClose } = renderWizard()

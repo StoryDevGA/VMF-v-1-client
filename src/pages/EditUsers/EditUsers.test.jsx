@@ -23,9 +23,11 @@ import tenantContextReducer, { setTenant } from '../../store/slices/tenantContex
 const {
   mockUseUsers,
   mockUseListTenantsQuery,
+  mockUseReplaceCustomerAdminMutation,
 } = vi.hoisted(() => ({
   mockUseUsers: vi.fn(),
   mockUseListTenantsQuery: vi.fn(),
+  mockUseReplaceCustomerAdminMutation: vi.fn(),
 }))
 
 vi.mock('../../hooks/useUsers.js', () => ({
@@ -34,6 +36,21 @@ vi.mock('../../hooks/useUsers.js', () => ({
 
 vi.mock('../../store/api/tenantApi.js', () => ({
   useListTenantsQuery: (...args) => mockUseListTenantsQuery(...args),
+}))
+
+vi.mock('../../store/api/customerApi.js', () => ({
+  useReplaceCustomerAdminMutation: (...args) => mockUseReplaceCustomerAdminMutation(...args),
+}))
+
+vi.mock('../../components/StepUpAuthForm', () => ({
+  StepUpAuthForm: ({ onStepUpComplete }) => (
+    <div>
+      <p>Mock Step-up Form</p>
+      <button type="button" onClick={() => onStepUpComplete?.('mock-step-up-token')}>
+        Mock Step-Up Complete
+      </button>
+    </div>
+  ),
 }))
 
 import EditUsers from './EditUsers'
@@ -204,6 +221,7 @@ function renderEditUsers(store) {
 describe('EditUsers page', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    mockUseReplaceCustomerAdminMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseUsers.mockReturnValue(
       buildUseUsersResult({
         users: [canonicalManagedUser, standardManagedUser, invitationRequiredUser],
@@ -435,6 +453,23 @@ describe('EditUsers page', () => {
         screen.getByRole('heading', { name: /bulk operations/i }),
       ).toBeInTheDocument()
     })
+  })
+
+  it('opens the ownership-transfer dialog from the governed row action', async () => {
+    const user = userEvent.setup()
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /transfer ownership member user/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /transfer customer admin ownership/i }),
+      ).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByText(/owner user/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/member user/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/mock step-up form/i)).toBeInTheDocument()
   })
 
   it('resets transient UI state when tenant context changes at runtime', async () => {

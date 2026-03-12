@@ -32,6 +32,11 @@
   margin: 0;
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
+}
+
+.user-edit-drawer__governance .btn {
+  align-self: flex-start;
 }
 
 .user-edit-drawer__tenant-visibility {
@@ -45,6 +50,7 @@
   margin: 0;
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 .user-edit-drawer__tenant-actions {
@@ -64,12 +70,20 @@
   border: var(--border-width-thin, 1px) solid var(--color-border);
   border-radius: var(--border-radius-md, 0.5rem);
   background-color: var(--color-background-primary);
+  transition: border-color var(--transition-fast, 150ms ease-in-out), box-shadow var(--transition-fast, 150ms ease-in-out);
+}
+
+.user-edit-drawer__tenant-option:focus-within,
+.user-edit-drawer__tenant-preserved-item:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-border-focus) 18%, transparent);
 }
 
 .user-edit-drawer__tenant-meta {
   margin: var(--spacing-xs, 0.25rem) 0 0 calc(var(--spacing-xl, 2rem) + var(--spacing-sm, 0.5rem));
   font-size: var(--font-size-xs, 0.75rem);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .user-edit-drawer__tenant-preserved {
@@ -96,6 +110,9 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-sm, 0.5rem);
+  padding: var(--spacing-xs, 0.25rem);
+  border-radius: var(--border-radius-sm, 0.25rem);
+  transition: border-color var(--transition-fast, 150ms ease-in-out), box-shadow var(--transition-fast, 150ms ease-in-out);
 }
 
 .user-edit-drawer__tenant-preserved-details {
@@ -114,6 +131,7 @@
 .user-edit-drawer__tenant-preserved-meta {
   font-size: var(--font-size-xs, 0.75rem);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .user-edit-drawer__locked-field {
@@ -136,15 +154,42 @@
   margin: 0;
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
+}
+
+.user-edit-drawer__footer {
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 .user-edit-drawer__error {
   margin: 0;
   color: var(--color-error);
+  line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 767px) {
+  .user-edit-drawer__governance .btn,
+  .user-edit-drawer__tenant-actions .btn,
+  .user-edit-drawer__footer .btn {
+    width: 100%;
+  }
+
+  .user-edit-drawer__tenant-actions,
+  .user-edit-drawer__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .user-edit-drawer__tenant-preserved-item {
     flex-direction: column;
+  }
+}
+
+@media (forced-colors: active) {
+  .user-edit-drawer__tenant-option:focus-within,
+  .user-edit-drawer__tenant-preserved-item:focus-within {
+    border: var(--border-width-thin, 1px) solid Highlight;
+    box-shadow: none;
   }
 }

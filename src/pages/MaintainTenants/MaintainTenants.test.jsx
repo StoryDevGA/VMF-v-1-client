@@ -323,6 +323,43 @@ describe('MaintainTenants page', () => {
     ).toBeInTheDocument()
   })
 
+  it('uses immediate-impact lifecycle copy in enable confirmations and success toasts', async () => {
+    const user = userEvent.setup()
+    const enableTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({}),
+    })
+    mockUseEnableTenantMutation.mockReturnValue([enableTenantMutationMock, { isLoading: false }])
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [disabledTenant],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    await user.click(screen.getByRole('button', { name: /enable disabled tenant/i }))
+
+    const dialogHeading = screen.getByRole('heading', { name: /enable tenant/i })
+    const dialog = dialogHeading.closest('dialog')
+    expect(dialog).not.toBeNull()
+    expect(
+      within(dialog).getByText(/users assigned to this tenant will regain access immediately/i),
+    ).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /^enable$/i }))
+
+    await waitFor(() => {
+      expect(enableTenantMutationMock).toHaveBeenCalledWith({ tenantId: 'tenant-disabled' })
+    })
+    expect(
+      await screen.findByText(/disabled tenant is enabled\. users assigned to this tenant can access it immediately\./i),
+    ).toBeInTheDocument()
+  })
+
   it('renders table with column headers', () => {
     renderMaintainTenants()
     expect(screen.getByText('Name')).toBeInTheDocument()

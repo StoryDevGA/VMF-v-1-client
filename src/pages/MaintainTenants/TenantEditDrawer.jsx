@@ -288,7 +288,13 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   if (!tenant) return null
 
   return (
-    <Dialog open={open} onClose={onClose} size="md">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      size="md"
+      closeOnBackdropClick={!isLoading}
+      closeOnEscape={!isLoading}
+    >
       <Dialog.Header>
         <h2 className="tenant-edit-drawer__title">Edit Tenant</h2>
       </Dialog.Header>
@@ -370,7 +376,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         </fieldset>
       </Dialog.Body>
 
-      <Dialog.Footer>
+      <Dialog.Footer className="tenant-edit-drawer__footer">
         <Button variant="outline" onClick={onClose} disabled={isLoading}>
           Cancel
         </Button>

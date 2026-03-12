@@ -200,6 +200,40 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByText('Tenant Admins')).toBeInTheDocument()
   })
 
+  it('submits changed tenant details and closes after a successful save', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const updateTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
+    })
+    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
+
+    renderDrawer({ onClose })
+
+    const nameInput = screen.getByLabelText(/tenant name/i)
+    const websiteInput = screen.getByLabelText(/website url/i)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Acme Tenant Updated')
+    await user.clear(websiteInput)
+    await user.type(websiteInput, 'https://updated.example.com')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateTenantMutationMock).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        body: {
+          name: 'Acme Tenant Updated',
+          website: 'https://updated.example.com',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/acme tenant updated has been updated/i)).toBeInTheDocument()
+    })
+  })
+
   it('shows archived tenants as read-only in the edit drawer', () => {
     renderDrawer({ tenant: archivedTenant })
 

@@ -263,7 +263,7 @@ describe('UserEditDrawer', () => {
     renderDrawer()
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/customer admin/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
   })
 
   it('hides TENANT_ADMIN for single-tenant customers and shows topology guidance', () => {
@@ -337,6 +337,18 @@ describe('UserEditDrawer', () => {
     expect(
       screen.getByRole('button', { name: /transfer ownership to this user/i }),
     ).toBeInTheDocument()
+  })
+
+  it('hands off to the ownership-transfer workflow from the drawer action', async () => {
+    const user = userEvent.setup()
+    const onStartOwnershipTransfer = vi.fn()
+    renderDrawer({ hasCanonicalAdmin: true, onStartOwnershipTransfer })
+
+    await user.click(screen.getByRole('button', { name: /transfer ownership to this user/i }))
+
+    expect(onStartOwnershipTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: 'user-1', email: 'jane@acme.com' }),
+    )
   })
 
   it('shows canonical-admin protection guidance for the current owner', () => {

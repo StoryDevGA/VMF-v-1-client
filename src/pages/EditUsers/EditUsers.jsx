@@ -924,6 +924,8 @@ function EditUsers() {
         open={!!confirmAction}
         onClose={() => setConfirmAction(null)}
         size="sm"
+        closeOnBackdropClick={!isLifecycleMutationLoading}
+        closeOnEscape={!isLifecycleMutationLoading}
       >
         <Dialog.Header>
           <h2 className="edit-users__confirm-title">
@@ -943,7 +945,7 @@ function EditUsers() {
                 : `Are you sure you want to permanently delete ${confirmAction?.user?.name}? This action cannot be undone.`}
           </p>
         </Dialog.Body>
-        <Dialog.Footer>
+        <Dialog.Footer className="edit-users__confirm-footer">
           <Button
             variant="outline"
             onClick={() => setConfirmAction(null)}

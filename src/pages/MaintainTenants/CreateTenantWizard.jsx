@@ -298,10 +298,16 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   const stepLabels = ['Tenant Details', 'Assign Admins', 'Review']
 
   return (
-    <Dialog open={open} onClose={handleClose} size="md">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      size="md"
+      closeOnBackdropClick={!isLoading}
+      closeOnEscape={!isLoading}
+    >
       <Dialog.Header>
         <h2 className="create-wizard__title">Create Tenant</h2>
-        <p className="create-wizard__step-indicator">
+        <p className="create-wizard__step-indicator" aria-live="polite">
           Step {step} of {TOTAL_STEPS}: {stepLabels[step - 1]}
         </p>
       </Dialog.Header>
@@ -395,7 +401,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
         )}
       </Dialog.Body>
 
-      <Dialog.Footer>
+      <Dialog.Footer className="maintain-tenants__dialog-footer">
         {step > 1 && (
           <Button variant="outline" onClick={handleBack} disabled={isLoading}>
             Back

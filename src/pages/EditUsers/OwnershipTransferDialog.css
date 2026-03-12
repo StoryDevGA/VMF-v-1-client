@@ -14,6 +14,7 @@
   margin: 0;
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 .ownership-transfer-dialog__summary {
@@ -48,6 +49,7 @@
   margin: 0;
   font-size: var(--font-size-sm, 0.875rem);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .ownership-transfer-dialog__help {
@@ -58,6 +60,7 @@
   background-color: var(--color-background-secondary);
   color: var(--color-text-secondary);
   line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 .ownership-transfer-dialog__step-up {
@@ -69,10 +72,23 @@
 .ownership-transfer-dialog__error {
   margin: 0;
   color: var(--color-error);
+  line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 .ownership-transfer-dialog__footer {
   gap: var(--spacing-sm, 0.5rem);
+}
+
+@media (max-width: 767px) {
+  .ownership-transfer-dialog__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ownership-transfer-dialog__footer .btn {
+    width: 100%;
+  }
 }
 
 @media (min-width: 768px) {

@@ -530,13 +530,14 @@ function MaintainTenants() {
             .filter(Boolean)
             .join(' ')}
           role={tenantCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
+          aria-label="Tenant capacity guidance"
         >
           <p className="maintain-tenants__note-title">{tenantCapacityGuidance.title}</p>
           <p className="maintain-tenants__note-text">{tenantCapacityGuidance.message}</p>
         </div>
       ) : null}
 
-      <div className="maintain-tenants__lifecycle-note" role="note">
+      <div className="maintain-tenants__lifecycle-note" role="note" aria-label="Tenant lifecycle guidance">
         <p className="maintain-tenants__lifecycle-title">Tenant lifecycle</p>
         <p className="maintain-tenants__lifecycle-text">{MAINTAIN_TENANTS_LIFECYCLE_NOTE}</p>
       </div>
@@ -645,6 +646,8 @@ function MaintainTenants() {
         open={!!confirmAction}
         onClose={() => setConfirmAction(null)}
         size="sm"
+        closeOnBackdropClick={!isLifecycleMutationLoading}
+        closeOnEscape={!isLifecycleMutationLoading}
       >
         <Dialog.Header>
           <h2 className="maintain-tenants__confirm-title">{confirmActionCopy.title}</h2>
@@ -652,16 +655,19 @@ function MaintainTenants() {
         <Dialog.Body>
           <p>{confirmActionCopy.message}</p>
         </Dialog.Body>
-        <Dialog.Footer>
+        <Dialog.Footer className="maintain-tenants__confirm-footer">
           <Button
             variant="outline"
             onClick={() => setConfirmAction(null)}
+            disabled={isLifecycleMutationLoading}
           >
             Cancel
           </Button>
           <Button
             variant={confirmAction?.type === 'disable' ? 'danger' : 'primary'}
             onClick={handleConfirmAction}
+            loading={isLifecycleMutationLoading}
+            disabled={isLifecycleMutationLoading}
           >
             {confirmActionCopy.confirmLabel}
           </Button>
