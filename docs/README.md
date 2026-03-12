@@ -67,7 +67,8 @@ docs/
 - **[Typewriter](./components/typewriter.md)** - Typewriter effect component with configurable speed, delay, and cursor
 
 ### Testing
-_(Documentation will be added as testing patterns are established)_
+- **[Manual Customer Admin End-to-End Walkthrough](./manual-test-customer-admin-end-to-end.md)** - Tester-friendly manual path from Super Admin customer setup through customer-admin user, governance, tenant, and inactive-customer checks
+- **[BE Handover: Manual Test Password Bootstrap](./be-handoff-manual-test-password-bootstrap.md)** - FE-to-BE handoff note explaining the seeded-password requirement for manual customer-admin UAT
 
 ## Contributing to Documentation
 

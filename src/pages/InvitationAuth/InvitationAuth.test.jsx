@@ -58,6 +58,9 @@ describe('InvitationAuth page', () => {
     expect(screen.getByRole('heading', { name: /identity verification/i })).toBeInTheDocument()
     expect(screen.getByText('gary@mail.com')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /complete verification/i })).toBeEnabled()
+    expect(
+      screen.getByText(/sign in at \/app\/login with your environment's seeded manual-test password/i),
+    ).toBeInTheDocument()
   })
 
   it('submits complete-fake-auth request with invitation id when user clicks complete', async () => {
@@ -85,7 +88,7 @@ describe('InvitationAuth page', () => {
     renderPage('/invitation-auth?invitationId=inv-1')
 
     expect(
-      screen.getByText(/verification complete! the user has been marked as trusted/i),
+      screen.getByText(/verification complete! the user has been marked as trusted\. continue by signing in with your environment's seeded manual-test password/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /complete verification/i })).not.toBeInTheDocument()
   })

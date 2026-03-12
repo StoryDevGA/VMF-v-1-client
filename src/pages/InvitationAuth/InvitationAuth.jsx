@@ -29,6 +29,9 @@ const STATUS_VARIANTS = {
   revoked: 'neutral',
 }
 
+const SEEDED_PASSWORD_GUIDANCE =
+  'After verification, sign in at /app/login with your environment\'s seeded manual-test password.'
+
 function InvitationAuth() {
   const [searchParams] = useSearchParams()
   const invitationId = searchParams.get('invitationId')
@@ -154,7 +157,7 @@ function InvitationAuth() {
       <div className="invitation-auth__actions">
         {isCompleted ? (
           <div className="invitation-auth__success" role="status">
-            Verification complete! The user has been marked as trusted.
+            Verification complete! The user has been marked as trusted. Continue by signing in with your environment&apos;s seeded manual-test password.
           </div>
         ) : (
           <>
@@ -186,6 +189,9 @@ function InvitationAuth() {
       <p className="invitation-auth__hint">
         This page simulates Identity Plus verification.
         It is only available when FAKE_AUTH_ENABLED is set.
+      </p>
+      <p className="invitation-auth__hint">
+        {SEEDED_PASSWORD_GUIDANCE}
       </p>
     </section>
   )

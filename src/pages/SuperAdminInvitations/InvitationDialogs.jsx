@@ -149,6 +149,10 @@ export function AuthLinkDialog({
           Email is in mock mode. Use this link to simulate the invitation
           auth flow:
         </p>
+        <p className="super-admin-invitations__dialog-subtitle">
+          After verification, sign in through the customer login page with your
+          environment&apos;s seeded manual-test password.
+        </p>
         <div className="super-admin-invitations__auth-link-box">
           <code className="super-admin-invitations__auth-link-code">
             {lastAuthLink}

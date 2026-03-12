@@ -1147,6 +1147,9 @@ describe('SuperAdminCustomers page', () => {
         'http://localhost:5173/invitation-auth?invitationId=inv-create-1',
       ),
     ).toBeInTheDocument()
+    expect(
+      within(authLinkDialog).getByText(/seeded manual-test password/i),
+    ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -2450,6 +2453,9 @@ describe('SuperAdminCustomers page', () => {
         'http://localhost:5173/invitation-auth?invitationId=inv-123',
       ),
     ).toBeInTheDocument()
+    expect(
+      within(authLinkDialog).getByText(/seeded manual-test password/i),
+    ).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /customers/i })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -2831,4 +2837,3 @@ describe('SuperAdminCustomers page', () => {
     expect(within(taylorSelect).getByRole('option', { name: /archive/i })).toBeInTheDocument()
   })
 })
-
