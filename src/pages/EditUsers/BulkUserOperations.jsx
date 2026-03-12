@@ -15,14 +15,17 @@
  * @param {string[]} [props.selectedUserIds]  — pre-selected user IDs for update/disable
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dialog } from '../../components/Dialog'
 import { Button } from '../../components/Button'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Select } from '../../components/Select'
 import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
+import { Tickbox } from '../../components/Tickbox'
 import { Status } from '../../components/Status'
 import { useToaster } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useBulkCreateUsersMutation,
   useBulkDisableUsersMutation,
@@ -56,6 +59,24 @@ const BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE =
 
 const BULK_SUPPORTED_ROLES_MESSAGE =
   `Supported bulk roles: ${BULK_EDITABLE_ROLES.join(', ')}.`
+
+const BULK_TENANT_VISIBILITY_GUIDANCE =
+  'Apply the same tenant visibility set to every selected user. Choose Replace to set explicit tenant visibility, or Clear to remove stored explicit tenant visibility.'
+
+const BULK_TENANT_VISIBILITY_SERVICE_PROVIDER_HINT =
+  'This customer uses guided tenant visibility for multi-tenant access.'
+
+const BULK_TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
+  'No selectable tenants are currently available for this customer.'
+
+const BULK_TENANT_VISIBILITY_PRESERVED_MESSAGE =
+  'Selected tenants that are no longer selectable stay preserved until you remove them.'
+
+const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
+  { value: 'unchanged', label: 'Leave tenant visibility unchanged' },
+  { value: 'replace', label: 'Replace with selected tenants' },
+  { value: 'clear', label: 'Clear explicit tenant visibility' },
+]
 
 function BulkGovernanceNote() {
   return (
@@ -158,6 +179,27 @@ function parseTenantVisibility(value) {
     .filter(Boolean)
 }
 
+function normalizeTenantVisibilityIds(tenantIds) {
+  return [...new Set((tenantIds ?? []).map((tenantId) => String(tenantId ?? '').trim()).filter(Boolean))]
+}
+
+function getTenantId(tenant) {
+  return String(tenant?.id ?? tenant?._id ?? '').trim()
+}
+
+function normalizeTenantOption(tenant) {
+  const id = getTenantId(tenant)
+
+  return {
+    id,
+    name: String(tenant?.name ?? id ?? '--').trim() || '--',
+    status: String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase(),
+    isSelectable: tenant?.isSelectable === true,
+    isDefault: tenant?.isDefault === true,
+    selectionState: String(tenant?.selectionState ?? '').trim().toUpperCase(),
+  }
+}
+
 function BulkUserOperations({
   open,
   onClose,
@@ -165,6 +207,13 @@ function BulkUserOperations({
   selectedUserIds = [],
 }) {
   const { addToast } = useToaster()
+  const {
+    customerId: activeCustomerId,
+    tenants: tenantRows,
+    tenantVisibilityMeta,
+    isLoadingTenants: rawIsLoadingTenants,
+    tenantsError,
+  } = useTenantContext()
   const [bulkCreateUsers, bulkCreateResult] = useBulkCreateUsersMutation()
   const [bulkUpdateUsers, bulkUpdateResult] = useBulkUpdateUsersMutation()
   const [bulkDisableUsers, bulkDisableResult] = useBulkDisableUsersMutation()
@@ -186,7 +235,8 @@ function BulkUserOperations({
   const [progressValue, setProgressValue] = useState(0)
   const [resultSummary, setResultSummary] = useState(null)
   const [bulkRoles, setBulkRoles] = useState('')
-  const [bulkTenantVisibility, setBulkTenantVisibility] = useState('')
+  const [bulkTenantVisibilityMode, setBulkTenantVisibilityMode] = useState('unchanged')
+  const [selectedBulkTenantVisibility, setSelectedBulkTenantVisibility] = useState([])
 
   const isProcessing =
     bulkCreateResult.isLoading ||
@@ -197,6 +247,64 @@ function BulkUserOperations({
     operation === 'update' || operation === 'disable'
 
   const selectedCount = selectedUserIds.length
+
+  const isCustomerContextAligned =
+    !customerId
+    || !activeCustomerId
+    || String(customerId) === String(activeCustomerId)
+
+  const tenants = useMemo(
+    () => (isCustomerContextAligned ? tenantRows.map(normalizeTenantOption).filter((tenant) => tenant.id) : []),
+    [isCustomerContextAligned, tenantRows],
+  )
+
+  const normalizedTenantsError = useMemo(
+    () => (tenantsError ? normalizeError(tenantsError) : null),
+    [tenantsError],
+  )
+
+  const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
+  const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+  const shouldShowTenantVisibilityUpdate =
+    effectiveTenantVisibilityMeta?.allowed === true
+    && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
+
+  const normalizedSelectedBulkTenantVisibility = useMemo(
+    () => normalizeTenantVisibilityIds(selectedBulkTenantVisibility),
+    [selectedBulkTenantVisibility],
+  )
+
+  const tenantLookup = useMemo(
+    () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
+    [tenants],
+  )
+
+  const selectableTenantOptions = useMemo(
+    () => tenants.filter((tenant) => tenant.isSelectable),
+    [tenants],
+  )
+
+  const resolvedSelectedTenants = useMemo(
+    () => normalizedSelectedBulkTenantVisibility.map((tenantId) => {
+      const matchedTenant = tenantLookup.get(tenantId)
+      if (matchedTenant) return matchedTenant
+
+      return {
+        id: tenantId,
+        name: tenantId,
+        status: 'UNKNOWN',
+        isSelectable: false,
+        isDefault: false,
+        selectionState: 'MISSING',
+      }
+    }),
+    [normalizedSelectedBulkTenantVisibility, tenantLookup],
+  )
+
+  const preservedSelectedTenants = useMemo(
+    () => resolvedSelectedTenants.filter((tenant) => !tenant.isSelectable),
+    [resolvedSelectedTenants],
+  )
 
   const resetState = useCallback(() => {
     setOperation('create')
@@ -211,13 +319,21 @@ function BulkUserOperations({
     setProgressValue(0)
     setResultSummary(null)
     setBulkRoles('')
-    setBulkTenantVisibility('')
+    setBulkTenantVisibilityMode('unchanged')
+    setSelectedBulkTenantVisibility([])
   }, [])
 
   const handleClose = useCallback(() => {
     resetState()
     onClose()
   }, [onClose, resetState])
+
+  useEffect(() => {
+    if (shouldShowTenantVisibilityUpdate) return
+
+    setBulkTenantVisibilityMode('unchanged')
+    setSelectedBulkTenantVisibility([])
+  }, [shouldShowTenantVisibilityUpdate])
 
   const startProgress = useCallback((label) => {
     setProgressLabel(label)
@@ -355,9 +471,54 @@ function BulkUserOperations({
   const canRunUpdate = useMemo(() => {
     if (operation !== 'update') return false
     const hasRoles = bulkRoles.trim().length > 0
-    const hasTenants = bulkTenantVisibility.trim().length > 0
+    const hasTenantReplaceSelection =
+      bulkTenantVisibilityMode === 'replace'
+      && normalizedSelectedBulkTenantVisibility.length > 0
+      && !isLoadingTenants
+      && !normalizedTenantsError
+    const hasTenantClearSelection = bulkTenantVisibilityMode === 'clear'
+    const hasTenants = shouldShowTenantVisibilityUpdate
+      && (hasTenantReplaceSelection || hasTenantClearSelection)
     return selectedCount > 0 && (hasRoles || hasTenants)
-  }, [operation, bulkRoles, bulkTenantVisibility, selectedCount])
+  }, [
+    bulkRoles,
+    bulkTenantVisibilityMode,
+    isLoadingTenants,
+    normalizedSelectedBulkTenantVisibility.length,
+    normalizedTenantsError,
+    operation,
+    selectedCount,
+    shouldShowTenantVisibilityUpdate,
+  ])
+
+  const toggleBulkTenantSelection = useCallback((tenantId) => {
+    setSelectedBulkTenantVisibility((prev) =>
+      prev.includes(tenantId)
+        ? prev.filter((candidate) => candidate !== tenantId)
+        : [...prev, tenantId],
+    )
+    setFieldError('')
+    setResultSummary(null)
+  }, [])
+
+  const handleSelectAllBulkTenants = useCallback(() => {
+    setSelectedBulkTenantVisibility((prev) => {
+      const preservedIds = normalizeTenantVisibilityIds(prev).filter((tenantId) => {
+        const tenant = tenantLookup.get(tenantId)
+        return !tenant || !tenant.isSelectable
+      })
+
+      return [...new Set([...preservedIds, ...selectableTenantOptions.map((tenant) => tenant.id)])]
+    })
+    setFieldError('')
+    setResultSummary(null)
+  }, [selectableTenantOptions, tenantLookup])
+
+  const handleClearBulkTenantSelection = useCallback(() => {
+    setSelectedBulkTenantVisibility([])
+    setFieldError('')
+    setResultSummary(null)
+  }, [])
 
   const runBulkCreate = useCallback(async () => {
     if (!canRunCreate) return
@@ -420,7 +581,6 @@ function BulkUserOperations({
   const runBulkUpdate = useCallback(async () => {
     if (!canRunUpdate) return
     const roles = parseRoles(bulkRoles)
-    const tenantVisibility = parseTenantVisibility(bulkTenantVisibility)
 
     if (roles.includes(GOVERNED_CUSTOMER_ADMIN_ROLE)) {
       setFieldError(getBulkGovernanceErrorMessage())
@@ -436,7 +596,12 @@ function BulkUserOperations({
       const users = selectedUserIds.map((userId) => ({
         userId,
         ...(roles.length > 0 ? { roles } : {}),
-        ...(tenantVisibility.length > 0 ? { tenantVisibility } : {}),
+        ...(shouldShowTenantVisibilityUpdate && bulkTenantVisibilityMode === 'replace'
+          ? { tenantVisibility: normalizedSelectedBulkTenantVisibility }
+          : {}),
+        ...(shouldShowTenantVisibilityUpdate && bulkTenantVisibilityMode === 'clear'
+          ? { tenantVisibility: [] }
+          : {}),
       }))
 
       setProgressValue(55)
@@ -475,13 +640,15 @@ function BulkUserOperations({
   }, [
     addToast,
     bulkRoles,
-    bulkTenantVisibility,
+    bulkTenantVisibilityMode,
     bulkUpdateUsers,
     canRunUpdate,
     customerId,
     finishProgress,
+    normalizedSelectedBulkTenantVisibility,
     selectedUserIds,
     startProgress,
+    shouldShowTenantVisibilityUpdate,
   ])
 
   const runBulkDisable = useCallback(async () => {
@@ -737,19 +904,139 @@ function BulkUserOperations({
               disabled={isProcessing}
               fullWidth
             />
-            <Input
-              id="bulk-update-tenants"
-              label="Tenant visibility IDs (optional)"
-              value={bulkTenantVisibility}
-              onChange={(event) => {
-                setBulkTenantVisibility(event.target.value)
-                setFieldError('')
-                setResultSummary(null)
-              }}
-              placeholder="tenantA|tenantB"
-              disabled={isProcessing}
-              fullWidth
-            />
+            {shouldShowTenantVisibilityUpdate ? (
+              <div className="bulk-users__tenant-visibility">
+                <p className="bulk-users__tenant-visibility-text">
+                  {BULK_TENANT_VISIBILITY_GUIDANCE}
+                </p>
+                {effectiveTenantVisibilityMeta?.isServiceProvider ? (
+                  <p className="bulk-users__tenant-visibility-hint">
+                    {BULK_TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
+                  </p>
+                ) : null}
+                {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
+                  <p className="bulk-users__tenant-visibility-hint">
+                    Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
+                  </p>
+                ) : null}
+
+                <Select
+                  id="bulk-update-tenant-mode"
+                  label="Tenant visibility change"
+                  value={bulkTenantVisibilityMode}
+                  onChange={(event) => {
+                    setBulkTenantVisibilityMode(event.target.value)
+                    if (event.target.value !== 'replace') {
+                      setSelectedBulkTenantVisibility([])
+                    }
+                    setFieldError('')
+                    setResultSummary(null)
+                  }}
+                  options={BULK_TENANT_VISIBILITY_MODE_OPTIONS}
+                  disabled={isProcessing}
+                />
+
+                {bulkTenantVisibilityMode === 'replace' ? (
+                  <>
+                    {isLoadingTenants ? (
+                      <p className="bulk-users__tenant-visibility-text" role="status">
+                        Loading tenant options...
+                      </p>
+                    ) : null}
+
+                    {normalizedTenantsError ? (
+                      <ErrorSupportPanel
+                        error={normalizedTenantsError}
+                        context="bulk-users-tenant-visibility"
+                      />
+                    ) : null}
+
+                    {!isLoadingTenants && !normalizedTenantsError ? (
+                      <>
+                        <div className="bulk-users__tenant-actions">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleSelectAllBulkTenants}
+                            disabled={selectableTenantOptions.length === 0 || isProcessing}
+                          >
+                            Select All Available
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleClearBulkTenantSelection}
+                            disabled={normalizedSelectedBulkTenantVisibility.length === 0 || isProcessing}
+                          >
+                            Clear Selection
+                          </Button>
+                        </div>
+
+                        {selectableTenantOptions.length > 0 ? (
+                          <div className="bulk-users__tenant-list" role="group" aria-label="Bulk update tenant visibility">
+                            {selectableTenantOptions.map((tenant) => (
+                              <div key={tenant.id} className="bulk-users__tenant-option">
+                                <Tickbox
+                                  id={`bulk-tenant-${tenant.id}`}
+                                  label={tenant.name}
+                                  checked={normalizedSelectedBulkTenantVisibility.includes(tenant.id)}
+                                  onChange={() => toggleBulkTenantSelection(tenant.id)}
+                                  disabled={isProcessing}
+                                />
+                                <p className="bulk-users__tenant-meta">
+                                  Status: {tenant.status}
+                                  {tenant.isDefault ? ' | Default tenant' : ''}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="bulk-users__tenant-visibility-hint">
+                            {BULK_TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                          </p>
+                        )}
+
+                        {preservedSelectedTenants.length > 0 ? (
+                          <div className="bulk-users__tenant-preserved">
+                            <p className="bulk-users__tenant-visibility-hint">
+                              {BULK_TENANT_VISIBILITY_PRESERVED_MESSAGE}
+                            </p>
+                            <ul className="bulk-users__tenant-preserved-list">
+                              {preservedSelectedTenants.map((tenant) => (
+                                <li key={tenant.id} className="bulk-users__tenant-preserved-item">
+                                  <div className="bulk-users__tenant-preserved-details">
+                                    <span className="bulk-users__tenant-preserved-name">{tenant.name}</span>
+                                    <span className="bulk-users__tenant-preserved-meta">
+                                      Status: {tenant.status}
+                                      {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
+                                    </span>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => toggleBulkTenantSelection(tenant.id)}
+                                    disabled={isProcessing}
+                                  >
+                                    Remove
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <p className="bulk-users__tenant-visibility-hint">
+                Tenant visibility is not required for this customer topology.
+              </p>
+            )}
             <div className="bulk-users__actions">
               <Button
                 variant="primary"

@@ -19,12 +19,15 @@ import {
   isAuthzError,
   isTenantDisabledError,
   isCustomerInactiveError,
+  getCustomerInactiveMessage,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
   getUserEmailConflictMessage,
   getUserLifecycleMessage,
   isGovernanceLimitConflictError,
   getGovernanceLimitConflictMessage,
+  isTenantAdminAssignmentsValidationError,
+  getTenantAdminAssignmentsValidationMessage,
   isRateLimitError,
 } from './errors.js'
 
@@ -349,6 +352,25 @@ describe('errors', () => {
     })
   })
 
+  describe('getCustomerInactiveMessage', () => {
+    it('uses stable inactive-customer guidance and preserves requestId', () => {
+      expect(
+        getCustomerInactiveMessage(
+          { code: 'CUSTOMER_INACTIVE', requestId: 'req-inactive-1' },
+          'This customer is inactive. User-management actions are unavailable until a Super Admin reactivates the customer.',
+        ),
+      ).toBe(
+        'This customer is inactive. User-management actions are unavailable until a Super Admin reactivates the customer. (Ref: req-inactive-1)',
+      )
+    })
+
+    it('falls back to the default inactive-customer copy without an override', () => {
+      expect(getCustomerInactiveMessage({ code: 'CUSTOMER_INACTIVE' })).toBe(
+        'This customer is inactive. Reactivate the customer to continue.',
+      )
+    })
+  })
+
   /* ---------- canonical Customer Admin conflict helpers ---------- */
 
   describe('isCanonicalAdminConflictError', () => {
@@ -561,6 +583,61 @@ describe('errors', () => {
           details: {},
         }),
       ).toBe('A governance limit was reached. Update customer limits and retry.')
+    })
+  })
+
+  describe('isTenantAdminAssignmentsValidationError', () => {
+    it('detects stable tenant-admin assignment validation failures', () => {
+      expect(
+        isTenantAdminAssignmentsValidationError({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          details: { reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID' },
+        }),
+      ).toBe(true)
+    })
+
+    it('returns false for unrelated validation failures', () => {
+      expect(
+        isTenantAdminAssignmentsValidationError({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          details: { reason: 'SOME_OTHER_REASON' },
+        }),
+      ).toBe(false)
+    })
+  })
+
+  describe('getTenantAdminAssignmentsValidationMessage', () => {
+    it('maps classified invalid tenant-admin arrays to operator guidance', () => {
+      expect(
+        getTenantAdminAssignmentsValidationMessage({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          requestId: 'tenant-admin-1',
+          details: {
+            reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+            invalidTenantAdminUserIds: ['user-missing', 'user-inactive', 'user-outside', 'user-other'],
+            missingTenantAdminUserIds: ['user-missing'],
+            inactiveTenantAdminUserIds: ['user-inactive'],
+            outOfCustomerTenantAdminUserIds: ['user-outside'],
+          },
+        }),
+      ).toBe(
+        'Tenant admin assignments need attention. Remove stale tenant-admin selections and search again: user-missing. Replace inactive tenant admins before continuing: user-inactive. Replace users outside this customer context: user-outside. Review invalid tenant-admin selections: user-other. (Ref: tenant-admin-1)',
+      )
+    })
+
+    it('falls back to generic tenant-admin validation guidance without classified ids', () => {
+      expect(
+        getTenantAdminAssignmentsValidationMessage({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          details: { reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID' },
+        }),
+      ).toBe(
+        'Tenant admin assignments need attention. Re-search and select active users from this customer before retrying.',
+      )
     })
   })
 

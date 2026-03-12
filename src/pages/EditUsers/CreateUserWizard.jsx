@@ -16,29 +16,52 @@
  * @param {string}  props.customerId — customer scope for the new user
  */
 
-import { useState, useCallback } from 'react'
-import { Dialog } from '../../components/Dialog'
-import { Input } from '../../components/Input'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '../../components/Button'
+import { Dialog } from '../../components/Dialog'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
+import { Input } from '../../components/Input'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useCreateUserMutation } from '../../store/api/userApi.js'
 import {
   appendRequestReference,
-  normalizeError,
-  isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
+  isCanonicalAdminConflictError,
+  normalizeError,
 } from '../../utils/errors.js'
 import './EditUsers.css'
 
 /** Available user roles (matches backend Role catalogue) */
 const AVAILABLE_ROLES = ['TENANT_ADMIN', 'USER']
-
-/** Wizard step count */
-const TOTAL_STEPS = 4
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const CUSTOMER_ADMIN_CREATE_GUIDANCE =
   'Customer Admin ownership is transferred separately. Create the replacement user first, then use Transfer Ownership from that user\'s row after the account is active.'
+
+const TENANT_ADMIN_TOPOLOGY_GUIDANCE =
+  'Tenant Admin is only available for multi-tenant customers.'
+
+const TENANT_VISIBILITY_STEP_COPY =
+  'Select the tenants this user should be able to access. Leave this empty if you do not want to store explicit tenant-visibility entries during create.'
+
+const TENANT_VISIBILITY_EMPTY_SELECTION_MESSAGE =
+  'No explicit tenant visibility selected.'
+
+const TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE =
+  'Not required for this customer topology.'
+
+const TENANT_VISIBILITY_LOADING_MESSAGE = 'Loading tenant options...'
+
+const TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
+  'No selectable tenants are currently available for this customer.'
+
+const TENANT_VISIBILITY_PRESERVED_MESSAGE =
+  'Selected tenants that are no longer selectable stay preserved until you remove them.'
+
+const TENANT_VISIBILITY_SERVICE_PROVIDER_HINT =
+  'This customer uses guided tenant visibility for multi-tenant access.'
 
 const getCreateUserOutcomeData = (result) => {
   if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
@@ -57,15 +80,55 @@ const normalizeCreateUserReason = (value) =>
     .trim()
     .toLowerCase()
 
+const normalizeCreateFieldName = (field) => {
+  const compact = String(field ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+
+  if (!compact) return ''
+  if (compact.includes('tenantvisibility')) return 'tenantVisibility'
+  if (compact.includes('roles')) return 'roles'
+  if (compact.includes('email')) return 'email'
+  if (compact.endsWith('name')) return 'name'
+
+  return ''
+}
+
+const getFieldErrorMessage = (value) => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim()
+      if (
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.message === 'string' &&
+        entry.message.trim()
+      ) {
+        return entry.message.trim()
+      }
+    }
+  }
+
+  if (value && typeof value === 'object' && typeof value.message === 'string') {
+    return value.message.trim()
+  }
+
+  return ''
+}
+
 const mapCreateUserValidationErrors = (details) => {
   const mapped = {}
 
   if (Array.isArray(details)) {
     for (const detail of details) {
       if (!detail || typeof detail !== 'object') continue
-      if (detail.field && detail.message) {
-        mapped[detail.field] = String(detail.message)
-      }
+      const field = normalizeCreateFieldName(detail.field)
+      const message = getFieldErrorMessage(detail.message)
+      if (!field || !message) continue
+      mapped[field] = message
     }
     return mapped
   }
@@ -73,14 +136,10 @@ const mapCreateUserValidationErrors = (details) => {
   if (!details || typeof details !== 'object') return mapped
 
   for (const [field, value] of Object.entries(details)) {
-    if (!field) continue
-    if (typeof value === 'string' && value.trim()) {
-      mapped[field] = value.trim()
-      continue
-    }
-    if (value && typeof value === 'object' && typeof value.message === 'string') {
-      mapped[field] = value.message
-    }
+    const normalizedField = normalizeCreateFieldName(field)
+    const message = getFieldErrorMessage(value)
+    if (!normalizedField || !message) continue
+    mapped[normalizedField] = message
   }
 
   return mapped
@@ -122,14 +181,77 @@ const getCreateUserConflictMessage = (appError) => {
   return appError?.message
 }
 
+const getTenantId = (tenant) => String(tenant?.id ?? tenant?._id ?? '').trim()
+
+const getTopologyAwareRoles = (roles, topology) => {
+  const normalizedTopology = String(topology ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (normalizedTopology === 'SINGLE_TENANT') {
+    return roles.filter((role) => role !== 'TENANT_ADMIN')
+  }
+
+  return roles
+}
+
+const normalizeTenantOption = (tenant) => {
+  const id = getTenantId(tenant)
+
+  return {
+    id,
+    name: String(tenant?.name ?? id ?? '--').trim() || '--',
+    status: String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase(),
+    isSelectable: tenant?.isSelectable === true,
+    isDefault: tenant?.isDefault === true,
+    selectionState: String(tenant?.selectionState ?? '').trim().toUpperCase(),
+  }
+}
+
+const getTenantVisibilityValidationMessage = (appError) => {
+  const reason = String(appError?.details?.reason ?? '').trim().toUpperCase()
+
+  if (reason === 'TENANT_VISIBILITY_NOT_ALLOWED') {
+    return appendRequestReference(
+      'Tenant visibility is not available for this customer topology.',
+      appError?.requestId,
+    )
+  }
+
+  if (reason === 'TENANT_VISIBILITY_INVALID_TENANT_IDS') {
+    const invalidTenantIds = Array.isArray(appError?.details?.invalidTenantIds)
+      ? appError.details.invalidTenantIds
+        .map((tenantId) => String(tenantId ?? '').trim())
+        .filter(Boolean)
+      : []
+
+    const invalidTenantSuffix = invalidTenantIds.length > 0
+      ? ` Remove invalid tenant selections: ${invalidTenantIds.join(', ')}.`
+      : ' Remove invalid tenant selections and retry.'
+
+    return appendRequestReference(
+      `One or more tenant selections are no longer valid.${invalidTenantSuffix}`,
+      appError?.requestId,
+    )
+  }
+
+  return ''
+}
+
 /**
  * CreateUserWizard Component
  */
 function CreateUserWizard({ open, onClose, customerId }) {
   const { addToast } = useToaster()
   const [createUserMutation, { isLoading }] = useCreateUserMutation()
+  const {
+    customerId: activeCustomerId,
+    tenants: tenantRows,
+    tenantVisibilityMeta,
+    isLoadingTenants: rawIsLoadingTenants,
+    tenantsError,
+  } = useTenantContext()
 
-  /* ---- Wizard state ---- */
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -137,7 +259,138 @@ function CreateUserWizard({ open, onClose, customerId }) {
   const [tenantVisibility, setTenantVisibility] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
 
-  /* ---- Reset when closing ---- */
+  const isCustomerContextAligned =
+    !customerId
+    || !activeCustomerId
+    || String(customerId) === String(activeCustomerId)
+
+  const tenants = useMemo(
+    () => (isCustomerContextAligned ? tenantRows.map(normalizeTenantOption).filter((tenant) => tenant.id) : []),
+    [isCustomerContextAligned, tenantRows],
+  )
+
+  const normalizedTenantsError = useMemo(
+    () => (tenantsError ? normalizeError(tenantsError) : null),
+    [tenantsError],
+  )
+
+  const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
+  const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+
+  const availableRoles = useMemo(
+    () => getTopologyAwareRoles(AVAILABLE_ROLES, effectiveTenantVisibilityMeta?.topology),
+    [effectiveTenantVisibilityMeta?.topology],
+  )
+  const allowsTenantAdminRole = availableRoles.includes('TENANT_ADMIN')
+
+  const shouldShowTenantVisibilityStep =
+    effectiveTenantVisibilityMeta?.allowed === true
+    && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
+
+  const stepDefinitions = useMemo(() => {
+    const steps = [
+      { key: 'details', label: 'User Details' },
+      { key: 'roles', label: 'Assign Roles' },
+    ]
+
+    if (shouldShowTenantVisibilityStep) {
+      steps.push({ key: 'tenantVisibility', label: 'Tenant Visibility' })
+    }
+
+    steps.push({ key: 'review', label: 'Review' })
+    return steps
+  }, [shouldShowTenantVisibilityStep])
+
+  const totalSteps = stepDefinitions.length
+  const currentStep = stepDefinitions[step - 1] ?? stepDefinitions[0]
+  const currentStepKey = currentStep?.key ?? 'details'
+
+  const tenantLookup = useMemo(
+    () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
+    [tenants],
+  )
+
+  const selectableTenantOptions = useMemo(
+    () => tenants.filter((tenant) => tenant.isSelectable),
+    [tenants],
+  )
+
+  const resolvedSelectedTenants = useMemo(
+    () => tenantVisibility.map((tenantId) => {
+      const matchedTenant = tenantLookup.get(tenantId)
+      if (matchedTenant) return matchedTenant
+
+      return {
+        id: tenantId,
+        name: tenantId,
+        status: 'UNKNOWN',
+        isSelectable: false,
+        isDefault: false,
+        selectionState: 'MISSING',
+      }
+    }),
+    [tenantLookup, tenantVisibility],
+  )
+
+  const preservedSelectedTenants = useMemo(
+    () => resolvedSelectedTenants.filter((tenant) => !tenant.isSelectable),
+    [resolvedSelectedTenants],
+  )
+
+  const tenantVisibilitySummary = useMemo(() => {
+    if (!shouldShowTenantVisibilityStep) {
+      return TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE
+    }
+
+    if (resolvedSelectedTenants.length === 0) {
+      return TENANT_VISIBILITY_EMPTY_SELECTION_MESSAGE
+    }
+
+    return resolvedSelectedTenants.map((tenant) => tenant.name).join(', ')
+  }, [resolvedSelectedTenants, shouldShowTenantVisibilityStep])
+
+  const getStepNumber = useCallback(
+    (stepKey) => {
+      const index = stepDefinitions.findIndex((definition) => definition.key === stepKey)
+      return index >= 0 ? index + 1 : 1
+    },
+    [stepDefinitions],
+  )
+
+  const clearFieldErrors = useCallback((...keys) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev }
+      for (const key of keys) {
+        delete next[key]
+      }
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    setSelectedRoles((prev) => {
+      const next = prev.filter((role) => availableRoles.includes(role))
+      return next.length === prev.length ? prev : next
+    })
+  }, [availableRoles])
+
+  useEffect(() => {
+    setStep((prev) => Math.min(prev, totalSteps))
+  }, [totalSteps])
+
+  useEffect(() => {
+    if (shouldShowTenantVisibilityStep) return
+    if (tenantVisibility.length === 0 && !fieldErrors.tenantVisibility) return
+
+    setTenantVisibility([])
+    clearFieldErrors('tenantVisibility')
+  }, [
+    clearFieldErrors,
+    fieldErrors.tenantVisibility,
+    shouldShowTenantVisibilityStep,
+    tenantVisibility.length,
+  ])
+
   const handleClose = useCallback(() => {
     setStep(1)
     setName('')
@@ -145,52 +398,80 @@ function CreateUserWizard({ open, onClose, customerId }) {
     setSelectedRoles([])
     setTenantVisibility([])
     setFieldErrors({})
-    onClose()
+    onClose?.()
   }, [onClose])
 
-  /* ---- Validation per step ---- */
   const validateStep = useCallback(() => {
     const errors = {}
 
-    if (step === 1) {
-      if (!name.trim()) errors.name = 'Name is required.'
+    if (currentStepKey === 'details') {
+      if (!name.trim()) {
+        errors.name = 'Name is required.'
+      }
+
       if (!email.trim()) {
         errors.email = 'Email is required.'
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      } else if (!EMAIL_REGEX.test(email.trim())) {
         errors.email = 'Enter a valid email address.'
       }
     }
 
-    if (step === 2) {
-      if (selectedRoles.length === 0) {
-        errors.roles = 'Select at least one role.'
-      }
+    if (currentStepKey === 'roles' && selectedRoles.length === 0) {
+      errors.roles = 'Select at least one role.'
+    }
+
+    if (currentStepKey === 'tenantVisibility' && normalizedTenantsError) {
+      errors.tenantVisibility = normalizedTenantsError.message
     }
 
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
-  }, [step, name, email, selectedRoles])
+  }, [currentStepKey, email, name, normalizedTenantsError, selectedRoles.length])
 
-  /* ---- Step navigation ---- */
   const handleNext = useCallback(() => {
     if (!validateStep()) return
     setFieldErrors({})
-    setStep((s) => Math.min(TOTAL_STEPS, s + 1))
-  }, [validateStep])
+    setStep((prev) => Math.min(totalSteps, prev + 1))
+  }, [totalSteps, validateStep])
 
   const handleBack = useCallback(() => {
     setFieldErrors({})
-    setStep((s) => Math.max(1, s - 1))
+    setStep((prev) => Math.max(1, prev - 1))
   }, [])
 
-  /* ---- Toggle role selection ---- */
   const toggleRole = useCallback((role) => {
     setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role],
+      prev.includes(role) ? prev.filter((candidate) => candidate !== role) : [...prev, role],
     )
-  }, [])
+    clearFieldErrors('roles')
+  }, [clearFieldErrors])
 
-  /* ---- Submit ---- */
+  const toggleTenantSelection = useCallback((tenantId) => {
+    setTenantVisibility((prev) =>
+      prev.includes(tenantId)
+        ? prev.filter((candidate) => candidate !== tenantId)
+        : [...prev, tenantId],
+    )
+    clearFieldErrors('tenantVisibility')
+  }, [clearFieldErrors])
+
+  const handleSelectAllTenants = useCallback(() => {
+    setTenantVisibility((prev) => {
+      const preservedIds = prev.filter((tenantId) => {
+        const tenant = tenantLookup.get(tenantId)
+        return !tenant || !tenant.isSelectable
+      })
+
+      return [...new Set([...preservedIds, ...selectableTenantOptions.map((tenant) => tenant.id)])]
+    })
+    clearFieldErrors('tenantVisibility')
+  }, [clearFieldErrors, selectableTenantOptions, tenantLookup])
+
+  const handleClearTenantSelection = useCallback(() => {
+    setTenantVisibility([])
+    clearFieldErrors('tenantVisibility')
+  }, [clearFieldErrors])
+
   const handleCreate = useCallback(async () => {
     try {
       const body = {
@@ -198,7 +479,8 @@ function CreateUserWizard({ open, onClose, customerId }) {
         email: email.trim(),
         roles: selectedRoles,
       }
-      if (tenantVisibility.length > 0) {
+
+      if (shouldShowTenantVisibilityStep && tenantVisibility.length > 0) {
         body.tenantVisibility = tenantVisibility
       }
 
@@ -250,7 +532,7 @@ function CreateUserWizard({ open, onClose, customerId }) {
           ...prev,
           roles: conflictMessage,
         }))
-        setStep(2)
+        setStep(getStepNumber('roles'))
         addToast({
           title: 'Customer admin conflict',
           description: conflictMessage,
@@ -268,7 +550,7 @@ function CreateUserWizard({ open, onClose, customerId }) {
           ...prev,
           email: conflictMessage,
         }))
-        setStep(1)
+        setStep(getStepNumber('details'))
         addToast({
           title: 'Cannot create user',
           description: conflictMessage,
@@ -277,14 +559,35 @@ function CreateUserWizard({ open, onClose, customerId }) {
         return
       }
 
-      if (appError.status === 422 && appError.details) {
-        const mapped = mapCreateUserValidationErrors(appError.details)
-        if (Object.keys(mapped).length > 0) {
-          setFieldErrors(mapped)
-          // Go back to the relevant step
-          if (mapped.name || mapped.email) setStep(1)
-          else if (mapped.roles) setStep(2)
+      if (appError.status === 422) {
+        const tenantVisibilityMessage = getTenantVisibilityValidationMessage(appError)
+        if (tenantVisibilityMessage) {
+          setFieldErrors((prev) => ({
+            ...prev,
+            tenantVisibility: tenantVisibilityMessage,
+          }))
+          setStep(getStepNumber(shouldShowTenantVisibilityStep ? 'tenantVisibility' : 'review'))
+          addToast({
+            title: 'Tenant visibility needs attention',
+            description: tenantVisibilityMessage,
+            variant: 'warning',
+          })
           return
+        }
+
+        if (appError.details) {
+          const mapped = mapCreateUserValidationErrors(appError.details)
+          if (Object.keys(mapped).length > 0) {
+            setFieldErrors(mapped)
+            if (mapped.name || mapped.email) {
+              setStep(getStepNumber('details'))
+            } else if (mapped.roles) {
+              setStep(getStepNumber('roles'))
+            } else if (mapped.tenantVisibility && shouldShowTenantVisibilityStep) {
+              setStep(getStepNumber('tenantVisibility'))
+            }
+            return
+          }
         }
       }
 
@@ -303,29 +606,34 @@ function CreateUserWizard({ open, onClose, customerId }) {
     createUserMutation,
     addToast,
     handleClose,
+    getStepNumber,
+    shouldShowTenantVisibilityStep,
   ])
 
-  /* ---- Step labels ---- */
-  const stepLabels = ['User Details', 'Assign Roles', 'Tenant Visibility', 'Review']
+  const nextButtonDisabled =
+    isLoading
+    || (currentStepKey === 'tenantVisibility' && (isLoadingTenants || Boolean(normalizedTenantsError)))
 
   return (
     <Dialog open={open} onClose={handleClose} size="md">
       <Dialog.Header>
         <h2 className="create-wizard__title">Create User</h2>
         <p className="create-wizard__step-indicator">
-          Step {step} of {TOTAL_STEPS}: {stepLabels[step - 1]}
+          Step {step} of {totalSteps}: {currentStep.label}
         </p>
       </Dialog.Header>
 
       <Dialog.Body>
-        {/* Step 1: User Details */}
-        {step === 1 && (
+        {currentStepKey === 'details' && (
           <div className="create-wizard__step">
             <Input
               id="create-user-name"
               label="Full Name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                clearFieldErrors('name')
+              }}
               error={fieldErrors.name}
               required
               fullWidth
@@ -337,7 +645,10 @@ function CreateUserWizard({ open, onClose, customerId }) {
               type="email"
               label="Email Address"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                clearFieldErrors('email')
+              }}
               error={fieldErrors.email}
               required
               fullWidth
@@ -347,15 +658,17 @@ function CreateUserWizard({ open, onClose, customerId }) {
           </div>
         )}
 
-        {/* Step 2: Assign Roles */}
-        {step === 2 && (
+        {currentStepKey === 'roles' && (
           <div className="create-wizard__step">
             <fieldset className="create-wizard__fieldset">
               <legend className="create-wizard__legend">Select Roles</legend>
               <p className="create-wizard__info" role="note">
                 {CUSTOMER_ADMIN_CREATE_GUIDANCE}
               </p>
-              {AVAILABLE_ROLES.map((role) => (
+              {!allowsTenantAdminRole ? (
+                <p className="create-wizard__hint">{TENANT_ADMIN_TOPOLOGY_GUIDANCE}</p>
+              ) : null}
+              {availableRoles.map((role) => (
                 <Tickbox
                   key={role}
                   id={`role-${role}`}
@@ -365,30 +678,129 @@ function CreateUserWizard({ open, onClose, customerId }) {
                   disabled={isLoading}
                 />
               ))}
-              {fieldErrors.roles && (
+              {fieldErrors.roles ? (
                 <p className="create-wizard__error" role="alert">
                   {fieldErrors.roles}
                 </p>
-              )}
+              ) : null}
             </fieldset>
           </div>
         )}
 
-        {/* Step 3: Tenant Visibility (placeholder — requires tenant list) */}
-        {step === 3 && (
+        {currentStepKey === 'tenantVisibility' && (
           <div className="create-wizard__step">
-            <p className="create-wizard__info">
-              Tenant visibility allows this user to access specific tenants.
-              If no tenants are selected, default visibility rules apply.
-            </p>
-            <p className="create-wizard__placeholder">
-              Tenant selection will be available when the customer has multiple tenants.
-            </p>
+            <fieldset className="create-wizard__fieldset">
+              <legend className="create-wizard__legend">Tenant Visibility</legend>
+              <p className="create-wizard__info">{TENANT_VISIBILITY_STEP_COPY}</p>
+              {effectiveTenantVisibilityMeta?.isServiceProvider ? (
+                <p className="create-wizard__hint">{TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}</p>
+              ) : null}
+              {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
+                <p className="create-wizard__hint">
+                  Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
+                </p>
+              ) : null}
+
+              {isLoadingTenants ? (
+                <p className="create-wizard__info" role="status">
+                  {TENANT_VISIBILITY_LOADING_MESSAGE}
+                </p>
+              ) : null}
+
+              {normalizedTenantsError ? (
+                <ErrorSupportPanel
+                  error={normalizedTenantsError}
+                  context="create-user-tenant-visibility"
+                />
+              ) : null}
+
+              {!isLoadingTenants && !normalizedTenantsError ? (
+                <>
+                  <div className="create-wizard__tenant-toolbar">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSelectAllTenants}
+                      disabled={selectableTenantOptions.length === 0 || isLoading}
+                    >
+                      Select All Available
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearTenantSelection}
+                      disabled={tenantVisibility.length === 0 || isLoading}
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+
+                  {selectableTenantOptions.length > 0 ? (
+                    <div className="create-wizard__tenant-list" role="group" aria-label="Selectable tenants">
+                      {selectableTenantOptions.map((tenant) => (
+                        <div key={tenant.id} className="create-wizard__tenant-option">
+                          <Tickbox
+                            id={`create-tenant-${tenant.id}`}
+                            label={tenant.name}
+                            checked={tenantVisibility.includes(tenant.id)}
+                            onChange={() => toggleTenantSelection(tenant.id)}
+                            disabled={isLoading}
+                          />
+                          <p className="create-wizard__tenant-meta">
+                            Status: {tenant.status}
+                            {tenant.isDefault ? ' | Default tenant' : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="create-wizard__hint">
+                      {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                    </p>
+                  )}
+
+                  {preservedSelectedTenants.length > 0 ? (
+                    <div className="create-wizard__tenant-preserved">
+                      <p className="create-wizard__hint">{TENANT_VISIBILITY_PRESERVED_MESSAGE}</p>
+                      <ul className="create-wizard__tenant-preserved-list">
+                        {preservedSelectedTenants.map((tenant) => (
+                          <li key={tenant.id} className="create-wizard__tenant-preserved-item">
+                            <div className="create-wizard__tenant-preserved-details">
+                              <span className="create-wizard__tenant-preserved-name">{tenant.name}</span>
+                              <span className="create-wizard__tenant-preserved-meta">
+                                Status: {tenant.status}
+                                {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleTenantSelection(tenant.id)}
+                              disabled={isLoading}
+                            >
+                              Remove
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {fieldErrors.tenantVisibility ? (
+                <p className="create-wizard__error" role="alert">
+                  {fieldErrors.tenantVisibility}
+                </p>
+              ) : null}
+            </fieldset>
           </div>
         )}
 
-        {/* Step 4: Review */}
-        {step === 4 && (
+        {currentStepKey === 'review' && (
           <div className="create-wizard__step create-wizard__review">
             <dl className="create-wizard__summary">
               <dt>Name</dt>
@@ -396,13 +808,9 @@ function CreateUserWizard({ open, onClose, customerId }) {
               <dt>Email</dt>
               <dd>{email}</dd>
               <dt>Roles</dt>
-              <dd>{selectedRoles.map((r) => r.replace(/_/g, ' ')).join(', ')}</dd>
-              {tenantVisibility.length > 0 && (
-                <>
-                  <dt>Tenant Visibility</dt>
-                  <dd>{tenantVisibility.length} tenant(s) selected</dd>
-                </>
-              )}
+              <dd>{selectedRoles.map((role) => role.replace(/_/g, ' ')).join(', ')}</dd>
+              <dt>Tenant Visibility</dt>
+              <dd>{tenantVisibilitySummary}</dd>
             </dl>
           </div>
         )}
@@ -420,8 +828,8 @@ function CreateUserWizard({ open, onClose, customerId }) {
             Cancel
           </Button>
 
-          {step < TOTAL_STEPS ? (
-            <Button variant="primary" onClick={handleNext} disabled={isLoading}>
+          {step < totalSteps ? (
+            <Button variant="primary" onClick={handleNext} disabled={nextButtonDisabled}>
               Next
             </Button>
           ) : (

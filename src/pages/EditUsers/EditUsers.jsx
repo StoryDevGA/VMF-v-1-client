@@ -26,8 +26,11 @@ import { MdInfoOutline } from 'react-icons/md'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { getCustomerLifecycleStatus } from '../../utils/authorization.js'
 import {
   normalizeError,
+  isCustomerInactiveError,
+  getCustomerInactiveMessage,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
   getUserLifecycleMessage,
@@ -56,6 +59,9 @@ const CUSTOMER_ADMIN_GOVERNANCE_NOTE =
 
 const USER_LIFECYCLE_NOTE =
   'Active users with UNTRUSTED trust can receive Resend Invitation. Disabled users must be reactivated before invitation recovery is available again.'
+
+const EDIT_USERS_INACTIVE_CUSTOMER_MESSAGE =
+  'This customer is inactive. User-management actions are unavailable until a Super Admin reactivates the customer.'
 
 const getMutationPayload = (result) => {
   if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
@@ -205,7 +211,7 @@ function EditUsersBoundaryState({
  */
 function EditUsers() {
   const { addToast } = useToaster()
-  const { isSuperAdmin, accessibleCustomerIds } = useAuthorization()
+  const { user, isSuperAdmin, accessibleCustomerIds } = useAuthorization()
 
   /* ---- Resolve customer / tenant context from shared store ---- */
   const {
@@ -271,6 +277,28 @@ function EditUsers() {
     [tenantsError],
   )
 
+  const selectedCustomerLifecycleStatus = useMemo(
+    () => getCustomerLifecycleStatus(user, customerId),
+    [customerId, user],
+  )
+
+  const inactiveCustomerAppError = useMemo(() => {
+    if (isCustomerInactiveError(listUsersAppError)) return listUsersAppError
+    if (isCustomerInactiveError(tenantContextAppError)) return tenantContextAppError
+    return null
+  }, [listUsersAppError, tenantContextAppError])
+
+  const isInactiveCustomerLocked =
+    selectedCustomerLifecycleStatus === 'INACTIVE' || Boolean(inactiveCustomerAppError)
+
+  const inactiveCustomerMessage = useMemo(
+    () => getCustomerInactiveMessage(
+      inactiveCustomerAppError,
+      EDIT_USERS_INACTIVE_CUSTOMER_MESSAGE,
+    ),
+    [inactiveCustomerAppError],
+  )
+
   useEffect(() => {
     const nextContextKey = `${customerId ?? ''}::${tenantId ?? ''}`
     if (previousContextKeyRef.current === nextContextKey) return
@@ -287,6 +315,17 @@ function EditUsers() {
     setStatusFilter('')
     setPage(1)
   }, [customerId, tenantId, setPage, setSearch, setStatusFilter])
+
+  useEffect(() => {
+    if (!isInactiveCustomerLocked) return
+
+    setShowCreateWizard(false)
+    setShowBulkOperations(false)
+    setEditingUser(null)
+    setOwnershipTransferTarget(null)
+    setConfirmAction(null)
+    setSelectedRows(new Set())
+  }, [isInactiveCustomerLocked])
 
   /* ---- Action handlers ---- */
 
@@ -659,6 +698,14 @@ function EditUsers() {
     return (
       <EditUsersBoundaryState
         message="No customer context available. Please contact your administrator."
+      />
+    )
+  }
+
+  if (isInactiveCustomerLocked) {
+    return (
+      <EditUsersBoundaryState
+        message={inactiveCustomerMessage}
       />
     )
   }

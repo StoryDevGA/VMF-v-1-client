@@ -7,6 +7,7 @@ import BulkUserOperations from './BulkUserOperations'
 const bulkCreateMock = vi.fn()
 const bulkUpdateMock = vi.fn()
 const bulkDisableMock = vi.fn()
+const mockUseTenantContext = vi.fn()
 
 vi.mock('../../store/api/userApi.js', () => ({
   useBulkCreateUsersMutation: () => [bulkCreateMock, { isLoading: false }],
@@ -14,10 +15,88 @@ vi.mock('../../store/api/userApi.js', () => ({
   useBulkDisableUsersMutation: () => [bulkDisableMock, { isLoading: false }],
 }))
 
+vi.mock('../../hooks/useTenantContext.js', () => ({
+  useTenantContext: (...args) => mockUseTenantContext(...args),
+}))
+
+function getTenantContextMockValue(overrides = {}) {
+  return {
+    customerId: 'cust-1',
+    tenantId: null,
+    tenantName: null,
+    resolvedTenantName: null,
+    tenants: [
+      {
+        id: 'ten-1',
+        name: 'North Hub',
+        status: 'ENABLED',
+        isDefault: true,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-2',
+        name: 'South Hub',
+        status: 'ENABLED',
+        isDefault: false,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-legacy',
+        name: 'Legacy Hub',
+        status: 'DISABLED',
+        isDefault: false,
+        isSelectable: false,
+        selectionState: 'PRESERVED',
+      },
+    ],
+    selectableTenants: [
+      {
+        id: 'ten-1',
+        name: 'North Hub',
+        status: 'ENABLED',
+        isDefault: true,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-2',
+        name: 'South Hub',
+        status: 'ENABLED',
+        isDefault: false,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+    ],
+    tenantVisibilityMeta: {
+      mode: 'GUIDED',
+      allowed: true,
+      topology: 'MULTI_TENANT',
+      isServiceProvider: true,
+      selectableStatuses: ['ENABLED'],
+    },
+    isLoadingTenants: false,
+    tenantsError: null,
+    isSuperAdmin: false,
+    accessibleCustomerIds: ['cust-1'],
+    hasSelectedCustomerAccess: true,
+    selectedTenant: null,
+    isResolvingSelectedTenantContext: false,
+    hasInvalidTenantContext: false,
+    setCustomerId: vi.fn(),
+    setTenantId: vi.fn(),
+    clearContext: vi.fn(),
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   bulkCreateMock.mockReset()
   bulkUpdateMock.mockReset()
   bulkDisableMock.mockReset()
+  mockUseTenantContext.mockReset()
+  mockUseTenantContext.mockReturnValue(getTenantContextMockValue())
 
   HTMLDialogElement.prototype.showModal = vi.fn(function () {
     this.open = true
@@ -87,7 +166,7 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/tenant visibility/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/tenant visibility change/i)).toBeInTheDocument()
     expect(
       screen.getByText(/supported bulk roles: tenant_admin, user\./i),
     ).toBeInTheDocument()
@@ -111,6 +190,20 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByText('2')).toBeInTheDocument()
+  })
+
+  it('shows guided tenant selection when bulk update uses replace mode', async () => {
+    const user = userEvent.setup()
+    renderDialog({ selectedUserIds: ['user-1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.selectOptions(screen.getByLabelText(/tenant visibility change/i), 'replace')
+
+    expect(screen.getByText(/apply the same tenant visibility set to every selected user/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /select all available/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/north hub/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/south hub/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/tenant visibility ids/i)).not.toBeInTheDocument()
   })
 
   // ---- Bulk Create: Manual ----
@@ -303,6 +396,71 @@ describe('BulkUserOperations', () => {
     })
   })
 
+  it('calls bulkUpdateUsers with selected tenant visibility ids in replace mode', async () => {
+    const user = userEvent.setup()
+    bulkUpdateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 1, success: 1, failed: 0 },
+        results: [{ userId: 'u1', success: true }],
+      }),
+    })
+
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.selectOptions(screen.getByLabelText(/tenant visibility change/i), 'replace')
+    await user.click(screen.getByLabelText(/north hub/i))
+    await user.click(screen.getByRole('button', { name: /update selected users/i }))
+
+    await waitFor(() => {
+      expect(bulkUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            users: [
+              {
+                userId: 'u1',
+                tenantVisibility: ['ten-1'],
+              },
+            ],
+          },
+        }),
+      )
+    })
+  })
+
+  it('calls bulkUpdateUsers with an empty tenant visibility array in clear mode', async () => {
+    const user = userEvent.setup()
+    bulkUpdateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 1, success: 1, failed: 0 },
+        results: [{ userId: 'u1', success: true }],
+      }),
+    })
+
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.selectOptions(screen.getByLabelText(/tenant visibility change/i), 'clear')
+    await user.click(screen.getByRole('button', { name: /update selected users/i }))
+
+    await waitFor(() => {
+      expect(bulkUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            users: [
+              {
+                userId: 'u1',
+                tenantVisibility: [],
+              },
+            ],
+          },
+        }),
+      )
+    })
+  })
+
   it('blocks bulk update when roles include CUSTOMER_ADMIN', async () => {
     const user = userEvent.setup()
     renderDialog({ selectedUserIds: ['u1'] })
@@ -316,6 +474,30 @@ describe('BulkUserOperations', () => {
       /bulk operations cannot assign or remove customer admin ownership/i,
     )
     expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
+  })
+
+  it('shows not-required guidance when tenant visibility is not allowed for the topology', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+
+    expect(screen.getByText(/tenant visibility is not required for this customer topology/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/tenant visibility change/i)).not.toBeInTheDocument()
   })
 
   // ---- Close / reset ----

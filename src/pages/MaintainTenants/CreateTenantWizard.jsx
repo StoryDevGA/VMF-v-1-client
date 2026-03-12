@@ -15,7 +15,7 @@
  * @param {string}  props.customerId — customer scope for the new tenant
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
@@ -26,17 +26,124 @@ import {
   normalizeError,
   isGovernanceLimitConflictError,
   getGovernanceLimitConflictMessage,
+  isTenantAdminAssignmentsValidationError,
+  getTenantAdminAssignmentsValidationMessage,
 } from '../../utils/errors.js'
 
 /** Wizard step count */
 const TOTAL_STEPS = 3
 
+const getTenantCapacityCountLabel = (countMode) =>
+  countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
+
+const getFieldErrorMessage = (value) => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim()
+      if (
+        entry
+        && typeof entry === 'object'
+        && typeof entry.message === 'string'
+        && entry.message.trim()
+      ) {
+        return entry.message.trim()
+      }
+    }
+  }
+
+  if (value && typeof value === 'object' && typeof value.message === 'string') {
+    return value.message.trim()
+  }
+
+  return ''
+}
+
+const normalizeTenantFieldName = (field) => {
+  const compact = String(field ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+
+  if (!compact) return ''
+  if (compact.includes('tenantadminuserids') || compact.includes('tenantadmins')) {
+    return 'tenantAdminUserIds'
+  }
+  if (compact.includes('website')) return 'website'
+  if (compact.endsWith('name')) return 'name'
+
+  return ''
+}
+
+const mapTenantValidationErrors = (details) => {
+  const mapped = {}
+
+  if (Array.isArray(details)) {
+    for (const detail of details) {
+      if (!detail || typeof detail !== 'object') continue
+      const field = normalizeTenantFieldName(detail.field)
+      const message = getFieldErrorMessage(detail.message)
+      if (!field || !message) continue
+      mapped[field] = message
+    }
+    return mapped
+  }
+
+  if (!details || typeof details !== 'object') return mapped
+
+  for (const [field, value] of Object.entries(details)) {
+    const normalizedField = normalizeTenantFieldName(field)
+    const message = getFieldErrorMessage(value)
+    if (!normalizedField || !message) continue
+    mapped[normalizedField] = message
+  }
+
+  return mapped
+}
+
+const getTenantCapacityGuidance = (tenantCapacity) => {
+  if (!tenantCapacity) return null
+
+  const currentCount = tenantCapacity.currentCount
+  const maxTenants = tenantCapacity.maxTenants
+  const remainingCount = tenantCapacity.remainingCount
+  const countLabel = getTenantCapacityCountLabel(tenantCapacity.countMode)
+
+  if (tenantCapacity.isAtCapacity && currentCount !== null && maxTenants !== null) {
+    return {
+      tone: 'warning',
+      title: 'Tenant capacity reached',
+      message:
+        `This customer is already using ${currentCount} of ${maxTenants} ${countLabel} tenant slots. `
+        + 'Disable or archive an existing tenant, or update customer limits before creating another.',
+    }
+  }
+
+  if (remainingCount === 1 && currentCount !== null && maxTenants !== null) {
+    return {
+      tone: 'warning',
+      title: 'Final tenant slot',
+      message:
+        `This create will use the final available ${countLabel} tenant slot for this customer `
+        + `(${currentCount} of ${maxTenants} currently in use).`,
+    }
+  }
+
+  return null
+}
+
 /**
  * CreateTenantWizard Component
  */
-function CreateTenantWizard({ open, onClose, customerId }) {
+function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }) {
   const { addToast } = useToaster()
   const [createTenantMutation, { isLoading }] = useCreateTenantMutation()
+  const tenantCapacityGuidance = useMemo(
+    () => getTenantCapacityGuidance(tenantCapacity),
+    [tenantCapacity],
+  )
+  const isCreateBlockedByCapacity = tenantCapacity?.isAtCapacity === true
 
   /* ---- Wizard state ---- */
   const [step, setStep] = useState(1)
@@ -106,6 +213,17 @@ function CreateTenantWizard({ open, onClose, customerId }) {
 
   /* ---- Submit ---- */
   const handleCreate = useCallback(async () => {
+    if (isCreateBlockedByCapacity) {
+      addToast({
+        title: 'Tenant capacity reached',
+        description:
+          tenantCapacityGuidance?.message
+          ?? 'Disable or archive an existing tenant, or update customer limits before creating another.',
+        variant: 'warning',
+      })
+      return
+    }
+
     try {
       const body = {
         name: name.trim(),
@@ -133,14 +251,29 @@ function CreateTenantWizard({ open, onClose, customerId }) {
         return
       }
 
+      if (isTenantAdminAssignmentsValidationError(appError)) {
+        const assignmentMessage = getTenantAdminAssignmentsValidationMessage(appError)
+        setFieldErrors((currentErrors) => ({
+          ...currentErrors,
+          tenantAdminUserIds: assignmentMessage,
+        }))
+        setStep(2)
+        addToast({
+          title: 'Tenant admin selection needs attention',
+          description: assignmentMessage,
+          variant: 'warning',
+        })
+        return
+      }
+
       if (appError.status === 422 && appError.details) {
-        const mapped = {}
-        for (const detail of appError.details) {
-          if (detail.field) mapped[detail.field] = detail.message
+        const mapped = mapTenantValidationErrors(appError.details)
+        if (Object.keys(mapped).length > 0) {
+          setFieldErrors(mapped)
+          if (mapped.name || mapped.website) setStep(1)
+          else if (mapped.tenantAdminUserIds) setStep(2)
+          return
         }
-        setFieldErrors(mapped)
-        if (mapped.name || mapped.website) setStep(1)
-        else if (mapped.tenantAdminUserIds) setStep(2)
       }
 
       addToast({
@@ -157,6 +290,8 @@ function CreateTenantWizard({ open, onClose, customerId }) {
     createTenantMutation,
     addToast,
     handleClose,
+    isCreateBlockedByCapacity,
+    tenantCapacityGuidance,
   ])
 
   /* ---- Step labels ---- */
@@ -172,6 +307,23 @@ function CreateTenantWizard({ open, onClose, customerId }) {
       </Dialog.Header>
 
       <Dialog.Body>
+        {tenantCapacityGuidance ? (
+          <div
+            className={[
+              'create-wizard__note',
+              tenantCapacityGuidance.tone === 'warning'
+                ? 'create-wizard__note--warning'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            role={tenantCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
+          >
+            <p className="create-wizard__note-title">{tenantCapacityGuidance.title}</p>
+            <p className="create-wizard__note-text">{tenantCapacityGuidance.message}</p>
+          </div>
+        ) : null}
+
         {/* Step 1: Tenant Details */}
         {step === 1 && (
           <div className="create-wizard__step">
@@ -206,7 +358,8 @@ function CreateTenantWizard({ open, onClose, customerId }) {
             <fieldset className="create-wizard__fieldset">
               <legend className="create-wizard__legend">Assign Tenant Admins</legend>
               <p className="create-wizard__hint">
-                Search and select at least one user to serve as tenant administrator.
+                Search and select at least one active user from this customer to serve as tenant administrator.
+                Stale, inactive, or out-of-customer selections will be rejected before save.
               </p>
 
               <UserSearchSelect
@@ -252,7 +405,11 @@ function CreateTenantWizard({ open, onClose, customerId }) {
           Cancel
         </Button>
         {step < TOTAL_STEPS ? (
-          <Button variant="primary" onClick={handleNext} disabled={isLoading}>
+          <Button
+            variant="primary"
+            onClick={handleNext}
+            disabled={isLoading || isCreateBlockedByCapacity}
+          >
             Next
           </Button>
         ) : (
@@ -260,7 +417,7 @@ function CreateTenantWizard({ open, onClose, customerId }) {
             variant="primary"
             onClick={handleCreate}
             loading={isLoading}
-            disabled={isLoading}
+            disabled={isLoading || isCreateBlockedByCapacity}
           >
             Create Tenant
           </Button>

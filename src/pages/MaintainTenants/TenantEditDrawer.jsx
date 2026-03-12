@@ -25,7 +25,11 @@ import { Status } from '../../components/Status'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useUpdateTenantMutation } from '../../store/api/tenantApi.js'
-import { normalizeError } from '../../utils/errors.js'
+import {
+  normalizeError,
+  isTenantAdminAssignmentsValidationError,
+  getTenantAdminAssignmentsValidationMessage,
+} from '../../utils/errors.js'
 
 /** Status variant mapping */
 const STATUS_VARIANT_MAP = {
@@ -34,12 +38,119 @@ const STATUS_VARIANT_MAP = {
   ARCHIVED: 'neutral',
 }
 
+const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
+
+const getTenantLifecycleGuidance = (tenant) => {
+  const tenantStatus = getTenantStatus(tenant)
+
+  if (tenantStatus === 'ARCHIVED') {
+    return {
+      tone: 'warning',
+      title: 'Archived tenant',
+      message:
+        'Archived tenants are read-only in this workspace. Update lifecycle elsewhere before editing tenant details or assignments.',
+    }
+  }
+
+  if (tenant?.isDefault) {
+    return {
+      tone: 'info',
+      title: 'Default tenant',
+      message:
+        'The default tenant must remain enabled for this customer. You can update details here, but disable remains unavailable from the table.',
+    }
+  }
+
+  if (tenantStatus === 'DISABLED') {
+    return {
+      tone: 'warning',
+      title: 'Tenant disabled',
+      message:
+        'Users assigned to this tenant currently cannot access it. Re-enabling restores access immediately.',
+    }
+  }
+
+  return null
+}
+
+const getFieldErrorMessage = (value) => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim()
+      if (
+        entry
+        && typeof entry === 'object'
+        && typeof entry.message === 'string'
+        && entry.message.trim()
+      ) {
+        return entry.message.trim()
+      }
+    }
+  }
+
+  if (value && typeof value === 'object' && typeof value.message === 'string') {
+    return value.message.trim()
+  }
+
+  return ''
+}
+
+const normalizeTenantFieldName = (field) => {
+  const compact = String(field ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+
+  if (!compact) return ''
+  if (compact.includes('tenantadminuserids') || compact.includes('tenantadmins')) {
+    return 'tenantAdminUserIds'
+  }
+  if (compact.includes('website')) return 'website'
+  if (compact.endsWith('name')) return 'name'
+
+  return ''
+}
+
+const mapTenantValidationErrors = (details) => {
+  const mapped = {}
+
+  if (Array.isArray(details)) {
+    for (const detail of details) {
+      if (!detail || typeof detail !== 'object') continue
+      const field = normalizeTenantFieldName(detail.field)
+      const message = getFieldErrorMessage(detail.message)
+      if (!field || !message) continue
+      mapped[field] = message
+    }
+    return mapped
+  }
+
+  if (!details || typeof details !== 'object') return mapped
+
+  for (const [field, value] of Object.entries(details)) {
+    const normalizedField = normalizeTenantFieldName(field)
+    const message = getFieldErrorMessage(value)
+    if (!normalizedField || !message) continue
+    mapped[normalizedField] = message
+  }
+
+  return mapped
+}
+
 /**
  * TenantEditDrawer Component
  */
 function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const { addToast } = useToaster()
   const [updateTenantMutation, { isLoading }] = useUpdateTenantMutation()
+  const tenantStatus = getTenantStatus(tenant)
+  const isArchivedTenant = tenantStatus === 'ARCHIVED'
+  const lifecycleGuidance = useMemo(
+    () => getTenantLifecycleGuidance(tenant),
+    [tenant],
+  )
 
   /* ---- Local edit state ---- */
   const [name, setName] = useState('')
@@ -94,6 +205,15 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
 
   /* ---- Save ---- */
   const handleSave = useCallback(async () => {
+    if (isArchivedTenant) {
+      addToast({
+        title: 'Archived tenant is read-only',
+        description: 'Archived tenants cannot be edited from this workspace.',
+        variant: 'info',
+      })
+      return
+    }
+
     if (!validate()) return
 
     try {
@@ -105,7 +225,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         body.website = website.trim()
       }
       // Always send tenantAdminUserIds if changed
-      const originalSorted = (tenant?.tenantAdminUserIds ?? []).sort().join(',')
+      const originalSorted = [...(tenant?.tenantAdminUserIds ?? [])].sort().join(',')
       const currentSorted = [...tenantAdminUserIds].sort().join(',')
       if (currentSorted !== originalSorted) {
         body.tenantAdminUserIds = tenantAdminUserIds
@@ -135,12 +255,26 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
     } catch (err) {
       const appError = normalizeError(err)
 
+      if (isTenantAdminAssignmentsValidationError(appError)) {
+        const assignmentMessage = getTenantAdminAssignmentsValidationMessage(appError)
+        setFieldErrors((currentErrors) => ({
+          ...currentErrors,
+          tenantAdminUserIds: assignmentMessage,
+        }))
+        addToast({
+          title: 'Tenant admin selection needs attention',
+          description: assignmentMessage,
+          variant: 'warning',
+        })
+        return
+      }
+
       if (appError.status === 422 && appError.details) {
-        const mapped = {}
-        for (const detail of appError.details) {
-          if (detail.field) mapped[detail.field] = detail.message
+        const mapped = mapTenantValidationErrors(appError.details)
+        if (Object.keys(mapped).length > 0) {
+          setFieldErrors(mapped)
+          return
         }
-        setFieldErrors(mapped)
       }
 
       addToast({
@@ -149,7 +283,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         variant: 'error',
       })
     }
-  }, [tenant, name, website, tenantAdminUserIds, updateTenantMutation, addToast, onClose, validate])
+  }, [tenant, name, website, tenantAdminUserIds, updateTenantMutation, addToast, onClose, validate, isArchivedTenant])
 
   if (!tenant) return null
 
@@ -160,6 +294,23 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       </Dialog.Header>
 
       <Dialog.Body>
+        {lifecycleGuidance ? (
+          <div
+            className={[
+              'tenant-edit-drawer__lifecycle-note',
+              lifecycleGuidance.tone === 'warning'
+                ? 'tenant-edit-drawer__lifecycle-note--warning'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            role={lifecycleGuidance.tone === 'warning' ? 'alert' : 'note'}
+          >
+            <p className="tenant-edit-drawer__lifecycle-title">{lifecycleGuidance.title}</p>
+            <p className="tenant-edit-drawer__lifecycle-text">{lifecycleGuidance.message}</p>
+          </div>
+        ) : null}
+
         {/* Status display */}
         <div className="tenant-edit-drawer__status">
           <span className="tenant-edit-drawer__label">Status</span>
@@ -184,7 +335,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           error={fieldErrors.name}
           required
           fullWidth
-          disabled={isLoading}
+          disabled={isLoading || isArchivedTenant}
         />
 
         <Input
@@ -195,12 +346,16 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           onChange={(e) => setWebsite(e.target.value)}
           error={fieldErrors.website}
           fullWidth
-          disabled={isLoading}
+          disabled={isLoading || isArchivedTenant}
         />
 
         {/* Tenant admin assignment */}
         <fieldset className="tenant-edit-drawer__fieldset">
           <legend className="tenant-edit-drawer__legend">Tenant Admins</legend>
+          <p className="tenant-edit-drawer__hint">
+            Keep at least one active tenant admin from this customer assigned. Stale, inactive,
+            or out-of-customer selections will be rejected on save.
+          </p>
 
           <UserSearchSelect
             customerId={customerId}
@@ -209,7 +364,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
             label="Search users by name or email"
             error={fieldErrors.tenantAdminUserIds}
             minRequired={1}
-            disabled={isLoading}
+            disabled={isLoading || isArchivedTenant}
             originalIds={originalAdminIds}
           />
         </fieldset>
@@ -223,7 +378,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           variant="primary"
           onClick={handleSave}
           loading={isLoading}
-          disabled={isLoading}
+          disabled={isLoading || isArchivedTenant}
         >
           Save Changes
         </Button>

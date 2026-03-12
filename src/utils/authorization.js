@@ -93,6 +93,68 @@ export const hasCustomerAccess = (user, customerId) => {
 }
 
 /**
+ * Normalize customer lifecycle status to the shared ACTIVE/INACTIVE model.
+ * Keeps compatibility with legacy DISABLED payloads.
+ *
+ * @param {string | undefined | null} status
+ * @returns {string}
+ */
+export const normalizeCustomerLifecycleStatus = (status) => {
+  const normalizedStatus = String(status ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (!normalizedStatus) return ''
+  return normalizedStatus === 'DISABLED' ? 'INACTIVE' : normalizedStatus
+}
+
+/**
+ * Best-effort resolver for the selected customer's lifecycle status from the
+ * authenticated user payload. Supports customer-specific status keys when the
+ * session profile includes them.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {string}
+ */
+export const getCustomerLifecycleStatus = (user, customerId) => {
+  if (!user?.memberships || !customerId) return ''
+
+  const membership = user.memberships.find(
+    (m) => m?.customerId && m.customerId.toString() === customerId.toString(),
+  )
+
+  if (!membership || typeof membership !== 'object') return ''
+
+  const candidateStatuses = [
+    membership?.customer?.status,
+    membership?.customerStatus,
+    membership?.customerLifecycleStatus,
+    membership?.customer?.lifecycleStatus,
+    membership?.status,
+    membership?.lifecycleStatus,
+  ]
+
+  for (const candidateStatus of candidateStatuses) {
+    const normalizedStatus = normalizeCustomerLifecycleStatus(candidateStatus)
+    if (normalizedStatus) return normalizedStatus
+  }
+
+  return ''
+}
+
+/**
+ * Check whether the selected customer is explicitly marked inactive in the
+ * authenticated user payload.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {boolean}
+ */
+export const isCustomerInactiveForContext = (user, customerId) =>
+  getCustomerLifecycleStatus(user, customerId) === 'INACTIVE'
+
+/**
  * Check whether the user holds a specific role for any customer
  * membership.
  *

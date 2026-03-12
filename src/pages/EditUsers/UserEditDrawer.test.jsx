@@ -21,12 +21,17 @@ import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import UserEditDrawer from './UserEditDrawer'
 
-const { mockUseUpdateUserMutation } = vi.hoisted(() => ({
+const { mockUseUpdateUserMutation, mockUseTenantContext } = vi.hoisted(() => ({
   mockUseUpdateUserMutation: vi.fn(),
+  mockUseTenantContext: vi.fn(),
 }))
 
 vi.mock('../../store/api/userApi.js', () => ({
   useUpdateUserMutation: (...args) => mockUseUpdateUserMutation(...args),
+}))
+
+vi.mock('../../hooks/useTenantContext.js', () => ({
+  useTenantContext: (...args) => mockUseTenantContext(...args),
 }))
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
@@ -74,6 +79,92 @@ const canonicalAdminUser = {
   memberships: [
     { customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] },
   ],
+}
+
+const tenantVisibleUser = {
+  ...mockUser,
+  _id: 'user-4',
+  tenantVisibility: ['ten-1', 'ten-legacy'],
+}
+
+const singleTenantAdminUser = {
+  ...mockUser,
+  _id: 'user-5',
+  memberships: [
+    { customerId: 'cust-1', roles: ['TENANT_ADMIN'] },
+  ],
+}
+
+function getTenantContextMockValue(overrides = {}) {
+  return {
+    customerId: 'cust-1',
+    tenantId: null,
+    tenantName: null,
+    resolvedTenantName: null,
+    tenants: [
+      {
+        id: 'ten-1',
+        name: 'North Hub',
+        status: 'ENABLED',
+        isDefault: true,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-2',
+        name: 'South Hub',
+        status: 'ENABLED',
+        isDefault: false,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-legacy',
+        name: 'Legacy Hub',
+        status: 'DISABLED',
+        isDefault: false,
+        isSelectable: false,
+        selectionState: 'PRESERVED',
+      },
+    ],
+    selectableTenants: [
+      {
+        id: 'ten-1',
+        name: 'North Hub',
+        status: 'ENABLED',
+        isDefault: true,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+      {
+        id: 'ten-2',
+        name: 'South Hub',
+        status: 'ENABLED',
+        isDefault: false,
+        isSelectable: true,
+        selectionState: 'AVAILABLE',
+      },
+    ],
+    tenantVisibilityMeta: {
+      mode: 'GUIDED',
+      allowed: true,
+      topology: 'MULTI_TENANT',
+      isServiceProvider: true,
+      selectableStatuses: ['ENABLED'],
+    },
+    isLoadingTenants: false,
+    tenantsError: null,
+    isSuperAdmin: false,
+    accessibleCustomerIds: ['cust-1'],
+    hasSelectedCustomerAccess: true,
+    selectedTenant: null,
+    isResolvingSelectedTenantContext: false,
+    hasInvalidTenantContext: false,
+    setCustomerId: vi.fn(),
+    setTenantId: vi.fn(),
+    clearContext: vi.fn(),
+    ...overrides,
+  }
 }
 
 /** Create a fresh store */
@@ -127,6 +218,7 @@ describe('UserEditDrawer', () => {
       }),
     })
     mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseTenantContext.mockReturnValue(getTenantContextMockValue())
   })
 
   it('renders the Edit User heading', () => {
@@ -172,6 +264,40 @@ describe('UserEditDrawer', () => {
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/customer admin/i)).not.toBeInTheDocument()
+  })
+
+  it('hides TENANT_ADMIN for single-tenant customers and shows topology guidance', () => {
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDrawer()
+
+    expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/tenant admin is only available for multi-tenant customers/i),
+    ).toBeInTheDocument()
+  })
+
+  it('renders guided tenant-visibility controls with preserved selections', () => {
+    renderDrawer({ user: tenantVisibleUser })
+
+    expect(screen.getByText(/select the tenants this user should be able to access/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/north hub/i)).toBeChecked()
+    expect(screen.getByLabelText(/south hub/i)).not.toBeChecked()
+    expect(screen.getByText(/legacy hub/i)).toBeInTheDocument()
+    expect(screen.getByText(/previously selected tenants that are no longer selectable/i)).toBeInTheDocument()
   })
 
   it('pre-checks the USER role from user memberships', () => {
@@ -288,6 +414,89 @@ describe('UserEditDrawer', () => {
     ).toBeInTheDocument()
   })
 
+  it('submits tenant-visibility changes using selected tenant ids', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'user-4',
+          name: 'Jane Doe',
+          email: 'jane@acme.com',
+          isActive: true,
+          trustStatus: 'TRUSTED',
+          tenantVisibility: ['ten-2'],
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDrawer({ user: tenantVisibleUser })
+
+    await user.click(screen.getByLabelText(/north hub/i))
+    await user.click(screen.getByLabelText(/south hub/i))
+    await user.click(screen.getByRole('button', { name: /remove/i }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith({
+        userId: 'user-4',
+        body: {
+          tenantVisibility: ['ten-2'],
+        },
+      })
+    })
+  })
+
+  it('filters hidden tenant-admin assignments out of submitted role changes for single-tenant customers', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'user-5',
+          name: 'Jane Doe',
+          email: 'jane@acme.com',
+          isActive: true,
+          trustStatus: 'TRUSTED',
+          memberships: [
+            { customerId: 'cust-1', roles: ['USER'] },
+          ],
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDrawer({ user: singleTenantAdminUser })
+
+    expect(
+      screen.getByText(/saving role changes will remove that assignment/i),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(/^user$/i))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith({
+        userId: 'user-5',
+        body: {
+          roles: ['USER'],
+        },
+      })
+    })
+  })
+
   it('maps reason-based email conflicts to the email field', async () => {
     const user = userEvent.setup()
     const updateUser = vi.fn().mockReturnValue({
@@ -316,6 +525,64 @@ describe('UserEditDrawer', () => {
     const conflictMessages = await screen.findAllByText(/already exists in this customer/i)
     expect(conflictMessages.length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText(/\(Ref: req-email-conflict-1\)/i).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows not-required guidance when tenant visibility is not allowed for the topology', () => {
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDrawer()
+
+    expect(screen.getByText(/tenant visibility is not required for this customer topology/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/north hub/i)).not.toBeInTheDocument()
+  })
+
+  it('maps tenant-visibility validation reasons to the tenant field', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            requestId: 'req-tenant-visibility-1',
+            details: {
+              reason: 'TENANT_VISIBILITY_INVALID_TENANT_IDS',
+              invalidTenantIds: ['ten-legacy'],
+            },
+          },
+        },
+      }),
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDrawer({ user: tenantVisibleUser })
+
+    await user.click(screen.getByLabelText(/north hub/i))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      const tenantVisibilityError = screen.getByText(
+        /one or more tenant selections are no longer valid/i,
+        {
+          selector: '.user-edit-drawer__error',
+        },
+      )
+
+      expect(tenantVisibilityError).toBeInTheDocument()
+      expect(tenantVisibilityError).toHaveTextContent(/remove invalid tenant selections: ten-legacy/i)
+    })
   })
 
   it('does not render when user is null', () => {

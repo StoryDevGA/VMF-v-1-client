@@ -28,6 +28,26 @@ import {
 import { useListTenantsQuery } from '../store/api/tenantApi.js'
 import { isSuperAdmin as checkIsSuperAdmin, getAccessibleCustomerIds } from '../utils/authorization.js'
 
+const normalizeTenantVisibilityMeta = (meta) => {
+  if (!meta || typeof meta !== 'object') return null
+
+  return {
+    mode: String(meta.mode ?? '')
+      .trim()
+      .toUpperCase(),
+    allowed: Boolean(meta.allowed),
+    topology: String(meta.topology ?? '')
+      .trim()
+      .toUpperCase(),
+    isServiceProvider: Boolean(meta.isServiceProvider),
+    selectableStatuses: Array.isArray(meta.selectableStatuses)
+      ? meta.selectableStatuses
+        .map((status) => String(status ?? '').trim().toUpperCase())
+        .filter(Boolean)
+      : [],
+  }
+}
+
 export function useTenantContext() {
   const dispatch = useDispatch()
   const user = useSelector(selectCurrentUser)
@@ -53,6 +73,14 @@ export function useTenantContext() {
   )
 
   const tenants = useMemo(() => tenantsData?.data ?? [], [tenantsData])
+  const tenantVisibilityMeta = useMemo(
+    () => normalizeTenantVisibilityMeta(tenantsData?.meta?.tenantVisibility),
+    [tenantsData],
+  )
+  const selectableTenants = useMemo(
+    () => tenants.filter((tenant) => tenant?.isSelectable === true),
+    [tenants],
+  )
 
   /* ---- Derived state ---- */
   const isSuperAdminUser = useMemo(() => checkIsSuperAdmin(user), [user])
@@ -103,6 +131,8 @@ export function useTenantContext() {
     tenantName,
     resolvedTenantName,
     tenants,
+    selectableTenants,
+    tenantVisibilityMeta,
     isLoadingTenants,
     tenantsError,
     isSuperAdmin: isSuperAdminUser,

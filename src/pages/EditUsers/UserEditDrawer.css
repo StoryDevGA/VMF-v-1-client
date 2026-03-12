@@ -34,6 +34,88 @@
   line-height: var(--line-height-normal, 1.5);
 }
 
+.user-edit-drawer__tenant-visibility {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.user-edit-drawer__tenant-visibility-text,
+.user-edit-drawer__tenant-visibility-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.user-edit-drawer__tenant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.user-edit-drawer__tenant-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.user-edit-drawer__tenant-option {
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) solid var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-primary);
+}
+
+.user-edit-drawer__tenant-meta {
+  margin: var(--spacing-xs, 0.25rem) 0 0 calc(var(--spacing-xl, 2rem) + var(--spacing-sm, 0.5rem));
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-text-secondary);
+}
+
+.user-edit-drawer__tenant-preserved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+  padding: var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) dashed var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-secondary);
+}
+
+.user-edit-drawer__tenant-preserved-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 0.5rem);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.user-edit-drawer__tenant-preserved-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-sm, 0.5rem);
+}
+
+.user-edit-drawer__tenant-preserved-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs, 0.125rem);
+  min-width: 0;
+}
+
+.user-edit-drawer__tenant-preserved-name {
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.user-edit-drawer__tenant-preserved-meta {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-text-secondary);
+}
+
 .user-edit-drawer__locked-field {
   display: flex;
   flex-direction: column;
@@ -59,4 +141,10 @@
 .user-edit-drawer__error {
   margin: 0;
   color: var(--color-error);
+}
+
+@media (max-width: 767px) {
+  .user-edit-drawer__tenant-preserved-item {
+    flex-direction: column;
+  }
 }

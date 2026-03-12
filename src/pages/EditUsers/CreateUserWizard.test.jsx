@@ -19,12 +19,89 @@ import { MemoryRouter } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import CreateUserWizard from './CreateUserWizard'
 import { useCreateUserMutation } from '../../store/api/userApi.js'
 
 vi.mock('../../store/api/userApi.js', () => ({
   useCreateUserMutation: vi.fn(),
 }))
+
+vi.mock('../../hooks/useTenantContext.js', () => ({
+  useTenantContext: vi.fn(),
+}))
+
+const getTenantContextMockValue = (overrides = {}) => ({
+  customerId: 'cust-1',
+  tenantId: null,
+  tenantName: null,
+  resolvedTenantName: null,
+  tenants: [
+    {
+      id: 'ten-1',
+      name: 'North Hub',
+      status: 'ENABLED',
+      isDefault: true,
+      isSelectable: true,
+      selectionState: 'AVAILABLE',
+    },
+    {
+      id: 'ten-2',
+      name: 'South Hub',
+      status: 'ENABLED',
+      isDefault: false,
+      isSelectable: true,
+      selectionState: 'AVAILABLE',
+    },
+    {
+      id: 'ten-legacy',
+      name: 'Legacy Hub',
+      status: 'DISABLED',
+      isDefault: false,
+      isSelectable: false,
+      selectionState: 'PRESERVED',
+    },
+  ],
+  selectableTenants: [
+    {
+      id: 'ten-1',
+      name: 'North Hub',
+      status: 'ENABLED',
+      isDefault: true,
+      isSelectable: true,
+      selectionState: 'AVAILABLE',
+    },
+    {
+      id: 'ten-2',
+      name: 'South Hub',
+      status: 'ENABLED',
+      isDefault: false,
+      isSelectable: true,
+      selectionState: 'AVAILABLE',
+    },
+  ],
+  tenantVisibilityMeta: {
+    mode: 'GUIDED',
+    allowed: true,
+    topology: 'MULTI_TENANT',
+    isServiceProvider: true,
+    selectableStatuses: ['ENABLED'],
+  },
+  isLoadingTenants: false,
+  tenantsError: null,
+  isSuperAdmin: false,
+  accessibleCustomerIds: ['cust-1'],
+  hasSelectedCustomerAccess: true,
+  selectedTenant: null,
+  isResolvingSelectedTenantContext: false,
+  hasInvalidTenantContext: false,
+  setCustomerId: vi.fn(),
+  setTenantId: vi.fn(),
+  clearContext: vi.fn(),
+  ...overrides,
+})
+
+let createUserMock
 
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
 beforeEach(() => {
@@ -75,6 +152,7 @@ async function completeWizardToReview(user, values = {}) {
   const name = values.name ?? 'Jane Doe'
   const email = values.email ?? 'jane@acme.com'
   const roleLabel = values.roleLabel ?? /^user$/i
+  const tenantLabel = values.tenantLabel ?? null
 
   await user.type(screen.getByLabelText(/full name/i), name)
   await user.type(screen.getByLabelText(/email address/i), email)
@@ -85,6 +163,9 @@ async function completeWizardToReview(user, values = {}) {
   await user.click(screen.getByRole('button', { name: /next/i }))
 
   await waitFor(() => screen.getByText(/step 3 of 4/i))
+  if (tenantLabel) {
+    await user.click(screen.getByLabelText(tenantLabel))
+  }
   await user.click(screen.getByRole('button', { name: /next/i }))
 
   await waitFor(() => screen.getByText(/step 4 of 4/i))
@@ -93,7 +174,7 @@ async function completeWizardToReview(user, values = {}) {
 describe('CreateUserWizard', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    const createUser = vi.fn(() => ({
+    createUserMock = vi.fn(() => ({
       unwrap: vi.fn().mockResolvedValue({
         data: {
           outcome: 'invited_new',
@@ -102,7 +183,8 @@ describe('CreateUserWizard', () => {
         },
       }),
     }))
-    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+    useCreateUserMutation.mockReturnValue([createUserMock, { isLoading: false }])
+    useTenantContext.mockReturnValue(getTenantContextMockValue())
   })
 
   it('renders step 1 heading when open', () => {
@@ -240,6 +322,99 @@ describe('CreateUserWizard', () => {
       expect(screen.getByText('Jane Doe')).toBeInTheDocument()
       expect(screen.getByText('jane@acme.com')).toBeInTheDocument()
       expect(screen.getByText(/USER/)).toBeInTheDocument()
+      expect(
+        screen.getByText(/no explicit tenant visibility selected/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('renders guided tenant selection instead of placeholder copy', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByLabelText(/full name/i), 'Jane Doe')
+    await user.type(screen.getByLabelText(/email address/i), 'jane@acme.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => screen.getByText(/step 2 of 4/i))
+    await user.click(screen.getByLabelText(/^user$/i))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/select the tenants this user should be able to access/i),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /select all available/i })).toBeInTheDocument()
+      expect(screen.getByLabelText(/north hub/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/south hub/i)).toBeInTheDocument()
+      expect(
+        screen.queryByText(/tenant selection will be available when the customer has multiple tenants/i),
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it('submits selected tenant visibility ids and shows tenant names in review', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await completeWizardToReview(user, { tenantLabel: /north hub/i })
+
+    await waitFor(() => {
+      expect(screen.getByText(/north hub/i)).toBeInTheDocument()
+      expect(screen.queryByText(/no explicit tenant visibility selected/i)).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        body: {
+          name: 'Jane Doe',
+          email: 'jane@acme.com',
+          roles: ['USER'],
+          tenantVisibility: ['ten-1'],
+        },
+      })
+    })
+  })
+
+  it('hides the tenant-visibility step when the topology does not allow it', async () => {
+    const user = userEvent.setup()
+    useTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+    renderWizard()
+
+    await user.type(screen.getByLabelText(/full name/i), 'Jane Doe')
+    await user.type(screen.getByLabelText(/email address/i), 'jane@acme.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 2 of 3/i)).toBeInTheDocument()
+      expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/tenant admin is only available for multi-tenant customers/i),
+      ).toBeInTheDocument()
+    })
+    await user.click(screen.getByLabelText(/^user$/i))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
+      expect(screen.getByText(/not required for this customer topology/i)).toBeInTheDocument()
     })
   })
 
@@ -367,6 +542,46 @@ describe('CreateUserWizard', () => {
           /belongs to another customer and cannot be assigned to this customer/i,
           { selector: '#create-user-email-error' },
         ),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('routes tenant-visibility validation failures back to the tenant step', async () => {
+    const user = userEvent.setup()
+    const createUser = vi.fn(() => ({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Generic validation failure',
+            requestId: 'req-tenant-visibility-1',
+            details: {
+              reason: 'TENANT_VISIBILITY_INVALID_TENANT_IDS',
+              invalidTenantIds: ['ten-1'],
+            },
+          },
+        },
+      }),
+    }))
+    useCreateUserMutation.mockReturnValue([createUser, { isLoading: false }])
+
+    renderWizard()
+
+    await completeWizardToReview(user, { tenantLabel: /north hub/i })
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/one or more tenant selections are no longer valid/i, {
+          selector: '.create-wizard__error',
+        }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/remove invalid tenant selections: ten-1/i, {
+          selector: '.create-wizard__error',
+        }),
       ).toBeInTheDocument()
     })
   })

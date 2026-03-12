@@ -16,9 +16,11 @@ import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Tickbox } from '../../components/Tickbox'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Status } from '../../components/Status'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useUpdateUserMutation } from '../../store/api/userApi.js'
 import {
   normalizeError,
@@ -38,14 +40,32 @@ const CUSTOMER_ADMIN_EDIT_GUIDANCE =
 const CUSTOMER_ADMIN_TRANSFER_GUIDANCE =
   'Use Transfer Ownership when this user should become the Canonical Admin.'
 
+const TENANT_ADMIN_TOPOLOGY_GUIDANCE =
+  'Tenant Admin is only available for multi-tenant customers.'
+
+const TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE =
+  'This user has a Tenant Admin assignment that is not editable for the current customer topology. Saving role changes will remove that assignment.'
+
 const ACTIVE_EMAIL_HELP_TEXT =
   'Changing email resets Identity Plus trust. If trust returns as UNTRUSTED after save, use Resend Invitation from the user row because backend does not auto-send a new invite.'
 
 const DISABLED_EMAIL_HELP_TEXT =
   'Changing email while this user is disabled keeps resend unavailable until reactivation succeeds.'
 
-const TENANT_VISIBILITY_LOCKED_MESSAGE =
-  'Tenant visibility stays unchanged in this drawer. Guided tenant-visibility editing is handled in the follow-up tenant-visibility workflow.'
+const TENANT_VISIBILITY_EDIT_GUIDANCE =
+  'Select the tenants this user should be able to access. Clear all selections to remove stored explicit tenant visibility.'
+
+const TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE =
+  'Tenant visibility is not required for this customer topology.'
+
+const TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
+  'No selectable tenants are currently available for this customer.'
+
+const TENANT_VISIBILITY_PRESERVED_MESSAGE =
+  'Previously selected tenants that are no longer selectable stay preserved until you remove them.'
+
+const TENANT_VISIBILITY_SERVICE_PROVIDER_HINT =
+  'This customer uses guided tenant visibility for multi-tenant access.'
 
 const EMAIL_CHANGE_RESEND_GUIDANCE =
   'Email updated. Trust reset to UNTRUSTED. Use Resend Invitation from the user row if the new address still needs an invite.'
@@ -55,6 +75,10 @@ const EMAIL_CHANGE_REACTIVATION_GUIDANCE =
 
 const normalizeText = (value) => String(value ?? '').trim()
 const normalizeEmail = (value) => normalizeText(value).toLowerCase()
+const normalizeTenantVisibilityIds = (tenantIds) => (
+  [...new Set((tenantIds ?? []).map((tenantId) => String(tenantId ?? '').trim()).filter(Boolean))]
+    .sort()
+)
 
 const normalizeRoles = (roles) => (
   [...new Set((roles ?? []).map((role) => String(role ?? '').trim().toUpperCase()).filter(Boolean))]
@@ -87,6 +111,61 @@ const getUserTrustStatus = (user) =>
   String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
     .trim()
     .toUpperCase()
+
+const getTopologyAwareRoles = (roles, topology) => {
+  const normalizedTopology = String(topology ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (normalizedTopology === 'SINGLE_TENANT') {
+    return roles.filter((role) => role !== 'TENANT_ADMIN')
+  }
+
+  return roles
+}
+
+const getTenantId = (tenant) => String(tenant?.id ?? tenant?._id ?? '').trim()
+
+const normalizeTenantOption = (tenant) => {
+  const id = getTenantId(tenant)
+
+  return {
+    id,
+    name: String(tenant?.name ?? id ?? '--').trim() || '--',
+    status: String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase(),
+    isSelectable: tenant?.isSelectable === true,
+    isDefault: tenant?.isDefault === true,
+    selectionState: String(tenant?.selectionState ?? '').trim().toUpperCase(),
+  }
+}
+
+const getTenantVisibilityValidationMessage = (appError) => {
+  const reason = String(appError?.details?.reason ?? '').trim().toUpperCase()
+
+  if (reason === 'TENANT_VISIBILITY_NOT_ALLOWED') {
+    return `Tenant visibility is not available for this customer topology.${appError?.requestId ? ` (Ref: ${appError.requestId})` : ''}`
+  }
+
+  if (reason === 'TENANT_VISIBILITY_INVALID_TENANT_IDS') {
+    const invalidTenantIds = Array.isArray(appError?.details?.invalidTenantIds)
+      ? appError.details.invalidTenantIds
+        .map((tenantId) => String(tenantId ?? '').trim())
+        .filter(Boolean)
+      : []
+
+    return [
+      'One or more tenant selections are no longer valid.',
+      invalidTenantIds.length > 0
+        ? `Remove invalid tenant selections: ${invalidTenantIds.join(', ')}.`
+        : 'Remove invalid tenant selections and retry.',
+      appError?.requestId ? `(Ref: ${appError.requestId})` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  return ''
+}
 
 const getFieldErrorMessage = (value) => {
   if (typeof value === 'string' && value.trim()) return value.trim()
@@ -166,27 +245,78 @@ function UserEditDrawer({
 }) {
   const { addToast } = useToaster()
   const [updateUserMutation, { isLoading }] = useUpdateUserMutation()
+  const {
+    customerId: activeCustomerId,
+    tenants: tenantRows,
+    tenantVisibilityMeta,
+    isLoadingTenants: rawIsLoadingTenants,
+    tenantsError,
+  } = useTenantContext()
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [selectedRoles, setSelectedRoles] = useState([])
+  const [tenantVisibility, setTenantVisibility] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     if (!user) return
     setName(String(user?.name ?? ''))
     setEmail(String(user?.email ?? ''))
-    setSelectedRoles(getCustomerScopedRoles(user, customerId))
+    setSelectedRoles(
+      getCustomerScopedRoles(user, customerId).filter((role) => editableRoleOptions.includes(role)),
+    )
+    setTenantVisibility(normalizeTenantVisibilityIds(user?.tenantVisibility))
     setFieldErrors({})
   }, [user, customerId])
 
+  const isCustomerContextAligned =
+    !customerId
+    || !activeCustomerId
+    || String(customerId) === String(activeCustomerId)
+
+  const tenants = useMemo(
+    () => (isCustomerContextAligned ? tenantRows.map(normalizeTenantOption).filter((tenant) => tenant.id) : []),
+    [isCustomerContextAligned, tenantRows],
+  )
+
+  const normalizedTenantsError = useMemo(
+    () => (tenantsError ? normalizeError(tenantsError) : null),
+    [tenantsError],
+  )
+
+  const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
+  const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+  const editableRoleOptions = useMemo(
+    () => getTopologyAwareRoles(EDITABLE_ROLES, effectiveTenantVisibilityMeta?.topology),
+    [effectiveTenantVisibilityMeta?.topology],
+  )
+  const allowsTenantAdminRole = editableRoleOptions.includes('TENANT_ADMIN')
+  const shouldShowTenantVisibilityEditor =
+    effectiveTenantVisibilityMeta?.allowed === true
+    && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
+  const customerScopedRoles = useMemo(
+    () => getCustomerScopedRoles(user, customerId),
+    [customerId, user],
+  )
+  const hasHiddenTenantAdminAssignment =
+    !allowsTenantAdminRole && customerScopedRoles.includes('TENANT_ADMIN')
+
   const initialRoles = useMemo(
-    () => normalizeRoles(getCustomerScopedRoles(user, customerId)),
-    [user, customerId],
+    () => normalizeRoles(customerScopedRoles.filter((role) => editableRoleOptions.includes(role))),
+    [customerScopedRoles, editableRoleOptions],
   )
   const normalizedSelectedRoles = useMemo(
     () => normalizeRoles(selectedRoles),
     [selectedRoles],
+  )
+  const initialTenantVisibility = useMemo(
+    () => normalizeTenantVisibilityIds(user?.tenantVisibility),
+    [user?.tenantVisibility],
+  )
+  const normalizedTenantVisibility = useMemo(
+    () => normalizeTenantVisibilityIds(tenantVisibility),
+    [tenantVisibility],
   )
 
   const normalizedInitialName = useMemo(() => normalizeText(user?.name), [user?.name])
@@ -197,7 +327,42 @@ function UserEditDrawer({
   const hasNameChange = normalizedName !== normalizedInitialName
   const hasEmailChange = normalizedUserEmail !== normalizedInitialEmail
   const hasRoleChange = normalizedSelectedRoles.join('|') !== initialRoles.join('|')
-  const hasChanges = hasNameChange || hasEmailChange || hasRoleChange
+  const hasTenantVisibilityChange =
+    normalizedTenantVisibility.join('|') !== initialTenantVisibility.join('|')
+  const hasChanges =
+    hasNameChange || hasEmailChange || hasRoleChange || hasTenantVisibilityChange
+
+  const tenantLookup = useMemo(
+    () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
+    [tenants],
+  )
+
+  const selectableTenantOptions = useMemo(
+    () => tenants.filter((tenant) => tenant.isSelectable),
+    [tenants],
+  )
+
+  const resolvedSelectedTenants = useMemo(
+    () => normalizedTenantVisibility.map((tenantId) => {
+      const matchedTenant = tenantLookup.get(tenantId)
+      if (matchedTenant) return matchedTenant
+
+      return {
+        id: tenantId,
+        name: tenantId,
+        status: 'UNKNOWN',
+        isSelectable: false,
+        isDefault: false,
+        selectionState: 'MISSING',
+      }
+    }),
+    [normalizedTenantVisibility, tenantLookup],
+  )
+
+  const preservedSelectedTenants = useMemo(
+    () => resolvedSelectedTenants.filter((tenant) => !tenant.isSelectable),
+    [resolvedSelectedTenants],
+  )
 
   const clearFieldErrors = useCallback((...keys) => {
     setFieldErrors((prev) => {
@@ -210,11 +375,44 @@ function UserEditDrawer({
     })
   }, [])
 
+  useEffect(() => {
+    setSelectedRoles((prev) => {
+      const next = prev.filter((role) => editableRoleOptions.includes(role))
+      return next.length === prev.length ? prev : next
+    })
+  }, [editableRoleOptions])
+
   const toggleRole = useCallback((role) => {
     setSelectedRoles((prev) =>
       prev.includes(role) ? prev.filter((candidate) => candidate !== role) : [...prev, role],
     )
     clearFieldErrors('roles')
+  }, [clearFieldErrors])
+
+  const toggleTenantSelection = useCallback((tenantId) => {
+    setTenantVisibility((prev) =>
+      prev.includes(tenantId)
+        ? prev.filter((candidate) => candidate !== tenantId)
+        : [...prev, tenantId],
+    )
+    clearFieldErrors('tenantVisibility')
+  }, [clearFieldErrors])
+
+  const handleSelectAllTenants = useCallback(() => {
+    setTenantVisibility((prev) => {
+      const preservedIds = normalizeTenantVisibilityIds(prev).filter((tenantId) => {
+        const tenant = tenantLookup.get(tenantId)
+        return !tenant || !tenant.isSelectable
+      })
+
+      return [...new Set([...preservedIds, ...selectableTenantOptions.map((tenant) => tenant.id)])]
+    })
+    clearFieldErrors('tenantVisibility')
+  }, [clearFieldErrors, selectableTenantOptions, tenantLookup])
+
+  const handleClearTenantSelection = useCallback(() => {
+    setTenantVisibility([])
+    clearFieldErrors('tenantVisibility')
   }, [clearFieldErrors])
 
   const validate = useCallback(() => {
@@ -254,6 +452,9 @@ function UserEditDrawer({
     if (hasNameChange) body.name = normalizedName
     if (hasEmailChange) body.email = normalizedUserEmail
     if (hasRoleChange) body.roles = normalizedSelectedRoles
+    if (hasTenantVisibilityChange && shouldShowTenantVisibilityEditor) {
+      body.tenantVisibility = normalizedTenantVisibility
+    }
 
     try {
       const result = await updateUserMutation({
@@ -322,6 +523,20 @@ function UserEditDrawer({
         return
       }
 
+      const tenantVisibilityMessage = getTenantVisibilityValidationMessage(appError)
+      if (tenantVisibilityMessage) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          tenantVisibility: tenantVisibilityMessage,
+        }))
+        addToast({
+          title: 'Tenant visibility needs attention',
+          description: tenantVisibilityMessage,
+          variant: 'warning',
+        })
+        return
+      }
+
       if (appError.status === 422 && appError.details) {
         const mappedErrors = mapEditValidationErrors(appError.details)
         if (Object.keys(mappedErrors).length > 0) {
@@ -350,10 +565,13 @@ function UserEditDrawer({
     hasEmailChange,
     hasNameChange,
     hasRoleChange,
+    hasTenantVisibilityChange,
     normalizedName,
     normalizedSelectedRoles,
+    normalizedTenantVisibility,
     normalizedUserEmail,
     onClose,
+    shouldShowTenantVisibilityEditor,
     updateUserMutation,
     user,
     validate,
@@ -449,6 +667,13 @@ function UserEditDrawer({
             <p className="user-edit-drawer__governance-text">
               {transferAvailabilityMessage}
             </p>
+            {!allowsTenantAdminRole ? (
+              <p className="user-edit-drawer__governance-text">
+                {hasHiddenTenantAdminAssignment
+                  ? TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE
+                  : TENANT_ADMIN_TOPOLOGY_GUIDANCE}
+              </p>
+            ) : null}
             {canStartOwnershipTransfer ? (
               <Button
                 type="button"
@@ -462,7 +687,7 @@ function UserEditDrawer({
               </Button>
             ) : null}
           </div>
-          {EDITABLE_ROLES.map((role) => (
+          {editableRoleOptions.map((role) => (
             <Tickbox
               key={role}
               id={`edit-role-${role}`}
@@ -481,12 +706,127 @@ function UserEditDrawer({
 
         <fieldset className="user-edit-drawer__fieldset">
           <legend className="user-edit-drawer__legend">Tenant Visibility</legend>
-          <div className="user-edit-drawer__locked-field" role="note">
-            <p className="user-edit-drawer__locked-field-title">Current handling</p>
-            <p className="user-edit-drawer__locked-field-text">
-              {TENANT_VISIBILITY_LOCKED_MESSAGE}
+          {shouldShowTenantVisibilityEditor ? (
+            <div className="user-edit-drawer__tenant-visibility">
+              <p className="user-edit-drawer__tenant-visibility-text">
+                {TENANT_VISIBILITY_EDIT_GUIDANCE}
+              </p>
+              {effectiveTenantVisibilityMeta?.isServiceProvider ? (
+                <p className="user-edit-drawer__tenant-visibility-hint">
+                  {TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
+                </p>
+              ) : null}
+              {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
+                <p className="user-edit-drawer__tenant-visibility-hint">
+                  Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
+                </p>
+              ) : null}
+
+              {isLoadingTenants ? (
+                <p className="user-edit-drawer__tenant-visibility-text" role="status">
+                  Loading tenant options...
+                </p>
+              ) : null}
+
+              {normalizedTenantsError ? (
+                <ErrorSupportPanel
+                  error={normalizedTenantsError}
+                  context="user-edit-drawer-tenant-visibility"
+                />
+              ) : null}
+
+              {!isLoadingTenants && !normalizedTenantsError ? (
+                <>
+                  <div className="user-edit-drawer__tenant-actions">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSelectAllTenants}
+                      disabled={selectableTenantOptions.length === 0 || isLoading}
+                    >
+                      Select All Available
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearTenantSelection}
+                      disabled={normalizedTenantVisibility.length === 0 || isLoading}
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+
+                  {selectableTenantOptions.length > 0 ? (
+                    <div className="user-edit-drawer__tenant-list" role="group" aria-label="Editable tenant visibility">
+                      {selectableTenantOptions.map((tenant) => (
+                        <div key={tenant.id} className="user-edit-drawer__tenant-option">
+                          <Tickbox
+                            id={`edit-tenant-${tenant.id}`}
+                            label={tenant.name}
+                            checked={normalizedTenantVisibility.includes(tenant.id)}
+                            onChange={() => toggleTenantSelection(tenant.id)}
+                            disabled={isLoading}
+                          />
+                          <p className="user-edit-drawer__tenant-meta">
+                            Status: {tenant.status}
+                            {tenant.isDefault ? ' | Default tenant' : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="user-edit-drawer__tenant-visibility-hint">
+                      {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                    </p>
+                  )}
+
+                  {preservedSelectedTenants.length > 0 ? (
+                    <div className="user-edit-drawer__tenant-preserved">
+                      <p className="user-edit-drawer__tenant-visibility-hint">
+                        {TENANT_VISIBILITY_PRESERVED_MESSAGE}
+                      </p>
+                      <ul className="user-edit-drawer__tenant-preserved-list">
+                        {preservedSelectedTenants.map((tenant) => (
+                          <li key={tenant.id} className="user-edit-drawer__tenant-preserved-item">
+                            <div className="user-edit-drawer__tenant-preserved-details">
+                              <span className="user-edit-drawer__tenant-preserved-name">{tenant.name}</span>
+                              <span className="user-edit-drawer__tenant-preserved-meta">
+                                Status: {tenant.status}
+                                {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleTenantSelection(tenant.id)}
+                              disabled={isLoading}
+                            >
+                              Remove
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="user-edit-drawer__locked-field" role="note">
+              <p className="user-edit-drawer__locked-field-title">Current handling</p>
+              <p className="user-edit-drawer__locked-field-text">
+                {TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE}
+              </p>
+            </div>
+          )}
+          {fieldErrors.tenantVisibility ? (
+            <p className="user-edit-drawer__error" role="alert">
+              {fieldErrors.tenantVisibility}
             </p>
-          </div>
+          ) : null}
         </fieldset>
 
         {fieldErrors.form && (

@@ -9,18 +9,26 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
 import { Table } from '../../components/Table'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Button } from '../../components/Button'
 import { Status } from '../../components/Status'
 import { Dialog } from '../../components/Dialog'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Spinner } from '../../components/Spinner'
 import { useToaster } from '../../components/Toaster'
 import { useTenants } from '../../hooks/useTenants.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { normalizeError } from '../../utils/errors.js'
+import { getCustomerLifecycleStatus } from '../../utils/authorization.js'
+import {
+  normalizeError,
+  isCustomerInactiveError,
+  getCustomerInactiveMessage,
+} from '../../utils/errors.js'
 import CreateTenantWizard from './CreateTenantWizard'
 import TenantEditDrawer from './TenantEditDrawer'
 import './MaintainTenants.css'
@@ -43,12 +51,130 @@ const STATUS_VARIANT_MAP = {
   ARCHIVED: 'neutral',
 }
 
+const MAINTAIN_TENANTS_INACTIVE_CUSTOMER_MESSAGE =
+  'This customer is inactive. Tenant-management actions are unavailable until a Super Admin reactivates the customer.'
+
+const MAINTAIN_TENANTS_LIFECYCLE_NOTE =
+  'Disable removes tenant access immediately. Enable restores access immediately. Default tenants stay enabled, and archived tenants are read-only.'
+
+const getTenantCapacityCountLabel = (countMode) =>
+  countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
+
+const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
+
+const canEditTenant = (tenant) =>
+  Boolean(tenant?._id || tenant?.id) && getTenantStatus(tenant) !== 'ARCHIVED'
+
+const canEnableTenant = (tenant) =>
+  Boolean(tenant?._id || tenant?.id) && getTenantStatus(tenant) === 'DISABLED'
+
+const canDisableTenant = (tenant) =>
+  Boolean(tenant?._id || tenant?.id)
+  && getTenantStatus(tenant) === 'ENABLED'
+  && tenant?.isDefault !== true
+
+const getTenantLifecycleDetail = (tenant) => {
+  const tenantStatus = getTenantStatus(tenant)
+
+  if (tenantStatus === 'ENABLED') {
+    return tenant?.isDefault
+      ? 'Default tenant remains available and cannot be disabled here.'
+      : 'Users assigned here retain access.'
+  }
+
+  if (tenantStatus === 'DISABLED') {
+    return 'Users assigned here cannot access this tenant until it is re-enabled.'
+  }
+
+  if (tenantStatus === 'ARCHIVED') {
+    return 'Archived tenants are read-only in this workspace.'
+  }
+
+  return 'Lifecycle state requires review before making access changes.'
+}
+
+const getLifecycleConfirmationCopy = (confirmAction) => {
+  const tenantName = confirmAction?.tenant?.name ?? 'this tenant'
+
+  if (confirmAction?.type === 'enable') {
+    return {
+      title: 'Enable Tenant',
+      message:
+        `Enable ${tenantName}? Users assigned to this tenant will regain access immediately.`,
+      confirmLabel: 'Enable',
+    }
+  }
+
+  return {
+    title: 'Disable Tenant',
+    message:
+      `Disable ${tenantName}? Users assigned to this tenant will lose access immediately. `
+      + 'The tenant remains available for future re-enablement.',
+    confirmLabel: 'Disable',
+  }
+}
+
+const getTenantCapacityGuidance = (tenantCapacity) => {
+  if (!tenantCapacity) return null
+
+  const currentCount = tenantCapacity.currentCount
+  const maxTenants = tenantCapacity.maxTenants
+  const remainingCount = tenantCapacity.remainingCount
+  const countLabel = getTenantCapacityCountLabel(tenantCapacity.countMode)
+
+  if (tenantCapacity.isAtCapacity && currentCount !== null && maxTenants !== null) {
+    return {
+      tone: 'warning',
+      title: 'Tenant capacity reached',
+      message:
+        `This customer is already using ${currentCount} of ${maxTenants} ${countLabel} tenant slots. `
+        + 'Disable or archive an existing tenant, or update customer limits before creating another.',
+    }
+  }
+
+  if (remainingCount === 1 && currentCount !== null && maxTenants !== null) {
+    return {
+      tone: 'warning',
+      title: 'Final tenant slot',
+      message:
+        `This customer has 1 ${countLabel} tenant slot remaining (${currentCount} of ${maxTenants} in use). `
+        + 'The next successful create will exhaust the current capacity.',
+    }
+  }
+
+  return null
+}
+
+function MaintainTenantsBoundaryState({
+  title = 'Maintain Tenants',
+  message,
+  supportPanel = null,
+}) {
+  return (
+    <section className="maintain-tenants container" aria-label="Maintain Tenants">
+      <header className="maintain-tenants__header">
+        <h1 className="maintain-tenants__title">{title}</h1>
+      </header>
+
+      <Fieldset className="maintain-tenants__fieldset">
+        <Fieldset.Legend className="sr-only">Maintain tenants state</Fieldset.Legend>
+        <Card variant="elevated" className="maintain-tenants__card">
+          <Card.Body className="maintain-tenants__card-body maintain-tenants__card-body--state">
+            <p className="maintain-tenants__state-message">{message}</p>
+            {supportPanel}
+          </Card.Body>
+        </Card>
+      </Fieldset>
+    </section>
+  )
+}
+
 /**
  * MaintainTenants Page Component
  */
 function MaintainTenants() {
   const { addToast } = useToaster()
-  const { isSuperAdmin } = useAuthorization()
+  const { user, isSuperAdmin } = useAuthorization()
 
   /* ---- Resolve customer context from shared store ---- */
   const { customerId } = useTenantContext()
@@ -59,14 +185,51 @@ function MaintainTenants() {
     pagination,
     isLoading,
     isFetching,
+    error: listError,
+    tenantCapacity,
     setSearch,
     statusFilter,
     setStatusFilter,
     page,
     setPage,
     enableTenant,
+    enableTenantResult,
     disableTenant,
+    disableTenantResult,
   } = useTenants(customerId)
+
+  const listTenantsAppError = useMemo(
+    () => (listError ? normalizeError(listError) : null),
+    [listError],
+  )
+  const tenantCapacityGuidance = useMemo(
+    () => getTenantCapacityGuidance(tenantCapacity),
+    [tenantCapacity],
+  )
+
+  const selectedCustomerLifecycleStatus = useMemo(
+    () => getCustomerLifecycleStatus(user, customerId),
+    [customerId, user],
+  )
+
+  const inactiveCustomerAppError = useMemo(
+    () => (isCustomerInactiveError(listTenantsAppError) ? listTenantsAppError : null),
+    [listTenantsAppError],
+  )
+
+  const isInactiveCustomerLocked =
+    selectedCustomerLifecycleStatus === 'INACTIVE' || Boolean(inactiveCustomerAppError)
+  const isTenantCreateBlocked = tenantCapacity?.isAtCapacity === true
+  const isLifecycleMutationLoading =
+    Boolean(enableTenantResult?.isLoading) || Boolean(disableTenantResult?.isLoading)
+
+  const inactiveCustomerMessage = useMemo(
+    () => getCustomerInactiveMessage(
+      inactiveCustomerAppError,
+      MAINTAIN_TENANTS_INACTIVE_CUSTOMER_MESSAGE,
+    ),
+    [inactiveCustomerAppError],
+  )
 
   /* ---- Debounced search ---- */
   const [searchInput, setSearchInput] = useState('')
@@ -83,6 +246,18 @@ function MaintainTenants() {
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
+  const confirmActionCopy = useMemo(
+    () => getLifecycleConfirmationCopy(confirmAction),
+    [confirmAction],
+  )
+
+  useEffect(() => {
+    if (!isInactiveCustomerLocked) return
+
+    setShowCreateWizard(false)
+    setEditingTenant(null)
+    setConfirmAction(null)
+  }, [isInactiveCustomerLocked])
 
   /* ---- Action handlers ---- */
 
@@ -92,7 +267,7 @@ function MaintainTenants() {
         await enableTenant(tenant._id)
         addToast({
           title: 'Tenant enabled',
-          description: `${tenant.name} has been enabled.`,
+          description: `${tenant.name} is enabled. Users assigned to this tenant can access it immediately.`,
           variant: 'success',
         })
       } catch (err) {
@@ -114,7 +289,7 @@ function MaintainTenants() {
         await disableTenant(tenant._id)
         addToast({
           title: 'Tenant disabled',
-          description: `${tenant.name} has been disabled.`,
+          description: `${tenant.name} is disabled. Users assigned to this tenant lost access immediately.`,
           variant: 'success',
         })
       } catch (err) {
@@ -168,13 +343,18 @@ function MaintainTenants() {
         key: 'status',
         label: 'Status',
         render: (_value, row) => (
-          <Status
-            variant={STATUS_VARIANT_MAP[row.status] ?? 'neutral'}
-            size="sm"
-            showIcon
-          >
-            {row.status ?? 'UNKNOWN'}
-          </Status>
+          <div className="maintain-tenants__status-cell">
+            <Status
+              variant={STATUS_VARIANT_MAP[row.status] ?? 'neutral'}
+              size="sm"
+              showIcon
+            >
+              {row.status ?? 'UNKNOWN'}
+            </Status>
+            <span className="maintain-tenants__status-detail">
+              {getTenantLifecycleDetail(row)}
+            </span>
+          </div>
         ),
       },
       {
@@ -189,32 +369,60 @@ function MaintainTenants() {
   /* ---- Row actions ---- */
   const actions = useMemo(
     () => [
-      { label: 'Edit', variant: 'ghost' },
-      { label: 'Enable', variant: 'ghost' },
-      { label: 'Disable', variant: 'ghost' },
+      {
+        label: 'Edit',
+        variant: 'ghost',
+        disabled: (row) => isLifecycleMutationLoading || !canEditTenant(row),
+      },
+      {
+        label: 'Enable',
+        variant: 'ghost',
+        disabled: (row) => isLifecycleMutationLoading || !canEnableTenant(row),
+      },
+      {
+        label: 'Disable',
+        variant: 'ghost',
+        disabled: (row) => isLifecycleMutationLoading || !canDisableTenant(row),
+      },
     ],
-    [],
+    [isLifecycleMutationLoading],
   )
 
   const handleRowAction = useCallback(
     (label, row) => {
       switch (label) {
         case 'Edit':
-          setEditingTenant(row)
-          break
-        case 'Enable':
-          if (row.status === 'ENABLED') {
+          if (!canEditTenant(row)) {
             addToast({
-              title: 'Already enabled',
-              description: `${row.name} is already enabled.`,
+              title: 'Archived tenant is read-only',
+              description: 'Archived tenants cannot be edited from this workspace.',
               variant: 'info',
             })
             return
           }
-          if (row.status === 'ARCHIVED') {
+          setEditingTenant(row)
+          break
+        case 'Enable':
+          if (!canEnableTenant(row)) {
+            if (getTenantStatus(row) === 'ENABLED') {
+              addToast({
+                title: 'Already enabled',
+                description: `${row.name} is already enabled.`,
+                variant: 'info',
+              })
+              return
+            }
+            if (getTenantStatus(row) === 'ARCHIVED') {
+              addToast({
+                title: 'Cannot enable archived tenant',
+                description: 'Archived tenants are read-only and cannot be re-enabled here.',
+                variant: 'warning',
+              })
+              return
+            }
             addToast({
-              title: 'Cannot enable archived tenant',
-              description: 'Archived tenants cannot be re-enabled.',
+              title: 'Cannot enable tenant',
+              description: 'Only disabled tenants can be re-enabled from this workspace.',
               variant: 'warning',
             })
             return
@@ -222,26 +430,34 @@ function MaintainTenants() {
           setConfirmAction({ type: 'enable', tenant: row })
           break
         case 'Disable':
-          if (row.isDefault) {
+          if (!canDisableTenant(row)) {
+            if (row.isDefault) {
+              addToast({
+                title: 'Cannot disable default tenant',
+                description: 'The default tenant must remain enabled for this customer.',
+                variant: 'warning',
+              })
+              return
+            }
+            if (getTenantStatus(row) === 'DISABLED') {
+              addToast({
+                title: 'Already disabled',
+                description: `${row.name} is already disabled.`,
+                variant: 'info',
+              })
+              return
+            }
+            if (getTenantStatus(row) === 'ARCHIVED') {
+              addToast({
+                title: 'Cannot disable archived tenant',
+                description: 'Archived tenants are read-only and cannot be disabled here.',
+                variant: 'warning',
+              })
+              return
+            }
             addToast({
-              title: 'Cannot disable default tenant',
-              description: 'The default tenant cannot be disabled.',
-              variant: 'warning',
-            })
-            return
-          }
-          if (row.status === 'DISABLED') {
-            addToast({
-              title: 'Already disabled',
-              description: `${row.name} is already disabled.`,
-              variant: 'info',
-            })
-            return
-          }
-          if (row.status === 'ARCHIVED') {
-            addToast({
-              title: 'Cannot disable archived tenant',
-              description: 'Archived tenants cannot be disabled.',
+              title: 'Cannot disable tenant',
+              description: 'Only enabled non-default tenants can be disabled from this workspace.',
               variant: 'warning',
             })
             return
@@ -267,23 +483,25 @@ function MaintainTenants() {
   /* ---- No customer ID guard ---- */
   if (!customerId && !isSuperAdmin) {
     return (
-      <section className="maintain-tenants container" aria-label="Maintain Tenants">
-        <p className="maintain-tenants__empty">
-          No customer context available. Please contact your administrator.
-        </p>
-      </section>
+      <MaintainTenantsBoundaryState
+        message="No customer context available. Please contact your administrator."
+      />
     )
   }
 
   if (!customerId && isSuperAdmin) {
     return (
-      <section className="maintain-tenants container" aria-label="Maintain Tenants">
-        <h1 className="maintain-tenants__title">Maintain Tenants</h1>
-        <p className="maintain-tenants__empty">
-          Please select a customer from the dashboard context panel to manage
-          tenants.
-        </p>
-      </section>
+      <MaintainTenantsBoundaryState
+        message="Please select a customer from the dashboard context panel to manage tenants."
+      />
+    )
+  }
+
+  if (isInactiveCustomerLocked) {
+    return (
+      <MaintainTenantsBoundaryState
+        message={inactiveCustomerMessage}
+      />
     )
   }
 
@@ -295,11 +513,33 @@ function MaintainTenants() {
         <Button
           variant="primary"
           onClick={() => setShowCreateWizard(true)}
-          disabled={isFetching}
+          disabled={isFetching || isTenantCreateBlocked}
         >
           Create Tenant
         </Button>
       </header>
+
+      {tenantCapacityGuidance ? (
+        <div
+          className={[
+            'maintain-tenants__note',
+            tenantCapacityGuidance.tone === 'warning'
+              ? 'maintain-tenants__note--warning'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          role={tenantCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
+        >
+          <p className="maintain-tenants__note-title">{tenantCapacityGuidance.title}</p>
+          <p className="maintain-tenants__note-text">{tenantCapacityGuidance.message}</p>
+        </div>
+      ) : null}
+
+      <div className="maintain-tenants__lifecycle-note" role="note">
+        <p className="maintain-tenants__lifecycle-title">Tenant lifecycle</p>
+        <p className="maintain-tenants__lifecycle-text">{MAINTAIN_TENANTS_LIFECYCLE_NOTE}</p>
+      </div>
 
       {/* Toolbar: search + filter */}
       <div className="maintain-tenants__toolbar">
@@ -327,6 +567,13 @@ function MaintainTenants() {
           />
         </div>
       </div>
+
+      {listTenantsAppError && (
+        <ErrorSupportPanel
+          error={listTenantsAppError}
+          context="maintain-tenants-list"
+        />
+      )}
 
       {/* Data table */}
       <div className="maintain-tenants__table">
@@ -382,6 +629,7 @@ function MaintainTenants() {
         open={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         customerId={customerId}
+        tenantCapacity={tenantCapacity}
       />
 
       {/* Tenant Edit Drawer */}
@@ -399,18 +647,10 @@ function MaintainTenants() {
         size="sm"
       >
         <Dialog.Header>
-          <h2 className="maintain-tenants__confirm-title">
-            {confirmAction?.type === 'enable'
-              ? 'Enable Tenant'
-              : 'Disable Tenant'}
-          </h2>
+          <h2 className="maintain-tenants__confirm-title">{confirmActionCopy.title}</h2>
         </Dialog.Header>
         <Dialog.Body>
-          <p>
-            {confirmAction?.type === 'enable'
-              ? `Are you sure you want to enable ${confirmAction?.tenant?.name}? Users will regain access to this tenant immediately.`
-              : `Are you sure you want to disable ${confirmAction?.tenant?.name}? All users will immediately lose access to this tenant.`}
-          </p>
+          <p>{confirmActionCopy.message}</p>
         </Dialog.Body>
         <Dialog.Footer>
           <Button
@@ -423,7 +663,7 @@ function MaintainTenants() {
             variant={confirmAction?.type === 'disable' ? 'danger' : 'primary'}
             onClick={handleConfirmAction}
           >
-            {confirmAction?.type === 'enable' ? 'Enable' : 'Disable'}
+            {confirmActionCopy.confirmLabel}
           </Button>
         </Dialog.Footer>
       </Dialog>

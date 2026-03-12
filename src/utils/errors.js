@@ -124,6 +124,8 @@ const GOVERNANCE_LIMIT_REASONS = new Set([
   'VMF_LIMIT_REACHED',
 ])
 
+const TENANT_ADMIN_ASSIGNMENTS_INVALID_REASON = 'TENANT_ADMIN_ASSIGNMENTS_INVALID'
+
 const GOVERNANCE_LIMIT_FALLBACKS = {
   TENANT_LIMIT_REACHED: 'Tenant limit reached for this customer.',
   VMF_LIMIT_REACHED: 'VMF limit reached for this tenant.',
@@ -404,6 +406,18 @@ export const isCustomerInactiveError = (err) =>
   String(err?.details?.reason ?? '').trim().toUpperCase() === 'CUSTOMER_INACTIVE'
 
 /**
+ * Resolve inactive-customer errors to stable operator guidance.
+ *
+ * @param {AppError | null | undefined} err
+ * @param {string} [fallbackMessage]
+ * @returns {string}
+ */
+export const getCustomerInactiveMessage = (
+  err,
+  fallbackMessage = getErrorMessage('CUSTOMER_INACTIVE'),
+) => appendRequestReference(fallbackMessage, err?.requestId)
+
+/**
  * Check if an error indicates canonical Customer Admin governance conflict.
  * Uses status + known detail keys + backend conflict message patterns.
  *
@@ -544,6 +558,76 @@ export const getGovernanceLimitConflictMessage = (err) => {
   }
 
   return fallback
+}
+
+const normalizeIdList = (value) =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => String(entry ?? '').trim())
+      .filter(Boolean)
+    : []
+
+/**
+ * Check if an error represents invalid tenant-admin assignments.
+ *
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isTenantAdminAssignmentsValidationError = (err) =>
+  err?.status === 422
+  && String(err?.details?.reason ?? '').trim().toUpperCase()
+  === TENANT_ADMIN_ASSIGNMENTS_INVALID_REASON
+
+/**
+ * Resolve tenant-admin assignment validation failures to stable operator guidance.
+ *
+ * @param {AppError} err
+ * @returns {string}
+ */
+export const getTenantAdminAssignmentsValidationMessage = (err) => {
+  const invalidTenantAdminUserIds = normalizeIdList(err?.details?.invalidTenantAdminUserIds)
+  const missingTenantAdminUserIds = normalizeIdList(err?.details?.missingTenantAdminUserIds)
+  const inactiveTenantAdminUserIds = normalizeIdList(err?.details?.inactiveTenantAdminUserIds)
+  const outOfCustomerTenantAdminUserIds = normalizeIdList(
+    err?.details?.outOfCustomerTenantAdminUserIds,
+  )
+
+  const classifiedIds = new Set([
+    ...missingTenantAdminUserIds,
+    ...inactiveTenantAdminUserIds,
+    ...outOfCustomerTenantAdminUserIds,
+  ])
+  const uncategorizedInvalidIds = invalidTenantAdminUserIds.filter((userId) => !classifiedIds.has(userId))
+
+  const guidance = []
+
+  if (missingTenantAdminUserIds.length > 0) {
+    guidance.push(
+      `Remove stale tenant-admin selections and search again: ${missingTenantAdminUserIds.join(', ')}.`,
+    )
+  }
+
+  if (inactiveTenantAdminUserIds.length > 0) {
+    guidance.push(
+      `Replace inactive tenant admins before continuing: ${inactiveTenantAdminUserIds.join(', ')}.`,
+    )
+  }
+
+  if (outOfCustomerTenantAdminUserIds.length > 0) {
+    guidance.push(
+      `Replace users outside this customer context: ${outOfCustomerTenantAdminUserIds.join(', ')}.`,
+    )
+  }
+
+  if (uncategorizedInvalidIds.length > 0) {
+    guidance.push(`Review invalid tenant-admin selections: ${uncategorizedInvalidIds.join(', ')}.`)
+  }
+
+  const baseMessage = guidance.length > 0
+    ? `Tenant admin assignments need attention. ${guidance.join(' ')}`
+    : 'Tenant admin assignments need attention. Re-search and select active users from this customer before retrying.'
+
+  return appendRequestReference(baseMessage, err?.requestId)
 }
 
 /**

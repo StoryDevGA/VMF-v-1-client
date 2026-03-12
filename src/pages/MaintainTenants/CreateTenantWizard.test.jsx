@@ -91,6 +91,7 @@ function renderWizard(props = {}) {
     open: true,
     onClose: vi.fn(),
     customerId: 'cust-1',
+    tenantCapacity: null,
     ...props,
   }
   const store = createTestStore()
@@ -276,5 +277,59 @@ describe('CreateTenantWizard', () => {
     })
 
     expect(screen.queryByText(/failed to create tenant/i)).not.toBeInTheDocument()
+  })
+
+  it('shows tenant-capacity guidance and blocks progression when the customer is at capacity', () => {
+    renderWizard({
+      tenantCapacity: {
+        maxTenants: 3,
+        currentCount: 3,
+        remainingCount: 0,
+        isAtCapacity: true,
+        countMode: 'NON_ARCHIVED',
+      },
+    })
+
+    expect(
+      screen.getByText(/this customer is already using 3 of 3 non-archived tenant slots/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
+  })
+
+  it('returns to tenant-admin selection with contract-based guidance when admin assignments are invalid', async () => {
+    const user = userEvent.setup()
+    createTenantMutationMock.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please check the form for errors.',
+            requestId: 'tenant-admin-create-1',
+            details: {
+              reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+              invalidTenantAdminUserIds: ['missing-admin-1', 'inactive-admin-2'],
+              missingTenantAdminUserIds: ['missing-admin-1'],
+              inactiveTenantAdminUserIds: ['inactive-admin-2'],
+            },
+          },
+        },
+      }),
+    })
+
+    renderWizard()
+    await goToStep3(user)
+    await user.click(screen.getByRole('button', { name: /create tenant/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 2 of 3/i)).toBeInTheDocument()
+      expect(
+        screen.getAllByText(/remove stale tenant-admin selections and search again: missing-admin-1/i).length,
+      ).toBeGreaterThan(0)
+      expect(
+        screen.getAllByText(/replace inactive tenant admins before continuing: inactive-admin-2/i).length,
+      ).toBeGreaterThan(0)
+      expect(screen.getAllByText(/\(Ref: tenant-admin-create-1\)/i).length).toBeGreaterThan(0)
+    })
   })
 })

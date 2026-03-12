@@ -18,6 +18,9 @@ import {
   getUserCustomerRoles,
   hasCustomerRole,
   hasCustomerAccess,
+  normalizeCustomerLifecycleStatus,
+  getCustomerLifecycleStatus,
+  isCustomerInactiveForContext,
   hasAnyCustomerRole,
   getUserTenantRoles,
   hasTenantRole,
@@ -186,6 +189,83 @@ describe('Customer role helpers', () => {
 
     it('denies access when user has no membership', () => {
       expect(hasCustomerAccess(customerAdminUser, CUSTOMER_ID_2)).toBe(false)
+    })
+  })
+
+  describe('customer lifecycle helpers', () => {
+    it('normalizes legacy customer lifecycle statuses', () => {
+      expect(normalizeCustomerLifecycleStatus('DISABLED')).toBe('INACTIVE')
+      expect(normalizeCustomerLifecycleStatus('inactive')).toBe('INACTIVE')
+      expect(normalizeCustomerLifecycleStatus('ACTIVE')).toBe('ACTIVE')
+      expect(normalizeCustomerLifecycleStatus('')).toBe('')
+    })
+
+    it('resolves customer lifecycle status from customer-specific membership fields', () => {
+      expect(
+        getCustomerLifecycleStatus(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                customer: { status: 'DISABLED' },
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('INACTIVE')
+
+      expect(
+        getCustomerLifecycleStatus(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                customerStatus: 'ACTIVE',
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('ACTIVE')
+    })
+
+    it('falls back to generic membership lifecycle fields when needed', () => {
+      expect(
+        getCustomerLifecycleStatus(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                status: 'INACTIVE',
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('INACTIVE')
+    })
+
+    it('detects inactive customer context from the authenticated user payload', () => {
+      expect(
+        isCustomerInactiveForContext(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                customerStatus: 'INACTIVE',
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe(true)
+
+      expect(isCustomerInactiveForContext(customerAdminUser, CUSTOMER_ID)).toBe(false)
     })
   })
 

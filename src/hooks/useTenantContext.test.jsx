@@ -196,4 +196,42 @@ describe('useTenantContext', () => {
     expect(result.current.selectedTenant).toBeNull()
     expect(result.current.hasInvalidTenantContext).toBe(true)
   })
+
+  it('exposes normalized tenant-visibility metadata and selectable tenants', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [
+          { id: 'ten-1', name: 'Alpha Tenant', isSelectable: true },
+          { id: 'ten-2', name: 'Beta Tenant', isSelectable: false },
+        ],
+        meta: {
+          tenantVisibility: {
+            mode: 'guided',
+            allowed: true,
+            topology: 'multi_tenant',
+            isServiceProvider: true,
+            selectableStatuses: ['enabled'],
+          },
+        },
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const wrapper = createWrapper({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.tenantVisibilityMeta).toEqual({
+      mode: 'GUIDED',
+      allowed: true,
+      topology: 'MULTI_TENANT',
+      isServiceProvider: true,
+      selectableStatuses: ['ENABLED'],
+    })
+    expect(result.current.selectableTenants.map((tenant) => tenant.id)).toEqual(['ten-1'])
+  })
 })

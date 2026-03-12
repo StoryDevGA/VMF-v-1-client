@@ -24,6 +24,17 @@ import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import TenantEditDrawer from './TenantEditDrawer'
 
+const mockUseUpdateTenantMutation = vi.hoisted(() => vi.fn())
+
+vi.mock('../../store/api/tenantApi.js', async () => {
+  const actual = await vi.importActual('../../store/api/tenantApi.js')
+
+  return {
+    ...actual,
+    useUpdateTenantMutation: (...args) => mockUseUpdateTenantMutation(...args),
+  }
+})
+
 // Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () {
@@ -51,6 +62,15 @@ const defaultTenant = {
   status: 'ENABLED',
   isDefault: true,
   tenantAdminUserIds: [],
+}
+
+const archivedTenant = {
+  _id: 'tenant-3',
+  name: 'Archived Tenant',
+  website: 'https://archived.com',
+  status: 'ARCHIVED',
+  isDefault: false,
+  tenantAdminUserIds: ['507f1f77bcf86cd799439011'],
 }
 
 /** Create a fresh store */
@@ -92,6 +112,7 @@ function renderDrawer(props = {}) {
 describe('TenantEditDrawer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    mockUseUpdateTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
   it('renders the Edit Tenant heading', () => {
@@ -177,5 +198,59 @@ describe('TenantEditDrawer', () => {
   it('renders Tenant Admins fieldset legend', () => {
     renderDrawer()
     expect(screen.getByText('Tenant Admins')).toBeInTheDocument()
+  })
+
+  it('shows archived tenants as read-only in the edit drawer', () => {
+    renderDrawer({ tenant: archivedTenant })
+
+    expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
+    expect(screen.getByLabelText(/website url/i)).toBeDisabled()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+  })
+
+  it('shows default-tenant lifecycle guidance in the edit drawer', () => {
+    renderDrawer({ tenant: defaultTenant })
+
+    expect(
+      screen.getByText(/the default tenant must remain enabled for this customer/i),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces contract-based tenant-admin guidance when save fails with invalid assignments', async () => {
+    const user = userEvent.setup()
+    const updateTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please check the form for errors.',
+            requestId: 'tenant-admin-edit-1',
+            details: {
+              reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+              invalidTenantAdminUserIds: ['outside-admin-3'],
+              outOfCustomerTenantAdminUserIds: ['outside-admin-3'],
+            },
+          },
+        },
+      }),
+    })
+    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
+
+    renderDrawer()
+
+    const nameInput = screen.getByLabelText(/tenant name/i)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Acme Tenant Updated')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateTenantMutationMock).toHaveBeenCalledTimes(1)
+      expect(
+        screen.getAllByText(/replace users outside this customer context: outside-admin-3/i).length,
+      ).toBeGreaterThan(0)
+      expect(screen.getAllByText(/\(Ref: tenant-admin-edit-1\)/i).length).toBeGreaterThan(0)
+    })
   })
 })

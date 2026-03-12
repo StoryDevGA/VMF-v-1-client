@@ -17,6 +17,36 @@ import {
   useDisableTenantMutation,
 } from '../store/api/tenantApi.js'
 
+const normalizeTenantCapacity = (tenantCapacity) => {
+  if (!tenantCapacity || typeof tenantCapacity !== 'object') return null
+
+  const maxTenants = Number(tenantCapacity.maxTenants)
+  const currentCount = Number(tenantCapacity.currentCount)
+  const remainingCountValue = Number(tenantCapacity.remainingCount)
+  const normalizedMaxTenants = Number.isFinite(maxTenants) ? maxTenants : null
+  const normalizedCurrentCount = Number.isFinite(currentCount) ? currentCount : null
+  const normalizedRemainingCount = Number.isFinite(remainingCountValue)
+    ? remainingCountValue
+    : Number.isFinite(maxTenants) && Number.isFinite(currentCount)
+      ? maxTenants - currentCount
+      : null
+
+  return {
+    maxTenants: normalizedMaxTenants,
+    currentCount: normalizedCurrentCount,
+    remainingCount: normalizedRemainingCount,
+    isAtCapacity:
+      tenantCapacity.isAtCapacity === true
+      || (normalizedRemainingCount !== null && normalizedRemainingCount <= 0)
+      || (
+        normalizedMaxTenants !== null
+        && normalizedCurrentCount !== null
+        && normalizedCurrentCount >= normalizedMaxTenants
+      ),
+    countMode: String(tenantCapacity.countMode ?? '').trim().toUpperCase() || null,
+  }
+}
+
 /**
  * @param {string} customerId - The customer to manage tenants for
  * @param {Object}  [options]
@@ -27,6 +57,7 @@ import {
  *   isLoading: boolean,
  *   isFetching: boolean,
  *   error: object|null,
+ *   tenantCapacity: { maxTenants: number|null, currentCount: number|null, remainingCount: number|null, isAtCapacity: boolean, countMode: string|null }|null,
  *   search: string,
  *   setSearch: Function,
  *   statusFilter: string,
@@ -69,6 +100,10 @@ export function useTenants(customerId, options = {}) {
   )
 
   const tenants = useMemo(() => listData?.data ?? [], [listData])
+  const tenantCapacity = useMemo(
+    () => normalizeTenantCapacity(listData?.meta?.tenantCapacity),
+    [listData],
+  )
 
   const pagination = useMemo(
     () => ({
@@ -117,6 +152,7 @@ export function useTenants(customerId, options = {}) {
     isLoading,
     isFetching,
     error: listError ?? null,
+    tenantCapacity,
 
     // Search & filter state
     search,

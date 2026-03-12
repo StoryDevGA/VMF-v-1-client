@@ -130,6 +130,17 @@ const disabledManagedUser = {
   identityPlus: { trustStatus: 'REVOKED' },
 }
 
+const inactiveCustomerAdminUser = {
+  ...customerAdminUser,
+  memberships: [
+    {
+      customerId: 'cust-1',
+      roles: ['CUSTOMER_ADMIN'],
+      customerStatus: 'INACTIVE',
+    },
+  ],
+}
+
 /** Create a fresh store */
 function createTestStore(preloadedState) {
   return configureStore({
@@ -254,6 +265,37 @@ describe('EditUsers page', () => {
     expect(
       screen.getByText(/no customer context available/i),
     ).toBeInTheDocument()
+  })
+
+  it('renders an inactive-customer blocked state when the selected customer is inactive', () => {
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        error: {
+          status: 403,
+          data: {
+            error: {
+              code: 'CUSTOMER_INACTIVE',
+              requestId: 'req-inactive-users-1',
+              details: { reason: 'CUSTOMER_INACTIVE' },
+            },
+          },
+        },
+      }),
+    )
+
+    const store = createTestStore({
+      auth: { user: inactiveCustomerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    renderEditUsers(store)
+
+    expect(
+      screen.getByText(/user-management actions are unavailable until a super admin reactivates the customer/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/\(Ref: req-inactive-users-1\)/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create user/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/users table/i)).not.toBeInTheDocument()
   })
 
   it('shows tenant context guidance without pretending the list is tenant-filtered', () => {
