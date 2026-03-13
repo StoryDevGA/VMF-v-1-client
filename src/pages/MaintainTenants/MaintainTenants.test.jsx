@@ -86,6 +86,14 @@ const enabledTenant = {
   isDefault: false,
 }
 
+const enabledTenantWithIdOnly = {
+  id: 'tenant-enabled-id-only',
+  name: 'Enabled Tenant Id Only',
+  website: 'https://enabled-id-only.example.com',
+  status: 'ENABLED',
+  isDefault: false,
+}
+
 const defaultTenant = {
   _id: 'tenant-default',
   name: 'Default Tenant',
@@ -356,6 +364,40 @@ describe('MaintainTenants page', () => {
     })
     expect(
       await screen.findByText(/enabled tenant is disabled\. users assigned to this tenant lost access immediately\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('disables tenants when the row exposes id without _id', async () => {
+    const user = userEvent.setup()
+    const disableTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({}),
+    })
+    mockUseDisableTenantMutation.mockReturnValue([disableTenantMutationMock, { isLoading: false }])
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenantWithIdOnly],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    await user.click(screen.getByRole('button', { name: /disable enabled tenant id only/i }))
+
+    const dialogHeading = screen.getByRole('heading', { name: /disable tenant/i })
+    const dialog = dialogHeading.closest('dialog')
+    expect(dialog).not.toBeNull()
+
+    await user.click(within(dialog).getByRole('button', { name: /^disable$/i }))
+
+    await waitFor(() => {
+      expect(disableTenantMutationMock).toHaveBeenCalledWith({ tenantId: 'tenant-enabled-id-only' })
+    })
+    expect(
+      await screen.findByText(/enabled tenant id only is disabled\. users assigned to this tenant lost access immediately\./i),
     ).toBeInTheDocument()
   })
 

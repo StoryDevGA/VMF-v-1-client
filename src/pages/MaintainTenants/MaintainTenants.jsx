@@ -64,15 +64,16 @@ const getTenantCapacityCountLabel = (countMode) =>
   countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
 
 const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
+const getTenantId = (tenant) => tenant?._id ?? tenant?.id ?? null
 
 const canEditTenant = (tenant) =>
-  Boolean(tenant?._id || tenant?.id) && getTenantStatus(tenant) !== 'ARCHIVED'
+  Boolean(getTenantId(tenant)) && getTenantStatus(tenant) !== 'ARCHIVED'
 
 const canEnableTenant = (tenant) =>
-  Boolean(tenant?._id || tenant?.id) && getTenantStatus(tenant) === 'DISABLED'
+  Boolean(getTenantId(tenant)) && getTenantStatus(tenant) === 'DISABLED'
 
 const canDisableTenant = (tenant) =>
-  Boolean(tenant?._id || tenant?.id)
+  Boolean(getTenantId(tenant))
   && getTenantStatus(tenant) === 'ENABLED'
   && tenant?.isDefault !== true
 
@@ -266,8 +267,20 @@ function MaintainTenants() {
 
   const handleEnable = useCallback(
     async (tenant) => {
+      const tenantId = getTenantId(tenant)
+
+      if (!tenantId) {
+        addToast({
+          title: 'Missing tenant identifier',
+          description: 'This tenant record is missing an identifier, so enable could not be completed.',
+          variant: 'error',
+        })
+        setConfirmAction(null)
+        return
+      }
+
       try {
-        await enableTenant(tenant._id)
+        await enableTenant(tenantId)
         addToast({
           title: 'Tenant enabled',
           description: `${tenant.name} is enabled. Users assigned to this tenant can access it immediately.`,
@@ -288,8 +301,20 @@ function MaintainTenants() {
 
   const handleDisable = useCallback(
     async (tenant) => {
+      const tenantId = getTenantId(tenant)
+
+      if (!tenantId) {
+        addToast({
+          title: 'Missing tenant identifier',
+          description: 'This tenant record is missing an identifier, so disable could not be completed.',
+          variant: 'error',
+        })
+        setConfirmAction(null)
+        return
+      }
+
       try {
-        await disableTenant(tenant._id)
+        await disableTenant(tenantId)
         addToast({
           title: 'Tenant disabled',
           description: `${tenant.name} is disabled. Users assigned to this tenant lost access immediately.`,
