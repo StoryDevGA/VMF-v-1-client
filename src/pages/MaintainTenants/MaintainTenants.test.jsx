@@ -1,16 +1,15 @@
 /**
  * MaintainTenants Page Tests
  *
- * Covers:
- * - Renders page heading and create button
- * - Renders search input and status filter
- * - Shows empty message when no customer context
- * - Renders tenant table with column headers
- * - Opens Create Tenant wizard on button click
+ * Covers the standard-aligned tenant catalogue surface:
+ * - action bar and helper copy inside the card
+ * - compact row-action menus
+ * - lifecycle dialogs triggered from row actions
+ * - boundary and capacity states
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -27,12 +26,16 @@ const {
   mockUseUpdateTenantMutation,
   mockUseEnableTenantMutation,
   mockUseDisableTenantMutation,
+  mockUseListUsersQuery,
+  mockUseLazyListUsersQuery,
 } = vi.hoisted(() => ({
   mockUseListTenantsQuery: vi.fn(),
   mockUseCreateTenantMutation: vi.fn(),
   mockUseUpdateTenantMutation: vi.fn(),
   mockUseEnableTenantMutation: vi.fn(),
   mockUseDisableTenantMutation: vi.fn(),
+  mockUseListUsersQuery: vi.fn(),
+  mockUseLazyListUsersQuery: vi.fn(),
 }))
 
 vi.mock('../../store/api/tenantApi.js', () => ({
@@ -43,17 +46,20 @@ vi.mock('../../store/api/tenantApi.js', () => ({
   useDisableTenantMutation: (...args) => mockUseDisableTenantMutation(...args),
 }))
 
-// Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
+vi.mock('../../store/api/userApi.js', () => ({
+  useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
+  useLazyListUsersQuery: (...args) => mockUseLazyListUsersQuery(...args),
+}))
+
 beforeEach(() => {
-  HTMLDialogElement.prototype.showModal = vi.fn(function () {
+  HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
     this.open = true
   })
-  HTMLDialogElement.prototype.close = vi.fn(function () {
+  HTMLDialogElement.prototype.close = vi.fn(function closeMock() {
     this.open = false
   })
 })
 
-/** Customer admin user shape */
 const customerAdminUser = {
   id: 'user-1',
   email: 'admin@acme.com',
@@ -118,7 +124,6 @@ const archivedTenant = {
   isDefault: false,
 }
 
-/** User with no customer membership */
 const noCustomerUser = {
   id: 'user-2',
   email: 'nobody@acme.com',
@@ -129,7 +134,6 @@ const noCustomerUser = {
   vmfGrants: [],
 }
 
-/** Create a fresh store */
 function createTestStore(preloadedState) {
   return configureStore({
     reducer: {
@@ -142,13 +146,13 @@ function createTestStore(preloadedState) {
   })
 }
 
-/** Render wrapper with all providers */
 function renderMaintainTenants(store) {
   const testStore =
     store ??
     createTestStore({
       auth: { user: customerAdminUser, status: 'authenticated' },
     })
+
   return render(
     <Provider store={testStore}>
       <ToasterProvider>
@@ -162,6 +166,13 @@ function renderMaintainTenants(store) {
         </MemoryRouter>
       </ToasterProvider>
     </Provider>,
+  )
+}
+
+function selectTenantAction(rowName, actionLabel) {
+  fireEvent.change(
+    screen.getByRole('combobox', { name: new RegExp(`actions for ${rowName}`, 'i') }),
+    { target: { value: actionLabel } },
   )
 }
 
@@ -181,34 +192,35 @@ describe('MaintainTenants page', () => {
     mockUseUpdateTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseEnableTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseDisableTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    mockUseListUsersQuery.mockReturnValue({
+      data: { data: { users: [] } },
+      isFetching: false,
+      error: null,
+    })
+    mockUseLazyListUsersQuery.mockReturnValue([
+      vi.fn(),
+      {
+        data: { data: { users: [] } },
+        isFetching: false,
+      },
+    ])
   })
 
-  it('renders the page heading', () => {
+  it('renders the page heading, subtitle, and create action bar', () => {
     renderMaintainTenants()
+
+    expect(screen.getByRole('heading', { name: /maintain tenants/i })).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: /maintain tenants/i }),
+      screen.getByText(/manage tenant lifecycle, capacity, and linked tenant-admin assignments/i),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create tenant/i })).toHaveClass('btn--sm')
   })
 
-  it('renders the Create Tenant button', () => {
+  it('renders the search input, status filter, and tenants table region', () => {
     renderMaintainTenants()
-    expect(
-      screen.getByRole('button', { name: /create tenant/i }),
-    ).toBeInTheDocument()
-  })
 
-  it('renders the search input', () => {
-    renderMaintainTenants()
     expect(screen.getByLabelText(/search/i)).toBeInTheDocument()
-  })
-
-  it('renders the status filter', () => {
-    renderMaintainTenants()
     expect(screen.getByLabelText(/status/i)).toBeInTheDocument()
-  })
-
-  it('renders the tenants table region', () => {
-    renderMaintainTenants()
     expect(screen.getByLabelText(/tenants table/i)).toBeInTheDocument()
   })
 
@@ -216,10 +228,10 @@ describe('MaintainTenants page', () => {
     const store = createTestStore({
       auth: { user: noCustomerUser, status: 'authenticated' },
     })
+
     renderMaintainTenants(store)
-    expect(
-      screen.getByText(/no customer context available/i),
-    ).toBeInTheDocument()
+
+    expect(screen.getByText(/no customer context available/i)).toBeInTheDocument()
   })
 
   it('renders an inactive-customer blocked state when the selected customer is inactive', () => {
@@ -304,7 +316,7 @@ describe('MaintainTenants page', () => {
     expect(screen.getByRole('button', { name: /create tenant/i })).toBeDisabled()
   })
 
-  it('status-gates tenant row actions and surfaces lifecycle guidance', () => {
+  it('renders lifecycle helper copy and compact row-action menus with allowed actions only', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant, defaultTenant, disabledTenant, archivedTenant],
@@ -317,17 +329,65 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    expect(screen.getByText(/disable removes tenant access immediately/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /edit enabled tenant/i })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /enable enabled tenant/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /disable enabled tenant/i })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /enable disabled tenant/i })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /disable disabled tenant/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /edit archived tenant/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /enable archived tenant/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /disable archived tenant/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /disable default tenant/i })).toBeDisabled()
+    expect(
+      screen.getByText(/use the actions menu to edit tenant details or change lifecycle state/i),
+    ).toBeInTheDocument()
+
+    const enabledActions = screen.getByRole('combobox', { name: /actions for enabled tenant/i })
+    expect(within(enabledActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(enabledActions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
+    expect(within(enabledActions).queryByRole('option', { name: /enable/i })).not.toBeInTheDocument()
+
+    const defaultActions = screen.getByRole('combobox', { name: /actions for default tenant/i })
+    expect(within(defaultActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(defaultActions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
+
+    const disabledActions = screen.getByRole('combobox', { name: /actions for disabled tenant/i })
+    expect(within(disabledActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(disabledActions).getByRole('option', { name: /enable/i })).toBeInTheDocument()
+    expect(within(disabledActions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
+
+    expect(screen.getByRole('combobox', { name: /actions for archived tenant/i })).toBeDisabled()
     expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
+  })
+
+  it('opens the edit drawer from the tenant name button', async () => {
+    const user = userEvent.setup()
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenant],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    await user.click(screen.getByRole('button', { name: /enabled tenant/i }))
+
+    expect(await screen.findByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
+  })
+
+  it('uses first/previous/next/last pagination controls inside the card', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenant],
+        meta: { page: 2, pageSize: 20, total: 41, totalPages: 3 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    expect(screen.getByRole('button', { name: /^first$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^previous$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^last$/i })).toBeInTheDocument()
+    expect(screen.getByText(/page 2 of 3 \(41 tenants\)/i)).toBeInTheDocument()
   })
 
   it('uses immediate-impact lifecycle copy in disable confirmations and success toasts', async () => {
@@ -348,7 +408,7 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    await user.click(screen.getByRole('button', { name: /disable enabled tenant/i }))
+    selectTenantAction('Enabled Tenant', 'Disable')
 
     const dialogHeading = screen.getByRole('heading', { name: /disable tenant/i })
     const dialog = dialogHeading.closest('dialog')
@@ -385,7 +445,7 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    await user.click(screen.getByRole('button', { name: /disable enabled tenant id only/i }))
+    selectTenantAction('Enabled Tenant Id Only', 'Disable')
 
     const dialogHeading = screen.getByRole('heading', { name: /disable tenant/i })
     const dialog = dialogHeading.closest('dialog')
@@ -419,7 +479,7 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    await user.click(screen.getByRole('button', { name: /enable disabled tenant/i }))
+    selectTenantAction('Disabled Tenant', 'Enable')
 
     const dialogHeading = screen.getByRole('heading', { name: /enable tenant/i })
     const dialog = dialogHeading.closest('dialog')
@@ -440,12 +500,13 @@ describe('MaintainTenants page', () => {
 
   it('renders table with column headers', () => {
     renderMaintainTenants()
+
     expect(screen.getByText('Name')).toBeInTheDocument()
     expect(screen.getByText('Website')).toBeInTheDocument()
-    // "Status" appears in both filter label and table header
     const statusElements = screen.getAllByText('Status')
     expect(statusElements.length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Default')).toBeInTheDocument()
+    expect(screen.getByText('Actions')).toBeInTheDocument()
   })
 
   it('opens Create Tenant wizard when button is clicked', async () => {
@@ -455,9 +516,7 @@ describe('MaintainTenants page', () => {
     await user.click(screen.getByRole('button', { name: /create tenant/i }))
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { name: /create tenant/i }),
-      ).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /create tenant/i })).toBeInTheDocument()
     })
   })
 })
