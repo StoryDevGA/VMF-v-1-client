@@ -539,7 +539,7 @@ describe('UserEditDrawer', () => {
     expect(screen.getAllByText(/\(Ref: req-email-conflict-1\)/i).length).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows not-required guidance when tenant visibility is not allowed for the topology', () => {
+  it('hides the tenant-visibility section for single-tenant customers', () => {
     mockUseTenantContext.mockReturnValue(
       getTenantContextMockValue({
         tenants: [],
@@ -556,7 +556,8 @@ describe('UserEditDrawer', () => {
 
     renderDrawer()
 
-    expect(screen.getByText(/tenant visibility is not required for this customer topology/i)).toBeInTheDocument()
+    expect(screen.queryByText(/tenant visibility is not required for this customer topology/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^tenant visibility$/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/north hub/i)).not.toBeInTheDocument()
   })
 

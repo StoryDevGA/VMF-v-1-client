@@ -49,9 +49,6 @@ const TENANT_VISIBILITY_STEP_COPY =
 const TENANT_VISIBILITY_EMPTY_SELECTION_MESSAGE =
   'No explicit tenant visibility selected.'
 
-const TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE =
-  'Not required for this customer topology.'
-
 const TENANT_VISIBILITY_LOADING_MESSAGE = 'Loading tenant options...'
 
 const TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
@@ -338,16 +335,12 @@ function CreateUserWizard({ open, onClose, customerId }) {
   )
 
   const tenantVisibilitySummary = useMemo(() => {
-    if (!shouldShowTenantVisibilityStep) {
-      return TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE
-    }
-
     if (resolvedSelectedTenants.length === 0) {
       return TENANT_VISIBILITY_EMPTY_SELECTION_MESSAGE
     }
 
     return resolvedSelectedTenants.map((tenant) => tenant.name).join(', ')
-  }, [resolvedSelectedTenants, shouldShowTenantVisibilityStep])
+  }, [resolvedSelectedTenants])
 
   const getStepNumber = useCallback(
     (stepKey) => {
@@ -815,8 +808,12 @@ function CreateUserWizard({ open, onClose, customerId }) {
               <dd>{email}</dd>
               <dt>Roles</dt>
               <dd>{selectedRoles.map((role) => role.replace(/_/g, ' ')).join(', ')}</dd>
-              <dt>Tenant Visibility</dt>
-              <dd>{tenantVisibilitySummary}</dd>
+              {shouldShowTenantVisibilityStep ? (
+                <>
+                  <dt>Tenant Visibility</dt>
+                  <dd>{tenantVisibilitySummary}</dd>
+                </>
+              ) : null}
             </dl>
           </div>
         )}

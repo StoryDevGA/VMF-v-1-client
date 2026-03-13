@@ -268,6 +268,8 @@ function BulkUserOperations({
   const shouldShowTenantVisibilityUpdate =
     effectiveTenantVisibilityMeta?.allowed === true
     && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
+  const shouldSuppressTenantVisibilityHint =
+    effectiveTenantVisibilityMeta?.topology === 'SINGLE_TENANT'
 
   const normalizedSelectedBulkTenantVisibility = useMemo(
     () => normalizeTenantVisibilityIds(selectedBulkTenantVisibility),
@@ -1032,11 +1034,11 @@ function BulkUserOperations({
                   </>
                 ) : null}
               </div>
-            ) : (
+            ) : !shouldSuppressTenantVisibilityHint ? (
               <p className="bulk-users__tenant-visibility-hint">
                 Tenant visibility is not required for this customer topology.
               </p>
-            )}
+            ) : null}
             <div className="bulk-users__actions">
               <Button
                 variant="primary"

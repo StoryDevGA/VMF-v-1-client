@@ -476,7 +476,7 @@ describe('BulkUserOperations', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
   })
 
-  it('shows not-required guidance when tenant visibility is not allowed for the topology', async () => {
+  it('suppresses the tenant-visibility fallback hint for single-tenant customers', async () => {
     const user = userEvent.setup()
     mockUseTenantContext.mockReturnValue(
       getTenantContextMockValue({
@@ -496,7 +496,7 @@ describe('BulkUserOperations', () => {
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
-    expect(screen.getByText(/tenant visibility is not required for this customer topology/i)).toBeInTheDocument()
+    expect(screen.queryByText(/tenant visibility is not required for this customer topology/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/tenant visibility change/i)).not.toBeInTheDocument()
   })
 

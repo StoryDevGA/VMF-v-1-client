@@ -450,7 +450,8 @@ describe('CreateUserWizard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
-      expect(screen.getByText(/not required for this customer topology/i)).toBeInTheDocument()
+      expect(screen.queryByText(/^tenant visibility$/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/not required for this customer topology/i)).not.toBeInTheDocument()
     })
   })
 

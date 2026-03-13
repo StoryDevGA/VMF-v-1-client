@@ -55,9 +55,6 @@ const DISABLED_EMAIL_HELP_TEXT =
 const TENANT_VISIBILITY_EDIT_GUIDANCE =
   'Select the tenants this user should be able to access. Clear all selections to remove stored explicit tenant visibility.'
 
-const TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE =
-  'Tenant visibility is not required for this customer topology.'
-
 const TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
   'No selectable tenants are currently available for this customer.'
 
@@ -295,6 +292,8 @@ function UserEditDrawer({
   const shouldShowTenantVisibilityEditor =
     effectiveTenantVisibilityMeta?.allowed === true
     && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
+  const shouldHideTenantVisibilitySection =
+    effectiveTenantVisibilityMeta?.topology === 'SINGLE_TENANT'
   const customerScopedRoles = useMemo(
     () => getCustomerScopedRoles(user, customerId),
     [customerId, user],
@@ -714,130 +713,125 @@ function UserEditDrawer({
           )}
         </fieldset>
 
-        <fieldset className="user-edit-drawer__fieldset">
-          <legend className="user-edit-drawer__legend">Tenant Visibility</legend>
-          {shouldShowTenantVisibilityEditor ? (
-            <div className="user-edit-drawer__tenant-visibility">
-              <p className="user-edit-drawer__tenant-visibility-text">
-                {TENANT_VISIBILITY_EDIT_GUIDANCE}
-              </p>
-              {effectiveTenantVisibilityMeta?.isServiceProvider ? (
-                <p className="user-edit-drawer__tenant-visibility-hint">
-                  {TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
+        {!shouldHideTenantVisibilitySection ? (
+          <fieldset className="user-edit-drawer__fieldset">
+            <legend className="user-edit-drawer__legend">Tenant Visibility</legend>
+            {shouldShowTenantVisibilityEditor ? (
+              <div className="user-edit-drawer__tenant-visibility">
+                <p className="user-edit-drawer__tenant-visibility-text">
+                  {TENANT_VISIBILITY_EDIT_GUIDANCE}
                 </p>
-              ) : null}
-              {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
-                <p className="user-edit-drawer__tenant-visibility-hint">
-                  Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
-                </p>
-              ) : null}
+                {effectiveTenantVisibilityMeta?.isServiceProvider ? (
+                  <p className="user-edit-drawer__tenant-visibility-hint">
+                    {TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
+                  </p>
+                ) : null}
+                {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
+                  <p className="user-edit-drawer__tenant-visibility-hint">
+                    Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
+                  </p>
+                ) : null}
 
-              {isLoadingTenants ? (
-                <p className="user-edit-drawer__tenant-visibility-text" role="status">
-                  Loading tenant options...
-                </p>
-              ) : null}
+                {isLoadingTenants ? (
+                  <p className="user-edit-drawer__tenant-visibility-text" role="status">
+                    Loading tenant options...
+                  </p>
+                ) : null}
 
-              {normalizedTenantsError ? (
-                <ErrorSupportPanel
-                  error={normalizedTenantsError}
-                  context="user-edit-drawer-tenant-visibility"
-                />
-              ) : null}
+                {normalizedTenantsError ? (
+                  <ErrorSupportPanel
+                    error={normalizedTenantsError}
+                    context="user-edit-drawer-tenant-visibility"
+                  />
+                ) : null}
 
-              {!isLoadingTenants && !normalizedTenantsError ? (
-                <>
-                  <div className="user-edit-drawer__tenant-actions">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllTenants}
-                      disabled={selectableTenantOptions.length === 0 || isLoading}
-                    >
-                      Select All Available
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleClearTenantSelection}
-                      disabled={normalizedTenantVisibility.length === 0 || isLoading}
-                    >
-                      Clear Selection
-                    </Button>
-                  </div>
-
-                  {selectableTenantOptions.length > 0 ? (
-                    <div className="user-edit-drawer__tenant-list" role="group" aria-label="Editable tenant visibility">
-                      {selectableTenantOptions.map((tenant) => (
-                        <div key={tenant.id} className="user-edit-drawer__tenant-option">
-                          <Tickbox
-                            id={`edit-tenant-${tenant.id}`}
-                            label={tenant.name}
-                            checked={normalizedTenantVisibility.includes(tenant.id)}
-                            onChange={() => toggleTenantSelection(tenant.id)}
-                            disabled={isLoading}
-                          />
-                          <p className="user-edit-drawer__tenant-meta">
-                            Status: {tenant.status}
-                            {tenant.isDefault ? ' | Default tenant' : ''}
-                          </p>
-                        </div>
-                      ))}
+                {!isLoadingTenants && !normalizedTenantsError ? (
+                  <>
+                    <div className="user-edit-drawer__tenant-actions">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleSelectAllTenants}
+                        disabled={selectableTenantOptions.length === 0 || isLoading}
+                      >
+                        Select All Available
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearTenantSelection}
+                        disabled={normalizedTenantVisibility.length === 0 || isLoading}
+                      >
+                        Clear Selection
+                      </Button>
                     </div>
-                  ) : (
-                    <p className="user-edit-drawer__tenant-visibility-hint">
-                      {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
-                    </p>
-                  )}
 
-                  {preservedSelectedTenants.length > 0 ? (
-                    <div className="user-edit-drawer__tenant-preserved">
-                      <p className="user-edit-drawer__tenant-visibility-hint">
-                        {TENANT_VISIBILITY_PRESERVED_MESSAGE}
-                      </p>
-                      <ul className="user-edit-drawer__tenant-preserved-list">
-                        {preservedSelectedTenants.map((tenant) => (
-                          <li key={tenant.id} className="user-edit-drawer__tenant-preserved-item">
-                            <div className="user-edit-drawer__tenant-preserved-details">
-                              <span className="user-edit-drawer__tenant-preserved-name">{tenant.name}</span>
-                              <span className="user-edit-drawer__tenant-preserved-meta">
-                                Status: {tenant.status}
-                                {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
-                              </span>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleTenantSelection(tenant.id)}
+                    {selectableTenantOptions.length > 0 ? (
+                      <div className="user-edit-drawer__tenant-list" role="group" aria-label="Editable tenant visibility">
+                        {selectableTenantOptions.map((tenant) => (
+                          <div key={tenant.id} className="user-edit-drawer__tenant-option">
+                            <Tickbox
+                              id={`edit-tenant-${tenant.id}`}
+                              label={tenant.name}
+                              checked={normalizedTenantVisibility.includes(tenant.id)}
+                              onChange={() => toggleTenantSelection(tenant.id)}
                               disabled={isLoading}
-                            >
-                              Remove
-                            </Button>
-                          </li>
+                            />
+                            <p className="user-edit-drawer__tenant-meta">
+                              Status: {tenant.status}
+                              {tenant.isDefault ? ' | Default tenant' : ''}
+                            </p>
+                          </div>
                         ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-          ) : (
-            <div className="user-edit-drawer__locked-field" role="note">
-              <p className="user-edit-drawer__locked-field-title">Current handling</p>
-              <p className="user-edit-drawer__locked-field-text">
-                {TENANT_VISIBILITY_NOT_REQUIRED_MESSAGE}
+                      </div>
+                    ) : (
+                      <p className="user-edit-drawer__tenant-visibility-hint">
+                        {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                      </p>
+                    )}
+
+                    {preservedSelectedTenants.length > 0 ? (
+                      <div className="user-edit-drawer__tenant-preserved">
+                        <p className="user-edit-drawer__tenant-visibility-hint">
+                          {TENANT_VISIBILITY_PRESERVED_MESSAGE}
+                        </p>
+                        <ul className="user-edit-drawer__tenant-preserved-list">
+                          {preservedSelectedTenants.map((tenant) => (
+                            <li key={tenant.id} className="user-edit-drawer__tenant-preserved-item">
+                              <div className="user-edit-drawer__tenant-preserved-details">
+                                <span className="user-edit-drawer__tenant-preserved-name">{tenant.name}</span>
+                                <span className="user-edit-drawer__tenant-preserved-meta">
+                                  Status: {tenant.status}
+                                  {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleTenantSelection(tenant.id)}
+                                disabled={isLoading}
+                              >
+                                Remove
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {fieldErrors.tenantVisibility ? (
+              <p className="user-edit-drawer__error" role="alert">
+                {fieldErrors.tenantVisibility}
               </p>
-            </div>
-          )}
-          {fieldErrors.tenantVisibility ? (
-            <p className="user-edit-drawer__error" role="alert">
-              {fieldErrors.tenantVisibility}
-            </p>
-          ) : null}
-        </fieldset>
+            ) : null}
+          </fieldset>
+        ) : null}
 
         {fieldErrors.form && (
           <p className="user-edit-drawer__error" role="alert">
