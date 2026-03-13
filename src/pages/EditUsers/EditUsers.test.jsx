@@ -259,10 +259,10 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders the Bulk Operations button', () => {
+  it('renders the Bulk Create button', () => {
     renderEditUsers()
     expect(
-      screen.getByRole('button', { name: /bulk operations/i }),
+      screen.getByRole('button', { name: /bulk create/i }),
     ).toBeInTheDocument()
   })
 
@@ -413,6 +413,17 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows selection guidance before any rows are selected', () => {
+    renderEditUsers()
+
+    expect(
+      screen.getByText(/use row checkboxes to select users for bulk update or bulk disable/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: /bulk actions for selected users/i }),
+    ).not.toBeInTheDocument()
+  })
+
   it('renders row-level lifecycle summaries for trusted, invited, invitation-required, and disabled users', () => {
     mockUseUsers.mockReturnValue(
       buildUseUsersResult({
@@ -443,17 +454,56 @@ describe('EditUsers page', () => {
     })
   })
 
-  it('opens Bulk Operations dialog when button is clicked', async () => {
+  it('opens the bulk-create dialog from the action bar', async () => {
     const user = userEvent.setup()
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /bulk operations/i }))
+    await user.click(screen.getByRole('button', { name: /bulk create/i }))
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: /bulk operations/i }),
+        screen.getByRole('heading', { name: /^bulk create users$/i }),
       ).toBeInTheDocument()
     })
+
+    expect(screen.queryByLabelText(/operation/i)).not.toBeInTheDocument()
+  })
+
+  it('shows contextual bulk actions when rows are selected', async () => {
+    const user = userEvent.setup()
+    renderEditUsers()
+
+    await user.click(screen.getByRole('checkbox', { name: /select row user-2/i }))
+
+    expect(
+      screen.getByRole('region', { name: /bulk actions for selected users/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/1 selected/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /bulk update selected/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /bulk disable selected/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the bulk-update dialog from the selected-users action bar', async () => {
+    const user = userEvent.setup()
+    renderEditUsers()
+
+    await user.click(screen.getByRole('checkbox', { name: /select row user-2/i }))
+    await user.click(screen.getByRole('button', { name: /bulk update selected/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /^bulk update users$/i }),
+      ).toBeInTheDocument()
+    })
+
+    expect(screen.queryByLabelText(/operation/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Selected users: 1'),
+    ).toBeInTheDocument()
   })
 
   it('opens the edit-user dialog from the user name workspace entry', async () => {

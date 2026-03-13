@@ -15,6 +15,7 @@
   gap: var(--spacing-sm, 0.5rem);
 }
 
+.bulk-users__mode,
 .bulk-users__selection-info {
   margin: 0;
   font-size: var(--font-size-sm);

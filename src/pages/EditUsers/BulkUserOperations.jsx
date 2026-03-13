@@ -78,6 +78,51 @@ const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
   { value: 'clear', label: 'Clear explicit tenant visibility' },
 ]
 
+function resolveAvailableOperationOptions(availableOperations = []) {
+  const allowedOperations = new Set(
+    availableOperations
+      .map((operation) => String(operation ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+
+  if (allowedOperations.size === 0) {
+    return OPERATION_OPTIONS
+  }
+
+  return OPERATION_OPTIONS.filter((option) => allowedOperations.has(option.value))
+}
+
+function getDefaultOperation(initialOperation, availableOperationOptions) {
+  const normalizedInitialOperation = String(initialOperation ?? '').trim().toLowerCase()
+  const matchingInitialOperation = availableOperationOptions.find(
+    (option) => option.value === normalizedInitialOperation,
+  )
+
+  return matchingInitialOperation?.value ?? availableOperationOptions[0]?.value ?? 'create'
+}
+
+function getLockedDialogTitle(operation) {
+  if (operation === 'update') return 'Bulk Update Users'
+  if (operation === 'disable') return 'Bulk Disable Users'
+  return 'Bulk Create Users'
+}
+
+function getDialogSubtitle({ isOperationLocked, operation, selectedCount }) {
+  if (!isOperationLocked) {
+    return `Run batched user actions (maximum ${BULK_LIMIT} users per request).`
+  }
+
+  if (operation === 'update') {
+    return `Apply the same contract-approved changes to ${selectedCount} selected ${selectedCount === 1 ? 'user' : 'users'}.`
+  }
+
+  if (operation === 'disable') {
+    return `Disable ${selectedCount} selected ${selectedCount === 1 ? 'user' : 'users'} from this customer workspace.`
+  }
+
+  return `Import or type up to ${BULK_LIMIT} users in this batch.`
+}
+
 function BulkGovernanceNote() {
   return (
     <div
@@ -205,6 +250,8 @@ function BulkUserOperations({
   onClose,
   customerId,
   selectedUserIds = [],
+  initialOperation = 'create',
+  availableOperations = OPERATION_OPTIONS.map((option) => option.value),
 }) {
   const { addToast } = useToaster()
   const {
@@ -217,8 +264,16 @@ function BulkUserOperations({
   const [bulkCreateUsers, bulkCreateResult] = useBulkCreateUsersMutation()
   const [bulkUpdateUsers, bulkUpdateResult] = useBulkUpdateUsersMutation()
   const [bulkDisableUsers, bulkDisableResult] = useBulkDisableUsersMutation()
+  const availableOperationOptions = useMemo(
+    () => resolveAvailableOperationOptions(availableOperations),
+    [availableOperations],
+  )
+  const defaultOperation = useMemo(
+    () => getDefaultOperation(initialOperation, availableOperationOptions),
+    [availableOperationOptions, initialOperation],
+  )
 
-  const [operation, setOperation] = useState('create')
+  const [operation, setOperation] = useState(defaultOperation)
   const [sourceMode, setSourceMode] = useState('csv')
   const [csvText, setCsvText] = useState('')
   const [manualText, setManualText] = useState('')
@@ -245,6 +300,7 @@ function BulkUserOperations({
 
   const isSelectionRequiredOperation =
     operation === 'update' || operation === 'disable'
+  const isOperationLocked = availableOperationOptions.length === 1
 
   const selectedCount = selectedUserIds.length
 
@@ -309,7 +365,7 @@ function BulkUserOperations({
   )
 
   const resetState = useCallback(() => {
-    setOperation('create')
+    setOperation(defaultOperation)
     setSourceMode('csv')
     setCsvText('')
     setManualText('')
@@ -323,7 +379,7 @@ function BulkUserOperations({
     setBulkRoles('')
     setBulkTenantVisibilityMode('unchanged')
     setSelectedBulkTenantVisibility([])
-  }, [])
+  }, [defaultOperation])
 
   const handleClose = useCallback(() => {
     resetState()
@@ -336,6 +392,12 @@ function BulkUserOperations({
     setBulkTenantVisibilityMode('unchanged')
     setSelectedBulkTenantVisibility([])
   }, [shouldShowTenantVisibilityUpdate])
+
+  useEffect(() => {
+    if (!open) return
+
+    setOperation(defaultOperation)
+  }, [defaultOperation, open])
 
   const startProgress = useCallback((label) => {
     setProgressLabel(label)
@@ -706,29 +768,38 @@ function BulkUserOperations({
     startProgress,
   ])
 
+  const dialogTitle = isOperationLocked ? getLockedDialogTitle(operation) : 'Bulk Operations'
+  const dialogSubtitle = getDialogSubtitle({ isOperationLocked, operation, selectedCount })
+
   return (
     <Dialog open={open} onClose={handleClose} size="lg">
       <Dialog.Header>
-        <h2 className="bulk-users__title">Bulk Operations</h2>
+        <h2 className="bulk-users__title">{dialogTitle}</h2>
         <p className="bulk-users__subtitle">
-          Run batched user actions (maximum {BULK_LIMIT} users per request).
+          {dialogSubtitle}
         </p>
       </Dialog.Header>
 
       <Dialog.Body>
         <div className="bulk-users__controls">
-          <Select
-            id="bulk-operation"
-            label="Operation"
-            value={operation}
-            onChange={(event) => {
-              setOperation(event.target.value)
-              setFieldError('')
-              setResultSummary(null)
-            }}
-            options={OPERATION_OPTIONS}
-            disabled={isProcessing}
-          />
+          {isOperationLocked ? (
+            <p className="bulk-users__mode" role="status">
+              Mode: <strong>{availableOperationOptions[0]?.label ?? 'Bulk Operation'}</strong>
+            </p>
+          ) : (
+            <Select
+              id="bulk-operation"
+              label="Operation"
+              value={operation}
+              onChange={(event) => {
+                setOperation(event.target.value)
+                setFieldError('')
+                setResultSummary(null)
+              }}
+              options={availableOperationOptions}
+              disabled={isProcessing}
+            />
+          )}
 
           {isSelectionRequiredOperation && (
             <p className="bulk-users__selection-info" role="status">

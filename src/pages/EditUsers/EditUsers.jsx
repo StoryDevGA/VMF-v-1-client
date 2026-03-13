@@ -49,6 +49,21 @@ const USER_LIFECYCLE_NOTE =
 const EDIT_USERS_INACTIVE_CUSTOMER_MESSAGE =
   'This customer is inactive. User-management actions are unavailable until a Super Admin reactivates the customer.'
 
+const BULK_CREATE_DIALOG_CONFIG = {
+  initialOperation: 'create',
+  availableOperations: ['create'],
+}
+
+const BULK_UPDATE_DIALOG_CONFIG = {
+  initialOperation: 'update',
+  availableOperations: ['update'],
+}
+
+const BULK_DISABLE_DIALOG_CONFIG = {
+  initialOperation: 'disable',
+  availableOperations: ['disable'],
+}
+
 const getMutationPayload = (result) => {
   if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
     return result.data
@@ -135,6 +150,7 @@ function EditUsers() {
   const [searchInput, setSearchInput] = useState('')
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [showBulkOperations, setShowBulkOperations] = useState(false)
+  const [bulkDialogConfig, setBulkDialogConfig] = useState(BULK_CREATE_DIALOG_CONFIG)
   const [editingUser, setEditingUser] = useState(null)
   const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
@@ -190,6 +206,7 @@ function EditUsers() {
     previousContextKeyRef.current = nextContextKey
     setShowCreateWizard(false)
     setShowBulkOperations(false)
+    setBulkDialogConfig(BULK_CREATE_DIALOG_CONFIG)
     setEditingUser(null)
     setOwnershipTransferTarget(null)
     setConfirmAction(null)
@@ -205,6 +222,7 @@ function EditUsers() {
 
     setShowCreateWizard(false)
     setShowBulkOperations(false)
+    setBulkDialogConfig(BULK_CREATE_DIALOG_CONFIG)
     setEditingUser(null)
     setOwnershipTransferTarget(null)
     setConfirmAction(null)
@@ -379,6 +397,30 @@ function EditUsers() {
   const isRowActionMutationLoading =
     isLifecycleMutationLoading || Boolean(resendInvitationResult?.isLoading)
 
+  const handleOpenBulkCreate = useCallback(() => {
+    setBulkDialogConfig(BULK_CREATE_DIALOG_CONFIG)
+    setShowBulkOperations(true)
+  }, [])
+
+  const handleOpenBulkUpdateSelected = useCallback(() => {
+    setBulkDialogConfig(BULK_UPDATE_DIALOG_CONFIG)
+    setShowBulkOperations(true)
+  }, [])
+
+  const handleOpenBulkDisableSelected = useCallback(() => {
+    setBulkDialogConfig(BULK_DISABLE_DIALOG_CONFIG)
+    setShowBulkOperations(true)
+  }, [])
+
+  const handleCloseBulkOperations = useCallback(() => {
+    setShowBulkOperations(false)
+    setBulkDialogConfig(BULK_CREATE_DIALOG_CONFIG)
+  }, [])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedRows(new Set())
+  }, [])
+
   const handleFirstPage = useCallback(() => {
     setPage(1)
   }, [setPage])
@@ -483,7 +525,10 @@ function EditUsers() {
         onPreviousPage={handlePrevPage}
         onNextPage={handleNextPage}
         onLastPage={handleLastPage}
-        onBulkOperationsClick={() => setShowBulkOperations(true)}
+        onBulkCreateClick={handleOpenBulkCreate}
+        onBulkUpdateSelectedClick={handleOpenBulkUpdateSelected}
+        onBulkDisableSelectedClick={handleOpenBulkDisableSelected}
+        onClearSelection={handleClearSelection}
         onCreateUserClick={() => setShowCreateWizard(true)}
         onEditUserClick={setEditingUser}
         onTransferOwnershipClick={(targetUser) => {
@@ -506,9 +551,11 @@ function EditUsers() {
 
       <BulkUserOperations
         open={showBulkOperations}
-        onClose={() => setShowBulkOperations(false)}
+        onClose={handleCloseBulkOperations}
         customerId={customerId}
         selectedUserIds={Array.from(selectedRowsSafe)}
+        initialOperation={bulkDialogConfig.initialOperation}
+        availableOperations={bulkDialogConfig.availableOperations}
       />
 
       <UserEditDrawer

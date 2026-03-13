@@ -149,6 +149,35 @@ describe('BulkUserOperations', () => {
     expect(screen.getByText(/maximum 100 users/i)).toBeInTheDocument()
   })
 
+  it('supports a locked bulk-create entry mode', () => {
+    renderDialog({
+      initialOperation: 'create',
+      availableOperations: ['create'],
+    })
+
+    expect(
+      screen.getByRole('heading', { name: /^bulk create users$/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/operation/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/^Bulk Create$/, { selector: 'strong' })).toBeInTheDocument()
+  })
+
+  it('supports a locked bulk-update entry mode for selected users', () => {
+    renderDialog({
+      initialOperation: 'update',
+      availableOperations: ['update'],
+      selectedUserIds: ['user-1', 'user-2'],
+    })
+
+    expect(
+      screen.getByRole('heading', { name: /^bulk update users$/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/operation/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Selected users: 2'),
+    ).toBeInTheDocument()
+  })
+
   // ---- Operation switching ----
 
   it('shows input mode select when operation is create', () => {

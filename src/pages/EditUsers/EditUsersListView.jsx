@@ -253,7 +253,10 @@ export function EditUsersListView({
   onPreviousPage,
   onNextPage,
   onLastPage,
-  onBulkOperationsClick,
+  onBulkCreateClick,
+  onBulkUpdateSelectedClick,
+  onBulkDisableSelectedClick,
+  onClearSelection,
   onCreateUserClick,
   onEditUserClick,
   onTransferOwnershipClick,
@@ -388,6 +391,7 @@ export function EditUsersListView({
     ],
     [handleRowAction, onEditUserClick, rowActions],
   )
+  const selectedCount = selectedRows?.size ?? 0
 
   return (
     <>
@@ -407,10 +411,10 @@ export function EditUsersListView({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onBulkOperationsClick}
+                onClick={onBulkCreateClick}
                 disabled={isListFetching}
               >
-                Bulk Operations
+                Bulk Create
               </Button>
               <Button
                 type="button"
@@ -474,6 +478,12 @@ export function EditUsersListView({
               </div>
             </div>
 
+            {selectedCount === 0 ? (
+              <p className="edit-users__selection-hint" role="status">
+                Use row checkboxes to select users for bulk update or bulk disable.
+              </p>
+            ) : null}
+
             {tenantContextAppError ? (
               <ErrorSupportPanel
                 error={tenantContextAppError}
@@ -504,6 +514,52 @@ export function EditUsersListView({
                 ariaLabel="Users table"
               />
             </HorizontalScroll>
+
+            {selectedCount > 0 ? (
+              <div
+                className="edit-users__selection-bar"
+                role="region"
+                aria-label="Bulk actions for selected users"
+              >
+                <div className="edit-users__selection-summary" aria-live="polite">
+                  <strong className="edit-users__selection-count">
+                    {selectedCount} selected
+                  </strong>
+                  <span className="edit-users__selection-text">
+                    Bulk update and bulk disable will apply only to the selected users on this page.
+                  </span>
+                </div>
+                <div className="edit-users__selection-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onClearSelection}
+                    disabled={isListFetching}
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={onBulkUpdateSelectedClick}
+                    disabled={isListFetching}
+                  >
+                    Bulk Update Selected
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    onClick={onBulkDisableSelectedClick}
+                    disabled={isListFetching}
+                  >
+                    Bulk Disable Selected
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             {isListFetching && !isListLoading ? (
               <p className="edit-users__muted">Refreshing users...</p>
