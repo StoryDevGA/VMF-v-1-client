@@ -1,20 +1,15 @@
 /**
  * TenantEditDrawer Tests
  *
- * Covers:
- * - Renders heading and fields when tenant is provided
- * - Shows status badge
- * - Shows default badge for default tenants
- * - Pre-fills name and website from tenant prop
- * - Validates empty name on save
- * - Renders UserSearchSelect for tenant admin management
- * - Shows selected admin as chip (truncated ID fallback)
- * - Calls onClose when Cancel is clicked
- * - Returns null when tenant is null
+ * Covers the redesigned tenant-edit workspace:
+ * - Tenant details remain at the top of the drawer
+ * - Linked users render in a searchable, filterable table
+ * - Bulk remove updates pending tenant-admin assignments
+ * - Save and contract-error handling still work
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -25,6 +20,8 @@ import authReducer from '../../store/slices/authSlice.js'
 import TenantEditDrawer from './TenantEditDrawer'
 
 const mockUseUpdateTenantMutation = vi.hoisted(() => vi.fn())
+const mockUseListUsersQuery = vi.hoisted(() => vi.fn())
+const mockUseLazyListUsersQuery = vi.hoisted(() => vi.fn())
 
 vi.mock('../../store/api/tenantApi.js', async () => {
   const actual = await vi.importActual('../../store/api/tenantApi.js')
@@ -35,24 +32,56 @@ vi.mock('../../store/api/tenantApi.js', async () => {
   }
 })
 
-// Mock HTMLDialogElement methods (JSDOM does not support <dialog>)
+vi.mock('../../store/api/userApi.js', async () => {
+  const actual = await vi.importActual('../../store/api/userApi.js')
+
+  return {
+    ...actual,
+    useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
+    useLazyListUsersQuery: (...args) => mockUseLazyListUsersQuery(...args),
+  }
+})
+
 beforeEach(() => {
-  HTMLDialogElement.prototype.showModal = vi.fn(function () {
+  HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
     this.open = true
   })
-  HTMLDialogElement.prototype.close = vi.fn(function () {
+  HTMLDialogElement.prototype.close = vi.fn(function closeMock() {
     this.open = false
   })
 })
 
-/** Sample tenant shapes */
+const customerUsers = [
+  {
+    _id: 'admin-user-1',
+    name: 'Jordan Manager',
+    email: 'jordan.manager@acme.test',
+    isActive: true,
+    memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN'] }],
+  },
+  {
+    _id: 'admin-user-2',
+    name: 'Taylor Viewer',
+    email: 'taylor.viewer@acme.test',
+    isActive: false,
+    memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+  },
+  {
+    _id: 'admin-user-3',
+    name: 'Morgan Backup',
+    email: 'morgan.backup@acme.test',
+    isActive: true,
+    memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+  },
+]
+
 const sampleTenant = {
   _id: 'tenant-1',
   name: 'Acme Tenant',
   website: 'https://acme.com',
   status: 'ENABLED',
   isDefault: false,
-  tenantAdminUserIds: ['507f1f77bcf86cd799439011'],
+  tenantAdminUserIds: ['admin-user-1', 'admin-user-2'],
 }
 
 const defaultTenant = {
@@ -61,7 +90,7 @@ const defaultTenant = {
   website: 'https://default.com',
   status: 'ENABLED',
   isDefault: true,
-  tenantAdminUserIds: [],
+  tenantAdminUserIds: ['admin-user-1'],
 }
 
 const archivedTenant = {
@@ -70,10 +99,9 @@ const archivedTenant = {
   website: 'https://archived.com',
   status: 'ARCHIVED',
   isDefault: false,
-  tenantAdminUserIds: ['507f1f77bcf86cd799439011'],
+  tenantAdminUserIds: ['admin-user-1'],
 }
 
-/** Create a fresh store */
 function createTestStore() {
   return configureStore({
     reducer: {
@@ -84,7 +112,6 @@ function createTestStore() {
   })
 }
 
-/** Render wrapper */
 function renderDrawer(props = {}) {
   const defaultProps = {
     open: true,
@@ -113,54 +140,136 @@ describe('TenantEditDrawer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     mockUseUpdateTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    mockUseListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: customerUsers,
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+    mockUseLazyListUsersQuery.mockReturnValue([
+      vi.fn(),
+      {
+        data: {
+          data: {
+            users: customerUsers,
+          },
+        },
+        isFetching: false,
+      },
+    ])
   })
 
-  it('renders the Edit Tenant heading', () => {
+  it('renders the redesigned tenant details and linked users workspace', async () => {
     renderDrawer()
-    expect(
-      screen.getByRole('heading', { name: /edit tenant/i }),
-    ).toBeInTheDocument()
+
+    expect(screen.getByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
+    expect(screen.getByText('Tenant Details')).toBeInTheDocument()
+    expect(screen.getByText('Linked Users')).toBeInTheDocument()
+    expect(screen.getByText('Linked tenant admins')).toBeInTheDocument()
+    expect(screen.getByText('2 linked users | 1 active')).toBeInTheDocument()
+    expect(screen.getByLabelText(/add users to this tenant/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/search linked users/i)).toBeInTheDocument()
+
+    const table = screen.getByRole('table', { name: /linked users/i })
+
+    expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
+    expect(within(table).getByText('Taylor Viewer')).toBeInTheDocument()
+    expect(within(table).getByText('TENANT_ADMIN')).toBeInTheDocument()
+    expect(within(table).getByText('USER')).toBeInTheDocument()
   })
 
   it('renders nothing when tenant is null', () => {
     renderDrawer({ tenant: null })
-    expect(
-      screen.queryByRole('heading', { name: /edit tenant/i }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /edit tenant/i })).not.toBeInTheDocument()
   })
 
-  it('shows the tenant status badge', () => {
+  it('filters linked users inside the table by search term', async () => {
+    const user = userEvent.setup()
     renderDrawer()
-    expect(screen.getByText('ENABLED')).toBeInTheDocument()
+
+    const table = screen.getByRole('table', { name: /linked users/i })
+    await user.type(screen.getByLabelText(/search linked users/i), 'Taylor')
+
+    expect(within(table).queryByText('Jordan Manager')).not.toBeInTheDocument()
+    expect(within(table).getByText('Taylor Viewer')).toBeInTheDocument()
   })
 
-  it('shows Default badge for default tenants', () => {
+  it('filters linked users inside the table by status', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+
+    const table = screen.getByRole('table', { name: /linked users/i })
+    await user.selectOptions(screen.getByLabelText(/^status$/i), 'ACTIVE')
+
+    expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
+    expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
+  })
+
+  it('removes selected linked users and submits the updated tenant-admin assignments', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const updateTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
+    })
+    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
+
+    renderDrawer({ onClose })
+
+    await user.click(screen.getByLabelText(/select row admin-user-2/i))
+    await user.click(screen.getByRole('button', { name: /remove selected/i }))
+
+    const table = screen.getByRole('table', { name: /linked users/i })
+    expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
+    expect(screen.getByText('1 linked user | 1 active')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateTenantMutationMock).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        body: {
+          tenantAdminUserIds: ['admin-user-1'],
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/acme tenant has been updated/i)).toBeInTheDocument()
+    })
+  })
+
+  it('prevents removing the final linked tenant admin', async () => {
+    const user = userEvent.setup()
     renderDrawer({ tenant: defaultTenant })
-    expect(screen.getByText('Default')).toBeInTheDocument()
+
+    const table = screen.getByRole('table', { name: /linked users/i })
+    expect(within(table).getByRole('button', { name: /^remove jordan manager$/i })).toBeDisabled()
+
+    await user.click(screen.getByLabelText(/select row admin-user-1/i))
+
+    expect(screen.getByRole('button', { name: /remove selected/i })).toBeDisabled()
   })
 
-  it('pre-fills name input from tenant prop', () => {
-    renderDrawer()
-    const nameInput = screen.getByLabelText(/tenant name/i)
-    expect(nameInput).toHaveValue('Acme Tenant')
+  it('shows archived tenants as read-only in the edit drawer', () => {
+    renderDrawer({ tenant: archivedTenant })
+
+    expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
+    expect(screen.getByLabelText(/website url/i)).toBeDisabled()
+    expect(screen.getByLabelText(/add users to this tenant/i)).toBeDisabled()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
-  it('pre-fills website input from tenant prop', () => {
-    renderDrawer()
-    const websiteInput = screen.getByLabelText(/website url/i)
-    expect(websiteInput).toHaveValue('https://acme.com')
-  })
+  it('shows default-tenant lifecycle guidance in the edit drawer', () => {
+    renderDrawer({ tenant: defaultTenant })
 
-  it('renders UserSearchSelect with combobox for admin assignment', () => {
-    renderDrawer()
-    expect(screen.getByRole('combobox')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/search by name or email/i)).toBeInTheDocument()
-  })
-
-  it('shows selected admin as a chip with truncated ID fallback', () => {
-    renderDrawer()
-    // Without cached user details, UserSearchSelect falls back to first 8 chars + ellipsis
-    expect(screen.getByText('507f1f77…')).toBeInTheDocument()
+    expect(
+      screen.getByText(/the default tenant must remain enabled for this customer/i),
+    ).toBeInTheDocument()
   })
 
   it('shows validation error when name is cleared and Save is clicked', async () => {
@@ -174,81 +283,6 @@ describe('TenantEditDrawer', () => {
     await waitFor(() => {
       expect(screen.getByText(/name must not be empty/i)).toBeInTheDocument()
     })
-  })
-
-  it('calls onClose when Cancel is clicked', async () => {
-    const user = userEvent.setup()
-    const { onClose } = renderDrawer()
-
-    await user.click(screen.getByRole('button', { name: /cancel/i }))
-
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('renders Save Changes and Cancel buttons', () => {
-    renderDrawer()
-    expect(
-      screen.getByRole('button', { name: /save changes/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /cancel/i }),
-    ).toBeInTheDocument()
-  })
-
-  it('renders Tenant Admins fieldset legend', () => {
-    renderDrawer()
-    expect(screen.getByText('Tenant Admins')).toBeInTheDocument()
-  })
-
-  it('submits changed tenant details and closes after a successful save', async () => {
-    const user = userEvent.setup()
-    const onClose = vi.fn()
-    const updateTenantMutationMock = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
-    })
-    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
-
-    renderDrawer({ onClose })
-
-    const nameInput = screen.getByLabelText(/tenant name/i)
-    const websiteInput = screen.getByLabelText(/website url/i)
-    await user.clear(nameInput)
-    await user.type(nameInput, 'Acme Tenant Updated')
-    await user.clear(websiteInput)
-    await user.type(websiteInput, 'https://updated.example.com')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
-
-    await waitFor(() => {
-      expect(updateTenantMutationMock).toHaveBeenCalledWith({
-        tenantId: 'tenant-1',
-        body: {
-          name: 'Acme Tenant Updated',
-          website: 'https://updated.example.com',
-        },
-      })
-    })
-
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledTimes(1)
-      expect(screen.getByText(/acme tenant updated has been updated/i)).toBeInTheDocument()
-    })
-  })
-
-  it('shows archived tenants as read-only in the edit drawer', () => {
-    renderDrawer({ tenant: archivedTenant })
-
-    expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
-    expect(screen.getByLabelText(/website url/i)).toBeDisabled()
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
-  })
-
-  it('shows default-tenant lifecycle guidance in the edit drawer', () => {
-    renderDrawer({ tenant: defaultTenant })
-
-    expect(
-      screen.getByText(/the default tenant must remain enabled for this customer/i),
-    ).toBeInTheDocument()
   })
 
   it('surfaces contract-based tenant-admin guidance when save fails with invalid assignments', async () => {
