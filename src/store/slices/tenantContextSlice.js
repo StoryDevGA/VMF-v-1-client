@@ -24,6 +24,26 @@ const initialState = {
   tenantName: null,
 }
 
+const getFirstCustomerAdminCustomerId = (user) => {
+  if (!user?.memberships) return null
+
+  const adminMembership = user.memberships.find(
+    (membership) => membership?.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
+  )
+
+  return adminMembership?.customerId ?? null
+}
+
+const hasCustomerAccessForUser = (user, customerId) => {
+  if (!user?.memberships || !customerId) return false
+
+  return user.memberships.some(
+    (membership) =>
+      membership?.customerId
+      && membership.customerId.toString() === customerId.toString(),
+  )
+}
+
 const tenantContextSlice = createSlice({
   name: 'tenantContext',
   initialState,
@@ -77,6 +97,27 @@ const tenantContextSlice = createSlice({
      * Clear all context (e.g. on logout).
      */
     clearTenantContext: () => initialState,
+  },
+  extraReducers: (builder) => {
+    builder.addCase('auth/clearCredentials', () => initialState)
+
+    builder.addCase('auth/setCredentials', (state, action) => {
+      const nextUser = action.payload?.user
+
+      if (!nextUser?.memberships) {
+        return initialState
+      }
+
+      if (state.customerId && hasCustomerAccessForUser(nextUser, state.customerId)) {
+        return state
+      }
+
+      state.customerId = getFirstCustomerAdminCustomerId(nextUser)
+      state.tenantId = null
+      state.tenantName = null
+
+      return state
+    })
   },
 })
 

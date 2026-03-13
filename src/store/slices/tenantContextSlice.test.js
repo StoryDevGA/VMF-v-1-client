@@ -13,6 +13,7 @@ import tenantContextReducer, {
   selectSelectedTenantId,
   selectSelectedTenantName,
 } from './tenantContextSlice.js'
+import { clearCredentials, setCredentials } from './authSlice.js'
 
 const initialState = { customerId: null, tenantId: null, tenantName: null }
 
@@ -103,5 +104,46 @@ describe('tenantContextSlice', () => {
     expect(selectSelectedCustomerId(rootState)).toBe('cust-1')
     expect(selectSelectedTenantId(rootState)).toBe('ten-2')
     expect(selectSelectedTenantName(rootState)).toBe('Acme')
+  })
+
+  it('auth clearCredentials resets to initial state', () => {
+    const prev = { customerId: 'cust-1', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const state = tenantContextReducer(prev, clearCredentials())
+    expect(state).toEqual(initialState)
+  })
+
+  it('auth setCredentials reinitializes stale customer context for a new customer-admin session', () => {
+    const prev = { customerId: 'stale-customer', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const nextUser = {
+      id: 'user-2',
+      memberships: [
+        { customerId: 'cust-9', roles: ['USER'] },
+        { customerId: 'cust-5', roles: ['CUSTOMER_ADMIN'] },
+        { customerId: 'cust-7', roles: ['CUSTOMER_ADMIN'] },
+      ],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
+    expect(state).toEqual({
+      customerId: 'cust-5',
+      tenantId: null,
+      tenantName: null,
+    })
+  })
+
+  it('auth setCredentials preserves current customer context when the new user still has access', () => {
+    const prev = { customerId: 'cust-5', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const nextUser = {
+      id: 'user-3',
+      memberships: [
+        { customerId: 'cust-5', roles: ['CUSTOMER_ADMIN'] },
+        { customerId: 'cust-7', roles: ['CUSTOMER_ADMIN'] },
+      ],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
+    expect(state).toEqual(prev)
   })
 })
