@@ -1,8 +1,108 @@
+.user-edit-drawer__header {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+}
+
+.user-edit-drawer__title,
+.user-edit-drawer__subtitle,
+.user-edit-drawer__section-title,
+.user-edit-drawer__section-text {
+  margin: 0;
+}
+
+.user-edit-drawer__title {
+  font-size: var(--font-size-xl, 1.4375rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.user-edit-drawer__subtitle,
+.user-edit-drawer__section-text,
+.user-edit-drawer__muted {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
+}
+
+.user-edit-drawer__layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__summary-grid {
+  display: grid;
+  gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__section {
+  margin: 0;
+}
+
+.user-edit-drawer__section-header {
+  padding-bottom: 0;
+}
+
+.user-edit-drawer__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__section-title {
+  font-size: var(--font-size-lg, 1.25rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
 .user-edit-drawer__info,
 .user-edit-drawer__fieldset {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.user-edit-drawer__fieldset-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+}
+
+.user-edit-drawer__snapshot-list {
+  display: grid;
+  gap: var(--spacing-sm, 0.5rem);
+  margin: 0;
+}
+
+.user-edit-drawer__snapshot-item {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+}
+
+.user-edit-drawer__snapshot-item dd {
+  margin: 0;
+}
+
+.user-edit-drawer__snapshot-value {
+  min-width: 0;
+}
+
+.user-edit-drawer__badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs, 0.25rem);
+}
+
+.user-edit-drawer__role-list {
+  display: grid;
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 .user-edit-drawer__status {
@@ -166,6 +266,12 @@
   color: var(--color-error);
   line-height: var(--line-height-normal, 1.5);
   overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .user-edit-drawer__summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767px) {

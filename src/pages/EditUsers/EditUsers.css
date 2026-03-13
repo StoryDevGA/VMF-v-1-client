@@ -27,6 +27,10 @@
   gap: var(--spacing-lg, 1.5rem);
 }
 
+.edit-users__card-body--compact {
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
+}
+
 .edit-users__card-body--state {
   align-items: center;
   justify-content: center;
@@ -37,20 +41,26 @@
 /* ---- Header ---- */
 
 .edit-users__header {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: space-between;
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
   margin-bottom: var(--spacing-lg, 1.5rem);
-  flex-wrap: wrap;
-  gap: var(--spacing-sm, 0.5rem);
+}
+
+.edit-users__title,
+.edit-users__subtitle {
+  margin: 0;
 }
 
 .edit-users__title {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  margin: 0;
+}
+
+.edit-users__subtitle {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal, 1.5);
+  overflow-wrap: anywhere;
 }
 
 .edit-users__header-actions {
@@ -58,6 +68,12 @@
   gap: var(--spacing-sm, 0.5rem);
   flex-wrap: wrap;
   width: 100%;
+}
+
+.edit-users__catalogue-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 /* ---- Tenant scope indicator ---- */
@@ -76,6 +92,11 @@
 }
 
 /* ---- Governance note ---- */
+
+.edit-users__note-grid {
+  display: grid;
+  gap: var(--spacing-sm, 0.5rem);
+}
 
 .edit-users__governance-note {
   display: flex;
@@ -130,26 +151,127 @@
 /* ---- Toolbar ---- */
 
 .edit-users__toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--spacing-md, 1rem);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  align-items: end;
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 .edit-users__search {
-  flex: 1 1 100%;
   min-width: 0;
 }
 
 .edit-users__filter {
-  flex: 1 1 100%;
+  min-width: 0;
 }
 
 /* ---- Table wrapper ---- */
 
+.edit-users__table-wrap {
+  margin-top: 0;
+}
+
 .edit-users__table {
-  overflow-x: auto;
+  min-width: 840px;
+}
+
+.edit-users__row-actions {
+  width: 100%;
+}
+
+.edit-users__user-identity {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+  min-width: 0;
+}
+
+.edit-users__name-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold, 600);
+  cursor: pointer;
+}
+
+.edit-users__name-button:hover {
+  text-decoration: underline;
+}
+
+.edit-users__name-button:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm, 0.25rem);
+}
+
+.edit-users__user-email {
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.edit-users__roles-summary {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--spacing-2xs, 0.25rem);
+  min-width: 0;
+}
+
+.edit-users__roles-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs, 0.25rem);
+  min-height: 1.5rem;
+  padding: 0 var(--spacing-2xs, 0.25rem);
+  border: 0;
+  border-radius: var(--border-radius-sm, 0.25rem);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+  text-transform: lowercase;
+  cursor: help;
+  transition: color var(--transition-fast, 150ms ease-in-out);
+}
+
+.edit-users__roles-trigger:hover,
+.edit-users__roles-trigger[aria-expanded='true'] {
+  color: var(--color-text-primary);
+}
+
+.edit-users__roles-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  color: var(--color-text-primary);
+}
+
+.edit-users__roles-trigger-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.edit-users__roles-tooltip .tooltip__bubble {
+  width: max-content;
+  min-width: min(12rem, calc(100vw - var(--spacing-lg, 1.5rem)));
+  max-width: min(18rem, calc(100vw - var(--spacing-lg, 1.5rem)));
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.edit-users__roles-tooltip-list {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+}
+
+.edit-users__roles-tooltip-item {
+  display: block;
+  white-space: nowrap;
 }
 
 .edit-users__canonical-header {
@@ -411,9 +533,15 @@
 .edit-users__pagination {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md, 1rem);
-  padding: var(--spacing-md, 1rem) 0;
+  justify-content: space-between;
+  gap: var(--spacing-sm, 0.5rem);
+  margin-top: var(--spacing-md, 1rem);
+}
+
+.edit-users__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
 }
 
 .edit-users__pagination-info {
@@ -429,6 +557,10 @@
   display: flex;
   justify-content: center;
   padding: var(--spacing-sm, 0.5rem) 0;
+}
+
+.edit-users__muted {
+  margin: 0;
 }
 
 /* ---- Empty state ---- */
@@ -469,10 +601,12 @@
 /* ---- Responsive ---- */
 
 @media (max-width: 767px) {
+  .edit-users__catalogue-actions,
   .edit-users__header-actions {
     flex-direction: column;
   }
 
+  .edit-users__catalogue-actions .btn,
   .edit-users__header-actions .btn,
   .edit-users__state-actions .btn,
   .edit-users__dialog-footer .btn,
@@ -502,20 +636,36 @@
     margin-left: 0;
   }
 
+  .edit-users__toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .edit-users__pagination {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .edit-users__pagination-controls {
+    justify-content: stretch;
+  }
+
+  .edit-users__pagination-controls .btn {
+    width: 100%;
   }
 
   .edit-users__pagination-info {
     white-space: normal;
     text-align: center;
   }
+
+  .edit-users__roles-trigger {
+    min-height: 44px;
+    padding: var(--spacing-xs, 0.25rem) var(--spacing-sm, 0.5rem);
+  }
 }
 
 @media (min-width: 768px) {
   .edit-users__header {
-    flex-direction: row;
     align-items: center;
   }
 
@@ -523,18 +673,8 @@
     width: auto;
   }
 
-  .edit-users__toolbar {
-    flex-direction: row;
-    align-items: flex-end;
-  }
-
-  .edit-users__search {
-    flex: 1 1 280px;
-    min-width: 200px;
-  }
-
-  .edit-users__filter {
-    flex: 0 0 180px;
+  .edit-users__note-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

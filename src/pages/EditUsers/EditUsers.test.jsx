@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -218,6 +218,14 @@ function renderEditUsers(store) {
   )
 }
 
+async function chooseRowAction(user, rowName, actionLabel) {
+  const actionSelect = screen.getByRole('combobox', {
+    name: new RegExp(`actions for ${rowName}`, 'i'),
+  })
+
+  await user.selectOptions(actionSelect, actionLabel)
+}
+
 describe('EditUsers page', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -358,13 +366,13 @@ describe('EditUsers page', () => {
 
   it('renders table with column headers', () => {
     renderEditUsers()
-    expect(screen.getByText('Name')).toBeInTheDocument()
-    expect(screen.getByText('Email')).toBeInTheDocument()
+    expect(screen.getByText('User')).toBeInTheDocument()
     expect(screen.getByText('Roles')).toBeInTheDocument()
     // "Status" appears in both filter label and table header
     const statusElements = screen.getAllByText('Status')
     expect(statusElements.length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Trust')).toBeInTheDocument()
+    expect(screen.getAllByText('Actions').length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows governance guidance and canonical-admin visibility before mutating actions', () => {
@@ -381,21 +389,14 @@ describe('EditUsers page', () => {
       screen.getByRole('button', { name: /explain canonical admin/i }),
     ).toBeInTheDocument()
     expect(screen.getByText('Canonical')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /transfer ownership member user/i }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('button', { name: /transfer ownership owner user/i }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: /resend invitation member user/i }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('button', { name: /resend invitation owner user/i }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: /reactivate member user/i }),
-    ).toBeDisabled()
+    const memberActions = screen.getByRole('combobox', { name: /actions for member user/i })
+    const ownerActions = screen.getByRole('combobox', { name: /actions for owner user/i })
+
+    expect(within(memberActions).getByRole('option', { name: /transfer ownership/i })).toBeInTheDocument()
+    expect(within(memberActions).getByRole('option', { name: /resend invitation/i })).toBeInTheDocument()
+    expect(within(ownerActions).queryByRole('option', { name: /transfer ownership/i })).not.toBeInTheDocument()
+    expect(within(ownerActions).queryByRole('option', { name: /resend invitation/i })).not.toBeInTheDocument()
+    expect(within(memberActions).queryByRole('option', { name: /reactivate/i })).not.toBeInTheDocument()
   })
 
   it('shows lifecycle and invitation guidance before the table actions', () => {
@@ -455,11 +456,24 @@ describe('EditUsers page', () => {
     })
   })
 
+  it('opens the edit-user dialog from the user name workspace entry', async () => {
+    const user = userEvent.setup()
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /member user/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /^edit user$/i }),
+      ).toBeInTheDocument()
+    })
+  })
+
   it('opens the ownership-transfer dialog from the governed row action', async () => {
     const user = userEvent.setup()
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /transfer ownership member user/i }))
+    await chooseRowAction(user, 'member user', 'Transfer Ownership')
 
     await waitFor(() => {
       expect(
@@ -528,18 +542,12 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    expect(
-      screen.getByRole('button', { name: /disable disabled user/i }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: /reactivate disabled user/i }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('button', { name: /delete disabled user/i }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('button', { name: /resend invitation disabled user/i }),
-    ).toBeDisabled()
+    const disabledActions = screen.getByRole('combobox', { name: /actions for disabled user/i })
+
+    expect(within(disabledActions).queryByRole('option', { name: /^disable$/i })).not.toBeInTheDocument()
+    expect(within(disabledActions).getByRole('option', { name: /reactivate/i })).toBeInTheDocument()
+    expect(within(disabledActions).getByRole('option', { name: /^delete$/i })).toBeInTheDocument()
+    expect(within(disabledActions).queryByRole('option', { name: /resend invitation/i })).not.toBeInTheDocument()
   })
 
   it('disables an active user through the confirm dialog', async () => {
@@ -556,7 +564,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /disable member user/i }))
+    await chooseRowAction(user, 'member user', 'Disable')
 
     expect(
       screen.getByRole('heading', { name: /disable user/i }),
@@ -584,7 +592,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /delete disabled user/i }))
+    await chooseRowAction(user, 'disabled user', 'Delete')
 
     expect(
       screen.getByRole('heading', { name: /delete user/i }),
@@ -612,7 +620,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /resend invitation member user/i }))
+    await chooseRowAction(user, 'member user', 'Resend Invitation')
 
     await waitFor(() => {
       expect(resendInvitation).toHaveBeenCalledWith('user-2')
@@ -641,7 +649,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /reactivate disabled user/i }))
+    await chooseRowAction(user, 'disabled user', 'Reactivate')
 
     expect(
       screen.getByRole('heading', { name: /reactivate user/i }),

@@ -2,27 +2,17 @@
  * Edit Users Page
  *
  * Central user management page at `/app/administration/edit-users`.
- * Displays a data table of users for the current customer with
- * search, status filter, pagination, and row-level actions.
- *
- * Requires CUSTOMER_ADMIN role.
+ * Displays a customer-scoped user catalogue with search, lifecycle actions,
+ * governed ownership transfer, and supporting dialogs.
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Card } from '../../components/Card'
-import { Fieldset } from '../../components/Fieldset'
-import { Table } from '../../components/Table'
-import { Input } from '../../components/Input'
-import { Select } from '../../components/Select'
 import { Button } from '../../components/Button'
-import { Status } from '../../components/Status'
+import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
-import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
+import { Fieldset } from '../../components/Fieldset'
 import { Spinner } from '../../components/Spinner'
-import { Tooltip } from '../../components/Tooltip'
-import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
-import { MdInfoOutline } from 'react-icons/md'
 import { useUsers } from '../../hooks/useUsers.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
@@ -39,20 +29,16 @@ import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
 import BulkUserOperations from './BulkUserOperations'
 import OwnershipTransferDialog from './OwnershipTransferDialog'
+import EditUsersListView from './EditUsersListView'
 import './EditUsers.css'
 
-/** Debounce delay for search input (ms) */
 const SEARCH_DEBOUNCE = 300
 
-/** Status filter options */
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
   { value: 'active', label: 'Active' },
   { value: 'disabled', label: 'Disabled' },
 ]
-
-const CANONICAL_ADMIN_TOOLTIP_TEXT =
-  'Canonical Admin identifies the governed owner for this customer. Ownership changes use the dedicated transfer workflow.'
 
 const CUSTOMER_ADMIN_GOVERNANCE_NOTE =
   'Canonical Admin marks the governed owner for this customer. Create or update the replacement user first, then use Transfer Ownership from that user\'s row. Generic role edits do not transfer ownership.'
@@ -79,100 +65,6 @@ const getUserTrustStatus = (user) =>
   String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
     .trim()
     .toUpperCase()
-
-const getUserInvitedAt = (user) => user?.identityPlus?.invitedAt ?? user?.invitedAt ?? null
-
-const getUserTrustedAt = (user) => user?.identityPlus?.trustedAt ?? user?.trustedAt ?? null
-
-const getUserLifecycleCopy = (user) => {
-  const trustStatus = getUserTrustStatus(user)
-  const invitedAt = getUserInvitedAt(user)
-
-  if (!user?.isActive) {
-    return {
-      title: 'Disabled',
-      detail: 'Reactivate first to make invitation recovery available again.',
-      variant: 'muted',
-    }
-  }
-
-  if (trustStatus === 'TRUSTED') {
-    return {
-      title: 'Access ready',
-      detail: 'User has completed sign-in and currently has active access.',
-      variant: 'success',
-    }
-  }
-
-  if (trustStatus === 'UNTRUSTED' && invitedAt) {
-    return {
-      title: 'Invitation pending',
-      detail: 'Invitation was sent. Resend is available if the user still needs it.',
-      variant: 'warning',
-    }
-  }
-
-  if (trustStatus === 'UNTRUSTED') {
-    return {
-      title: 'Invitation required',
-      detail: 'User is active but not trusted yet. Resend Invitation is available now.',
-      variant: 'warning',
-    }
-  }
-
-  return {
-    title: 'Needs attention',
-    detail: 'This lifecycle and trust combination is outside the expected contract.',
-    variant: 'error',
-  }
-}
-
-function UserLifecycleState({ user }) {
-  const lifecycleCopy = getUserLifecycleCopy(user)
-
-  return (
-    <div className="edit-users__trust-cell">
-      <UserTrustStatus
-        trustStatus={getUserTrustStatus(user)}
-        invitedAt={getUserInvitedAt(user)}
-        trustedAt={getUserTrustedAt(user)}
-        size="sm"
-        showDates
-      />
-      <span className={`edit-users__trust-title edit-users__trust-title--${lifecycleCopy.variant}`}>
-        {lifecycleCopy.title}
-      </span>
-      <span className="edit-users__trust-detail">
-        {lifecycleCopy.detail}
-      </span>
-    </div>
-  )
-}
-
-function CanonicalAdminHeaderLabel() {
-  return (
-    <span className="edit-users__canonical-header">
-      <span>Canonical Admin</span>
-      <Tooltip
-        content={CANONICAL_ADMIN_TOOLTIP_TEXT}
-        position="bottom"
-        align="end"
-        openDelay={0}
-        closeDelay={0}
-        className="edit-users__canonical-tooltip"
-      >
-        <button
-          type="button"
-          className="edit-users__canonical-help-trigger"
-          aria-label="Explain Canonical Admin"
-        >
-          <MdInfoOutline aria-hidden="true" focusable="false" />
-          <span className="sr-only">Explain Canonical Admin</span>
-        </button>
-      </Tooltip>
-    </span>
-  )
-}
 
 function EditUsersBoundaryState({
   title = 'Edit Users',
@@ -206,14 +98,9 @@ function EditUsersBoundaryState({
   )
 }
 
-/**
- * EditUsers Page Component
- */
 function EditUsers() {
   const { addToast } = useToaster()
   const { user, isSuperAdmin, accessibleCustomerIds } = useAuthorization()
-
-  /* ---- Resolve customer / tenant context from shared store ---- */
   const {
     customerId,
     tenantId,
@@ -225,7 +112,6 @@ function EditUsers() {
     setTenantId,
   } = useTenantContext()
 
-  /* ---- User list hook ---- */
   const {
     users,
     pagination,
@@ -235,7 +121,6 @@ function EditUsers() {
     setSearch,
     statusFilter,
     setStatusFilter,
-    page,
     setPage,
     disableUser,
     enableUser,
@@ -247,18 +132,7 @@ function EditUsers() {
     resendInvitationResult,
   } = useUsers(customerId)
 
-  /* ---- Debounced search ---- */
   const [searchInput, setSearchInput] = useState('')
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearch(searchInput)
-      setPage(1)
-    }, SEARCH_DEBOUNCE)
-    return () => clearTimeout(timer)
-  }, [searchInput, setSearch, setPage])
-
-  /* ---- Dialog state ---- */
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [showBulkOperations, setShowBulkOperations] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
@@ -266,6 +140,15 @@ function EditUsers() {
   const [confirmAction, setConfirmAction] = useState(null)
   const [selectedRows, setSelectedRows] = useState(new Set())
   const previousContextKeyRef = useRef(`${customerId ?? ''}::${tenantId ?? ''}`)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, SEARCH_DEBOUNCE)
+
+    return () => clearTimeout(timer)
+  }, [searchInput, setPage, setSearch])
 
   const listUsersAppError = useMemo(
     () => (usersError ? normalizeError(usersError) : null),
@@ -292,10 +175,11 @@ function EditUsers() {
     selectedCustomerLifecycleStatus === 'INACTIVE' || Boolean(inactiveCustomerAppError)
 
   const inactiveCustomerMessage = useMemo(
-    () => getCustomerInactiveMessage(
-      inactiveCustomerAppError,
-      EDIT_USERS_INACTIVE_CUSTOMER_MESSAGE,
-    ),
+    () =>
+      getCustomerInactiveMessage(
+        inactiveCustomerAppError,
+        EDIT_USERS_INACTIVE_CUSTOMER_MESSAGE,
+      ),
     [inactiveCustomerAppError],
   )
 
@@ -327,15 +211,13 @@ function EditUsers() {
     setSelectedRows(new Set())
   }, [isInactiveCustomerLocked])
 
-  /* ---- Action handlers ---- */
-
   const handleDisable = useCallback(
-    async (user) => {
+    async (targetUser) => {
       try {
-        await disableUser(user._id)
+        await disableUser(targetUser._id)
         addToast({
           title: 'User disabled',
-          description: `${user.name} has been disabled.`,
+          description: `${targetUser.name} has been disabled.`,
           variant: 'success',
         })
       } catch (err) {
@@ -356,18 +238,19 @@ function EditUsers() {
           variant: 'error',
         })
       }
+
       setConfirmAction(null)
     },
-    [disableUser, addToast],
+    [addToast, disableUser],
   )
 
   const handleDelete = useCallback(
-    async (user) => {
+    async (targetUser) => {
       try {
-        await deleteUser(user._id)
+        await deleteUser(targetUser._id)
         addToast({
           title: 'User deleted',
-          description: `${user.name} has been permanently deleted.`,
+          description: `${targetUser.name} has been permanently deleted.`,
           variant: 'success',
         })
       } catch (err) {
@@ -388,17 +271,18 @@ function EditUsers() {
           variant: 'error',
         })
       }
+
       setConfirmAction(null)
     },
-    [deleteUser, addToast],
+    [addToast, deleteUser],
   )
 
   const handleEnable = useCallback(
-    async (user) => {
+    async (targetUser) => {
       try {
-        const result = await enableUser(user._id)
+        const result = await enableUser(targetUser._id)
         const enabledUser = getMutationPayload(result)
-        const enabledUserName = String(enabledUser?.name ?? user?.name ?? 'User').trim() || 'User'
+        const enabledUserName = String(enabledUser?.name ?? targetUser?.name ?? 'User').trim() || 'User'
         const enabledTrustStatus = getUserTrustStatus(enabledUser)
 
         if (enabledTrustStatus === 'UNTRUSTED') {
@@ -422,18 +306,19 @@ function EditUsers() {
           variant: 'error',
         })
       }
+
       setConfirmAction(null)
     },
-    [enableUser, addToast],
+    [addToast, enableUser],
   )
 
   const handleResendInvitation = useCallback(
-    async (user) => {
+    async (targetUser) => {
       try {
-        await resendInvitation(user._id)
+        await resendInvitation(targetUser._id)
         addToast({
           title: 'Invitation sent',
-          description: `Invitation resent to ${user.email}.`,
+          description: `Invitation resent to ${targetUser.email}.`,
           variant: 'success',
         })
       } catch (err) {
@@ -445,89 +330,29 @@ function EditUsers() {
         })
       }
     },
-    [resendInvitation, addToast],
+    [addToast, resendInvitation],
   )
 
   const handleConfirmAction = useCallback(() => {
     if (!confirmAction) return
+
     if (confirmAction.type === 'disable') {
       handleDisable(confirmAction.user)
-    } else if (confirmAction.type === 'enable') {
+      return
+    }
+
+    if (confirmAction.type === 'enable') {
       handleEnable(confirmAction.user)
-    } else if (confirmAction.type === 'delete') {
+      return
+    }
+
+    if (confirmAction.type === 'delete') {
       handleDelete(confirmAction.user)
     }
-  }, [confirmAction, handleDisable, handleDelete, handleEnable])
-
-  /* ---- Table columns ---- */
-  const columns = useMemo(
-    () => [
-      {
-        key: 'name',
-        label: 'Name',
-        sortable: true,
-      },
-      {
-        key: 'email',
-        label: 'Email',
-        sortable: true,
-      },
-      {
-        key: 'roles',
-        label: 'Roles',
-        render: (value, row) => {
-          const roles = row.memberships
-            ?.flatMap((m) => m.roles)
-            ?.filter(Boolean) ?? []
-          return roles.length > 0
-            ? roles.join(', ')
-            : '—'
-        },
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        render: (_value, row) => (
-          <Status
-            variant={row.isActive ? 'success' : 'error'}
-            size="sm"
-            showIcon
-          >
-            {row.isActive ? 'Active' : 'Disabled'}
-          </Status>
-        ),
-      },
-      {
-        key: 'trustStatus',
-        label: 'Trust',
-        render: (_value, row) => (
-          <UserLifecycleState user={row} />
-        ),
-      },
-      {
-        key: 'isCanonicalAdmin',
-        label: <CanonicalAdminHeaderLabel />,
-        mobileLabel: 'Canonical Admin',
-        width: '220px',
-        render: (_value, row) =>
-          row?.isCanonicalAdmin
-            ? (
-              <Status size="sm" variant="info" className="edit-users__canonical-status">
-                Canonical
-              </Status>
-            )
-            : <span className="edit-users__canonical-empty">--</span>,
-      },
-    ],
-    [],
-  )
+  }, [confirmAction, handleDelete, handleDisable, handleEnable])
 
   const tableData = useMemo(
-    () =>
-      users.map((user) => ({
-        ...user,
-        id: user._id,
-      })),
+    () => users.map((entry) => ({ ...entry, id: entry._id })),
     [users],
   )
 
@@ -554,129 +379,22 @@ function EditUsers() {
   const isRowActionMutationLoading =
     isLifecycleMutationLoading || Boolean(resendInvitationResult?.isLoading)
 
-  /* ---- Row actions ---- */
-  const actions = useMemo(
-    () => [
-      {
-        label: 'Edit',
-        variant: 'ghost',
-        disabled: isRowActionMutationLoading,
-      },
-      {
-        label: 'Transfer Ownership',
-        variant: 'ghost',
-        disabled: (row) =>
-          isRowActionMutationLoading ||
-          !canonicalAdminUser ||
-          !row?.isActive ||
-          Boolean(row?.isCanonicalAdmin),
-      },
-      {
-        label: 'Disable',
-        variant: 'ghost',
-        disabled: (row) => isRowActionMutationLoading || !row?.isActive,
-      },
-      {
-        label: 'Reactivate',
-        variant: 'ghost',
-        disabled: (row) => isRowActionMutationLoading || Boolean(row?.isActive),
-      },
-      {
-        label: 'Delete',
-        variant: 'ghost',
-        disabled: (row) => isRowActionMutationLoading || Boolean(row?.isActive),
-      },
-      {
-        label: 'Resend Invitation',
-        variant: 'ghost',
-        disabled: (row) =>
-          isRowActionMutationLoading
-          || !row?.isActive
-          || getUserTrustStatus(row) !== 'UNTRUSTED',
-      },
-    ],
-    [canonicalAdminUser, isRowActionMutationLoading],
-  )
+  const handleFirstPage = useCallback(() => {
+    setPage(1)
+  }, [setPage])
 
-  const handleRowAction = useCallback(
-    (label, row) => {
-      switch (label) {
-        case 'Edit':
-          setEditingUser(row)
-          break
-        case 'Transfer Ownership':
-          setEditingUser(null)
-          setOwnershipTransferTarget(row)
-          break
-        case 'Disable':
-          if (!row.isActive) {
-            addToast({
-              title: 'Already disabled',
-              description: `${row.name} is already disabled.`,
-              variant: 'info',
-            })
-            return
-          }
-          setConfirmAction({ type: 'disable', user: row })
-          break
-        case 'Reactivate':
-          if (row.isActive) {
-            addToast({
-              title: 'Already active',
-              description: `${row.name} is already active.`,
-              variant: 'info',
-            })
-            return
-          }
-          setConfirmAction({ type: 'enable', user: row })
-          break
-        case 'Delete':
-          if (row.isActive) {
-            addToast({
-              title: 'Cannot delete active user',
-              description: 'Disable the user before deleting.',
-              variant: 'warning',
-            })
-            return
-          }
-          setConfirmAction({ type: 'delete', user: row })
-          break
-        case 'Resend Invitation':
-          if (!row.isActive) {
-            addToast({
-              title: 'Invitation not applicable',
-              description: 'Invitations can only be resent for active users. Reactivate the user first.',
-              variant: 'info',
-            })
-            return
-          }
-          if (getUserTrustStatus(row) !== 'UNTRUSTED') {
-            addToast({
-              title: 'Invitation not applicable',
-              description: 'Invitations can only be resent when trust is UNTRUSTED.',
-              variant: 'info',
-            })
-            return
-          }
-          handleResendInvitation(row)
-          break
-        default:
-          break
-      }
-    },
-    [addToast, handleResendInvitation],
-  )
-
-  /* ---- Pagination handlers ---- */
   const handlePrevPage = useCallback(() => {
-    setPage((p) => Math.max(1, p - 1))
+    setPage((currentPage) => Math.max(1, currentPage - 1))
   }, [setPage])
 
   const handleNextPage = useCallback(() => {
-    setPage((p) => Math.min(pagination.totalPages, p + 1))
-  }, [setPage, pagination.totalPages])
+    setPage((currentPage) => Math.min(pagination.totalPages, currentPage + 1))
+  }, [pagination.totalPages, setPage])
 
-  /* ---- Context guards ---- */
+  const handleLastPage = useCallback(() => {
+    setPage(pagination.totalPages)
+  }, [pagination.totalPages, setPage])
+
   if (!customerId && isSuperAdmin) {
     return (
       <EditUsersBoundaryState
@@ -688,8 +406,8 @@ function EditUsers() {
   if (!customerId && accessibleCustomerIds.length > 0) {
     return (
       <EditUsersBoundaryState
-        message="Resolving your customer context…"
-        isLoading
+        message="Resolving your customer context..."
+        isLoading={isLoading}
       />
     )
   }
@@ -703,11 +421,7 @@ function EditUsers() {
   }
 
   if (isInactiveCustomerLocked) {
-    return (
-      <EditUsersBoundaryState
-        message={inactiveCustomerMessage}
-      />
-    )
+    return <EditUsersBoundaryState message={inactiveCustomerMessage} />
   }
 
   if (hasInvalidTenantContext) {
@@ -735,156 +449,55 @@ function EditUsers() {
 
   return (
     <section className="edit-users container" aria-label="Edit Users">
-      {/* Page header */}
-      <header className="edit-users__header">
-        <h1 className="edit-users__title">Edit Users</h1>
-        <div className="edit-users__header-actions">
-          <Button
-            variant="outline"
-            onClick={() => setShowBulkOperations(true)}
-            disabled={isFetching}
-          >
-            Bulk Operations
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setShowCreateWizard(true)}
-            disabled={isFetching}
-          >
-            Create User
-          </Button>
-        </div>
-      </header>
+      <EditUsersListView
+        tenantScopeMessage={
+          tenantId
+            ? (
+                isResolvingSelectedTenantContext
+                  ? 'Checking selected tenant context...'
+                  : `Selected tenant context: ${resolvedTenantName ?? tenantName ?? tenantId}. The current user list remains scoped to the active customer.`
+              )
+            : ''
+        }
+        tenantContextAppError={tenantContextAppError}
+        listUsersAppError={listUsersAppError}
+        governanceNote={CUSTOMER_ADMIN_GOVERNANCE_NOTE}
+        lifecycleNote={USER_LIFECYCLE_NOTE}
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        statusFilter={statusFilter}
+        statusOptions={STATUS_OPTIONS}
+        onStatusFilterChange={(value) => {
+          setStatusFilter(value)
+          setPage(1)
+        }}
+        rows={tableData}
+        isListLoading={isLoading}
+        isListFetching={isFetching}
+        selectedRows={selectedRowsSafe}
+        onSelectedRowsChange={setSelectedRows}
+        totalPages={pagination.totalPages}
+        currentPage={pagination.page}
+        totalCount={pagination.total}
+        onFirstPage={handleFirstPage}
+        onPreviousPage={handlePrevPage}
+        onNextPage={handleNextPage}
+        onLastPage={handleLastPage}
+        onBulkOperationsClick={() => setShowBulkOperations(true)}
+        onCreateUserClick={() => setShowCreateWizard(true)}
+        onEditUserClick={setEditingUser}
+        onTransferOwnershipClick={(targetUser) => {
+          setEditingUser(null)
+          setOwnershipTransferTarget(targetUser)
+        }}
+        onDisableUserClick={(targetUser) => setConfirmAction({ type: 'disable', user: targetUser })}
+        onEnableUserClick={(targetUser) => setConfirmAction({ type: 'enable', user: targetUser })}
+        onDeleteUserClick={(targetUser) => setConfirmAction({ type: 'delete', user: targetUser })}
+        onResendInvitationClick={handleResendInvitation}
+        hasCanonicalAdmin={Boolean(canonicalAdminUser)}
+        isRowActionMutationLoading={isRowActionMutationLoading}
+      />
 
-      <Fieldset className="edit-users__fieldset">
-        <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>
-        <Card variant="elevated" className="edit-users__card">
-          <Card.Body className="edit-users__card-body">
-            {tenantId && (
-              <p className="edit-users__scope-indicator" role="status">
-                {isResolvingSelectedTenantContext
-                  ? 'Checking selected tenant context…'
-                  : (
-                    <>
-                      Selected tenant context:{' '}
-                      <strong>{resolvedTenantName ?? tenantName ?? tenantId}</strong>. The
-                      current user list remains scoped to the active customer.
-                    </>
-                  )}
-              </p>
-            )}
-
-            {tenantContextAppError && (
-              <ErrorSupportPanel
-                error={tenantContextAppError}
-                context="edit-users-tenant-context"
-              />
-            )}
-
-            <div
-              className="edit-users__governance-note"
-              role="note"
-              aria-label="Customer Admin governance guidance"
-            >
-              <p className="edit-users__governance-title">Customer Admin governance</p>
-              <p className="edit-users__governance-text">{CUSTOMER_ADMIN_GOVERNANCE_NOTE}</p>
-            </div>
-
-            <div
-              className="edit-users__lifecycle-note"
-              role="note"
-              aria-label="User lifecycle and invitation guidance"
-            >
-              <p className="edit-users__lifecycle-title">User lifecycle and invitations</p>
-              <p className="edit-users__lifecycle-text">{USER_LIFECYCLE_NOTE}</p>
-            </div>
-
-            {listUsersAppError && (
-              <ErrorSupportPanel
-                error={listUsersAppError}
-                context="edit-users-list"
-              />
-            )}
-
-            <div className="edit-users__toolbar">
-              <div className="edit-users__search">
-                <Input
-                  id="user-search"
-                  type="search"
-                  label="Search"
-                  placeholder="Search by name or email…"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  fullWidth
-                />
-              </div>
-              <div className="edit-users__filter">
-                <Select
-                  id="user-status-filter"
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value)
-                    setPage(1)
-                  }}
-                  options={STATUS_OPTIONS}
-                />
-              </div>
-            </div>
-
-            <div className="edit-users__table">
-              <Table
-                columns={columns}
-                data={tableData}
-                variant="striped"
-                hoverable
-                selectable
-                selectedRows={selectedRowsSafe}
-                onSelectChange={setSelectedRows}
-                loading={isLoading}
-                loadingRows={5}
-                actions={actions}
-                onRowAction={handleRowAction}
-                emptyMessage="No users found."
-                ariaLabel="Users table"
-              />
-            </div>
-
-            {pagination.totalPages > 1 && (
-              <div className="edit-users__pagination">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePrevPage}
-                  disabled={page <= 1 || isFetching}
-                >
-                  Previous
-                </Button>
-                <span className="edit-users__pagination-info">
-                  Page {pagination.page} of {pagination.totalPages}
-                  {pagination.total > 0 && ` (${pagination.total} users)`}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleNextPage}
-                  disabled={page >= pagination.totalPages || isFetching}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-
-            {isFetching && !isLoading && (
-              <div className="edit-users__fetching" role="status" aria-label="Updating">
-                <Spinner size="sm" />
-              </div>
-            )}
-          </Card.Body>
-        </Card>
-      </Fieldset>
-
-      {/* Create User Wizard */}
       <CreateUserWizard
         open={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
@@ -898,15 +511,14 @@ function EditUsers() {
         selectedUserIds={Array.from(selectedRowsSafe)}
       />
 
-      {/* User Edit Drawer */}
       <UserEditDrawer
         open={!!editingUser}
         onClose={() => setEditingUser(null)}
         user={editingUser}
         customerId={customerId}
-        onStartOwnershipTransfer={(user) => {
+        onStartOwnershipTransfer={(targetUser) => {
           setEditingUser(null)
-          setOwnershipTransferTarget(user)
+          setOwnershipTransferTarget(targetUser)
         }}
         hasCanonicalAdmin={Boolean(canonicalAdminUser)}
       />
@@ -919,7 +531,6 @@ function EditUsers() {
         targetUser={ownershipTransferTarget}
       />
 
-      {/* Confirm action dialog */}
       <Dialog
         open={!!confirmAction}
         onClose={() => setConfirmAction(null)}

@@ -226,6 +226,9 @@ describe('UserEditDrawer', () => {
     expect(
       screen.getByRole('heading', { name: /edit user/i }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /account details/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /access snapshot/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /role access/i })).toBeInTheDocument()
   })
 
   it('displays user name as editable input', () => {

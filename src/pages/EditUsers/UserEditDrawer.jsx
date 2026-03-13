@@ -12,7 +12,10 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { Badge } from '../../components/Badge'
+import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
+import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
 import { Tickbox } from '../../components/Tickbox'
@@ -330,6 +333,7 @@ function UserEditDrawer({
     normalizedTenantVisibility.join('|') !== initialTenantVisibility.join('|')
   const hasChanges =
     hasNameChange || hasEmailChange || hasRoleChange || hasTenantVisibilityChange
+  const draftRoles = normalizedSelectedRoles.length > 0 ? normalizedSelectedRoles : []
 
   const tenantLookup = useMemo(
     () => new Map(tenants.map((tenant) => [tenant.id, tenant])),
@@ -598,246 +602,328 @@ function UserEditDrawer({
     <Dialog
       open={open}
       onClose={onClose}
-      size="md"
+      size="lg"
       closeOnBackdropClick={!isLoading}
       closeOnEscape={!isLoading}
     >
       <Dialog.Header>
-        <h2 className="user-edit-drawer__title">Edit User</h2>
+        <div className="user-edit-drawer__header">
+          <h2 className="user-edit-drawer__title">Edit User</h2>
+          <p className="user-edit-drawer__subtitle">
+            Update profile, lifecycle-aware access, and customer-scoped visibility for {user?.name || user?.email || 'this user'}.
+          </p>
+        </div>
       </Dialog.Header>
 
       <Dialog.Body>
-        <div className="user-edit-drawer__info">
-          <Input
-            id="edit-user-name"
-            label="Name"
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value)
-              clearFieldErrors('name')
-            }}
-            error={fieldErrors.name}
-            fullWidth
-          />
-          <Input
-            id="edit-user-email"
-            type="email"
-            label="Email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value)
-              clearFieldErrors('email')
-            }}
-            error={fieldErrors.email}
-            helperText={user.isActive ? ACTIVE_EMAIL_HELP_TEXT : DISABLED_EMAIL_HELP_TEXT}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            fullWidth
-          />
-        </div>
-
-        <div className="user-edit-drawer__status">
-          <span className="user-edit-drawer__label">Status</span>
-          <Status
-            variant={user.isActive ? 'success' : 'error'}
-            size="sm"
-            showIcon
-          >
-            {user.isActive ? 'Active' : 'Disabled'}
-          </Status>
-        </div>
-
-        <div className="user-edit-drawer__status">
-          <span className="user-edit-drawer__label">Trust</span>
-          <UserTrustStatus
-            trustStatus={getUserTrustStatus(user)}
-            invitedAt={user.identityPlus?.invitedAt}
-            trustedAt={user.identityPlus?.trustedAt}
-            size="sm"
-            showDates
-          />
-        </div>
-
-        <fieldset className="user-edit-drawer__fieldset">
-          <legend className="user-edit-drawer__legend">Editable Roles</legend>
-          <div
-            className="user-edit-drawer__governance"
-            role="note"
-            aria-label="Customer admin governance guidance"
-          >
-            <p className="user-edit-drawer__governance-title">Customer Admin governance</p>
-            <p className="user-edit-drawer__governance-text">
-              {hasGovernedCustomerAdminRole
-                ? CUSTOMER_ADMIN_EDIT_GUIDANCE
-                : 'Customer Admin ownership is managed through Transfer Ownership rather than this role editor.'}
-            </p>
-            <p className="user-edit-drawer__governance-text">
-              {transferAvailabilityMessage}
-            </p>
-            {!allowsTenantAdminRole ? (
-              <p className="user-edit-drawer__governance-text">
-                {hasHiddenTenantAdminAssignment
-                  ? TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE
-                  : TENANT_ADMIN_TOPOLOGY_GUIDANCE}
-              </p>
-            ) : null}
-            {canStartOwnershipTransfer ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  onStartOwnershipTransfer?.(user)
-                  onClose?.()
-                }}
-              >
-                Transfer Ownership to This User
-              </Button>
-            ) : null}
-          </div>
-          {editableRoleOptions.map((role) => (
-            <Tickbox
-              key={role}
-              id={`edit-role-${role}`}
-              label={role.replace(/_/g, ' ')}
-              checked={selectedRoles.includes(role)}
-              onChange={() => toggleRole(role)}
-              disabled={isLoading}
-            />
-          ))}
-          {fieldErrors.roles && (
-            <p className="user-edit-drawer__error" role="alert">
-              {fieldErrors.roles}
-            </p>
-          )}
-        </fieldset>
-
-        {!shouldHideTenantVisibilitySection ? (
-          <fieldset className="user-edit-drawer__fieldset">
-            <legend className="user-edit-drawer__legend">Tenant Visibility</legend>
-            {shouldShowTenantVisibilityEditor ? (
-              <div className="user-edit-drawer__tenant-visibility">
-                <p className="user-edit-drawer__tenant-visibility-text">
-                  {TENANT_VISIBILITY_EDIT_GUIDANCE}
+        <div className="user-edit-drawer__layout">
+          <Card variant="outlined" className="user-edit-drawer__section">
+            <Card.Header className="user-edit-drawer__section-header">
+              <div>
+                <h3 className="user-edit-drawer__section-title">Account Details</h3>
+                <p className="user-edit-drawer__section-text">
+                  Update the saved profile values for this customer-scoped user record.
                 </p>
-                {effectiveTenantVisibilityMeta?.isServiceProvider ? (
-                  <p className="user-edit-drawer__tenant-visibility-hint">
-                    {TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
-                  </p>
-                ) : null}
-                {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
-                  <p className="user-edit-drawer__tenant-visibility-hint">
-                    Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
-                  </p>
-                ) : null}
+              </div>
+            </Card.Header>
+            <Card.Body className="user-edit-drawer__section-body">
+              <div className="user-edit-drawer__info">
+                <Input
+                  id="edit-user-name"
+                  label="Name"
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    clearFieldErrors('name')
+                  }}
+                  error={fieldErrors.name}
+                  fullWidth
+                />
+                <Input
+                  id="edit-user-email"
+                  type="email"
+                  label="Email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                    clearFieldErrors('email')
+                  }}
+                  error={fieldErrors.email}
+                  helperText={user.isActive ? ACTIVE_EMAIL_HELP_TEXT : DISABLED_EMAIL_HELP_TEXT}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  fullWidth
+                />
+              </div>
+            </Card.Body>
+          </Card>
 
-                {isLoadingTenants ? (
-                  <p className="user-edit-drawer__tenant-visibility-text" role="status">
-                    Loading tenant options...
+          <div className="user-edit-drawer__summary-grid">
+            <Card variant="outlined" className="user-edit-drawer__section">
+              <Card.Header className="user-edit-drawer__section-header">
+                <div>
+                  <h3 className="user-edit-drawer__section-title">Access Snapshot</h3>
+                  <p className="user-edit-drawer__section-text">
+                    Review the current lifecycle and trust state before changing access.
                   </p>
-                ) : null}
-
-                {normalizedTenantsError ? (
-                  <ErrorSupportPanel
-                    error={normalizedTenantsError}
-                    context="user-edit-drawer-tenant-visibility"
-                  />
-                ) : null}
-
-                {!isLoadingTenants && !normalizedTenantsError ? (
-                  <>
-                    <div className="user-edit-drawer__tenant-actions">
-                      <Button
-                        type="button"
-                        variant="secondary"
+                </div>
+              </Card.Header>
+              <Card.Body className="user-edit-drawer__section-body">
+                <dl className="user-edit-drawer__snapshot-list">
+                  <div className="user-edit-drawer__snapshot-item">
+                    <dt className="user-edit-drawer__label">Status</dt>
+                    <dd className="user-edit-drawer__snapshot-value">
+                      <Status
+                        variant={user.isActive ? 'success' : 'error'}
                         size="sm"
-                        onClick={handleSelectAllTenants}
-                        disabled={selectableTenantOptions.length === 0 || isLoading}
+                        showIcon
                       >
-                        Select All Available
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
+                        {user.isActive ? 'Active' : 'Disabled'}
+                      </Status>
+                    </dd>
+                  </div>
+                  <div className="user-edit-drawer__snapshot-item">
+                    <dt className="user-edit-drawer__label">Trust</dt>
+                    <dd className="user-edit-drawer__snapshot-value">
+                      <UserTrustStatus
+                        trustStatus={getUserTrustStatus(user)}
+                        invitedAt={user.identityPlus?.invitedAt}
+                        trustedAt={user.identityPlus?.trustedAt}
                         size="sm"
-                        onClick={handleClearTenantSelection}
-                        disabled={normalizedTenantVisibility.length === 0 || isLoading}
-                      >
-                        Clear Selection
-                      </Button>
-                    </div>
-
-                    {selectableTenantOptions.length > 0 ? (
-                      <div className="user-edit-drawer__tenant-list" role="group" aria-label="Editable tenant visibility">
-                        {selectableTenantOptions.map((tenant) => (
-                          <div key={tenant.id} className="user-edit-drawer__tenant-option">
-                            <Tickbox
-                              id={`edit-tenant-${tenant.id}`}
-                              label={tenant.name}
-                              checked={normalizedTenantVisibility.includes(tenant.id)}
-                              onChange={() => toggleTenantSelection(tenant.id)}
-                              disabled={isLoading}
-                            />
-                            <p className="user-edit-drawer__tenant-meta">
-                              Status: {tenant.status}
-                              {tenant.isDefault ? ' | Default tenant' : ''}
-                            </p>
-                          </div>
-                        ))}
+                        showDates
+                      />
+                    </dd>
+                  </div>
+                  <div className="user-edit-drawer__snapshot-item">
+                    <dt className="user-edit-drawer__label">Draft roles</dt>
+                    <dd className="user-edit-drawer__snapshot-value">
+                      <div className="user-edit-drawer__badge-list">
+                        {draftRoles.length > 0
+                          ? draftRoles.map((role) => (
+                            <Badge key={role} variant="neutral" size="sm">
+                              {role.replace(/_/g, ' ')}
+                            </Badge>
+                          ))
+                          : <span className="user-edit-drawer__muted">No editable roles selected.</span>}
                       </div>
-                    ) : (
-                      <p className="user-edit-drawer__tenant-visibility-hint">
-                        {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                    </dd>
+                  </div>
+                </dl>
+              </Card.Body>
+            </Card>
+
+            <Card variant="outlined" className="user-edit-drawer__section">
+              <Card.Header className="user-edit-drawer__section-header">
+                <div>
+                  <h3 className="user-edit-drawer__section-title">Role Access</h3>
+                  <p className="user-edit-drawer__section-text">
+                    Governance rules apply here. Ownership changes still require the guided transfer flow.
+                  </p>
+                </div>
+              </Card.Header>
+              <Card.Body className="user-edit-drawer__section-body">
+                <Fieldset className="user-edit-drawer__fieldset">
+                  <Fieldset.Legend className="user-edit-drawer__legend">Editable Roles</Fieldset.Legend>
+                  <Fieldset.Content className="user-edit-drawer__fieldset-content">
+                    <div
+                      className="user-edit-drawer__governance"
+                      role="note"
+                      aria-label="Customer admin governance guidance"
+                    >
+                      <p className="user-edit-drawer__governance-title">Customer Admin governance</p>
+                      <p className="user-edit-drawer__governance-text">
+                        {hasGovernedCustomerAdminRole
+                          ? CUSTOMER_ADMIN_EDIT_GUIDANCE
+                          : 'Customer Admin ownership is managed through Transfer Ownership rather than this role editor.'}
+                      </p>
+                      <p className="user-edit-drawer__governance-text">
+                        {transferAvailabilityMessage}
+                      </p>
+                      {!allowsTenantAdminRole ? (
+                        <p className="user-edit-drawer__governance-text">
+                          {hasHiddenTenantAdminAssignment
+                            ? TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE
+                            : TENANT_ADMIN_TOPOLOGY_GUIDANCE}
+                        </p>
+                      ) : null}
+                      {canStartOwnershipTransfer ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            onStartOwnershipTransfer?.(user)
+                            onClose?.()
+                          }}
+                        >
+                          Transfer Ownership to This User
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="user-edit-drawer__role-list">
+                      {editableRoleOptions.map((role) => (
+                        <Tickbox
+                          key={role}
+                          id={`edit-role-${role}`}
+                          label={role.replace(/_/g, ' ')}
+                          checked={selectedRoles.includes(role)}
+                          onChange={() => toggleRole(role)}
+                          disabled={isLoading}
+                        />
+                      ))}
+                    </div>
+                    {fieldErrors.roles && (
+                      <p className="user-edit-drawer__error" role="alert">
+                        {fieldErrors.roles}
                       </p>
                     )}
+                  </Fieldset.Content>
+                </Fieldset>
+              </Card.Body>
+            </Card>
+          </div>
 
-                    {preservedSelectedTenants.length > 0 ? (
-                      <div className="user-edit-drawer__tenant-preserved">
-                        <p className="user-edit-drawer__tenant-visibility-hint">
-                          {TENANT_VISIBILITY_PRESERVED_MESSAGE}
+          {!shouldHideTenantVisibilitySection ? (
+            <Card variant="outlined" className="user-edit-drawer__section">
+              <Card.Header className="user-edit-drawer__section-header">
+                <div>
+                  <h3 className="user-edit-drawer__section-title">Tenant Visibility</h3>
+                  <p className="user-edit-drawer__section-text">
+                    Use guided tenant selection when this customer topology allows scoped visibility.
+                  </p>
+                </div>
+              </Card.Header>
+              <Card.Body className="user-edit-drawer__section-body">
+                <Fieldset className="user-edit-drawer__fieldset">
+                  <Fieldset.Legend className="user-edit-drawer__legend">Tenant Visibility</Fieldset.Legend>
+                  <Fieldset.Content className="user-edit-drawer__fieldset-content">
+                    {shouldShowTenantVisibilityEditor ? (
+                      <div className="user-edit-drawer__tenant-visibility">
+                        <p className="user-edit-drawer__tenant-visibility-text">
+                          {TENANT_VISIBILITY_EDIT_GUIDANCE}
                         </p>
-                        <ul className="user-edit-drawer__tenant-preserved-list">
-                          {preservedSelectedTenants.map((tenant) => (
-                            <li key={tenant.id} className="user-edit-drawer__tenant-preserved-item">
-                              <div className="user-edit-drawer__tenant-preserved-details">
-                                <span className="user-edit-drawer__tenant-preserved-name">{tenant.name}</span>
-                                <span className="user-edit-drawer__tenant-preserved-meta">
-                                  Status: {tenant.status}
-                                  {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
-                                </span>
-                              </div>
+                        {effectiveTenantVisibilityMeta?.isServiceProvider ? (
+                          <p className="user-edit-drawer__tenant-visibility-hint">
+                            {TENANT_VISIBILITY_SERVICE_PROVIDER_HINT}
+                          </p>
+                        ) : null}
+                        {effectiveTenantVisibilityMeta?.selectableStatuses?.length > 0 ? (
+                          <p className="user-edit-drawer__tenant-visibility-hint">
+                            Selectable statuses: {effectiveTenantVisibilityMeta.selectableStatuses.join(', ')}.
+                          </p>
+                        ) : null}
+
+                        {isLoadingTenants ? (
+                          <p className="user-edit-drawer__tenant-visibility-text" role="status">
+                            Loading tenant options...
+                          </p>
+                        ) : null}
+
+                        {normalizedTenantsError ? (
+                          <ErrorSupportPanel
+                            error={normalizedTenantsError}
+                            context="user-edit-drawer-tenant-visibility"
+                          />
+                        ) : null}
+
+                        {!isLoadingTenants && !normalizedTenantsError ? (
+                          <>
+                            <div className="user-edit-drawer__tenant-actions">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleSelectAllTenants}
+                                disabled={selectableTenantOptions.length === 0 || isLoading}
+                              >
+                                Select All Available
+                              </Button>
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => toggleTenantSelection(tenant.id)}
-                                disabled={isLoading}
+                                onClick={handleClearTenantSelection}
+                                disabled={normalizedTenantVisibility.length === 0 || isLoading}
                               >
-                                Remove
+                                Clear Selection
                               </Button>
-                            </li>
-                          ))}
-                        </ul>
+                            </div>
+
+                            {selectableTenantOptions.length > 0 ? (
+                              <div className="user-edit-drawer__tenant-list" role="group" aria-label="Editable tenant visibility">
+                                {selectableTenantOptions.map((tenant) => (
+                                  <div key={tenant.id} className="user-edit-drawer__tenant-option">
+                                    <Tickbox
+                                      id={`edit-tenant-${tenant.id}`}
+                                      label={tenant.name}
+                                      checked={normalizedTenantVisibility.includes(tenant.id)}
+                                      onChange={() => toggleTenantSelection(tenant.id)}
+                                      disabled={isLoading}
+                                    />
+                                    <p className="user-edit-drawer__tenant-meta">
+                                      Status: {tenant.status}
+                                      {tenant.isDefault ? ' | Default tenant' : ''}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="user-edit-drawer__tenant-visibility-hint">
+                                {TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE}
+                              </p>
+                            )}
+
+                            {preservedSelectedTenants.length > 0 ? (
+                              <div className="user-edit-drawer__tenant-preserved">
+                                <p className="user-edit-drawer__tenant-visibility-hint">
+                                  {TENANT_VISIBILITY_PRESERVED_MESSAGE}
+                                </p>
+                                <ul className="user-edit-drawer__tenant-preserved-list">
+                                  {preservedSelectedTenants.map((tenant) => (
+                                    <li key={tenant.id} className="user-edit-drawer__tenant-preserved-item">
+                                      <div className="user-edit-drawer__tenant-preserved-details">
+                                        <span className="user-edit-drawer__tenant-preserved-name">{tenant.name}</span>
+                                        <span className="user-edit-drawer__tenant-preserved-meta">
+                                          Status: {tenant.status}
+                                          {tenant.selectionState ? ` | State: ${tenant.selectionState}` : ''}
+                                        </span>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => toggleTenantSelection(tenant.id)}
+                                        disabled={isLoading}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
                       </div>
                     ) : null}
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-            {fieldErrors.tenantVisibility ? (
-              <p className="user-edit-drawer__error" role="alert">
-                {fieldErrors.tenantVisibility}
-              </p>
-            ) : null}
-          </fieldset>
-        ) : null}
+                    {fieldErrors.tenantVisibility ? (
+                      <p className="user-edit-drawer__error" role="alert">
+                        {fieldErrors.tenantVisibility}
+                      </p>
+                    ) : null}
+                  </Fieldset.Content>
+                </Fieldset>
+              </Card.Body>
+            </Card>
+          ) : null}
 
-        {fieldErrors.form && (
-          <p className="user-edit-drawer__error" role="alert">
-            {fieldErrors.form}
-          </p>
-        )}
+          {fieldErrors.form && (
+            <p className="user-edit-drawer__error" role="alert">
+              {fieldErrors.form}
+            </p>
+          )}
+        </div>
       </Dialog.Body>
 
       <Dialog.Footer className="user-edit-drawer__footer">
