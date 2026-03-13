@@ -232,6 +232,32 @@ describe('useTenantContext', () => {
       isServiceProvider: true,
       selectableStatuses: ['ENABLED'],
     })
+    expect(result.current.selectedCustomerTopology).toBe('MULTI_TENANT')
+    expect(result.current.supportsTenantManagement).toBe(true)
     expect(result.current.selectableTenants.map((tenant) => tenant.id)).toEqual(['ten-1'])
+  })
+
+  it('falls back to authenticated customer topology when tenant metadata is not present', () => {
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          ...customerAdminUser,
+          memberships: [
+            {
+              customerId: 'cust-1',
+              roles: ['CUSTOMER_ADMIN'],
+              customer: { topology: 'single_tenant' },
+            },
+          ],
+        },
+        status: 'authenticated',
+      },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.selectedCustomerTopology).toBe('SINGLE_TENANT')
+    expect(result.current.supportsTenantManagement).toBe(false)
   })
 })

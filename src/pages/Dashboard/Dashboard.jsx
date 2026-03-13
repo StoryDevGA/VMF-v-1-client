@@ -33,7 +33,14 @@ function Dashboard() {
   const { logout, logoutResult } = useAuth()
   const { user, isSuperAdmin, accessibleCustomerIds, hasCustomerRole } =
     useAuthorization()
-  const { customerId, tenantId, tenantName, tenants, isLoadingTenants } =
+  const {
+    customerId,
+    tenantId,
+    tenantName,
+    tenants,
+    isLoadingTenants,
+    supportsTenantManagement,
+  } =
     useTenantContext()
 
   const isCustomerAdmin = useMemo(
@@ -79,7 +86,7 @@ function Dashboard() {
           'Create and maintain tenant records and tenant admin assignments.',
         to: '/app/administration/maintain-tenants',
         icon: <MdBusiness aria-hidden="true" />,
-        visible: hasAdminAccess,
+        visible: hasAdminAccess && (!hasCustomerContext || supportsTenantManagement),
         enabled: hasCustomerContext,
         disabledReason:
           'Select a customer in the Context panel to unlock tenant management.',
@@ -239,7 +246,7 @@ function Dashboard() {
     }
 
     return actions.filter((action) => action.visible)
-  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin])
+  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin, supportsTenantManagement])
 
   const handleLogout = async () => {
     if (logoutResult.isLoading) return

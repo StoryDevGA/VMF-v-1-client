@@ -229,6 +229,42 @@ describe('MaintainTenants page', () => {
     expect(screen.queryByLabelText(/tenants table/i)).not.toBeInTheDocument()
   })
 
+  it('renders a blocked state for single-tenant customer context', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0,
+          tenantVisibility: {
+            mode: 'NONE',
+            allowed: false,
+            topology: 'SINGLE_TENANT',
+            isServiceProvider: false,
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    const store = createTestStore({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    renderMaintainTenants(store)
+
+    expect(
+      screen.getByText(/tenant management is only available for multi-tenant customers/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/tenants table/i)).not.toBeInTheDocument()
+  })
+
   it('shows tenant-capacity guidance and disables create when the customer is at capacity', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {

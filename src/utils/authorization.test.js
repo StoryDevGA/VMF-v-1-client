@@ -19,7 +19,9 @@ import {
   hasCustomerRole,
   hasCustomerAccess,
   normalizeCustomerLifecycleStatus,
+  normalizeCustomerTopology,
   getCustomerLifecycleStatus,
+  getCustomerTopology,
   isCustomerInactiveForContext,
   hasAnyCustomerRole,
   getUserTenantRoles,
@@ -266,6 +268,64 @@ describe('Customer role helpers', () => {
       ).toBe(true)
 
       expect(isCustomerInactiveForContext(customerAdminUser, CUSTOMER_ID)).toBe(false)
+    })
+  })
+
+  describe('customer topology helpers', () => {
+    it('normalizes supported customer topology values', () => {
+      expect(normalizeCustomerTopology('single_tenant')).toBe('SINGLE_TENANT')
+      expect(normalizeCustomerTopology('MULTI_TENANT')).toBe('MULTI_TENANT')
+      expect(normalizeCustomerTopology('service_provider')).toBe('')
+      expect(normalizeCustomerTopology('')).toBe('')
+    })
+
+    it('resolves customer topology from customer-specific membership fields', () => {
+      expect(
+        getCustomerTopology(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                customer: { topology: 'single_tenant' },
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('SINGLE_TENANT')
+
+      expect(
+        getCustomerTopology(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                customerTopology: 'MULTI_TENANT',
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('MULTI_TENANT')
+    })
+
+    it('falls back to generic membership topology fields when needed', () => {
+      expect(
+        getCustomerTopology(
+          {
+            memberships: [
+              {
+                customerId: CUSTOMER_ID,
+                roles: ['CUSTOMER_ADMIN'],
+                topology: 'SINGLE_TENANT',
+              },
+            ],
+          },
+          CUSTOMER_ID,
+        ),
+      ).toBe('SINGLE_TENANT')
     })
   })
 

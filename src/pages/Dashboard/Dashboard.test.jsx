@@ -82,6 +82,7 @@ beforeEach(() => {
     tenantId: null,
     tenantName: null,
     tenants: [{ _id: 'ten-1', name: 'Alpha', status: 'ENABLED' }],
+    supportsTenantManagement: true,
     isLoadingTenants: false,
   })
 
@@ -157,6 +158,26 @@ describe('Dashboard page', () => {
 
     expect(
       screen.queryByRole('link', { name: /open invitation management/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open manage users/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides manage tenants for single-tenant customer-admin context', () => {
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenantName: null,
+      tenants: [],
+      supportsTenantManagement: false,
+      isLoadingTenants: false,
+    })
+
+    renderDashboard()
+
+    expect(
+      screen.queryByRole('link', { name: /open manage tenants/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open manage users/i }),

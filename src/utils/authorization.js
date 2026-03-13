@@ -144,6 +144,57 @@ export const getCustomerLifecycleStatus = (user, customerId) => {
 }
 
 /**
+ * Normalize customer topology to the shared SINGLE_TENANT / MULTI_TENANT model.
+ *
+ * @param {string | undefined | null} topology
+ * @returns {string}
+ */
+export const normalizeCustomerTopology = (topology) => {
+  const normalizedTopology = String(topology ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (normalizedTopology === 'SINGLE_TENANT' || normalizedTopology === 'MULTI_TENANT') {
+    return normalizedTopology
+  }
+
+  return ''
+}
+
+/**
+ * Best-effort resolver for the selected customer's topology from the
+ * authenticated user payload. Supports customer-specific topology keys when the
+ * session profile includes them.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {string}
+ */
+export const getCustomerTopology = (user, customerId) => {
+  if (!user?.memberships || !customerId) return ''
+
+  const membership = user.memberships.find(
+    (m) => m?.customerId && m.customerId.toString() === customerId.toString(),
+  )
+
+  if (!membership || typeof membership !== 'object') return ''
+
+  const candidateTopologies = [
+    membership?.customer?.topology,
+    membership?.customerTopology,
+    membership?.customer?.customerTopology,
+    membership?.topology,
+  ]
+
+  for (const candidateTopology of candidateTopologies) {
+    const normalizedTopology = normalizeCustomerTopology(candidateTopology)
+    if (normalizedTopology) return normalizedTopology
+  }
+
+  return ''
+}
+
+/**
  * Check whether the selected customer is explicitly marked inactive in the
  * authenticated user payload.
  *

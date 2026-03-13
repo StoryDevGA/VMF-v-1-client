@@ -54,6 +54,9 @@ const STATUS_VARIANT_MAP = {
 const MAINTAIN_TENANTS_INACTIVE_CUSTOMER_MESSAGE =
   'This customer is inactive. Tenant-management actions are unavailable until a Super Admin reactivates the customer.'
 
+const MAINTAIN_TENANTS_SINGLE_TENANT_MESSAGE =
+  'This customer uses single-tenant topology. Tenant management is only available for multi-tenant customers.'
+
 const MAINTAIN_TENANTS_LIFECYCLE_NOTE =
   'Disable removes tenant access immediately. Enable restores access immediately. Default tenants stay enabled, and archived tenants are read-only.'
 
@@ -177,7 +180,7 @@ function MaintainTenants() {
   const { user, isSuperAdmin } = useAuthorization()
 
   /* ---- Resolve customer context from shared store ---- */
-  const { customerId } = useTenantContext()
+  const { customerId, selectedCustomerTopology, supportsTenantManagement } = useTenantContext()
 
   /* ---- Tenant list hook ---- */
   const {
@@ -501,6 +504,14 @@ function MaintainTenants() {
     return (
       <MaintainTenantsBoundaryState
         message={inactiveCustomerMessage}
+      />
+    )
+  }
+
+  if (selectedCustomerTopology === 'SINGLE_TENANT' && !supportsTenantManagement) {
+    return (
+      <MaintainTenantsBoundaryState
+        message={MAINTAIN_TENANTS_SINGLE_TENANT_MESSAGE}
       />
     )
   }

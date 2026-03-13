@@ -26,7 +26,11 @@ import {
   clearTenantContext,
 } from '../store/slices/tenantContextSlice.js'
 import { useListTenantsQuery } from '../store/api/tenantApi.js'
-import { isSuperAdmin as checkIsSuperAdmin, getAccessibleCustomerIds } from '../utils/authorization.js'
+import {
+  isSuperAdmin as checkIsSuperAdmin,
+  getAccessibleCustomerIds,
+  getCustomerTopology,
+} from '../utils/authorization.js'
 
 const normalizeTenantVisibilityMeta = (meta) => {
   if (!meta || typeof meta !== 'object') return null
@@ -77,6 +81,12 @@ export function useTenantContext() {
     () => normalizeTenantVisibilityMeta(tenantsData?.meta?.tenantVisibility),
     [tenantsData],
   )
+  const authCustomerTopology = useMemo(
+    () => getCustomerTopology(user, customerId),
+    [customerId, user],
+  )
+  const selectedCustomerTopology = tenantVisibilityMeta?.topology ?? authCustomerTopology
+  const supportsTenantManagement = selectedCustomerTopology === 'MULTI_TENANT'
   const selectableTenants = useMemo(
     () => tenants.filter((tenant) => tenant?.isSelectable === true),
     [tenants],
@@ -133,6 +143,8 @@ export function useTenantContext() {
     tenants,
     selectableTenants,
     tenantVisibilityMeta,
+    selectedCustomerTopology,
+    supportsTenantManagement,
     isLoadingTenants,
     tenantsError,
     isSuperAdmin: isSuperAdminUser,
