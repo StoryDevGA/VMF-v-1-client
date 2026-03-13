@@ -182,7 +182,12 @@ export const customerApi = baseApi.injectEndpoints({
           recipientEmail: String(recipientEmail ?? '').trim().toLowerCase(),
         },
       }),
-      invalidatesTags: [{ type: 'Invitation', id: 'LIST' }],
+      invalidatesTags: (_result, _error, { customerId }) => [
+        { type: 'Invitation', id: 'LIST' },
+        { type: 'Customer', id: customerId },
+        { type: 'Customer', id: 'LIST' },
+        { type: 'User', id: 'LIST' },
+      ],
     }),
 
     /* ---- Assign Customer Admin ----

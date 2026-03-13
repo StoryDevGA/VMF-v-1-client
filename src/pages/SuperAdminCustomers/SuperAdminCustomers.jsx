@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { TabView } from '../../components/TabView'
 import { useToaster } from '../../components/Toaster'
@@ -34,6 +34,16 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
 
   const customerMgmt = useCustomerManagement()
 
+  const currentUsersWorkspaceCustomer = useMemo(() => {
+    if (!usersWorkspaceCustomerId) {
+      return usersWorkspaceCustomer
+    }
+
+    return customerMgmt.rows.find((row) => (
+      String(getCustomerId(row) ?? '') === String(usersWorkspaceCustomerId)
+    )) ?? usersWorkspaceCustomer
+  }, [customerMgmt.rows, usersWorkspaceCustomer, usersWorkspaceCustomerId])
+
   const handleAuthLink = useCallback((authLink, switchToInvitations) => {
     setLastAuthLink(authLink)
     setAuthLinkDialogOpen(true)
@@ -41,7 +51,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   }, [])
 
   const userMgmt = useUserManagement({
-    customer: usersWorkspaceCustomer,
+    customer: currentUsersWorkspaceCustomer,
     onAuthLink: handleAuthLink,
   })
 
@@ -75,7 +85,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
   }, [onAssignAdminSuccess, pendingInvitationTabSwitch])
 
   const handleOpenAssignAdminFromUserEdit = useCallback(() => {
-    if (!usersWorkspaceCustomer) return
+    if (!currentUsersWorkspaceCustomer) return
 
     const recipientName = userMgmt.userEditName.trim() || String(userMgmt.userEditTarget?.name ?? '').trim()
     const recipientEmail = getUserEmail(userMgmt.userEditTarget)
@@ -90,24 +100,24 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
     }
 
     userMgmt.closeUserEditDialog()
-    adminMgmt.openAdminDialog('assign', usersWorkspaceCustomer, {
+    adminMgmt.openAdminDialog('assign', currentUsersWorkspaceCustomer, {
       recipientName,
       recipientEmail,
     })
   }, [
     addToast,
+    currentUsersWorkspaceCustomer,
     userMgmt.closeUserEditDialog,
     adminMgmt.openAdminDialog,
     userMgmt.userEditName,
     userMgmt.userEditTarget,
-    usersWorkspaceCustomer,
   ])
 
   return (
     <section className="super-admin-customers" aria-label="Super admin customers">
       {isUsersWorkspaceOpen ? (
         <CustomerUsersWorkspace
-          customer={usersWorkspaceCustomer}
+          customer={currentUsersWorkspaceCustomer}
           customerId={usersWorkspaceCustomerId}
           userSearch={userMgmt.userSearch}
           onUserSearchChange={userMgmt.setUserSearch}
@@ -189,7 +199,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       <EditUserDialog
         open={userMgmt.userEditOpen}
         onClose={userMgmt.closeUserEditDialog}
-        customerName={usersWorkspaceCustomer?.name}
+        customerName={currentUsersWorkspaceCustomer?.name}
         name={userMgmt.userEditName}
         onNameChange={userMgmt.setUserEditName}
         email={userMgmt.userEditEmail}
@@ -216,7 +226,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
       <CreateUserDialog
         open={userMgmt.userCreateOpen}
         onClose={userMgmt.closeUserCreateDialog}
-        customerName={usersWorkspaceCustomer?.name}
+        customerName={currentUsersWorkspaceCustomer?.name}
         mode={userMgmt.userCreateMode}
         onModeChange={userMgmt.setUserCreateMode}
         name={userMgmt.userCreateName}

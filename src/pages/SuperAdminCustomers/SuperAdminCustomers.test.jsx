@@ -1999,6 +1999,73 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
   })
 
+  it('refreshes canonical-admin actions when the selected customer row gains a canonical admin', async () => {
+    let customerRows = [
+      {
+        id: 'c-1',
+        name: 'Acme Corp',
+        status: 'ACTIVE',
+        topology: 'SINGLE_TENANT',
+      },
+    ]
+
+    useListCustomersQuery.mockImplementation(() => ({
+      data: {
+        data: customerRows,
+        meta: { page: 1, totalPages: 1, total: customerRows.length },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [],
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    const view = renderPage()
+
+    selectRowAction('acme corp', 'View Users')
+
+    expect(screen.getByRole('button', { name: /assign customer admin/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /replace customer admin/i })).not.toBeInTheDocument()
+
+    customerRows = [
+      {
+        id: 'c-1',
+        name: 'Acme Corp',
+        status: 'ACTIVE',
+        topology: 'SINGLE_TENANT',
+        governance: { customerAdminUserId: 'u-1' },
+      },
+    ]
+
+    view.rerender(
+      <MemoryRouter initialEntries={['/super-admin/customers']}>
+        <ToasterProvider>
+          <SuperAdminCustomers />
+        </ToasterProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /replace customer admin/i })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /assign customer admin/i })).not.toBeInTheDocument()
+  })
+
   it('shows assign-invitation validation error for invalid email and blocks submit', async () => {
     const user = userEvent.setup()
     const mockCreateCustomerAdminInvitation = vi.fn()
