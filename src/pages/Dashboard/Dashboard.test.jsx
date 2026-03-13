@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
 
@@ -16,31 +15,16 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: vi.fn(),
 }))
 
-vi.mock('../../hooks/useAuth.js', () => ({
-  useAuth: vi.fn(),
-}))
-
 vi.mock('../../components/CustomerSelector', () => ({
-  CustomerSelector: () => (
-    <div data-testid="customer-selector">Customer Selector</div>
-  ),
+  CustomerSelector: () => <div data-testid="customer-selector">Customer Selector</div>,
 }))
 
 vi.mock('../../components/TenantSwitcher', () => ({
   TenantSwitcher: () => <div data-testid="tenant-switcher">Tenant Switcher</div>,
 }))
 
-vi.mock('../../components/SystemHealthIndicator', () => ({
-  SystemHealthIndicator: () => (
-    <div data-testid="system-health-indicator">System Health Indicator</div>
-  ),
-}))
-
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { useAuth } from '../../hooks/useAuth.js'
-
-const mockLogout = vi.fn().mockResolvedValue(undefined)
 
 function renderDashboard() {
   return render(
@@ -53,18 +37,20 @@ function renderDashboard() {
 function mockRole({
   isSuperAdmin = false,
   isCustomerAdmin = false,
+  accessibleCustomerIds,
   userName = 'Test User',
+  tenantMemberships = [],
 } = {}) {
-  const accessibleCustomerIds = isCustomerAdmin ? ['cust-1'] : []
+  const customerIds = accessibleCustomerIds ?? (isCustomerAdmin ? ['cust-1'] : [])
   const hasCustomerRole = vi.fn((customerId, role) => {
     if (!isCustomerAdmin) return false
-    return customerId === 'cust-1' && role === 'CUSTOMER_ADMIN'
+    return customerIds.includes(customerId) && role === 'CUSTOMER_ADMIN'
   })
 
   useAuthorization.mockReturnValue({
-    user: { id: 'u-1', name: userName },
+    user: { id: 'u-1', name: userName, tenantMemberships },
     isSuperAdmin,
-    accessibleCustomerIds,
+    accessibleCustomerIds: customerIds,
     hasCustomerRole,
   })
 }
@@ -72,203 +58,86 @@ function mockRole({
 beforeEach(() => {
   vi.clearAllMocks()
 
-  useAuth.mockReturnValue({
-    logout: mockLogout,
-    logoutResult: { isLoading: false },
-  })
-
   useTenantContext.mockReturnValue({
     customerId: 'cust-1',
     tenantId: null,
-    tenantName: null,
-    tenants: [{ _id: 'ten-1', name: 'Alpha', status: 'ENABLED' }],
+    resolvedTenantName: null,
     supportsTenantManagement: true,
-    isLoadingTenants: false,
+    selectedCustomerTopology: 'MULTI_TENANT',
   })
 
   mockRole({ isCustomerAdmin: true })
 })
 
 describe('Dashboard page', () => {
-  it('renders the four dashboard sections', () => {
+  it('renders a minimal holding page for customer admins', () => {
     renderDashboard()
 
-    expect(
-      screen.getByRole('heading', { name: /^workflow$/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /^context$/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /^health$/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /^quick links$/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /customer admin workspace/i })).toBeInTheDocument()
+    expect(screen.getByText(/future modules in progress/i)).toBeInTheDocument()
+    expect(screen.getByText(/use the main navigation for manage users, manage tenants, monitoring, and help/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^workflow$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^quick links$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument()
   })
 
-  it('renders context controls on the dashboard', () => {
-    renderDashboard()
-
-    expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
-    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
-    expect(screen.getByTestId('system-health-indicator')).toBeInTheDocument()
-  })
-
-  it('shows super-admin invitation management tile for super admins', () => {
-    mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
-    renderDashboard()
-
-    expect(
-      screen.getByRole('link', { name: /open invitation management/i }),
-    ).toBeInTheDocument()
-  })
-
-  it('orders super-admin quick links with governance and audit entries', () => {
-    mockRole({ isSuperAdmin: true, isCustomerAdmin: false })
-    renderDashboard()
-
-    const quickActionsCard = screen
-      .getByRole('heading', { name: /^quick links$/i })
-      .closest('.card')
-
-    if (!quickActionsCard) {
-      throw new Error('Quick actions card not found')
-    }
-
-    const quickLinks = within(quickActionsCard).getAllByRole('link')
-    expect(quickLinks.map((link) => link.textContent?.trim())).toEqual([
-      'Invitations',
-      'Versioning',
-      'Licence Levels',
-      'Customers',
-      'Denied Access',
-      'Audit Logs',
-      'Monitoring',
-      'Help',
-    ])
-    expect(
-      within(quickActionsCard).queryByRole('link', { name: /edit users/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('hides super-admin invitation management tile for customer admins', () => {
-    mockRole({ isSuperAdmin: false, isCustomerAdmin: true })
-    renderDashboard()
-
-    expect(
-      screen.queryByRole('link', { name: /open invitation management/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: /open manage users/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/customer administration now lives in the header menus/i),
-    ).toBeInTheDocument()
-  })
-
-  it('keeps customer-admin workflow menu-first for single-tenant context', () => {
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenantName: null,
-      tenants: [],
-      supportsTenantManagement: false,
-      isLoadingTenants: false,
-    })
-
-    renderDashboard()
-
-    expect(
-      screen.queryByRole('link', { name: /open manage tenants/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: /open manage users/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/customer administration now lives in the header menus/i),
-    ).toBeInTheDocument()
-  })
-
-  it('shows non-admin workflow tile and hides admin-only tiles', () => {
-    mockRole({ isSuperAdmin: false, isCustomerAdmin: false })
-    renderDashboard()
-
-    expect(
-      screen.getByRole('link', { name: /open help center/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: /open manage users/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('keeps customer-admin workflow guidance on the dashboard when no customer is selected', () => {
-    useTenantContext.mockReturnValue({
-      customerId: null,
-      tenantId: null,
-      tenantName: null,
-      tenants: [],
-      supportsTenantManagement: true,
-      isLoadingTenants: false,
-    })
-
-    renderDashboard()
-
-    expect(
-      screen.getByText(/customer administration now lives in the header menus/i),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /open manage users/i })).not.toBeInTheDocument()
-  })
-
-  it('calls logout from quick actions', async () => {
-    const user = userEvent.setup()
-    renderDashboard()
-
-    await user.click(screen.getByRole('button', { name: /sign out/i }))
-    expect(mockLogout).toHaveBeenCalledTimes(1)
-  })
-
-  it('displays the signed-in user name', () => {
+  it('shows the signed-in user name and current role', () => {
     mockRole({ userName: 'Alice Wonderland', isCustomerAdmin: true })
     renderDashboard()
 
     expect(screen.getByText('Alice Wonderland')).toBeInTheDocument()
-    expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Customer Administrator')).toHaveLength(2)
   })
 
-  it('shows "Super Administrator" role for super admins', () => {
-    mockRole({ isSuperAdmin: true })
+  it('shows only the tenant switcher for a single-customer multi-tenant admin', () => {
     renderDashboard()
 
-    expect(screen.getByText('Super Administrator')).toBeInTheDocument()
+    expect(screen.queryByTestId('customer-selector')).not.toBeInTheDocument()
+    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
   })
 
-  it('shows "Customer Administrator" role for customer admins', () => {
-    mockRole({ isCustomerAdmin: true })
+  it('shows customer and tenant scope controls when the admin can switch customers', () => {
+    mockRole({ isCustomerAdmin: true, accessibleCustomerIds: ['cust-1', 'cust-2'] })
     renderDashboard()
 
-    expect(screen.getByText('Customer Administrator')).toBeInTheDocument()
+    expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
+    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
   })
 
-  it('shows "User" role for non-admin users', () => {
+  it('suppresses the tenant switcher for single-tenant context', () => {
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      resolvedTenantName: null,
+      supportsTenantManagement: false,
+      selectedCustomerTopology: 'SINGLE_TENANT',
+    })
+
+    renderDashboard()
+
+    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
+    expect(screen.getByText('Single-tenant customer')).toBeInTheDocument()
+  })
+
+  it('renders a generic workspace for non-admin users', () => {
     mockRole({ isSuperAdmin: false, isCustomerAdmin: false })
     renderDashboard()
 
-    expect(screen.getByText('User')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^workspace$/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/^user$/i)).toHaveLength(2)
+    expect(screen.queryByTestId('customer-selector')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
   })
 
-  it('hides tenant switcher when no customer context is set', () => {
-    useTenantContext.mockReturnValue({
-      customerId: null,
-      tenantId: null,
-      tenantName: null,
-      tenants: [],
-      isLoadingTenants: false,
+  it('shows tenant administrator role when tenant membership is present', () => {
+    mockRole({
+      isCustomerAdmin: false,
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['TENANT_ADMIN'] }],
     })
+
     renderDashboard()
 
-    expect(
-      screen.getByText(/select a customer to unlock/i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /tenant workspace/i })).toBeInTheDocument()
+    expect(screen.getAllByText('Tenant Administrator')).toHaveLength(2)
   })
 })

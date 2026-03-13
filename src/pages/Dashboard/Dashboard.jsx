@@ -1,420 +1,138 @@
 /**
  * Dashboard Page
  *
- * Central workflow control page for authenticated users at `/app/dashboard`.
- * Replaces header-level context controls with a dedicated page surface.
+ * Minimal holding page for customer-app users.
  */
 
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
-  MdBusiness,
-  MdGroups,
-  MdHelpOutline,
-  MdLogout,
-  MdMarkEmailUnread,
-  MdMonitorHeart,
-  MdSettings,
-  MdTune,
+  MdOutlineAssessment,
+  MdOutlineInsights,
+  MdOutlineNotificationsActive,
 } from 'react-icons/md'
-import { Card } from '../../components/Card'
-import { Link } from '../../components/Link'
-import { Button } from '../../components/Button'
+import { AdminHoldingPage } from '../../components/AdminHoldingPage'
 import { CustomerSelector } from '../../components/CustomerSelector'
 import { TenantSwitcher } from '../../components/TenantSwitcher'
-import { SystemHealthIndicator } from '../../components/SystemHealthIndicator'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { useAuth } from '../../hooks/useAuth.js'
-import './Dashboard.css'
 
 function Dashboard() {
-  const navigate = useNavigate()
-  const { logout, logoutResult } = useAuth()
-  const { user, isSuperAdmin, accessibleCustomerIds, hasCustomerRole } =
-    useAuthorization()
+  const { user, accessibleCustomerIds, isSuperAdmin, hasCustomerRole } = useAuthorization()
   const {
     customerId,
     tenantId,
-    tenantName,
-    tenants,
-    isLoadingTenants,
+    resolvedTenantName,
     supportsTenantManagement,
-  } =
-    useTenantContext()
+    selectedCustomerTopology,
+  } = useTenantContext()
 
   const isCustomerAdmin = useMemo(
-    () =>
-      accessibleCustomerIds.some((id) =>
-        hasCustomerRole(id, 'CUSTOMER_ADMIN'),
-      ),
+    () => accessibleCustomerIds.some((id) => hasCustomerRole(id, 'CUSTOMER_ADMIN')),
     [accessibleCustomerIds, hasCustomerRole],
   )
 
-  const hasAdminAccess = isSuperAdmin || isCustomerAdmin
-  const hasCustomerContext = Boolean(customerId)
-  const shouldUseHeaderAdminMenu = isCustomerAdmin && !isSuperAdmin
-
-  /** Derive a human-friendly primary role label. */
   const primaryRole = useMemo(() => {
     if (isSuperAdmin) return 'Super Administrator'
     if (isCustomerAdmin) return 'Customer Administrator'
-    const tenantAdmin = user?.tenantMemberships?.find((m) =>
-      m.roles?.includes('TENANT_ADMIN'),
-    )
+    const tenantAdmin = user?.tenantMemberships?.find((membership) =>
+      membership?.roles?.includes('TENANT_ADMIN'))
     if (tenantAdmin) return 'Tenant Administrator'
     return 'User'
-  }, [isSuperAdmin, isCustomerAdmin, user])
+  }, [isCustomerAdmin, isSuperAdmin, user])
 
-  const workflowTiles = useMemo(() => {
-    const tiles = [
-      {
-        key: 'edit-users',
-        title: 'Manage Users',
-        description:
-          'Create, edit, disable, and review user access within customer scope.',
-        to: '/app/administration/edit-users',
-        icon: <MdGroups aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: hasCustomerContext,
-        disabledReason:
-          'Select a customer in the Context panel to unlock user management.',
-      },
-      {
-        key: 'maintain-tenants',
-        title: 'Manage Tenants',
-        description:
-          'Create and maintain tenant records and tenant admin assignments.',
-        to: '/app/administration/maintain-tenants',
-        icon: <MdBusiness aria-hidden="true" />,
-        visible: isSuperAdmin && (!hasCustomerContext || supportsTenantManagement),
-        enabled: hasCustomerContext,
-        disabledReason:
-          'Select a customer in the Context panel to unlock tenant management.',
-      },
-      {
-        key: 'system-monitoring',
-        title: 'System Monitoring',
-        description:
-          'Review platform health, performance signals, and active alerts.',
-        to: '/app/administration/system-monitoring',
-        icon: <MdMonitorHeart aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-invitations',
-        title: 'Invitation Management',
-        description:
-          'Manage onboarding invitations for customer administrators.',
-        to: '/super-admin/invitations',
-        icon: <MdMarkEmailUnread aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-license-levels',
-        title: 'Licence Levels',
-        description:
-          'Create and update governance licence tiers and feature entitlements.',
-        to: '/super-admin/license-levels',
-        icon: <MdTune aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-customers',
-        title: 'Customer Governance',
-        description:
-          'Manage customer lifecycle status and canonical customer admin ownership.',
-        to: '/super-admin/customers',
-        icon: <MdBusiness aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-system-versioning',
-        title: 'System Versioning',
-        description:
-          'Review and update governance policy versions with step-up controls.',
-        to: '/super-admin/system-versioning',
-        icon: <MdSettings aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-audit-logs',
-        title: 'Audit Logs',
-        description:
-          'Query immutable audit records and run integrity verification checks.',
-        to: '/super-admin/audit-logs',
-        icon: <MdMonitorHeart aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'super-admin-denied-access-logs',
-        title: 'Denied Access Logs',
-        description:
-          'Review platform-wide authorization denials for security and audit follow-up.',
-        to: '/super-admin/denied-access-logs',
-        icon: <MdMonitorHeart aria-hidden="true" />,
-        visible: isSuperAdmin,
-        enabled: true,
-        disabledReason: '',
-      },
-      {
-        key: 'help-center',
-        title: 'Help Center',
-        description:
-          'Access onboarding guidance, troubleshooting steps, and support escalation paths.',
-        to: '/help',
-        icon: <MdHelpOutline aria-hidden="true" />,
-        visible: !hasAdminAccess,
-        enabled: true,
-        disabledReason: '',
-      },
-    ]
+  const dashboardTitle = useMemo(() => {
+    if (isCustomerAdmin) return 'Customer Admin Workspace'
+    if (primaryRole === 'Tenant Administrator') return 'Tenant Workspace'
+    return 'Workspace'
+  }, [isCustomerAdmin, primaryRole])
 
-    return tiles.filter((tile) => tile.visible)
-  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin, supportsTenantManagement])
+  const subtitle = isCustomerAdmin
+    ? 'This landing page stays intentionally light while customer-admin overview modules are prepared.'
+    : 'This landing page stays intentionally light while role-aware overview modules are prepared.'
 
-  const quickLinks = useMemo(() => {
-    if (isSuperAdmin) {
-      return [
-        {
-          key: 'invitations',
-          label: 'Invitations',
-          to: '/super-admin/invitations',
-        },
-        {
-          key: 'versioning',
-          label: 'Versioning',
-          to: '/super-admin/system-versioning',
-        },
-        {
-          key: 'license-levels',
-          label: 'Licence Levels',
-          to: '/super-admin/license-levels',
-        },
-        {
-          key: 'customers',
-          label: 'Customers',
-          to: '/super-admin/customers',
-        },
-        {
-          key: 'denied-access',
-          label: 'Denied Access',
-          to: '/super-admin/denied-access-logs',
-        },
-        {
-          key: 'audit-logs',
-          label: 'Audit Logs',
-          to: '/super-admin/audit-logs',
-        },
-        {
-          key: 'monitoring',
-          label: 'Monitoring',
-          to: '/super-admin/system-monitoring',
-        },
-        { key: 'help', label: 'Help', to: '/help' },
-      ]
-    }
+  const guidance = isCustomerAdmin
+    ? 'Use the main navigation for Manage Users, Manage Tenants, Monitoring, and Help. Scope controls remain below only where they still add value.'
+    : 'Use the main navigation for the tools available to your role. This page is reserved for future overview content.'
 
-    return [{ key: 'help', label: 'Help', to: '/help', visible: true }]
-  }, [isSuperAdmin])
+  const topologyLabel = useMemo(() => {
+    if (selectedCustomerTopology === 'MULTI_TENANT') return 'Multi-tenant'
+    if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant'
+    return 'Not available'
+  }, [selectedCustomerTopology])
 
-  const handleLogout = async () => {
-    if (logoutResult.isLoading) return
-    await logout()
-    navigate(isSuperAdmin ? '/super-admin/login' : '/app/login', {
-      replace: true,
-    })
-  }
+  const tenantScopeValue = useMemo(() => {
+    if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant customer'
+    if (resolvedTenantName) return resolvedTenantName
+    if (tenantId) return tenantId
+    if (customerId && supportsTenantManagement) return 'All tenants'
+    return 'Not selected'
+  }, [customerId, resolvedTenantName, selectedCustomerTopology, supportsTenantManagement, tenantId])
+
+  const showCustomerSelector = isCustomerAdmin && accessibleCustomerIds.length > 1
+  const showTenantSwitcher = isCustomerAdmin && supportsTenantManagement && Boolean(customerId)
+  const controls = showCustomerSelector || showTenantSwitcher
+    ? (
+      <>
+        {showCustomerSelector ? (
+          <CustomerSelector className="admin-holding-page__control" />
+        ) : null}
+        {showTenantSwitcher ? (
+          <TenantSwitcher className="admin-holding-page__control" />
+        ) : null}
+      </>
+      )
+    : null
+
+  const summaryTitle = isCustomerAdmin ? 'Current scope' : 'Current session'
+  const summarySubtitle = isCustomerAdmin
+    ? 'The selected customer and tenant scope will carry into customer-admin tools from the main navigation.'
+    : 'This page is currently acting as a lightweight landing surface for your role.'
+
+  const summaryItems = useMemo(
+    () => [
+      { label: 'Access level', value: primaryRole },
+      { label: 'Customer scope', value: customerId ?? 'Not selected' },
+      { label: 'Tenant scope', value: tenantScopeValue },
+      { label: 'Topology', value: topologyLabel },
+    ],
+    [customerId, primaryRole, tenantScopeValue, topologyLabel],
+  )
+
+  const futureItems = useMemo(
+    () => [
+      {
+        title: 'Overview metrics',
+        description: 'Reserved for role-aware counts, trust signals, and high-level access summaries.',
+        icon: <MdOutlineAssessment aria-hidden="true" />,
+      },
+      {
+        title: 'Operational highlights',
+        description: 'Reserved for activity rollups, lifecycle changes, and notable governance events.',
+        icon: <MdOutlineInsights aria-hidden="true" />,
+      },
+      {
+        title: 'Attention queue',
+        description: 'Reserved for alerts, pending actions, and context-specific follow-up items.',
+        icon: <MdOutlineNotificationsActive aria-hidden="true" />,
+      },
+    ],
+    [],
+  )
 
   return (
-    <section className="dashboard container" aria-label="Workflow dashboard">
-      <header className="dashboard__header">
-        <h1 className="dashboard__title">Dashboard</h1>
-        <p className="dashboard__subtitle">
-          Centralize workflow control, scope context, and health visibility in
-          one page.
-        </p>
-        {user?.name && (
-          <p className="dashboard__signed-in">
-            Signed in as <strong>{user.name}</strong>
-          </p>
-        )}
-        <p className="dashboard__role">{primaryRole}</p>
-      </header>
-
-      <div className="dashboard__grid">
-        <Card
-          variant="elevated"
-          className="dashboard__section dashboard__section--workflow"
-        >
-          <Card.Header>
-            <h2 className="dashboard__section-title">Workflow</h2>
-            <p className="dashboard__section-subtitle">
-              {shouldUseHeaderAdminMenu
-                ? 'Customer administration now lives in the header menus.'
-                : 'Role-aware shortcuts to core operational flows.'}
-            </p>
-          </Card.Header>
-          <Card.Body>
-            {shouldUseHeaderAdminMenu ? (
-              <p className="dashboard__hint" role="note">
-                Use the header <strong>Admin</strong> menu for Manage Users and, when the
-                selected customer supports it, Manage Tenants. Use <strong>System Health</strong>
-                for Monitoring. Sign out is also available from the header.
-              </p>
-            ) : (
-              <div className="dashboard__tiles" role="list">
-                {workflowTiles.map((tile) => (
-                  <article
-                    key={tile.key}
-                    className={[
-                      'dashboard__tile',
-                      !tile.enabled && 'dashboard__tile--disabled',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    role="listitem"
-                  >
-                    <div className="dashboard__tile-title-row">
-                      <span className="dashboard__tile-icon">{tile.icon}</span>
-                      <h3 className="dashboard__tile-title">{tile.title}</h3>
-                    </div>
-                    <p className="dashboard__tile-description">{tile.description}</p>
-                    <Link
-                      to={tile.to}
-                      disabled={!tile.enabled}
-                      className="dashboard__tile-link"
-                      variant="primary"
-                      underline="none"
-                    >
-                      Open {tile.title}
-                    </Link>
-                    {!tile.enabled && tile.disabledReason && (
-                      <p className="dashboard__tile-reason">{tile.disabledReason}</p>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
-          </Card.Body>
-        </Card>
-
-        <Card
-          variant="elevated"
-          className="dashboard__section dashboard__section--context"
-        >
-          <Card.Header>
-            <h2 className="dashboard__section-title">Context</h2>
-            <p className="dashboard__section-subtitle">
-              Set customer and tenant scope for downstream administration pages.
-            </p>
-          </Card.Header>
-          <Card.Body>
-            <div className="dashboard__context-controls">
-              <CustomerSelector className="dashboard__control" />
-              <TenantSwitcher className="dashboard__control" />
-            </div>
-
-            {!hasCustomerContext && (
-              <p className="dashboard__hint" role="status">
-                Select a customer to unlock customer-scoped workflows.
-              </p>
-            )}
-
-            <dl className="dashboard__context-list">
-              <div className="dashboard__context-item">
-                <dt>Customer ID</dt>
-                <dd>{customerId ?? 'Not selected'}</dd>
-              </div>
-              <div className="dashboard__context-item">
-                <dt>Tenant scope</dt>
-                <dd>
-                  {tenantName ??
-                    (tenantId ? tenantId : 'All tenants (or not selected)')}
-                </dd>
-              </div>
-              <div className="dashboard__context-item">
-                <dt>Tenant records</dt>
-                <dd>{isLoadingTenants ? 'Loading...' : tenants.length}</dd>
-              </div>
-            </dl>
-          </Card.Body>
-        </Card>
-
-        <Card
-          variant="elevated"
-          className="dashboard__section dashboard__section--health"
-        >
-          <Card.Header>
-            <h2 className="dashboard__section-title">Health</h2>
-            <p className="dashboard__section-subtitle">
-              Inline operational signal for admin users.
-            </p>
-          </Card.Header>
-          <Card.Body>
-            <div className="dashboard__health-row">
-              <SystemHealthIndicator />
-              {!hasAdminAccess && (
-                <p className="dashboard__hint">
-                  Health telemetry is visible for admin users only.
-                </p>
-              )}
-            </div>
-          </Card.Body>
-        </Card>
-
-        <Card
-          variant="elevated"
-          className="dashboard__section dashboard__section--quick-actions"
-        >
-          <Card.Header>
-            <h2 className="dashboard__section-title">Quick Links</h2>
-            <p className="dashboard__section-subtitle">
-              Fast navigation and session controls.
-            </p>
-          </Card.Header>
-          <Card.Body>
-            <div className="dashboard__quick-actions">
-              {quickLinks.map((action) => (
-                <Link
-                  key={action.key}
-                  to={action.to}
-                  className="dashboard__quick-link"
-                  variant="subtle"
-                  underline="none"
-                >
-                  <span className="dashboard__quick-icon" aria-hidden="true">
-                    <MdTune />
-                  </span>
-                  {action.label}
-                </Link>
-              ))}
-              <Button
-                variant="outline"
-                className="dashboard__logout"
-                onClick={handleLogout}
-                loading={logoutResult.isLoading}
-                leftIcon={<MdLogout aria-hidden="true" />}
-              >
-                Sign Out
-              </Button>
-            </div>
-          </Card.Body>
-        </Card>
-      </div>
-    </section>
+    <AdminHoldingPage
+      ariaLabel="Dashboard landing page"
+      title={dashboardTitle}
+      subtitle={subtitle}
+      roleLabel={primaryRole}
+      guidance={guidance}
+      userName={user?.name ?? ''}
+      summaryTitle={summaryTitle}
+      summarySubtitle={summarySubtitle}
+      summaryItems={summaryItems}
+      controls={controls}
+      futureItems={futureItems}
+    />
   )
 }
 

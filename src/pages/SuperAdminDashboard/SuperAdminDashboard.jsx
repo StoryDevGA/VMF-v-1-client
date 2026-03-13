@@ -1,53 +1,64 @@
 /**
  * Super Admin Dashboard Page
  *
- * Dedicated platform-level control surface for SUPER_ADMIN users.
+ * Minimal holding page for SUPER_ADMIN users.
  */
 
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth.js'
+import { useMemo } from 'react'
+import {
+  MdOutlineAdminPanelSettings,
+  MdOutlineInsights,
+  MdOutlineSecurity,
+} from 'react-icons/md'
+import { AdminHoldingPage } from '../../components/AdminHoldingPage'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
-import { DashboardActions } from './DashboardActions.jsx'
-import { DashboardQuickLinks } from './DashboardQuickLinks.jsx'
-import './SuperAdminDashboard.css'
 
 function SuperAdminDashboard() {
-  const navigate = useNavigate()
-  const { logout, logoutResult } = useAuth()
   const { user } = useAuthorization()
 
-  const handleLogout = async () => {
-    if (logoutResult.isLoading) return
-    await logout()
-    navigate('/super-admin/login', { replace: true })
-  }
+  const summaryItems = useMemo(
+    () => [
+      { label: 'Access level', value: 'Super Administrator' },
+      { label: 'Workspace scope', value: 'Platform-wide' },
+      { label: 'Primary focus', value: 'Customer governance, platform health, and audit oversight' },
+    ],
+    [],
+  )
+
+  const futureItems = useMemo(
+    () => [
+      {
+        title: 'Platform snapshot',
+        description: 'Reserved for high-level system posture, customer totals, and governance rollups.',
+        icon: <MdOutlineAdminPanelSettings aria-hidden="true" />,
+      },
+      {
+        title: 'Recent oversight signals',
+        description: 'Reserved for notable operational changes, versioning activity, and audit highlights.',
+        icon: <MdOutlineInsights aria-hidden="true" />,
+      },
+      {
+        title: 'Security attention queue',
+        description: 'Reserved for denied-access trends, escalations, and action-required alerts.',
+        icon: <MdOutlineSecurity aria-hidden="true" />,
+      },
+    ],
+    [],
+  )
 
   return (
-    <section
-      className="super-admin-dashboard container"
-      aria-label="Super admin dashboard"
-    >
-      <header className="super-admin-dashboard__header">
-        <h1 className="super-admin-dashboard__title">Super Admin Dashboard</h1>
-        <p className="super-admin-dashboard__subtitle">
-          Platform-level controls for customer governance, monitoring, and
-          cross-tenant operations.
-        </p>
-        {user?.name && (
-          <p className="super-admin-dashboard__signed-in">
-            Signed in as <strong>{user.name}</strong>
-          </p>
-        )}
-      </header>
-
-      <div className="super-admin-dashboard__grid">
-        <DashboardActions />
-        <DashboardQuickLinks
-          onLogout={handleLogout}
-          isLoggingOut={logoutResult.isLoading}
-        />
-      </div>
-    </section>
+    <AdminHoldingPage
+      ariaLabel="Super admin dashboard landing page"
+      title="Super Admin Workspace"
+      subtitle="This landing page is intentionally minimal while platform overview modules are prepared."
+      roleLabel="Super Administrator"
+      guidance="Use the main navigation for customers, licence maintenance, versioning, monitoring, audit, and denied-access workflows."
+      userName={user?.name ?? ''}
+      summaryTitle="Current session"
+      summarySubtitle="The platform dashboard has been reduced to a clean holding surface while future overview modules are designed."
+      summaryItems={summaryItems}
+      futureItems={futureItems}
+    />
   )
 }
 
