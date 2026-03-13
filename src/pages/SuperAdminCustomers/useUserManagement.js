@@ -114,6 +114,11 @@ export function useUserManagement({ customer, onAuthLink }) {
       ? USER_CREATE_ROLE_OPTIONS.filter((option) => option.value !== 'TENANT_ADMIN')
       : USER_CREATE_ROLE_OPTIONS
   ), [customer?.topology])
+  const editUserRoleOptions = createUserRoleOptions
+  const allowedEditRoleValues = useMemo(
+    () => new Set(editUserRoleOptions.map((option) => option.value)),
+    [editUserRoleOptions],
+  )
 
   useEffect(() => {
     const allowedRoles = new Set(createUserRoleOptions.map((option) => option.value))
@@ -122,6 +127,7 @@ export function useUserManagement({ customer, onAuthLink }) {
       if (nextRoles.length > 0) return nextRoles
       return DEFAULT_USER_CREATE_ROLES.filter((role) => allowedRoles.has(role))
     })
+    setUserEditRoles((currentRoles) => currentRoles.filter((role) => allowedRoles.has(role)))
   }, [createUserRoleOptions])
 
   const listUsersAppError = listUsersError ? normalizeError(listUsersError) : null
@@ -168,10 +174,13 @@ export function useUserManagement({ customer, onAuthLink }) {
     if (!row) return
     setUserEditTarget(row)
     setUserEditName(String(row?.name ?? ''))
-    setUserEditRoles(normalizeRoles(getCustomerUserRoles(row, customerId)))
+    setUserEditRoles(
+      normalizeRoles(getCustomerUserRoles(row, customerId))
+        .filter((role) => allowedEditRoleValues.has(role)),
+    )
     setUserEditErrors({})
     setUserEditOpen(true)
-  }, [customerId])
+  }, [allowedEditRoleValues, customerId])
 
   const closeUserEditDialog = useCallback(() => {
     setUserEditOpen(false)
@@ -224,6 +233,7 @@ export function useUserManagement({ customer, onAuthLink }) {
 
     const trimmedName = userEditName.trim()
     const normalizedRoles = normalizeRoles(userEditRoles)
+      .filter((role) => allowedEditRoleValues.has(role))
     const validationErrors = {}
 
     if (!trimmedName) {
@@ -285,6 +295,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     userEditName,
     userEditRoles,
     userEditTarget,
+    allowedEditRoleValues,
     customerId,
   ])
 
@@ -676,6 +687,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     userTotalCount,
     hasCanonicalAdmin,
     createUserRoleOptions,
+    editUserRoleOptions,
     isListUsersLoading,
     isListUsersFetching,
     listUsersAppError,

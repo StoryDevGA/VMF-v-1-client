@@ -4,10 +4,7 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
-import {
-  USER_CREATE_MODE_OPTIONS,
-  USER_CREATE_ROLE_OPTIONS,
-} from './superAdminCustomers.constants.js'
+import { USER_CREATE_MODE_OPTIONS } from './superAdminCustomers.constants.js'
 import { getLifecycleActionVerb } from './superAdminCustomers.utils.js'
 import './CustomerUserDialogs.css'
 
@@ -150,6 +147,7 @@ export function EditUserDialog({
   email,
   roles,
   onToggleRole,
+  roleOptions,
   errors,
   onClearNameError,
   isSubmitting,
@@ -191,7 +189,7 @@ export function EditUserDialog({
         <fieldset className="super-admin-customers__roles-fieldset">
           <legend className="super-admin-customers__roles-legend">Roles</legend>
           <div className="super-admin-customers__roles-grid">
-            {USER_CREATE_ROLE_OPTIONS.map((roleOption) => (
+            {roleOptions.map((roleOption) => (
               <Tickbox
                 key={roleOption.value}
                 id={`sa-customer-user-edit-role-${String(roleOption.value).toLowerCase()}`}

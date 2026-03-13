@@ -1836,6 +1836,71 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByRole('heading', { name: /edit customer user/i })).not.toBeInTheDocument()
   })
 
+  it('hides TENANT_ADMIN in edit-user for single-tenant customers and strips stale hidden roles from submit', async () => {
+    const user = userEvent.setup()
+    const mockUpdateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { id: 'u-1', name: 'Taylor User' } }),
+    })
+    useUpdateUserMutation.mockReturnValue([mockUpdateUser, { isLoading: false }])
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              id: 'u-1',
+              name: 'Taylor User',
+              email: 'taylor@example.com',
+              customerRoles: ['USER', 'TENANT_ADMIN'],
+              isCanonicalAdmin: false,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          filters: {},
+        },
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    openCustomerUsersWorkspace()
+    selectRowAction('Taylor User', 'Edit User')
+
+    const editHeading = screen.getByRole('heading', { name: /edit customer user/i })
+    const editDialog = editHeading.closest('dialog')
+    expect(editDialog).not.toBeNull()
+    const editDialogScreen = within(editDialog)
+
+    expect(editDialogScreen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
+
+    await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
+
+    await waitFor(() => {
+      expect(mockUpdateUser).toHaveBeenCalledWith({
+        userId: 'u-1',
+        body: {
+          name: 'Taylor User',
+          roles: ['USER'],
+        },
+      })
+    })
+  })
+
   it('maps edit-user 422 errors to field-level guidance', async () => {
     const user = userEvent.setup()
     const mockUpdateUser = vi.fn().mockReturnValue({

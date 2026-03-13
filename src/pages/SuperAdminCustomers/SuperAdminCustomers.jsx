@@ -205,6 +205,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         email={userMgmt.userEditEmail}
         roles={userMgmt.userEditRoles}
         onToggleRole={userMgmt.toggleUserEditRole}
+        roleOptions={userMgmt.editUserRoleOptions}
         errors={userMgmt.userEditErrors}
         onClearNameError={() => {
           userMgmt.setUserEditErrors((currentErrors) => {
