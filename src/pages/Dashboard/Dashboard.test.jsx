@@ -160,11 +160,14 @@ describe('Dashboard page', () => {
       screen.queryByRole('link', { name: /open invitation management/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: /open manage users/i }),
+      screen.queryByRole('link', { name: /open manage users/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/customer administration now lives in the header menus/i),
     ).toBeInTheDocument()
   })
 
-  it('hides manage tenants for single-tenant customer-admin context', () => {
+  it('keeps customer-admin workflow menu-first for single-tenant context', () => {
     useTenantContext.mockReturnValue({
       customerId: 'cust-1',
       tenantId: null,
@@ -180,7 +183,10 @@ describe('Dashboard page', () => {
       screen.queryByRole('link', { name: /open manage tenants/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: /open manage users/i }),
+      screen.queryByRole('link', { name: /open manage users/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/customer administration now lives in the header menus/i),
     ).toBeInTheDocument()
   })
 
@@ -196,22 +202,22 @@ describe('Dashboard page', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('disables customer-scoped workflow tiles when no customer is selected', () => {
+  it('keeps customer-admin workflow guidance on the dashboard when no customer is selected', () => {
     useTenantContext.mockReturnValue({
       customerId: null,
       tenantId: null,
       tenantName: null,
       tenants: [],
+      supportsTenantManagement: true,
       isLoadingTenants: false,
     })
 
     renderDashboard()
 
-    const usersLink = screen.getByRole('link', { name: /open manage users/i })
-    expect(usersLink).toHaveAttribute('aria-disabled', 'true')
     expect(
-      screen.getAllByText(/select a customer in the context panel/i).length,
-    ).toBeGreaterThanOrEqual(1)
+      screen.getByText(/customer administration now lives in the header menus/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /open manage users/i })).not.toBeInTheDocument()
   })
 
   it('calls logout from quick actions', async () => {

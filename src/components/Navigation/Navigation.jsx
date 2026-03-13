@@ -6,22 +6,33 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { MdExpandMore } from 'react-icons/md'
+import { useAuth } from '../../hooks/useAuth.js'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
-import { isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
+import { selectSelectedCustomerId } from '../../store/slices/tenantContextSlice.js'
+import { getCustomerTopology, isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
+  const selectedCustomerId = useSelector(selectSelectedCustomerId)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { logout, logoutResult } = useAuth()
 
   const isSuperAdmin = checkIsSuperAdmin(user)
   const hasCustomerAdminAccess = (user?.memberships ?? []).some(
     (membership) => membership.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
   )
+  const selectedCustomerTopology = useMemo(
+    () => getCustomerTopology(user, selectedCustomerId),
+    [selectedCustomerId, user],
+  )
+  const supportsTenantManagement =
+    !selectedCustomerId || selectedCustomerTopology !== 'SINGLE_TENANT'
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -48,6 +59,30 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
         key: 'customer-admin',
         label: 'Customer Admin',
         to: '/super-admin/customers',
+      })
+    }
+
+    if (hasCustomerAdminAccess) {
+      entries.push({
+        type: 'group',
+        key: 'admin',
+        label: 'Admin',
+        links: [
+          {
+            key: 'manage-users',
+            label: 'Manage Users',
+            to: '/app/administration/edit-users',
+          },
+          ...(supportsTenantManagement
+            ? [
+                {
+                  key: 'manage-tenants',
+                  label: 'Manage Tenants',
+                  to: '/app/administration/maintain-tenants',
+                },
+              ]
+            : []),
+        ],
       })
     }
 
@@ -85,8 +120,16 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       to: '/help',
     })
 
+    if (isSuperAdmin || hasCustomerAdminAccess) {
+      entries.push({
+        type: 'action',
+        key: 'sign-out',
+        label: 'Sign Out',
+      })
+    }
+
     return entries
-  }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin])
+  }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin, supportsTenantManagement])
 
   const [openMenuKey, setOpenMenuKey] = useState(null)
 
@@ -120,6 +163,17 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     onLinkClick()
   }
 
+  const handleActionClick = async (entry) => {
+    if (entry.key !== 'sign-out' || logoutResult.isLoading) return
+
+    setOpenMenuKey(null)
+    onLinkClick()
+    await logout()
+    navigate(isSuperAdmin ? '/super-admin/login' : '/app/login', {
+      replace: true,
+    })
+  }
+
   const isGroupActive = (links) =>
     links.some(
       (link) => location.pathname === link.to || location.pathname.startsWith(`${link.to}/`),
@@ -147,6 +201,21 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   >
                     <span className="nav__text">{entry.label}</span>
                   </NavLink>
+                </li>
+              )
+            }
+
+            if (entry.type === 'action') {
+              return (
+                <li key={entry.key} className="nav__item nav__item--action">
+                  <button
+                    type="button"
+                    className="nav__action"
+                    onClick={() => handleActionClick(entry)}
+                    disabled={logoutResult.isLoading}
+                  >
+                    <span className="nav__text">{entry.label}</span>
+                  </button>
                 </li>
               )
             }

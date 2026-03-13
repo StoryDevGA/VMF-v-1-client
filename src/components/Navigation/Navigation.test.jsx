@@ -13,10 +13,20 @@ import Navigation from './Navigation.jsx'
 import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
+import { useAuth } from '../../hooks/useAuth.js'
+
+vi.mock('../../hooks/useAuth.js', () => ({
+  useAuth: vi.fn(),
+}))
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
+  useAuth.mockReturnValue({
+    logout: mockLogout,
+    logoutResult: { isLoading: false },
+  })
+  mockLogout.mockClear()
 })
 
 const anonymousUser = null
@@ -29,6 +39,17 @@ const customerAdminUser = {
   memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
   tenantMemberships: [],
   vmfGrants: [],
+}
+
+const singleTenantCustomerAdminUser = {
+  ...customerAdminUser,
+  memberships: [
+    {
+      customerId: 'cust-1',
+      roles: ['CUSTOMER_ADMIN'],
+      customer: { topology: 'SINGLE_TENANT' },
+    },
+  ],
 }
 
 const superAdminUser = {
@@ -51,7 +72,9 @@ const basicUser = {
   vmfGrants: [],
 }
 
-function createTestStore(user, status = 'authenticated') {
+const mockLogout = vi.fn().mockResolvedValue(undefined)
+
+function createTestStore(user, status = 'authenticated', tenantContextState = {}) {
   return configureStore({
     reducer: {
       auth: authReducer,
@@ -61,6 +84,12 @@ function createTestStore(user, status = 'authenticated') {
     middleware: (gDM) => gDM().concat(baseApi.middleware),
     preloadedState: {
       auth: { user, status },
+      tenantContext: {
+        customerId: null,
+        tenantId: null,
+        tenantName: null,
+        ...tenantContextState,
+      },
     },
   })
 }
@@ -93,15 +122,27 @@ describe('Navigation', () => {
     expect(screen.queryByRole('button', { name: /system health/i })).not.toBeInTheDocument()
   })
 
-  it('shows system health submenu with monitoring for CUSTOMER_ADMIN', async () => {
+  it('shows Admin and System Health menus for CUSTOMER_ADMIN', async () => {
     const user = userEvent.setup()
-    const store = createTestStore(customerAdminUser)
+    const store = createTestStore(customerAdminUser, 'authenticated', { customerId: 'cust-1' })
     renderNavigation(store)
 
+    expect(screen.getByRole('button', { name: /^admin$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^customer admin$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+    expect(screen.getByRole('link', { name: /manage users/i })).toHaveAttribute(
+      'href',
+      '/app/administration/edit-users',
+    )
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
 
     await user.click(screen.getByRole('button', { name: /system health/i }))
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
@@ -110,6 +151,19 @@ describe('Navigation', () => {
     )
     expect(screen.queryByRole('link', { name: /audit logs/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /denied access/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Manage Tenants from the Admin menu for a selected single-tenant customer', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(singleTenantCustomerAdminUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
   it('shows system admin submenu links for SUPER_ADMIN', async () => {
@@ -152,6 +206,7 @@ describe('Navigation', () => {
       'href',
       '/help',
     )
+    expect(within(topLevelItems[4]).getByRole('button', { name: /^sign out$/i })).toBeInTheDocument()
   })
 
   it('does not render a Dashboard top-level menu item for SUPER_ADMIN', () => {
@@ -227,7 +282,7 @@ describe('Navigation', () => {
     )
   })
 
-  it('renders Help as the last top-level navigation item', () => {
+  it('renders Sign Out as the last top-level navigation item for admin users', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
@@ -235,9 +290,16 @@ describe('Navigation', () => {
     const topLevelItems = Array.from(primaryMenu.children)
     const lastItem = topLevelItems[topLevelItems.length - 1]
 
-    expect(within(lastItem).getByRole('link', { name: /^help$/i })).toHaveAttribute(
-      'href',
-      '/help',
-    )
+    expect(within(lastItem).getByRole('button', { name: /^sign out$/i })).toBeInTheDocument()
+  })
+
+  it('calls logout when Sign Out is clicked', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(customerAdminUser, 'authenticated', { customerId: 'cust-1' })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^sign out$/i }))
+
+    expect(mockLogout).toHaveBeenCalledTimes(1)
   })
 })

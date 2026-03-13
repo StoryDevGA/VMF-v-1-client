@@ -33,7 +33,8 @@
 }
 
 .nav__link,
-.nav__group-toggle {
+.nav__group-toggle,
+.nav__action {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
@@ -59,7 +60,8 @@
   background-color: var(--color-background-secondary);
 }
 
-.nav__link:hover {
+.nav__link:hover,
+.nav__action:hover {
   color: var(--color-text-primary);
   background-color: var(--color-background-secondary);
 }
@@ -79,6 +81,7 @@
 
 .nav__group-toggle:focus-visible,
 .nav__link:focus-visible,
+.nav__action:focus-visible,
 .nav__submenu-link:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
@@ -190,7 +193,8 @@
     text-transform: none;
   }
 
-  .nav__link {
+  .nav__link,
+  .nav__action {
     justify-content: flex-start;
     width: 100%;
     padding: var(--spacing-md) var(--spacing-lg);

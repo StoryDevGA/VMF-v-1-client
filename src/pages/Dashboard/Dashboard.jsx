@@ -53,6 +53,7 @@ function Dashboard() {
 
   const hasAdminAccess = isSuperAdmin || isCustomerAdmin
   const hasCustomerContext = Boolean(customerId)
+  const shouldUseHeaderAdminMenu = isCustomerAdmin && !isSuperAdmin
 
   /** Derive a human-friendly primary role label. */
   const primaryRole = useMemo(() => {
@@ -74,7 +75,7 @@ function Dashboard() {
           'Create, edit, disable, and review user access within customer scope.',
         to: '/app/administration/edit-users',
         icon: <MdGroups aria-hidden="true" />,
-        visible: hasAdminAccess,
+        visible: isSuperAdmin,
         enabled: hasCustomerContext,
         disabledReason:
           'Select a customer in the Context panel to unlock user management.',
@@ -86,7 +87,7 @@ function Dashboard() {
           'Create and maintain tenant records and tenant admin assignments.',
         to: '/app/administration/maintain-tenants',
         icon: <MdBusiness aria-hidden="true" />,
-        visible: hasAdminAccess && (!hasCustomerContext || supportsTenantManagement),
+        visible: isSuperAdmin && (!hasCustomerContext || supportsTenantManagement),
         enabled: hasCustomerContext,
         disabledReason:
           'Select a customer in the Context panel to unlock tenant management.',
@@ -98,7 +99,7 @@ function Dashboard() {
           'Review platform health, performance signals, and active alerts.',
         to: '/app/administration/system-monitoring',
         icon: <MdMonitorHeart aria-hidden="true" />,
-        visible: hasAdminAccess,
+        visible: isSuperAdmin,
         enabled: true,
         disabledReason: '',
       },
@@ -182,7 +183,7 @@ function Dashboard() {
     ]
 
     return tiles.filter((tile) => tile.visible)
-  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin])
+  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin, supportsTenantManagement])
 
   const quickLinks = useMemo(() => {
     if (isSuperAdmin) {
@@ -226,27 +227,8 @@ function Dashboard() {
       ]
     }
 
-    const actions = [{ key: 'help', label: 'Help', to: '/help', visible: true }]
-
-    if (hasAdminAccess) {
-      actions.push(
-        {
-          key: 'users',
-          label: 'Edit Users',
-          to: '/app/administration/edit-users',
-          visible: hasCustomerContext,
-        },
-        {
-          key: 'monitoring',
-          label: 'Monitoring',
-          to: '/app/administration/system-monitoring',
-          visible: true,
-        },
-      )
-    }
-
-    return actions.filter((action) => action.visible)
-  }, [hasAdminAccess, hasCustomerContext, isSuperAdmin, supportsTenantManagement])
+    return [{ key: 'help', label: 'Help', to: '/help', visible: true }]
+  }, [isSuperAdmin])
 
   const handleLogout = async () => {
     if (logoutResult.isLoading) return
@@ -280,42 +262,52 @@ function Dashboard() {
           <Card.Header>
             <h2 className="dashboard__section-title">Workflow</h2>
             <p className="dashboard__section-subtitle">
-              Role-aware shortcuts to core operational flows.
+              {shouldUseHeaderAdminMenu
+                ? 'Customer administration now lives in the header menus.'
+                : 'Role-aware shortcuts to core operational flows.'}
             </p>
           </Card.Header>
           <Card.Body>
-            <div className="dashboard__tiles" role="list">
-              {workflowTiles.map((tile) => (
-                <article
-                  key={tile.key}
-                  className={[
-                    'dashboard__tile',
-                    !tile.enabled && 'dashboard__tile--disabled',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  role="listitem"
-                >
-                  <div className="dashboard__tile-title-row">
-                    <span className="dashboard__tile-icon">{tile.icon}</span>
-                    <h3 className="dashboard__tile-title">{tile.title}</h3>
-                  </div>
-                  <p className="dashboard__tile-description">{tile.description}</p>
-                  <Link
-                    to={tile.to}
-                    disabled={!tile.enabled}
-                    className="dashboard__tile-link"
-                    variant="primary"
-                    underline="none"
+            {shouldUseHeaderAdminMenu ? (
+              <p className="dashboard__hint" role="note">
+                Use the header <strong>Admin</strong> menu for Manage Users and, when the
+                selected customer supports it, Manage Tenants. Use <strong>System Health</strong>
+                for Monitoring. Sign out is also available from the header.
+              </p>
+            ) : (
+              <div className="dashboard__tiles" role="list">
+                {workflowTiles.map((tile) => (
+                  <article
+                    key={tile.key}
+                    className={[
+                      'dashboard__tile',
+                      !tile.enabled && 'dashboard__tile--disabled',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    role="listitem"
                   >
-                    Open {tile.title}
-                  </Link>
-                  {!tile.enabled && tile.disabledReason && (
-                    <p className="dashboard__tile-reason">{tile.disabledReason}</p>
-                  )}
-                </article>
-              ))}
-            </div>
+                    <div className="dashboard__tile-title-row">
+                      <span className="dashboard__tile-icon">{tile.icon}</span>
+                      <h3 className="dashboard__tile-title">{tile.title}</h3>
+                    </div>
+                    <p className="dashboard__tile-description">{tile.description}</p>
+                    <Link
+                      to={tile.to}
+                      disabled={!tile.enabled}
+                      className="dashboard__tile-link"
+                      variant="primary"
+                      underline="none"
+                    >
+                      Open {tile.title}
+                    </Link>
+                    {!tile.enabled && tile.disabledReason && (
+                      <p className="dashboard__tile-reason">{tile.disabledReason}</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
           </Card.Body>
         </Card>
 
