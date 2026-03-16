@@ -533,9 +533,11 @@ describe('EditUsers page', () => {
 
     await user.click(screen.getByRole('checkbox', { name: /select row user-2/i }))
 
-    expect(
-      screen.getByRole('region', { name: /bulk actions for selected users/i }),
-    ).toBeInTheDocument()
+    const selectionBar = screen.getByRole('region', { name: /bulk actions for selected users/i })
+
+    expect(selectionBar).toBeInTheDocument()
+    expect(selectionBar).toHaveClass('edit-users__selection-bar--floating')
+    expect(screen.getByText(/bulk update and bulk disable will apply only to the selected users on this page/i)).toBeInTheDocument()
     expect(screen.getByText(/1 selected/i)).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /bulk update selected/i }),
@@ -543,6 +545,7 @@ describe('EditUsers page', () => {
     expect(
       screen.getByRole('button', { name: /bulk disable selected/i }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/clear selection/i)).toBeInTheDocument()
   })
 
   it('opens the bulk-update dialog from the selected-users action bar', async () => {
