@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react'
+import { MdInfoOutline } from 'react-icons/md'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
@@ -8,6 +9,7 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { Tooltip } from '../../components/Tooltip'
 import './MaintainTenants.css'
 
 const STATUS_OPTIONS = [
@@ -21,6 +23,12 @@ const STATUS_VARIANT_MAP = {
   ENABLED: 'success',
   DISABLED: 'error',
   ARCHIVED: 'neutral',
+}
+
+const STATUS_LABEL_MAP = {
+  ENABLED: 'Enabled',
+  DISABLED: 'Disabled',
+  ARCHIVED: 'Archived',
 }
 
 const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
@@ -55,6 +63,40 @@ const getTenantLifecycleDetail = (tenant) => {
   }
 
   return 'Lifecycle state requires review before making access changes.'
+}
+
+function TenantStatusCell({ tenant }) {
+  const tenantStatus = getTenantStatus(tenant)
+  const tenantName = tenant?.name || tenant?.id || 'tenant'
+
+  return (
+    <div className="maintain-tenants__status-summary">
+      <Status
+        variant={STATUS_VARIANT_MAP[tenantStatus] ?? 'neutral'}
+        size="sm"
+        showIcon
+      >
+        {STATUS_LABEL_MAP[tenantStatus] ?? tenantStatus ?? 'Unknown'}
+      </Status>
+      <Tooltip
+        content={getTenantLifecycleDetail(tenant)}
+        position="top"
+        align="start"
+        openDelay={0}
+        closeDelay={0}
+        className="maintain-tenants__status-tooltip"
+      >
+        <button
+          type="button"
+          className="maintain-tenants__status-help-trigger"
+          aria-label={`Explain status for ${tenantName}`}
+        >
+          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <span className="sr-only">Explain tenant status</span>
+        </button>
+      </Tooltip>
+    </div>
+  )
 }
 
 function TenantRowActionsMenu({ row, actions, onAction }) {
@@ -175,20 +217,7 @@ export function TenantListView({
       {
         key: 'status',
         label: 'Status',
-        render: (_value, row) => (
-          <div className="maintain-tenants__status-cell">
-            <Status
-              variant={STATUS_VARIANT_MAP[row.status] ?? 'neutral'}
-              size="sm"
-              showIcon
-            >
-              {row.status ?? 'UNKNOWN'}
-            </Status>
-            <span className="maintain-tenants__status-detail">
-              {getTenantLifecycleDetail(row)}
-            </span>
-          </div>
-        ),
+        render: (_value, row) => <TenantStatusCell tenant={row} />,
       },
       {
         key: 'isDefault',

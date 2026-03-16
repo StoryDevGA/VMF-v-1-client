@@ -348,7 +348,40 @@ describe('MaintainTenants page', () => {
     expect(within(disabledActions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
 
     expect(screen.getByRole('combobox', { name: /actions for archived tenant/i })).toBeDisabled()
-    expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
+  })
+
+  it('renders compact status labels and exposes lifecycle detail on demand', async () => {
+    const user = userEvent.setup()
+
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenant, defaultTenant, disabledTenant, archivedTenant],
+        meta: { page: 1, pageSize: 20, total: 4, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    expect(screen.getAllByText('Enabled').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Archived').length).toBeGreaterThanOrEqual(1)
+
+    const enabledStatusHelp = screen.getByRole('button', { name: /explain status for enabled tenant/i })
+    const enabledDetail = screen.getByText(/users assigned here retain access/i)
+
+    expect(enabledDetail).not.toBeVisible()
+
+    await user.hover(enabledStatusHelp)
+
+    expect(enabledDetail).toBeVisible()
+
+    await user.unhover(enabledStatusHelp)
+    await user.hover(screen.getByRole('button', { name: /explain status for archived tenant/i }))
+
+    expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeVisible()
   })
 
   it('opens the edit drawer from the tenant name button', async () => {
@@ -365,7 +398,7 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    await user.click(screen.getByRole('button', { name: /enabled tenant/i }))
+    await user.click(screen.getByRole('button', { name: /^enabled tenant$/i }))
 
     expect(await screen.findByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
   })
