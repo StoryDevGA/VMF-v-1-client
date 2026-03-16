@@ -103,7 +103,6 @@ function UserRolesCell({ row }) {
   }, [isTooltipOpen])
 
   if (roles.length === 0) return '--'
-  if (roles.length === 1) return roles[0]
 
   return (
     <div className="edit-users__roles-summary" ref={containerRef}>
@@ -128,7 +127,7 @@ function UserRolesCell({ row }) {
         <button
           type="button"
           className="edit-users__roles-trigger"
-          aria-label={`See all roles for ${userName}`}
+          aria-label={`Show roles for ${userName}`}
           aria-controls={tooltipId}
           aria-expanded={isTooltipOpen}
           onClick={() => setIsTooltipOpen(true)}
@@ -145,7 +144,7 @@ function UserRolesCell({ row }) {
             focusable="false"
             className="edit-users__roles-trigger-icon"
           />
-          <span>see all</span>
+          <span>all</span>
         </button>
       </Tooltip>
     </div>

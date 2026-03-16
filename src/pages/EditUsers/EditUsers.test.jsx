@@ -147,6 +147,20 @@ const disabledManagedUser = {
   identityPlus: { trustStatus: 'REVOKED' },
 }
 
+const multiRoleManagedUser = {
+  _id: 'user-5',
+  email: 'multi@acme.com',
+  name: 'Multi Role User',
+  isActive: true,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER', 'TENANT_ADMIN'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'TRUSTED', trustedAt: '2026-01-17T11:15:00Z' },
+}
+
 const inactiveCustomerAdminUser = {
   ...customerAdminUser,
   memberships: [
@@ -453,6 +467,36 @@ describe('EditUsers page', () => {
     expect(
       screen.getByText(/user has completed sign-in and currently has active access/i),
     ).toBeVisible()
+  })
+
+  it('renders compact role summaries for both single-role and multi-role rows', async () => {
+    const user = userEvent.setup()
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, multiRoleManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    expect(
+      screen.getByRole('button', { name: /show roles for owner user/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /show roles for multi role user/i }),
+    ).toBeInTheDocument()
+
+    await user.hover(screen.getByRole('button', { name: /show roles for owner user/i }))
+
+    expect(screen.getByText('CUSTOMER_ADMIN')).toBeVisible()
+
+    await user.unhover(screen.getByRole('button', { name: /show roles for owner user/i }))
+    await user.hover(screen.getByRole('button', { name: /show roles for multi role user/i }))
+
+    expect(screen.getByText('TENANT_ADMIN')).toBeVisible()
+    expect(screen.getByText('USER')).toBeVisible()
   })
 
   it('opens Create User wizard when button is clicked', async () => {
