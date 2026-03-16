@@ -10,10 +10,23 @@
  * - Hook usage guard
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Dialog } from '../Dialog'
 import { ToasterProvider, useToaster } from './Toaster'
+
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
+    this.open = true
+    this.setAttribute('open', '')
+  })
+
+  HTMLDialogElement.prototype.close = vi.fn(function closeMock() {
+    this.open = false
+    this.removeAttribute('open')
+  })
+})
 
 function TestHarness({ duration = 1000 }) {
   const { addToast } = useToaster()
@@ -25,6 +38,31 @@ function TestHarness({ duration = 1000 }) {
     >
       Add Toast
     </button>
+  )
+}
+
+function DialogToastHarness() {
+  const { addToast } = useToaster()
+
+  return (
+    <Dialog open>
+      <Dialog.Header>
+        <h2>Dialog Title</h2>
+      </Dialog.Header>
+      <Dialog.Body>
+        <button
+          type="button"
+          onClick={() =>
+            addToast({
+              title: 'Saved',
+              description: 'Profile updated',
+              variant: 'success',
+            })}
+        >
+          Add Dialog Toast
+        </button>
+      </Dialog.Body>
+    </Dialog>
   )
 }
 
@@ -83,6 +121,20 @@ describe('Toaster', () => {
 
     const titles = screen.getAllByText('Saved')
     expect(titles).toHaveLength(2)
+  })
+
+  it('renders active toasts inside the topmost open dialog when a popup is active', async () => {
+    const user = userEvent.setup()
+    renderWithToaster(<DialogToastHarness />)
+
+    await user.click(screen.getByRole('button', { name: 'Add Dialog Toast' }))
+
+    const dialog = screen.getByRole('dialog')
+    const toastRegion = screen.getByRole('status')
+
+    expect(toastRegion).toHaveClass('toaster--modal-hosted')
+    expect(toastRegion.closest('dialog')).toBe(dialog)
+    expect(screen.getByText('Saved')).toBeInTheDocument()
   })
 
   it('throws if hook used outside provider', () => {

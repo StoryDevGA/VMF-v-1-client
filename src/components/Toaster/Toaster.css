@@ -15,6 +15,12 @@
   width: min(420px, 90vw);
 }
 
+.toaster--modal-hosted {
+  position: absolute;
+  z-index: 11;
+  width: min(420px, calc(100% - var(--spacing-lg) * 2));
+}
+
 .toaster--top-left {
   top: var(--spacing-lg);
   left: var(--spacing-lg);
@@ -39,6 +45,30 @@
   align-items: flex-end;
 }
 
+.toaster--modal-hosted.toaster--top-left,
+.toaster--modal-hosted.toaster--top-right {
+  top: var(--spacing-md);
+  bottom: auto;
+}
+
+.toaster--modal-hosted.toaster--bottom-left,
+.toaster--modal-hosted.toaster--bottom-right {
+  bottom: var(--spacing-md);
+  top: auto;
+}
+
+.toaster--modal-hosted.toaster--top-left,
+.toaster--modal-hosted.toaster--bottom-left {
+  left: var(--spacing-md);
+  right: auto;
+}
+
+.toaster--modal-hosted.toaster--top-right,
+.toaster--modal-hosted.toaster--bottom-right {
+  right: var(--spacing-md);
+  left: auto;
+}
+
 .toast {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -52,6 +82,10 @@
   width: 100%;
   pointer-events: auto;
   animation: slide-in var(--transition-base) ease-out;
+}
+
+.toaster--modal-hosted .toast {
+  box-shadow: var(--shadow-xl);
 }
 
 .toast__body {
@@ -129,6 +163,12 @@
 
 @media (max-width: 640px) {
   .toaster {
+    left: var(--spacing-sm);
+    right: var(--spacing-sm);
+    width: auto;
+  }
+
+  .toaster--modal-hosted {
     left: var(--spacing-sm);
     right: var(--spacing-sm);
     width: auto;

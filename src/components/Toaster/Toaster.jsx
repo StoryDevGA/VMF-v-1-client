@@ -13,12 +13,24 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MdClose } from 'react-icons/md'
 import './Toaster.css'
 
 const ToasterContext = createContext(null)
 
 const variants = ['info', 'success', 'warning', 'error']
+
+function getActiveDialogToastHost() {
+  if (typeof document === 'undefined') return null
+
+  const openDialogs = Array.from(document.querySelectorAll('dialog[open]'))
+  const topDialog = openDialogs[openDialogs.length - 1]
+
+  if (!topDialog) return null
+
+  return topDialog.querySelector('.dialog__container') ?? topDialog
+}
 
 export function ToasterProvider({
   children,
@@ -29,6 +41,7 @@ export function ToasterProvider({
   const allowedPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
   const resolvedPosition = allowedPositions.includes(position) ? position : 'top-right'
   const [toasts, setToasts] = useState([])
+  const [portalHost, setPortalHost] = useState(null)
   const timersRef = useRef(new Map())
 
   const removeToast = useCallback((id) => {
@@ -82,35 +95,70 @@ export function ToasterProvider({
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.body) return undefined
+
+    const updatePortalHost = () => {
+      setPortalHost(getActiveDialogToastHost())
+    }
+
+    updatePortalHost()
+
+    const observer = new MutationObserver(() => {
+      updatePortalHost()
+    })
+
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['open'],
+    })
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
   const value = useMemo(() => ({ addToast, removeToast, position: resolvedPosition }), [addToast, removeToast, resolvedPosition])
+  const activePortalHost = portalHost?.isConnected ? portalHost : null
+  const toasterMarkup = (
+    <div
+      className={[
+        'toaster',
+        `toaster--${resolvedPosition}`,
+        activePortalHost ? 'toaster--modal-hosted' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      role="status"
+      aria-live="polite"
+    >
+      {toasts.map((toast) => (
+        <div key={toast.id} className={['toast', `toast--${toast.variant}`].join(' ')}>
+          <div className="toast__body">
+            <div className="toast__title">{toast.title}</div>
+            {toast.description ? (
+              <div className="toast__description">{toast.description}</div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="toast__close"
+            aria-label="Dismiss notification"
+            onClick={() => removeToast(toast.id)}
+          >
+            <MdClose className="toast__close-icon" aria-hidden="true" focusable="false" />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <ToasterContext.Provider value={value}>
       {children}
-      <div
-        className={['toaster', `toaster--${resolvedPosition}`].join(' ')}
-        role="status"
-        aria-live="polite"
-      >
-        {toasts.map((toast) => (
-          <div key={toast.id} className={['toast', `toast--${toast.variant}`].join(' ')}>
-            <div className="toast__body">
-              <div className="toast__title">{toast.title}</div>
-              {toast.description ? (
-                <div className="toast__description">{toast.description}</div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="toast__close"
-              aria-label="Dismiss notification"
-              onClick={() => removeToast(toast.id)}
-            >
-              <MdClose className="toast__close-icon" aria-hidden="true" focusable="false" />
-            </button>
-          </div>
-        ))}
-      </div>
+      {activePortalHost ? createPortal(toasterMarkup, activePortalHost) : toasterMarkup}
     </ToasterContext.Provider>
   )
 }
