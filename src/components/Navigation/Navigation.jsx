@@ -12,7 +12,11 @@ import { MdExpandMore } from 'react-icons/md'
 import { useAuth } from '../../hooks/useAuth.js'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import { selectSelectedCustomerId } from '../../store/slices/tenantContextSlice.js'
-import { getCustomerTopology, isSuperAdmin as checkIsSuperAdmin } from '../../utils/authorization.js'
+import {
+  getCustomerTopology,
+  hasAnyMultiTenantCustomerAdminScope,
+  isSuperAdmin as checkIsSuperAdmin,
+} from '../../utils/authorization.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
@@ -31,8 +35,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     () => getCustomerTopology(user, selectedCustomerId),
     [selectedCustomerId, user],
   )
-  const supportsTenantManagement =
-    !selectedCustomerId || selectedCustomerTopology !== 'SINGLE_TENANT'
+  const supportsTenantManagement = useMemo(() => {
+    if (!hasCustomerAdminAccess) return false
+    if (selectedCustomerId) return selectedCustomerTopology !== 'SINGLE_TENANT'
+    return hasAnyMultiTenantCustomerAdminScope(user)
+  }, [hasCustomerAdminAccess, selectedCustomerId, selectedCustomerTopology, user])
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []

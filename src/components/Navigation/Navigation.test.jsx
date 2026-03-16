@@ -166,6 +166,40 @@ describe('Navigation', () => {
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
+  it('hides Manage Tenants before customer context initializes for a single-tenant customer admin', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(singleTenantCustomerAdminUser)
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps Manage Tenants available before customer context initializes for a multi-tenant customer admin', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore({
+      ...customerAdminUser,
+      memberships: [
+        {
+          customerId: 'cust-1',
+          roles: ['CUSTOMER_ADMIN'],
+          customer: { topology: 'MULTI_TENANT' },
+        },
+      ],
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
+  })
+
   it('shows system admin submenu links for SUPER_ADMIN', async () => {
     const user = userEvent.setup()
     const store = createTestStore(superAdminUser)

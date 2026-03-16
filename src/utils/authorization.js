@@ -224,6 +224,40 @@ export const hasAnyCustomerRole = (user, role) => {
   )
 }
 
+/**
+ * Best-effort check for whether any CUSTOMER_ADMIN membership currently
+ * resolves to multi-tenant topology. Used when customer-admin UI needs a
+ * safer startup fallback before selected customer context is initialized.
+ *
+ * Returns `true` when at least one admin membership is explicitly
+ * `MULTI_TENANT`. Returns `false` when all resolved admin topologies are
+ * `SINGLE_TENANT`. If no admin membership exposes topology yet, this keeps the
+ * legacy permissive fallback and returns `true`.
+ *
+ * @param {Object} user
+ * @returns {boolean}
+ */
+export const hasAnyMultiTenantCustomerAdminScope = (user) => {
+  if (!user?.memberships) return false
+
+  const customerAdminMemberships = user.memberships.filter(
+    (membership) =>
+      membership?.customerId !== null
+      && membership?.customerId !== undefined
+      && (membership.roles ?? []).includes('CUSTOMER_ADMIN'),
+  )
+
+  if (customerAdminMemberships.length === 0) return false
+
+  const resolvedTopologies = customerAdminMemberships
+    .map((membership) => getCustomerTopology(user, membership.customerId))
+    .filter(Boolean)
+
+  if (resolvedTopologies.length === 0) return true
+
+  return resolvedTopologies.includes('MULTI_TENANT')
+}
+
 /* ------------------------------------------------------------------ */
 /*  Tenant                                                            */
 /* ------------------------------------------------------------------ */

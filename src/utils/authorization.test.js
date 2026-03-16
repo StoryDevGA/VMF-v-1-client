@@ -24,6 +24,7 @@ import {
   getCustomerTopology,
   isCustomerInactiveForContext,
   hasAnyCustomerRole,
+  hasAnyMultiTenantCustomerAdminScope,
   getUserTenantRoles,
   hasTenantRole,
   hasTenantAccess,
@@ -340,6 +341,57 @@ describe('Customer role helpers', () => {
 
     it('returns false for null user', () => {
       expect(hasAnyCustomerRole(null, 'CUSTOMER_ADMIN')).toBe(false)
+    })
+  })
+
+  describe('hasAnyMultiTenantCustomerAdminScope', () => {
+    it('returns false when all customer-admin memberships resolve to single-tenant', () => {
+      expect(
+        hasAnyMultiTenantCustomerAdminScope({
+          memberships: [
+            {
+              customerId: CUSTOMER_ID,
+              roles: ['CUSTOMER_ADMIN'],
+              customer: { topology: 'SINGLE_TENANT' },
+            },
+          ],
+        }),
+      ).toBe(false)
+    })
+
+    it('returns true when at least one customer-admin membership resolves to multi-tenant', () => {
+      expect(
+        hasAnyMultiTenantCustomerAdminScope({
+          memberships: [
+            {
+              customerId: CUSTOMER_ID,
+              roles: ['CUSTOMER_ADMIN'],
+              customer: { topology: 'SINGLE_TENANT' },
+            },
+            {
+              customerId: CUSTOMER_ID_2,
+              roles: ['CUSTOMER_ADMIN'],
+              customer: { topology: 'MULTI_TENANT' },
+            },
+          ],
+        }),
+      ).toBe(true)
+    })
+
+    it('keeps the permissive fallback when topology has not been exposed yet', () => {
+      expect(
+        hasAnyMultiTenantCustomerAdminScope({
+          memberships: [{ customerId: CUSTOMER_ID, roles: ['CUSTOMER_ADMIN'] }],
+        }),
+      ).toBe(true)
+    })
+
+    it('returns false when the user has no customer-admin memberships', () => {
+      expect(
+        hasAnyMultiTenantCustomerAdminScope({
+          memberships: [{ customerId: CUSTOMER_ID, roles: ['USER'] }],
+        }),
+      ).toBe(false)
     })
   })
 })
