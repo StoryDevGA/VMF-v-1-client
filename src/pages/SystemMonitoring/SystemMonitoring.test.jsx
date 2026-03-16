@@ -155,16 +155,13 @@ describe('SystemMonitoring page', () => {
     )
 
     render(<SystemMonitoring />)
-    expect(
-      screen.getByText(/detailed dependency status is available to super admins only/i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/detailed performance metrics are available to super admins only/i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getAllByText(/alert lifecycle is available to super admins only/i).length,
-    ).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText(/trends are available to super admins only/i)).toBeInTheDocument()
+    expect(screen.getByText(/overall: healthy/i)).toBeInTheDocument()
+    expect(screen.queryByText(/dependency status/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/performance metrics/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /active alerts/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /resolved alerts/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /health trends/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/super admins only/i)).not.toBeInTheDocument()
   })
 
   it('calls refetchAll on Refresh button click', async () => {

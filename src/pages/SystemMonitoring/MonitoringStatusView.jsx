@@ -31,48 +31,40 @@ export function MonitoringStatusView({
         </Card>
       </Fieldset>
 
-      <div className="system-monitoring__grid">
-        <Fieldset className="system-monitoring__fieldset">
-          <Fieldset.Legend className="system-monitoring__legend">
-            <h2 className="system-monitoring__section-title">Dependency Status</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="system-monitoring__card">
-            <Card.Body>
-              {isLoading && dependencies.length === 0 ? (
-                <Spinner size="md" />
-              ) : dependencies.length > 0 ? (
-                <ul className="system-monitoring__dependency-list">
-                  {dependencies.map((dep) => (
-                    <li key={dep.id} className="system-monitoring__dependency-row">
-                      <span className="system-monitoring__dependency-name">{dep.name}</span>
-                      <Status variant={statusToVariant(dep.status)} size="sm" showIcon>
-                        {dep.status}
-                      </Status>
-                    </li>
-                  ))}
-                </ul>
-              ) : !isSuperAdmin ? (
-                <p className="system-monitoring__empty">
-                  Detailed dependency status is available to super admins only.
-                </p>
-              ) : (
-                <p className="system-monitoring__empty">No dependency data available.</p>
-              )}
-            </Card.Body>
-          </Card>
-        </Fieldset>
+      {isSuperAdmin ? (
+        <div className="system-monitoring__grid">
+          <Fieldset className="system-monitoring__fieldset">
+            <Fieldset.Legend className="system-monitoring__legend">
+              <h2 className="system-monitoring__section-title">Dependency Status</h2>
+            </Fieldset.Legend>
+            <Card variant="elevated" className="system-monitoring__card">
+              <Card.Body>
+                {isLoading && dependencies.length === 0 ? (
+                  <Spinner size="md" />
+                ) : dependencies.length > 0 ? (
+                  <ul className="system-monitoring__dependency-list">
+                    {dependencies.map((dep) => (
+                      <li key={dep.id} className="system-monitoring__dependency-row">
+                        <span className="system-monitoring__dependency-name">{dep.name}</span>
+                        <Status variant={statusToVariant(dep.status)} size="sm" showIcon>
+                          {dep.status}
+                        </Status>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="system-monitoring__empty">No dependency data available.</p>
+                )}
+              </Card.Body>
+            </Card>
+          </Fieldset>
 
-        <Fieldset className="system-monitoring__fieldset">
-          <Fieldset.Legend className="system-monitoring__legend">
-            <h2 className="system-monitoring__section-title">Performance Metrics</h2>
-          </Fieldset.Legend>
-          <Card variant="elevated" className="system-monitoring__card">
-            <Card.Body>
-              {!isSuperAdmin ? (
-                <p className="system-monitoring__empty">
-                  Detailed performance metrics are available to super admins only.
-                </p>
-              ) : (
+          <Fieldset className="system-monitoring__fieldset">
+            <Fieldset.Legend className="system-monitoring__legend">
+              <h2 className="system-monitoring__section-title">Performance Metrics</h2>
+            </Fieldset.Legend>
+            <Card variant="elevated" className="system-monitoring__card">
+              <Card.Body>
                 <dl className="system-monitoring__metrics">
                   <div className="system-monitoring__metric-row">
                     <dt>Average response</dt>
@@ -103,11 +95,11 @@ export function MonitoringStatusView({
                     <dd>{formatUptime(metricSnapshot)}</dd>
                   </div>
                 </dl>
-              )}
-            </Card.Body>
-          </Card>
-        </Fieldset>
-      </div>
+              </Card.Body>
+            </Card>
+          </Fieldset>
+        </div>
+      ) : null}
     </>
   )
 }

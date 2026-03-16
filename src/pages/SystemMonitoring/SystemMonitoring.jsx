@@ -94,20 +94,24 @@ function SystemMonitoring() {
         isFetching={isFetching}
       />
 
-      <MonitoringAlertsView
-        isSuperAdmin={isSuperAdmin}
-        activeAlerts={activeAlerts}
-        resolvedAlerts={resolvedAlerts}
-        alertSummary={alertSummary}
-      />
+      {isSuperAdmin ? (
+        <>
+          <MonitoringAlertsView
+            isSuperAdmin={isSuperAdmin}
+            activeAlerts={activeAlerts}
+            resolvedAlerts={resolvedAlerts}
+            alertSummary={alertSummary}
+          />
 
-      <MonitoringTrendsView
-        isSuperAdmin={isSuperAdmin}
-        recentTrendPoints={recentTrendPoints}
-        trendWindowMs={trendWindowMs}
-        trendBucketMs={trendBucketMs}
-        trendGeneratedAt={trendGeneratedAt}
-      />
+          <MonitoringTrendsView
+            isSuperAdmin={isSuperAdmin}
+            recentTrendPoints={recentTrendPoints}
+            trendWindowMs={trendWindowMs}
+            trendBucketMs={trendBucketMs}
+            trendGeneratedAt={trendGeneratedAt}
+          />
+        </>
+      ) : null}
     </section>
   )
 }
