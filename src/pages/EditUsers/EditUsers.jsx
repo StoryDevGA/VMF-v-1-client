@@ -398,16 +398,19 @@ function EditUsers() {
     isLifecycleMutationLoading || Boolean(resendInvitationResult?.isLoading)
 
   const handleOpenBulkCreate = useCallback(() => {
+    setEditingUser(null)
     setBulkDialogConfig(BULK_CREATE_DIALOG_CONFIG)
     setShowBulkOperations(true)
   }, [])
 
   const handleOpenBulkUpdateSelected = useCallback(() => {
+    setEditingUser(null)
     setBulkDialogConfig(BULK_UPDATE_DIALOG_CONFIG)
     setShowBulkOperations(true)
   }, [])
 
   const handleOpenBulkDisableSelected = useCallback(() => {
+    setEditingUser(null)
     setBulkDialogConfig(BULK_DISABLE_DIALOG_CONFIG)
     setShowBulkOperations(true)
   }, [])
@@ -529,7 +532,10 @@ function EditUsers() {
         onBulkUpdateSelectedClick={handleOpenBulkUpdateSelected}
         onBulkDisableSelectedClick={handleOpenBulkDisableSelected}
         onClearSelection={handleClearSelection}
-        onCreateUserClick={() => setShowCreateWizard(true)}
+        onCreateUserClick={() => {
+          setEditingUser(null)
+          setShowCreateWizard(true)
+        }}
         onEditUserClick={setEditingUser}
         onTransferOwnershipClick={(targetUser) => {
           setEditingUser(null)

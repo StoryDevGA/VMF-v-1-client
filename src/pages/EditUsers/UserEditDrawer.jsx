@@ -1,8 +1,8 @@
 /**
- * User Edit Drawer
+ * User Edit Workspace
  *
- * Dialog for editing an existing user's roles and tenant visibility.
- * Opens as a side-sheet style dialog when a user row's Edit action is triggered.
+ * In-page workspace for editing an existing user's roles and tenant visibility.
+ * Opens beneath the catalogue when a user row's Edit action is triggered.
  *
  * @param {Object}  props
  * @param {boolean} props.open       — controls dialog visibility
@@ -11,10 +11,9 @@
  * @param {string}  props.customerId — customer scope
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Badge } from '../../components/Badge'
 import { Card } from '../../components/Card'
-import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
@@ -245,6 +244,7 @@ function UserEditDrawer({
 }) {
   const { addToast } = useToaster()
   const [updateUserMutation, { isLoading }] = useUpdateUserMutation()
+  const workspaceRef = useRef(null)
   const {
     customerId: activeCustomerId,
     tenants: tenantRows,
@@ -384,6 +384,26 @@ function UserEditDrawer({
       return next.length === prev.length ? prev : next
     })
   }, [editableRoleOptions])
+
+  useEffect(() => {
+    if (!open || !user || !workspaceRef.current) return
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (typeof workspaceRef.current.scrollIntoView === 'function') {
+      workspaceRef.current.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    }
+
+    if (typeof workspaceRef.current.focus === 'function') {
+      workspaceRef.current.focus({ preventScroll: true })
+    }
+  }, [open, user])
 
   const toggleRole = useCallback((role) => {
     setSelectedRoles((prev) =>
@@ -581,7 +601,7 @@ function UserEditDrawer({
     validate,
   ])
 
-  if (!user) return null
+  if (!open || !user) return null
 
   const hasGovernedCustomerAdminRole =
     user.isCanonicalAdmin || selectedRoles.includes('CUSTOMER_ADMIN')
@@ -599,25 +619,63 @@ function UserEditDrawer({
         ? 'Only active users can receive customer ownership.'
         : CUSTOMER_ADMIN_TRANSFER_GUIDANCE
 
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      size="lg"
-      closeOnBackdropClick={!isLoading}
-      closeOnEscape={!isLoading}
-    >
-      <Dialog.Header>
-        <div className="user-edit-drawer__header">
-          <h2 className="user-edit-drawer__title">Edit User</h2>
-          <p className="user-edit-drawer__subtitle">
-            Update profile, lifecycle-aware access, and customer-scoped visibility for {user?.name || user?.email || 'this user'}.
-          </p>
-        </div>
-      </Dialog.Header>
+  const workspaceIdentity = user?.name || user?.email || 'this user'
+  const workspaceChangeSummary = hasChanges
+    ? 'You have unsaved changes in this workspace.'
+    : 'No changes staged yet. Update any editable field to enable save.'
+  const workspaceRoleSummary = hasGovernedCustomerAdminRole
+    ? 'Canonical Admin'
+    : normalizedSelectedRoles.length > 0
+      ? normalizedSelectedRoles.join(', ').replace(/_/g, ' ')
+      : 'No editable roles selected'
 
-      <Dialog.Body>
-        <div className="user-edit-drawer__layout">
+  return (
+    <section
+      ref={workspaceRef}
+      className="user-edit-drawer user-edit-drawer--workspace"
+      aria-label={`Edit user workspace for ${workspaceIdentity}`}
+      tabIndex={-1}
+    >
+      <Fieldset className="user-edit-drawer__workspace-fieldset">
+        <Fieldset.Legend className="sr-only">Edit user workspace</Fieldset.Legend>
+        <Card variant="elevated" className="user-edit-drawer__workspace-card">
+          <Card.Header className="user-edit-drawer__workspace-header">
+            <div className="user-edit-drawer__workspace-heading">
+              <div className="user-edit-drawer__header">
+                <p className="user-edit-drawer__workspace-kicker">User workspace</p>
+                <h2 className="user-edit-drawer__title">Edit User</h2>
+                <p className="user-edit-drawer__subtitle">
+                  Update profile, lifecycle-aware access, and customer-scoped visibility for {workspaceIdentity}.
+                </p>
+              </div>
+              <div className="user-edit-drawer__workspace-header-actions">
+                <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>
+                  Close Editor
+                </Button>
+              </div>
+            </div>
+            <div className="user-edit-drawer__workspace-summary" aria-label="Selected user summary">
+              <div className="user-edit-drawer__workspace-summary-item">
+                <span className="user-edit-drawer__label">Status</span>
+                <Status variant={user.isActive ? 'success' : 'error'} size="sm" showIcon>
+                  {user.isActive ? 'Active' : 'Disabled'}
+                </Status>
+              </div>
+              <div className="user-edit-drawer__workspace-summary-item">
+                <span className="user-edit-drawer__label">Trust</span>
+                <UserTrustStatus trustStatus={getUserTrustStatus(user)} size="sm" />
+              </div>
+              <div className="user-edit-drawer__workspace-summary-item">
+                <span className="user-edit-drawer__label">Access scope</span>
+                <Badge variant={hasGovernedCustomerAdminRole ? 'info' : 'neutral'} size="sm">
+                  {workspaceRoleSummary}
+                </Badge>
+              </div>
+            </div>
+          </Card.Header>
+
+          <Card.Body className="user-edit-drawer__workspace-body">
+            <div className="user-edit-drawer__layout">
           <Card variant="outlined" className="user-edit-drawer__section">
             <Card.Header className="user-edit-drawer__section-header">
               <div>
@@ -919,28 +977,35 @@ function UserEditDrawer({
             </Card>
           ) : null}
 
-          {fieldErrors.form && (
-            <p className="user-edit-drawer__error" role="alert">
-              {fieldErrors.form}
-            </p>
-          )}
-        </div>
-      </Dialog.Body>
+            {fieldErrors.form && (
+              <p className="user-edit-drawer__error" role="alert">
+                {fieldErrors.form}
+              </p>
+            )}
+          </div>
+          </Card.Body>
 
-      <Dialog.Footer className="user-edit-drawer__footer">
-        <Button variant="outline" onClick={onClose} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleSave}
-          loading={isLoading}
-          disabled={isLoading || !hasChanges}
-        >
-          Save Changes
-        </Button>
-      </Dialog.Footer>
-    </Dialog>
+          <Card.Footer className="user-edit-drawer__workspace-footer">
+            <p className="user-edit-drawer__workspace-footer-text" role="status" aria-live="polite">
+              {workspaceChangeSummary}
+            </p>
+            <div className="user-edit-drawer__footer">
+              <Button variant="outline" onClick={onClose} disabled={isLoading}>
+                Close Editor
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                loading={isLoading}
+                disabled={isLoading || !hasChanges}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </Card.Footer>
+        </Card>
+      </Fieldset>
+    </section>
   )
 }
 

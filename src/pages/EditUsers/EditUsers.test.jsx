@@ -567,7 +567,7 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
-  it('opens the edit-user dialog from the user name workspace entry', async () => {
+  it('opens the inline edit-user workspace from the user name workspace entry', async () => {
     const user = userEvent.setup()
     renderEditUsers()
 
@@ -578,6 +578,11 @@ describe('EditUsers page', () => {
         screen.getByRole('heading', { name: /^edit user$/i }),
       ).toBeInTheDocument()
     })
+
+    expect(
+      screen.getByLabelText(/edit user workspace for member user/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('opens the ownership-transfer dialog from the governed row action', async () => {

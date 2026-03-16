@@ -226,6 +226,10 @@ describe('UserEditDrawer', () => {
     expect(
       screen.getByRole('heading', { name: /edit user/i }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', { name: /close editor/i }).length,
+    ).toBeGreaterThanOrEqual(1)
     expect(screen.getByRole('heading', { name: /account details/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /access snapshot/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /role access/i })).toBeInTheDocument()
@@ -249,17 +253,17 @@ describe('UserEditDrawer', () => {
 
   it('shows Active status for active user', () => {
     renderDrawer()
-    expect(screen.getByText('Active')).toBeInTheDocument()
+    expect(screen.getAllByText('Active').length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows Disabled status for disabled user', () => {
     renderDrawer({ user: disabledUser })
-    expect(screen.getByText('Disabled')).toBeInTheDocument()
+    expect(screen.getAllByText('Disabled').length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows trust status', () => {
     renderDrawer()
-    expect(screen.getByText('Trusted')).toBeInTheDocument()
+    expect(screen.getAllByText('Trusted').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders role checkboxes', () => {
@@ -308,11 +312,11 @@ describe('UserEditDrawer', () => {
     expect(screen.getByLabelText(/^user$/i)).toBeChecked()
   })
 
-  it('calls onClose when Cancel is clicked', async () => {
+  it('calls onClose when Close Editor is clicked', async () => {
     const user = userEvent.setup()
     const { onClose } = renderDrawer()
 
-    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    await user.click(screen.getAllByRole('button', { name: /close editor/i })[0])
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
