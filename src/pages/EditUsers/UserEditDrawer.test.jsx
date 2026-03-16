@@ -392,6 +392,7 @@ describe('UserEditDrawer', () => {
 
     await waitFor(() => {
       expect(updateUser).toHaveBeenCalledWith({
+        customerId: 'cust-1',
         userId: 'user-1',
         body: { email: 'jane.updated@acme.com' },
       })
@@ -454,6 +455,7 @@ describe('UserEditDrawer', () => {
 
     await waitFor(() => {
       expect(updateUser).toHaveBeenCalledWith({
+        customerId: 'cust-1',
         userId: 'user-4',
         body: {
           tenantVisibility: ['ten-2'],
@@ -504,6 +506,7 @@ describe('UserEditDrawer', () => {
 
     await waitFor(() => {
       expect(updateUser).toHaveBeenCalledWith({
+        customerId: 'cust-1',
         userId: 'user-5',
         body: {
           roles: ['USER'],

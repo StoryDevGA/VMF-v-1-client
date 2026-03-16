@@ -84,6 +84,10 @@ const normalizeListUsersResponse = (
 }
 
 const getUserRowId = (row) => row?._id ?? row?.id ?? null
+const getScopedUserMutationUrl = (customerId, userId, suffix = '') =>
+  customerId
+    ? `/customers/${customerId}/users/${userId}${suffix}`
+    : `/users/${userId}${suffix}`
 
 export const userApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -138,16 +142,17 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * PATCH /customers/:customerId/users/:userId
      * PATCH /users/:userId
      * Updates user profile and authorization grants.
-     * Returns 409 when removing CUSTOMER_ADMIN from the canonical
-     * active admin, or assigning a second active CUSTOMER_ADMIN.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the legacy entity-scoped fallback.
      *
-     * @param {{ userId: string, body: { name?: string, email?: string, roles?: string[], tenantVisibility?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
+     * @param {{ customerId?: string, userId: string, body: { name?: string, email?: string, roles?: string[], tenantVisibility?: string[], tenantMemberships?: Array, vmfGrants?: Array } }} params
      */
     updateUser: build.mutation({
-      query: ({ userId, body }) => ({
-        url: `/users/${userId}`,
+      query: ({ customerId, userId, body }) => ({
+        url: getScopedUserMutationUrl(customerId, userId),
         method: 'PATCH',
         body,
       }),
@@ -158,15 +163,17 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * POST /customers/:customerId/users/:userId/disable
      * POST /users/:userId/disable
      * Disables a user and revokes Identity Plus trust.
-     * Returns 409 when the target is canonical admin for an active customer.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the legacy entity-scoped fallback.
      *
-     * @param {{ userId: string }} params
+     * @param {{ customerId?: string, userId: string }} params
      */
     disableUser: build.mutation({
-      query: ({ userId }) => ({
-        url: `/users/${userId}/disable`,
+      query: ({ customerId, userId }) => ({
+        url: getScopedUserMutationUrl(customerId, userId, '/disable'),
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { userId }) => [
@@ -176,15 +183,17 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * POST /customers/:customerId/users/:userId/enable
      * POST /users/:userId/enable
      * Re-enables an inactive user.
-     * Returns 422 when the user is already active.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the legacy entity-scoped fallback.
      *
-     * @param {{ userId: string }} params
+     * @param {{ customerId?: string, userId: string }} params
      */
     enableUser: build.mutation({
-      query: ({ userId }) => ({
-        url: `/users/${userId}/enable`,
+      query: ({ customerId, userId }) => ({
+        url: getScopedUserMutationUrl(customerId, userId, '/enable'),
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { userId }) => [
@@ -194,29 +203,34 @@ export const userApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * DELETE /customers/:customerId/users/:userId
      * DELETE /users/:userId
      * Permanently deletes a disabled user.
-     * Returns 409 when the target is canonical admin for an active customer.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the legacy entity-scoped fallback.
      *
-     * @param {{ userId: string }} params
+     * @param {{ customerId?: string, userId: string }} params
      */
     deleteUser: build.mutation({
-      query: ({ userId }) => ({
-        url: `/users/${userId}`,
+      query: ({ customerId, userId }) => ({
+        url: getScopedUserMutationUrl(customerId, userId),
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'User', id: 'LIST' }],
     }),
 
     /**
+     * POST /customers/:customerId/users/:userId/resend-invitation
      * POST /users/:userId/resend-invitation
      * Resends the Identity Plus invitation for an untrusted user.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the legacy entity-scoped fallback.
      *
-     * @param {{ userId: string }} params
+     * @param {{ customerId?: string, userId: string }} params
      */
     resendInvitation: build.mutation({
-      query: ({ userId }) => ({
-        url: `/users/${userId}/resend-invitation`,
+      query: ({ customerId, userId }) => ({
+        url: getScopedUserMutationUrl(customerId, userId, '/resend-invitation'),
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { userId }) => [

@@ -106,32 +106,32 @@ export function useUsers(customerId, options = {}) {
 
   /** Update user by ID */
   const updateUser = useCallback(
-    (userId, body) => updateUserMutation({ userId, body }).unwrap(),
-    [updateUserMutation],
+    (userId, body) => updateUserMutation({ customerId, userId, body }).unwrap(),
+    [customerId, updateUserMutation],
   )
 
   /** Disable user by ID */
   const disableUser = useCallback(
-    (userId) => disableUserMutation({ userId }).unwrap(),
-    [disableUserMutation],
+    (userId) => disableUserMutation({ customerId, userId }).unwrap(),
+    [customerId, disableUserMutation],
   )
 
   /** Reactivate user by ID */
   const enableUser = useCallback(
-    (userId) => enableUserMutation({ userId }).unwrap(),
-    [enableUserMutation],
+    (userId) => enableUserMutation({ customerId, userId }).unwrap(),
+    [customerId, enableUserMutation],
   )
 
   /** Delete user by ID (must be disabled first) */
   const deleteUser = useCallback(
-    (userId) => deleteUserMutation({ userId }).unwrap(),
-    [deleteUserMutation],
+    (userId) => deleteUserMutation({ customerId, userId }).unwrap(),
+    [customerId, deleteUserMutation],
   )
 
   /** Resend Identity Plus invitation for untrusted user */
   const resendInvitation = useCallback(
-    (userId) => resendInvitationMutation({ userId }).unwrap(),
-    [resendInvitationMutation],
+    (userId) => resendInvitationMutation({ customerId, userId }).unwrap(),
+    [customerId, resendInvitationMutation],
   )
 
   return {

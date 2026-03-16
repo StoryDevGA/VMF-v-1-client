@@ -129,20 +129,20 @@ export function useTenants(customerId, options = {}) {
 
   /** Update tenant by ID */
   const updateTenant = useCallback(
-    (tenantId, body) => updateTenantMutation({ tenantId, body }).unwrap(),
-    [updateTenantMutation],
+    (tenantId, body) => updateTenantMutation({ customerId, tenantId, body }).unwrap(),
+    [customerId, updateTenantMutation],
   )
 
   /** Enable tenant by ID */
   const enableTenant = useCallback(
-    (tenantId) => enableTenantMutation({ tenantId }).unwrap(),
-    [enableTenantMutation],
+    (tenantId) => enableTenantMutation({ customerId, tenantId }).unwrap(),
+    [customerId, enableTenantMutation],
   )
 
   /** Disable tenant by ID */
   const disableTenant = useCallback(
-    (tenantId) => disableTenantMutation({ tenantId }).unwrap(),
-    [disableTenantMutation],
+    (tenantId) => disableTenantMutation({ customerId, tenantId }).unwrap(),
+    [customerId, disableTenantMutation],
   )
 
   return {

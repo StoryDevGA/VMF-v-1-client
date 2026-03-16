@@ -18,6 +18,11 @@
 
 import { baseApi } from './baseApi.js'
 
+const getScopedTenantMutationUrl = (customerId, tenantId, suffix = '') =>
+  customerId
+    ? `/customers/${customerId}/tenants/${tenantId}${suffix}`
+    : `/tenants/${tenantId}${suffix}`
+
 export const tenantApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     /**
@@ -60,14 +65,17 @@ export const tenantApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * PATCH /customers/:customerId/tenants/:tenantId
      * PATCH /tenants/:tenantId
      * Updates tenant name, website, or admin user IDs.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the entity-scoped fallback.
      *
-     * @param {{ tenantId: string, body: { name?: string, website?: string, tenantAdminUserIds?: string[] } }} params
+     * @param {{ customerId?: string, tenantId: string, body: { name?: string, website?: string, tenantAdminUserIds?: string[] } }} params
      */
     updateTenant: build.mutation({
-      query: ({ tenantId, body }) => ({
-        url: `/tenants/${tenantId}`,
+      query: ({ customerId, tenantId, body }) => ({
+        url: getScopedTenantMutationUrl(customerId, tenantId),
         method: 'PATCH',
         body,
       }),
@@ -78,14 +86,17 @@ export const tenantApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * POST /customers/:customerId/tenants/:tenantId/enable
      * POST /tenants/:tenantId/enable
      * Re-enables a disabled tenant.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the entity-scoped fallback.
      *
-     * @param {{ tenantId: string }} params
+     * @param {{ customerId?: string, tenantId: string }} params
      */
     enableTenant: build.mutation({
-      query: ({ tenantId }) => ({
-        url: `/tenants/${tenantId}/enable`,
+      query: ({ customerId, tenantId }) => ({
+        url: getScopedTenantMutationUrl(customerId, tenantId, '/enable'),
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { tenantId }) => [
@@ -95,14 +106,17 @@ export const tenantApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * POST /customers/:customerId/tenants/:tenantId/disable
      * POST /tenants/:tenantId/disable
      * Disables a tenant with immediate effect.
+     * Customer-admin flows use the customer-scoped route; super-admin flows
+     * keep the entity-scoped fallback.
      *
-     * @param {{ tenantId: string }} params
+     * @param {{ customerId?: string, tenantId: string }} params
      */
     disableTenant: build.mutation({
-      query: ({ tenantId }) => ({
-        url: `/tenants/${tenantId}/disable`,
+      query: ({ customerId, tenantId }) => ({
+        url: getScopedTenantMutationUrl(customerId, tenantId, '/disable'),
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { tenantId }) => [

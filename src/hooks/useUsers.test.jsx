@@ -3,9 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const {
   mockUseListUsersQuery,
+  mockUseDisableUserMutation,
   mockUseEnableUserMutation,
 } = vi.hoisted(() => ({
   mockUseListUsersQuery: vi.fn(),
+  mockUseDisableUserMutation: vi.fn(),
   mockUseEnableUserMutation: vi.fn(),
 }))
 
@@ -13,7 +15,7 @@ vi.mock('../store/api/userApi.js', () => ({
   useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
   useCreateUserMutation: () => [vi.fn(), {}],
   useUpdateUserMutation: () => [vi.fn(), {}],
-  useDisableUserMutation: () => [vi.fn(), {}],
+  useDisableUserMutation: (...args) => mockUseDisableUserMutation(...args),
   useEnableUserMutation: (...args) => mockUseEnableUserMutation(...args),
   useDeleteUserMutation: () => [vi.fn(), {}],
   useResendInvitationMutation: () => [vi.fn(), {}],
@@ -24,6 +26,7 @@ import { useUsers } from './useUsers.js'
 describe('useUsers', () => {
   beforeEach(() => {
     mockUseListUsersQuery.mockReset()
+    mockUseDisableUserMutation.mockReset()
     mockUseEnableUserMutation.mockReset()
     mockUseListUsersQuery.mockReturnValue({
       data: {
@@ -42,6 +45,7 @@ describe('useUsers', () => {
       isFetching: false,
       error: null,
     })
+    mockUseDisableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseEnableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
   })
 
@@ -75,6 +79,25 @@ describe('useUsers', () => {
     )
   })
 
+  it('passes customer scope through the disableUser mutation facade', async () => {
+    const disableUserMutation = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'user-1', isActive: false } }),
+    })
+    mockUseDisableUserMutation.mockReturnValue([disableUserMutation, { isLoading: false }])
+
+    const { result } = renderHook(() => useUsers('cust-1'))
+
+    await act(async () => {
+      await result.current.disableUser('user-1')
+    })
+
+    expect(disableUserMutation).toHaveBeenCalledWith({
+      customerId: 'cust-1',
+      userId: 'user-1',
+    })
+    expect(result.current.disableUserResult.isLoading).toBe(false)
+  })
+
   it('exposes the enableUser mutation facade', async () => {
     const enableUserMutation = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({ data: { _id: 'user-2', isActive: true } }),
@@ -87,7 +110,10 @@ describe('useUsers', () => {
       await result.current.enableUser('user-2')
     })
 
-    expect(enableUserMutation).toHaveBeenCalledWith({ userId: 'user-2' })
+    expect(enableUserMutation).toHaveBeenCalledWith({
+      customerId: 'cust-1',
+      userId: 'user-2',
+    })
     expect(result.current.enableUserResult.isLoading).toBe(false)
   })
 })

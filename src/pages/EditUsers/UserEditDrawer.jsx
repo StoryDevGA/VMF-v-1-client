@@ -461,6 +461,7 @@ function UserEditDrawer({
 
     try {
       const result = await updateUserMutation({
+        customerId,
         userId: user._id,
         body,
       }).unwrap()

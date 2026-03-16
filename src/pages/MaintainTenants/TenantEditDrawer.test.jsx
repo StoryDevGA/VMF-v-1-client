@@ -229,6 +229,7 @@ describe('TenantEditDrawer', () => {
 
     await waitFor(() => {
       expect(updateTenantMutationMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
         tenantId: 'tenant-1',
         body: {
           tenantAdminUserIds: ['admin-user-1'],

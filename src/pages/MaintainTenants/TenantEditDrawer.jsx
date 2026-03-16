@@ -486,6 +486,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       }
 
       await updateTenantMutation({
+        customerId,
         tenantId,
         body,
       }).unwrap()
