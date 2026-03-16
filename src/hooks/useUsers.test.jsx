@@ -29,7 +29,7 @@ describe('useUsers', () => {
       data: {
         data: {
           users: [
-            { _id: 'user-1', name: 'Alpha' },
+            { _id: 'user-1', name: 'Alpha', isCanonicalAdmin: true },
             { _id: 'user-2', name: 'Beta' },
           ],
           page: 1,
@@ -61,6 +61,17 @@ describe('useUsers', () => {
         pageSize: 20,
       },
       { skip: false },
+    )
+  })
+
+  it('preserves the canonical-admin marker from the list-users contract', () => {
+    const { result } = renderHook(() => useUsers('cust-1'))
+
+    expect(result.current.users[0]).toEqual(
+      expect.objectContaining({
+        _id: 'user-1',
+        isCanonicalAdmin: true,
+      }),
     )
   })
 
