@@ -78,6 +78,13 @@ const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
   { value: 'clear', label: 'Clear explicit tenant visibility' },
 ]
 
+const BULK_CREATE_AUTOFILL_PROPS = {
+  autoComplete: 'off',
+  autoCorrect: 'off',
+  autoCapitalize: 'none',
+  spellCheck: false,
+}
+
 function resolveAvailableOperationOptions(availableOperations = []) {
   const allowedOperations = new Set(
     availableOperations
@@ -813,6 +820,7 @@ function BulkUserOperations({
             <BulkGovernanceNote />
             <Select
               id="bulk-source-mode"
+              name="bulk-create-source-mode"
               label="Input mode"
               value={sourceMode}
               onChange={(event) => {
@@ -823,21 +831,25 @@ function BulkUserOperations({
               }}
               options={SOURCE_OPTIONS}
               disabled={isProcessing}
+              autoComplete="off"
             />
 
             {sourceMode === 'csv' ? (
               <>
                 <Input
                   id="bulk-csv-file"
+                  name="bulk-create-csv-file"
                   type="file"
                   label="CSV file"
                   accept=".csv,text/csv"
                   onChange={handleCsvUpload}
                   disabled={isProcessing}
                   fullWidth
+                  {...BULK_CREATE_AUTOFILL_PROPS}
                 />
                 <Textarea
                   id="bulk-csv-text"
+                  name="bulk-create-csv-content"
                   label="CSV content"
                   value={csvText}
                   onChange={(event) => {
@@ -850,11 +862,13 @@ function BulkUserOperations({
                   fullWidth
                   disabled={isProcessing}
                   helperText={`Include headers for name, email, roles, and optional tenantVisibility. ${BULK_SUPPORTED_ROLES_MESSAGE}`}
+                  {...BULK_CREATE_AUTOFILL_PROPS}
                 />
                 {headers.length > 0 && (
                   <div className="bulk-users__mapping">
                     <Select
                       id="map-name"
+                      name="bulk-create-map-name-column"
                       label="Name column"
                       value={mapping.name}
                       onChange={(event) => {
@@ -868,9 +882,11 @@ function BulkUserOperations({
                         ...headers.map((header) => ({ value: header, label: header })),
                       ]}
                       disabled={isProcessing}
+                      autoComplete="off"
                     />
                     <Select
                       id="map-email"
+                      name="bulk-create-map-email-column"
                       label="Email column"
                       value={mapping.email}
                       onChange={(event) => {
@@ -884,9 +900,11 @@ function BulkUserOperations({
                         ...headers.map((header) => ({ value: header, label: header })),
                       ]}
                       disabled={isProcessing}
+                      autoComplete="off"
                     />
                     <Select
                       id="map-roles"
+                      name="bulk-create-map-roles-column"
                       label="Roles column"
                       value={mapping.roles}
                       onChange={(event) => {
@@ -900,9 +918,11 @@ function BulkUserOperations({
                         ...headers.map((header) => ({ value: header, label: header })),
                       ]}
                       disabled={isProcessing}
+                      autoComplete="off"
                     />
                     <Select
                       id="map-tenant-visibility"
+                      name="bulk-create-map-tenant-visibility-column"
                       label="Tenant visibility column (optional)"
                       value={mapping.tenantVisibility}
                       onChange={(event) => {
@@ -919,6 +939,7 @@ function BulkUserOperations({
                         ...headers.map((header) => ({ value: header, label: header })),
                       ]}
                       disabled={isProcessing}
+                      autoComplete="off"
                     />
                   </div>
                 )}
@@ -926,6 +947,7 @@ function BulkUserOperations({
             ) : (
               <Textarea
                 id="bulk-manual"
+                name="bulk-create-manual-rows"
                 label="Manual rows"
                 value={manualText}
                 onChange={(event) => {
@@ -938,6 +960,7 @@ function BulkUserOperations({
                 fullWidth
                 disabled={isProcessing}
                 helperText={`One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${BULK_SUPPORTED_ROLES_MESSAGE}`}
+                {...BULK_CREATE_AUTOFILL_PROPS}
               />
             )}
 

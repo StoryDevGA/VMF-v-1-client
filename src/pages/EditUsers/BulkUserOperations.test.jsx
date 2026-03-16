@@ -350,6 +350,49 @@ describe('BulkUserOperations', () => {
     expect(screen.getByLabelText(/csv file/i)).toBeInTheDocument()
   })
 
+  it('applies browser-autofill suppression to bulk-create text inputs and textareas', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    const csvFileInput = screen.getByLabelText(/csv file/i)
+    const csvContentTextarea = screen.getByLabelText(/csv content/i)
+
+    expect(csvFileInput).toHaveAttribute('autocomplete', 'off')
+    expect(csvFileInput).toHaveAttribute('autocorrect', 'off')
+    expect(csvFileInput).toHaveAttribute('autocapitalize', 'none')
+    expect(csvFileInput).toHaveAttribute('name', 'bulk-create-csv-file')
+    expect(csvContentTextarea).toHaveAttribute('autocomplete', 'off')
+    expect(csvContentTextarea).toHaveAttribute('autocorrect', 'off')
+    expect(csvContentTextarea).toHaveAttribute('autocapitalize', 'none')
+    expect(csvContentTextarea).toHaveAttribute('name', 'bulk-create-csv-content')
+    expect(csvContentTextarea).not.toHaveAttribute('spellcheck', 'true')
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+
+    const manualRowsTextarea = screen.getByLabelText(/manual rows/i)
+    expect(manualRowsTextarea).toHaveAttribute('autocomplete', 'off')
+    expect(manualRowsTextarea).toHaveAttribute('autocorrect', 'off')
+    expect(manualRowsTextarea).toHaveAttribute('autocapitalize', 'none')
+    expect(manualRowsTextarea).toHaveAttribute('name', 'bulk-create-manual-rows')
+    expect(manualRowsTextarea).not.toHaveAttribute('spellcheck', 'true')
+  })
+
+  it('applies browser-autofill suppression to CSV mapping controls', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.type(
+      screen.getByLabelText(/csv content/i),
+      'name,email,roles{enter}Jane Doe,jane@example.com,USER',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+
+    expect(screen.getByLabelText(/name column/i)).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(/name column/i)).toHaveAttribute('name', 'bulk-create-map-name-column')
+    expect(screen.getByLabelText(/email column/i)).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(/email column/i)).toHaveAttribute('name', 'bulk-create-map-email-column')
+  })
+
   // ---- Bulk Disable ----
 
   it('disables the Disable button when no users are selected', async () => {
