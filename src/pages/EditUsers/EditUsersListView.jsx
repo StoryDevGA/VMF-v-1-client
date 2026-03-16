@@ -152,24 +152,49 @@ function UserRolesCell({ row }) {
   )
 }
 
-function UserLifecycleState({ user }) {
+function UserTrustCell({ user }) {
   const lifecycleCopy = getUserLifecycleCopy(user)
+  const userName = user?.name || user?.email || 'user'
 
   return (
-    <div className="edit-users__trust-cell">
+    <div className="edit-users__trust-summary">
       <UserTrustStatus
         trustStatus={getUserTrustStatus(user)}
-        invitedAt={getUserInvitedAt(user)}
-        trustedAt={getUserTrustedAt(user)}
         size="sm"
-        showDates
       />
-      <span className={`edit-users__trust-title edit-users__trust-title--${lifecycleCopy.variant}`}>
-        {lifecycleCopy.title}
-      </span>
-      <span className="edit-users__trust-detail">
-        {lifecycleCopy.detail}
-      </span>
+      <Tooltip
+        content={(
+          <span className="edit-users__trust-tooltip-content">
+            <UserTrustStatus
+              trustStatus={getUserTrustStatus(user)}
+              invitedAt={getUserInvitedAt(user)}
+              trustedAt={getUserTrustedAt(user)}
+              size="sm"
+              showDates
+            />
+            <span className={`edit-users__trust-title edit-users__trust-title--${lifecycleCopy.variant}`}>
+              {lifecycleCopy.title}
+            </span>
+            <span className="edit-users__trust-detail">
+              {lifecycleCopy.detail}
+            </span>
+          </span>
+        )}
+        position="top"
+        align="start"
+        openDelay={0}
+        closeDelay={0}
+        className="edit-users__trust-tooltip"
+      >
+        <button
+          type="button"
+          className="edit-users__trust-help-trigger"
+          aria-label={`Explain trust status for ${userName}`}
+        >
+          <MdInfoOutline aria-hidden="true" focusable="false" />
+          <span className="sr-only">Explain trust status</span>
+        </button>
+      </Tooltip>
     </div>
   )
 }
@@ -363,7 +388,7 @@ export function EditUsersListView({
       {
         key: 'trustStatus',
         label: 'Trust',
-        render: (_value, row) => <UserLifecycleState user={row} />,
+        render: (_value, row) => <UserTrustCell user={row} />,
       },
       {
         key: 'isCanonicalAdmin',

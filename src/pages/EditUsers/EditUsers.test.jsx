@@ -424,7 +424,9 @@ describe('EditUsers page', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders row-level lifecycle summaries for trusted, invited, invitation-required, and disabled users', () => {
+  it('renders compact trust labels and exposes lifecycle detail on demand', async () => {
+    const user = userEvent.setup()
+
     mockUseUsers.mockReturnValue(
       buildUseUsersResult({
         users: [canonicalManagedUser, standardManagedUser, invitationRequiredUser, disabledManagedUser],
@@ -434,11 +436,23 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    expect(screen.getByText(/access ready/i)).toBeInTheDocument()
-    expect(screen.getByText(/invitation pending/i)).toBeInTheDocument()
-    expect(screen.getByText(/invitation required/i)).toBeInTheDocument()
-    expect(screen.getByText(/reactivate first to make invitation recovery available again/i)).toBeInTheDocument()
-    expect(screen.getByText(/resend invitation is available now/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Trusted').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Untrusted').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('Revoked').length).toBeGreaterThanOrEqual(1)
+
+    const trustHelpButton = screen.getByRole('button', {
+      name: /explain trust status for owner user/i,
+    })
+    const accessReadyText = screen.getByText(/access ready/i)
+
+    expect(accessReadyText).not.toBeVisible()
+
+    await user.hover(trustHelpButton)
+
+    expect(accessReadyText).toBeVisible()
+    expect(
+      screen.getByText(/user has completed sign-in and currently has active access/i),
+    ).toBeVisible()
   })
 
   it('opens Create User wizard when button is clicked', async () => {
@@ -510,7 +524,7 @@ describe('EditUsers page', () => {
     const user = userEvent.setup()
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /member user/i }))
+    await user.click(screen.getByRole('button', { name: /^member user$/i }))
 
     await waitFor(() => {
       expect(
