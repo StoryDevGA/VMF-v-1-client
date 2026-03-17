@@ -19,10 +19,21 @@ import {
   useResendInvitationMutation,
 } from '../store/api/userApi.js'
 
+const createMissingCustomerScopeError = () => ({
+  status: 400,
+  data: {
+    error: {
+      code: 'CUSTOMER_CONTEXT_REQUIRED',
+      message: 'No customer context is available for this action. Refresh and try again.',
+    },
+  },
+})
+
 /**
  * @param {string} customerId - The customer to manage users for
  * @param {Object}  [options]
  * @param {number}  [options.pageSize=20] - Page size for list queries
+ * @param {boolean} [options.skipListQuery=false] - Skip the list query and expose only mutation facades
  * @returns {{
  *   users: Array,
  *   pagination: { page: number, pageSize: number, total: number, totalPages: number },
@@ -50,7 +61,7 @@ import {
  * }}
  */
 export function useUsers(customerId, options = {}) {
-  const { pageSize = 20 } = options
+  const { pageSize = 20, skipListQuery = false } = options
 
   /* ---- Local filter / pagination state ---- */
   const [search, setSearch] = useState('')
@@ -71,7 +82,7 @@ export function useUsers(customerId, options = {}) {
       page,
       pageSize,
     },
-    { skip: !customerId },
+    { skip: !customerId || skipListQuery },
   )
 
   const users = useMemo(
@@ -100,37 +111,55 @@ export function useUsers(customerId, options = {}) {
 
   /** Create a user within the current customer */
   const createUser = useCallback(
-    (body) => createUserMutation({ customerId, body }).unwrap(),
+    (body) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return createUserMutation({ customerId, body }).unwrap()
+    },
     [createUserMutation, customerId],
   )
 
   /** Update user by ID */
   const updateUser = useCallback(
-    (userId, body) => updateUserMutation({ customerId, userId, body }).unwrap(),
+    (userId, body) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return updateUserMutation({ customerId, userId, body }).unwrap()
+    },
     [customerId, updateUserMutation],
   )
 
   /** Disable user by ID */
   const disableUser = useCallback(
-    (userId) => disableUserMutation({ customerId, userId }).unwrap(),
+    (userId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return disableUserMutation({ customerId, userId }).unwrap()
+    },
     [customerId, disableUserMutation],
   )
 
   /** Reactivate user by ID */
   const enableUser = useCallback(
-    (userId) => enableUserMutation({ customerId, userId }).unwrap(),
+    (userId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return enableUserMutation({ customerId, userId }).unwrap()
+    },
     [customerId, enableUserMutation],
   )
 
   /** Delete user by ID (must be disabled first) */
   const deleteUser = useCallback(
-    (userId) => deleteUserMutation({ customerId, userId }).unwrap(),
+    (userId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return deleteUserMutation({ customerId, userId }).unwrap()
+    },
     [customerId, deleteUserMutation],
   )
 
   /** Resend Identity Plus invitation for untrusted user */
   const resendInvitation = useCallback(
-    (userId) => resendInvitationMutation({ customerId, userId }).unwrap(),
+    (userId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return resendInvitationMutation({ customerId, userId }).unwrap()
+    },
     [customerId, resendInvitationMutation],
   )
 

@@ -79,6 +79,21 @@ describe('useUsers', () => {
     )
   })
 
+  it('skips the list query when only mutation facades are needed', () => {
+    renderHook(() => useUsers('cust-1', { skipListQuery: true }))
+
+    expect(mockUseListUsersQuery).toHaveBeenCalledWith(
+      {
+        customerId: 'cust-1',
+        q: undefined,
+        status: undefined,
+        page: 1,
+        pageSize: 20,
+      },
+      { skip: true },
+    )
+  })
+
   it('passes customer scope through the disableUser mutation facade', async () => {
     const disableUserMutation = vi.fn().mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({ data: { _id: 'user-1', isActive: false } }),
@@ -96,6 +111,28 @@ describe('useUsers', () => {
       userId: 'user-1',
     })
     expect(result.current.disableUserResult.isLoading).toBe(false)
+  })
+
+  it('rejects customer-admin user lifecycle actions when customer scope is missing', async () => {
+    const disableUserMutation = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'user-1', isActive: false } }),
+    })
+    mockUseDisableUserMutation.mockReturnValue([disableUserMutation, { isLoading: false }])
+
+    const { result } = renderHook(() => useUsers())
+
+    await act(async () => {
+      await expect(result.current.disableUser('user-1')).rejects.toMatchObject({
+        status: 400,
+        data: {
+          error: {
+            code: 'CUSTOMER_CONTEXT_REQUIRED',
+          },
+        },
+      })
+    })
+
+    expect(disableUserMutation).not.toHaveBeenCalled()
   })
 
   it('exposes the enableUser mutation facade', async () => {

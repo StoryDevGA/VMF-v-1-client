@@ -30,8 +30,8 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
+import { useTenants } from '../../hooks/useTenants.js'
 import { useListUsersQuery } from '../../store/api/userApi.js'
-import { useUpdateTenantMutation } from '../../store/api/tenantApi.js'
 import {
   normalizeError,
   isTenantAdminAssignmentsValidationError,
@@ -203,7 +203,8 @@ const mapTenantValidationErrors = (details) => {
  */
 function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const { addToast } = useToaster()
-  const [updateTenantMutation, { isLoading }] = useUpdateTenantMutation()
+  const { updateTenant, updateTenantResult } = useTenants(customerId, { skipListQuery: true })
+  const isLoading = Boolean(updateTenantResult?.isLoading)
   const {
     data: customerUsersResponse,
     isFetching: isFetchingCustomerUsers,
@@ -495,11 +496,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         return
       }
 
-      await updateTenantMutation({
-        customerId,
-        tenantId,
-        body,
-      }).unwrap()
+      await updateTenant(tenantId, body)
 
       addToast({
         title: 'Tenant updated',
@@ -538,7 +535,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         variant: 'error',
       })
     }
-  }, [tenant, name, website, tenantAdminUserIds, updateTenantMutation, addToast, onClose, validate, isArchivedTenant])
+  }, [tenant, name, website, tenantAdminUserIds, updateTenant, addToast, onClose, validate, isArchivedTenant])
 
   if (!tenant) return null
 

@@ -19,18 +19,13 @@ import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import TenantEditDrawer from './TenantEditDrawer'
 
-const mockUseUpdateTenantMutation = vi.hoisted(() => vi.fn())
+const mockUseTenants = vi.hoisted(() => vi.fn())
 const mockUseListUsersQuery = vi.hoisted(() => vi.fn())
 const mockUseLazyListUsersQuery = vi.hoisted(() => vi.fn())
 
-vi.mock('../../store/api/tenantApi.js', async () => {
-  const actual = await vi.importActual('../../store/api/tenantApi.js')
-
-  return {
-    ...actual,
-    useUpdateTenantMutation: (...args) => mockUseUpdateTenantMutation(...args),
-  }
-})
+vi.mock('../../hooks/useTenants.js', () => ({
+  useTenants: (...args) => mockUseTenants(...args),
+}))
 
 vi.mock('../../store/api/userApi.js', async () => {
   const actual = await vi.importActual('../../store/api/userApi.js')
@@ -139,7 +134,10 @@ function renderDrawer(props = {}) {
 describe('TenantEditDrawer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    mockUseUpdateTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    mockUseTenants.mockReturnValue({
+      updateTenant: vi.fn(),
+      updateTenantResult: { isLoading: false },
+    })
     mockUseListUsersQuery.mockReturnValue({
       data: {
         data: {
@@ -215,10 +213,11 @@ describe('TenantEditDrawer', () => {
   it('removes selected linked users and submits the updated tenant-admin assignments', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
-    const updateTenantMutationMock = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
+    const updateTenantMutationMock = vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } })
+    mockUseTenants.mockReturnValue({
+      updateTenant: updateTenantMutationMock,
+      updateTenantResult: { isLoading: false },
     })
-    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
 
     renderDrawer({ onClose })
 
@@ -232,12 +231,8 @@ describe('TenantEditDrawer', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
-      expect(updateTenantMutationMock).toHaveBeenCalledWith({
-        customerId: 'cust-1',
-        tenantId: 'tenant-1',
-        body: {
-          tenantAdminUserIds: ['admin-user-1'],
-        },
+      expect(updateTenantMutationMock).toHaveBeenCalledWith('tenant-1', {
+        tenantAdminUserIds: ['admin-user-1'],
       })
     })
 
@@ -292,24 +287,25 @@ describe('TenantEditDrawer', () => {
 
   it('surfaces contract-based tenant-admin guidance when save fails with invalid assignments', async () => {
     const user = userEvent.setup()
-    const updateTenantMutationMock = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockRejectedValue({
-        status: 422,
-        data: {
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'Please check the form for errors.',
-            requestId: 'tenant-admin-edit-1',
-            details: {
-              reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
-              invalidTenantAdminUserIds: ['outside-admin-3'],
-              outOfCustomerTenantAdminUserIds: ['outside-admin-3'],
-            },
+    const updateTenantMutationMock = vi.fn().mockRejectedValue({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Please check the form for errors.',
+          requestId: 'tenant-admin-edit-1',
+          details: {
+            reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+            invalidTenantAdminUserIds: ['outside-admin-3'],
+            outOfCustomerTenantAdminUserIds: ['outside-admin-3'],
           },
         },
-      }),
+      },
     })
-    mockUseUpdateTenantMutation.mockReturnValue([updateTenantMutationMock, { isLoading: false }])
+    mockUseTenants.mockReturnValue({
+      updateTenant: updateTenantMutationMock,
+      updateTenantResult: { isLoading: false },
+    })
 
     renderDrawer()
 
@@ -324,6 +320,38 @@ describe('TenantEditDrawer', () => {
         screen.getAllByText(/replace users outside this customer context: outside-admin-3/i).length,
       ).toBeGreaterThan(0)
       expect(screen.getAllByText(/\(Ref: tenant-admin-edit-1\)/i).length).toBeGreaterThan(0)
+    })
+  })
+
+  it('surfaces customer-context guidance instead of falling back to a platform-only tenant update route', async () => {
+    const user = userEvent.setup()
+    const updateTenantMutationMock = vi.fn().mockRejectedValue({
+      status: 400,
+      data: {
+        error: {
+          code: 'CUSTOMER_CONTEXT_REQUIRED',
+          message: 'No customer context is available for this action. Refresh and try again.',
+        },
+      },
+    })
+    mockUseTenants.mockReturnValue({
+      updateTenant: updateTenantMutationMock,
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDrawer({ customerId: null })
+
+    await user.clear(screen.getByLabelText(/tenant name/i))
+    await user.type(screen.getByLabelText(/tenant name/i), 'Acme Tenant Updated')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateTenantMutationMock).toHaveBeenCalledWith('tenant-1', {
+        name: 'Acme Tenant Updated',
+      })
+      expect(
+        screen.getAllByText(/no customer context is available for this action/i).length,
+      ).toBeGreaterThanOrEqual(1)
     })
   })
 })

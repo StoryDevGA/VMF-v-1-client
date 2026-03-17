@@ -21,13 +21,13 @@ import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
 import UserEditDrawer from './UserEditDrawer'
 
-const { mockUseUpdateUserMutation, mockUseTenantContext } = vi.hoisted(() => ({
-  mockUseUpdateUserMutation: vi.fn(),
+const { mockUseUsers, mockUseTenantContext } = vi.hoisted(() => ({
+  mockUseUsers: vi.fn(),
   mockUseTenantContext: vi.fn(),
 }))
 
-vi.mock('../../store/api/userApi.js', () => ({
-  useUpdateUserMutation: (...args) => mockUseUpdateUserMutation(...args),
+vi.mock('../../hooks/useUsers.js', () => ({
+  useUsers: (...args) => mockUseUsers(...args),
 }))
 
 vi.mock('../../hooks/useTenantContext.js', () => ({
@@ -207,17 +207,18 @@ describe('UserEditDrawer', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: {
-          _id: 'user-1',
-          name: 'Jane Doe',
-          email: 'jane@acme.com',
-          isActive: true,
-          trustStatus: 'TRUSTED',
-        },
-      }),
+      data: {
+        _id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@acme.com',
+        isActive: true,
+        trustStatus: 'TRUSTED',
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
     mockUseTenantContext.mockReturnValue(getTenantContextMockValue())
   })
 
@@ -375,18 +376,19 @@ describe('UserEditDrawer', () => {
   it('submits only the changed email field and shows resend guidance when trust resets', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: {
-          _id: 'user-1',
-          name: 'Jane Doe',
-          email: 'jane.updated@acme.com',
-          isActive: true,
-          trustStatus: 'UNTRUSTED',
-        },
-      }),
+    const updateUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane.updated@acme.com',
+        isActive: true,
+        trustStatus: 'UNTRUSTED',
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
 
     renderDrawer({ onClose })
 
@@ -395,10 +397,8 @@ describe('UserEditDrawer', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
-      expect(updateUser).toHaveBeenCalledWith({
-        customerId: 'cust-1',
-        userId: 'user-1',
-        body: { email: 'jane.updated@acme.com' },
+      expect(updateUser).toHaveBeenCalledWith('user-1', {
+        email: 'jane.updated@acme.com',
       })
     })
 
@@ -410,18 +410,19 @@ describe('UserEditDrawer', () => {
 
   it('shows reactivation guidance after updating a disabled user email', async () => {
     const user = userEvent.setup()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: {
-          _id: 'user-2',
-          name: 'Jane Doe',
-          email: 'disabled.updated@acme.com',
-          isActive: false,
-          trustStatus: 'REVOKED',
-        },
-      }),
+    const updateUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-2',
+        name: 'Jane Doe',
+        email: 'disabled.updated@acme.com',
+        isActive: false,
+        trustStatus: 'REVOKED',
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
 
     renderDrawer({ user: disabledUser })
 
@@ -436,19 +437,20 @@ describe('UserEditDrawer', () => {
 
   it('submits tenant-visibility changes using selected tenant ids', async () => {
     const user = userEvent.setup()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: {
-          _id: 'user-4',
-          name: 'Jane Doe',
-          email: 'jane@acme.com',
-          isActive: true,
-          trustStatus: 'TRUSTED',
-          tenantVisibility: ['ten-2'],
-        },
-      }),
+    const updateUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-4',
+        name: 'Jane Doe',
+        email: 'jane@acme.com',
+        isActive: true,
+        trustStatus: 'TRUSTED',
+        tenantVisibility: ['ten-2'],
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
 
     renderDrawer({ user: tenantVisibleUser })
 
@@ -458,33 +460,30 @@ describe('UserEditDrawer', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
-      expect(updateUser).toHaveBeenCalledWith({
-        customerId: 'cust-1',
-        userId: 'user-4',
-        body: {
-          tenantVisibility: ['ten-2'],
-        },
+      expect(updateUser).toHaveBeenCalledWith('user-4', {
+        tenantVisibility: ['ten-2'],
       })
     })
   })
 
   it('filters hidden tenant-admin assignments out of submitted role changes for single-tenant customers', async () => {
     const user = userEvent.setup()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: {
-          _id: 'user-5',
-          name: 'Jane Doe',
-          email: 'jane@acme.com',
-          isActive: true,
-          trustStatus: 'TRUSTED',
-          memberships: [
-            { customerId: 'cust-1', roles: ['USER'] },
-          ],
-        },
-      }),
+    const updateUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-5',
+        name: 'Jane Doe',
+        email: 'jane@acme.com',
+        isActive: true,
+        trustStatus: 'TRUSTED',
+        memberships: [
+          { customerId: 'cust-1', roles: ['USER'] },
+        ],
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
     mockUseTenantContext.mockReturnValue(
       getTenantContextMockValue({
         tenants: [],
@@ -509,34 +508,31 @@ describe('UserEditDrawer', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
-      expect(updateUser).toHaveBeenCalledWith({
-        customerId: 'cust-1',
-        userId: 'user-5',
-        body: {
-          roles: ['USER'],
-        },
+      expect(updateUser).toHaveBeenCalledWith('user-5', {
+        roles: ['USER'],
       })
     })
   })
 
   it('maps reason-based email conflicts to the email field', async () => {
     const user = userEvent.setup()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockRejectedValue({
-        status: 409,
-        data: {
-          error: {
-            code: 'USER_ALREADY_EXISTS',
-            requestId: 'req-email-conflict-1',
-            details: {
-              reason: 'already-in-customer',
-              existingUserId: 'user-99',
-            },
+    const updateUser = vi.fn().mockRejectedValue({
+      status: 409,
+      data: {
+        error: {
+          code: 'USER_ALREADY_EXISTS',
+          requestId: 'req-email-conflict-1',
+          details: {
+            reason: 'already-in-customer',
+            existingUserId: 'user-99',
           },
         },
-      }),
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
 
     renderDrawer()
 
@@ -573,22 +569,23 @@ describe('UserEditDrawer', () => {
 
   it('maps tenant-visibility validation reasons to the tenant field', async () => {
     const user = userEvent.setup()
-    const updateUser = vi.fn().mockReturnValue({
-      unwrap: vi.fn().mockRejectedValue({
-        status: 422,
-        data: {
-          error: {
-            code: 'VALIDATION_FAILED',
-            requestId: 'req-tenant-visibility-1',
-            details: {
-              reason: 'TENANT_VISIBILITY_INVALID_TENANT_IDS',
-              invalidTenantIds: ['ten-legacy'],
-            },
+    const updateUser = vi.fn().mockRejectedValue({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          requestId: 'req-tenant-visibility-1',
+          details: {
+            reason: 'TENANT_VISIBILITY_INVALID_TENANT_IDS',
+            invalidTenantIds: ['ten-legacy'],
           },
         },
-      }),
+      },
     })
-    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
 
     renderDrawer({ user: tenantVisibleUser })
 
@@ -613,5 +610,35 @@ describe('UserEditDrawer', () => {
     expect(
       screen.queryByRole('heading', { name: /edit user/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('surfaces customer-context guidance instead of falling back to a platform-only update route', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockRejectedValue({
+      status: 400,
+      data: {
+        error: {
+          code: 'CUSTOMER_CONTEXT_REQUIRED',
+          message: 'No customer context is available for this action. Refresh and try again.',
+        },
+      },
+    })
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
+
+    renderDrawer({ customerId: null })
+
+    await user.clear(screen.getByLabelText(/name/i))
+    await user.type(screen.getByLabelText(/name/i), 'Jane Updated')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith('user-1', { name: 'Jane Updated' })
+      expect(
+        screen.getAllByText(/no customer context is available for this action/i).length,
+      ).toBeGreaterThanOrEqual(1)
+    })
   })
 })

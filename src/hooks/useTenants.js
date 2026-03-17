@@ -17,6 +17,16 @@ import {
   useDisableTenantMutation,
 } from '../store/api/tenantApi.js'
 
+const createMissingCustomerScopeError = () => ({
+  status: 400,
+  data: {
+    error: {
+      code: 'CUSTOMER_CONTEXT_REQUIRED',
+      message: 'No customer context is available for this action. Refresh and try again.',
+    },
+  },
+})
+
 const normalizeTenantCapacity = (tenantCapacity) => {
   if (!tenantCapacity || typeof tenantCapacity !== 'object') return null
 
@@ -51,6 +61,7 @@ const normalizeTenantCapacity = (tenantCapacity) => {
  * @param {string} customerId - The customer to manage tenants for
  * @param {Object}  [options]
  * @param {number}  [options.pageSize=20] - Page size for list queries
+ * @param {boolean} [options.skipListQuery=false] - Skip the list query and expose only mutation facades
  * @returns {{
  *   tenants: Array,
  *   pagination: { page: number, pageSize: number, total: number, totalPages: number },
@@ -75,7 +86,7 @@ const normalizeTenantCapacity = (tenantCapacity) => {
  * }}
  */
 export function useTenants(customerId, options = {}) {
-  const { pageSize = 20 } = options
+  const { pageSize = 20, skipListQuery = false } = options
 
   /* ---- Local filter / pagination state ---- */
   const [search, setSearch] = useState('')
@@ -96,7 +107,7 @@ export function useTenants(customerId, options = {}) {
       page,
       pageSize,
     },
-    { skip: !customerId },
+    { skip: !customerId || skipListQuery },
   )
 
   const tenants = useMemo(() => listData?.data ?? [], [listData])
@@ -123,25 +134,37 @@ export function useTenants(customerId, options = {}) {
 
   /** Create a tenant within the current customer */
   const createTenant = useCallback(
-    (body) => createTenantMutation({ customerId, body }).unwrap(),
+    (body) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return createTenantMutation({ customerId, body }).unwrap()
+    },
     [createTenantMutation, customerId],
   )
 
   /** Update tenant by ID */
   const updateTenant = useCallback(
-    (tenantId, body) => updateTenantMutation({ customerId, tenantId, body }).unwrap(),
+    (tenantId, body) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return updateTenantMutation({ customerId, tenantId, body }).unwrap()
+    },
     [customerId, updateTenantMutation],
   )
 
   /** Enable tenant by ID */
   const enableTenant = useCallback(
-    (tenantId) => enableTenantMutation({ customerId, tenantId }).unwrap(),
+    (tenantId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return enableTenantMutation({ customerId, tenantId }).unwrap()
+    },
     [customerId, enableTenantMutation],
   )
 
   /** Disable tenant by ID */
   const disableTenant = useCallback(
-    (tenantId) => disableTenantMutation({ customerId, tenantId }).unwrap(),
+    (tenantId) => {
+      if (!customerId) return Promise.reject(createMissingCustomerScopeError())
+      return disableTenantMutation({ customerId, tenantId }).unwrap()
+    },
     [customerId, disableTenantMutation],
   )
 

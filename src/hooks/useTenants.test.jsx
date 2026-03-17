@@ -91,4 +91,41 @@ describe('useTenants', () => {
     })
     expect(result.current.disableTenantResult.isLoading).toBe(false)
   })
+
+  it('skips the list query when only tenant mutation facades are needed', () => {
+    renderHook(() => useTenants('cust-1', { skipListQuery: true }))
+
+    expect(mockUseListTenantsQuery).toHaveBeenCalledWith(
+      {
+        customerId: 'cust-1',
+        q: undefined,
+        status: undefined,
+        page: 1,
+        pageSize: 20,
+      },
+      { skip: true },
+    )
+  })
+
+  it('rejects customer-admin tenant lifecycle actions when customer scope is missing', async () => {
+    const disableTenantMutation = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1', status: 'DISABLED' } }),
+    })
+    mockUseDisableTenantMutation.mockReturnValue([disableTenantMutation, { isLoading: false }])
+
+    const { result } = renderHook(() => useTenants())
+
+    await act(async () => {
+      await expect(result.current.disableTenant('tenant-1')).rejects.toMatchObject({
+        status: 400,
+        data: {
+          error: {
+            code: 'CUSTOMER_CONTEXT_REQUIRED',
+          },
+        },
+      })
+    })
+
+    expect(disableTenantMutation).not.toHaveBeenCalled()
+  })
 })

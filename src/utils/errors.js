@@ -27,6 +27,8 @@ const ERROR_MESSAGES = {
   AUTHZ_FORBIDDEN: 'You do not have permission to perform this action.',
   AUTHZ_ROLE_REQUIRED: 'This action requires a higher role.',
   AUTHZ_TENANT_DISABLED: 'This tenant has been disabled.',
+  CUSTOMER_CONTEXT_REQUIRED:
+    'No customer context is available for this action. Refresh and try again.',
   CUSTOMER_INACTIVE:
     'This customer is inactive. Reactivate the customer to continue.',
 

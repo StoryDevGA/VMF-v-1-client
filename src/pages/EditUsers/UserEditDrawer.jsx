@@ -23,7 +23,7 @@ import { Status } from '../../components/Status'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 import { useToaster } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { useUpdateUserMutation } from '../../store/api/userApi.js'
+import { useUsers } from '../../hooks/useUsers.js'
 import {
   normalizeError,
   isCanonicalAdminConflictError,
@@ -243,7 +243,8 @@ function UserEditDrawer({
   hasCanonicalAdmin = false,
 }) {
   const { addToast } = useToaster()
-  const [updateUserMutation, { isLoading }] = useUpdateUserMutation()
+  const { updateUser, updateUserResult } = useUsers(customerId, { skipListQuery: true })
+  const isLoading = Boolean(updateUserResult?.isLoading)
   const workspaceRef = useRef(null)
   const {
     customerId: activeCustomerId,
@@ -480,11 +481,7 @@ function UserEditDrawer({
     }
 
     try {
-      const result = await updateUserMutation({
-        customerId,
-        userId: user._id,
-        body,
-      }).unwrap()
+      const result = await updateUser(user._id, body)
       const updatedUser = getUpdateUserPayload(result)
       const updatedName = normalizeText(updatedUser?.name) || normalizedName || user?.name
       const updatedTrustStatus = getUserTrustStatus(updatedUser)
@@ -596,7 +593,7 @@ function UserEditDrawer({
     normalizedUserEmail,
     onClose,
     shouldShowTenantVisibilityEditor,
-    updateUserMutation,
+    updateUser,
     user,
     validate,
   ])
