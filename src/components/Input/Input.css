@@ -71,6 +71,63 @@
   background-color: color-mix(in srgb, var(--color-surface) 95%, var(--color-text));
 }
 
+.input--file {
+  padding: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.input--file::file-selector-button,
+.input--file::-webkit-file-upload-button {
+  margin-right: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  min-height: 44px;
+  font-family: var(--font-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+  color: var(--slos-btn-hover-text);
+  background-color: var(--slos-btn-hover-bg);
+  border: var(--border-width-thin) solid var(--slos-btn-hover-border);
+  border-radius: var(--border-radius-pill);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.input--file::file-selector-button:hover,
+.input--file::-webkit-file-upload-button:hover {
+  color: var(--slos-btn-text);
+  background-color: var(--slos-btn-bg);
+  border-color: transparent;
+}
+
+.input--file::file-selector-button:active,
+.input--file::-webkit-file-upload-button:active {
+  color: var(--slos-btn-text);
+  background-color: var(--color-action-primary-active);
+  border-color: transparent;
+  transform: translateY(1px);
+}
+
+.input--file:focus-visible::file-selector-button,
+.input--file:focus-visible::-webkit-file-upload-button {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-background) 80%, transparent);
+}
+
+.input--file:disabled::file-selector-button,
+.input--file:disabled::-webkit-file-upload-button {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 /* ===========================
    INPUT SIZES
    =========================== */

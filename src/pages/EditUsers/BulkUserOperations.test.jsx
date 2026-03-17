@@ -348,6 +348,7 @@ describe('BulkUserOperations', () => {
   it('shows CSV file input', () => {
     renderDialog()
     expect(screen.getByLabelText(/csv file/i)).toBeInTheDocument()
+    expect(screen.queryByText(/^csv file$/i)).not.toBeInTheDocument()
   })
 
   it('applies browser-autofill suppression to bulk-create text inputs and textareas', async () => {
@@ -361,6 +362,7 @@ describe('BulkUserOperations', () => {
     expect(csvFileInput).toHaveAttribute('autocorrect', 'off')
     expect(csvFileInput).toHaveAttribute('autocapitalize', 'none')
     expect(csvFileInput).toHaveAttribute('name', 'bulk-create-csv-file')
+    expect(csvFileInput).toHaveClass('input--file')
     expect(csvContentTextarea).toHaveAttribute('autocomplete', 'off')
     expect(csvContentTextarea).toHaveAttribute('autocorrect', 'off')
     expect(csvContentTextarea).toHaveAttribute('autocapitalize', 'none')

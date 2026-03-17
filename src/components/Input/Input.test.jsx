@@ -283,6 +283,13 @@ describe('Input Component', () => {
       const input = screen.getByRole('spinbutton')
       expect(input).toHaveAttribute('type', 'number')
     })
+
+    it('should apply the shared file-input styling modifier', () => {
+      render(<Input type="file" label="CSV file" id="csv-file" />)
+      const input = screen.getByLabelText(/csv file/i)
+      expect(input).toHaveAttribute('type', 'file')
+      expect(input).toHaveClass('input--file')
+    })
   })
 
   describe('Password Toggle', () => {

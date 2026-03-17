@@ -50,6 +50,7 @@ export const Input = forwardRef(function Input(
   const hasLeftIcon = Boolean(leftIcon)
   const hasRightIcon = Boolean(rightIcon)
   const hasRightAdornment = hasRightIcon || canTogglePassword
+  const isFileInput = inputType === 'file'
 
   useEffect(() => {
     if (value === undefined) return
@@ -95,6 +96,7 @@ export const Input = forwardRef(function Input(
     'input',
     `input--${variant}`,
     `input--${size}`,
+    isFileInput && 'input--file',
     hasLeftIcon && 'input--with-left-icon',
     hasRightAdornment && 'input--with-right-icon',
   ]

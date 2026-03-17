@@ -18,7 +18,7 @@
   border-radius: var(--border-radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-2xl);
-  height: auto;
+  /* height: auto; */
   max-width: calc(100vw - var(--spacing-lg) * 2);
   max-height: calc(100vh - var(--spacing-lg) * 2);
   min-width: min(320px, calc(100vw - var(--spacing-lg) * 2));
@@ -123,7 +123,7 @@
   flex-direction: column;
   width: 100%;
   height: auto;
-  min-height: 100%;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   max-height: calc(100vh - var(--spacing-lg) * 2);
@@ -202,7 +202,7 @@
    =========================== */
 
 .dialog__body {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   min-height: 0;
   padding: var(--spacing-lg) var(--spacing-xl);
@@ -210,6 +210,10 @@
   -webkit-overflow-scrolling: touch;
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
+}
+
+.dialog--full .dialog__body {
+  flex: 1 1 auto;
 }
 
 /* Custom scrollbar for dialog body */

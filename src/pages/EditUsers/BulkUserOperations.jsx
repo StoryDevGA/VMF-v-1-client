@@ -840,7 +840,7 @@ function BulkUserOperations({
                   id="bulk-csv-file"
                   name="bulk-create-csv-file"
                   type="file"
-                  label="CSV file"
+                  aria-label="CSV file"
                   accept=".csv,text/csv"
                   onChange={handleCsvUpload}
                   disabled={isProcessing}
