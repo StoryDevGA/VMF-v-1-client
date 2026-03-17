@@ -185,11 +185,11 @@ const getTopologyAwareRoles = (roles, topology) => {
     .trim()
     .toUpperCase()
 
-  if (normalizedTopology === 'SINGLE_TENANT') {
-    return roles.filter((role) => role !== 'TENANT_ADMIN')
+  if (normalizedTopology === 'MULTI_TENANT') {
+    return roles
   }
 
-  return roles
+  return roles.filter((role) => role !== 'TENANT_ADMIN')
 }
 
 const normalizeTenantOption = (tenant) => {

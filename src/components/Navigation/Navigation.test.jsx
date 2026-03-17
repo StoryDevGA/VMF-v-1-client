@@ -14,9 +14,14 @@ import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
 import { useAuth } from '../../hooks/useAuth.js'
+import { useListTenantsQuery } from '../../store/api/tenantApi.js'
 
 vi.mock('../../hooks/useAuth.js', () => ({
   useAuth: vi.fn(),
+}))
+
+vi.mock('../../store/api/tenantApi.js', () => ({
+  useListTenantsQuery: vi.fn(),
 }))
 
 beforeEach(() => {
@@ -25,6 +30,11 @@ beforeEach(() => {
   useAuth.mockReturnValue({
     logout: mockLogout,
     logoutResult: { isLoading: false },
+  })
+  useListTenantsQuery.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: null,
   })
   mockLogout.mockClear()
 })
@@ -41,6 +51,17 @@ const customerAdminUser = {
   vmfGrants: [],
 }
 
+const multiTenantCustomerAdminUser = {
+  ...customerAdminUser,
+  memberships: [
+    {
+      customerId: 'cust-1',
+      roles: ['CUSTOMER_ADMIN'],
+      customer: { topology: 'MULTI_TENANT' },
+    },
+  ],
+}
+
 const singleTenantCustomerAdminUser = {
   ...customerAdminUser,
   memberships: [
@@ -48,6 +69,16 @@ const singleTenantCustomerAdminUser = {
       customerId: 'cust-1',
       roles: ['CUSTOMER_ADMIN'],
       customer: { topology: 'SINGLE_TENANT' },
+    },
+  ],
+}
+
+const nestedCustomerAdminUser = {
+  ...customerAdminUser,
+  memberships: [
+    {
+      customer: { id: 'cust-1', topology: 'SINGLE_TENANT' },
+      roles: ['CUSTOMER_ADMIN'],
     },
   ],
 }
@@ -112,19 +143,22 @@ describe('Navigation', () => {
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('renders a help-only navigation for basic users', () => {
+  it('renders help and sign-out navigation for basic users', () => {
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
     expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system health/i })).not.toBeInTheDocument()
   })
 
   it('shows Admin and System Health menus for CUSTOMER_ADMIN', async () => {
     const user = userEvent.setup()
-    const store = createTestStore(customerAdminUser, 'authenticated', { customerId: 'cust-1' })
+    const store = createTestStore(multiTenantCustomerAdminUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
     renderNavigation(store)
 
     expect(screen.getByRole('button', { name: /^admin$/i })).toBeInTheDocument()
@@ -166,9 +200,78 @@ describe('Navigation', () => {
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
+  it('hides Manage Tenants while selected customer topology is unresolved', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(customerAdminUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps the Admin menu available when customer-admin membership uses a nested customer id', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(nestedCustomerAdminUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Manage Tenants when tenant metadata resolves the selected customer as multi-tenant', async () => {
+    const user = userEvent.setup()
+    useListTenantsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          tenantVisibility: {
+            mode: 'GUIDED',
+            allowed: true,
+            topology: 'MULTI_TENANT',
+            isServiceProvider: true,
+            selectableStatuses: ['ENABLED'],
+          },
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+    const store = createTestStore(customerAdminUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
+  })
+
   it('hides Manage Tenants before customer context initializes for a single-tenant customer admin', async () => {
     const user = userEvent.setup()
     const store = createTestStore(singleTenantCustomerAdminUser)
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Manage Tenants before customer context initializes when membership has no topology data', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(customerAdminUser)
     renderNavigation(store)
 
     await user.click(screen.getByRole('button', { name: /^admin$/i }))

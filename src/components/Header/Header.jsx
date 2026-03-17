@@ -44,10 +44,7 @@ export function Header({
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
   const isSuperAdmin = checkIsSuperAdmin(user)
-  const hasCustomerAdminAccess = (user?.memberships ?? []).some(
-    (membership) => membership.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
-  )
-  const canAccessNavigation = isSuperAdmin || hasCustomerAdminAccess
+  const canAccessNavigation = isAuthenticated
   const shouldShowNavigation = showNavigation && canAccessNavigation
   const resolvedLogoLink = logoLink === undefined
     ? (isAuthenticated

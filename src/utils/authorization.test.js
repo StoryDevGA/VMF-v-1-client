@@ -97,6 +97,18 @@ const multiCustomerUser = {
   vmfGrants: [],
 }
 
+const nestedCustomerMembershipUser = {
+  id: '6',
+  memberships: [
+    {
+      customer: { id: CUSTOMER_ID, topology: 'SINGLE_TENANT' },
+      roles: ['CUSTOMER_ADMIN'],
+    },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+}
+
 /* ================================================================== */
 /*  Platform                                                          */
 /* ================================================================== */
@@ -168,6 +180,12 @@ describe('Customer role helpers', () => {
 
     it('returns empty array when customerId is missing', () => {
       expect(getUserCustomerRoles(customerAdminUser, null)).toEqual([])
+    })
+
+    it('resolves customer roles when the membership uses a nested customer id', () => {
+      expect(getUserCustomerRoles(nestedCustomerMembershipUser, CUSTOMER_ID)).toEqual([
+        'CUSTOMER_ADMIN',
+      ])
     })
   })
 
@@ -342,6 +360,10 @@ describe('Customer role helpers', () => {
     it('returns false for null user', () => {
       expect(hasAnyCustomerRole(null, 'CUSTOMER_ADMIN')).toBe(false)
     })
+
+    it('supports nested customer ids when checking customer roles', () => {
+      expect(hasAnyCustomerRole(nestedCustomerMembershipUser, 'CUSTOMER_ADMIN')).toBe(true)
+    })
   })
 
   describe('hasAnyMultiTenantCustomerAdminScope', () => {
@@ -378,12 +400,12 @@ describe('Customer role helpers', () => {
       ).toBe(true)
     })
 
-    it('keeps the permissive fallback when topology has not been exposed yet', () => {
+    it('returns false when topology has not been exposed yet', () => {
       expect(
         hasAnyMultiTenantCustomerAdminScope({
           memberships: [{ customerId: CUSTOMER_ID, roles: ['CUSTOMER_ADMIN'] }],
         }),
-      ).toBe(true)
+      ).toBe(false)
     })
 
     it('returns false when the user has no customer-admin memberships', () => {
@@ -536,6 +558,10 @@ describe('Aggregate helpers', () => {
 
     it('returns empty for null user', () => {
       expect(getAccessibleCustomerIds(null)).toEqual([])
+    })
+
+    it('extracts nested customer ids from memberships', () => {
+      expect(getAccessibleCustomerIds(nestedCustomerMembershipUser)).toEqual([CUSTOMER_ID])
     })
   })
 

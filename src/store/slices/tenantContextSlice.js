@@ -24,14 +24,23 @@ const initialState = {
   tenantName: null,
 }
 
+const getMembershipCustomerId = (membership) => {
+  const customerId =
+    membership?.customerId
+    ?? membership?.customer?.id
+    ?? membership?.customer?._id
+
+  return customerId === null || customerId === undefined ? null : customerId
+}
+
 const getFirstCustomerAdminCustomerId = (user) => {
   if (!user?.memberships) return null
 
   const adminMembership = user.memberships.find(
-    (membership) => membership?.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
+    (membership) => getMembershipCustomerId(membership) && membership.roles?.includes('CUSTOMER_ADMIN'),
   )
 
-  return adminMembership?.customerId ?? null
+  return getMembershipCustomerId(adminMembership)
 }
 
 const hasCustomerAccessForUser = (user, customerId) => {
@@ -39,8 +48,8 @@ const hasCustomerAccessForUser = (user, customerId) => {
 
   return user.memberships.some(
     (membership) =>
-      membership?.customerId
-      && membership.customerId.toString() === customerId.toString(),
+      getMembershipCustomerId(membership)
+      && getMembershipCustomerId(membership).toString() === customerId.toString(),
   )
 }
 
@@ -86,10 +95,10 @@ const tenantContextSlice = createSlice({
       if (!user?.memberships) return
 
       const adminMembership = user.memberships.find(
-        (m) => m.customerId && m.roles?.includes('CUSTOMER_ADMIN'),
+        (m) => getMembershipCustomerId(m) && m.roles?.includes('CUSTOMER_ADMIN'),
       )
       if (adminMembership) {
-        state.customerId = adminMembership.customerId
+        state.customerId = getMembershipCustomerId(adminMembership)
       }
     },
 

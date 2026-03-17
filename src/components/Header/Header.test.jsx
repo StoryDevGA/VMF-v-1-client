@@ -2,7 +2,7 @@
  * Header Component Tests
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -13,6 +13,11 @@ import { Header } from './Header'
 import authReducer from '../../store/slices/authSlice.js'
 import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
+import { useListTenantsQuery } from '../../store/api/tenantApi.js'
+
+vi.mock('../../store/api/tenantApi.js', () => ({
+  useListTenantsQuery: vi.fn(),
+}))
 
 // Create a minimal store for Header + Navigation Redux needs
 const createTestStore = (authState) =>
@@ -32,6 +37,14 @@ const RouterWrapper = ({ children, authState }) => (
     <BrowserRouter>{children}</BrowserRouter>
   </Provider>
 )
+
+beforeEach(() => {
+  useListTenantsQuery.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  })
+})
 
 describe('Header Component', () => {
   // ===========================
@@ -229,6 +242,39 @@ describe('Header Component', () => {
       // Navigation component renders nav with role="navigation"
       const navigation = screen.getByRole('navigation')
       expect(navigation).toBeInTheDocument()
+    })
+
+    it('should render navigation for authenticated non-admin users and defer menu contents to Navigation', () => {
+      render(
+        <RouterWrapper
+          authState={{
+            user: {
+              id: 'user-1',
+              memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+            },
+            status: 'authenticated',
+          }}
+        >
+          <Header />
+        </RouterWrapper>
+      )
+
+      expect(screen.getByRole('navigation')).toBeInTheDocument()
+    })
+
+    it('should not render navigation for unauthenticated users', () => {
+      render(
+        <RouterWrapper
+          authState={{
+            user: null,
+            status: 'unauthenticated',
+          }}
+        >
+          <Header />
+        </RouterWrapper>
+      )
+
+      expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
     })
 
     it('should not render navigation when showNavigation=false', () => {

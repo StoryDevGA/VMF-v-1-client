@@ -76,6 +76,7 @@ function getTenantContextMockValue(overrides = {}) {
       isServiceProvider: true,
       selectableStatuses: ['ENABLED'],
     },
+    selectedCustomerTopology: 'MULTI_TENANT',
     isLoadingTenants: false,
     tenantsError: null,
     isSuperAdmin: false,
@@ -199,6 +200,52 @@ describe('BulkUserOperations', () => {
     expect(
       screen.getByText(/supported bulk roles: tenant_admin, user\./i),
     ).toBeInTheDocument()
+  })
+
+  it('limits bulk-update role guidance to USER for single-tenant customers', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        selectedCustomerTopology: 'SINGLE_TENANT',
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDialog({ selectedUserIds: ['user-1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+
+    expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/roles/i)).toHaveAttribute('placeholder', 'USER')
+    expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
+  })
+
+  it('limits bulk-update role guidance to USER when customer topology is unresolved', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        selectedCustomerTopology: '',
+        tenantVisibilityMeta: null,
+      }),
+    )
+
+    renderDialog({ selectedUserIds: ['user-1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+
+    expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/roles/i)).toHaveAttribute('placeholder', 'USER')
+    expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
   })
 
   it('shows disable warning when operation is disable', async () => {
@@ -550,12 +597,42 @@ describe('BulkUserOperations', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
   })
 
+  it('blocks bulk update when single-tenant customers include TENANT_ADMIN', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        selectedCustomerTopology: 'SINGLE_TENANT',
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.type(screen.getByLabelText(/roles/i), 'TENANT_ADMIN')
+    await user.click(screen.getByRole('button', { name: /update selected/i }))
+
+    expect(bulkUpdateMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /bulk role updates for this customer only support user/i,
+    )
+  })
+
   it('suppresses the tenant-visibility fallback hint for single-tenant customers', async () => {
     const user = userEvent.setup()
     mockUseTenantContext.mockReturnValue(
       getTenantContextMockValue({
         tenants: [],
         selectableTenants: [],
+        selectedCustomerTopology: 'SINGLE_TENANT',
         tenantVisibilityMeta: {
           mode: 'NONE',
           allowed: false,

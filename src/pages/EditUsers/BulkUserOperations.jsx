@@ -57,9 +57,6 @@ const GOVERNED_CUSTOMER_ADMIN_ROLE = 'CUSTOMER_ADMIN'
 const BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE =
   'Bulk operations cannot assign or remove Customer Admin ownership. Use Transfer Ownership from Edit Users after the replacement user is active.'
 
-const BULK_SUPPORTED_ROLES_MESSAGE =
-  `Supported bulk roles: ${BULK_EDITABLE_ROLES.join(', ')}.`
-
 const BULK_TENANT_VISIBILITY_GUIDANCE =
   'Apply the same tenant visibility set to every selected user. Choose Replace to set explicit tenant visibility, or Clear to remove stored explicit tenant visibility.'
 
@@ -77,6 +74,21 @@ const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
   { value: 'replace', label: 'Replace with selected tenants' },
   { value: 'clear', label: 'Clear explicit tenant visibility' },
 ]
+
+const getTopologyAwareRoles = (roles, topology) => {
+  const normalizedTopology = String(topology ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (normalizedTopology === 'MULTI_TENANT') {
+    return roles
+  }
+
+  return roles.filter((role) => role !== 'TENANT_ADMIN')
+}
+
+const getSupportedBulkRolesMessage = (roles) =>
+  `Supported bulk roles: ${roles.join(', ')}.`
 
 const BULK_CREATE_AUTOFILL_PROPS = {
   autoComplete: 'off',
@@ -130,7 +142,7 @@ function getDialogSubtitle({ isOperationLocked, operation, selectedCount }) {
   return `Import or type up to ${BULK_LIMIT} users in this batch.`
 }
 
-function BulkGovernanceNote() {
+function BulkGovernanceNote({ supportedRolesMessage }) {
   return (
     <div
       className="bulk-users__governance"
@@ -139,7 +151,7 @@ function BulkGovernanceNote() {
     >
       <p className="bulk-users__governance-title">Customer Admin governance</p>
       <p className="bulk-users__governance-text">{BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE}</p>
-      <p className="bulk-users__governance-text">{BULK_SUPPORTED_ROLES_MESSAGE}</p>
+      <p className="bulk-users__governance-text">{supportedRolesMessage}</p>
     </div>
   )
 }
@@ -161,6 +173,29 @@ function getBulkGovernanceErrorMessage(rowNumbers = []) {
       : `rows ${rowNumbers.join(', ')}`
 
   return `Bulk operations cannot assign or remove Customer Admin ownership. Remove CUSTOMER_ADMIN from ${rowLabel} and retry. Use Transfer Ownership from Edit Users after the replacement user is active.`
+}
+
+function getUnsupportedBulkRoles(roles, supportedRoles) {
+  return roles.filter(
+    (role) => role !== GOVERNED_CUSTOMER_ADMIN_ROLE && !supportedRoles.includes(role),
+  )
+}
+
+function getUnsupportedBulkRoleRows(users, supportedRoles, rowOffset = 1) {
+  return users.flatMap((user, index) =>
+    getUnsupportedBulkRoles(user.roles, supportedRoles).length > 0 ? [index + rowOffset] : [],
+  )
+}
+
+function getUnsupportedBulkRolesMessage(supportedRoles, rowNumbers = []) {
+  const rowLabel =
+    rowNumbers.length === 0
+      ? 'this customer'
+      : rowNumbers.length === 1
+      ? `row ${rowNumbers[0]}`
+      : `rows ${rowNumbers.join(', ')}`
+
+  return `Bulk role updates for ${rowLabel} only support ${supportedRoles.join(', ')}. Remove unsupported roles and retry.`
 }
 
 function parseCsvLine(line) {
@@ -265,6 +300,7 @@ function BulkUserOperations({
     customerId: activeCustomerId,
     tenants: tenantRows,
     tenantVisibilityMeta,
+    selectedCustomerTopology,
     isLoadingTenants: rawIsLoadingTenants,
     tenantsError,
   } = useTenantContext()
@@ -327,12 +363,21 @@ function BulkUserOperations({
   )
 
   const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
+  const effectiveCustomerTopology = isCustomerContextAligned ? selectedCustomerTopology : ''
   const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
   const shouldShowTenantVisibilityUpdate =
     effectiveTenantVisibilityMeta?.allowed === true
     && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
   const shouldSuppressTenantVisibilityHint =
     effectiveTenantVisibilityMeta?.topology === 'SINGLE_TENANT'
+  const supportedBulkRoles = useMemo(
+    () => getTopologyAwareRoles(BULK_EDITABLE_ROLES, effectiveCustomerTopology),
+    [effectiveCustomerTopology],
+  )
+  const supportedBulkRolesMessage = useMemo(
+    () => getSupportedBulkRolesMessage(supportedBulkRoles),
+    [supportedBulkRoles],
+  )
 
   const normalizedSelectedBulkTenantVisibility = useMemo(
     () => normalizeTenantVisibilityIds(selectedBulkTenantVisibility),
@@ -466,6 +511,13 @@ function BulkUserOperations({
         return
       }
 
+      const unsupportedRoleRows = getUnsupportedBulkRoleRows(users, supportedBulkRoles, 1)
+      if (unsupportedRoleRows.length > 0) {
+        setFieldError(getUnsupportedBulkRolesMessage(supportedBulkRoles, unsupportedRoleRows))
+        setPreviewUsers([])
+        return
+      }
+
       setPreviewUsers(users)
       return
     }
@@ -532,8 +584,15 @@ function BulkUserOperations({
       return
     }
 
+    const unsupportedRoleRows = getUnsupportedBulkRoleRows(users, supportedBulkRoles, 2)
+    if (unsupportedRoleRows.length > 0) {
+      setFieldError(getUnsupportedBulkRolesMessage(supportedBulkRoles, unsupportedRoleRows))
+      setPreviewUsers([])
+      return
+    }
+
     setPreviewUsers(users)
-  }, [sourceMode, manualText, csvText, mapping])
+  }, [csvText, manualText, mapping, sourceMode, supportedBulkRoles])
 
   const canRunCreate = useMemo(() => {
     return operation === 'create' && previewUsers.length > 0 && !fieldError
@@ -659,6 +718,13 @@ function BulkUserOperations({
       return
     }
 
+    const unsupportedRoles = getUnsupportedBulkRoles(roles, supportedBulkRoles)
+    if (unsupportedRoles.length > 0) {
+      setFieldError(getUnsupportedBulkRolesMessage(supportedBulkRoles))
+      setResultSummary(null)
+      return
+    }
+
     startProgress('Updating selected users...')
     setResultSummary(null)
     setFieldError('')
@@ -719,6 +785,7 @@ function BulkUserOperations({
     normalizedSelectedBulkTenantVisibility,
     selectedUserIds,
     startProgress,
+    supportedBulkRoles,
     shouldShowTenantVisibilityUpdate,
   ])
 
@@ -817,7 +884,7 @@ function BulkUserOperations({
 
         {operation === 'create' && (
           <div className="bulk-users__panel">
-            <BulkGovernanceNote />
+            <BulkGovernanceNote supportedRolesMessage={supportedBulkRolesMessage} />
             <Select
               id="bulk-source-mode"
               name="bulk-create-source-mode"
@@ -861,7 +928,7 @@ function BulkUserOperations({
                   rows={7}
                   fullWidth
                   disabled={isProcessing}
-                  helperText={`Include headers for name, email, roles, and optional tenantVisibility. ${BULK_SUPPORTED_ROLES_MESSAGE}`}
+                  helperText={`Include headers for name, email, roles, and optional tenantVisibility. ${supportedBulkRolesMessage}`}
                   {...BULK_CREATE_AUTOFILL_PROPS}
                 />
                 {headers.length > 0 && (
@@ -959,7 +1026,7 @@ function BulkUserOperations({
                 rows={7}
                 fullWidth
                 disabled={isProcessing}
-                helperText={`One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${BULK_SUPPORTED_ROLES_MESSAGE}`}
+                helperText={`One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${supportedBulkRolesMessage}`}
                 {...BULK_CREATE_AUTOFILL_PROPS}
               />
             )}
@@ -986,7 +1053,7 @@ function BulkUserOperations({
 
         {operation === 'update' && (
           <div className="bulk-users__panel">
-            <BulkGovernanceNote />
+            <BulkGovernanceNote supportedRolesMessage={supportedBulkRolesMessage} />
             <Input
               id="bulk-update-roles"
               label="Roles (comma, pipe, or semicolon separated)"
@@ -996,7 +1063,7 @@ function BulkUserOperations({
                 setFieldError('')
                 setResultSummary(null)
               }}
-              placeholder={BULK_EDITABLE_ROLES.join(', ')}
+              placeholder={supportedBulkRoles.join(', ')}
               disabled={isProcessing}
               fullWidth
             />

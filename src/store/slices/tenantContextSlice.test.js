@@ -70,6 +70,21 @@ describe('tenantContextSlice', () => {
     expect(state.customerId).toBe('cust-5')
   })
 
+  it('initializeFromUser — supports nested customer ids on customer-admin memberships', () => {
+    const user = {
+      memberships: [
+        {
+          customer: { id: 'cust-nested' },
+          roles: ['CUSTOMER_ADMIN'],
+        },
+      ],
+    }
+
+    const state = tenantContextReducer(initialState, initializeFromUser(user))
+
+    expect(state.customerId).toBe('cust-nested')
+  })
+
   it('initializeFromUser — no-op if customerId already set', () => {
     const prev = { customerId: 'cust-1', tenantId: null, tenantName: null }
     const user = {

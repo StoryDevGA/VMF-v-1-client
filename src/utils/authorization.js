@@ -17,6 +17,17 @@
 /*  Platform                                                          */
 /* ------------------------------------------------------------------ */
 
+const getMembershipCustomerId = (membership) => {
+  const customerId =
+    membership?.customerId
+    ?? membership?.customer?.id
+    ?? membership?.customer?._id
+
+  return customerId === null || customerId === undefined
+    ? null
+    : customerId.toString()
+}
+
 /**
  * Extract all platform-level roles from a user object.
  * Platform memberships have customerId === null.
@@ -27,7 +38,7 @@
 export const getUserPlatformRoles = (user) => {
   if (!user?.memberships) return []
   return user.memberships
-    .filter((m) => m.customerId === null || m.customerId === undefined)
+    .filter((m) => getMembershipCustomerId(m) === null)
     .flatMap((m) => m.roles ?? [])
 }
 
@@ -62,8 +73,9 @@ export const isSuperAdmin = (user) => hasPlatformRole(user, 'SUPER_ADMIN')
  */
 export const getUserCustomerRoles = (user, customerId) => {
   if (!user?.memberships || !customerId) return []
+  const normalizedCustomerId = customerId.toString()
   const membership = user.memberships.find(
-    (m) => m.customerId && m.customerId.toString() === customerId.toString(),
+    (m) => getMembershipCustomerId(m) === normalizedCustomerId,
   )
   return membership?.roles ?? []
 }
@@ -119,9 +131,10 @@ export const normalizeCustomerLifecycleStatus = (status) => {
  */
 export const getCustomerLifecycleStatus = (user, customerId) => {
   if (!user?.memberships || !customerId) return ''
+  const normalizedCustomerId = customerId.toString()
 
   const membership = user.memberships.find(
-    (m) => m?.customerId && m.customerId.toString() === customerId.toString(),
+    (m) => getMembershipCustomerId(m) === normalizedCustomerId,
   )
 
   if (!membership || typeof membership !== 'object') return ''
@@ -172,9 +185,10 @@ export const normalizeCustomerTopology = (topology) => {
  */
 export const getCustomerTopology = (user, customerId) => {
   if (!user?.memberships || !customerId) return ''
+  const normalizedCustomerId = customerId.toString()
 
   const membership = user.memberships.find(
-    (m) => m?.customerId && m.customerId.toString() === customerId.toString(),
+    (m) => getMembershipCustomerId(m) === normalizedCustomerId,
   )
 
   if (!membership || typeof membership !== 'object') return ''
@@ -218,8 +232,7 @@ export const hasAnyCustomerRole = (user, role) => {
 
   return user.memberships.some(
     (membership) =>
-      membership?.customerId !== null
-      && membership?.customerId !== undefined
+      getMembershipCustomerId(membership) !== null
       && (membership.roles ?? []).includes(role),
   )
 }
@@ -231,8 +244,7 @@ export const hasAnyCustomerRole = (user, role) => {
  *
  * Returns `true` when at least one admin membership is explicitly
  * `MULTI_TENANT`. Returns `false` when all resolved admin topologies are
- * `SINGLE_TENANT`. If no admin membership exposes topology yet, this keeps the
- * legacy permissive fallback and returns `true`.
+ * `SINGLE_TENANT` or when no admin membership exposes topology data.
  *
  * @param {Object} user
  * @returns {boolean}
@@ -242,18 +254,17 @@ export const hasAnyMultiTenantCustomerAdminScope = (user) => {
 
   const customerAdminMemberships = user.memberships.filter(
     (membership) =>
-      membership?.customerId !== null
-      && membership?.customerId !== undefined
+      getMembershipCustomerId(membership) !== null
       && (membership.roles ?? []).includes('CUSTOMER_ADMIN'),
   )
 
   if (customerAdminMemberships.length === 0) return false
 
   const resolvedTopologies = customerAdminMemberships
-    .map((membership) => getCustomerTopology(user, membership.customerId))
+    .map((membership) => getCustomerTopology(user, getMembershipCustomerId(membership)))
     .filter(Boolean)
 
-  if (resolvedTopologies.length === 0) return true
+  if (resolvedTopologies.length === 0) return false
 
   return resolvedTopologies.includes('MULTI_TENANT')
 }
@@ -374,8 +385,8 @@ export const hasVmfAccess = (user, customerId, tenantId, vmfId) => {
 export const getAccessibleCustomerIds = (user) => {
   if (!user?.memberships) return []
   return user.memberships
-    .filter((m) => m.customerId !== null && m.customerId !== undefined)
-    .map((m) => m.customerId.toString())
+    .map((m) => getMembershipCustomerId(m))
+    .filter(Boolean)
 }
 
 /**

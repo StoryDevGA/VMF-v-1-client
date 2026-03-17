@@ -10,10 +10,10 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { MdExpandMore } from 'react-icons/md'
 import { useAuth } from '../../hooks/useAuth.js'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
-import { selectSelectedCustomerId } from '../../store/slices/tenantContextSlice.js'
 import {
-  getCustomerTopology,
+  hasAnyCustomerRole,
   hasAnyMultiTenantCustomerAdminScope,
   isSuperAdmin as checkIsSuperAdmin,
 } from '../../utils/authorization.js'
@@ -22,24 +22,21 @@ import './Navigation.css'
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
-  const selectedCustomerId = useSelector(selectSelectedCustomerId)
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, logoutResult } = useAuth()
+  const {
+    customerId: selectedCustomerId,
+    supportsTenantManagement: selectedCustomerSupportsTenantManagement,
+  } = useTenantContext()
 
   const isSuperAdmin = checkIsSuperAdmin(user)
-  const hasCustomerAdminAccess = (user?.memberships ?? []).some(
-    (membership) => membership.customerId && membership.roles?.includes('CUSTOMER_ADMIN'),
-  )
-  const selectedCustomerTopology = useMemo(
-    () => getCustomerTopology(user, selectedCustomerId),
-    [selectedCustomerId, user],
-  )
+  const hasCustomerAdminAccess = hasAnyCustomerRole(user, 'CUSTOMER_ADMIN')
   const supportsTenantManagement = useMemo(() => {
     if (!hasCustomerAdminAccess) return false
-    if (selectedCustomerId) return selectedCustomerTopology !== 'SINGLE_TENANT'
+    if (selectedCustomerId) return selectedCustomerSupportsTenantManagement
     return hasAnyMultiTenantCustomerAdminScope(user)
-  }, [hasCustomerAdminAccess, selectedCustomerId, selectedCustomerTopology, user])
+  }, [hasCustomerAdminAccess, selectedCustomerId, selectedCustomerSupportsTenantManagement, user])
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -127,13 +124,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       to: '/help',
     })
 
-    if (isSuperAdmin || hasCustomerAdminAccess) {
-      entries.push({
-        type: 'action',
-        key: 'sign-out',
-        label: 'Sign Out',
-      })
-    }
+    entries.push({
+      type: 'action',
+      key: 'sign-out',
+      label: 'Sign Out',
+    })
 
     return entries
   }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin, supportsTenantManagement])
