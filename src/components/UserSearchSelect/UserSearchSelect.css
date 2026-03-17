@@ -86,23 +86,32 @@
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: var(--spacing-xs);
   margin-bottom: var(--spacing-xs);
 }
 
 .user-search-select__chip {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-sm);
+  width: 100%;
   padding: var(--spacing-2xs) var(--spacing-sm);
   background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
   border-radius: var(--border-radius-full);
   font-size: var(--font-size-sm);
   line-height: 1.4;
-  max-width: 100%;
+  min-width: 0;
+}
+
+.user-search-select__chip-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
 }
 
 .user-search-select__chip-name {
@@ -111,7 +120,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  min-width: 0;
 }
 
 .user-search-select__chip-email {
@@ -120,7 +129,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  min-width: 0;
+  text-align: right;
 }
 
 .user-search-select__chip-remove {
@@ -261,11 +271,11 @@
 /* ---- Responsive ---- */
 
 @media (max-width: 768px) {
-  .user-search-select__chip-name {
-    max-width: 100px;
+  .user-search-select__chip-copy {
+    gap: var(--spacing-xs);
   }
 
   .user-search-select__chip-email {
-    display: none;
+    text-align: left;
   }
 }

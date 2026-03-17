@@ -309,6 +309,16 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
     [customerUserLookup, tenantAdminUserIds],
   )
 
+  const selectedTenantAdminUsers = useMemo(
+    () => tenantAdminUserIds.reduce((accumulator, userId) => {
+      if (customerUserLookup[userId]) {
+        accumulator[userId] = customerUserLookup[userId]
+      }
+      return accumulator
+    }, {}),
+    [customerUserLookup, tenantAdminUserIds],
+  )
+
   const filteredLinkedUserRows = useMemo(() => {
     const normalizedSearch = linkedUserSearch.trim().toLowerCase()
 
@@ -625,6 +635,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
               <UserSearchSelect
                 customerId={customerId}
                 selectedIds={tenantAdminUserIds}
+                selectedUsers={selectedTenantAdminUsers}
                 onChange={handleAdminChange}
                 label="Add users to this tenant"
                 error={fieldErrors.tenantAdminUserIds}

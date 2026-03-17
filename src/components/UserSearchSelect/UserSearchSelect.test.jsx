@@ -93,6 +93,25 @@ describe('UserSearchSelect', () => {
     expect(removeBtn).toBeInTheDocument()
   })
 
+  it('renders readable chip labels when selected user details are preloaded', () => {
+    renderSelect({
+      selectedIds: ['user-1'],
+      selectedUsers: {
+        'user-1': {
+          name: 'Jordan Manager',
+          email: 'jordan.manager@acme.test',
+          roles: ['TENANT_ADMIN'],
+          isActive: true,
+        },
+      },
+    })
+
+    const selectedAdmins = screen.getByLabelText(/selected admins/i)
+    expect(selectedAdmins).toBeInTheDocument()
+    expect(screen.getByText('Jordan Manager')).toBeInTheDocument()
+    expect(screen.getByText('jordan.manager@acme.test')).toBeInTheDocument()
+  })
+
   it('calls onChange when remove is clicked (above minimum)', () => {
     const onChange = vi.fn()
     renderSelect({
@@ -105,7 +124,8 @@ describe('UserSearchSelect', () => {
     expect(onChange).toHaveBeenCalledWith(['user-2'])
   })
 
-  it('blocks removal when at minimum required count', () => {
+  it('blocks removal when at minimum required count', async () => {
+    const user = userEvent.setup()
     const onChange = vi.fn()
     renderSelect({
       selectedIds: ['user-1'],
@@ -113,12 +133,13 @@ describe('UserSearchSelect', () => {
       minRequired: 1,
     })
     const removeBtn = screen.getByRole('button', { name: /remove/i })
-    removeBtn.click()
+    await user.click(removeBtn)
     // onChange should NOT be called
     expect(onChange).not.toHaveBeenCalled()
   })
 
   it('shows recovery warning when removal is blocked', async () => {
+    const user = userEvent.setup()
     const onChange = vi.fn()
     renderSelect({
       selectedIds: ['user-1'],
@@ -126,7 +147,7 @@ describe('UserSearchSelect', () => {
       minRequired: 1,
     })
     const removeBtn = screen.getByRole('button', { name: /remove/i })
-    removeBtn.click()
+    await user.click(removeBtn)
 
     await waitFor(() => {
       expect(screen.getByText(/cannot remove/i)).toBeInTheDocument()
@@ -135,6 +156,7 @@ describe('UserSearchSelect', () => {
   })
 
   it('shows Super Admin recovery hint when originalIds provided and removal blocked', async () => {
+    const user = userEvent.setup()
     renderSelect({
       selectedIds: ['user-1'],
       onChange: vi.fn(),
@@ -142,7 +164,7 @@ describe('UserSearchSelect', () => {
       originalIds: ['user-1'],
     })
     const removeBtn = screen.getByRole('button', { name: /remove/i })
-    removeBtn.click()
+    await user.click(removeBtn)
 
     await waitFor(() => {
       expect(screen.getByText(/contact a super admin/i)).toBeInTheDocument()
@@ -184,7 +206,7 @@ describe('UserSearchSelect', () => {
   it('shows truncated ID for selected users without cached names', () => {
     renderSelect({ selectedIds: ['507f1f77bcf86cd799439011'] })
     // Should show first 8 chars + ellipsis
-    expect(screen.getByText('507f1f77…')).toBeInTheDocument()
+    expect(screen.getByText('507f1f77...')).toBeInTheDocument()
   })
 
   it('does not render selected list when no IDs selected', () => {

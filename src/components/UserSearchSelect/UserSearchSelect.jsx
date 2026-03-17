@@ -21,6 +21,7 @@
  * @param {boolean} [props.disabled=false] — disable the component
  * @param {string}  [props.className='']   — additional CSS classes
  * @param {Array<string>} [props.originalIds=[]] — original admin IDs for recovery detection
+ * @param {Record<string, {name?: string, email?: string, roles?: Array<string>, isActive?: boolean}>} [props.selectedUsers={}] — preloaded selected-user display data
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
@@ -30,6 +31,8 @@ import './UserSearchSelect.css'
 
 /** Debounce delay for search input (ms) */
 const SEARCH_DEBOUNCE = 300
+const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
+const getUserRoles = (user) => user?.memberships?.[0]?.roles ?? []
 
 /**
  * UserSearchSelect Component
@@ -44,6 +47,7 @@ function UserSearchSelect({
   disabled = false,
   className = '',
   originalIds = [],
+  selectedUsers = {},
 }) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
@@ -75,7 +79,10 @@ function UserSearchSelect({
   const searchResults = useMemo(() => {
     const users = searchData?.data?.users ?? []
     // Filter out already-selected users
-    return users.filter((u) => !selectedIds.includes(u._id))
+    return users.filter((user) => {
+      const userId = getUserId(user)
+      return userId && !selectedIds.includes(userId)
+    })
   }, [searchData, selectedIds])
 
   /* ---- Close dropdown on outside click ---- */
@@ -92,6 +99,24 @@ function UserSearchSelect({
   /* ---- Selected user details cache ---- */
   const [selectedUsersCache, setSelectedUsersCache] = useState({})
 
+  useEffect(() => {
+    const entries = Object.entries(selectedUsers ?? {}).filter(([userId]) => Boolean(userId))
+    if (entries.length === 0) return
+
+    setSelectedUsersCache((prev) => {
+      const next = { ...prev }
+      for (const [userId, user] of entries) {
+        next[userId] = {
+          name: user?.name ?? '',
+          email: user?.email ?? '',
+          roles: Array.isArray(user?.roles) ? user.roles : [],
+          isActive: user?.isActive,
+        }
+      }
+      return next
+    })
+  }, [selectedUsers])
+
   // Update cache when search results come in (so we have name/email for selected users)
   useEffect(() => {
     const users = searchData?.data?.users ?? []
@@ -99,7 +124,14 @@ function UserSearchSelect({
     setSelectedUsersCache((prev) => {
       const next = { ...prev }
       for (const u of users) {
-        next[u._id] = { name: u.name, email: u.email, roles: u.memberships?.[0]?.roles ?? [], isActive: u.isActive }
+        const userId = getUserId(u)
+        if (!userId) continue
+        next[userId] = {
+          name: u.name,
+          email: u.email,
+          roles: getUserRoles(u),
+          isActive: u.isActive,
+        }
       }
       return next
     })
@@ -121,11 +153,19 @@ function UserSearchSelect({
 
   const handleSelectUser = useCallback(
     (user) => {
-      const newIds = [...selectedIds, user._id]
+      const userId = getUserId(user)
+      if (!userId) return
+
+      const newIds = [...selectedIds, userId]
       // Cache the user details
       setSelectedUsersCache((prev) => ({
         ...prev,
-        [user._id]: { name: user.name, email: user.email, roles: user.memberships?.[0]?.roles ?? [], isActive: user.isActive },
+        [userId]: {
+          name: user.name,
+          email: user.email,
+          roles: getUserRoles(user),
+          isActive: user.isActive,
+        },
       }))
       onChange(newIds)
       setQuery('')
@@ -164,7 +204,7 @@ function UserSearchSelect({
       const cached = selectedUsersCache[userId]
       if (cached) return cached.name || cached.email
       // Fallback — truncated ID
-      return `${userId.slice(0, 8)}…`
+      return `${userId.slice(0, 8)}...`
     },
     [selectedUsersCache],
   )
@@ -205,14 +245,16 @@ function UserSearchSelect({
         <ul className="user-search-select__selected" aria-label="Selected admins">
           {selectedIds.map((uid) => (
             <li key={uid} className="user-search-select__chip">
-              <span className="user-search-select__chip-name">
-                {getDisplayName(uid)}
-              </span>
-              {getDisplayEmail(uid) && (
-                <span className="user-search-select__chip-email">
-                  {getDisplayEmail(uid)}
+              <div className="user-search-select__chip-copy">
+                <span className="user-search-select__chip-name">
+                  {getDisplayName(uid)}
                 </span>
-              )}
+                {getDisplayEmail(uid) && (
+                  <span className="user-search-select__chip-email">
+                    {getDisplayEmail(uid)}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 className="user-search-select__chip-remove"

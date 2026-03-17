@@ -173,6 +173,10 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByLabelText(/add users to this tenant/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/search linked users/i)).toBeInTheDocument()
 
+    const selectedAdmins = screen.getByLabelText(/selected admins/i)
+    expect(within(selectedAdmins).getByText('Jordan Manager')).toBeInTheDocument()
+    expect(within(selectedAdmins).getByText('Taylor Viewer')).toBeInTheDocument()
+
     const table = screen.getByRole('table', { name: /linked users/i })
 
     expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
