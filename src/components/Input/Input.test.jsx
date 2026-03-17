@@ -29,6 +29,12 @@ describe('Input Component', () => {
       expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument()
     })
 
+    it('should suppress placeholder text when a label is provided', () => {
+      render(<Input label="Email" placeholder="Enter your email" id="email-with-placeholder" />)
+      expect(screen.getByLabelText('Email')).toBeInTheDocument()
+      expect(screen.queryByPlaceholderText('Enter your email')).not.toBeInTheDocument()
+    })
+
     it('should have default classes', () => {
       const { container } = render(<Input />)
       const inputContainer = container.querySelector('.input-container')

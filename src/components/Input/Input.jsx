@@ -51,6 +51,7 @@ export const Input = forwardRef(function Input(
   const hasRightIcon = Boolean(rightIcon)
   const hasRightAdornment = hasRightIcon || canTogglePassword
   const isFileInput = inputType === 'file'
+  const resolvedPlaceholder = label ? undefined : placeholder
 
   useEffect(() => {
     if (value === undefined) return
@@ -119,7 +120,7 @@ export const Input = forwardRef(function Input(
           defaultValue={defaultValue}
           disabled={disabled}
           required={required}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onChange={handleChange}
