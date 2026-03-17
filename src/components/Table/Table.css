@@ -166,11 +166,13 @@
   }
 
   .table__cell--checkbox {
-    width: 48px;
-    padding: var(--spacing-md);
+    width: 3.5rem;
+    padding: var(--spacing-sm);
     border-bottom: 1px solid var(--color-border);
     border-top: none;
     margin-bottom: 0;
+    text-align: center;
+    vertical-align: middle;
   }
 
   .table__cell--actions {
@@ -210,8 +212,18 @@
   }
 
   .table__header--checkbox {
-    width: 48px;
+    width: 3.5rem;
+    padding: var(--spacing-sm);
     text-align: center;
+    vertical-align: middle;
+  }
+
+  .table__header--checkbox .tickbox-container,
+  .table__cell--checkbox .tickbox-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
   }
 }
 

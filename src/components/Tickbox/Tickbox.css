@@ -26,8 +26,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   border: 2px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-  border-radius: var(--border-radius-xs);
+  border-radius: var(--border-radius-sm);
   background-color: var(--color-surface);
   transition: all var(--transition-fast);
 }

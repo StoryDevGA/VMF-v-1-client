@@ -226,6 +226,17 @@ describe('Table Component', () => {
       expect(checkboxes.length).toBe(4) // 1 select-all + 3 rows
     })
 
+    it('should render selection controls inside dedicated checkbox cells', () => {
+      const { container } = render(<Table columns={columns} data={data} selectable />)
+
+      expect(
+        container.querySelector('.table__header--checkbox .tickbox-container'),
+      ).toBeInTheDocument()
+      expect(
+        container.querySelectorAll('.table__cell--checkbox .tickbox-container'),
+      ).toHaveLength(3)
+    })
+
     it('should select individual row', async () => {
       const user = userEvent.setup()
       const onSelectChange = vi.fn()
