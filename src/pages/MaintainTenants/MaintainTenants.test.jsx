@@ -332,6 +332,7 @@ describe('MaintainTenants page', () => {
     expect(
       screen.getByText(/use the actions menu to edit tenant details or change lifecycle state/i),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /^default$/i })).not.toBeInTheDocument()
 
     const enabledActions = screen.getByRole('combobox', { name: /actions for enabled tenant/i })
     expect(within(enabledActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
@@ -453,7 +454,10 @@ describe('MaintainTenants page', () => {
     await user.click(within(dialog).getByRole('button', { name: /^disable$/i }))
 
     await waitFor(() => {
-      expect(disableTenantMutationMock).toHaveBeenCalledWith({ tenantId: 'tenant-enabled' })
+      expect(disableTenantMutationMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        tenantId: 'tenant-enabled',
+      })
     })
     expect(
       await screen.findByText(/enabled tenant is disabled\. users assigned to this tenant lost access immediately\./i),
@@ -487,7 +491,10 @@ describe('MaintainTenants page', () => {
     await user.click(within(dialog).getByRole('button', { name: /^disable$/i }))
 
     await waitFor(() => {
-      expect(disableTenantMutationMock).toHaveBeenCalledWith({ tenantId: 'tenant-enabled-id-only' })
+      expect(disableTenantMutationMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        tenantId: 'tenant-enabled-id-only',
+      })
     })
     expect(
       await screen.findByText(/enabled tenant id only is disabled\. users assigned to this tenant lost access immediately\./i),
@@ -524,7 +531,10 @@ describe('MaintainTenants page', () => {
     await user.click(within(dialog).getByRole('button', { name: /^enable$/i }))
 
     await waitFor(() => {
-      expect(enableTenantMutationMock).toHaveBeenCalledWith({ tenantId: 'tenant-disabled' })
+      expect(enableTenantMutationMock).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        tenantId: 'tenant-disabled',
+      })
     })
     expect(
       await screen.findByText(/disabled tenant is enabled\. users assigned to this tenant can access it immediately\./i),
@@ -538,7 +548,7 @@ describe('MaintainTenants page', () => {
     expect(screen.getByText('Website')).toBeInTheDocument()
     const statusElements = screen.getAllByText('Status')
     expect(statusElements.length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('Default')).toBeInTheDocument()
+    expect(screen.queryByText('Default')).not.toBeInTheDocument()
     expect(screen.getByText('Actions')).toBeInTheDocument()
   })
 

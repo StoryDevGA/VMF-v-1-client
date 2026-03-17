@@ -220,11 +220,6 @@ export function TenantListView({
         render: (_value, row) => <TenantStatusCell tenant={row} />,
       },
       {
-        key: 'isDefault',
-        label: 'Default',
-        render: (_value, row) => (row.isDefault ? 'Yes' : '--'),
-      },
-      {
         key: 'rowActions',
         label: 'Actions',
         align: 'center',
@@ -286,7 +281,6 @@ export function TenantListView({
                 type="search"
                 label="Search"
                 size="sm"
-                placeholder="Search by name..."
                 value={searchInput}
                 onChange={(event) => onSearchInputChange(event.target.value)}
                 fullWidth
