@@ -236,6 +236,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const [linkedUserSearch, setLinkedUserSearch] = useState('')
   const [linkedUserStatusFilter, setLinkedUserStatusFilter] = useState('')
   const [selectedLinkedUserIds, setSelectedLinkedUserIds] = useState(new Set())
+  const [confirmRemoveUserIds, setConfirmRemoveUserIds] = useState([])
 
   /* ---- Original admin IDs for recovery detection ---- */
   const originalAdminIds = useMemo(
@@ -273,6 +274,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       setLinkedUserSearch('')
       setLinkedUserStatusFilter('')
       setSelectedLinkedUserIds(new Set())
+      setConfirmRemoveUserIds([])
     }
   }, [tenant])
 
@@ -348,6 +350,49 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
     return `${allLinkedUserRows.length} linked | ${activeCount} active`
   }, [allLinkedUserRows])
 
+  const normalizedSelectedLinkedUserIds = useMemo(
+    () => [...selectedLinkedUserIds].filter((userId) => tenantAdminUserIds.includes(userId)),
+    [selectedLinkedUserIds, tenantAdminUserIds],
+  )
+
+  const selectedLinkedUserCount = normalizedSelectedLinkedUserIds.length
+
+  const canReviewBulkRemoval =
+    !isLoading
+    && !isArchivedTenant
+    && selectedLinkedUserCount > 0
+    && tenantAdminUserIds.length - selectedLinkedUserCount >= 1
+
+  const bulkRemovalStatusMessage = useMemo(() => {
+    if (isArchivedTenant) {
+      return 'Archived tenants are read-only, so linked users cannot be removed here.'
+    }
+
+    if (selectedLinkedUserCount === 0) {
+      return 'Select linked users from the table to review a bulk removal.'
+    }
+
+    if (tenantAdminUserIds.length - selectedLinkedUserCount < 1) {
+      return 'At least one tenant admin must remain linked before you can remove the current selection.'
+    }
+
+    return `${selectedLinkedUserCount} linked user${selectedLinkedUserCount === 1 ? '' : 's'} selected for review.`
+  }, [isArchivedTenant, selectedLinkedUserCount, tenantAdminUserIds.length])
+
+  const handleLinkedSelectionChange = useCallback((nextSelection) => {
+    const normalized = nextSelection instanceof Set
+      ? [...nextSelection]
+      : Array.isArray(nextSelection)
+      ? nextSelection
+      : []
+
+    setSelectedLinkedUserIds(new Set(
+      normalized
+        .map((userId) => String(userId ?? '').trim())
+        .filter((userId) => tenantAdminUserIds.includes(userId)),
+    ))
+  }, [tenantAdminUserIds])
+
   const removeTenantAdmins = useCallback((userIdsToRemove) => {
     if (!Array.isArray(userIdsToRemove) || userIdsToRemove.length === 0) return
 
@@ -374,8 +419,23 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       currentIds.filter((userId) => !uniqueUserIdsToRemove.includes(userId))
     ))
     setSelectedLinkedUserIds(new Set())
+    setConfirmRemoveUserIds([])
     clearTenantAdminFieldError()
   }, [addToast, clearTenantAdminFieldError, tenantAdminUserIds])
+
+  const handleReviewBulkRemoval = useCallback(() => {
+    if (!canReviewBulkRemoval) return
+    setConfirmRemoveUserIds(normalizedSelectedLinkedUserIds)
+  }, [canReviewBulkRemoval, normalizedSelectedLinkedUserIds])
+
+  const handleConfirmBulkRemoval = useCallback(() => {
+    removeTenantAdmins(confirmRemoveUserIds)
+  }, [confirmRemoveUserIds, removeTenantAdmins])
+
+  const confirmRemoveUsers = useMemo(
+    () => confirmRemoveUserIds.map((userId) => customerUserLookup[userId] ?? getFallbackLinkedUserRow(userId)),
+    [confirmRemoveUserIds, customerUserLookup],
+  )
 
   /* ---- Validate ---- */
   const validate = useCallback(() => {
@@ -665,19 +725,19 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
               </div>
 
               <div className="tenant-edit-drawer__linked-actions">
+                <p className="tenant-edit-drawer__linked-selection-status" role="status" aria-live="polite">
+                  {bulkRemovalStatusMessage}
+                </p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => removeTenantAdmins([...selectedLinkedUserIds])}
+                  onClick={handleReviewBulkRemoval}
                   disabled={
-                    isLoading
-                    || isArchivedTenant
-                    || selectedLinkedUserIds.size === 0
-                    || tenantAdminUserIds.length - selectedLinkedUserIds.size < 1
+                    !canReviewBulkRemoval
                   }
                 >
-                  Remove Selected
+                  Remove Selected{selectedLinkedUserCount > 0 ? ` (${selectedLinkedUserCount})` : ''}
                 </Button>
               </div>
 
@@ -699,7 +759,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
                   data={filteredLinkedUserRows}
                   selectable
                   selectedRows={selectedLinkedUserIds}
-                  onSelectChange={setSelectedLinkedUserIds}
+                  onSelectChange={handleLinkedSelectionChange}
                   actions={linkedUserActions}
                   onRowAction={(_label, row) => removeTenantAdmins([row.id])}
                   loading={isFetchingCustomerUsers}
@@ -731,6 +791,51 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           Save Changes
         </Button>
       </Dialog.Footer>
+
+      <Dialog
+        open={confirmRemoveUserIds.length > 0}
+        onClose={() => setConfirmRemoveUserIds([])}
+        size="sm"
+        closeOnBackdropClick={!isLoading}
+        closeOnEscape={!isLoading}
+      >
+        <Dialog.Header>
+          <h2 className="maintain-tenants__confirm-title">Remove linked users</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p>
+            Remove {confirmRemoveUserIds.length} linked user{confirmRemoveUserIds.length === 1 ? '' : 's'} from this tenant?
+          </p>
+          {confirmRemoveUsers.length > 0 ? (
+            <ul className="tenant-edit-drawer__confirm-list">
+              {confirmRemoveUsers.map((user) => (
+                <li key={user.id} className="tenant-edit-drawer__confirm-item">
+                  <span className="tenant-edit-drawer__confirm-name">{user.name}</span>
+                  <span className="tenant-edit-drawer__confirm-email">
+                    {user.email || user.id}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Dialog.Body>
+        <Dialog.Footer className="maintain-tenants__confirm-footer">
+          <Button
+            variant="outline"
+            onClick={() => setConfirmRemoveUserIds([])}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleConfirmBulkRemoval}
+            disabled={isLoading}
+          >
+            Remove Linked Users
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </Dialog>
   )
 }

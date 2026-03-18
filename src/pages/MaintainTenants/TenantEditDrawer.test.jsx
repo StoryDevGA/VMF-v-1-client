@@ -207,7 +207,7 @@ describe('TenantEditDrawer', () => {
     expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
   })
 
-  it('removes selected linked users and submits the updated tenant-admin assignments', async () => {
+  it('reviews and confirms linked-user bulk removal before submitting the updated tenant-admin assignments', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
     const updateTenantMutationMock = vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } })
@@ -218,8 +218,24 @@ describe('TenantEditDrawer', () => {
 
     renderDrawer({ onClose })
 
+    expect(
+      screen.getByText(/select linked users from the table to review a bulk removal/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^remove selected$/i })).toBeDisabled()
+
     await user.click(screen.getByLabelText(/select row admin-user-2/i))
-    await user.click(screen.getByRole('button', { name: /remove selected/i }))
+
+    expect(screen.getByText(/1 linked user selected for review/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /remove selected \(1\)/i })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /remove selected \(1\)/i }))
+
+    const confirmDialog = screen.getAllByRole('dialog')[1]
+    expect(within(confirmDialog).getByRole('heading', { name: /remove linked users/i })).toBeInTheDocument()
+    expect(within(confirmDialog).getByText(/remove 1 linked user from this tenant/i)).toBeInTheDocument()
+    expect(within(confirmDialog).getByText('Taylor Viewer')).toBeInTheDocument()
+
+    await user.click(within(confirmDialog).getByRole('button', { name: /remove linked users/i }))
 
     const table = screen.getByRole('table', { name: /linked users/i })
     expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
@@ -248,7 +264,10 @@ describe('TenantEditDrawer', () => {
 
     await user.click(screen.getByLabelText(/select row admin-user-1/i))
 
-    expect(screen.getByRole('button', { name: /remove selected/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /remove selected \(1\)/i })).toBeDisabled()
+    expect(
+      screen.getByText(/at least one tenant admin must remain linked before you can remove the current selection/i),
+    ).toBeInTheDocument()
   })
 
   it('shows archived tenants as read-only in the edit drawer', () => {
