@@ -1,12 +1,12 @@
 /**
  * Tenant Edit Drawer
  *
- * Dialog for editing an existing tenant's details and linked tenant admins.
+ * Dialog for editing an existing tenant's details and linked-admin assignments.
  * Opens as a side-sheet style dialog when a tenant row's Edit action is triggered.
  *
  * Features:
  * - Tenant details are grouped at the top of the drawer
- * - Linked tenant admins are managed in a searchable workspace below
+ * - Linked-admin users are managed in a searchable workspace below
  * - Minimum 1 admin enforcement with removal protection
  * - Diff-based update (only sends changed fields)
  *
@@ -62,20 +62,6 @@ const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().t
 const getTenantId = (tenant) => String(tenant?._id ?? tenant?.id ?? '').trim()
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
 
-const getUserRoles = (user, customerId) => {
-  if (Array.isArray(user?.customerRoles) && user.customerRoles.length > 0) {
-    return user.customerRoles
-  }
-
-  if (!Array.isArray(user?.memberships)) return []
-
-  const membership = user.memberships.find(
-    (entry) => String(entry?.customerId ?? '') === String(customerId ?? ''),
-  )
-
-  return Array.isArray(membership?.roles) ? membership.roles : []
-}
-
 const getLinkedUserStatus = (user) => {
   const explicitStatus = String(user?.status ?? '').trim().toUpperCase()
   if (explicitStatus === 'ENABLED' || explicitStatus === 'ACTIVE') return 'ACTIVE'
@@ -96,7 +82,6 @@ const getFallbackLinkedUserRow = (userId) => ({
   name: `${String(userId).slice(0, 8)}...`,
   email: '',
   status: 'UNKNOWN',
-  roles: [],
 })
 
 const getTenantLifecycleGuidance = (tenant) => {
@@ -257,12 +242,11 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         name: String(user?.name ?? '').trim() || String(user?.email ?? '').trim() || userId,
         email: String(user?.email ?? '').trim(),
         status: getLinkedUserStatus(user),
-        roles: getUserRoles(user, customerId),
       }
     }
 
     return lookup
-  }, [customerUsers, customerId])
+  }, [customerUsers])
 
   /* ---- Sync from tenant prop ---- */
   useEffect(() => {
@@ -335,7 +319,6 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         row.name,
         row.email,
         row.id,
-        ...(Array.isArray(row.roles) ? row.roles : []),
       ]
         .filter(Boolean)
         .join(' ')
@@ -373,7 +356,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
     }
 
     if (tenantAdminUserIds.length - selectedLinkedUserCount < 1) {
-      return 'At least one tenant admin must remain linked before you can remove the current selection.'
+      return 'At least one linked user must remain assigned before you can remove the current selection.'
     }
 
     return `${selectedLinkedUserCount} linked user${selectedLinkedUserCount === 1 ? '' : 's'} selected for review.`
@@ -402,7 +385,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
     ).length
 
     if (remainingCount < 1) {
-      const removalMessage = 'At least one tenant admin must remain linked to this tenant.'
+      const removalMessage = 'At least one linked user must remain assigned to this tenant.'
       setFieldErrors((currentErrors) => ({
         ...currentErrors,
         tenantAdminUserIds: removalMessage,
@@ -451,7 +434,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       }
     }
     if (tenantAdminUserIds.length === 0) {
-      errors.tenantAdminUserIds = 'At least one tenant admin is required.'
+      errors.tenantAdminUserIds = 'At least one linked user is required for this tenant.'
     }
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
@@ -484,13 +467,6 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           >
             {row.status}
           </Status>
-        ),
-      },
-      {
-        key: 'roles',
-        label: 'Roles',
-        render: (_value, row) => (
-          row.roles.length > 0 ? row.roles.join(', ') : '--'
         ),
       },
     ],
@@ -574,7 +550,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           tenantAdminUserIds: assignmentMessage,
         }))
         addToast({
-          title: 'Tenant admin selection needs attention',
+          title: 'Linked user selection needs attention',
           description: assignmentMessage,
           variant: 'warning',
         })
@@ -682,8 +658,8 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
                 <div className="tenant-edit-drawer__linked-copy">
                   <p className="tenant-edit-drawer__linked-title">Linked users</p>
                   <p className="tenant-edit-drawer__linked-text">
-                    Add linked users with search, then manage the current linked users in the table
-                    below. At least one tenant admin must remain linked before you save.
+                    In v1, linked users are the users who administer this tenant. Add or remove
+                    linked users here, and keep at least one linked user assigned before you save.
                   </p>
                 </div>
                 <p className="tenant-edit-drawer__linked-summary">{linkedUserSummary}</p>
@@ -709,7 +685,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
                   size="sm"
                   value={linkedUserSearch}
                   onChange={(event) => setLinkedUserSearch(event.target.value)}
-                  placeholder="Search by name, email, role, or ID"
+                  placeholder="Search by name, email, or ID"
                   fullWidth
                   disabled={isLoading}
                 />

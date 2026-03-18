@@ -168,6 +168,9 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByText('Linked Users')).toBeInTheDocument()
     expect(screen.getByText('Linked users')).toBeInTheDocument()
     expect(screen.getByText('2 linked | 1 active')).toBeInTheDocument()
+    expect(
+      screen.getByText(/linked users are the users who administer this tenant/i),
+    ).toBeInTheDocument()
     expect(screen.getByLabelText(/add linked users/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/search linked users/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/selected admins/i)).not.toBeInTheDocument()
@@ -176,8 +179,7 @@ describe('TenantEditDrawer', () => {
 
     expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
     expect(within(table).getByText('Taylor Viewer')).toBeInTheDocument()
-    expect(within(table).getByText('TENANT_ADMIN')).toBeInTheDocument()
-    expect(within(table).getByText('USER')).toBeInTheDocument()
+    expect(within(table).queryByRole('columnheader', { name: /roles/i })).not.toBeInTheDocument()
   })
 
   it('renders nothing when tenant is null', () => {
@@ -266,7 +268,7 @@ describe('TenantEditDrawer', () => {
 
     expect(screen.getByRole('button', { name: /remove selected \(1\)/i })).toBeDisabled()
     expect(
-      screen.getByText(/at least one tenant admin must remain linked before you can remove the current selection/i),
+      screen.getByText(/at least one linked user must remain assigned before you can remove the current selection/i),
     ).toBeInTheDocument()
   })
 
