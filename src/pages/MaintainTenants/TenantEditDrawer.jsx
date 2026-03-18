@@ -345,7 +345,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
 
   const linkedUserSummary = useMemo(() => {
     const activeCount = allLinkedUserRows.filter((row) => row.status === 'ACTIVE').length
-    return `${allLinkedUserRows.length} linked user${allLinkedUserRows.length === 1 ? '' : 's'} | ${activeCount} active`
+    return `${allLinkedUserRows.length} linked | ${activeCount} active`
   }, [allLinkedUserRows])
 
   const removeTenantAdmins = useCallback((userIdsToRemove) => {
@@ -620,10 +620,10 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
             <Card.Body className="tenant-edit-drawer__linked-card-body">
               <div className="tenant-edit-drawer__linked-header">
                 <div className="tenant-edit-drawer__linked-copy">
-                  <p className="tenant-edit-drawer__linked-title">Linked tenant admins</p>
+                  <p className="tenant-edit-drawer__linked-title">Linked users</p>
                   <p className="tenant-edit-drawer__linked-text">
-                    Add, search, filter, and remove the users who administer this tenant. At least
-                    one tenant admin must remain linked before you save.
+                    Add linked users with search, then manage the current linked users in the table
+                    below. At least one tenant admin must remain linked before you save.
                   </p>
                 </div>
                 <p className="tenant-edit-drawer__linked-summary">{linkedUserSummary}</p>
@@ -634,11 +634,12 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
                 selectedIds={tenantAdminUserIds}
                 selectedUsers={selectedTenantAdminUsers}
                 onChange={handleAdminChange}
-                label="Add users to this tenant"
+                label="Add linked users"
                 error={fieldErrors.tenantAdminUserIds}
                 minRequired={1}
                 disabled={isLoading || isArchivedTenant}
                 originalIds={originalAdminIds}
+                showSelectedUsers={false}
               />
 
               <div className="tenant-edit-drawer__linked-toolbar">

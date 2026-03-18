@@ -213,4 +213,20 @@ describe('UserSearchSelect', () => {
     renderSelect({ selectedIds: [] })
     expect(screen.queryByLabelText(/selected admins/i)).not.toBeInTheDocument()
   })
+
+  it('can suppress the selected-user chip list when the consumer already renders selected users elsewhere', () => {
+    renderSelect({
+      selectedIds: ['user-1'],
+      showSelectedUsers: false,
+      selectedUsers: {
+        'user-1': {
+          name: 'Jordan Manager',
+          email: 'jordan.manager@acme.test',
+        },
+      },
+    })
+
+    expect(screen.queryByLabelText(/selected admins/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+  })
 })

@@ -397,6 +397,10 @@
   gap: var(--spacing-lg, 1.5rem);
 }
 
+.tenant-edit-drawer__linked-card-body {
+  gap: var(--spacing-md, 1rem);
+}
+
 .tenant-edit-drawer__details-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -432,6 +436,19 @@
 
 .tenant-edit-drawer__linked-summary {
   font-weight: var(--font-weight-semibold, 600);
+}
+
+@media (min-width: 768px) {
+  .tenant-edit-drawer__linked-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .tenant-edit-drawer__linked-summary {
+    text-align: right;
+    white-space: nowrap;
+  }
 }
 
 .tenant-edit-drawer__linked-toolbar {

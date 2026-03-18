@@ -48,6 +48,7 @@ function UserSearchSelect({
   className = '',
   originalIds = [],
   selectedUsers = {},
+  showSelectedUsers = true,
 }) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
@@ -241,7 +242,7 @@ function UserSearchSelect({
       )}
 
       {/* Selected users chips */}
-      {selectedIds.length > 0 && (
+      {showSelectedUsers && selectedIds.length > 0 && (
         <ul className="user-search-select__selected" aria-label="Selected admins">
           {selectedIds.map((uid) => (
             <li key={uid} className="user-search-select__chip">

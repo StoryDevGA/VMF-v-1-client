@@ -166,14 +166,11 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
     expect(screen.getByText('Tenant Details')).toBeInTheDocument()
     expect(screen.getByText('Linked Users')).toBeInTheDocument()
-    expect(screen.getByText('Linked tenant admins')).toBeInTheDocument()
-    expect(screen.getByText('2 linked users | 1 active')).toBeInTheDocument()
-    expect(screen.getByLabelText(/add users to this tenant/i)).toBeInTheDocument()
+    expect(screen.getByText('Linked users')).toBeInTheDocument()
+    expect(screen.getByText('2 linked | 1 active')).toBeInTheDocument()
+    expect(screen.getByLabelText(/add linked users/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/search linked users/i)).toBeInTheDocument()
-
-    const selectedAdmins = screen.getByLabelText(/selected admins/i)
-    expect(within(selectedAdmins).getByText('Jordan Manager')).toBeInTheDocument()
-    expect(within(selectedAdmins).getByText('Taylor Viewer')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/selected admins/i)).not.toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: /linked users/i })
 
@@ -226,7 +223,7 @@ describe('TenantEditDrawer', () => {
 
     const table = screen.getByRole('table', { name: /linked users/i })
     expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
-    expect(screen.getByText('1 linked user | 1 active')).toBeInTheDocument()
+    expect(screen.getByText('1 linked | 1 active')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
@@ -260,7 +257,7 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
     expect(screen.getByLabelText(/website url/i)).toBeDisabled()
-    expect(screen.getByLabelText(/add users to this tenant/i)).toBeDisabled()
+    expect(screen.getByLabelText(/add linked users/i)).toBeDisabled()
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
