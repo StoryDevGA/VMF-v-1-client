@@ -196,7 +196,9 @@ describe('BulkUserOperations', () => {
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
-    expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
+    expect(screen.getByText(/role access/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant visibility change/i)).toBeInTheDocument()
     expect(
       screen.getByText(/supported bulk roles: tenant_admin, user\./i),
@@ -225,7 +227,8 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
   })
 
@@ -245,7 +248,8 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
   })
 
@@ -646,7 +650,7 @@ describe('BulkUserOperations', () => {
     renderDialog({ selectedUserIds: ['u1'] })
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
-    await user.type(screen.getByLabelText(/roles/i), 'TENANT_ADMIN')
+    await user.click(screen.getByLabelText(/tenant admin/i))
     await user.click(screen.getByRole('button', { name: /update selected/i }))
 
     await waitFor(() => {
@@ -732,22 +736,41 @@ describe('BulkUserOperations', () => {
     })
   })
 
-  it('blocks bulk update when roles include CUSTOMER_ADMIN', async () => {
+  it('does not offer CUSTOMER_ADMIN in bulk update role selection', async () => {
     const user = userEvent.setup()
     renderDialog({ selectedUserIds: ['u1'] })
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
-    await user.type(screen.getByLabelText(/roles/i), 'CUSTOMER_ADMIN')
-    await user.click(screen.getByRole('button', { name: /update selected/i }))
 
-    expect(bulkUpdateMock).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      /bulk operations cannot assign or remove customer admin ownership/i,
-    )
-    expect(screen.getByRole('alert')).toHaveTextContent(/transfer ownership/i)
+    expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
   })
 
-  it('blocks bulk update when single-tenant customers include TENANT_ADMIN', async () => {
+  it('keeps update disabled until at least one change is selected', async () => {
+    const user = userEvent.setup()
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+
+    expect(screen.getByRole('button', { name: /update selected users/i })).toBeDisabled()
+    expect(
+      screen.getByText(/choose at least one role or tenant visibility change before updating selected users\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a replace-mode readiness hint until a tenant is selected', async () => {
+    const user = userEvent.setup()
+    renderDialog({ selectedUserIds: ['u1'] })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+    await user.selectOptions(screen.getByLabelText(/tenant visibility change/i), 'replace')
+
+    expect(
+      screen.getByText(/select at least one tenant before replacing tenant visibility\./i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /update selected users/i })).toBeDisabled()
+  })
+
+  it('hides TENANT_ADMIN in single-tenant bulk update and still allows USER updates', async () => {
     const user = userEvent.setup()
     mockUseTenantContext.mockReturnValue(
       getTenantContextMockValue({
@@ -767,13 +790,25 @@ describe('BulkUserOperations', () => {
     renderDialog({ selectedUserIds: ['u1'] })
 
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
-    await user.type(screen.getByLabelText(/roles/i), 'TENANT_ADMIN')
+    await user.click(screen.getByLabelText(/^user$/i))
     await user.click(screen.getByRole('button', { name: /update selected/i }))
 
-    expect(bulkUpdateMock).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      /bulk role updates for this customer only support user/i,
-    )
+    await waitFor(() => {
+      expect(bulkUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            users: [
+              {
+                userId: 'u1',
+                roles: ['USER'],
+              },
+            ],
+          },
+        }),
+      )
+    })
+    expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
   })
 
   it('suppresses the tenant-visibility fallback hint for single-tenant customers', async () => {

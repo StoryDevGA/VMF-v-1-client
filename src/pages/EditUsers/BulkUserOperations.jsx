@@ -69,6 +69,9 @@ const BULK_TENANT_VISIBILITY_EMPTY_OPTIONS_MESSAGE =
 const BULK_TENANT_VISIBILITY_PRESERVED_MESSAGE =
   'Selected tenants that are no longer selectable stay preserved until you remove them.'
 
+const BULK_UPDATE_ROLE_GUIDANCE =
+  'Select the roles to apply to every selected user. Leave all roles cleared if you only want to change tenant visibility.'
+
 const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
   { value: 'unchanged', label: 'Leave tenant visibility unchanged' },
   { value: 'replace', label: 'Replace with selected tenants' },
@@ -282,6 +285,53 @@ function getUnsupportedBulkRolesMessage(supportedRoles, rowNumbers = []) {
   return `Bulk role updates for ${rowLabel} only support ${supportedRoles.join(', ')}. Remove unsupported roles and retry.`
 }
 
+function formatRoleLabel(role) {
+  return String(role ?? '')
+    .trim()
+    .replace(/_/g, ' ')
+}
+
+function getBulkUpdateReadinessMessage({
+  selectedCount,
+  selectedRoles,
+  shouldShowTenantVisibilityUpdate,
+  bulkTenantVisibilityMode,
+  normalizedSelectedBulkTenantVisibility,
+  isLoadingTenants,
+  normalizedTenantsError,
+}) {
+  if (selectedCount === 0) {
+    return 'Select at least one user before applying a bulk update.'
+  }
+
+  if (isLoadingTenants && bulkTenantVisibilityMode === 'replace') {
+    return 'Tenant options are still loading before this replace change can be applied.'
+  }
+
+  if (normalizedTenantsError && bulkTenantVisibilityMode === 'replace') {
+    return 'Tenant options could not be loaded. Resolve that error before applying a replace change.'
+  }
+
+  if (
+    shouldShowTenantVisibilityUpdate
+    && bulkTenantVisibilityMode === 'replace'
+    && normalizedSelectedBulkTenantVisibility.length === 0
+  ) {
+    return 'Select at least one tenant before replacing tenant visibility.'
+  }
+
+  if (
+    selectedRoles.length === 0
+    && (!shouldShowTenantVisibilityUpdate || bulkTenantVisibilityMode === 'unchanged')
+  ) {
+    return shouldShowTenantVisibilityUpdate
+      ? 'Choose at least one role or tenant visibility change before updating selected users.'
+      : 'Choose at least one role before updating selected users.'
+  }
+
+  return 'Ready to apply the selected changes to every selected user.'
+}
+
 function parseCsvLine(line) {
   const out = []
   let current = ''
@@ -416,7 +466,7 @@ function BulkUserOperations({
   const [progressLabel, setProgressLabel] = useState('')
   const [progressValue, setProgressValue] = useState(0)
   const [resultSummary, setResultSummary] = useState(null)
-  const [bulkRoles, setBulkRoles] = useState('')
+  const [selectedBulkRoles, setSelectedBulkRoles] = useState([])
   const [bulkTenantVisibilityMode, setBulkTenantVisibilityMode] = useState('unchanged')
   const [selectedBulkTenantVisibility, setSelectedBulkTenantVisibility] = useState([])
   const previewSectionRef = useRef(null)
@@ -526,7 +576,7 @@ function BulkUserOperations({
     setProgressLabel('')
     setProgressValue(0)
     setResultSummary(null)
-    setBulkRoles('')
+    setSelectedBulkRoles([])
     setBulkTenantVisibilityMode('unchanged')
     setSelectedBulkTenantVisibility([])
   }, [defaultOperation])
@@ -542,6 +592,13 @@ function BulkUserOperations({
     setBulkTenantVisibilityMode('unchanged')
     setSelectedBulkTenantVisibility([])
   }, [shouldShowTenantVisibilityUpdate])
+
+  useEffect(() => {
+    setSelectedBulkRoles((prev) => {
+      const next = prev.filter((role) => supportedBulkRoles.includes(role))
+      return next.length === prev.length ? prev : next
+    })
+  }, [supportedBulkRoles])
 
   useEffect(() => {
     if (!open) return
@@ -762,7 +819,7 @@ function BulkUserOperations({
 
   const canRunUpdate = useMemo(() => {
     if (operation !== 'update') return false
-    const hasRoles = bulkRoles.trim().length > 0
+    const hasRoles = selectedBulkRoles.length > 0
     const hasTenantReplaceSelection =
       bulkTenantVisibilityMode === 'replace'
       && normalizedSelectedBulkTenantVisibility.length > 0
@@ -773,15 +830,37 @@ function BulkUserOperations({
       && (hasTenantReplaceSelection || hasTenantClearSelection)
     return selectedCount > 0 && (hasRoles || hasTenants)
   }, [
-    bulkRoles,
     bulkTenantVisibilityMode,
     isLoadingTenants,
     normalizedSelectedBulkTenantVisibility.length,
     normalizedTenantsError,
     operation,
+    selectedBulkRoles.length,
     selectedCount,
     shouldShowTenantVisibilityUpdate,
   ])
+
+  const bulkUpdateReadinessMessage = useMemo(
+    () =>
+      getBulkUpdateReadinessMessage({
+        selectedCount,
+        selectedRoles: selectedBulkRoles,
+        shouldShowTenantVisibilityUpdate,
+        bulkTenantVisibilityMode,
+        normalizedSelectedBulkTenantVisibility,
+        isLoadingTenants,
+        normalizedTenantsError,
+      }),
+    [
+      bulkTenantVisibilityMode,
+      isLoadingTenants,
+      normalizedSelectedBulkTenantVisibility,
+      normalizedTenantsError,
+      selectedBulkRoles,
+      selectedCount,
+      shouldShowTenantVisibilityUpdate,
+    ],
+  )
 
   const toggleBulkTenantSelection = useCallback((tenantId) => {
     setSelectedBulkTenantVisibility((prev) =>
@@ -808,6 +887,20 @@ function BulkUserOperations({
 
   const handleClearBulkTenantSelection = useCallback(() => {
     setSelectedBulkTenantVisibility([])
+    setFieldError('')
+    setResultSummary(null)
+  }, [])
+
+  const toggleBulkRole = useCallback((role) => {
+    setSelectedBulkRoles((prev) =>
+      prev.includes(role) ? prev.filter((candidate) => candidate !== role) : [...prev, role],
+    )
+    setFieldError('')
+    setResultSummary(null)
+  }, [])
+
+  const handleClearBulkRoles = useCallback(() => {
+    setSelectedBulkRoles([])
     setFieldError('')
     setResultSummary(null)
   }, [])
@@ -868,7 +961,7 @@ function BulkUserOperations({
 
   const runBulkUpdate = useCallback(async () => {
     if (!canRunUpdate) return
-    const roles = parseRoles(bulkRoles)
+    const roles = selectedBulkRoles
 
     if (roles.includes(GOVERNED_CUSTOMER_ADMIN_ROLE)) {
       setFieldError(getBulkGovernanceErrorMessage())
@@ -908,11 +1001,7 @@ function BulkUserOperations({
 
       const normalized = normalizeBulkResponse(response)
       setResultSummary(normalized)
-      addToast({
-        title: 'Bulk update completed',
-        description: `${normalized.success} succeeded, ${normalized.failed} failed.`,
-        variant: normalized.failed > 0 ? 'warning' : 'success',
-      })
+      addToast(getBulkCompletionToast('Bulk update', normalized))
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
@@ -934,13 +1023,13 @@ function BulkUserOperations({
     }
   }, [
     addToast,
-    bulkRoles,
     bulkTenantVisibilityMode,
     bulkUpdateUsers,
     canRunUpdate,
     customerId,
     finishProgress,
     normalizedSelectedBulkTenantVisibility,
+    selectedBulkRoles,
     selectedUserIds,
     startProgress,
     supportedBulkRoles,
@@ -1252,19 +1341,35 @@ function BulkUserOperations({
         {operation === 'update' && (
           <div className="bulk-users__panel">
             <BulkGovernanceNote supportedRolesMessage={supportedBulkRolesMessage} />
-            <Input
-              id="bulk-update-roles"
-              label="Roles (comma, pipe, or semicolon separated)"
-              value={bulkRoles}
-              onChange={(event) => {
-                setBulkRoles(event.target.value)
-                setFieldError('')
-                setResultSummary(null)
-              }}
-              placeholder={supportedBulkRoles.join(', ')}
-              disabled={isProcessing}
-              fullWidth
-            />
+            <div className="bulk-users__update-section">
+              <p className="bulk-users__section-title">Role Access</p>
+              <p className="bulk-users__section-intro">
+                {BULK_UPDATE_ROLE_GUIDANCE}
+              </p>
+              <div className="bulk-users__role-list" role="group" aria-label="Bulk update roles">
+                {supportedBulkRoles.map((role) => (
+                  <Tickbox
+                    key={role}
+                    id={`bulk-update-role-${role}`}
+                    label={formatRoleLabel(role)}
+                    checked={selectedBulkRoles.includes(role)}
+                    onChange={() => toggleBulkRole(role)}
+                    disabled={isProcessing}
+                  />
+                ))}
+              </div>
+              <div className="bulk-users__role-actions">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearBulkRoles}
+                  disabled={selectedBulkRoles.length === 0 || isProcessing}
+                >
+                  Clear Role Selection
+                </Button>
+              </div>
+            </div>
             {shouldShowTenantVisibilityUpdate ? (
               <div className="bulk-users__tenant-visibility">
                 <p className="bulk-users__tenant-visibility-text">
@@ -1398,6 +1503,26 @@ function BulkUserOperations({
                 Tenant visibility is not required for this customer topology.
               </p>
             ) : null}
+            <div className="bulk-users__update-summary" aria-live="polite">
+              <p className="bulk-users__update-summary-title">Changes to apply</p>
+              <p className="bulk-users__update-summary-text">
+                {selectedBulkRoles.length > 0
+                  ? `Roles: ${selectedBulkRoles.map(formatRoleLabel).join(', ')}`
+                  : 'Roles: leave unchanged'}
+              </p>
+              {shouldShowTenantVisibilityUpdate ? (
+                <p className="bulk-users__update-summary-text">
+                  {bulkTenantVisibilityMode === 'replace'
+                    ? `Tenant visibility: replace with ${normalizedSelectedBulkTenantVisibility.length === 0 ? 'no tenants selected yet' : `${normalizedSelectedBulkTenantVisibility.length} selected ${normalizedSelectedBulkTenantVisibility.length === 1 ? 'tenant' : 'tenants'}`}`
+                    : bulkTenantVisibilityMode === 'clear'
+                    ? 'Tenant visibility: clear explicit tenant visibility'
+                    : 'Tenant visibility: leave unchanged'}
+                </p>
+              ) : null}
+              <p className="bulk-users__update-summary-text">
+                {bulkUpdateReadinessMessage}
+              </p>
+            </div>
             <div className="bulk-users__actions">
               <Button
                 variant="primary"
