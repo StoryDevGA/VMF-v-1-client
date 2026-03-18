@@ -15,7 +15,7 @@
  * @param {string[]} [props.selectedUserIds]  — pre-selected user IDs for update/disable
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '../../components/Dialog'
 import { Button } from '../../components/Button'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
@@ -99,6 +99,80 @@ const getBulkCreateManualHelperText = (supportsTenantVisibility, supportedRolesM
   supportsTenantVisibility
     ? `One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${supportedRolesMessage}`
     : `One row per line: name,email,roles. ${supportedRolesMessage}`
+
+const getBulkCreateExampleRows = (supportsTenantVisibility) =>
+  supportsTenantVisibility
+    ? [
+        'Avery North,avery.north@example.com,USER,tenant-1|tenant-2',
+        'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,tenant-1',
+      ].join('\n')
+    : [
+        'Avery North,avery.north@example.com,USER',
+        'Taylor Reed,taylor.reed@example.com,USER',
+      ].join('\n')
+
+const getBulkCreateExampleCsvContent = (supportsTenantVisibility) =>
+  supportsTenantVisibility
+    ? [
+        'name,email,roles,tenantVisibility',
+        'Avery North,avery.north@example.com,USER,tenant-1|tenant-2',
+        'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,tenant-1',
+      ].join('\n')
+    : [
+        'name,email,roles',
+        'Avery North,avery.north@example.com,USER',
+        'Taylor Reed,taylor.reed@example.com,USER',
+      ].join('\n')
+
+const getBulkCreateExampleFilename = (supportsTenantVisibility) =>
+  supportsTenantVisibility
+    ? 'bulk-create-users-multi-tenant-example.csv'
+    : 'bulk-create-users-single-tenant-example.csv'
+
+function getBulkCompletionToast(actionLabel, resultSummary) {
+  if (resultSummary.failed === 0) {
+    return {
+      title: `${actionLabel} completed`,
+      description: `${resultSummary.success} succeeded. Review batch results below if you need the row-level detail.`,
+      variant: 'success',
+    }
+  }
+
+  if (resultSummary.success === 0) {
+    return {
+      title: `${actionLabel} failed`,
+      description: `No rows succeeded. Review batch results below and correct the failing rows before retrying.`,
+      variant: 'error',
+    }
+  }
+
+  return {
+    title: `${actionLabel} completed with issues`,
+    description: `${resultSummary.success} succeeded and ${resultSummary.failed} failed. Review batch results below before retrying the failed rows.`,
+    variant: 'warning',
+  }
+}
+
+function getBulkResultSummaryMessage(operation, resultSummary) {
+  if (!resultSummary) return ''
+
+  const actionLabel =
+    operation === 'update'
+      ? 'updated'
+      : operation === 'disable'
+      ? 'disabled'
+      : 'created'
+
+  if (resultSummary.failed === 0) {
+    return `All ${resultSummary.success} rows were ${actionLabel} successfully.`
+  }
+
+  if (resultSummary.success === 0) {
+    return `No rows were ${actionLabel}. Review the failures below before retrying.`
+  }
+
+  return `${resultSummary.success} rows were ${actionLabel}, and ${resultSummary.failed} need attention before retrying.`
+}
 
 const BULK_CREATE_AUTOFILL_PROPS = {
   autoComplete: 'off',
@@ -345,6 +419,8 @@ function BulkUserOperations({
   const [bulkRoles, setBulkRoles] = useState('')
   const [bulkTenantVisibilityMode, setBulkTenantVisibilityMode] = useState('unchanged')
   const [selectedBulkTenantVisibility, setSelectedBulkTenantVisibility] = useState([])
+  const previewSectionRef = useRef(null)
+  const resultsSectionRef = useRef(null)
 
   const isProcessing =
     bulkCreateResult.isLoading ||
@@ -387,6 +463,18 @@ function BulkUserOperations({
   const supportedBulkRolesMessage = useMemo(
     () => getSupportedBulkRolesMessage(supportedBulkRoles),
     [supportedBulkRoles],
+  )
+  const bulkCreateExampleRows = useMemo(
+    () => getBulkCreateExampleRows(shouldShowTenantVisibilityUpdate),
+    [shouldShowTenantVisibilityUpdate],
+  )
+  const bulkCreateExampleCsvContent = useMemo(
+    () => getBulkCreateExampleCsvContent(shouldShowTenantVisibilityUpdate),
+    [shouldShowTenantVisibilityUpdate],
+  )
+  const bulkCreateExampleFilename = useMemo(
+    () => getBulkCreateExampleFilename(shouldShowTenantVisibilityUpdate),
+    [shouldShowTenantVisibilityUpdate],
   )
 
   const normalizedSelectedBulkTenantVisibility = useMemo(
@@ -470,6 +558,38 @@ function BulkUserOperations({
     setProgressValue(100)
   }, [])
 
+  const revealSection = useCallback((sectionRef) => {
+    if (!sectionRef?.current) return
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (typeof sectionRef.current.scrollIntoView === 'function') {
+      sectionRef.current.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    }
+
+    if (typeof sectionRef.current.focus === 'function') {
+      sectionRef.current.focus({ preventScroll: true })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open || operation !== 'create' || previewUsers.length === 0 || resultSummary) return
+
+    revealSection(previewSectionRef)
+  }, [open, operation, previewUsers.length, resultSummary, revealSection])
+
+  useEffect(() => {
+    if (!open || !resultSummary) return
+
+    revealSection(resultsSectionRef)
+  }, [open, resultSummary, revealSection])
+
   const handleCsvUpload = useCallback(async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -479,6 +599,31 @@ function BulkUserOperations({
     setFieldError('')
     setResultSummary(null)
   }, [])
+
+  const handleUseExampleRows = useCallback(() => {
+    setSourceMode('manual')
+    setManualText(bulkCreateExampleRows)
+    setCsvText('')
+    setHeaders([])
+    setPreviewUsers([])
+    setFieldError('')
+    setResultSummary(null)
+  }, [bulkCreateExampleRows])
+
+  const handleDownloadExampleCsv = useCallback(() => {
+    if (typeof document === 'undefined' || typeof URL === 'undefined') return
+
+    const csvBlob = new Blob([bulkCreateExampleCsvContent], {
+      type: 'text/csv;charset=utf-8',
+    })
+    const downloadUrl = URL.createObjectURL(csvBlob)
+    const link = document.createElement('a')
+
+    link.href = downloadUrl
+    link.download = bulkCreateExampleFilename
+    link.click()
+    URL.revokeObjectURL(downloadUrl)
+  }, [bulkCreateExampleCsvContent, bulkCreateExampleFilename])
 
   const parsePreview = useCallback(() => {
     setFieldError('')
@@ -691,11 +836,7 @@ function BulkUserOperations({
 
       const normalized = normalizeBulkResponse(response)
       setResultSummary(normalized)
-      addToast({
-        title: 'Bulk create completed',
-        description: `${normalized.success} succeeded, ${normalized.failed} failed.`,
-        variant: normalized.failed > 0 ? 'warning' : 'success',
-      })
+      addToast(getBulkCompletionToast('Bulk create', normalized))
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
@@ -1034,27 +1175,59 @@ function BulkUserOperations({
                 )}
               </>
             ) : (
-              <Textarea
-                id="bulk-manual"
-                name="bulk-create-manual-rows"
-                label="Manual rows"
-                value={manualText}
-                onChange={(event) => {
-                  setManualText(event.target.value)
-                  setPreviewUsers([])
-                  setFieldError('')
-                  setResultSummary(null)
-                }}
-                rows={7}
-                fullWidth
-                disabled={isProcessing}
-                helperText={getBulkCreateManualHelperText(
-                  shouldShowTenantVisibilityUpdate,
-                  supportedBulkRolesMessage,
-                )}
-                {...BULK_CREATE_AUTOFILL_PROPS}
-              />
+              <>
+                <Textarea
+                  id="bulk-manual"
+                  name="bulk-create-manual-rows"
+                  label="Manual rows"
+                  value={manualText}
+                  onChange={(event) => {
+                    setManualText(event.target.value)
+                    setPreviewUsers([])
+                    setFieldError('')
+                    setResultSummary(null)
+                  }}
+                  rows={7}
+                  fullWidth
+                  disabled={isProcessing}
+                  helperText={getBulkCreateManualHelperText(
+                    shouldShowTenantVisibilityUpdate,
+                    supportedBulkRolesMessage,
+                  )}
+                  {...BULK_CREATE_AUTOFILL_PROPS}
+                />
+              </>
             )}
+
+            <div className="bulk-users__examples" aria-label="Bulk create examples">
+              <div className="bulk-users__examples-copy">
+                <p className="bulk-users__examples-title">Examples</p>
+                <p className="bulk-users__examples-text">
+                  Use a sample that matches the current customer topology. After validation,
+                  preview and batch results will jump into view below.
+                </p>
+              </div>
+              <div className="bulk-users__example-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleUseExampleRows}
+                  disabled={isProcessing}
+                >
+                  Use Example Rows
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDownloadExampleCsv}
+                  disabled={isProcessing}
+                >
+                  Download Example CSV
+                </Button>
+              </div>
+            </div>
 
             <div className="bulk-users__actions">
               <Button
@@ -1270,8 +1443,16 @@ function BulkUserOperations({
         )}
 
         {previewUsers.length > 0 && operation === 'create' && (
-          <div className="bulk-users__preview">
+          <div
+            ref={previewSectionRef}
+            className="bulk-users__preview"
+            tabIndex={-1}
+            aria-live="polite"
+          >
             <h3 className="bulk-users__section-title">Preview ({previewUsers.length})</h3>
+            <p className="bulk-users__section-intro">
+              Preview is ready. Review the first {Math.min(previewUsers.length, 10)} row{previewUsers.length === 1 ? '' : 's'} below, then process the batch.
+            </p>
             <div className="bulk-users__preview-list">
               {previewUsers.slice(0, 10).map((user) => (
                 <div className="bulk-users__preview-row" key={user.key}>
@@ -1285,8 +1466,16 @@ function BulkUserOperations({
         )}
 
         {resultSummary && (
-          <div className="bulk-users__results">
+          <div
+            ref={resultsSectionRef}
+            className="bulk-users__results"
+            tabIndex={-1}
+            aria-live="polite"
+          >
             <h3 className="bulk-users__section-title">Batch Results</h3>
+            <p className="bulk-users__section-intro">
+              {getBulkResultSummaryMessage(operation, resultSummary)}
+            </p>
             <div className="bulk-users__result-stats">
               <Status variant="info" size="sm" showIcon>Total: {resultSummary.total}</Status>
               <Status variant="success" size="sm" showIcon>Success: {resultSummary.success}</Status>

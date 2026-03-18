@@ -105,6 +105,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = vi.fn(function () {
     this.open = false
   })
+  HTMLElement.prototype.scrollIntoView = vi.fn()
 })
 
 function renderDialog(props = {}) {
@@ -337,6 +338,72 @@ describe('BulkUserOperations', () => {
     expect(screen.getByText('jane@example.com')).toBeInTheDocument()
   })
 
+  it('uses example rows and switches to manual entry mode', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /use example rows/i }))
+
+    expect(screen.getByLabelText(/input mode/i)).toHaveValue('manual')
+    expect(screen.getByLabelText(/manual rows/i).value).toContain(
+      'Avery North,avery.north@example.com',
+    )
+  })
+
+  it('uses single-tenant example rows without tenant visibility values', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        selectedCustomerTopology: 'SINGLE_TENANT',
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /use example rows/i }))
+
+    expect(screen.getByLabelText(/manual rows/i)).toHaveValue(
+      'Avery North,avery.north@example.com,USER\nTaylor Reed,taylor.reed@example.com,USER',
+    )
+  })
+
+  it('downloads an example CSV from create mode', async () => {
+    const user = userEvent.setup()
+    const originalCreateObjectUrl = URL.createObjectURL
+    const originalRevokeObjectUrl = URL.revokeObjectURL
+    const createObjectUrlMock = vi.fn(() => 'blob:example')
+    const revokeObjectUrlMock = vi.fn()
+    const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    URL.createObjectURL = createObjectUrlMock
+    URL.revokeObjectURL = revokeObjectUrlMock
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /download example csv/i }))
+
+    expect(createObjectUrlMock).toHaveBeenCalledTimes(1)
+    expect(revokeObjectUrlMock).toHaveBeenCalledWith('blob:example')
+    expect(clickMock).toHaveBeenCalledTimes(1)
+
+    const generatedBlob = createObjectUrlMock.mock.calls[0][0]
+    expect(generatedBlob).toBeInstanceOf(Blob)
+    expect(generatedBlob.type).toContain('text/csv')
+
+    clickMock.mockRestore()
+    URL.createObjectURL = originalCreateObjectUrl
+    URL.revokeObjectURL = originalRevokeObjectUrl
+  })
+
   it('shows error for empty manual input', async () => {
     const user = userEvent.setup()
     renderDialog()
@@ -415,8 +482,56 @@ describe('BulkUserOperations', () => {
     await user.click(screen.getByRole('button', { name: /process batch/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/batch results/i)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /batch results/i })).toBeInTheDocument()
     })
+  })
+
+  it('reveals the preview section after validation', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,tenant-1',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+
+    await waitFor(() => {
+      expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+    expect(
+      screen.getByText(/preview is ready\. review the first 1 row below, then process the batch\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('uses create completion messaging that distinguishes partial success from failure', async () => {
+    const user = userEvent.setup()
+    bulkCreateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 2, success: 1, failed: 1 },
+        results: [
+          { email: 'avery.north@example.com', success: true },
+          { email: 'taylor.tenant@example.com', success: false, error: 'Duplicate email' },
+        ],
+      }),
+    })
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /use example rows/i }))
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+    await user.click(screen.getByRole('button', { name: /process batch/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/bulk create completed with issues/i)).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText(/1 succeeded and 1 failed\. review batch results below before retrying the failed rows\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/1 rows were created, and 1 need attention before retrying\./i),
+    ).toBeInTheDocument()
   })
 
   // ---- Bulk Create: CSV ----
