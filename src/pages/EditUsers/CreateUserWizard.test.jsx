@@ -442,8 +442,8 @@ describe('CreateUserWizard', () => {
       expect(screen.queryByLabelText(/tenant admin/i)).not.toBeInTheDocument()
       expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
       expect(
-        screen.getByText(/tenant admin is only available for multi-tenant customers/i),
-      ).toBeInTheDocument()
+        screen.queryByText(/tenant admin is only available for multi-tenant customers/i),
+      ).not.toBeInTheDocument()
     })
     await user.click(screen.getByLabelText(/^user$/i))
     await user.click(screen.getByRole('button', { name: /next/i }))

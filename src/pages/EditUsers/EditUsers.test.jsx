@@ -398,11 +398,6 @@ describe('EditUsers page', () => {
     expect(
       screen.getByText(/generic role edits do not transfer ownership/i),
     ).toBeInTheDocument()
-    expect(screen.getByText('Canonical Admin')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /explain canonical admin/i }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Canonical')).toBeInTheDocument()
     const memberActions = screen.getByRole('combobox', { name: /actions for member user/i })
     const ownerActions = screen.getByRole('combobox', { name: /actions for owner user/i })
 

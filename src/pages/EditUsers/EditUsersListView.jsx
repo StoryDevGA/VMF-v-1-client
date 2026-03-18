@@ -12,9 +12,6 @@ import { Table } from '../../components/Table'
 import { Tooltip } from '../../components/Tooltip'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
 
-const CANONICAL_ADMIN_TOOLTIP_TEXT =
-  'Canonical Admin identifies the governed owner for this customer. Ownership changes use the dedicated transfer workflow.'
-
 const getUserTrustStatus = (user) =>
   String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
     .trim()
@@ -198,31 +195,6 @@ function UserTrustCell({ user }) {
   )
 }
 
-function CanonicalAdminHeaderLabel() {
-  return (
-    <span className="edit-users__canonical-header">
-      <span>Canonical Admin</span>
-      <Tooltip
-        content={CANONICAL_ADMIN_TOOLTIP_TEXT}
-        position="bottom"
-        align="end"
-        openDelay={0}
-        closeDelay={0}
-        className="edit-users__canonical-tooltip"
-      >
-        <button
-          type="button"
-          className="edit-users__canonical-help-trigger"
-          aria-label="Explain Canonical Admin"
-        >
-          <MdInfoOutline aria-hidden="true" focusable="false" />
-          <span className="sr-only">Explain Canonical Admin</span>
-        </button>
-      </Tooltip>
-    </span>
-  )
-}
-
 function UserRowActionsMenu({ row, actions, onAction }) {
   const rowName = row?.name || row?.email || row?.id || 'user'
 
@@ -388,20 +360,6 @@ export function EditUsersListView({
         key: 'trustStatus',
         label: 'Trust',
         render: (_value, row) => <UserTrustCell user={row} />,
-      },
-      {
-        key: 'isCanonicalAdmin',
-        label: <CanonicalAdminHeaderLabel />,
-        mobileLabel: 'Canonical Admin',
-        width: '220px',
-        render: (_value, row) =>
-          row?.isCanonicalAdmin
-            ? (
-              <Status size="sm" variant="info" className="edit-users__canonical-status">
-                Canonical
-              </Status>
-            )
-            : <span className="edit-users__canonical-empty">--</span>,
       },
       {
         key: 'rowActions',

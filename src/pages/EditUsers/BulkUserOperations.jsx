@@ -90,6 +90,16 @@ const getTopologyAwareRoles = (roles, topology) => {
 const getSupportedBulkRolesMessage = (roles) =>
   `Supported bulk roles: ${roles.join(', ')}.`
 
+const getBulkCreateCsvHelperText = (supportsTenantVisibility, supportedRolesMessage) =>
+  supportsTenantVisibility
+    ? `Include headers for name, email, roles, and optional tenantVisibility. ${supportedRolesMessage}`
+    : `Include headers for name, email, and roles. ${supportedRolesMessage}`
+
+const getBulkCreateManualHelperText = (supportsTenantVisibility, supportedRolesMessage) =>
+  supportsTenantVisibility
+    ? `One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${supportedRolesMessage}`
+    : `One row per line: name,email,roles. ${supportedRolesMessage}`
+
 const BULK_CREATE_AUTOFILL_PROPS = {
   autoComplete: 'off',
   autoCorrect: 'off',
@@ -500,7 +510,9 @@ function BulkUserOperations({
           name,
           email,
           roles: parseRoles(roles),
-          tenantVisibility: parseTenantVisibility(tenantVisibility),
+          tenantVisibility: shouldShowTenantVisibilityUpdate
+            ? parseTenantVisibility(tenantVisibility)
+            : [],
         }
       })
 
@@ -542,11 +554,14 @@ function BulkUserOperations({
       email:
         mapping.email || parsedHeaders.find((h) => h.toLowerCase() === 'email') || '',
       roles: mapping.roles || parsedHeaders.find((h) => h.toLowerCase() === 'roles') || '',
-      tenantVisibility:
-        mapping.tenantVisibility ||
-        parsedHeaders.find((h) => h.toLowerCase() === 'tenantvisibility') ||
-        parsedHeaders.find((h) => h.toLowerCase() === 'tenant_visibility') ||
-        '',
+      tenantVisibility: shouldShowTenantVisibilityUpdate
+        ? (
+          mapping.tenantVisibility ||
+          parsedHeaders.find((h) => h.toLowerCase() === 'tenantvisibility') ||
+          parsedHeaders.find((h) => h.toLowerCase() === 'tenant_visibility') ||
+          ''
+        )
+        : '',
     }
     setMapping(nextMapping)
 
@@ -571,9 +586,11 @@ function BulkUserOperations({
         name: rowObj[nextMapping.name]?.trim() ?? '',
         email: rowObj[nextMapping.email]?.trim() ?? '',
         roles: parseRoles(rowObj[nextMapping.roles] ?? ''),
-        tenantVisibility: parseTenantVisibility(
-          nextMapping.tenantVisibility ? rowObj[nextMapping.tenantVisibility] ?? '' : '',
-        ),
+        tenantVisibility: shouldShowTenantVisibilityUpdate
+          ? parseTenantVisibility(
+            nextMapping.tenantVisibility ? rowObj[nextMapping.tenantVisibility] ?? '' : '',
+          )
+          : [],
       }
     })
 
@@ -928,7 +945,10 @@ function BulkUserOperations({
                   rows={7}
                   fullWidth
                   disabled={isProcessing}
-                  helperText={`Include headers for name, email, roles, and optional tenantVisibility. ${supportedBulkRolesMessage}`}
+                  helperText={getBulkCreateCsvHelperText(
+                    shouldShowTenantVisibilityUpdate,
+                    supportedBulkRolesMessage,
+                  )}
                   {...BULK_CREATE_AUTOFILL_PROPS}
                 />
                 {headers.length > 0 && (
@@ -987,27 +1007,29 @@ function BulkUserOperations({
                       disabled={isProcessing}
                       autoComplete="off"
                     />
-                    <Select
-                      id="map-tenant-visibility"
-                      name="bulk-create-map-tenant-visibility-column"
-                      label="Tenant visibility column (optional)"
-                      value={mapping.tenantVisibility}
-                      onChange={(event) => {
-                        setMapping((prev) => ({
-                          ...prev,
-                          tenantVisibility: event.target.value,
-                        }))
-                        setPreviewUsers([])
-                        setFieldError('')
-                        setResultSummary(null)
-                      }}
-                      options={[
-                        { value: '', label: 'None' },
-                        ...headers.map((header) => ({ value: header, label: header })),
-                      ]}
-                      disabled={isProcessing}
-                      autoComplete="off"
-                    />
+                    {shouldShowTenantVisibilityUpdate ? (
+                      <Select
+                        id="map-tenant-visibility"
+                        name="bulk-create-map-tenant-visibility-column"
+                        label="Tenant visibility column (optional)"
+                        value={mapping.tenantVisibility}
+                        onChange={(event) => {
+                          setMapping((prev) => ({
+                            ...prev,
+                            tenantVisibility: event.target.value,
+                          }))
+                          setPreviewUsers([])
+                          setFieldError('')
+                          setResultSummary(null)
+                        }}
+                        options={[
+                          { value: '', label: 'None' },
+                          ...headers.map((header) => ({ value: header, label: header })),
+                        ]}
+                        disabled={isProcessing}
+                        autoComplete="off"
+                      />
+                    ) : null}
                   </div>
                 )}
               </>
@@ -1026,7 +1048,10 @@ function BulkUserOperations({
                 rows={7}
                 fullWidth
                 disabled={isProcessing}
-                helperText={`One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${supportedBulkRolesMessage}`}
+                helperText={getBulkCreateManualHelperText(
+                  shouldShowTenantVisibilityUpdate,
+                  supportedBulkRolesMessage,
+                )}
                 {...BULK_CREATE_AUTOFILL_PROPS}
               />
             )}

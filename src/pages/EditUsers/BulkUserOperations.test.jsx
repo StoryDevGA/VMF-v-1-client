@@ -224,7 +224,7 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/roles/i)).toHaveAttribute('placeholder', 'USER')
+    expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
     expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
   })
 
@@ -244,8 +244,43 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
 
     expect(screen.getByText(/supported bulk roles: user\./i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/roles/i)).toHaveAttribute('placeholder', 'USER')
+    expect(screen.getByLabelText(/roles/i)).toBeInTheDocument()
     expect(screen.queryByText(/supported bulk roles: tenant_admin, user\./i)).not.toBeInTheDocument()
+  })
+
+  it('removes tenant-visibility create guidance for single-tenant customers', async () => {
+    const user = userEvent.setup()
+    mockUseTenantContext.mockReturnValue(
+      getTenantContextMockValue({
+        tenants: [],
+        selectableTenants: [],
+        selectedCustomerTopology: 'SINGLE_TENANT',
+        tenantVisibilityMeta: {
+          mode: 'NONE',
+          allowed: false,
+          topology: 'SINGLE_TENANT',
+          isServiceProvider: false,
+          selectableStatuses: [],
+        },
+      }),
+    )
+
+    renderDialog()
+
+    expect(screen.getAllByText(/supported bulk roles: user\./i).length).toBeGreaterThanOrEqual(1)
+    expect(
+      screen.getByText(/include headers for name, email, and roles\. supported bulk roles: user\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/optional tenantvisibility/i),
+    ).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+
+    expect(
+      screen.getByText(/one row per line: name,email,roles\. supported bulk roles: user\./i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/roles\/tenants separated by \|/i)).not.toBeInTheDocument()
   })
 
   it('shows disable warning when operation is disable', async () => {

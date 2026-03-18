@@ -39,6 +39,7 @@ docs/
 - **[Routing](./routing.md)** - React Router setup, lazy loading, navigation, and adding new routes
 - **[Styling Conventions](./styling-conventions.md)** - CSS architecture, BEM naming, inline style policy, and best practices
 - **[Super Admin Management Page Standard](./design-system/super-admin-management-page-standard.md)** - Reference layout, module structure, interaction rules, and testing standard for Super Admin catalogue pages anchored to `src/pages/SuperAdminCustomers/`
+- **[Role-Based Access: Current FE State](./role-based-access-current-state.md)** - Current frontend route, navigation, and feature access by `SUPER_ADMIN`, `CUSTOMER_ADMIN`, `TENANT_ADMIN`, and `USER`
 
 ### Design System
 - **[CSS Design System](./design-system/css-design-system.md)** - Design tokens, color system, typography, spacing, and more

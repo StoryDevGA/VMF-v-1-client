@@ -40,9 +40,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const CUSTOMER_ADMIN_CREATE_GUIDANCE =
   'Customer Admin ownership is transferred separately. Create the replacement user first, then use Transfer Ownership from that user\'s row after the account is active.'
 
-const TENANT_ADMIN_TOPOLOGY_GUIDANCE =
-  'Tenant Admin is only available for multi-tenant customers.'
-
 const TENANT_VISIBILITY_STEP_COPY =
   'Select the tenants this user should be able to access. Leave this empty if you do not want to store explicit tenant-visibility entries during create.'
 
@@ -664,9 +661,6 @@ function CreateUserWizard({ open, onClose, customerId }) {
               <p className="create-wizard__info" role="note">
                 {CUSTOMER_ADMIN_CREATE_GUIDANCE}
               </p>
-              {!allowsTenantAdminRole ? (
-                <p className="create-wizard__hint">{TENANT_ADMIN_TOPOLOGY_GUIDANCE}</p>
-              ) : null}
               {availableRoles.map((role) => (
                 <Tickbox
                   key={role}

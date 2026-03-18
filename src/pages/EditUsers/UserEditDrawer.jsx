@@ -42,9 +42,6 @@ const CUSTOMER_ADMIN_EDIT_GUIDANCE =
 const CUSTOMER_ADMIN_TRANSFER_GUIDANCE =
   'Use Transfer Ownership when this user should become the Canonical Admin.'
 
-const TENANT_ADMIN_TOPOLOGY_GUIDANCE =
-  'Tenant Admin is only available for multi-tenant customers.'
-
 const TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE =
   'This user has a Tenant Admin assignment that is not editable for the current customer topology. Saving role changes will remove that assignment.'
 
@@ -797,11 +794,9 @@ function UserEditDrawer({
                       <p className="user-edit-drawer__governance-text">
                         {transferAvailabilityMessage}
                       </p>
-                      {!allowsTenantAdminRole ? (
+                      {!allowsTenantAdminRole && hasHiddenTenantAdminAssignment ? (
                         <p className="user-edit-drawer__governance-text">
-                          {hasHiddenTenantAdminAssignment
-                            ? TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE
-                            : TENANT_ADMIN_TOPOLOGY_GUIDANCE}
+                          {TENANT_ADMIN_HIDDEN_ASSIGNMENT_GUIDANCE}
                         </p>
                       ) : null}
                       {canStartOwnershipTransfer ? (
