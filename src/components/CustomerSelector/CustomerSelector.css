@@ -14,7 +14,7 @@
   flex-wrap: wrap;
   gap: var(--spacing-xs);
   position: relative;
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
   padding: var(--spacing-xs) var(--spacing-sm);
@@ -24,7 +24,7 @@
 /* ---- Form fields ---- */
 
 .customer-selector__input {
-  background: var(--color-surface-elevated);
+  background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   padding: var(--spacing-2xs) var(--spacing-xs);
@@ -52,7 +52,7 @@
 .customer-selector__select {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--color-surface-elevated);
+  background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   padding: var(--spacing-2xs) var(--spacing-xs);
@@ -66,7 +66,7 @@
 }
 
 .customer-selector__select option {
-  background-color: var(--color-surface-elevated);
+  background-color: var(--color-background);
   color: var(--color-text-primary);
 }
 

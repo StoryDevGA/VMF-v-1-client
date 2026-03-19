@@ -28,7 +28,7 @@
   justify-content: center;
   border: 2px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   border-radius: 50%; /* Make it circular */
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   transition: all var(--transition-fast);
 }
 

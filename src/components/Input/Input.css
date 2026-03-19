@@ -42,7 +42,7 @@
   font-size: var(--font-size-base);
   color: var(--color-text);
 
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
   border-radius: var(--border-radius-sm);
 
@@ -250,7 +250,7 @@
   font-weight: var(--font-weight-medium);
   color: color-mix(in srgb, var(--color-text-secondary) 70%, transparent);
 
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   pointer-events: none;
 
   transition: all var(--transition-normal);
@@ -321,7 +321,7 @@
 }
 
 .input-container--filled .input:focus {
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   border-color: var(--color-primary);
 }
 
@@ -330,7 +330,7 @@
 }
 
 .input-container--filled .input-label--floating {
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
 }
 
 /* ===========================

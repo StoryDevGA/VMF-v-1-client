@@ -29,8 +29,8 @@
   --color-text-tertiary: #7a8484;
   --color-text-inverse: #000000;
 
-  --color-border: #2a2a2a;
-  --color-border-hover: #3a3a3a;
+  --color-border: #6a6a6a;
+  --color-border-hover: #7a7a7a;
   --color-border-focus: var(--color-primary-300);
 
   --color-action-primary: var(--slos-btn-bg, #d6dcdc);
@@ -70,8 +70,8 @@
   --color-text-tertiary: #7a8484;
   --color-text-inverse: #000000;
 
-  --color-border: #2a2a2a;
-  --color-border-hover: #3a3a3a;
+  --color-border: #6a6a6a;
+  --color-border-hover: #7a7a7a;
   --color-border-focus: var(--color-primary-300);
 
   --color-action-primary: var(--slos-btn-bg, #d6dcdc);

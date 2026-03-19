@@ -43,7 +43,7 @@
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   color: var(--color-text);
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
   border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
   border-radius: var(--border-radius-sm);
   transition: border-color var(--transition-fast),
