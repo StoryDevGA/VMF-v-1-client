@@ -72,6 +72,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = vi.fn(function () {
     this.open = false
   })
+  HTMLElement.prototype.scrollIntoView = vi.fn()
 })
 
 /** Create a fresh store */
@@ -141,6 +142,7 @@ describe('CreateTenantWizard', () => {
 
   it('renders name and website inputs on step 1', () => {
     renderWizard()
+    expect(screen.getByText(/^tenant details$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/website url/i)).toBeInTheDocument()
   })
@@ -194,6 +196,56 @@ describe('CreateTenantWizard', () => {
     expect(screen.getByText(/search users by name or email/i)).toBeInTheDocument()
   })
 
+  it('expands the dialog footprint for the tenant-admin assignment step', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(screen.getByRole('dialog')).toHaveClass('dialog--md')
+
+    await goToStep2(user)
+
+    expect(screen.getByRole('dialog')).toHaveClass('dialog--lg')
+    expect(screen.getByRole('dialog')).toHaveClass('create-wizard__dialog--admin-step')
+    expect(screen.getByText(/assign tenant admins/i).closest('.create-wizard__fieldset')).toBeInTheDocument()
+    expect(screen.getByRole('dialog').querySelector('.create-wizard__body--admin-step')).toBeTruthy()
+  })
+
+  it('auto-scrolls the tenant-admin assignment step into view when step 2 opens', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await goToStep2(user)
+
+    await waitFor(() => {
+      expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+  })
+
+  it('shows tenant-capacity guidance from the legend info tooltip inside the admin-assignment step', async () => {
+    const user = userEvent.setup()
+    renderWizard({
+      tenantCapacity: {
+        maxTenants: 3,
+        currentCount: 2,
+        remainingCount: 1,
+        isAtCapacity: false,
+        countMode: 'NON_ARCHIVED',
+      },
+    })
+
+    await goToStep2(user)
+
+    const helpTrigger = screen.getByRole('button', { name: /final tenant slot/i })
+    expect(helpTrigger.closest('.create-wizard__legend')).toBeInTheDocument()
+
+    await user.hover(helpTrigger)
+
+    expect(screen.getByRole('tooltip', { hidden: true })).toHaveAttribute('aria-hidden', 'false')
+    expect(
+      screen.getByRole('tooltip', { hidden: true }),
+    ).toHaveTextContent(/this create will use the final available non-archived tenant slot/i)
+  })
+
   it('shows validation error when no admins selected on Next', async () => {
     const user = userEvent.setup()
     renderWizard()
@@ -231,6 +283,9 @@ describe('CreateTenantWizard', () => {
     await waitFor(() => {
       expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
       expect(screen.getByText(/review details/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/confirm the tenant details and initial linked-admin assignment/i),
+      ).toBeInTheDocument()
       expect(screen.getByText('Review Tenant')).toBeInTheDocument()
       expect(screen.getByText('https://review.com')).toBeInTheDocument()
     })

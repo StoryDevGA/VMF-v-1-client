@@ -584,10 +584,13 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       closeOnEscape={!isLoading}
     >
       <Dialog.Header>
-        <h2 className="tenant-edit-drawer__title">Edit Tenant</h2>
+        <h2 className="maintain-tenants__dialog-title tenant-edit-drawer__title">Edit Tenant</h2>
+        <p className="maintain-tenants__dialog-subtitle tenant-edit-drawer__subtitle">
+          Update tenant details and linked-user assignments in one workspace.
+        </p>
       </Dialog.Header>
 
-      <Dialog.Body>
+      <Dialog.Body className="maintain-tenants__dialog-body tenant-edit-drawer__body">
         {lifecycleGuidance ? (
           <div
             className={[
@@ -754,7 +757,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         </Fieldset>
       </Dialog.Body>
 
-      <Dialog.Footer className="tenant-edit-drawer__footer">
+      <Dialog.Footer className="maintain-tenants__dialog-footer tenant-edit-drawer__footer">
         <Button variant="outline" onClick={onClose} disabled={isLoading}>
           Cancel
         </Button>
@@ -776,10 +779,12 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         closeOnEscape={!isLoading}
       >
         <Dialog.Header>
-          <h2 className="maintain-tenants__confirm-title">Remove linked users</h2>
+          <h2 className="maintain-tenants__dialog-title maintain-tenants__confirm-title">
+            Remove linked users
+          </h2>
         </Dialog.Header>
-        <Dialog.Body>
-          <p>
+        <Dialog.Body className="maintain-tenants__confirm-body">
+          <p className="maintain-tenants__confirm-message">
             Remove {confirmRemoveUserIds.length} linked user{confirmRemoveUserIds.length === 1 ? '' : 's'} from this tenant?
           </p>
           {confirmRemoveUsers.length > 0 ? (
@@ -795,7 +800,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
             </ul>
           ) : null}
         </Dialog.Body>
-        <Dialog.Footer className="maintain-tenants__confirm-footer">
+        <Dialog.Footer className="maintain-tenants__dialog-footer maintain-tenants__confirm-footer">
           <Button
             variant="outline"
             onClick={() => setConfirmRemoveUserIds([])}

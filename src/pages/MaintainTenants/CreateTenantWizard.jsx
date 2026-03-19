@@ -15,10 +15,12 @@
  * @param {string}  props.customerId — customer scope for the new tenant
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { MdInfoOutline } from 'react-icons/md'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
+import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useCreateTenantMutation } from '../../store/api/tenantApi.js'
@@ -151,6 +153,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   const [website, setWebsite] = useState('')
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
+  const adminStepRef = useRef(null)
 
   /* ---- Reset when closing ---- */
   const handleClose = useCallback(() => {
@@ -296,24 +299,59 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
 
   /* ---- Step labels ---- */
   const stepLabels = ['Tenant Details', 'Assign Admins', 'Review']
+  const dialogSize = step === 2 ? 'lg' : 'md'
+  const dialogClassName = [
+    'create-wizard__dialog',
+    step === 2 ? 'create-wizard__dialog--admin-step' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const bodyClassName = [
+    'create-wizard__body',
+    step === 2 ? 'create-wizard__body--admin-step' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  useEffect(() => {
+    if (!open || step !== 2 || !adminStepRef.current) return
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const frame = requestAnimationFrame(() => {
+      adminStepRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [open, step])
 
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      size="md"
+      size={dialogSize}
+      className={dialogClassName}
       closeOnBackdropClick={!isLoading}
       closeOnEscape={!isLoading}
     >
       <Dialog.Header>
-        <h2 className="create-wizard__title">Create Tenant</h2>
-        <p className="create-wizard__step-indicator" aria-live="polite">
+        <h2 className="maintain-tenants__dialog-title create-wizard__title">Create Tenant</h2>
+        <p
+          className="maintain-tenants__dialog-subtitle create-wizard__step-indicator"
+          aria-live="polite"
+        >
           Step {step} of {TOTAL_STEPS}: {stepLabels[step - 1]}
         </p>
       </Dialog.Header>
 
-      <Dialog.Body>
-        {tenantCapacityGuidance ? (
+      <Dialog.Body className={['maintain-tenants__dialog-body', bodyClassName].join(' ')}>
+        {tenantCapacityGuidance && step !== 2 ? (
           <div
             className={[
               'create-wizard__note',
@@ -333,50 +371,80 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
         {/* Step 1: Tenant Details */}
         {step === 1 && (
           <div className="create-wizard__step">
-            <Input
-              id="create-tenant-name"
-              label="Tenant Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              error={fieldErrors.name}
-              required
-              fullWidth
-              disabled={isLoading}
-            />
-            <Input
-              id="create-tenant-website"
-              type="url"
-              label="Website URL"
-              placeholder="https://example.com"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              error={fieldErrors.website}
-              required
-              fullWidth
-              disabled={isLoading}
-            />
+            <fieldset className="create-wizard__fieldset">
+              <legend className="create-wizard__legend">Tenant Details</legend>
+              <div className="create-wizard__section create-wizard__section--form">
+                <Input
+                  id="create-tenant-name"
+                  label="Tenant Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  error={fieldErrors.name}
+                  required
+                  fullWidth
+                  disabled={isLoading}
+                />
+                <Input
+                  id="create-tenant-website"
+                  type="url"
+                  label="Website URL"
+                  placeholder="https://example.com"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  error={fieldErrors.website}
+                  required
+                  fullWidth
+                  disabled={isLoading}
+                />
+              </div>
+            </fieldset>
           </div>
         )}
 
         {/* Step 2: Assign Tenant Admins */}
         {step === 2 && (
-          <div className="create-wizard__step">
+          <div
+            ref={adminStepRef}
+            className="create-wizard__step create-wizard__step--admin-step"
+          >
             <fieldset className="create-wizard__fieldset">
-              <legend className="create-wizard__legend">Assign Tenant Admins</legend>
-              <p className="create-wizard__hint">
-                Search and select at least one active user from this customer to serve as tenant administrator.
-                Stale, inactive, or out-of-customer selections will be rejected before save.
-              </p>
-
-              <UserSearchSelect
-                customerId={customerId}
-                selectedIds={tenantAdminUserIds}
-                onChange={handleAdminChange}
-                label="Search users by name or email"
-                error={fieldErrors.tenantAdminUserIds}
-                minRequired={1}
-                disabled={isLoading}
-              />
+              <legend className="create-wizard__legend">
+                <span>Assign Tenant Admins</span>
+                {tenantCapacityGuidance ? (
+                  <Tooltip
+                    content={tenantCapacityGuidance.message}
+                    position="bottom"
+                    align="start"
+                    openDelay={0}
+                    closeDelay={0}
+                    className="create-wizard__legend-tooltip"
+                  >
+                    <button
+                      type="button"
+                      className="create-wizard__legend-help-trigger"
+                      aria-label={tenantCapacityGuidance.title}
+                    >
+                      <MdInfoOutline aria-hidden="true" focusable="false" />
+                      <span className="sr-only">{tenantCapacityGuidance.title}</span>
+                    </button>
+                  </Tooltip>
+                ) : null}
+              </legend>
+              <div className="create-wizard__section create-wizard__admin-search">
+                <UserSearchSelect
+                  customerId={customerId}
+                  selectedIds={tenantAdminUserIds}
+                  onChange={handleAdminChange}
+                  label="Search users by name or email"
+                  error={fieldErrors.tenantAdminUserIds}
+                  minRequired={1}
+                  disabled={isLoading}
+                />
+                <p className="create-wizard__hint">
+                  Search and select at least one active user from this customer to serve as tenant administrator.
+                  Stale, inactive, or out-of-customer selections will be rejected before save.
+                </p>
+              </div>
             </fieldset>
           </div>
         )}
@@ -384,19 +452,27 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
         {/* Step 3: Review */}
         {step === 3 && (
           <div className="create-wizard__step">
-            <h3 className="create-wizard__review-heading">Review Details</h3>
-            <dl className="create-wizard__review-list">
-              <dt>Name</dt>
-              <dd>{name}</dd>
-              <dt>Website</dt>
-              <dd>{website}</dd>
-              <dt>Tenant Admins</dt>
-              <dd>
-                {tenantAdminUserIds.length > 0
-                  ? tenantAdminUserIds.join(', ')
-                  : 'None'}
-              </dd>
-            </dl>
+            <fieldset className="create-wizard__fieldset">
+              <legend className="create-wizard__legend">Review Details</legend>
+              <div className="create-wizard__section">
+                <p className="create-wizard__review-copy">
+                  Confirm the tenant details and initial linked-admin assignment before creating
+                  this tenant.
+                </p>
+                <dl className="create-wizard__review-list">
+                  <dt>Name</dt>
+                  <dd>{name}</dd>
+                  <dt>Website</dt>
+                  <dd>{website}</dd>
+                  <dt>Tenant Admins</dt>
+                  <dd>
+                    {tenantAdminUserIds.length > 0
+                      ? tenantAdminUserIds.join(', ')
+                      : 'None'}
+                  </dd>
+                </dl>
+              </div>
+            </fieldset>
           </div>
         )}
       </Dialog.Body>

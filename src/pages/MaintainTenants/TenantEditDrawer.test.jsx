@@ -164,6 +164,9 @@ describe('TenantEditDrawer', () => {
     renderDrawer()
 
     expect(screen.getByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(/update tenant details and linked-user assignments in one workspace/i),
+    ).toBeInTheDocument()
     expect(screen.getByText('Tenant Details')).toBeInTheDocument()
     expect(screen.getByText('Linked Users')).toBeInTheDocument()
     expect(screen.getByText('Linked users')).toBeInTheDocument()

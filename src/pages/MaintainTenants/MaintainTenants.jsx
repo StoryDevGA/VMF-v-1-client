@@ -360,12 +360,14 @@ function MaintainTenants() {
         closeOnEscape={!isLifecycleMutationLoading}
       >
         <Dialog.Header>
-          <h2 className="maintain-tenants__confirm-title">{confirmActionCopy.title}</h2>
+          <h2 className="maintain-tenants__dialog-title maintain-tenants__confirm-title">
+            {confirmActionCopy.title}
+          </h2>
         </Dialog.Header>
-        <Dialog.Body>
-          <p>{confirmActionCopy.message}</p>
+        <Dialog.Body className="maintain-tenants__confirm-body">
+          <p className="maintain-tenants__confirm-message">{confirmActionCopy.message}</p>
         </Dialog.Body>
-        <Dialog.Footer className="maintain-tenants__confirm-footer">
+        <Dialog.Footer className="maintain-tenants__dialog-footer maintain-tenants__confirm-footer">
           <Button
             variant="outline"
             onClick={() => setConfirmAction(null)}
