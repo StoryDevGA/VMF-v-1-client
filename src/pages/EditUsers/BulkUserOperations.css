@@ -191,6 +191,41 @@
   gap: var(--spacing-sm, 0.5rem);
 }
 
+.bulk-users__examples-reference {
+  display: grid;
+  gap: var(--spacing-sm, 0.5rem);
+  padding-top: var(--spacing-xs, 0.25rem);
+  border-top: var(--border-width-thin, 1px) solid var(--color-border);
+}
+
+.bulk-users__examples-reference-list {
+  display: grid;
+  gap: var(--spacing-xs, 0.25rem);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bulk-users__examples-reference-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm, 0.5rem);
+  font-size: var(--font-size-sm, 0.875rem);
+}
+
+.bulk-users__examples-reference-name {
+  color: var(--color-text-primary);
+  min-width: 0;
+}
+
+.bulk-users__examples-reference-id {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .bulk-users__update-summary {
   display: grid;
   gap: var(--spacing-2xs, 0.125rem);
@@ -308,6 +343,11 @@
 
   .bulk-users__tenant-preserved-item {
     flex-direction: column;
+  }
+
+  .bulk-users__examples-reference-item {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

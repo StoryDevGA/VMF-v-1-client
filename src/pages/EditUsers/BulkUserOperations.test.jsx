@@ -322,6 +322,16 @@ describe('BulkUserOperations', () => {
     expect(screen.queryByLabelText(/tenant visibility ids/i)).not.toBeInTheDocument()
   })
 
+  it('shows current tenant references for multi-tenant bulk create', () => {
+    renderDialog()
+
+    expect(screen.getByText(/current tenant references/i)).toBeInTheDocument()
+    expect(screen.getByText('North Hub')).toBeInTheDocument()
+    expect(screen.getByText('ten-1')).toBeInTheDocument()
+    expect(screen.getByText('South Hub')).toBeInTheDocument()
+    expect(screen.getByText('ten-2')).toBeInTheDocument()
+  })
+
   // ---- Bulk Create: Manual ----
 
   it('parses manual rows and shows preview', async () => {
@@ -334,7 +344,7 @@ describe('BulkUserOperations', () => {
     )
     await user.type(
       screen.getByLabelText(/manual rows/i),
-      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,tenant-1',
+      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,North Hub',
     )
     await user.click(screen.getByRole('button', { name: /validate & preview/i }))
 
@@ -352,6 +362,7 @@ describe('BulkUserOperations', () => {
     expect(screen.getByLabelText(/manual rows/i).value).toContain(
       'Avery North,avery.north@example.com',
     )
+    expect(screen.getByLabelText(/manual rows/i).value).toContain('ten-1')
   })
 
   it('uses single-tenant example rows without tenant visibility values', async () => {
@@ -435,14 +446,51 @@ describe('BulkUserOperations', () => {
     )
     await user.type(
       screen.getByLabelText(/manual rows/i),
-      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,tenant-1',
+      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,North Hub|South Hub',
     )
     await user.click(screen.getByRole('button', { name: /validate & preview/i }))
     await user.click(screen.getByRole('button', { name: /process batch/i }))
 
     await waitFor(() => {
       expect(bulkCreateMock).toHaveBeenCalledTimes(1)
+      expect(bulkCreateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            sendInvitations: true,
+            users: [
+              {
+                name: 'Jane Doe',
+                email: 'jane@example.com',
+                roles: ['USER', 'TENANT_ADMIN'],
+                tenantVisibility: ['ten-1', 'ten-2'],
+              },
+            ],
+          },
+        }),
+      )
     })
+  })
+
+  it('blocks bulk create preview when tenant visibility values do not match current tenant references', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.selectOptions(
+      screen.getByLabelText(/input mode/i),
+      'manual',
+    )
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Jane Doe,jane@example.com,USER,tenant-1|tenant-2',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /tenant visibility values must use current tenant ids or exact tenant names from this customer/i,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(/row 1: tenant-1, tenant-2/i)
+    expect(screen.queryByText(/preview \(1\)/i)).not.toBeInTheDocument()
   })
 
   it('blocks bulk create preview when rows include CUSTOMER_ADMIN', async () => {
@@ -455,7 +503,7 @@ describe('BulkUserOperations', () => {
     )
     await user.type(
       screen.getByLabelText(/manual rows/i),
-      'Jane Doe,jane@example.com,CUSTOMER_ADMIN,tenant-1',
+      'Jane Doe,jane@example.com,CUSTOMER_ADMIN,North Hub',
     )
     await user.click(screen.getByRole('button', { name: /validate & preview/i }))
 
@@ -490,6 +538,44 @@ describe('BulkUserOperations', () => {
     })
   })
 
+  it('resolves CSV tenant visibility values to canonical tenant ids before submit', async () => {
+    const user = userEvent.setup()
+    bulkCreateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 1, success: 1, failed: 0 },
+        results: [{ email: 'jane@example.com', success: true }],
+      }),
+    })
+
+    renderDialog()
+
+    await user.type(
+      screen.getByLabelText(/csv content/i),
+      'name,email,roles,tenantVisibility{enter}Jane Doe,jane@example.com,USER,South Hub',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+    await user.click(screen.getByRole('button', { name: /process batch/i }))
+
+    await waitFor(() => {
+      expect(bulkCreateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          body: {
+            sendInvitations: true,
+            users: [
+              {
+                name: 'Jane Doe',
+                email: 'jane@example.com',
+                roles: ['USER'],
+                tenantVisibility: ['ten-2'],
+              },
+            ],
+          },
+        }),
+      )
+    })
+  })
+
   it('reveals the preview section after validation', async () => {
     const user = userEvent.setup()
     renderDialog()
@@ -497,7 +583,7 @@ describe('BulkUserOperations', () => {
     await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
     await user.type(
       screen.getByLabelText(/manual rows/i),
-      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,tenant-1',
+      'Jane Doe,jane@example.com,USER|TENANT_ADMIN,North Hub',
     )
     await user.click(screen.getByRole('button', { name: /validate & preview/i }))
 
@@ -536,6 +622,42 @@ describe('BulkUserOperations', () => {
     expect(
       screen.getByText(/1 rows were created, and 1 need attention before retrying\./i),
     ).toBeInTheDocument()
+  })
+
+  it('respects zero failed counts from the API summary even when result rows omit success flags', async () => {
+    const user = userEvent.setup()
+    bulkCreateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 1, success: 1, failed: 0 },
+        results: [{ email: 'jane@example.com', userId: 'user-1' }],
+      }),
+    })
+
+    renderDialog()
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Jane,jane@example.com,USER',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+    await user.click(screen.getByRole('button', { name: /process batch/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/bulk create completed$/i)).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText(/1 succeeded\. review batch results below if you need the row-level detail\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/all 1 rows were created successfully\./i),
+    ).toBeInTheDocument()
+
+    const resultRow = screen.getByText('jane@example.com', {
+      selector: '.bulk-users__result-target',
+    }).closest('.bulk-users__result-row')
+    expect(resultRow).toHaveTextContent('Success')
+    expect(resultRow).not.toHaveTextContent('Failed')
   })
 
   // ---- Bulk Create: CSV ----

@@ -57,6 +57,18 @@ const GOVERNED_CUSTOMER_ADMIN_ROLE = 'CUSTOMER_ADMIN'
 const BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE =
   'Bulk operations cannot assign or remove Customer Admin ownership. Use Transfer Ownership from Edit Users after the replacement user is active.'
 
+const BULK_CREATE_TENANT_VISIBILITY_GUIDANCE =
+  'Use current tenant IDs or exact tenant names separated by |. Preview resolves valid values to canonical tenant IDs before submit.'
+
+const BULK_CREATE_TENANT_REFERENCE_EMPTY_MESSAGE =
+  'No selectable tenants are currently available for this customer.'
+
+const BULK_CREATE_TENANT_REFERENCE_LOADING_MESSAGE =
+  'Loading current tenant references...'
+
+const BULK_CREATE_TENANT_REFERENCE_ERROR_MESSAGE =
+  'Tenant references could not be loaded. Leave tenantVisibility blank until that error is resolved.'
+
 const BULK_TENANT_VISIBILITY_GUIDANCE =
   'Apply the same tenant visibility set to every selected user. Choose Replace to set explicit tenant visibility, or Clear to remove stored explicit tenant visibility.'
 
@@ -95,37 +107,59 @@ const getSupportedBulkRolesMessage = (roles) =>
 
 const getBulkCreateCsvHelperText = (supportsTenantVisibility, supportedRolesMessage) =>
   supportsTenantVisibility
-    ? `Include headers for name, email, roles, and optional tenantVisibility. ${supportedRolesMessage}`
+    ? `Include headers for name, email, roles, and optional tenantVisibility. ${BULK_CREATE_TENANT_VISIBILITY_GUIDANCE} ${supportedRolesMessage}`
     : `Include headers for name, email, and roles. ${supportedRolesMessage}`
 
 const getBulkCreateManualHelperText = (supportsTenantVisibility, supportedRolesMessage) =>
   supportsTenantVisibility
-    ? `One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${supportedRolesMessage}`
+    ? `One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${BULK_CREATE_TENANT_VISIBILITY_GUIDANCE} ${supportedRolesMessage}`
     : `One row per line: name,email,roles. ${supportedRolesMessage}`
 
-const getBulkCreateExampleRows = (supportsTenantVisibility) =>
-  supportsTenantVisibility
-    ? [
-        'Avery North,avery.north@example.com,USER,tenant-1|tenant-2',
-        'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,tenant-1',
-      ].join('\n')
-    : [
-        'Avery North,avery.north@example.com,USER',
-        'Taylor Reed,taylor.reed@example.com,USER',
-      ].join('\n')
+const getBulkCreateExampleTenantValues = (selectableTenants) => {
+  const firstTenantId = selectableTenants[0]?.id ?? 'tenant-id-1'
+  const secondTenantId = selectableTenants[1]?.id ?? null
 
-const getBulkCreateExampleCsvContent = (supportsTenantVisibility) =>
-  supportsTenantVisibility
-    ? [
-        'name,email,roles,tenantVisibility',
-        'Avery North,avery.north@example.com,USER,tenant-1|tenant-2',
-        'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,tenant-1',
-      ].join('\n')
-    : [
-        'name,email,roles',
-        'Avery North,avery.north@example.com,USER',
-        'Taylor Reed,taylor.reed@example.com,USER',
-      ].join('\n')
+  return {
+    singleTenantValue: firstTenantId,
+    multiTenantValue: secondTenantId ? `${firstTenantId}|${secondTenantId}` : firstTenantId,
+  }
+}
+
+const getBulkCreateExampleRows = (supportsTenantVisibility, selectableTenants) => {
+  if (!supportsTenantVisibility) {
+    return [
+      'Avery North,avery.north@example.com,USER',
+      'Taylor Reed,taylor.reed@example.com,USER',
+    ].join('\n')
+  }
+
+  const { singleTenantValue, multiTenantValue } =
+    getBulkCreateExampleTenantValues(selectableTenants)
+
+  return [
+    `Avery North,avery.north@example.com,USER,${multiTenantValue}`,
+    `Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,${singleTenantValue}`,
+  ].join('\n')
+}
+
+const getBulkCreateExampleCsvContent = (supportsTenantVisibility, selectableTenants) => {
+  if (!supportsTenantVisibility) {
+    return [
+      'name,email,roles',
+      'Avery North,avery.north@example.com,USER',
+      'Taylor Reed,taylor.reed@example.com,USER',
+    ].join('\n')
+  }
+
+  const { singleTenantValue, multiTenantValue } =
+    getBulkCreateExampleTenantValues(selectableTenants)
+
+  return [
+    'name,email,roles,tenantVisibility',
+    `Avery North,avery.north@example.com,USER,${multiTenantValue}`,
+    `Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,${singleTenantValue}`,
+  ].join('\n')
+}
 
 const getBulkCreateExampleFilename = (supportsTenantVisibility) =>
   supportsTenantVisibility
@@ -370,13 +404,19 @@ function normalizeBulkResponse(payload) {
   const summary = data.summary ?? {}
   const results = data.results ?? data.items ?? []
 
-  const success =
-    Number(summary.success ?? summary.successCount ?? 0) ||
-    results.filter((item) => item.success).length
-  const failed =
-    Number(summary.failed ?? summary.failureCount ?? 0) ||
-    results.filter((item) => !item.success).length
-  const total = Number(summary.total ?? 0) || success + failed
+  const summarySuccess = summary.success ?? summary.successCount
+  const summaryFailed = summary.failed ?? summary.failureCount
+  const summaryTotal = summary.total
+
+  const success = summarySuccess != null
+    ? Number(summarySuccess)
+    : results.filter((item) => item.success).length
+  const failed = summaryFailed != null
+    ? Number(summaryFailed)
+    : results.filter((item) => !item.success).length
+  const total = summaryTotal != null
+    ? Number(summaryTotal)
+    : success + failed
 
   return {
     total,
@@ -400,6 +440,10 @@ function parseTenantVisibility(value) {
     .filter(Boolean)
 }
 
+function normalizeTenantLookupValue(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
 function normalizeTenantVisibilityIds(tenantIds) {
   return [...new Set((tenantIds ?? []).map((tenantId) => String(tenantId ?? '').trim()).filter(Boolean))]
 }
@@ -419,6 +463,172 @@ function normalizeTenantOption(tenant) {
     isDefault: tenant?.isDefault === true,
     selectionState: String(tenant?.selectionState ?? '').trim().toUpperCase(),
   }
+}
+
+function buildTenantResolutionIndex(selectableTenants) {
+  const byId = new Map()
+  const byName = new Map()
+
+  for (const tenant of selectableTenants) {
+    const id = String(tenant?.id ?? '').trim()
+    const name = String(tenant?.name ?? '').trim()
+    const normalizedId = normalizeTenantLookupValue(id)
+    const normalizedName = normalizeTenantLookupValue(name)
+
+    if (normalizedId) {
+      byId.set(normalizedId, id)
+    }
+
+    if (normalizedName) {
+      const currentIds = byName.get(normalizedName) ?? []
+      if (!currentIds.includes(id)) {
+        byName.set(normalizedName, [...currentIds, id])
+      }
+    }
+  }
+
+  return { byId, byName }
+}
+
+function resolveTenantVisibilityValues(values, tenantResolutionIndex) {
+  const resolvedIds = []
+  const invalidValues = []
+  const ambiguousValues = []
+
+  for (const value of values) {
+    const normalizedValue = normalizeTenantLookupValue(value)
+    if (!normalizedValue) continue
+
+    if (tenantResolutionIndex.byId.has(normalizedValue)) {
+      resolvedIds.push(tenantResolutionIndex.byId.get(normalizedValue))
+      continue
+    }
+
+    const matchingNames = tenantResolutionIndex.byName.get(normalizedValue) ?? []
+    if (matchingNames.length === 1) {
+      resolvedIds.push(matchingNames[0])
+      continue
+    }
+
+    if (matchingNames.length > 1) {
+      ambiguousValues.push(String(value).trim())
+      continue
+    }
+
+    invalidValues.push(String(value).trim())
+  }
+
+  return {
+    resolvedIds: normalizeTenantVisibilityIds(resolvedIds),
+    invalidValues: [...new Set(invalidValues)],
+    ambiguousValues: [...new Set(ambiguousValues)],
+  }
+}
+
+function formatTenantRowIssues(rowIssues) {
+  return rowIssues
+    .map(({ row, values }) => `row ${row}: ${values.join(', ')}`)
+    .join('; ')
+}
+
+function getBulkCreateTenantVisibilityError({
+  invalidRows,
+  ambiguousRows,
+  selectableTenants,
+  needsTenantCatalog,
+}) {
+  if (needsTenantCatalog) {
+    return 'Tenant visibility values require the current tenant catalog. Wait for tenant references to load or remove tenantVisibility values and retry.'
+  }
+
+  if (selectableTenants.length === 0) {
+    return 'No selectable tenants are currently available for this customer. Remove tenantVisibility values and retry.'
+  }
+
+  const errorParts = []
+
+  if (invalidRows.length > 0) {
+    errorParts.push(
+      `Tenant visibility values must use current tenant IDs or exact tenant names from this customer. Invalid values in ${formatTenantRowIssues(invalidRows)}.`,
+    )
+  }
+
+  if (ambiguousRows.length > 0) {
+    errorParts.push(
+      `Ambiguous tenant names were found in ${formatTenantRowIssues(ambiguousRows)}. Use the tenant ID instead.`,
+    )
+  }
+
+  return errorParts.join(' ')
+}
+
+function resolveBulkCreateTenantVisibility({
+  users,
+  rowOffset,
+  shouldShowTenantVisibilityUpdate,
+  selectableTenants,
+  tenantResolutionIndex,
+  canResolveTenantVisibility,
+}) {
+  if (!shouldShowTenantVisibilityUpdate) {
+    return { users }
+  }
+
+  const hasTenantVisibilityValues = users.some((user) => (user.tenantVisibility?.length ?? 0) > 0)
+  if (!hasTenantVisibilityValues) {
+    return { users }
+  }
+
+  if (!canResolveTenantVisibility) {
+    return {
+      users: [],
+      errorMessage: getBulkCreateTenantVisibilityError({
+        invalidRows: [],
+        ambiguousRows: [],
+        selectableTenants,
+        needsTenantCatalog: true,
+      }),
+    }
+  }
+
+  const invalidRows = []
+  const ambiguousRows = []
+  const normalizedUsers = users.map((user, index) => {
+    const resolved = resolveTenantVisibilityValues(user.tenantVisibility ?? [], tenantResolutionIndex)
+
+    if (resolved.invalidValues.length > 0) {
+      invalidRows.push({
+        row: index + rowOffset,
+        values: resolved.invalidValues,
+      })
+    }
+
+    if (resolved.ambiguousValues.length > 0) {
+      ambiguousRows.push({
+        row: index + rowOffset,
+        values: resolved.ambiguousValues,
+      })
+    }
+
+    return {
+      ...user,
+      tenantVisibility: resolved.resolvedIds,
+    }
+  })
+
+  if (invalidRows.length > 0 || ambiguousRows.length > 0) {
+    return {
+      users: [],
+      errorMessage: getBulkCreateTenantVisibilityError({
+        invalidRows,
+        ambiguousRows,
+        selectableTenants,
+        needsTenantCatalog: false,
+      }),
+    }
+  }
+
+  return { users: normalizedUsers }
 }
 
 function BulkUserOperations({
@@ -514,19 +724,6 @@ function BulkUserOperations({
     () => getSupportedBulkRolesMessage(supportedBulkRoles),
     [supportedBulkRoles],
   )
-  const bulkCreateExampleRows = useMemo(
-    () => getBulkCreateExampleRows(shouldShowTenantVisibilityUpdate),
-    [shouldShowTenantVisibilityUpdate],
-  )
-  const bulkCreateExampleCsvContent = useMemo(
-    () => getBulkCreateExampleCsvContent(shouldShowTenantVisibilityUpdate),
-    [shouldShowTenantVisibilityUpdate],
-  )
-  const bulkCreateExampleFilename = useMemo(
-    () => getBulkCreateExampleFilename(shouldShowTenantVisibilityUpdate),
-    [shouldShowTenantVisibilityUpdate],
-  )
-
   const normalizedSelectedBulkTenantVisibility = useMemo(
     () => normalizeTenantVisibilityIds(selectedBulkTenantVisibility),
     [selectedBulkTenantVisibility],
@@ -540,6 +737,29 @@ function BulkUserOperations({
   const selectableTenantOptions = useMemo(
     () => tenants.filter((tenant) => tenant.isSelectable),
     [tenants],
+  )
+
+  const tenantResolutionIndex = useMemo(
+    () => buildTenantResolutionIndex(selectableTenantOptions),
+    [selectableTenantOptions],
+  )
+
+  const canResolveBulkCreateTenantVisibility =
+    shouldShowTenantVisibilityUpdate
+      ? !isLoadingTenants && !normalizedTenantsError
+      : true
+
+  const bulkCreateExampleRows = useMemo(
+    () => getBulkCreateExampleRows(shouldShowTenantVisibilityUpdate, selectableTenantOptions),
+    [selectableTenantOptions, shouldShowTenantVisibilityUpdate],
+  )
+  const bulkCreateExampleCsvContent = useMemo(
+    () => getBulkCreateExampleCsvContent(shouldShowTenantVisibilityUpdate, selectableTenantOptions),
+    [selectableTenantOptions, shouldShowTenantVisibilityUpdate],
+  )
+  const bulkCreateExampleFilename = useMemo(
+    () => getBulkCreateExampleFilename(shouldShowTenantVisibilityUpdate),
+    [shouldShowTenantVisibilityUpdate],
   )
 
   const resolvedSelectedTenants = useMemo(
@@ -718,21 +938,40 @@ function BulkUserOperations({
         }
       })
 
-      const restrictedRoleRows = getRestrictedBulkRoleRows(users, 1)
+      const resolvedCreateUsers = resolveBulkCreateTenantVisibility({
+        users,
+        rowOffset: 1,
+        shouldShowTenantVisibilityUpdate,
+        selectableTenants: selectableTenantOptions,
+        tenantResolutionIndex,
+        canResolveTenantVisibility: canResolveBulkCreateTenantVisibility,
+      })
+
+      if (resolvedCreateUsers.errorMessage) {
+        setFieldError(resolvedCreateUsers.errorMessage)
+        setPreviewUsers([])
+        return
+      }
+
+      const restrictedRoleRows = getRestrictedBulkRoleRows(resolvedCreateUsers.users, 1)
       if (restrictedRoleRows.length > 0) {
         setFieldError(getBulkGovernanceErrorMessage(restrictedRoleRows))
         setPreviewUsers([])
         return
       }
 
-      const unsupportedRoleRows = getUnsupportedBulkRoleRows(users, supportedBulkRoles, 1)
+      const unsupportedRoleRows = getUnsupportedBulkRoleRows(
+        resolvedCreateUsers.users,
+        supportedBulkRoles,
+        1,
+      )
       if (unsupportedRoleRows.length > 0) {
         setFieldError(getUnsupportedBulkRolesMessage(supportedBulkRoles, unsupportedRoleRows))
         setPreviewUsers([])
         return
       }
 
-      setPreviewUsers(users)
+      setPreviewUsers(resolvedCreateUsers.users)
       return
     }
 
@@ -796,22 +1035,51 @@ function BulkUserOperations({
       }
     })
 
-    const restrictedRoleRows = getRestrictedBulkRoleRows(users, 2)
+    const resolvedCreateUsers = resolveBulkCreateTenantVisibility({
+      users,
+      rowOffset: 2,
+      shouldShowTenantVisibilityUpdate,
+      selectableTenants: selectableTenantOptions,
+      tenantResolutionIndex,
+      canResolveTenantVisibility: canResolveBulkCreateTenantVisibility,
+    })
+
+    if (resolvedCreateUsers.errorMessage) {
+      setFieldError(resolvedCreateUsers.errorMessage)
+      setPreviewUsers([])
+      return
+    }
+
+    const restrictedRoleRows = getRestrictedBulkRoleRows(resolvedCreateUsers.users, 2)
     if (restrictedRoleRows.length > 0) {
       setFieldError(getBulkGovernanceErrorMessage(restrictedRoleRows))
       setPreviewUsers([])
       return
     }
 
-    const unsupportedRoleRows = getUnsupportedBulkRoleRows(users, supportedBulkRoles, 2)
+    const unsupportedRoleRows = getUnsupportedBulkRoleRows(
+      resolvedCreateUsers.users,
+      supportedBulkRoles,
+      2,
+    )
     if (unsupportedRoleRows.length > 0) {
       setFieldError(getUnsupportedBulkRolesMessage(supportedBulkRoles, unsupportedRoleRows))
       setPreviewUsers([])
       return
     }
 
-    setPreviewUsers(users)
-  }, [csvText, manualText, mapping, sourceMode, supportedBulkRoles])
+    setPreviewUsers(resolvedCreateUsers.users)
+  }, [
+    canResolveBulkCreateTenantVisibility,
+    csvText,
+    manualText,
+    mapping,
+    selectableTenantOptions,
+    shouldShowTenantVisibilityUpdate,
+    sourceMode,
+    supportedBulkRoles,
+    tenantResolutionIndex,
+  ])
 
   const canRunCreate = useMemo(() => {
     return operation === 'create' && previewUsers.length > 0 && !fieldError
@@ -1296,6 +1564,33 @@ function BulkUserOperations({
                   preview and batch results will jump into view below.
                 </p>
               </div>
+              {shouldShowTenantVisibilityUpdate ? (
+                <div className="bulk-users__examples-reference" aria-label="Current tenant references">
+                  <p className="bulk-users__examples-title">Current tenant references</p>
+                  {isLoadingTenants ? (
+                    <p className="bulk-users__examples-text" role="status">
+                      {BULK_CREATE_TENANT_REFERENCE_LOADING_MESSAGE}
+                    </p>
+                  ) : normalizedTenantsError ? (
+                    <p className="bulk-users__examples-text">
+                      {BULK_CREATE_TENANT_REFERENCE_ERROR_MESSAGE}
+                    </p>
+                  ) : selectableTenantOptions.length > 0 ? (
+                    <ul className="bulk-users__examples-reference-list">
+                      {selectableTenantOptions.map((tenant) => (
+                        <li key={tenant.id} className="bulk-users__examples-reference-item">
+                          <span className="bulk-users__examples-reference-name">{tenant.name}</span>
+                          <span className="bulk-users__examples-reference-id">{tenant.id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="bulk-users__examples-text">
+                      {BULK_CREATE_TENANT_REFERENCE_EMPTY_MESSAGE}
+                    </p>
+                  )}
+                </div>
+              ) : null}
               <div className="bulk-users__example-actions">
                 <Button
                   type="button"
@@ -1614,7 +1909,7 @@ function BulkUserOperations({
                       {item.email ?? item.userId ?? `Row ${index + 1}`}
                     </span>
                     <span>
-                      {item.success ? 'Success' : item.error || 'Failed'}
+                      {item.success === false ? (item.error || 'Failed') : 'Success'}
                     </span>
                   </div>
                 ))}
