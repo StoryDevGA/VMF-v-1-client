@@ -90,6 +90,7 @@ const enabledTenant = {
   website: 'https://enabled.example.com',
   status: 'ENABLED',
   isDefault: false,
+  tenantAdmin: { id: 'user-10', name: 'Jordan Manager' },
 }
 
 const enabledTenantWithIdOnly = {
@@ -98,6 +99,7 @@ const enabledTenantWithIdOnly = {
   website: 'https://enabled-id-only.example.com',
   status: 'ENABLED',
   isDefault: false,
+  tenantAdmin: { id: 'user-11', name: 'Morgan Lead' },
 }
 
 const defaultTenant = {
@@ -106,6 +108,7 @@ const defaultTenant = {
   website: 'https://default.example.com',
   status: 'ENABLED',
   isDefault: true,
+  tenantAdmin: { id: 'user-12', name: 'Default Admin' },
 }
 
 const disabledTenant = {
@@ -114,6 +117,7 @@ const disabledTenant = {
   website: 'https://disabled.example.com',
   status: 'DISABLED',
   isDefault: false,
+  tenantAdmin: null,
 }
 
 const archivedTenant = {
@@ -122,6 +126,7 @@ const archivedTenant = {
   website: 'https://archived.example.com',
   status: 'ARCHIVED',
   isDefault: false,
+  tenantAdmin: { id: 'user-13', name: 'Archived Admin' },
 }
 
 const noCustomerUser = {
@@ -333,18 +338,26 @@ describe('MaintainTenants page', () => {
       screen.getByText(/use the actions menu to edit tenant details or change lifecycle state/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /^default$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /tenant admin/i })).toBeInTheDocument()
+    expect(screen.getByText('Jordan Manager')).toBeInTheDocument()
+    expect(screen.getByText('Default Admin')).toBeInTheDocument()
+    expect(screen.getByText('Archived Admin')).toBeInTheDocument()
+    expect(screen.getByText('Not assigned')).toBeInTheDocument()
 
     const enabledActions = screen.getByRole('combobox', { name: /actions for enabled tenant/i })
     expect(within(enabledActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(enabledActions).getByRole('option', { name: /assign admin/i })).toBeInTheDocument()
     expect(within(enabledActions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
     expect(within(enabledActions).queryByRole('option', { name: /enable/i })).not.toBeInTheDocument()
 
     const defaultActions = screen.getByRole('combobox', { name: /actions for default tenant/i })
     expect(within(defaultActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(defaultActions).getByRole('option', { name: /assign admin/i })).toBeInTheDocument()
     expect(within(defaultActions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
 
     const disabledActions = screen.getByRole('combobox', { name: /actions for disabled tenant/i })
     expect(within(disabledActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(disabledActions).getByRole('option', { name: /assign admin/i })).toBeInTheDocument()
     expect(within(disabledActions).getByRole('option', { name: /enable/i })).toBeInTheDocument()
     expect(within(disabledActions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
 
@@ -402,6 +415,29 @@ describe('MaintainTenants page', () => {
     await user.click(screen.getByRole('button', { name: /^enabled tenant$/i }))
 
     expect(await screen.findByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
+  })
+
+  it('opens the dedicated assign-admin dialog from the row actions menu', async () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenant],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    selectTenantAction('Enabled Tenant', 'Assign Admin')
+
+    const dialogHeading = await screen.findByRole('heading', { name: /assign tenant admin/i })
+    const dialog = dialogHeading.closest('dialog')
+
+    expect(dialog).not.toBeNull()
+    expect(within(dialog).getByText(/replace the current tenant admin for enabled tenant/i)).toBeInTheDocument()
+    expect(within(dialog).getByText('Jordan Manager')).toBeInTheDocument()
   })
 
   it('uses first/previous/next/last pagination controls inside the card', () => {
@@ -548,6 +584,7 @@ describe('MaintainTenants page', () => {
     expect(screen.getByText('Website')).toBeInTheDocument()
     const statusElements = screen.getAllByText('Status')
     expect(statusElements.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Tenant Admin')).toBeInTheDocument()
     expect(screen.queryByText('Default')).not.toBeInTheDocument()
     expect(screen.getByText('Actions')).toBeInTheDocument()
   })
@@ -560,6 +597,72 @@ describe('MaintainTenants page', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /create tenant/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows error toast when enable fails', async () => {
+    const user = userEvent.setup()
+    const enableTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 500,
+        data: { error: { message: 'Internal server error during enable' } },
+      }),
+    })
+    mockUseEnableTenantMutation.mockReturnValue([enableTenantMutationMock, { isLoading: false }])
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [disabledTenant],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    selectTenantAction('Disabled Tenant', 'Enable')
+
+    const dialogHeading = screen.getByRole('heading', { name: /enable tenant/i })
+    const dialog = dialogHeading.closest('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: /^enable$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to enable tenant/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows error toast when disable fails', async () => {
+    const user = userEvent.setup()
+    const disableTenantMutationMock = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 500,
+        data: { error: { message: 'Internal server error during disable' } },
+      }),
+    })
+    mockUseDisableTenantMutation.mockReturnValue([disableTenantMutationMock, { isLoading: false }])
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [enabledTenant],
+        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    selectTenantAction('Enabled Tenant', 'Disable')
+
+    const dialogHeading = screen.getByRole('heading', { name: /disable tenant/i })
+    const dialog = dialogHeading.closest('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: /^disable$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to disable tenant/i)).toBeInTheDocument()
     })
   })
 })

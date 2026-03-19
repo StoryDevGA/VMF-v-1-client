@@ -30,23 +30,53 @@ vi.mock('../../store/api/tenantApi.js', () => ({
 }))
 
 vi.mock('../../components/UserSearchSelect', () => {
-  function MockUserSearchSelect({ label, onChange, error, disabled }) {
+  function MockUserSearchSelect({
+    label,
+    onChange,
+    error,
+    disabled,
+    selectedIds = [],
+    lockSelectionUntilRemoval = false,
+    allowTemporaryEmptySelection = false,
+    expandDropdown = false,
+  }) {
+    const isLocked = lockSelectionUntilRemoval && selectedIds.length >= 1
+
     return (
-      <div>
+      <div data-expand-dropdown={expandDropdown ? 'true' : 'false'}>
         <label htmlFor="mock-user-search">{label}</label>
+        {selectedIds.length > 0 ? (
+          <div aria-label="Selected admins">
+            <span>{selectedIds[0]}</span>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={disabled || !allowTemporaryEmptySelection}
+            >
+              Remove Selected Admin
+            </button>
+          </div>
+        ) : null}
         <input
           id="mock-user-search"
           role="combobox"
           placeholder="Search by name or email..."
-          disabled={disabled}
+          disabled={disabled || isLocked}
           onChange={() => {}}
         />
         <button
           type="button"
           onClick={() => onChange(['admin-user-1'])}
-          disabled={disabled}
+          disabled={disabled || isLocked}
         >
           Add Mock Admin
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(['admin-user-1', 'admin-user-2'])}
+          disabled={disabled || isLocked}
+        >
+          Set Multiple Admins
         </button>
         {error ? <span role="alert">{error}</span> : null}
       </div>
@@ -182,7 +212,7 @@ describe('CreateTenantWizard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/step 2 of 3/i)).toBeInTheDocument()
-      expect(screen.getByText(/assign tenant admins/i)).toBeInTheDocument()
+      expect(screen.getAllByText(/assign tenant admin/i).length).toBeGreaterThan(0)
     })
   })
 
@@ -193,7 +223,8 @@ describe('CreateTenantWizard', () => {
 
     expect(screen.getByRole('combobox')).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/search by name or email/i)).toBeInTheDocument()
-    expect(screen.getByText(/search users by name or email/i)).toBeInTheDocument()
+    expect(screen.getByText(/search for tenant admin/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/search for tenant admin/i).closest('div')).toHaveAttribute('data-expand-dropdown', 'true')
   })
 
   it('expands the dialog footprint for the tenant-admin assignment step', async () => {
@@ -206,7 +237,8 @@ describe('CreateTenantWizard', () => {
 
     expect(screen.getByRole('dialog')).toHaveClass('dialog--lg')
     expect(screen.getByRole('dialog')).toHaveClass('create-wizard__dialog--admin-step')
-    expect(screen.getByText(/assign tenant admins/i).closest('.create-wizard__fieldset')).toBeInTheDocument()
+    expect(screen.getAllByText(/assign tenant admin/i)[0].closest('.create-wizard__fieldset')
+      ?? screen.getAllByText(/assign tenant admin/i)[1].closest('.create-wizard__fieldset')).toBeInTheDocument()
     expect(screen.getByRole('dialog').querySelector('.create-wizard__body--admin-step')).toBeTruthy()
   })
 
@@ -254,8 +286,27 @@ describe('CreateTenantWizard', () => {
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/at least one tenant admin/i)).toBeInTheDocument()
+      expect(screen.getByText(/exactly one tenant admin is required/i)).toBeInTheDocument()
     })
+  })
+
+  it('locks tenant-admin search until the current selection is removed', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await goToStep2(user)
+    await user.click(screen.getByRole('button', { name: /add mock admin/i }))
+
+    expect(screen.getByRole('combobox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: /remove selected admin/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(/remove the selected tenant admin before searching for a different user/i),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /remove selected admin/i }))
+
+    expect(screen.getByRole('combobox')).toBeEnabled()
+    expect(screen.getByText(/search and select one active user from this customer/i)).toBeInTheDocument()
   })
 
   it('navigates back from step 2 to step 1', async () => {
@@ -284,7 +335,7 @@ describe('CreateTenantWizard', () => {
       expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
       expect(screen.getByText(/review details/i)).toBeInTheDocument()
       expect(
-        screen.getByText(/confirm the tenant details and initial linked-admin assignment/i),
+        screen.getByText(/confirm the tenant details and initial tenant-admin assignment/i),
       ).toBeInTheDocument()
       expect(screen.getByText('Review Tenant')).toBeInTheDocument()
       expect(screen.getByText('https://review.com')).toBeInTheDocument()
@@ -312,6 +363,21 @@ describe('CreateTenantWizard', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
       expect(screen.getByText(/test tenant has been created successfully/i)).toBeInTheDocument()
+    })
+  })
+
+  it('keeps only one tenant admin when the selector reports multiple IDs', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await goToStep2(user)
+    await user.click(screen.getByRole('button', { name: /set multiple admins/i }))
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
+      expect(screen.getByText(/^tenant admin$/i)).toBeInTheDocument()
+      expect(screen.getByText('admin-user-1')).toBeInTheDocument()
     })
   })
 

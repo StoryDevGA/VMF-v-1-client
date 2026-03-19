@@ -1,15 +1,15 @@
 /**
  * TenantEditDrawer Tests
  *
- * Covers the redesigned tenant-edit workspace:
+ * Covers the single-admin tenant-edit workspace:
  * - Tenant details remain at the top of the drawer
- * - Linked users render in a searchable, filterable table
- * - Bulk remove updates pending tenant-admin assignments
+ * - Tenant admin assignment is singular
+ * - Reassigning the tenant admin replaces the current assignment
  * - Save and contract-error handling still work
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -76,7 +76,21 @@ const sampleTenant = {
   website: 'https://acme.com',
   status: 'ENABLED',
   isDefault: false,
-  tenantAdminUserIds: ['admin-user-1', 'admin-user-2'],
+  tenantAdminUserIds: ['admin-user-1'],
+  tenantAdmin: {
+    id: 'admin-user-1',
+    name: 'Jordan Manager',
+  },
+}
+
+const unassignedTenant = {
+  _id: 'tenant-4',
+  name: 'Unassigned Tenant',
+  website: 'https://unassigned.com',
+  status: 'ENABLED',
+  isDefault: false,
+  tenantAdminUserIds: [],
+  tenantAdmin: null,
 }
 
 const defaultTenant = {
@@ -86,6 +100,10 @@ const defaultTenant = {
   status: 'ENABLED',
   isDefault: true,
   tenantAdminUserIds: ['admin-user-1'],
+  tenantAdmin: {
+    id: 'admin-user-1',
+    name: 'Jordan Manager',
+  },
 }
 
 const archivedTenant = {
@@ -95,6 +113,10 @@ const archivedTenant = {
   status: 'ARCHIVED',
   isDefault: false,
   tenantAdminUserIds: ['admin-user-1'],
+  tenantAdmin: {
+    id: 'admin-user-1',
+    name: 'Jordan Manager',
+  },
 }
 
 function createTestStore() {
@@ -160,59 +182,32 @@ describe('TenantEditDrawer', () => {
     ])
   })
 
-  it('renders the redesigned tenant details and linked users workspace', async () => {
+  it('renders the single-admin tenant workspace', async () => {
     renderDrawer()
 
     expect(screen.getByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
     expect(
-      screen.getByText(/update tenant details and linked-user assignments in one workspace/i),
+      screen.getByText(/update tenant details and assign exactly one tenant admin/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Tenant Details')).toBeInTheDocument()
-    expect(screen.getByText('Linked Users')).toBeInTheDocument()
-    expect(screen.getByText('Linked users')).toBeInTheDocument()
-    expect(screen.getByText('2 linked | 1 active')).toBeInTheDocument()
-    expect(
-      screen.getByText(/linked users are the users who administer this tenant/i),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText(/add linked users/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/search linked users/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/selected admins/i)).not.toBeInTheDocument()
-
-    const table = screen.getByRole('table', { name: /linked users/i })
-
-    expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
-    expect(within(table).getByText('Taylor Viewer')).toBeInTheDocument()
-    expect(within(table).queryByRole('columnheader', { name: /roles/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Tenant Admin')).toBeInTheDocument()
+    expect(screen.getByText('Tenant admin assignment')).toBeInTheDocument()
+    expect(screen.getByText('Assigned')).toBeInTheDocument()
+    expect(screen.getByText('Jordan Manager')).toBeInTheDocument()
+    expect(screen.getByText('jordan.manager@acme.test')).toBeInTheDocument()
+    expect(screen.getByLabelText(/assign tenant admin/i)).toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: /linked users/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remove selected/i })).not.toBeInTheDocument()
   })
 
-  it('renders nothing when tenant is null', () => {
-    renderDrawer({ tenant: null })
-    expect(screen.queryByRole('heading', { name: /edit tenant/i })).not.toBeInTheDocument()
+  it('shows an empty-state message when no tenant admin is currently assigned', () => {
+    renderDrawer({ tenant: unassignedTenant })
+
+    expect(screen.getByText(/not assigned/i)).toBeInTheDocument()
+    expect(screen.getByText(/no tenant admin is currently assigned/i)).toBeInTheDocument()
   })
 
-  it('filters linked users inside the table by search term', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-
-    const table = screen.getByRole('table', { name: /linked users/i })
-    await user.type(screen.getByLabelText(/search linked users/i), 'Taylor')
-
-    expect(within(table).queryByText('Jordan Manager')).not.toBeInTheDocument()
-    expect(within(table).getByText('Taylor Viewer')).toBeInTheDocument()
-  })
-
-  it('filters linked users inside the table by status', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-
-    const table = screen.getByRole('table', { name: /linked users/i })
-    await user.selectOptions(screen.getByLabelText(/^status$/i), 'ACTIVE')
-
-    expect(within(table).getByText('Jordan Manager')).toBeInTheDocument()
-    expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
-  })
-
-  it('reviews and confirms linked-user bulk removal before submitting the updated tenant-admin assignments', async () => {
+  it('replaces the current tenant admin and saves a single tenantAdminUserIds entry', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
     const updateTenantMutationMock = vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } })
@@ -223,34 +218,18 @@ describe('TenantEditDrawer', () => {
 
     renderDrawer({ onClose })
 
-    expect(
-      screen.getByText(/select linked users from the table to review a bulk removal/i),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^remove selected$/i })).toBeDisabled()
+    await user.type(screen.getByRole('combobox'), 'Morgan')
+    await user.click(await screen.findByText('Morgan Backup'))
 
-    await user.click(screen.getByLabelText(/select row admin-user-2/i))
-
-    expect(screen.getByText(/1 linked user selected for review/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /remove selected \(1\)/i })).toBeEnabled()
-
-    await user.click(screen.getByRole('button', { name: /remove selected \(1\)/i }))
-
-    const confirmDialog = screen.getAllByRole('dialog')[1]
-    expect(within(confirmDialog).getByRole('heading', { name: /remove linked users/i })).toBeInTheDocument()
-    expect(within(confirmDialog).getByText(/remove 1 linked user from this tenant/i)).toBeInTheDocument()
-    expect(within(confirmDialog).getByText('Taylor Viewer')).toBeInTheDocument()
-
-    await user.click(within(confirmDialog).getByRole('button', { name: /remove linked users/i }))
-
-    const table = screen.getByRole('table', { name: /linked users/i })
-    expect(within(table).queryByText('Taylor Viewer')).not.toBeInTheDocument()
-    expect(screen.getByText('1 linked | 1 active')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Morgan Backup')).toBeInTheDocument()
+    })
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
       expect(updateTenantMutationMock).toHaveBeenCalledWith('tenant-1', {
-        tenantAdminUserIds: ['admin-user-1'],
+        tenantAdminUserIds: ['admin-user-3'],
       })
     })
 
@@ -260,28 +239,13 @@ describe('TenantEditDrawer', () => {
     })
   })
 
-  it('prevents removing the final linked tenant admin', async () => {
-    const user = userEvent.setup()
-    renderDrawer({ tenant: defaultTenant })
-
-    const table = screen.getByRole('table', { name: /linked users/i })
-    expect(within(table).getByRole('button', { name: /^remove jordan manager$/i })).toBeDisabled()
-
-    await user.click(screen.getByLabelText(/select row admin-user-1/i))
-
-    expect(screen.getByRole('button', { name: /remove selected \(1\)/i })).toBeDisabled()
-    expect(
-      screen.getByText(/at least one linked user must remain assigned before you can remove the current selection/i),
-    ).toBeInTheDocument()
-  })
-
   it('shows archived tenants as read-only in the edit drawer', () => {
     renderDrawer({ tenant: archivedTenant })
 
     expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
     expect(screen.getByLabelText(/website url/i)).toBeDisabled()
-    expect(screen.getByLabelText(/add linked users/i)).toBeDisabled()
+    expect(screen.getByLabelText(/assign tenant admin/i)).toBeDisabled()
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
@@ -306,7 +270,7 @@ describe('TenantEditDrawer', () => {
     })
   })
 
-  it('surfaces contract-based tenant-admin guidance when save fails with invalid assignments', async () => {
+  it('surfaces the single-admin contract validation message from the API', async () => {
     const user = userEvent.setup()
     const updateTenantMutationMock = vi.fn().mockRejectedValue({
       status: 422,
@@ -314,11 +278,8 @@ describe('TenantEditDrawer', () => {
         error: {
           code: 'VALIDATION_FAILED',
           message: 'Please check the form for errors.',
-          requestId: 'tenant-admin-edit-1',
           details: {
-            reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
-            invalidTenantAdminUserIds: ['outside-admin-3'],
-            outOfCustomerTenantAdminUserIds: ['outside-admin-3'],
+            tenantAdminUserIds: 'Only one tenant admin is allowed',
           },
         },
       },
@@ -330,18 +291,33 @@ describe('TenantEditDrawer', () => {
 
     renderDrawer()
 
-    const nameInput = screen.getByLabelText(/tenant name/i)
-    await user.clear(nameInput)
-    await user.type(nameInput, 'Acme Tenant Updated')
+    await user.clear(screen.getByLabelText(/tenant name/i))
+    await user.type(screen.getByLabelText(/tenant name/i), 'Acme Tenant Updated')
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
       expect(updateTenantMutationMock).toHaveBeenCalledTimes(1)
-      expect(
-        screen.getAllByText(/replace users outside this customer context: outside-admin-3/i).length,
-      ).toBeGreaterThan(0)
-      expect(screen.getAllByText(/\(Ref: tenant-admin-edit-1\)/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/only one tenant admin is allowed/i).length).toBeGreaterThan(0)
     })
+  })
+
+  it('shows informational toast when saving without any changes', async () => {
+    const user = userEvent.setup()
+    const updateTenantMutationMock = vi.fn()
+    mockUseTenants.mockReturnValue({
+      updateTenant: updateTenantMutationMock,
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDrawer()
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/no changes/i)).toBeInTheDocument()
+      expect(screen.getByText(/no fields were modified/i)).toBeInTheDocument()
+    })
+    expect(updateTenantMutationMock).not.toHaveBeenCalled()
   })
 
   it('surfaces customer-context guidance instead of falling back to a platform-only tenant update route', async () => {

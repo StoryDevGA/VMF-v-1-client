@@ -410,10 +410,10 @@ function normalizeBulkResponse(payload) {
 
   const success = summarySuccess != null
     ? Number(summarySuccess)
-    : results.filter((item) => item.success).length
+    : results.filter((item) => item.success !== false).length
   const failed = summaryFailed != null
     ? Number(summaryFailed)
-    : results.filter((item) => !item.success).length
+    : results.filter((item) => item.success === false).length
   const total = summaryTotal != null
     ? Number(summaryTotal)
     : success + failed

@@ -182,6 +182,32 @@ describe('UserSearchSelect', () => {
     expect(input).toBeDisabled()
   })
 
+  it('locks the search input when max selection is reached and lockSelectionUntilRemoval is enabled', () => {
+    renderSelect({
+      selectedIds: ['user-1'],
+      maxSelections: 1,
+      lockSelectionUntilRemoval: true,
+    })
+
+    expect(screen.getByRole('combobox')).toBeDisabled()
+  })
+
+  it('allows removing the final selected user when temporary empty selection is enabled', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+
+    renderSelect({
+      selectedIds: ['user-1'],
+      onChange,
+      minRequired: 1,
+      allowTemporaryEmptySelection: true,
+    })
+
+    await user.click(screen.getByRole('button', { name: /remove/i }))
+
+    expect(onChange).toHaveBeenCalledWith([])
+  })
+
   it('opens dropdown when user types in the search input', async () => {
     const user = userEvent.setup()
     renderSelect()
@@ -189,10 +215,10 @@ describe('UserSearchSelect', () => {
     const input = screen.getByPlaceholderText(/search by name or email/i)
     await user.type(input, 'John')
 
-    // Dropdown should appear (even at minimum showing "Searching…" or "No users found")
+    // Status message appears for empty results (listbox only renders when results exist)
     await waitFor(
       () => {
-        expect(screen.getByRole('listbox')).toBeInTheDocument()
+        expect(screen.getByRole('status')).toBeInTheDocument()
       },
       { timeout: 500 },
     )

@@ -10,6 +10,11 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { Tooltip } from '../../components/Tooltip'
+import {
+  STATUS_VARIANT_MAP,
+  getTenantStatus,
+  getTenantId,
+} from './tenantUtils.js'
 import './MaintainTenants.css'
 
 const STATUS_OPTIONS = [
@@ -19,22 +24,17 @@ const STATUS_OPTIONS = [
   { value: 'ARCHIVED', label: 'Archived' },
 ]
 
-const STATUS_VARIANT_MAP = {
-  ENABLED: 'success',
-  DISABLED: 'error',
-  ARCHIVED: 'neutral',
-}
-
 const STATUS_LABEL_MAP = {
   ENABLED: 'Enabled',
   DISABLED: 'Disabled',
   ARCHIVED: 'Archived',
 }
-
-const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
-const getTenantId = (tenant) => tenant?._id ?? tenant?.id ?? null
+const getTenantAdminName = (tenant) => String(tenant?.tenantAdmin?.name ?? '').trim()
 
 const canEditTenant = (tenant) =>
+  Boolean(getTenantId(tenant)) && getTenantStatus(tenant) !== 'ARCHIVED'
+
+const canAssignTenantAdmin = (tenant) =>
   Boolean(getTenantId(tenant)) && getTenantStatus(tenant) !== 'ARCHIVED'
 
 const canEnableTenant = (tenant) =>
@@ -99,6 +99,16 @@ function TenantStatusCell({ tenant }) {
   )
 }
 
+function TenantAdminCell({ tenant }) {
+  const tenantAdminName = getTenantAdminName(tenant)
+
+  if (!tenantAdminName) {
+    return <span className="maintain-tenants__tenant-admin-empty">Not assigned</span>
+  }
+
+  return <span className="maintain-tenants__tenant-admin-name">{tenantAdminName}</span>
+}
+
 function TenantRowActionsMenu({ row, actions, onAction }) {
   const rowName = row?.name || row?.id || 'tenant'
 
@@ -145,6 +155,7 @@ export function TenantListView({
   createButtonDisabled,
   onCreateClick,
   onEditClick,
+  onAssignAdminClick,
   onEnableClick,
   onDisableClick,
   tenantCapacityGuidance,
@@ -156,6 +167,10 @@ export function TenantListView({
       {
         label: 'Edit',
         disabled: (row) => isLifecycleMutationLoading || !canEditTenant(row),
+      },
+      {
+        label: 'Assign Admin',
+        disabled: (row) => isLifecycleMutationLoading || !canAssignTenantAdmin(row),
       },
       {
         label: 'Enable',
@@ -172,10 +187,11 @@ export function TenantListView({
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') onEditClick(row)
+      if (label === 'Assign Admin') onAssignAdminClick(row)
       if (label === 'Enable') onEnableClick(row)
       if (label === 'Disable') onDisableClick(row)
     },
-    [onDisableClick, onEditClick, onEnableClick],
+    [onAssignAdminClick, onDisableClick, onEditClick, onEnableClick],
   )
 
   const columns = useMemo(
@@ -200,8 +216,16 @@ export function TenantListView({
       {
         key: 'website',
         label: 'Website',
-        render: (value) =>
-          value ? (
+        render: (value) => {
+          if (!value) return '--'
+          let isSafeUrl = false
+          try {
+            const parsed = new URL(value)
+            isSafeUrl = parsed.protocol === 'https:' || parsed.protocol === 'http:'
+          } catch {
+            // not a parseable URL — render as plain text
+          }
+          return isSafeUrl ? (
             <a
               href={value}
               target="_blank"
@@ -211,13 +235,19 @@ export function TenantListView({
               {value}
             </a>
           ) : (
-            '--'
-          ),
+            <span>{value}</span>
+          )
+        },
       },
       {
         key: 'status',
         label: 'Status',
         render: (_value, row) => <TenantStatusCell tenant={row} />,
+      },
+      {
+        key: 'tenantAdmin',
+        label: 'Tenant Admin',
+        render: (_value, row) => <TenantAdminCell tenant={row} />,
       },
       {
         key: 'rowActions',

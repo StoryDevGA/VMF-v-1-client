@@ -3,7 +3,7 @@
  *
  * Multi-step dialog for creating a new tenant:
  *   1. Tenant Details — name, website URL
- *   2. Assign Tenant Admins — add user IDs for initial admins
+ *   2. Assign Tenant Admin — choose the initial tenant admin
  *   3. Review & Create
  *
  * On submit, calls `POST /api/customers/:customerId/tenants` via the
@@ -31,78 +31,13 @@ import {
   isTenantAdminAssignmentsValidationError,
   getTenantAdminAssignmentsValidationMessage,
 } from '../../utils/errors.js'
+import {
+  getTenantCapacityCountLabel,
+  mapTenantValidationErrors,
+} from './tenantUtils.js'
 
 /** Wizard step count */
 const TOTAL_STEPS = 3
-
-const getTenantCapacityCountLabel = (countMode) =>
-  countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
-
-const getFieldErrorMessage = (value) => {
-  if (typeof value === 'string' && value.trim()) return value.trim()
-
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      if (typeof entry === 'string' && entry.trim()) return entry.trim()
-      if (
-        entry
-        && typeof entry === 'object'
-        && typeof entry.message === 'string'
-        && entry.message.trim()
-      ) {
-        return entry.message.trim()
-      }
-    }
-  }
-
-  if (value && typeof value === 'object' && typeof value.message === 'string') {
-    return value.message.trim()
-  }
-
-  return ''
-}
-
-const normalizeTenantFieldName = (field) => {
-  const compact = String(field ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]/g, '')
-
-  if (!compact) return ''
-  if (compact.includes('tenantadminuserids') || compact.includes('tenantadmins')) {
-    return 'tenantAdminUserIds'
-  }
-  if (compact.includes('website')) return 'website'
-  if (compact.endsWith('name')) return 'name'
-
-  return ''
-}
-
-const mapTenantValidationErrors = (details) => {
-  const mapped = {}
-
-  if (Array.isArray(details)) {
-    for (const detail of details) {
-      if (!detail || typeof detail !== 'object') continue
-      const field = normalizeTenantFieldName(detail.field)
-      const message = getFieldErrorMessage(detail.message)
-      if (!field || !message) continue
-      mapped[field] = message
-    }
-    return mapped
-  }
-
-  if (!details || typeof details !== 'object') return mapped
-
-  for (const [field, value] of Object.entries(details)) {
-    const normalizedField = normalizeTenantFieldName(field)
-    const message = getFieldErrorMessage(value)
-    if (!normalizedField || !message) continue
-    mapped[normalizedField] = message
-  }
-
-  return mapped
-}
 
 const getTenantCapacityGuidance = (tenantCapacity) => {
   if (!tenantCapacity) return null
@@ -152,8 +87,21 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   const [name, setName] = useState('')
   const [website, setWebsite] = useState('')
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
+  const [selectedAdminInfo, setSelectedAdminInfo] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   const adminStepRef = useRef(null)
+
+  /* ---- Reset when opening ---- */
+  useEffect(() => {
+    if (open) {
+      setStep(1)
+      setName('')
+      setWebsite('')
+      setTenantAdminUserIds([])
+      setSelectedAdminInfo(null)
+      setFieldErrors({})
+    }
+  }, [open])
 
   /* ---- Reset when closing ---- */
   const handleClose = useCallback(() => {
@@ -161,6 +109,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
     setName('')
     setWebsite('')
     setTenantAdminUserIds([])
+    setSelectedAdminInfo(null)
     setFieldErrors({})
     onClose()
   }, [onClose])
@@ -183,8 +132,8 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
     }
 
     if (step === 2) {
-      if (tenantAdminUserIds.length === 0) {
-        errors.tenantAdminUserIds = 'At least one tenant admin is required.'
+      if (tenantAdminUserIds.length !== 1) {
+        errors.tenantAdminUserIds = 'Exactly one tenant admin is required.'
       }
     }
 
@@ -205,8 +154,15 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   }, [])
 
   /* ---- Admin selection handler ---- */
-  const handleAdminChange = useCallback((newIds) => {
-    setTenantAdminUserIds(newIds)
+  const handleAdminChange = useCallback((newIds, usersById) => {
+    const sliced = newIds.slice(0, 1)
+    setTenantAdminUserIds(sliced)
+    const selectedId = sliced[0]
+    if (selectedId && usersById?.[selectedId]) {
+      setSelectedAdminInfo(usersById[selectedId])
+    } else if (sliced.length === 0) {
+      setSelectedAdminInfo(null)
+    }
     // Clear any existing tenantAdminUserIds error when user adds admins
     setFieldErrors((prev) => {
       const { tenantAdminUserIds: _, ...rest } = prev
@@ -231,7 +187,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
       const body = {
         name: name.trim(),
         website: website.trim(),
-        tenantAdminUserIds,
+        tenantAdminUserIds: tenantAdminUserIds.slice(0, 1),
       }
 
       await createTenantMutation({ customerId, body }).unwrap()
@@ -298,7 +254,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   ])
 
   /* ---- Step labels ---- */
-  const stepLabels = ['Tenant Details', 'Assign Admins', 'Review']
+  const stepLabels = ['Tenant Details', 'Assign Tenant Admin', 'Review']
   const dialogSize = step === 2 ? 'lg' : 'md'
   const dialogClassName = [
     'create-wizard__dialog',
@@ -401,7 +357,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
           </div>
         )}
 
-        {/* Step 2: Assign Tenant Admins */}
+        {/* Step 2: Assign Tenant Admin */}
         {step === 2 && (
           <div
             ref={adminStepRef}
@@ -409,7 +365,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
           >
             <fieldset className="create-wizard__fieldset">
               <legend className="create-wizard__legend">
-                <span>Assign Tenant Admins</span>
+                <span>Assign Tenant Admin</span>
                 {tenantCapacityGuidance ? (
                   <Tooltip
                     content={tenantCapacityGuidance.message}
@@ -435,14 +391,19 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
                   customerId={customerId}
                   selectedIds={tenantAdminUserIds}
                   onChange={handleAdminChange}
-                  label="Search users by name or email"
+                  label="Search for tenant admin"
                   error={fieldErrors.tenantAdminUserIds}
                   minRequired={1}
+                  maxSelections={1}
+                  lockSelectionUntilRemoval
+                  allowTemporaryEmptySelection
+                  expandDropdown
                   disabled={isLoading}
                 />
                 <p className="create-wizard__hint">
-                  Search and select at least one active user from this customer to serve as tenant administrator.
-                  Stale, inactive, or out-of-customer selections will be rejected before save.
+                  {tenantAdminUserIds.length > 0
+                    ? 'Remove the selected tenant admin before searching for a different user.'
+                    : 'Search and select one active user from this customer to serve as tenant admin.'}
                 </p>
               </div>
             </fieldset>
@@ -456,7 +417,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
               <legend className="create-wizard__legend">Review Details</legend>
               <div className="create-wizard__section">
                 <p className="create-wizard__review-copy">
-                  Confirm the tenant details and initial linked-admin assignment before creating
+                  Confirm the tenant details and initial tenant-admin assignment before creating
                   this tenant.
                 </p>
                 <dl className="create-wizard__review-list">
@@ -464,10 +425,10 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
                   <dd>{name}</dd>
                   <dt>Website</dt>
                   <dd>{website}</dd>
-                  <dt>Tenant Admins</dt>
+                  <dt>Tenant Admin</dt>
                   <dd>
                     {tenantAdminUserIds.length > 0
-                      ? tenantAdminUserIds.join(', ')
+                      ? (selectedAdminInfo?.name || selectedAdminInfo?.email || tenantAdminUserIds[0])
                       : 'None'}
                   </dd>
                 </dl>
@@ -509,4 +470,5 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
   )
 }
 
+export { CreateTenantWizard }
 export default CreateTenantWizard

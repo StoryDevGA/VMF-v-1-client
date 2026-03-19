@@ -43,7 +43,7 @@ export const tenantApi = baseApi.injectEndpoints({
       providesTags: (result) =>
         result?.data
           ? [
-              ...result.data.map((t) => ({ type: 'Tenant', id: t._id })),
+              ...result.data.map((t) => ({ type: 'Tenant', id: t.id ?? t._id })),
               { type: 'Tenant', id: 'LIST' },
             ]
           : [{ type: 'Tenant', id: 'LIST' }],

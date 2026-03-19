@@ -282,7 +282,7 @@
 .bulk-users__preview,
 .bulk-users__results {
   margin-top: var(--spacing-md);
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   padding: var(--spacing-sm);
 }
@@ -314,7 +314,7 @@
   gap: var(--spacing-sm, 0.5rem);
   font-size: var(--font-size-sm, 0.875rem);
   padding: var(--spacing-xs, 0.25rem) var(--spacing-xs, 0.25rem);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
 }
 
 .bulk-users__result-row {
@@ -352,7 +352,25 @@
 }
 
 @media (forced-colors: active) {
-  .bulk-users__governance {
+  .bulk-users__governance,
+  .bulk-users__tenant-option,
+  .bulk-users__tenant-preserved,
+  .bulk-users__examples,
+  .bulk-users__examples-reference,
+  .bulk-users__update-summary,
+  .bulk-users__preview,
+  .bulk-users__results {
     border-color: CanvasText;
+  }
+
+  .bulk-users__preview-row,
+  .bulk-users__result-row {
+    border-bottom-color: CanvasText;
+  }
+
+  .bulk-users__warning {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
   }
 }

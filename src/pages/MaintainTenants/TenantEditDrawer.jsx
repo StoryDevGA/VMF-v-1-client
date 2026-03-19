@@ -1,13 +1,13 @@
 /**
  * Tenant Edit Drawer
  *
- * Dialog for editing an existing tenant's details and linked-admin assignments.
+ * Dialog for editing an existing tenant's details and tenant-admin assignment.
  * Opens as a side-sheet style dialog when a tenant row's Edit action is triggered.
  *
  * Features:
  * - Tenant details are grouped at the top of the drawer
- * - Linked-admin users are managed in a searchable workspace below
- * - Minimum 1 admin enforcement with removal protection
+ * - One tenant admin is assigned through a searchable workspace below
+ * - Exactly 1 admin is enforced in v1
  * - Diff-based update (only sends changed fields)
  *
  * @param {Object}  props
@@ -23,11 +23,8 @@ import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Fieldset } from '../../components/Fieldset'
-import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
-import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useTenants } from '../../hooks/useTenants.js'
@@ -37,52 +34,32 @@ import {
   isTenantAdminAssignmentsValidationError,
   getTenantAdminAssignmentsValidationMessage,
 } from '../../utils/errors.js'
+import {
+  STATUS_VARIANT_MAP,
+  getTenantStatus,
+  getTenantId,
+  mapTenantValidationErrors,
+} from './tenantUtils.js'
 
-/** Status variant mapping */
-const STATUS_VARIANT_MAP = {
-  ENABLED: 'success',
-  DISABLED: 'error',
-  ARCHIVED: 'neutral',
-}
-
-const LINKED_USER_STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'INACTIVE', label: 'Inactive' },
-  { value: 'UNKNOWN', label: 'Unavailable' },
-]
-
-const LINKED_USER_STATUS_VARIANT_MAP = {
-  ACTIVE: 'success',
-  INACTIVE: 'neutral',
-  UNKNOWN: 'neutral',
-}
-
-const getTenantStatus = (tenant) => String(tenant?.status ?? 'UNKNOWN').trim().toUpperCase()
-const getTenantId = (tenant) => String(tenant?._id ?? tenant?.id ?? '').trim()
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
-
-const getLinkedUserStatus = (user) => {
-  const explicitStatus = String(user?.status ?? '').trim().toUpperCase()
-  if (explicitStatus === 'ENABLED' || explicitStatus === 'ACTIVE') return 'ACTIVE'
-  if (explicitStatus === 'DISABLED' || explicitStatus === 'INACTIVE' || explicitStatus === 'REVOKED') {
-    return 'INACTIVE'
-  }
-  if (explicitStatus) return explicitStatus
-
-  if (typeof user?.isActive === 'boolean') {
-    return user.isActive ? 'ACTIVE' : 'INACTIVE'
-  }
-
-  return 'UNKNOWN'
-}
-
-const getFallbackLinkedUserRow = (userId) => ({
+const getFallbackTenantAdmin = (userId, name = '') => ({
   id: userId,
-  name: `${String(userId).slice(0, 8)}...`,
+  name: name || `${String(userId).slice(0, 8)}...`,
   email: '',
-  status: 'UNKNOWN',
 })
+
+const getInitialTenantAdminIds = (tenant) => {
+  const tenantAdminUserIds = Array.isArray(tenant?.tenantAdminUserIds)
+    ? tenant.tenantAdminUserIds
+        .map((userId) => String(userId ?? '').trim())
+        .filter(Boolean)
+    : []
+
+  if (tenantAdminUserIds.length > 0) return tenantAdminUserIds.slice(0, 1)
+
+  const tenantAdminId = getUserId(tenant?.tenantAdmin)
+  return tenantAdminId ? [tenantAdminId] : []
+}
 
 const getTenantLifecycleGuidance = (tenant) => {
   const tenantStatus = getTenantStatus(tenant)
@@ -117,72 +94,6 @@ const getTenantLifecycleGuidance = (tenant) => {
   return null
 }
 
-const getFieldErrorMessage = (value) => {
-  if (typeof value === 'string' && value.trim()) return value.trim()
-
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      if (typeof entry === 'string' && entry.trim()) return entry.trim()
-      if (
-        entry
-        && typeof entry === 'object'
-        && typeof entry.message === 'string'
-        && entry.message.trim()
-      ) {
-        return entry.message.trim()
-      }
-    }
-  }
-
-  if (value && typeof value === 'object' && typeof value.message === 'string') {
-    return value.message.trim()
-  }
-
-  return ''
-}
-
-const normalizeTenantFieldName = (field) => {
-  const compact = String(field ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]/g, '')
-
-  if (!compact) return ''
-  if (compact.includes('tenantadminuserids') || compact.includes('tenantadmins')) {
-    return 'tenantAdminUserIds'
-  }
-  if (compact.includes('website')) return 'website'
-  if (compact.endsWith('name')) return 'name'
-
-  return ''
-}
-
-const mapTenantValidationErrors = (details) => {
-  const mapped = {}
-
-  if (Array.isArray(details)) {
-    for (const detail of details) {
-      if (!detail || typeof detail !== 'object') continue
-      const field = normalizeTenantFieldName(detail.field)
-      const message = getFieldErrorMessage(detail.message)
-      if (!field || !message) continue
-      mapped[field] = message
-    }
-    return mapped
-  }
-
-  if (!details || typeof details !== 'object') return mapped
-
-  for (const [field, value] of Object.entries(details)) {
-    const normalizedField = normalizeTenantFieldName(field)
-    const message = getFieldErrorMessage(value)
-    if (!normalizedField || !message) continue
-    mapped[normalizedField] = message
-  }
-
-  return mapped
-}
-
 /**
  * TenantEditDrawer Component
  */
@@ -192,7 +103,6 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const isLoading = Boolean(updateTenantResult?.isLoading)
   const {
     data: customerUsersResponse,
-    isFetching: isFetchingCustomerUsers,
     error: customerUsersError,
   } = useListUsersQuery(
     {
@@ -218,14 +128,10 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   const [website, setWebsite] = useState('')
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
-  const [linkedUserSearch, setLinkedUserSearch] = useState('')
-  const [linkedUserStatusFilter, setLinkedUserStatusFilter] = useState('')
-  const [selectedLinkedUserIds, setSelectedLinkedUserIds] = useState(new Set())
-  const [confirmRemoveUserIds, setConfirmRemoveUserIds] = useState([])
 
   /* ---- Original admin IDs for recovery detection ---- */
   const originalAdminIds = useMemo(
-    () => tenant?.tenantAdminUserIds ?? [],
+    () => getInitialTenantAdminIds(tenant),
     [tenant],
   )
 
@@ -241,7 +147,6 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         id: userId,
         name: String(user?.name ?? '').trim() || String(user?.email ?? '').trim() || userId,
         email: String(user?.email ?? '').trim(),
-        status: getLinkedUserStatus(user),
       }
     }
 
@@ -249,30 +154,19 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
   }, [customerUsers])
 
   /* ---- Sync from tenant prop ---- */
+  const tenantIdForSync = getTenantId(tenant)
+
   useEffect(() => {
-    if (tenant) {
+    if (open && tenant) {
       setName(tenant.name ?? '')
       setWebsite(tenant.website ?? '')
-      setTenantAdminUserIds(tenant.tenantAdminUserIds ?? [])
+      setTenantAdminUserIds(getInitialTenantAdminIds(tenant))
       setFieldErrors({})
-      setLinkedUserSearch('')
-      setLinkedUserStatusFilter('')
-      setSelectedLinkedUserIds(new Set())
-      setConfirmRemoveUserIds([])
     }
-  }, [tenant])
-
-  useEffect(() => {
-    setSelectedLinkedUserIds((currentSelection) => {
-      if (currentSelection.size === 0) return currentSelection
-
-      const nextSelection = new Set(
-        [...currentSelection].filter((userId) => tenantAdminUserIds.includes(userId)),
-      )
-
-      return nextSelection.size === currentSelection.size ? currentSelection : nextSelection
-    })
-  }, [tenantAdminUserIds])
+    // Keyed on identity + open state, not full object reference,
+    // so background refetches do not wipe in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tenantIdForSync])
 
   const clearTenantAdminFieldError = useCallback(() => {
     setFieldErrors((currentErrors) => {
@@ -285,140 +179,25 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
 
   /* ---- Admin selection handler ---- */
   const handleAdminChange = useCallback((newIds) => {
-    setTenantAdminUserIds(newIds)
+    setTenantAdminUserIds(newIds.slice(0, 1))
     clearTenantAdminFieldError()
   }, [clearTenantAdminFieldError])
 
-  const allLinkedUserRows = useMemo(
-    () => tenantAdminUserIds.map((userId) => (
-      customerUserLookup[userId] ?? getFallbackLinkedUserRow(userId)
-    )),
-    [customerUserLookup, tenantAdminUserIds],
-  )
-
   const selectedTenantAdminUsers = useMemo(
     () => tenantAdminUserIds.reduce((accumulator, userId) => {
-      if (customerUserLookup[userId]) {
-        accumulator[userId] = customerUserLookup[userId]
-      }
+      const tenantAdminSummary = getUserId(tenant?.tenantAdmin) === userId
+        ? getFallbackTenantAdmin(userId, String(tenant?.tenantAdmin?.name ?? '').trim())
+        : null
+      accumulator[userId] = customerUserLookup[userId] ?? tenantAdminSummary ?? getFallbackTenantAdmin(userId)
       return accumulator
     }, {}),
-    [customerUserLookup, tenantAdminUserIds],
+    [customerUserLookup, tenant, tenantAdminUserIds],
   )
-
-  const filteredLinkedUserRows = useMemo(() => {
-    const normalizedSearch = linkedUserSearch.trim().toLowerCase()
-
-    return allLinkedUserRows.filter((row) => {
-      const matchesStatus = !linkedUserStatusFilter || row.status === linkedUserStatusFilter
-      if (!matchesStatus) return false
-
-      if (!normalizedSearch) return true
-
-      const haystack = [
-        row.name,
-        row.email,
-        row.id,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-
-      return haystack.includes(normalizedSearch)
-    })
-  }, [allLinkedUserRows, linkedUserSearch, linkedUserStatusFilter])
-
-  const linkedUserSummary = useMemo(() => {
-    const activeCount = allLinkedUserRows.filter((row) => row.status === 'ACTIVE').length
-    return `${allLinkedUserRows.length} linked | ${activeCount} active`
-  }, [allLinkedUserRows])
-
-  const normalizedSelectedLinkedUserIds = useMemo(
-    () => [...selectedLinkedUserIds].filter((userId) => tenantAdminUserIds.includes(userId)),
-    [selectedLinkedUserIds, tenantAdminUserIds],
-  )
-
-  const selectedLinkedUserCount = normalizedSelectedLinkedUserIds.length
-
-  const canReviewBulkRemoval =
-    !isLoading
-    && !isArchivedTenant
-    && selectedLinkedUserCount > 0
-    && tenantAdminUserIds.length - selectedLinkedUserCount >= 1
-
-  const bulkRemovalStatusMessage = useMemo(() => {
-    if (isArchivedTenant) {
-      return 'Archived tenants are read-only, so linked users cannot be removed here.'
-    }
-
-    if (selectedLinkedUserCount === 0) {
-      return 'Select linked users from the table to review a bulk removal.'
-    }
-
-    if (tenantAdminUserIds.length - selectedLinkedUserCount < 1) {
-      return 'At least one linked user must remain assigned before you can remove the current selection.'
-    }
-
-    return `${selectedLinkedUserCount} linked user${selectedLinkedUserCount === 1 ? '' : 's'} selected for review.`
-  }, [isArchivedTenant, selectedLinkedUserCount, tenantAdminUserIds.length])
-
-  const handleLinkedSelectionChange = useCallback((nextSelection) => {
-    const normalized = nextSelection instanceof Set
-      ? [...nextSelection]
-      : Array.isArray(nextSelection)
-      ? nextSelection
-      : []
-
-    setSelectedLinkedUserIds(new Set(
-      normalized
-        .map((userId) => String(userId ?? '').trim())
-        .filter((userId) => tenantAdminUserIds.includes(userId)),
-    ))
-  }, [tenantAdminUserIds])
-
-  const removeTenantAdmins = useCallback((userIdsToRemove) => {
-    if (!Array.isArray(userIdsToRemove) || userIdsToRemove.length === 0) return
-
-    const uniqueUserIdsToRemove = [...new Set(userIdsToRemove)]
-    const remainingCount = tenantAdminUserIds.filter(
-      (userId) => !uniqueUserIdsToRemove.includes(userId),
-    ).length
-
-    if (remainingCount < 1) {
-      const removalMessage = 'At least one linked user must remain assigned to this tenant.'
-      setFieldErrors((currentErrors) => ({
-        ...currentErrors,
-        tenantAdminUserIds: removalMessage,
-      }))
-      addToast({
-        title: 'Cannot remove all linked users',
-        description: `${removalMessage} Add a replacement first.`,
-        variant: 'warning',
-      })
-      return
-    }
-
-    setTenantAdminUserIds((currentIds) => (
-      currentIds.filter((userId) => !uniqueUserIdsToRemove.includes(userId))
-    ))
-    setSelectedLinkedUserIds(new Set())
-    setConfirmRemoveUserIds([])
-    clearTenantAdminFieldError()
-  }, [addToast, clearTenantAdminFieldError, tenantAdminUserIds])
-
-  const handleReviewBulkRemoval = useCallback(() => {
-    if (!canReviewBulkRemoval) return
-    setConfirmRemoveUserIds(normalizedSelectedLinkedUserIds)
-  }, [canReviewBulkRemoval, normalizedSelectedLinkedUserIds])
-
-  const handleConfirmBulkRemoval = useCallback(() => {
-    removeTenantAdmins(confirmRemoveUserIds)
-  }, [confirmRemoveUserIds, removeTenantAdmins])
-
-  const confirmRemoveUsers = useMemo(
-    () => confirmRemoveUserIds.map((userId) => customerUserLookup[userId] ?? getFallbackLinkedUserRow(userId)),
-    [confirmRemoveUserIds, customerUserLookup],
-  )
+  const currentTenantAdmin = useMemo(() => {
+    const currentTenantAdminId = tenantAdminUserIds[0]
+    if (!currentTenantAdminId) return null
+    return selectedTenantAdminUsers[currentTenantAdminId] ?? getFallbackTenantAdmin(currentTenantAdminId)
+  }, [selectedTenantAdminUsers, tenantAdminUserIds])
 
   /* ---- Validate ---- */
   const validate = useCallback(() => {
@@ -433,56 +212,12 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         errors.website = 'Enter a valid URL.'
       }
     }
-    if (tenantAdminUserIds.length === 0) {
-      errors.tenantAdminUserIds = 'At least one linked user is required for this tenant.'
+    if (tenantAdminUserIds.length !== 1) {
+      errors.tenantAdminUserIds = 'Exactly one tenant admin is required for this tenant.'
     }
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }, [name, website, tenantAdminUserIds])
-
-  const linkedUserColumns = useMemo(
-    () => [
-      {
-        key: 'identity',
-        label: 'User',
-        width: '240px',
-        render: (_value, row) => (
-          <div className="tenant-edit-drawer__linked-user">
-            <strong className="tenant-edit-drawer__linked-user-name">{row.name}</strong>
-            <span className="tenant-edit-drawer__linked-user-email">
-              {row.email || row.id}
-            </span>
-          </div>
-        ),
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        width: '148px',
-        render: (_value, row) => (
-          <Status
-            size="sm"
-            showIcon
-            variant={LINKED_USER_STATUS_VARIANT_MAP[row.status] ?? 'neutral'}
-          >
-            {row.status}
-          </Status>
-        ),
-      },
-    ],
-    [],
-  )
-
-  const linkedUserActions = useMemo(
-    () => [
-      {
-        label: 'Remove',
-        variant: 'ghost',
-        disabled: () => isLoading || isArchivedTenant || tenantAdminUserIds.length <= 1,
-      },
-    ],
-    [isArchivedTenant, isLoading, tenantAdminUserIds.length],
-  )
 
   /* ---- Save ---- */
   const handleSave = useCallback(async () => {
@@ -516,10 +251,10 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         body.website = website.trim()
       }
       // Always send tenantAdminUserIds if changed
-      const originalSorted = [...(tenant?.tenantAdminUserIds ?? [])].sort().join(',')
-      const currentSorted = [...tenantAdminUserIds].sort().join(',')
+      const originalSorted = [...getInitialTenantAdminIds(tenant)].sort().join(',')
+      const currentSorted = [...tenantAdminUserIds.slice(0, 1)].sort().join(',')
       if (currentSorted !== originalSorted) {
-        body.tenantAdminUserIds = tenantAdminUserIds
+        body.tenantAdminUserIds = tenantAdminUserIds.slice(0, 1)
       }
 
       // Don't send if nothing changed
@@ -550,7 +285,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           tenantAdminUserIds: assignmentMessage,
         }))
         addToast({
-          title: 'Linked user selection needs attention',
+          title: 'Tenant admin selection needs attention',
           description: assignmentMessage,
           variant: 'warning',
         })
@@ -586,7 +321,7 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
       <Dialog.Header>
         <h2 className="maintain-tenants__dialog-title tenant-edit-drawer__title">Edit Tenant</h2>
         <p className="maintain-tenants__dialog-subtitle tenant-edit-drawer__subtitle">
-          Update tenant details and linked-user assignments in one workspace.
+          Update tenant details and assign exactly one tenant admin in this workspace.
         </p>
       </Dialog.Header>
 
@@ -654,104 +389,57 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
         </Fieldset>
 
         <Fieldset className="tenant-edit-drawer__section">
-          <Fieldset.Legend className="tenant-edit-drawer__legend">Linked Users</Fieldset.Legend>
+          <Fieldset.Legend className="tenant-edit-drawer__legend">Tenant Admin</Fieldset.Legend>
           <Card variant="elevated" className="tenant-edit-drawer__linked-card">
             <Card.Body className="tenant-edit-drawer__linked-card-body">
               <div className="tenant-edit-drawer__linked-header">
                 <div className="tenant-edit-drawer__linked-copy">
-                  <p className="tenant-edit-drawer__linked-title">Linked users</p>
+                  <p className="tenant-edit-drawer__linked-title">Tenant admin assignment</p>
                   <p className="tenant-edit-drawer__linked-text">
-                    In v1, linked users are the users who administer this tenant. Add or remove
-                    linked users here, and keep at least one linked user assigned before you save.
+                    Assign exactly one tenant admin for this tenant. Selecting a different user
+                    replaces the current tenant admin before you save.
                   </p>
                 </div>
-                <p className="tenant-edit-drawer__linked-summary">{linkedUserSummary}</p>
+                <p className="tenant-edit-drawer__linked-summary">
+                  {currentTenantAdmin ? 'Assigned' : 'Not assigned'}
+                </p>
               </div>
+
+              {currentTenantAdmin ? (
+                <div className="tenant-edit-drawer__assigned-admin">
+                  <strong className="tenant-edit-drawer__assigned-admin-name">
+                    {currentTenantAdmin.name}
+                  </strong>
+                  <span className="tenant-edit-drawer__assigned-admin-email">
+                    {currentTenantAdmin.email || currentTenantAdmin.id}
+                  </span>
+                </div>
+              ) : (
+                <p className="tenant-edit-drawer__assignment-empty">
+                  No tenant admin is currently assigned.
+                </p>
+              )}
 
               <UserSearchSelect
                 customerId={customerId}
                 selectedIds={tenantAdminUserIds}
                 selectedUsers={selectedTenantAdminUsers}
                 onChange={handleAdminChange}
-                label="Add linked users"
+                label="Assign tenant admin"
                 error={fieldErrors.tenantAdminUserIds}
                 minRequired={1}
+                maxSelections={1}
                 disabled={isLoading || isArchivedTenant}
                 originalIds={originalAdminIds}
                 showSelectedUsers={false}
               />
 
-              <div className="tenant-edit-drawer__linked-toolbar">
-                <Input
-                  id="edit-tenant-linked-user-search"
-                  label="Search linked users"
-                  size="sm"
-                  value={linkedUserSearch}
-                  onChange={(event) => setLinkedUserSearch(event.target.value)}
-                  placeholder="Search by name, email, or ID"
-                  fullWidth
-                  disabled={isLoading}
-                />
-                <Select
-                  id="edit-tenant-linked-user-status"
-                  label="Status"
-                  size="sm"
-                  value={linkedUserStatusFilter}
-                  onChange={(event) => setLinkedUserStatusFilter(event.target.value)}
-                  options={LINKED_USER_STATUS_OPTIONS}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="tenant-edit-drawer__linked-actions">
-                <p className="tenant-edit-drawer__linked-selection-status" role="status" aria-live="polite">
-                  {bulkRemovalStatusMessage}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReviewBulkRemoval}
-                  disabled={
-                    !canReviewBulkRemoval
-                  }
-                >
-                  Remove Selected{selectedLinkedUserCount > 0 ? ` (${selectedLinkedUserCount})` : ''}
-                </Button>
-              </div>
-
               {customerUsersAppError ? (
                 <ErrorSupportPanel
                   error={customerUsersAppError}
-                  context="tenant-edit-linked-users"
+                  context="tenant-edit-tenant-admin"
                 />
               ) : null}
-
-              <HorizontalScroll
-                ariaLabel="Linked users table"
-                className="tenant-edit-drawer__table-wrap"
-                gap="sm"
-              >
-                <Table
-                  className="tenant-edit-drawer__table"
-                  columns={linkedUserColumns}
-                  data={filteredLinkedUserRows}
-                  selectable
-                  selectedRows={selectedLinkedUserIds}
-                  onSelectChange={handleLinkedSelectionChange}
-                  actions={linkedUserActions}
-                  onRowAction={(_label, row) => removeTenantAdmins([row.id])}
-                  loading={isFetchingCustomerUsers}
-                  variant="striped"
-                  hoverable
-                  emptyMessage={
-                    linkedUserSearch.trim() || linkedUserStatusFilter
-                      ? 'No linked users match the current filters.'
-                      : 'No linked users are assigned to this tenant.'
-                  }
-                  ariaLabel="Linked users"
-                />
-              </HorizontalScroll>
             </Card.Body>
           </Card>
         </Fieldset>
@@ -770,56 +458,10 @@ function TenantEditDrawer({ open, onClose, tenant, customerId }) {
           Save Changes
         </Button>
       </Dialog.Footer>
-
-      <Dialog
-        open={confirmRemoveUserIds.length > 0}
-        onClose={() => setConfirmRemoveUserIds([])}
-        size="sm"
-        closeOnBackdropClick={!isLoading}
-        closeOnEscape={!isLoading}
-      >
-        <Dialog.Header>
-          <h2 className="maintain-tenants__dialog-title maintain-tenants__confirm-title">
-            Remove linked users
-          </h2>
-        </Dialog.Header>
-        <Dialog.Body className="maintain-tenants__confirm-body">
-          <p className="maintain-tenants__confirm-message">
-            Remove {confirmRemoveUserIds.length} linked user{confirmRemoveUserIds.length === 1 ? '' : 's'} from this tenant?
-          </p>
-          {confirmRemoveUsers.length > 0 ? (
-            <ul className="tenant-edit-drawer__confirm-list">
-              {confirmRemoveUsers.map((user) => (
-                <li key={user.id} className="tenant-edit-drawer__confirm-item">
-                  <span className="tenant-edit-drawer__confirm-name">{user.name}</span>
-                  <span className="tenant-edit-drawer__confirm-email">
-                    {user.email || user.id}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </Dialog.Body>
-        <Dialog.Footer className="maintain-tenants__dialog-footer maintain-tenants__confirm-footer">
-          <Button
-            variant="outline"
-            onClick={() => setConfirmRemoveUserIds([])}
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleConfirmBulkRemoval}
-            disabled={isLoading}
-          >
-            Remove Linked Users
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
     </Dialog>
   )
 }
 
+export { TenantEditDrawer }
 export default TenantEditDrawer
 

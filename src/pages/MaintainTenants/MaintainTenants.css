@@ -310,6 +310,65 @@
   color: var(--color-text-secondary);
 }
 
+.tenant-admin-dialog__body,
+.tenant-admin-dialog__summary-card-body,
+.tenant-admin-dialog__replacement-card-body {
+  display: grid;
+  gap: var(--spacing-md, 1rem);
+}
+
+.tenant-admin-dialog {
+  overflow: visible;
+}
+
+.tenant-admin-dialog .dialog__container,
+.tenant-admin-dialog .dialog__body,
+.tenant-admin-dialog__body,
+.tenant-admin-dialog__replacement-card-body {
+  overflow: visible;
+}
+
+.tenant-admin-dialog__section {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.tenant-admin-dialog__legend {
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.tenant-admin-dialog__summary-label {
+  margin: 0;
+  font-size: var(--font-size-xs, 0.75rem);
+  font-weight: var(--font-weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.tenant-admin-dialog__summary-value,
+.tenant-admin-dialog__summary-meta,
+.tenant-admin-dialog__hint {
+  margin: 0;
+}
+
+.tenant-admin-dialog__summary-value {
+  font-size: var(--font-size-lg, 1.25rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-primary);
+}
+
+.tenant-admin-dialog__summary-meta,
+.tenant-admin-dialog__hint {
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+  color: var(--color-text-secondary);
+}
+
 .maintain-tenants__row-actions {
   width: 100%;
 }
@@ -448,6 +507,22 @@
   letter-spacing: normal;
   line-height: var(--line-height-normal, 1.5);
   white-space: normal;
+}
+
+.maintain-tenants__tenant-admin-name,
+.maintain-tenants__tenant-admin-empty {
+  display: inline-block;
+  min-width: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.maintain-tenants__tenant-admin-name {
+  color: var(--color-text-primary);
+}
+
+.maintain-tenants__tenant-admin-empty {
+  color: var(--color-text-secondary);
 }
 
 .create-wizard__dialog--admin-step .dialog__container {
@@ -593,6 +668,28 @@
 
 .tenant-edit-drawer__linked-summary {
   font-weight: var(--font-weight-semibold, 600);
+}
+
+.tenant-edit-drawer__assigned-admin {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
+  border: var(--border-width-thin, 1px) solid var(--color-border);
+  border-radius: var(--border-radius-md, 0.5rem);
+  background-color: var(--color-background-secondary);
+}
+
+.tenant-edit-drawer__assigned-admin-name {
+  color: var(--color-text-primary);
+}
+
+.tenant-edit-drawer__assigned-admin-email,
+.tenant-edit-drawer__assignment-empty {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .tenant-edit-drawer__subtitle {

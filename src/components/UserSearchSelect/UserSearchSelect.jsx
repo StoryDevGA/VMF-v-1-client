@@ -10,6 +10,7 @@
  * - Selected users shown as removable chips
  * - Minimum selection enforcement (e.g. min 1 tenant admin)
  * - Last-admin removal protection with clear messaging
+ * - Keyboard navigation (ArrowDown/ArrowUp/Enter/Escape)
  *
  * @param {Object}  props
  * @param {string}  props.customerId        — customer scope for user lookup
@@ -24,7 +25,7 @@
  * @param {Record<string, {name?: string, email?: string, roles?: Array<string>, isActive?: boolean}>} [props.selectedUsers={}] — preloaded selected-user display data
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo, useId } from 'react'
 import { useLazyListUsersQuery } from '../../store/api/userApi.js'
 import { Spinner } from '../Spinner'
 import './UserSearchSelect.css'
@@ -44,17 +45,32 @@ function UserSearchSelect({
   label = 'Search Users',
   error,
   minRequired = 1,
+  maxSelections = Infinity,
+  lockSelectionUntilRemoval = false,
+  allowTemporaryEmptySelection = false,
+  expandDropdown = false,
   disabled = false,
   className = '',
   originalIds = [],
   selectedUsers = {},
   showSelectedUsers = true,
 }) {
+  const instanceId = useId()
+  const inputId = `${instanceId}-search-input`
+  const listboxId = `${instanceId}-search-results`
+
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const [removalBlocked, setRemovalBlocked] = useState(null)
   const containerRef = useRef(null)
   const inputRef = useRef(null)
+  const normalizedMaxSelections =
+    Number.isFinite(maxSelections) && maxSelections > 0 ? maxSelections : Number.POSITIVE_INFINITY
+  const isSelectionLocked =
+    lockSelectionUntilRemoval
+    && normalizedMaxSelections !== Number.POSITIVE_INFINITY
+    && selectedIds.length >= normalizedMaxSelections
 
   /* ---- RTK Query lazy trigger ---- */
   const [triggerSearch, { data: searchData, isFetching: isSearching }] =
@@ -76,15 +92,25 @@ function UserSearchSelect({
     return () => clearTimeout(timer)
   }, [query, customerId, triggerSearch])
 
+  useEffect(() => {
+    if (!isSelectionLocked) return
+    setIsOpen(false)
+    setQuery('')
+  }, [isSelectionLocked])
+
   /* ---- Parse search results ---- */
   const searchResults = useMemo(() => {
     const users = searchData?.data?.users ?? []
-    // Filter out already-selected users
     return users.filter((user) => {
       const userId = getUserId(user)
       return userId && !selectedIds.includes(userId)
     })
   }, [searchData, selectedIds])
+
+  /* ---- Reset active index when results change ---- */
+  useEffect(() => {
+    setActiveIndex(-1)
+  }, [searchResults])
 
   /* ---- Close dropdown on outside click ---- */
   useEffect(() => {
@@ -96,6 +122,13 @@ function UserSearchSelect({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  /* ---- Auto-clear removalBlocked when conditions change ---- */
+  useEffect(() => {
+    if (removalBlocked && selectedIds.length > minRequired) {
+      setRemovalBlocked(null)
+    }
+  }, [removalBlocked, selectedIds, minRequired])
 
   /* ---- Selected user details cache ---- */
   const [selectedUsersCache, setSelectedUsersCache] = useState({})
@@ -141,23 +174,29 @@ function UserSearchSelect({
   /* ---- Handlers ---- */
 
   const handleInputChange = useCallback((e) => {
+    if (isSelectionLocked) return
     setQuery(e.target.value)
     setIsOpen(true)
+    setActiveIndex(-1)
     setRemovalBlocked(null)
-  }, [])
+  }, [isSelectionLocked])
 
   const handleInputFocus = useCallback(() => {
+    if (isSelectionLocked) return
     if (query.trim()) {
       setIsOpen(true)
     }
-  }, [query])
+  }, [isSelectionLocked, query])
 
   const handleSelectUser = useCallback(
     (user) => {
       const userId = getUserId(user)
       if (!userId) return
+      if (selectedIds.includes(userId)) return
 
-      const newIds = [...selectedIds, userId]
+      const newIds = normalizedMaxSelections === 1
+        ? [userId]
+        : [...selectedIds, userId].slice(-normalizedMaxSelections)
       // Cache the user details
       setSelectedUsersCache((prev) => ({
         ...prev,
@@ -168,25 +207,33 @@ function UserSearchSelect({
           isActive: user.isActive,
         },
       }))
-      onChange(newIds)
+      onChange(newIds, {
+        [userId]: {
+          name: user.name,
+          email: user.email,
+          roles: getUserRoles(user),
+          isActive: user.isActive,
+        },
+      })
       setQuery('')
       setIsOpen(false)
+      setActiveIndex(-1)
       inputRef.current?.focus()
     },
-    [selectedIds, onChange],
+    [normalizedMaxSelections, onChange, selectedIds],
   )
 
   const handleRemoveUser = useCallback(
     (userId) => {
       // Block removal if it would drop below minimum
-      if (selectedIds.length <= minRequired) {
+      if (!allowTemporaryEmptySelection && selectedIds.length <= minRequired) {
         setRemovalBlocked(userId)
         return
       }
       setRemovalBlocked(null)
       onChange(selectedIds.filter((id) => id !== userId))
     },
-    [selectedIds, minRequired, onChange],
+    [allowTemporaryEmptySelection, selectedIds, minRequired, onChange],
   )
 
   const handleKeyDown = useCallback(
@@ -194,9 +241,30 @@ function UserSearchSelect({
       if (e.key === 'Escape') {
         setIsOpen(false)
         setQuery('')
+        setActiveIndex(-1)
+        return
+      }
+
+      if (!isOpen || searchResults.length === 0) return
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActiveIndex((prev) =>
+          prev < searchResults.length - 1 ? prev + 1 : 0,
+        )
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActiveIndex((prev) =>
+          prev > 0 ? prev - 1 : searchResults.length - 1,
+        )
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (activeIndex >= 0 && activeIndex < searchResults.length) {
+          handleSelectUser(searchResults[activeIndex])
+        }
       }
     },
-    [],
+    [isOpen, searchResults, activeIndex, handleSelectUser],
   )
 
   /* ---- Compute display name for selected IDs ---- */
@@ -224,19 +292,30 @@ function UserSearchSelect({
     return selectedIds.length <= minRequired
   }, [removalBlocked, selectedIds, minRequired])
 
+  /* ---- Active descendant ID for aria ---- */
+  const activeDescendantId =
+    activeIndex >= 0 && activeIndex < searchResults.length
+      ? `${listboxId}-option-${activeIndex}`
+      : undefined
+
   const containerClasses = [
     'user-search-select',
     disabled && 'user-search-select--disabled',
     error && 'user-search-select--error',
+    expandDropdown && 'user-search-select--expanded-dropdown',
     className,
   ]
     .filter(Boolean)
     .join(' ')
 
+  const showDropdown = isOpen && query.trim() && !isSelectionLocked
+  const hasResults = searchResults.length > 0
+  const showStatusMessage = showDropdown && !hasResults
+
   return (
     <div className={containerClasses} ref={containerRef}>
       {label && (
-        <label className="user-search-select__label" htmlFor="user-search-input">
+        <label className="user-search-select__label" htmlFor={inputId}>
           {label}
         </label>
       )}
@@ -289,7 +368,7 @@ function UserSearchSelect({
       <div className="user-search-select__input-wrapper">
         <input
           ref={inputRef}
-          id="user-search-input"
+          id={inputId}
           type="text"
           className="user-search-select__input"
           placeholder="Search by name or email…"
@@ -297,12 +376,13 @@ function UserSearchSelect({
           onChange={handleInputChange}
           onFocus={handleInputFocus}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={disabled || isSelectionLocked}
           autoComplete="off"
           role="combobox"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
-          aria-controls="user-search-results"
+          aria-controls={listboxId}
+          aria-activedescendant={activeDescendantId}
         />
         {isSearching && (
           <span className="user-search-select__spinner" aria-hidden="true">
@@ -311,55 +391,59 @@ function UserSearchSelect({
         )}
       </div>
 
+      {/* Status messages (outside listbox for valid ARIA) */}
+      {showStatusMessage && (
+        <div
+          className="user-search-select__dropdown user-search-select__dropdown--status"
+          role="status"
+          aria-live="polite"
+        >
+          {isSearching
+            ? 'Searching\u2026'
+            : `No users found matching \u201c${query}\u201d`}
+        </div>
+      )}
+
       {/* Dropdown results */}
-      {isOpen && query.trim() && (
+      {showDropdown && hasResults && (
         <ul
-          id="user-search-results"
+          id={listboxId}
           className="user-search-select__dropdown"
           role="listbox"
           aria-label="User search results"
         >
-          {isSearching && searchResults.length === 0 && (
-            <li className="user-search-select__dropdown-item user-search-select__dropdown-item--loading">
-              Searching…
-            </li>
-          )}
-
-          {!isSearching && searchResults.length === 0 && (
-            <li className="user-search-select__dropdown-item user-search-select__dropdown-item--empty">
-              No users found matching "{query}"
-            </li>
-          )}
-
-          {searchResults.map((user) => (
-            <li
-              key={user._id}
-              className={[
-                'user-search-select__dropdown-item',
-                !user.isActive && 'user-search-select__dropdown-item--inactive',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              role="option"
-              aria-selected="false"
-              onClick={() => handleSelectUser(user)}
-            >
-              <span className="user-search-select__result-name">
-                {user.name}
-              </span>
-              <span className="user-search-select__result-email">
-                {user.email}
-              </span>
-              {user.memberships?.[0]?.roles?.length > 0 && (
-                <span className="user-search-select__result-roles">
-                  {user.memberships[0].roles.join(', ')}
-                </span>
-              )}
-              {!user.isActive && (
-                <span className="user-search-select__result-badge">Inactive</span>
-              )}
-            </li>
-          ))}
+          {searchResults.map((user, index) => {
+            const optionId = `${listboxId}-option-${index}`
+            const isFocused = index === activeIndex
+            return (
+              <li
+                key={user._id}
+                id={optionId}
+                className={[
+                  'user-search-select__dropdown-item',
+                  !user.isActive && 'user-search-select__dropdown-item--inactive',
+                  isFocused && 'user-search-select__dropdown-item--focused',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                role="option"
+                aria-selected={isFocused}
+                onClick={() => handleSelectUser(user)}
+              >
+                <div className="user-search-select__result-copy">
+                  <span className="user-search-select__result-name">
+                    {user.name}
+                  </span>
+                  <span className="user-search-select__result-email">
+                    {user.email}
+                  </span>
+                </div>
+                {!user.isActive && (
+                  <span className="user-search-select__result-badge">Inactive</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 

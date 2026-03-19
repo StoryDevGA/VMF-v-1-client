@@ -24,8 +24,13 @@ import {
   getCustomerInactiveMessage,
 } from '../../utils/errors.js'
 import CreateTenantWizard from './CreateTenantWizard'
+import TenantAdminAssignmentDialog from './TenantAdminAssignmentDialog'
 import TenantEditDrawer from './TenantEditDrawer'
 import TenantListView from './TenantListView'
+import {
+  getTenantCapacityCountLabel,
+  getTenantId,
+} from './tenantUtils.js'
 import './MaintainTenants.css'
 
 const SEARCH_DEBOUNCE = 300
@@ -38,11 +43,6 @@ const MAINTAIN_TENANTS_SINGLE_TENANT_MESSAGE =
 
 const MAINTAIN_TENANTS_LIFECYCLE_NOTE =
   'Use the Actions menu to edit tenant details or change lifecycle state. Default tenants stay enabled, and archived tenants remain read-only.'
-
-const getTenantCapacityCountLabel = (countMode) =>
-  countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
-
-const getTenantId = (tenant) => tenant?._id ?? tenant?.id ?? null
 
 const getLifecycleConfirmationCopy = (confirmAction) => {
   const tenantName = confirmAction?.tenant?.name ?? 'this tenant'
@@ -187,6 +187,7 @@ function MaintainTenants() {
 
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
+  const [assigningTenantAdmin, setAssigningTenantAdmin] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
   const confirmActionCopy = useMemo(
     () => getLifecycleConfirmationCopy(confirmAction),
@@ -198,6 +199,7 @@ function MaintainTenants() {
 
     setShowCreateWizard(false)
     setEditingTenant(null)
+    setAssigningTenantAdmin(null)
     setConfirmAction(null)
   }, [isInactiveCustomerLocked])
 
@@ -269,12 +271,12 @@ function MaintainTenants() {
     [disableTenant, addToast],
   )
 
-  const handleConfirmAction = useCallback(() => {
+  const handleConfirmAction = useCallback(async () => {
     if (!confirmAction) return
     if (confirmAction.type === 'enable') {
-      handleEnable(confirmAction.tenant)
+      await handleEnable(confirmAction.tenant)
     } else if (confirmAction.type === 'disable') {
-      handleDisable(confirmAction.tenant)
+      await handleDisable(confirmAction.tenant)
     }
   }, [confirmAction, handleEnable, handleDisable])
 
@@ -330,7 +332,14 @@ function MaintainTenants() {
         onPageChange={setPage}
         createButtonDisabled={isFetching || isTenantCreateBlocked}
         onCreateClick={() => setShowCreateWizard(true)}
-        onEditClick={setEditingTenant}
+        onEditClick={(tenant) => {
+          setAssigningTenantAdmin(null)
+          setEditingTenant(tenant)
+        }}
+        onAssignAdminClick={(tenant) => {
+          setEditingTenant(null)
+          setAssigningTenantAdmin(tenant)
+        }}
         onEnableClick={(tenant) => setConfirmAction({ type: 'enable', tenant })}
         onDisableClick={(tenant) => setConfirmAction({ type: 'disable', tenant })}
         tenantCapacityGuidance={tenantCapacityGuidance}
@@ -352,39 +361,48 @@ function MaintainTenants() {
         customerId={customerId}
       />
 
-      <Dialog
-        open={!!confirmAction}
-        onClose={() => setConfirmAction(null)}
-        size="sm"
-        closeOnBackdropClick={!isLifecycleMutationLoading}
-        closeOnEscape={!isLifecycleMutationLoading}
-      >
-        <Dialog.Header>
-          <h2 className="maintain-tenants__dialog-title maintain-tenants__confirm-title">
-            {confirmActionCopy.title}
-          </h2>
-        </Dialog.Header>
-        <Dialog.Body className="maintain-tenants__confirm-body">
-          <p className="maintain-tenants__confirm-message">{confirmActionCopy.message}</p>
-        </Dialog.Body>
-        <Dialog.Footer className="maintain-tenants__dialog-footer maintain-tenants__confirm-footer">
-          <Button
-            variant="outline"
-            onClick={() => setConfirmAction(null)}
-            disabled={isLifecycleMutationLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant={confirmAction?.type === 'disable' ? 'danger' : 'primary'}
-            onClick={handleConfirmAction}
-            loading={isLifecycleMutationLoading}
-            disabled={isLifecycleMutationLoading}
-          >
-            {confirmActionCopy.confirmLabel}
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
+      <TenantAdminAssignmentDialog
+        open={!!assigningTenantAdmin}
+        onClose={() => setAssigningTenantAdmin(null)}
+        tenant={assigningTenantAdmin}
+        customerId={customerId}
+      />
+
+      {confirmAction ? (
+        <Dialog
+          open
+          onClose={() => setConfirmAction(null)}
+          size="sm"
+          closeOnBackdropClick={!isLifecycleMutationLoading}
+          closeOnEscape={!isLifecycleMutationLoading}
+        >
+          <Dialog.Header>
+            <h2 className="maintain-tenants__dialog-title maintain-tenants__confirm-title">
+              {confirmActionCopy.title}
+            </h2>
+          </Dialog.Header>
+          <Dialog.Body className="maintain-tenants__confirm-body">
+            <p className="maintain-tenants__confirm-message">{confirmActionCopy.message}</p>
+          </Dialog.Body>
+          <Dialog.Footer className="maintain-tenants__dialog-footer maintain-tenants__confirm-footer">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmAction(null)}
+              disabled={isLifecycleMutationLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={confirmAction.type === 'disable' ? 'danger' : 'primary'}
+              onClick={handleConfirmAction}
+              loading={isLifecycleMutationLoading}
+              disabled={isLifecycleMutationLoading}
+            >
+              {confirmActionCopy.confirmLabel}
+            </Button>
+          </Dialog.Footer>
+        </Dialog>
+      ) : null}
     </section>
   )
 }

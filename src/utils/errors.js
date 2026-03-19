@@ -126,7 +126,10 @@ const GOVERNANCE_LIMIT_REASONS = new Set([
   'VMF_LIMIT_REACHED',
 ])
 
-const TENANT_ADMIN_ASSIGNMENTS_INVALID_REASON = 'TENANT_ADMIN_ASSIGNMENTS_INVALID'
+const TENANT_ADMIN_ASSIGNMENT_REASONS = new Set([
+  'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+  'TENANT_ADMIN_LIMIT_EXCEEDED',
+])
 
 const GOVERNANCE_LIMIT_FALLBACKS = {
   TENANT_LIMIT_REACHED: 'Tenant limit reached for this customer.',
@@ -577,8 +580,9 @@ const normalizeIdList = (value) =>
  */
 export const isTenantAdminAssignmentsValidationError = (err) =>
   err?.status === 422
-  && String(err?.details?.reason ?? '').trim().toUpperCase()
-  === TENANT_ADMIN_ASSIGNMENTS_INVALID_REASON
+  && TENANT_ADMIN_ASSIGNMENT_REASONS.has(
+    String(err?.details?.reason ?? '').trim().toUpperCase(),
+  )
 
 /**
  * Resolve tenant-admin assignment validation failures to stable operator guidance.
@@ -623,6 +627,11 @@ export const getTenantAdminAssignmentsValidationMessage = (err) => {
 
   if (uncategorizedInvalidIds.length > 0) {
     guidance.push(`Review invalid tenant-admin selections: ${uncategorizedInvalidIds.join(', ')}.`)
+  }
+
+  const reason = String(err?.details?.reason ?? '').trim().toUpperCase()
+  if (reason === 'TENANT_ADMIN_LIMIT_EXCEEDED' && guidance.length === 0) {
+    guidance.push('Only one tenant admin is allowed per tenant.')
   }
 
   const baseMessage = guidance.length > 0

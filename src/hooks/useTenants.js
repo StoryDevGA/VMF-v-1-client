@@ -8,7 +8,7 @@
  * const { tenants, pagination, isLoading, createTenant, enableTenant } = useTenants(customerId)
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import {
   useListTenantsQuery,
   useCreateTenantMutation,
@@ -89,9 +89,19 @@ export function useTenants(customerId, options = {}) {
   const { pageSize = 20, skipListQuery = false } = options
 
   /* ---- Local filter / pagination state ---- */
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [search, setSearchRaw] = useState('')
+  const [statusFilter, setStatusFilterRaw] = useState('')
   const [page, setPage] = useState(1)
+
+  const setSearch = useCallback((value) => {
+    setSearchRaw(value)
+    setPage(1)
+  }, [])
+
+  const setStatusFilter = useCallback((value) => {
+    setStatusFilterRaw(value)
+    setPage(1)
+  }, [])
 
   /* ---- RTK Query: list tenants ---- */
   const {
