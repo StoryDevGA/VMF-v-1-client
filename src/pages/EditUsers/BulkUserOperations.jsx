@@ -115,17 +115,7 @@ const getBulkCreateManualHelperText = (supportsTenantVisibility, supportedRolesM
     ? `One row per line: name,email,roles,tenantVisibility (roles/tenants separated by |). ${BULK_CREATE_TENANT_VISIBILITY_GUIDANCE} ${supportedRolesMessage}`
     : `One row per line: name,email,roles. ${supportedRolesMessage}`
 
-const getBulkCreateExampleTenantValues = (selectableTenants) => {
-  const firstTenantId = selectableTenants[0]?.id ?? 'tenant-id-1'
-  const secondTenantId = selectableTenants[1]?.id ?? null
-
-  return {
-    singleTenantValue: firstTenantId,
-    multiTenantValue: secondTenantId ? `${firstTenantId}|${secondTenantId}` : firstTenantId,
-  }
-}
-
-const getBulkCreateExampleRows = (supportsTenantVisibility, selectableTenants) => {
+const getBulkCreateExampleRows = (supportsTenantVisibility) => {
   if (!supportsTenantVisibility) {
     return [
       'Avery North,avery.north@example.com,USER',
@@ -133,16 +123,13 @@ const getBulkCreateExampleRows = (supportsTenantVisibility, selectableTenants) =
     ].join('\n')
   }
 
-  const { singleTenantValue, multiTenantValue } =
-    getBulkCreateExampleTenantValues(selectableTenants)
-
   return [
-    `Avery North,avery.north@example.com,USER,${multiTenantValue}`,
-    `Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,${singleTenantValue}`,
+    'Avery North,avery.north@example.com,USER',
+    'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN',
   ].join('\n')
 }
 
-const getBulkCreateExampleCsvContent = (supportsTenantVisibility, selectableTenants) => {
+const getBulkCreateExampleCsvContent = (supportsTenantVisibility) => {
   if (!supportsTenantVisibility) {
     return [
       'name,email,roles',
@@ -151,13 +138,10 @@ const getBulkCreateExampleCsvContent = (supportsTenantVisibility, selectableTena
     ].join('\n')
   }
 
-  const { singleTenantValue, multiTenantValue } =
-    getBulkCreateExampleTenantValues(selectableTenants)
-
   return [
-    'name,email,roles,tenantVisibility',
-    `Avery North,avery.north@example.com,USER,${multiTenantValue}`,
-    `Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN,${singleTenantValue}`,
+    'name,email,roles',
+    'Avery North,avery.north@example.com,USER',
+    'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN',
   ].join('\n')
 }
 
@@ -404,25 +388,73 @@ function normalizeBulkResponse(payload) {
   const summary = data.summary ?? {}
   const results = data.results ?? data.items ?? []
 
+  const normalizedResults = results.map((item) => {
+    const hasErrorMessage = String(item?.error ?? '').trim().length > 0
+    const outcome =
+      item?.success === false
+        ? 'failed'
+        : item?.success === true
+        ? 'success'
+        : hasErrorMessage
+        ? 'failed'
+        : 'unknown'
+
+    return {
+      ...item,
+      outcome,
+    }
+  })
+
   const summarySuccess = summary.success ?? summary.successCount
   const summaryFailed = summary.failed ?? summary.failureCount
   const summaryTotal = summary.total
 
-  const success = summarySuccess != null
+  const rowSuccess = normalizedResults.filter((item) => item.outcome === 'success').length
+  const rowFailed = normalizedResults.filter((item) => item.outcome === 'failed').length
+  const rowTotal = normalizedResults.length
+  const hasDeterministicRowOutcomes = rowTotal > 0 && rowSuccess + rowFailed === rowTotal
+
+  const fallbackSuccess = normalizedResults.filter((item) => item.outcome !== 'failed').length
+  const fallbackFailed = rowFailed
+  const fallbackTotal = normalizedResults.length
+
+  const hasImpossibleExplicitSummary =
+    summaryTotal != null
+    && summarySuccess != null
+    && summaryFailed != null
+    && Number(summarySuccess) + Number(summaryFailed) !== Number(summaryTotal)
+
+  const conflictsWithDeterministicRows =
+    hasDeterministicRowOutcomes
+    && (
+      (summaryTotal != null && Number(summaryTotal) !== rowTotal)
+      || (summarySuccess != null && Number(summarySuccess) !== rowSuccess)
+      || (summaryFailed != null && Number(summaryFailed) !== rowFailed)
+    )
+
+  const shouldPreferRowCounts = hasImpossibleExplicitSummary || conflictsWithDeterministicRows
+
+  const success = shouldPreferRowCounts
+    ? rowSuccess
+    : summarySuccess != null
     ? Number(summarySuccess)
-    : results.filter((item) => item.success !== false).length
-  const failed = summaryFailed != null
+    : fallbackSuccess
+  const failed = shouldPreferRowCounts
+    ? rowFailed
+    : summaryFailed != null
     ? Number(summaryFailed)
-    : results.filter((item) => item.success === false).length
-  const total = summaryTotal != null
+    : fallbackFailed
+  const total = shouldPreferRowCounts
+    ? rowTotal
+    : summaryTotal != null
     ? Number(summaryTotal)
-    : success + failed
+    : fallbackTotal
 
   return {
     total,
     success,
     failed,
-    results,
+    results: normalizedResults,
   }
 }
 
@@ -681,6 +713,7 @@ function BulkUserOperations({
   const [selectedBulkTenantVisibility, setSelectedBulkTenantVisibility] = useState([])
   const previewSectionRef = useRef(null)
   const resultsSectionRef = useRef(null)
+  const csvFileInputRef = useRef(null)
 
   const isProcessing =
     bulkCreateResult.isLoading ||
@@ -787,6 +820,9 @@ function BulkUserOperations({
   const resetState = useCallback(() => {
     setOperation(defaultOperation)
     setSourceMode('csv')
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = ''
+    }
     setCsvText('')
     setManualText('')
     setHeaders([])
@@ -1196,8 +1232,14 @@ function BulkUserOperations({
       finishProgress()
 
       const normalized = normalizeBulkResponse(response)
-      setResultSummary(normalized)
       addToast(getBulkCompletionToast('Bulk create', normalized))
+
+      if (normalized.failed === 0) {
+        handleClose()
+        return
+      }
+
+      setResultSummary(normalized)
     } catch (error) {
       const appError = normalizeError(error)
       setProgressValue(0)
@@ -1223,6 +1265,7 @@ function BulkUserOperations({
     canRunCreate,
     customerId,
     finishProgress,
+    handleClose,
     previewUsers,
     startProgress,
   ])
@@ -1419,6 +1462,7 @@ function BulkUserOperations({
             {sourceMode === 'csv' ? (
               <>
                 <Input
+                  ref={csvFileInputRef}
                   id="bulk-csv-file"
                   name="bulk-create-csv-file"
                   type="file"
@@ -1909,7 +1953,7 @@ function BulkUserOperations({
                       {item.email ?? item.userId ?? `Row ${index + 1}`}
                     </span>
                     <span>
-                      {item.success === false ? (item.error || 'Failed') : 'Success'}
+                      {item.outcome === 'failed' ? (item.error || 'Failed') : 'Success'}
                     </span>
                   </div>
                 ))}

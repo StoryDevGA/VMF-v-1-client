@@ -362,7 +362,11 @@ describe('BulkUserOperations', () => {
     expect(screen.getByLabelText(/manual rows/i).value).toContain(
       'Avery North,avery.north@example.com',
     )
-    expect(screen.getByLabelText(/manual rows/i).value).toContain('ten-1')
+    expect(screen.getByLabelText(/manual rows/i).value).toContain(
+      'Taylor Tenant,taylor.tenant@example.com,TENANT_ADMIN',
+    )
+    expect(screen.getByLabelText(/manual rows/i).value).not.toContain('tenantVisibility')
+    expect(screen.getByLabelText(/manual rows/i).value).not.toContain('ten-1')
   })
 
   it('uses single-tenant example rows without tenant visibility values', async () => {
@@ -514,8 +518,9 @@ describe('BulkUserOperations', () => {
     expect(screen.queryByText(/preview \(1\)/i)).not.toBeInTheDocument()
   })
 
-  it('shows batch results after successful create', async () => {
+  it('clears the bulk-create form and closes after a fully successful create', async () => {
     const user = userEvent.setup()
+    const onClose = vi.fn()
     bulkCreateMock.mockReturnValue({
       unwrap: async () => ({
         summary: { total: 1, success: 1, failed: 0 },
@@ -523,7 +528,7 @@ describe('BulkUserOperations', () => {
       }),
     })
 
-    renderDialog()
+    renderDialog({ onClose })
 
     await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
     await user.type(
@@ -534,8 +539,12 @@ describe('BulkUserOperations', () => {
     await user.click(screen.getByRole('button', { name: /process batch/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /batch results/i })).toBeInTheDocument()
+      expect(onClose).toHaveBeenCalledTimes(1)
     })
+    expect(screen.getByLabelText(/input mode/i)).toHaveValue('csv')
+    expect(screen.getByLabelText(/csv content/i)).toHaveValue('')
+    expect(screen.queryByText(/preview \(1\)/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /batch results/i })).not.toBeInTheDocument()
   })
 
   it('resolves CSV tenant visibility values to canonical tenant ids before submit', async () => {
@@ -624,8 +633,74 @@ describe('BulkUserOperations', () => {
     ).toBeInTheDocument()
   })
 
-  it('respects zero failed counts from the API summary even when result rows omit success flags', async () => {
+  it('reconciles impossible bulk-create summary counts with deterministic row results', async () => {
     const user = userEvent.setup()
+    const onClose = vi.fn()
+    bulkCreateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 2, success: 2, failed: 1 },
+        results: [
+          { email: 'avery.north@example.com', success: true },
+          { email: 'tiny.bloggs@example.com', success: true },
+        ],
+      }),
+    })
+
+    renderDialog({ onClose })
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Avery North,avery.north@example.com,USER{enter}Tiny Bloggs,tiny.bloggs@example.com,USER',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+    await user.click(screen.getByRole('button', { name: /process batch/i }))
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.getByLabelText(/input mode/i)).toHaveValue('csv')
+    expect(screen.getByLabelText(/csv content/i)).toHaveValue('')
+    expect(screen.queryByRole('heading', { name: /batch results/i })).not.toBeInTheDocument()
+  })
+
+  it('treats result rows with an error message as failed even when success is omitted', async () => {
+    const user = userEvent.setup()
+    bulkCreateMock.mockReturnValue({
+      unwrap: async () => ({
+        summary: { total: 2, success: 1, failed: 1 },
+        results: [
+          { email: 'avery.north@example.com', success: true },
+          { email: 'tiny.bloggs@example.com', error: 'Duplicate email' },
+        ],
+      }),
+    })
+
+    renderDialog()
+
+    await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
+    await user.type(
+      screen.getByLabelText(/manual rows/i),
+      'Avery North,avery.north@example.com,USER{enter}Tiny Bloggs,tiny.bloggs@example.com,USER',
+    )
+    await user.click(screen.getByRole('button', { name: /validate & preview/i }))
+    await user.click(screen.getByRole('button', { name: /process batch/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /batch results/i })).toBeInTheDocument()
+    })
+    expect(screen.getByText(/success: 1/i)).toBeInTheDocument()
+    expect(screen.getByText(/failed: 1/i)).toBeInTheDocument()
+    const failedRow = screen.getByText('tiny.bloggs@example.com', {
+      selector: '.bulk-users__result-target',
+    }).closest('.bulk-users__result-row')
+    expect(failedRow).toHaveTextContent('Duplicate email')
+    expect(failedRow).not.toHaveTextContent('Success')
+  })
+
+  it('closes successfully when zero failed counts are returned even if result rows omit success flags', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
     bulkCreateMock.mockReturnValue({
       unwrap: async () => ({
         summary: { total: 1, success: 1, failed: 0 },
@@ -633,7 +708,7 @@ describe('BulkUserOperations', () => {
       }),
     })
 
-    renderDialog()
+    renderDialog({ onClose })
 
     await user.selectOptions(screen.getByLabelText(/input mode/i), 'manual')
     await user.type(
@@ -644,20 +719,11 @@ describe('BulkUserOperations', () => {
     await user.click(screen.getByRole('button', { name: /process batch/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/bulk create completed$/i)).toBeInTheDocument()
+      expect(onClose).toHaveBeenCalledTimes(1)
     })
-    expect(
-      screen.getByText(/1 succeeded\. review batch results below if you need the row-level detail\./i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/all 1 rows were created successfully\./i),
-    ).toBeInTheDocument()
-
-    const resultRow = screen.getByText('jane@example.com', {
-      selector: '.bulk-users__result-target',
-    }).closest('.bulk-users__result-row')
-    expect(resultRow).toHaveTextContent('Success')
-    expect(resultRow).not.toHaveTextContent('Failed')
+    expect(screen.getByLabelText(/input mode/i)).toHaveValue('csv')
+    expect(screen.getByLabelText(/csv content/i)).toHaveValue('')
+    expect(screen.queryByRole('heading', { name: /batch results/i })).not.toBeInTheDocument()
   })
 
   // ---- Bulk Create: CSV ----
@@ -672,6 +738,27 @@ describe('BulkUserOperations', () => {
     renderDialog()
     expect(screen.getByLabelText(/csv file/i)).toBeInTheDocument()
     expect(screen.queryByText(/^csv file$/i)).not.toBeInTheDocument()
+  })
+
+  it('clears the selected CSV file when the dialog closes', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+
+    const csvFileInput = screen.getByLabelText(/csv file/i)
+    const csvFile = new File(['name,email,roles'], 'bulk-users.csv', { type: 'text/csv' })
+    Object.defineProperty(csvFile, 'text', {
+      value: vi.fn().mockResolvedValue('name,email,roles'),
+    })
+
+    await user.upload(csvFileInput, csvFile)
+
+    expect(csvFileInput).toHaveValue('C:\\fakepath\\bulk-users.csv')
+
+    const closeButtons = screen.getAllByRole('button', { name: /close/i })
+    await user.click(closeButtons[closeButtons.length - 1])
+
+    expect(csvFileInput).toHaveValue('')
+    expect(screen.getByLabelText(/csv content/i)).toHaveValue('')
   })
 
   it('applies browser-autofill suppression to bulk-create text inputs and textareas', async () => {
