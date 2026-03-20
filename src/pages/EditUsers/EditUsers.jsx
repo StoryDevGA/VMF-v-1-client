@@ -30,6 +30,7 @@ import UserEditDrawer from './UserEditDrawer'
 import BulkUserOperations from './BulkUserOperations'
 import OwnershipTransferDialog from './OwnershipTransferDialog'
 import EditUsersListView from './EditUsersListView'
+import { AuthLinkDialog } from '../SuperAdminCustomers/CustomerUserDialogs.jsx'
 import './EditUsers.css'
 
 const SEARCH_DEBOUNCE = 300
@@ -80,6 +81,9 @@ const getUserTrustStatus = (user) =>
   String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
     .trim()
     .toUpperCase()
+
+const getUserId = (user) =>
+  String(user?._id ?? user?.id ?? '').trim()
 
 function EditUsersBoundaryState({
   title = 'Edit Users',
@@ -155,6 +159,8 @@ function EditUsers() {
   const [ownershipTransferTarget, setOwnershipTransferTarget] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
   const [selectedRows, setSelectedRows] = useState(new Set())
+  const [authLinkDialogOpen, setAuthLinkDialogOpen] = useState(false)
+  const [lastAuthLink, setLastAuthLink] = useState('')
   const previousContextKeyRef = useRef(`${customerId ?? ''}::${tenantId ?? ''}`)
 
   useEffect(() => {
@@ -211,6 +217,8 @@ function EditUsers() {
     setOwnershipTransferTarget(null)
     setConfirmAction(null)
     setSelectedRows(new Set())
+    setAuthLinkDialogOpen(false)
+    setLastAuthLink('')
     setSearchInput('')
     setSearch('')
     setStatusFilter('')
@@ -227,12 +235,24 @@ function EditUsers() {
     setOwnershipTransferTarget(null)
     setConfirmAction(null)
     setSelectedRows(new Set())
+    setAuthLinkDialogOpen(false)
+    setLastAuthLink('')
   }, [isInactiveCustomerLocked])
 
   const handleDisable = useCallback(
     async (targetUser) => {
+      const targetUserId = getUserId(targetUser)
+      if (!targetUserId) {
+        addToast({
+          title: 'Action unavailable',
+          description: 'This user row is missing an ID and cannot be disabled.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await disableUser(targetUser._id)
+        await disableUser(targetUserId)
         addToast({
           title: 'User disabled',
           description: `${targetUser.name} has been disabled.`,
@@ -264,8 +284,18 @@ function EditUsers() {
 
   const handleDelete = useCallback(
     async (targetUser) => {
+      const targetUserId = getUserId(targetUser)
+      if (!targetUserId) {
+        addToast({
+          title: 'Action unavailable',
+          description: 'This user row is missing an ID and cannot be deleted.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await deleteUser(targetUser._id)
+        await deleteUser(targetUserId)
         addToast({
           title: 'User deleted',
           description: `${targetUser.name} has been permanently deleted.`,
@@ -297,8 +327,18 @@ function EditUsers() {
 
   const handleEnable = useCallback(
     async (targetUser) => {
+      const targetUserId = getUserId(targetUser)
+      if (!targetUserId) {
+        addToast({
+          title: 'Action unavailable',
+          description: 'This user row is missing an ID and cannot be reactivated.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        const result = await enableUser(targetUser._id)
+        const result = await enableUser(targetUserId)
         const enabledUser = getMutationPayload(result)
         const enabledUserName = String(enabledUser?.name ?? targetUser?.name ?? 'User').trim() || 'User'
         const enabledTrustStatus = getUserTrustStatus(enabledUser)
@@ -332,13 +372,31 @@ function EditUsers() {
 
   const handleResendInvitation = useCallback(
     async (targetUser) => {
+      const targetUserId = getUserId(targetUser)
+      if (!targetUserId) {
+        addToast({
+          title: 'Action unavailable',
+          description: 'This user row is missing an ID and cannot be invited.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await resendInvitation(targetUser._id)
+        const result = await resendInvitation(targetUserId)
+        const resendData = getMutationPayload(result)
+        const authLink = String(resendData?.authLink ?? '').trim()
+
         addToast({
           title: 'Invitation sent',
           description: `Invitation resent to ${targetUser.email}.`,
           variant: 'success',
         })
+
+        if (authLink) {
+          setLastAuthLink(authLink)
+          setAuthLinkDialogOpen(true)
+        }
       } catch (err) {
         const appError = normalizeError(err)
         addToast({
@@ -370,7 +428,7 @@ function EditUsers() {
   }, [confirmAction, handleDelete, handleDisable, handleEnable])
 
   const tableData = useMemo(
-    () => users.map((entry) => ({ ...entry, id: entry._id })),
+    () => users.map((entry) => ({ ...entry, id: getUserId(entry) })),
     [users],
   )
 
@@ -631,6 +689,12 @@ function EditUsers() {
           </Button>
         </Dialog.Footer>
       </Dialog>
+
+      <AuthLinkDialog
+        open={authLinkDialogOpen}
+        onClose={() => setAuthLinkDialogOpen(false)}
+        authLink={lastAuthLink}
+      />
     </section>
   )
 }

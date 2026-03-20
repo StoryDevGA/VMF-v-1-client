@@ -119,6 +119,20 @@ const standardManagedUser = {
   identityPlus: { trustStatus: 'UNTRUSTED', invitedAt: '2026-01-16T09:30:00Z' },
 }
 
+const idOnlyManagedUser = {
+  id: 'user-6',
+  email: 'id-only@acme.com',
+  name: 'ID Only User',
+  isActive: true,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'UNTRUSTED', invitedAt: '2026-01-18T08:00:00Z' },
+}
+
 const invitationRequiredUser = {
   _id: 'user-4',
   email: 'reset@acme.com',
@@ -723,6 +737,34 @@ describe('EditUsers page', () => {
 
     mockUseUsers.mockReturnValue(
       buildUseUsersResult({
+        users: [canonicalManagedUser, idOnlyManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        resendInvitation,
+      }),
+    )
+
+    renderEditUsers()
+
+    await chooseRowAction(user, 'id only user', 'Resend Invitation')
+
+    await waitFor(() => {
+      expect(resendInvitation).toHaveBeenCalledWith('user-6')
+      expect(screen.getByText(/invitation resent to id-only@acme.com/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows dev auth-link dialog when resend returns authLink', async () => {
+    const user = userEvent.setup()
+    const authLink = 'http://localhost:5173/invitation-auth?invitationId=inv-resend-1'
+    const resendInvitation = vi.fn().mockResolvedValue({
+      data: {
+        message: 'Invitation resent successfully.',
+        authLink,
+      },
+    })
+
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
         users: [canonicalManagedUser, standardManagedUser],
         pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
         resendInvitation,
@@ -733,10 +775,10 @@ describe('EditUsers page', () => {
 
     await chooseRowAction(user, 'member user', 'Resend Invitation')
 
-    await waitFor(() => {
-      expect(resendInvitation).toHaveBeenCalledWith('user-2')
-      expect(screen.getByText(/invitation resent to member@acme.com/i)).toBeInTheDocument()
-    })
+    const authLinkHeading = await screen.findByRole('heading', { name: /auth link \(dev mode\)/i })
+    const authLinkDialog = authLinkHeading.closest('dialog')
+    expect(authLinkDialog).not.toBeNull()
+    expect(within(authLinkDialog).getByText(authLink)).toBeInTheDocument()
   })
 
   it('reactivates a disabled user and surfaces untrusted trust guidance', async () => {
