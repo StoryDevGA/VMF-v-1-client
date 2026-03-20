@@ -1,11 +1,10 @@
 /**
  * TenantEditDrawer Tests
  *
- * Covers the single-admin tenant-edit workspace:
- * - Tenant details remain at the top of the drawer
- * - Tenant admin assignment is singular
- * - Reassigning the tenant admin replaces the current assignment
- * - Save and contract-error handling still work
+ * Covers tenant-details-only edit behavior:
+ * - Edit Tenant focuses on tenant name and website updates
+ * - Tenant-admin assignment is not rendered in this dialog
+ * - Save, validation, read-only, and error handling remain intact
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -20,22 +19,10 @@ import authReducer from '../../store/slices/authSlice.js'
 import TenantEditDrawer from './TenantEditDrawer'
 
 const mockUseTenants = vi.hoisted(() => vi.fn())
-const mockUseListUsersQuery = vi.hoisted(() => vi.fn())
-const mockUseLazyListUsersQuery = vi.hoisted(() => vi.fn())
 
 vi.mock('../../hooks/useTenants.js', () => ({
   useTenants: (...args) => mockUseTenants(...args),
 }))
-
-vi.mock('../../store/api/userApi.js', async () => {
-  const actual = await vi.importActual('../../store/api/userApi.js')
-
-  return {
-    ...actual,
-    useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
-    useLazyListUsersQuery: (...args) => mockUseLazyListUsersQuery(...args),
-  }
-})
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
@@ -45,30 +32,6 @@ beforeEach(() => {
     this.open = false
   })
 })
-
-const customerUsers = [
-  {
-    _id: 'admin-user-1',
-    name: 'Jordan Manager',
-    email: 'jordan.manager@acme.test',
-    isActive: true,
-    memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN'] }],
-  },
-  {
-    _id: 'admin-user-2',
-    name: 'Taylor Viewer',
-    email: 'taylor.viewer@acme.test',
-    isActive: false,
-    memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-  },
-  {
-    _id: 'admin-user-3',
-    name: 'Morgan Backup',
-    email: 'morgan.backup@acme.test',
-    isActive: true,
-    memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
-  },
-]
 
 const sampleTenant = {
   _id: 'tenant-1',
@@ -83,27 +46,12 @@ const sampleTenant = {
   },
 }
 
-const unassignedTenant = {
-  _id: 'tenant-4',
-  name: 'Unassigned Tenant',
-  website: 'https://unassigned.com',
-  status: 'ENABLED',
-  isDefault: false,
-  tenantAdminUserIds: [],
-  tenantAdmin: null,
-}
-
 const defaultTenant = {
   _id: 'tenant-2',
   name: 'Default Tenant',
   website: 'https://default.com',
   status: 'ENABLED',
   isDefault: true,
-  tenantAdminUserIds: ['admin-user-1'],
-  tenantAdmin: {
-    id: 'admin-user-1',
-    name: 'Jordan Manager',
-  },
 }
 
 const archivedTenant = {
@@ -112,11 +60,6 @@ const archivedTenant = {
   website: 'https://archived.com',
   status: 'ARCHIVED',
   isDefault: false,
-  tenantAdminUserIds: ['admin-user-1'],
-  tenantAdmin: {
-    id: 'admin-user-1',
-    name: 'Jordan Manager',
-  },
 }
 
 function createTestStore() {
@@ -160,57 +103,25 @@ describe('TenantEditDrawer', () => {
       updateTenant: vi.fn(),
       updateTenantResult: { isLoading: false },
     })
-    mockUseListUsersQuery.mockReturnValue({
-      data: {
-        data: {
-          users: customerUsers,
-        },
-      },
-      isFetching: false,
-      error: null,
-    })
-    mockUseLazyListUsersQuery.mockReturnValue([
-      vi.fn(),
-      {
-        data: {
-          data: {
-            users: customerUsers,
-          },
-        },
-        isFetching: false,
-      },
-    ])
   })
 
-  it('renders the single-admin tenant workspace', async () => {
+  it('renders the tenant-details-only workspace', () => {
     renderDrawer()
 
     expect(screen.getByRole('heading', { name: /edit tenant/i })).toBeInTheDocument()
     expect(
-      screen.getByText(/update tenant details and assign exactly one tenant admin/i),
+      screen.getByText(/update tenant details in this workspace/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Tenant Details')).toBeInTheDocument()
-    expect(screen.getByText('Tenant Admin')).toBeInTheDocument()
-    expect(screen.getByText('Tenant admin assignment')).toBeInTheDocument()
-    expect(screen.getByText('Assigned')).toBeInTheDocument()
-    expect(screen.getByText('Jordan Manager')).toBeInTheDocument()
-    expect(screen.getByText('jordan.manager@acme.test')).toBeInTheDocument()
-    expect(screen.getByLabelText(/assign tenant admin/i)).toBeInTheDocument()
-    expect(screen.queryByRole('table', { name: /linked users/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /remove selected/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Tenant Admin')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/assign tenant admin/i)).not.toBeInTheDocument()
   })
 
-  it('shows an empty-state message when no tenant admin is currently assigned', () => {
-    renderDrawer({ tenant: unassignedTenant })
-
-    expect(screen.getByText(/not assigned/i)).toBeInTheDocument()
-    expect(screen.getByText(/no tenant admin is currently assigned/i)).toBeInTheDocument()
-  })
-
-  it('replaces the current tenant admin and saves a single tenantAdminUserIds entry', async () => {
+  it('saves updated tenant details only', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
     const updateTenantMutationMock = vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } })
+
     mockUseTenants.mockReturnValue({
       updateTenant: updateTenantMutationMock,
       updateTenantResult: { isLoading: false },
@@ -218,24 +129,23 @@ describe('TenantEditDrawer', () => {
 
     renderDrawer({ onClose })
 
-    await user.type(screen.getByRole('combobox'), 'Morgan')
-    await user.click(await screen.findByText('Morgan Backup'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Morgan Backup')).toBeInTheDocument()
-    })
+    await user.clear(screen.getByLabelText(/tenant name/i))
+    await user.type(screen.getByLabelText(/tenant name/i), 'Acme Tenant Updated')
+    await user.clear(screen.getByLabelText(/website url/i))
+    await user.type(screen.getByLabelText(/website url/i), 'https://acme-updated.com')
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
       expect(updateTenantMutationMock).toHaveBeenCalledWith('tenant-1', {
-        tenantAdminUserIds: ['admin-user-3'],
+        name: 'Acme Tenant Updated',
+        website: 'https://acme-updated.com',
       })
     })
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
-      expect(screen.getByText(/acme tenant has been updated/i)).toBeInTheDocument()
+      expect(screen.getByText(/acme tenant updated has been updated/i)).toBeInTheDocument()
     })
   })
 
@@ -245,7 +155,6 @@ describe('TenantEditDrawer', () => {
     expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant name/i)).toBeDisabled()
     expect(screen.getByLabelText(/website url/i)).toBeDisabled()
-    expect(screen.getByLabelText(/assign tenant admin/i)).toBeDisabled()
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
@@ -270,7 +179,7 @@ describe('TenantEditDrawer', () => {
     })
   })
 
-  it('surfaces the single-admin contract validation message from the API', async () => {
+  it('maps 422 tenant validation errors to tenant detail fields', async () => {
     const user = userEvent.setup()
     const updateTenantMutationMock = vi.fn().mockRejectedValue({
       status: 422,
@@ -279,7 +188,7 @@ describe('TenantEditDrawer', () => {
           code: 'VALIDATION_FAILED',
           message: 'Please check the form for errors.',
           details: {
-            tenantAdminUserIds: 'Only one tenant admin is allowed',
+            name: 'Tenant name is required.',
           },
         },
       },
@@ -297,7 +206,7 @@ describe('TenantEditDrawer', () => {
 
     await waitFor(() => {
       expect(updateTenantMutationMock).toHaveBeenCalledTimes(1)
-      expect(screen.getAllByText(/only one tenant admin is allowed/i).length).toBeGreaterThan(0)
+      expect(screen.getByText(/tenant name is required/i)).toBeInTheDocument()
     })
   })
 
@@ -320,7 +229,7 @@ describe('TenantEditDrawer', () => {
     expect(updateTenantMutationMock).not.toHaveBeenCalled()
   })
 
-  it('surfaces customer-context guidance instead of falling back to a platform-only tenant update route', async () => {
+  it('surfaces customer-context guidance instead of a platform-only mutation route', async () => {
     const user = userEvent.setup()
     const updateTenantMutationMock = vi.fn().mockRejectedValue({
       status: 400,

@@ -29,6 +29,7 @@ const STATUS_LABEL_MAP = {
   DISABLED: 'Disabled',
   ARCHIVED: 'Archived',
 }
+
 const getTenantAdminName = (tenant) => String(tenant?.tenantAdmin?.name ?? '').trim()
 
 const canEditTenant = (tenant) =>
@@ -44,6 +45,8 @@ const canDisableTenant = (tenant) =>
   Boolean(getTenantId(tenant))
   && getTenantStatus(tenant) === 'ENABLED'
   && tenant?.isDefault !== true
+
+const canViewLinkedUsers = (tenant) => Boolean(getTenantId(tenant))
 
 const getTenantLifecycleDetail = (tenant) => {
   const tenantStatus = getTenantStatus(tenant)
@@ -153,8 +156,15 @@ export function TenantListView({
   totalCount,
   onPageChange,
   createButtonDisabled,
+  showCreateAction = true,
+  showTenantAdminColumn = true,
+  allowAssignAdmin = true,
+  allowLifecycleActions = true,
+  allowLinkedUsers = true,
+  tenantAdminScopeNote = null,
   onCreateClick,
   onEditClick,
+  onLinkedUsersClick,
   onAssignAdminClick,
   onEnableClick,
   onDisableClick,
@@ -162,40 +172,57 @@ export function TenantListView({
   lifecycleNote,
   isLifecycleMutationLoading,
 }) {
-  const rowActions = useMemo(
-    () => [
+  const rowActions = useMemo(() => {
+    const actions = [
       {
         label: 'Edit',
         disabled: (row) => isLifecycleMutationLoading || !canEditTenant(row),
       },
-      {
+    ]
+
+    if (allowLinkedUsers) {
+      actions.push({
+        label: 'Linked Users',
+        disabled: (row) => isLifecycleMutationLoading || !canViewLinkedUsers(row),
+      })
+    }
+
+    if (allowAssignAdmin) {
+      actions.push({
         label: 'Assign Admin',
         disabled: (row) => isLifecycleMutationLoading || !canAssignTenantAdmin(row),
-      },
-      {
-        label: 'Enable',
-        disabled: (row) => isLifecycleMutationLoading || !canEnableTenant(row),
-      },
-      {
-        label: 'Disable',
-        disabled: (row) => isLifecycleMutationLoading || !canDisableTenant(row),
-      },
-    ],
-    [isLifecycleMutationLoading],
-  )
+      })
+    }
+
+    if (allowLifecycleActions) {
+      actions.push(
+        {
+          label: 'Enable',
+          disabled: (row) => isLifecycleMutationLoading || !canEnableTenant(row),
+        },
+        {
+          label: 'Disable',
+          disabled: (row) => isLifecycleMutationLoading || !canDisableTenant(row),
+        },
+      )
+    }
+
+    return actions
+  }, [allowAssignAdmin, allowLifecycleActions, allowLinkedUsers, isLifecycleMutationLoading])
 
   const handleRowAction = useCallback(
     (label, row) => {
-      if (label === 'Edit') onEditClick(row)
-      if (label === 'Assign Admin') onAssignAdminClick(row)
-      if (label === 'Enable') onEnableClick(row)
-      if (label === 'Disable') onDisableClick(row)
+      if (label === 'Edit') onEditClick?.(row)
+      if (label === 'Linked Users') onLinkedUsersClick?.(row)
+      if (label === 'Assign Admin') onAssignAdminClick?.(row)
+      if (label === 'Enable') onEnableClick?.(row)
+      if (label === 'Disable') onDisableClick?.(row)
     },
-    [onAssignAdminClick, onDisableClick, onEditClick, onEnableClick],
+    [onAssignAdminClick, onDisableClick, onEditClick, onEnableClick, onLinkedUsersClick],
   )
 
-  const columns = useMemo(
-    () => [
+  const columns = useMemo(() => {
+    const baseColumns = [
       {
         key: 'name',
         label: 'Name',
@@ -218,13 +245,15 @@ export function TenantListView({
         label: 'Website',
         render: (value) => {
           if (!value) return '--'
+
           let isSafeUrl = false
           try {
             const parsed = new URL(value)
             isSafeUrl = parsed.protocol === 'https:' || parsed.protocol === 'http:'
           } catch {
-            // not a parseable URL — render as plain text
+            // not a parseable URL - render as plain text
           }
+
           return isSafeUrl ? (
             <a
               href={value}
@@ -244,30 +273,37 @@ export function TenantListView({
         label: 'Status',
         render: (_value, row) => <TenantStatusCell tenant={row} />,
       },
-      {
+    ]
+
+    if (showTenantAdminColumn) {
+      baseColumns.push({
         key: 'tenantAdmin',
         label: 'Tenant Admin',
         render: (_value, row) => <TenantAdminCell tenant={row} />,
-      },
-      {
-        key: 'rowActions',
-        label: 'Actions',
-        align: 'center',
-        width: '168px',
-        render: (_value, row) => (
-          <TenantRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
-        ),
-      },
-    ],
-    [handleRowAction, onEditClick, rowActions],
-  )
+      })
+    }
+
+    baseColumns.push({
+      key: 'rowActions',
+      label: 'Actions',
+      align: 'center',
+      width: '168px',
+      render: (_value, row) => (
+        <TenantRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+      ),
+    })
+
+    return baseColumns
+  }, [handleRowAction, onEditClick, rowActions, showTenantAdminColumn])
 
   return (
     <>
       <header className="maintain-tenants__header">
         <h1 className="maintain-tenants__title">Maintain Tenants</h1>
         <p className="maintain-tenants__subtitle">
-          Manage tenant lifecycle, capacity, and linked tenant-admin assignments for the selected customer.
+          {showTenantAdminColumn
+            ? 'Manage tenant lifecycle, capacity, and linked tenant-admin assignments for the selected customer.'
+            : 'View and edit tenant details for the tenants you administer.'}
         </p>
       </header>
 
@@ -275,19 +311,21 @@ export function TenantListView({
         <Fieldset.Legend className="sr-only">Tenant catalogue</Fieldset.Legend>
         <Card variant="elevated" className="maintain-tenants__card">
           <Card.Body className="maintain-tenants__card-body maintain-tenants__card-body--compact">
-            <div className="maintain-tenants__catalogue-actions">
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={onCreateClick}
-                disabled={createButtonDisabled}
-              >
-                Create Tenant
-              </Button>
-            </div>
+            {showCreateAction ? (
+              <div className="maintain-tenants__catalogue-actions">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={onCreateClick}
+                  disabled={createButtonDisabled}
+                >
+                  Create Tenant
+                </Button>
+              </div>
+            ) : null}
 
-            {tenantCapacityGuidance ? (
+            {showCreateAction && tenantCapacityGuidance ? (
               <div
                 className={[
                   'maintain-tenants__note',
@@ -303,6 +341,10 @@ export function TenantListView({
                 <p className="maintain-tenants__note-title">{tenantCapacityGuidance.title}</p>
                 <p className="maintain-tenants__note-text">{tenantCapacityGuidance.message}</p>
               </div>
+            ) : null}
+
+            {tenantAdminScopeNote ? (
+              <p className="maintain-tenants__table-note">{tenantAdminScopeNote}</p>
             ) : null}
 
             <div className="maintain-tenants__toolbar">

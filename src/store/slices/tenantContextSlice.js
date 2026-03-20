@@ -5,12 +5,12 @@
  *
  * State shape:
  *   {
- *     customerId: string | null,   — active customer scope
- *     tenantId:   string | null,   — active tenant scope (null = all tenants)
- *     tenantName: string | null,   — display name for the active tenant
+ *     customerId: string | null, // active customer scope
+ *     tenantId:   string | null, // active tenant scope (null = all tenants)
+ *     tenantName: string | null, // display name for the active tenant
  *   }
  *
- * The slice auto-initializes from the user's first CUSTOMER_ADMIN membership
+ * The slice auto-initializes from the user's first manageable customer scope
  * when `initializeFromUser` is dispatched. Super Admins may switch customers.
  *
  * @module store/slices/tenantContextSlice
@@ -33,23 +33,54 @@ const getMembershipCustomerId = (membership) => {
   return customerId === null || customerId === undefined ? null : customerId
 }
 
-const getFirstCustomerAdminCustomerId = (user) => {
-  if (!user?.memberships) return null
+const getTenantMembershipCustomerId = (tenantMembership) => {
+  const customerId = tenantMembership?.customerId
+  return customerId === null || customerId === undefined ? null : customerId
+}
 
-  const adminMembership = user.memberships.find(
-    (membership) => getMembershipCustomerId(membership) && membership.roles?.includes('CUSTOMER_ADMIN'),
-  )
+const getFirstManageableCustomerId = (user) => {
+  if (!user) return null
 
-  return getMembershipCustomerId(adminMembership)
+  const customerAdminMembership = Array.isArray(user.memberships)
+    ? user.memberships.find(
+      (membership) =>
+        getMembershipCustomerId(membership)
+        && membership.roles?.includes('CUSTOMER_ADMIN'),
+    )
+    : null
+
+  if (customerAdminMembership) {
+    return getMembershipCustomerId(customerAdminMembership)
+  }
+
+  const tenantAdminMembership = Array.isArray(user.tenantMemberships)
+    ? user.tenantMemberships.find(
+      (tenantMembership) =>
+        getTenantMembershipCustomerId(tenantMembership)
+        && tenantMembership.roles?.includes('TENANT_ADMIN'),
+    )
+    : null
+
+  return getTenantMembershipCustomerId(tenantAdminMembership)
 }
 
 const hasCustomerAccessForUser = (user, customerId) => {
-  if (!user?.memberships || !customerId) return false
+  if (!customerId) return false
 
-  return user.memberships.some(
+  const normalizedCustomerId = customerId.toString()
+
+  const hasMembershipAccess = Array.isArray(user?.memberships) && user.memberships.some(
     (membership) =>
       getMembershipCustomerId(membership)
-      && getMembershipCustomerId(membership).toString() === customerId.toString(),
+      && getMembershipCustomerId(membership).toString() === normalizedCustomerId,
+  )
+
+  if (hasMembershipAccess) return true
+
+  return Array.isArray(user?.tenantMemberships) && user.tenantMemberships.some(
+    (tenantMembership) =>
+      getTenantMembershipCustomerId(tenantMembership)
+      && getTenantMembershipCustomerId(tenantMembership).toString() === normalizedCustomerId,
   )
 }
 
@@ -60,7 +91,7 @@ const tenantContextSlice = createSlice({
     /**
      * Set the active customer scope.
      * Clears tenant selection when the customer changes.
-     * @param {Object} action.payload — { customerId: string }
+     * @param {Object} action.payload - { customerId: string }
      */
     setCustomer: (state, action) => {
       const { customerId } = action.payload
@@ -73,7 +104,7 @@ const tenantContextSlice = createSlice({
 
     /**
      * Set the active tenant scope within the current customer.
-     * @param {Object} action.payload — { tenantId: string|null, tenantName?: string|null }
+     * @param {Object} action.payload - { tenantId: string|null, tenantName?: string|null }
      */
     setTenant: (state, action) => {
       const { tenantId, tenantName = null } = action.payload
@@ -82,23 +113,19 @@ const tenantContextSlice = createSlice({
     },
 
     /**
-     * Auto-initialize from the authenticated user's memberships.
-     * Picks the first customerId with CUSTOMER_ADMIN role.
+     * Auto-initialize from the authenticated user's manageable customer scopes.
+     * Picks the first CUSTOMER_ADMIN customer, otherwise the first customer
+     * where the user is TENANT_ADMIN.
      * No-op if context is already set.
-     * @param {Object} action.payload — AuthUser (from authSlice)
+     * @param {Object} action.payload - AuthUser (from authSlice)
      */
     initializeFromUser: (state, action) => {
-      // Skip if already initialized
       if (state.customerId) return
 
       const user = action.payload
-      if (!user?.memberships) return
-
-      const adminMembership = user.memberships.find(
-        (m) => getMembershipCustomerId(m) && m.roles?.includes('CUSTOMER_ADMIN'),
-      )
-      if (adminMembership) {
-        state.customerId = getMembershipCustomerId(adminMembership)
+      const initialCustomerId = getFirstManageableCustomerId(user)
+      if (initialCustomerId) {
+        state.customerId = initialCustomerId
       }
     },
 
@@ -113,7 +140,7 @@ const tenantContextSlice = createSlice({
     builder.addCase('auth/setCredentials', (state, action) => {
       const nextUser = action.payload?.user
 
-      if (!nextUser?.memberships) {
+      if (!nextUser?.memberships && !nextUser?.tenantMemberships) {
         return initialState
       }
 
@@ -121,7 +148,7 @@ const tenantContextSlice = createSlice({
         return state
       }
 
-      state.customerId = getFirstCustomerAdminCustomerId(nextUser)
+      state.customerId = getFirstManageableCustomerId(nextUser)
       state.tenantId = null
       state.tenantName = null
 
@@ -135,9 +162,9 @@ export const { setCustomer, setTenant, initializeFromUser, clearTenantContext } 
 
 /* ---- Selectors ---- */
 
-export const selectTenantContext     = (state) => state.tenantContext ?? initialState
+export const selectTenantContext = (state) => state.tenantContext ?? initialState
 export const selectSelectedCustomerId = (state) => state.tenantContext?.customerId ?? null
-export const selectSelectedTenantId   = (state) => state.tenantContext?.tenantId ?? null
+export const selectSelectedTenantId = (state) => state.tenantContext?.tenantId ?? null
 export const selectSelectedTenantName = (state) => state.tenantContext?.tenantName ?? null
 
 export default tenantContextSlice.reducer

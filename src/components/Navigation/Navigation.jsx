@@ -14,6 +14,7 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import {
   hasAnyCustomerRole,
+  hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
   isSuperAdmin as checkIsSuperAdmin,
 } from '../../utils/authorization.js'
@@ -32,11 +33,25 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
   const isSuperAdmin = checkIsSuperAdmin(user)
   const hasCustomerAdminAccess = hasAnyCustomerRole(user, 'CUSTOMER_ADMIN')
+  const hasTenantAdminAccess = hasAnyTenantRole(user, 'TENANT_ADMIN')
+  const hasSelectedCustomerTenantAdminAccess = useMemo(() => {
+    if (!hasTenantAdminAccess) return false
+    if (!selectedCustomerId) return true
+
+    return Array.isArray(user?.tenantMemberships) && user.tenantMemberships.some(
+      (tenantMembership) =>
+        tenantMembership?.customerId?.toString() === selectedCustomerId.toString()
+        && (tenantMembership.roles ?? []).includes('TENANT_ADMIN'),
+    )
+  }, [hasTenantAdminAccess, selectedCustomerId, user])
   const supportsTenantManagement = useMemo(() => {
     if (!hasCustomerAdminAccess) return false
     if (selectedCustomerId) return selectedCustomerSupportsTenantManagement
     return hasAnyMultiTenantCustomerAdminScope(user)
   }, [hasCustomerAdminAccess, selectedCustomerId, selectedCustomerSupportsTenantManagement, user])
+  const canAccessTenantMaintenance = hasCustomerAdminAccess
+    ? supportsTenantManagement || hasSelectedCustomerTenantAdminAccess
+    : hasSelectedCustomerTenantAdminAccess
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -66,18 +81,22 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       })
     }
 
-    if (hasCustomerAdminAccess) {
+    if (hasCustomerAdminAccess || hasTenantAdminAccess) {
       entries.push({
         type: 'group',
         key: 'admin',
         label: 'Admin',
         links: [
-          {
-            key: 'manage-users',
-            label: 'Manage Users',
-            to: '/app/administration/edit-users',
-          },
-          ...(supportsTenantManagement
+          ...(hasCustomerAdminAccess
+            ? [
+                {
+                  key: 'manage-users',
+                  label: 'Manage Users',
+                  to: '/app/administration/edit-users',
+                },
+              ]
+            : []),
+          ...(canAccessTenantMaintenance
             ? [
                 {
                   key: 'manage-tenants',
@@ -131,7 +150,13 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     })
 
     return entries
-  }, [hasCustomerAdminAccess, isAuthenticated, isSuperAdmin, supportsTenantManagement])
+  }, [
+    canAccessTenantMaintenance,
+    hasCustomerAdminAccess,
+    hasTenantAdminAccess,
+    isAuthenticated,
+    isSuperAdmin,
+  ])
 
   const [openMenuKey, setOpenMenuKey] = useState(null)
 

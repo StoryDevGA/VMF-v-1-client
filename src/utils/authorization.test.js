@@ -24,6 +24,7 @@ import {
   getCustomerTopology,
   isCustomerInactiveForContext,
   hasAnyCustomerRole,
+  hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
   getUserTenantRoles,
   hasTenantRole,
@@ -106,6 +107,16 @@ const nestedCustomerMembershipUser = {
     },
   ],
   tenantMemberships: [],
+  vmfGrants: [],
+}
+
+const tenantMembershipOnlyUser = {
+  id: '7',
+  memberships: [],
+  tenantMemberships: [
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roles: ['TENANT_ADMIN'] },
+    { customerId: CUSTOMER_ID_2, tenantId: TENANT_ID_2, roles: ['USER'] },
+  ],
   vmfGrants: [],
 }
 
@@ -416,6 +427,20 @@ describe('Customer role helpers', () => {
       ).toBe(false)
     })
   })
+
+  describe('hasAnyTenantRole', () => {
+    it('returns true when the user holds the role on at least one tenant membership', () => {
+      expect(hasAnyTenantRole(tenantAdminUser, 'TENANT_ADMIN')).toBe(true)
+    })
+
+    it('returns false when the user lacks the role across tenant memberships', () => {
+      expect(hasAnyTenantRole(tenantAdminUser, 'CUSTOMER_ADMIN')).toBe(false)
+    })
+
+    it('returns false for null user', () => {
+      expect(hasAnyTenantRole(null, 'TENANT_ADMIN')).toBe(false)
+    })
+  })
 })
 
 /* ================================================================== */
@@ -562,6 +587,13 @@ describe('Aggregate helpers', () => {
 
     it('extracts nested customer ids from memberships', () => {
       expect(getAccessibleCustomerIds(nestedCustomerMembershipUser)).toEqual([CUSTOMER_ID])
+    })
+
+    it('includes customer ids inferred from tenant memberships', () => {
+      expect(getAccessibleCustomerIds(tenantMembershipOnlyUser)).toEqual([
+        CUSTOMER_ID,
+        CUSTOMER_ID_2,
+      ])
     })
   })
 

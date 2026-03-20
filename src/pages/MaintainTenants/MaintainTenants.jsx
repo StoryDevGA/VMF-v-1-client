@@ -4,11 +4,10 @@
  * Tenant management page at `/app/administration/maintain-tenants`.
  * Displays a tenant catalogue for the current customer with
  * search, status filter, pagination, and lifecycle actions.
- *
- * Requires CUSTOMER_ADMIN role (multi-tenant / service-provider customers).
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Button } from '../../components/Button'
@@ -38,11 +37,20 @@ const SEARCH_DEBOUNCE = 300
 const MAINTAIN_TENANTS_INACTIVE_CUSTOMER_MESSAGE =
   'This customer is inactive. Tenant-management actions are unavailable until a Super Admin reactivates the customer.'
 
+const MAINTAIN_TENANTS_UNAUTHORIZED_MESSAGE =
+  'You do not have permission to access tenant maintenance for this customer.'
+
 const MAINTAIN_TENANTS_SINGLE_TENANT_MESSAGE =
   'This customer uses single-tenant topology. Tenant management is only available for multi-tenant customers.'
 
 const MAINTAIN_TENANTS_LIFECYCLE_NOTE =
   'Use the Actions menu to edit tenant details or change lifecycle state. Default tenants stay enabled, and archived tenants remain read-only.'
+
+const MAINTAIN_TENANTS_TENANT_ADMIN_LIFECYCLE_NOTE =
+  'Use the Actions menu to edit tenant details for the tenants you administer.'
+
+const MAINTAIN_TENANTS_TENANT_ADMIN_SCOPE_NOTE =
+  'Showing only tenants where you are the assigned tenant admin.'
 
 const getLifecycleConfirmationCopy = (confirmAction) => {
   const tenantName = confirmAction?.tenant?.name ?? 'this tenant'
@@ -121,9 +129,35 @@ function MaintainTenantsBoundaryState({
 }
 
 function MaintainTenants() {
+  const navigate = useNavigate()
   const { addToast } = useToaster()
-  const { user, isSuperAdmin } = useAuthorization()
+  const {
+    user,
+    isSuperAdmin,
+    hasCustomerRole,
+    hasTenantRole,
+    getAccessibleTenants,
+  } = useAuthorization()
   const { customerId, selectedCustomerTopology, supportsTenantManagement } = useTenantContext()
+
+  const isSelectedCustomerCustomerAdmin = useMemo(
+    () => Boolean(customerId && hasCustomerRole(customerId, 'CUSTOMER_ADMIN')),
+    [customerId, hasCustomerRole],
+  )
+
+  const selectedCustomerTenantAdminIds = useMemo(() => {
+    if (!customerId) return []
+
+    return getAccessibleTenants(customerId).filter(
+      (tenantId) => hasTenantRole(customerId, tenantId, 'TENANT_ADMIN'),
+    )
+  }, [customerId, getAccessibleTenants, hasTenantRole])
+
+  const isSelectedCustomerTenantAdmin = selectedCustomerTenantAdminIds.length > 0
+  const hasTenantMaintenanceAccess =
+    isSuperAdmin || isSelectedCustomerCustomerAdmin || isSelectedCustomerTenantAdmin
+  const isTenantAdminScopedView =
+    !isSuperAdmin && !isSelectedCustomerCustomerAdmin && isSelectedCustomerTenantAdmin
 
   const {
     tenants,
@@ -140,7 +174,40 @@ function MaintainTenants() {
     enableTenantResult,
     disableTenant,
     disableTenantResult,
-  } = useTenants(customerId)
+  } = useTenants(customerId, {
+    skipListQuery: !customerId || !hasTenantMaintenanceAccess,
+  })
+
+  const tenantAdminScopeSet = useMemo(
+    () => new Set(selectedCustomerTenantAdminIds.map((tenantId) => tenantId.toString())),
+    [selectedCustomerTenantAdminIds],
+  )
+
+  const visibleTenants = useMemo(() => {
+    if (!isTenantAdminScopedView) return tenants
+
+    return tenants.filter((tenant) => {
+      const tenantId = getTenantId(tenant)
+      return Boolean(tenantId) && tenantAdminScopeSet.has(tenantId.toString())
+    })
+  }, [isTenantAdminScopedView, tenantAdminScopeSet, tenants])
+
+  const isClientFilteredTenantAdminView = useMemo(
+    () => isTenantAdminScopedView && visibleTenants.length !== tenants.length,
+    [isTenantAdminScopedView, tenants.length, visibleTenants.length],
+  )
+
+  const scopedPagination = useMemo(
+    () =>
+      isClientFilteredTenantAdminView
+        ? {
+            totalPages: 1,
+            page: 1,
+            total: visibleTenants.length,
+          }
+        : pagination,
+    [isClientFilteredTenantAdminView, pagination, visibleTenants.length],
+  )
 
   const listTenantsAppError = useMemo(
     () => (listError ? normalizeError(listError) : null),
@@ -175,6 +242,15 @@ function MaintainTenants() {
     [inactiveCustomerAppError],
   )
 
+  const canCreateTenant = !isTenantAdminScopedView
+  const canAssignTenantAdmin = !isTenantAdminScopedView
+  const canRunLifecycleActions = !isTenantAdminScopedView
+  const showTenantAdminColumn = !isTenantAdminScopedView
+
+  const lifecycleNote = isTenantAdminScopedView
+    ? MAINTAIN_TENANTS_TENANT_ADMIN_LIFECYCLE_NOTE
+    : MAINTAIN_TENANTS_LIFECYCLE_NOTE
+
   const [searchInput, setSearchInput] = useState('')
 
   useEffect(() => {
@@ -202,6 +278,21 @@ function MaintainTenants() {
     setAssigningTenantAdmin(null)
     setConfirmAction(null)
   }, [isInactiveCustomerLocked])
+
+  useEffect(() => {
+    if (canCreateTenant) return
+    setShowCreateWizard(false)
+  }, [canCreateTenant])
+
+  useEffect(() => {
+    if (canAssignTenantAdmin) return
+    setAssigningTenantAdmin(null)
+  }, [canAssignTenantAdmin])
+
+  useEffect(() => {
+    if (canRunLifecycleActions) return
+    setConfirmAction(null)
+  }, [canRunLifecycleActions])
 
   const handleEnable = useCallback(
     async (tenant) => {
@@ -296,6 +387,14 @@ function MaintainTenants() {
     )
   }
 
+  if (!hasTenantMaintenanceAccess) {
+    return (
+      <MaintainTenantsBoundaryState
+        message={MAINTAIN_TENANTS_UNAUTHORIZED_MESSAGE}
+      />
+    )
+  }
+
   if (isInactiveCustomerLocked) {
     return (
       <MaintainTenantsBoundaryState
@@ -304,7 +403,11 @@ function MaintainTenants() {
     )
   }
 
-  if (selectedCustomerTopology === 'SINGLE_TENANT' && !supportsTenantManagement) {
+  if (
+    selectedCustomerTopology === 'SINGLE_TENANT'
+    && !supportsTenantManagement
+    && !isTenantAdminScopedView
+  ) {
     return (
       <MaintainTenantsBoundaryState
         message={MAINTAIN_TENANTS_SINGLE_TENANT_MESSAGE}
@@ -322,19 +425,39 @@ function MaintainTenants() {
           setStatusFilter(nextStatus)
           setPage(1)
         }}
-        rows={tenants}
+        rows={visibleTenants}
         isListLoading={isLoading}
         isListFetching={isFetching}
         listAppError={listTenantsAppError}
-        totalPages={pagination.totalPages}
-        currentPage={pagination.page}
-        totalCount={pagination.total}
+        totalPages={scopedPagination.totalPages}
+        currentPage={scopedPagination.page}
+        totalCount={scopedPagination.total}
         onPageChange={setPage}
-        createButtonDisabled={isFetching || isTenantCreateBlocked}
+        createButtonDisabled={!canCreateTenant || isFetching || isTenantCreateBlocked}
+        showCreateAction={canCreateTenant}
+        showTenantAdminColumn={showTenantAdminColumn}
+        allowAssignAdmin={canAssignTenantAdmin}
+        allowLifecycleActions={canRunLifecycleActions}
+        tenantAdminScopeNote={isTenantAdminScopedView ? MAINTAIN_TENANTS_TENANT_ADMIN_SCOPE_NOTE : null}
         onCreateClick={() => setShowCreateWizard(true)}
         onEditClick={(tenant) => {
           setAssigningTenantAdmin(null)
           setEditingTenant(tenant)
+        }}
+        onLinkedUsersClick={(tenant) => {
+          const tenantId = getTenantId(tenant)
+          if (!tenantId) {
+            addToast({
+              title: 'Missing tenant identifier',
+              description: 'This tenant record is missing an identifier, so linked users could not be opened.',
+              variant: 'error',
+            })
+            return
+          }
+
+          navigate(`/app/administration/maintain-tenants/${tenantId}/linked-users`, {
+            state: { tenant },
+          })
         }}
         onAssignAdminClick={(tenant) => {
           setEditingTenant(null)
@@ -343,7 +466,7 @@ function MaintainTenants() {
         onEnableClick={(tenant) => setConfirmAction({ type: 'enable', tenant })}
         onDisableClick={(tenant) => setConfirmAction({ type: 'disable', tenant })}
         tenantCapacityGuidance={tenantCapacityGuidance}
-        lifecycleNote={MAINTAIN_TENANTS_LIFECYCLE_NOTE}
+        lifecycleNote={lifecycleNote}
         isLifecycleMutationLoading={isLifecycleMutationLoading}
       />
 

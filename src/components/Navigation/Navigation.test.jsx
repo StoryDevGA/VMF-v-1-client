@@ -103,6 +103,16 @@ const basicUser = {
   vmfGrants: [],
 }
 
+const tenantAdminOnlyUser = {
+  id: 'user-4',
+  email: 'tenant.admin@acme.com',
+  name: 'Tenant Admin',
+  isActive: true,
+  memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+  tenantMemberships: [{ customerId: 'cust-1', tenantId: 'tenant-1', roles: ['TENANT_ADMIN'] }],
+  vmfGrants: [],
+}
+
 const mockLogout = vi.fn().mockResolvedValue(undefined)
 
 function createTestStore(user, status = 'authenticated', tenantContextState = {}) {
@@ -278,6 +288,20 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Manage Tenants for tenant-admin users and hides Manage Users', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(tenantAdminOnlyUser)
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
   })
 
   it('keeps Manage Tenants available before customer context initializes for a multi-tenant customer admin', async () => {

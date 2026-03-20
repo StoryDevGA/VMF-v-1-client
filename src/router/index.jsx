@@ -52,6 +52,9 @@ const EditUsers = lazy(() => import('../pages/EditUsers/EditUsers'))
 const MaintainTenants = lazy(
   () => import('../pages/MaintainTenants/MaintainTenants'),
 )
+const TenantLinkedUsersWorkspace = lazy(
+  () => import('../pages/MaintainTenants/TenantLinkedUsersWorkspace'),
+)
 const SystemMonitoring = lazy(
   () => import('../pages/SystemMonitoring/SystemMonitoring'),
 )
@@ -176,11 +179,15 @@ export const router = createBrowserRouter([
                         path: 'edit-users',
                         element: <EditUsers />,
                       },
-                      {
-                        path: 'maintain-tenants',
-                        element: <MaintainTenants />,
-                      },
                     ],
+                  },
+                  {
+                    path: 'maintain-tenants',
+                    element: <MaintainTenants />,
+                  },
+                  {
+                    path: 'maintain-tenants/:tenantId/linked-users',
+                    element: <TenantLinkedUsersWorkspace />,
                   },
                   {
                     path: 'system-monitoring',

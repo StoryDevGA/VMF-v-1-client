@@ -238,6 +238,22 @@ export const hasAnyCustomerRole = (user, role) => {
 }
 
 /**
+ * Check whether the user holds a specific role across any tenant
+ * membership.
+ *
+ * @param {Object} user
+ * @param {string} role
+ * @returns {boolean}
+ */
+export const hasAnyTenantRole = (user, role) => {
+  if (!user?.tenantMemberships || !role) return false
+
+  return user.tenantMemberships.some(
+    (tenantMembership) => (tenantMembership.roles ?? []).includes(role),
+  )
+}
+
+/**
  * Best-effort check for whether any CUSTOMER_ADMIN membership currently
  * resolves to multi-tenant topology. Used when customer-admin UI needs a
  * safer startup fallback before selected customer context is initialized.
@@ -383,10 +399,23 @@ export const hasVmfAccess = (user, customerId, tenantId, vmfId) => {
  * @returns {string[]}
  */
 export const getAccessibleCustomerIds = (user) => {
-  if (!user?.memberships) return []
-  return user.memberships
+  const membershipCustomerIds = Array.isArray(user?.memberships)
+    ? user.memberships
     .map((m) => getMembershipCustomerId(m))
     .filter(Boolean)
+    : []
+  const tenantMembershipCustomerIds = Array.isArray(user?.tenantMemberships)
+    ? user.tenantMemberships
+      .map((tm) => {
+        const customerId = tm?.customerId
+        return customerId === null || customerId === undefined
+          ? null
+          : customerId.toString()
+      })
+      .filter(Boolean)
+    : []
+
+  return Array.from(new Set([...membershipCustomerIds, ...tenantMembershipCustomerIds]))
 }
 
 /**
