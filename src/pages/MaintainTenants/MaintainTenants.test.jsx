@@ -151,6 +151,14 @@ const tenantAdminUser = {
   vmfGrants: [],
 }
 
+const customerScopedTenantAdminUser = {
+  ...tenantAdminUser,
+  memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+  tenantMemberships: [
+    { customerId: 'cust-1', tenantId: 'tenant-enabled', roles: ['USER'] },
+  ],
+}
+
 function createTestStore(preloadedState) {
   return configureStore({
     reducer: {
@@ -418,7 +426,7 @@ describe('MaintainTenants page', () => {
     expect(screen.getByText(/archived tenants are read-only in this workspace/i)).toBeVisible()
   })
 
-  it('renders tenant-admin scoped table with only tenant-admin-owned rows and restricted actions', () => {
+  it('renders tenant-admin scoped table with only tenant-admin-owned rows and allowed non-admin actions', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [
@@ -456,9 +464,60 @@ describe('MaintainTenants page', () => {
 
     const actions = screen.getByRole('combobox', { name: /actions for enabled tenant/i })
     expect(within(actions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: /linked users/i })).toBeInTheDocument()
     expect(within(actions).queryByRole('option', { name: /assign admin/i })).not.toBeInTheDocument()
     expect(within(actions).queryByRole('option', { name: /enable/i })).not.toBeInTheDocument()
-    expect(within(actions).queryByRole('option', { name: /disable/i })).not.toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
+  })
+
+  it('allows customer-scoped tenant-admin users into maintain-tenants and scopes rows by tenantAdmin id', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            _id: 'tenant-owned',
+            name: 'Owned Tenant',
+            website: 'https://owned.example.com',
+            status: 'ENABLED',
+            isDefault: false,
+            tenantAdmin: { id: 'user-3', name: 'Tenant Admin' },
+          },
+          {
+            _id: 'tenant-other',
+            name: 'Other Tenant',
+            website: 'https://other.example.com',
+            status: 'ENABLED',
+            isDefault: false,
+            tenantAdmin: { id: 'user-99', name: 'Other Admin' },
+          },
+        ],
+        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    const store = createTestStore({
+      auth: { user: customerScopedTenantAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    renderMaintainTenants(store)
+
+    expect(
+      screen.getByText(/showing only tenants where you are the assigned tenant admin/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Owned Tenant')).toBeInTheDocument()
+    expect(screen.queryByText('Other Tenant')).not.toBeInTheDocument()
+
+    const actions = screen.getByRole('combobox', { name: /actions for owned tenant/i })
+    expect(within(actions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: /linked users/i })).toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: /assign admin/i })).not.toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
   })
 
   it('opens the edit drawer from the tenant name button', async () => {

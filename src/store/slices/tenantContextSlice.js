@@ -53,6 +53,18 @@ const getFirstManageableCustomerId = (user) => {
     return getMembershipCustomerId(customerAdminMembership)
   }
 
+  const customerScopedTenantAdminMembership = Array.isArray(user.memberships)
+    ? user.memberships.find(
+      (membership) =>
+        getMembershipCustomerId(membership)
+        && membership.roles?.includes('TENANT_ADMIN'),
+    )
+    : null
+
+  if (customerScopedTenantAdminMembership) {
+    return getMembershipCustomerId(customerScopedTenantAdminMembership)
+  }
+
   const tenantAdminMembership = Array.isArray(user.tenantMemberships)
     ? user.tenantMemberships.find(
       (tenantMembership) =>

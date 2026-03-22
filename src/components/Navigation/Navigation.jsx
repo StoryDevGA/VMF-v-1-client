@@ -14,6 +14,7 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
 import {
   hasAnyCustomerRole,
+  hasCustomerRole,
   hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
   isSuperAdmin as checkIsSuperAdmin,
@@ -33,10 +34,15 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
   const isSuperAdmin = checkIsSuperAdmin(user)
   const hasCustomerAdminAccess = hasAnyCustomerRole(user, 'CUSTOMER_ADMIN')
-  const hasTenantAdminAccess = hasAnyTenantRole(user, 'TENANT_ADMIN')
+  const hasTenantAdminAccess =
+    hasAnyTenantRole(user, 'TENANT_ADMIN') || hasAnyCustomerRole(user, 'TENANT_ADMIN')
   const hasSelectedCustomerTenantAdminAccess = useMemo(() => {
     if (!hasTenantAdminAccess) return false
     if (!selectedCustomerId) return true
+
+    if (hasCustomerRole(user, selectedCustomerId, 'TENANT_ADMIN')) {
+      return true
+    }
 
     return Array.isArray(user?.tenantMemberships) && user.tenantMemberships.some(
       (tenantMembership) =>

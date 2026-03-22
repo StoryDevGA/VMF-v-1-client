@@ -113,6 +113,12 @@ const tenantAdminOnlyUser = {
   vmfGrants: [],
 }
 
+const customerScopedTenantAdminOnlyUser = {
+  ...tenantAdminOnlyUser,
+  memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+  tenantMemberships: [{ customerId: 'cust-1', tenantId: 'tenant-1', roles: ['USER'] }],
+}
+
 const mockLogout = vi.fn().mockResolvedValue(undefined)
 
 function createTestStore(user, status = 'authenticated', tenantContextState = {}) {
@@ -293,6 +299,22 @@ describe('Navigation', () => {
   it('shows Manage Tenants for tenant-admin users and hides Manage Users', async () => {
     const user = userEvent.setup()
     const store = createTestStore(tenantAdminOnlyUser)
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
+  })
+
+  it('shows Manage Tenants when tenant-admin authority is customer-scoped and hides Manage Users', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore(customerScopedTenantAdminOnlyUser, 'authenticated', {
+      customerId: 'cust-1',
+    })
     renderNavigation(store)
 
     await user.click(screen.getByRole('button', { name: /^admin$/i }))

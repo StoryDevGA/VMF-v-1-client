@@ -47,10 +47,13 @@ const MAINTAIN_TENANTS_LIFECYCLE_NOTE =
   'Use the Actions menu to edit tenant details or change lifecycle state. Default tenants stay enabled, and archived tenants remain read-only.'
 
 const MAINTAIN_TENANTS_TENANT_ADMIN_LIFECYCLE_NOTE =
-  'Use the Actions menu to edit tenant details for the tenants you administer.'
+  'Use the Actions menu to edit tenant details or change lifecycle state for the tenants you administer.'
 
 const MAINTAIN_TENANTS_TENANT_ADMIN_SCOPE_NOTE =
   'Showing only tenants where you are the assigned tenant admin.'
+
+const getTenantAdminUserId = (tenant) =>
+  String(tenant?.tenantAdmin?.id ?? tenant?.tenantAdmin?._id ?? '').trim()
 
 const getLifecycleConfirmationCopy = (confirmAction) => {
   const tenantName = confirmAction?.tenant?.name ?? 'this tenant'
@@ -139,9 +142,17 @@ function MaintainTenants() {
     getAccessibleTenants,
   } = useAuthorization()
   const { customerId, selectedCustomerTopology, supportsTenantManagement } = useTenantContext()
+  const currentUserId = useMemo(
+    () => String(user?._id ?? user?.id ?? '').trim(),
+    [user],
+  )
 
   const isSelectedCustomerCustomerAdmin = useMemo(
     () => Boolean(customerId && hasCustomerRole(customerId, 'CUSTOMER_ADMIN')),
+    [customerId, hasCustomerRole],
+  )
+  const isSelectedCustomerCustomerScopedTenantAdmin = useMemo(
+    () => Boolean(customerId && hasCustomerRole(customerId, 'TENANT_ADMIN')),
     [customerId, hasCustomerRole],
   )
 
@@ -153,7 +164,8 @@ function MaintainTenants() {
     )
   }, [customerId, getAccessibleTenants, hasTenantRole])
 
-  const isSelectedCustomerTenantAdmin = selectedCustomerTenantAdminIds.length > 0
+  const isSelectedCustomerTenantAdmin =
+    selectedCustomerTenantAdminIds.length > 0 || isSelectedCustomerCustomerScopedTenantAdmin
   const hasTenantMaintenanceAccess =
     isSuperAdmin || isSelectedCustomerCustomerAdmin || isSelectedCustomerTenantAdmin
   const isTenantAdminScopedView =
@@ -186,11 +198,17 @@ function MaintainTenants() {
   const visibleTenants = useMemo(() => {
     if (!isTenantAdminScopedView) return tenants
 
-    return tenants.filter((tenant) => {
-      const tenantId = getTenantId(tenant)
-      return Boolean(tenantId) && tenantAdminScopeSet.has(tenantId.toString())
-    })
-  }, [isTenantAdminScopedView, tenantAdminScopeSet, tenants])
+    if (tenantAdminScopeSet.size > 0) {
+      return tenants.filter((tenant) => {
+        const tenantId = getTenantId(tenant)
+        return Boolean(tenantId) && tenantAdminScopeSet.has(tenantId.toString())
+      })
+    }
+
+    if (!currentUserId) return []
+
+    return tenants.filter((tenant) => getTenantAdminUserId(tenant) === currentUserId)
+  }, [currentUserId, isTenantAdminScopedView, tenantAdminScopeSet, tenants])
 
   const isClientFilteredTenantAdminView = useMemo(
     () => isTenantAdminScopedView && visibleTenants.length !== tenants.length,
@@ -244,7 +262,7 @@ function MaintainTenants() {
 
   const canCreateTenant = !isTenantAdminScopedView
   const canAssignTenantAdmin = !isTenantAdminScopedView
-  const canRunLifecycleActions = !isTenantAdminScopedView
+  const canRunLifecycleActions = hasTenantMaintenanceAccess
   const showTenantAdminColumn = !isTenantAdminScopedView
 
   const lifecycleNote = isTenantAdminScopedView

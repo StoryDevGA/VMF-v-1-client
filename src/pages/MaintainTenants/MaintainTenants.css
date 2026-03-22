@@ -864,6 +864,67 @@
   overflow-wrap: anywhere;
 }
 
+.tenant-linked-users__roles-summary {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--spacing-2xs, 0.25rem);
+  min-width: 0;
+}
+
+.tenant-linked-users__roles-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs, 0.25rem);
+  min-height: 1.5rem;
+  padding: 0 var(--spacing-2xs, 0.25rem);
+  border: 0;
+  border-radius: var(--border-radius-sm, 0.25rem);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: var(--line-height-normal, 1.5);
+  text-transform: lowercase;
+  cursor: help;
+  transition: color var(--transition-fast, 150ms ease-in-out);
+}
+
+.tenant-linked-users__roles-trigger:hover,
+.tenant-linked-users__roles-trigger[aria-expanded='true'] {
+  color: var(--color-text-primary);
+}
+
+.tenant-linked-users__roles-trigger:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  color: var(--color-text-primary);
+}
+
+.tenant-linked-users__roles-trigger-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.tenant-linked-users__roles-tooltip .tooltip__bubble {
+  width: max-content;
+  min-width: min(12rem, calc(100vw - var(--spacing-lg, 1.5rem)));
+  max-width: min(18rem, calc(100vw - var(--spacing-lg, 1.5rem)));
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: var(--line-height-normal, 1.5);
+}
+
+.tenant-linked-users__roles-tooltip-list {
+  display: grid;
+  gap: var(--spacing-2xs, 0.25rem);
+}
+
+.tenant-linked-users__roles-tooltip-item {
+  display: block;
+  white-space: nowrap;
+}
+
 .tenant-linked-users__row-actions {
   width: 100%;
 }

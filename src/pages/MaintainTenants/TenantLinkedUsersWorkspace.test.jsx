@@ -207,6 +207,36 @@ describe('TenantLinkedUsersWorkspace', () => {
     expect(await screen.findByRole('heading', { name: /maintain tenants/i })).toBeInTheDocument()
   })
 
+  it('uses compact roles affordance and reveals full roles on hover/focus', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('Taylor Reed')
+
+    expect(screen.queryByText('TENANT_ADMIN, USER')).not.toBeInTheDocument()
+
+    const rolesTrigger = screen.getByRole('button', { name: /show roles for taylor reed/i })
+    const tenantAdminRole = screen.getByText('TENANT_ADMIN')
+
+    expect(tenantAdminRole).not.toBeVisible()
+
+    await user.hover(rolesTrigger)
+    expect(tenantAdminRole).toBeVisible()
+
+    await user.unhover(rolesTrigger)
+    await waitFor(() => {
+      expect(tenantAdminRole).not.toBeVisible()
+    })
+
+    await user.click(rolesTrigger)
+    expect(tenantAdminRole).toBeVisible()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => {
+      expect(tenantAdminRole).not.toBeVisible()
+    })
+  })
+
   it('shows unauthorized boundary state when the user lacks tenant-linked-users access', async () => {
     mockUseAuthorization.mockReturnValue({
       isSuperAdmin: false,

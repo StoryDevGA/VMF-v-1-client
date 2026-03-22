@@ -97,6 +97,20 @@ describe('tenantContextSlice', () => {
     expect(state.customerId).toBe('cust-tenant-2')
   })
 
+  it('initializeFromUser falls back to customer membership carrying TENANT_ADMIN', () => {
+    const user = {
+      memberships: [
+        { customerId: 'cust-9', roles: ['USER'] },
+        { customerId: 'cust-tenant-6', roles: ['TENANT_ADMIN', 'USER'] },
+      ],
+      tenantMemberships: [{ customerId: 'cust-tenant-6', tenantId: 'ten-11', roles: ['USER'] }],
+    }
+
+    const state = tenantContextReducer(initialState, initializeFromUser(user))
+
+    expect(state.customerId).toBe('cust-tenant-6')
+  })
+
   it('initializeFromUser is a no-op if customerId is already set', () => {
     const prev = { customerId: 'cust-1', tenantId: null, tenantName: null }
     const user = {
@@ -172,6 +186,26 @@ describe('tenantContextSlice', () => {
 
     expect(state).toEqual({
       customerId: 'cust-tenant-5',
+      tenantId: null,
+      tenantName: null,
+    })
+  })
+
+  it('auth setCredentials reinitializes stale customer context for customer-scoped tenant-admin session', () => {
+    const prev = { customerId: 'stale-customer', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const nextUser = {
+      id: 'user-6',
+      memberships: [
+        { customerId: 'cust-9', roles: ['USER'] },
+        { customerId: 'cust-tenant-6', roles: ['TENANT_ADMIN', 'USER'] },
+      ],
+      tenantMemberships: [{ customerId: 'cust-tenant-6', tenantId: 'ten-11', roles: ['USER'] }],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
+    expect(state).toEqual({
+      customerId: 'cust-tenant-6',
       tenantId: null,
       tenantName: null,
     })

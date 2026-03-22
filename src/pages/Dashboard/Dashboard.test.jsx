@@ -15,6 +15,10 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: vi.fn(),
 }))
 
+vi.mock('../../store/api/customerApi.js', () => ({
+  useGetCustomerQuery: vi.fn(),
+}))
+
 vi.mock('../../components/CustomerSelector', () => ({
   CustomerSelector: () => <div data-testid="customer-selector">Customer Selector</div>,
 }))
@@ -25,6 +29,7 @@ vi.mock('../../components/TenantSwitcher', () => ({
 
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 
 function renderDashboard() {
   return render(
@@ -39,6 +44,7 @@ function mockRole({
   isCustomerAdmin = false,
   accessibleCustomerIds,
   userName = 'Test User',
+  memberships = [],
   tenantMemberships = [],
 } = {}) {
   const customerIds = accessibleCustomerIds ?? (isCustomerAdmin ? ['cust-1'] : [])
@@ -48,7 +54,7 @@ function mockRole({
   })
 
   useAuthorization.mockReturnValue({
-    user: { id: 'u-1', name: userName, tenantMemberships },
+    user: { id: 'u-1', name: userName, memberships, tenantMemberships },
     isSuperAdmin,
     accessibleCustomerIds: customerIds,
     hasCustomerRole,
@@ -61,10 +67,12 @@ beforeEach(() => {
   useTenantContext.mockReturnValue({
     customerId: 'cust-1',
     tenantId: null,
+    tenants: [],
     resolvedTenantName: null,
     supportsTenantManagement: true,
     selectedCustomerTopology: 'MULTI_TENANT',
   })
+  useGetCustomerQuery.mockReturnValue({ data: undefined })
 
   mockRole({ isCustomerAdmin: true })
 })
@@ -89,6 +97,53 @@ describe('Dashboard page', () => {
     expect(screen.getAllByText('Customer Administrator')).toHaveLength(2)
   })
 
+  it('renders customer scope using customer display name when available', () => {
+    mockRole({
+      isCustomerAdmin: true,
+      memberships: [
+        {
+          customerId: 'cust-1',
+          roles: ['CUSTOMER_ADMIN'],
+          customer: { name: 'Orbit Services' },
+        },
+      ],
+    })
+
+    renderDashboard()
+
+    expect(screen.getByText('Orbit Services')).toBeInTheDocument()
+  })
+
+  it('falls back to a readable label when no customer display name is available', () => {
+    mockRole({
+      isCustomerAdmin: true,
+      memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
+    })
+
+    renderDashboard()
+
+    expect(screen.getByText('Current customer')).toBeInTheDocument()
+  })
+
+  it('uses customer details API name when membership has no embedded customer name', () => {
+    mockRole({
+      isCustomerAdmin: true,
+      memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
+    })
+    useGetCustomerQuery.mockReturnValue({
+      data: {
+        data: {
+          _id: 'cust-1',
+          name: 'Northwind Logistics',
+        },
+      },
+    })
+
+    renderDashboard()
+
+    expect(screen.getByText('Northwind Logistics')).toBeInTheDocument()
+  })
+
   it('shows only the tenant switcher for a single-customer multi-tenant admin', () => {
     renderDashboard()
 
@@ -108,6 +163,7 @@ describe('Dashboard page', () => {
     useTenantContext.mockReturnValue({
       customerId: 'cust-1',
       tenantId: null,
+      tenants: [],
       resolvedTenantName: null,
       supportsTenantManagement: false,
       selectedCustomerTopology: 'SINGLE_TENANT',
@@ -117,6 +173,21 @@ describe('Dashboard page', () => {
 
     expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
     expect(screen.getByText('Single-tenant customer')).toBeInTheDocument()
+  })
+
+  it('renders the selected tenant name for single-tenant scope when available', () => {
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: 'ten-1',
+      tenants: [],
+      resolvedTenantName: 'My Tenant',
+      supportsTenantManagement: false,
+      selectedCustomerTopology: 'SINGLE_TENANT',
+    })
+
+    renderDashboard()
+
+    expect(screen.getAllByText('My Tenant').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders a generic workspace for non-admin users', () => {

@@ -15,16 +15,73 @@ import { CustomerSelector } from '../../components/CustomerSelector'
 import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 
 function Dashboard() {
   const { user, accessibleCustomerIds, isSuperAdmin, hasCustomerRole } = useAuthorization()
   const {
     customerId,
     tenantId,
+    tenants,
     resolvedTenantName,
     supportsTenantManagement,
     selectedCustomerTopology,
   } = useTenantContext()
+  const { data: customerDetails } = useGetCustomerQuery(customerId, { skip: !customerId })
+
+  const customerScopeValue = useMemo(() => {
+    if (!customerId) return 'Not selected'
+
+    const normalizedCustomerId = String(customerId)
+    const isMatchingCustomerScope = (membershipCustomerId) =>
+      membershipCustomerId !== null
+      && membershipCustomerId !== undefined
+      && String(membershipCustomerId) === normalizedCustomerId
+
+    const customerMembership = Array.isArray(user?.memberships)
+      ? user.memberships.find((membership) => {
+        const membershipCustomerId =
+          membership?.customerId
+          ?? membership?.customer?.id
+          ?? membership?.customer?._id
+        return isMatchingCustomerScope(membershipCustomerId)
+      })
+      : null
+
+    const tenantMembership = Array.isArray(user?.tenantMemberships)
+      ? user.tenantMemberships.find((membership) => {
+        const membershipCustomerId =
+          membership?.customerId
+          ?? membership?.customer?.id
+          ?? membership?.customer?._id
+        return isMatchingCustomerScope(membershipCustomerId)
+      })
+      : null
+
+    const customerNameCandidates = [
+      customerDetails?.data?.name,
+      customerDetails?.data?.companyName,
+      customerDetails?.name,
+      customerDetails?.companyName,
+      customerMembership?.customer?.name,
+      customerMembership?.customer?.companyName,
+      customerMembership?.customerName,
+      customerMembership?.companyName,
+      tenantMembership?.customer?.name,
+      tenantMembership?.customer?.companyName,
+      tenantMembership?.customerName,
+      tenantMembership?.companyName,
+      ...tenants
+        .map((tenant) => tenant?.customer?.name ?? tenant?.customerName ?? tenant?.customer?.companyName)
+        .filter(Boolean),
+    ]
+
+    const resolvedCustomerName = customerNameCandidates
+      .map((candidate) => String(candidate ?? '').trim())
+      .find(Boolean)
+
+    return resolvedCustomerName || resolvedTenantName || 'Current customer'
+  }, [customerDetails, customerId, resolvedTenantName, tenants, user])
 
   const isCustomerAdmin = useMemo(
     () => accessibleCustomerIds.some((id) => hasCustomerRole(id, 'CUSTOMER_ADMIN')),
@@ -61,7 +118,9 @@ function Dashboard() {
   }, [selectedCustomerTopology])
 
   const tenantScopeValue = useMemo(() => {
-    if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant customer'
+    if (selectedCustomerTopology === 'SINGLE_TENANT') {
+      return resolvedTenantName || 'Single-tenant customer'
+    }
     if (resolvedTenantName) return resolvedTenantName
     if (tenantId) return tenantId
     if (customerId && supportsTenantManagement) return 'All tenants'
@@ -91,11 +150,11 @@ function Dashboard() {
   const summaryItems = useMemo(
     () => [
       { label: 'Access level', value: primaryRole },
-      { label: 'Customer scope', value: customerId ?? 'Not selected' },
+      { label: 'Customer scope', value: customerScopeValue },
       { label: 'Tenant scope', value: tenantScopeValue },
       { label: 'Topology', value: topologyLabel },
     ],
-    [customerId, primaryRole, tenantScopeValue, topologyLabel],
+    [customerScopeValue, primaryRole, tenantScopeValue, topologyLabel],
   )
 
   const futureItems = useMemo(

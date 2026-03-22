@@ -5,7 +5,8 @@
  * Linkage is managed through user-side `tenantVisibility`.
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useId, useRef } from 'react'
+import { MdInfoOutline } from 'react-icons/md'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -17,6 +18,7 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { Tooltip } from '../../components/Tooltip'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useToaster } from '../../components/Toaster'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
@@ -102,6 +104,88 @@ function LinkedUsersRowActions({ row, onRemoveClick, disabled }) {
         }}
         aria-label={`Actions for ${rowName}`}
       />
+    </div>
+  )
+}
+
+function LinkedUserRolesCell({ row }) {
+  const roles = getUserRoles(row)
+  const userName = row?.name || row?.email || 'user'
+  const tooltipId = useId()
+  const containerRef = useRef(null)
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+
+  useEffect(() => {
+    if (!isTooltipOpen) return undefined
+
+    const handleDocumentPointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentPointerDown)
+    document.addEventListener('touchstart', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentPointerDown)
+      document.removeEventListener('touchstart', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [isTooltipOpen])
+
+  if (roles.length === 0) return '--'
+
+  return (
+    <div className="tenant-linked-users__roles-summary" ref={containerRef}>
+      <Tooltip
+        id={tooltipId}
+        content={(
+          <span className="tenant-linked-users__roles-tooltip-list">
+            {roles.map((role) => (
+              <span key={role} className="tenant-linked-users__roles-tooltip-item">
+                {role}
+              </span>
+            ))}
+          </span>
+        )}
+        position="top"
+        align="start"
+        open={isTooltipOpen}
+        openDelay={0}
+        closeDelay={0}
+        className="tenant-linked-users__roles-tooltip"
+      >
+        <button
+          type="button"
+          className="tenant-linked-users__roles-trigger"
+          aria-label={`Show roles for ${userName}`}
+          aria-controls={tooltipId}
+          aria-expanded={isTooltipOpen}
+          onClick={() => setIsTooltipOpen(true)}
+          onFocus={() => setIsTooltipOpen(true)}
+          onBlur={(event) => {
+            if (containerRef.current?.contains(event.relatedTarget)) return
+            setIsTooltipOpen(false)
+          }}
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <MdInfoOutline
+            aria-hidden="true"
+            focusable="false"
+            className="tenant-linked-users__roles-trigger-icon"
+          />
+          <span>all</span>
+        </button>
+      </Tooltip>
     </div>
   )
 }
@@ -530,10 +614,7 @@ function TenantLinkedUsersWorkspace() {
       {
         key: 'roles',
         label: 'Roles',
-        render: (_value, row) => {
-          const roles = getUserRoles(row)
-          return roles.length > 0 ? roles.join(', ') : '--'
-        },
+        render: (_value, row) => <LinkedUserRolesCell row={row} />,
       },
       {
         key: 'rowActions',

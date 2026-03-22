@@ -303,7 +303,7 @@ export function TenantListView({
         <p className="maintain-tenants__subtitle">
           {showTenantAdminColumn
             ? 'Manage tenant lifecycle, capacity, and linked tenant-admin assignments for the selected customer.'
-            : 'View and edit tenant details for the tenants you administer.'}
+            : 'Manage tenant details, lifecycle state, and linked users for the tenants you administer.'}
         </p>
       </header>
 
