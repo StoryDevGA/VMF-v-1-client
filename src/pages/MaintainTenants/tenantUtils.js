@@ -5,6 +5,17 @@
  * TenantEditDrawer, and TenantListView.
  */
 
+/** Canonical role constant for tenant-admin checks */
+export const TENANT_ADMIN_ROLE = 'TENANT_ADMIN'
+
+/** Deduplicate, uppercase, trim, and sort a roles array */
+export const normalizeRoles = (roles) =>
+  [...new Set(
+    (roles ?? [])
+      .map((role) => String(role ?? '').trim().toUpperCase())
+      .filter(Boolean),
+  )].sort()
+
 /** Status variant mapping for the Status component */
 export const STATUS_VARIANT_MAP = {
   ENABLED: 'success',

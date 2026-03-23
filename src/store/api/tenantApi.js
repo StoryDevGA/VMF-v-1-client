@@ -61,7 +61,10 @@ export const tenantApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: [{ type: 'Tenant', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'Tenant', id: 'LIST' },
+        { type: 'User', id: 'LIST' },
+      ],
     }),
 
     /**
@@ -82,6 +85,7 @@ export const tenantApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { tenantId }) => [
         { type: 'Tenant', id: tenantId },
         { type: 'Tenant', id: 'LIST' },
+        { type: 'User', id: 'LIST' },
       ],
     }),
 

@@ -13,6 +13,7 @@ import {
   isTenantAdminAssignmentsValidationError,
   getTenantAdminAssignmentsValidationMessage,
 } from '../../utils/errors.js'
+import { TENANT_ADMIN_ROLE, normalizeRoles } from './tenantUtils.js'
 
 const getTenantId = (tenant) => String(tenant?._id ?? tenant?.id ?? '').trim()
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
@@ -136,9 +137,17 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
     }
 
     try {
-      await updateTenant(tenantId, {
+      const updateTenantResponse = await updateTenant(tenantId, {
         tenantAdminUserIds: tenantAdminUserIds.slice(0, 1),
       })
+      const updatedTenantAdminRoles = normalizeRoles(
+        updateTenantResponse?.data?.tenantAdminUser?.customerRoles ?? [],
+      )
+      const hasTenantAdminRole = updatedTenantAdminRoles.includes(TENANT_ADMIN_ROLE)
+      const updatedTenantAdminName =
+        String(updateTenantResponse?.data?.tenantAdminUser?.name ?? '').trim()
+        || replacementTenantAdmin?.name
+        || 'Selected tenant admin'
 
       addToast({
         title: currentTenantAdmin ? 'Tenant admin replaced' : 'Tenant admin assigned',
@@ -147,6 +156,16 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
           : `${replacementTenantAdmin?.name ?? 'The selected user'} is now assigned as tenant admin for ${tenant?.name ?? 'this tenant'}.`,
         variant: 'success',
       })
+
+      if (!hasTenantAdminRole) {
+        addToast({
+          title: 'Tenant admin updated, role grant needs review',
+          description:
+            `${updatedTenantAdminName} was assigned as tenant admin, but `
+            + `${TENANT_ADMIN_ROLE} was not confirmed in the tenant mutation response. Refresh and verify role state.`,
+          variant: 'warning',
+        })
+      }
 
       handleDialogClose()
     } catch (err) {

@@ -32,6 +32,8 @@ import {
   getTenantAdminAssignmentsValidationMessage,
 } from '../../utils/errors.js'
 import {
+  TENANT_ADMIN_ROLE,
+  normalizeRoles,
   getTenantCapacityCountLabel,
   mapTenantValidationErrors,
 } from './tenantUtils.js'
@@ -190,13 +192,33 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
         tenantAdminUserIds: tenantAdminUserIds.slice(0, 1),
       }
 
-      await createTenantMutation({ customerId, body }).unwrap()
+      const createTenantResponse = await createTenantMutation({ customerId, body }).unwrap()
+      const createdTenantAdminRoles = normalizeRoles(
+        createTenantResponse?.data?.tenantAdminUser?.customerRoles ?? [],
+      )
+      const hasTenantAdminRole = createdTenantAdminRoles.includes(TENANT_ADMIN_ROLE)
+      const createdTenantAdminName =
+        String(createTenantResponse?.data?.tenantAdminUser?.name ?? '').trim()
+        || selectedAdminInfo?.name
+        || selectedAdminInfo?.email
+        || 'Selected tenant admin'
 
       addToast({
         title: 'Tenant created',
         description: `${name.trim()} has been created successfully.`,
         variant: 'success',
       })
+
+      if (!hasTenantAdminRole) {
+        addToast({
+          title: 'Tenant created, role grant needs review',
+          description:
+            `${createdTenantAdminName} was assigned as tenant admin, but `
+            + `${TENANT_ADMIN_ROLE} was not confirmed in the tenant mutation response. Refresh and verify role state.`,
+          variant: 'warning',
+        })
+      }
+
       handleClose()
     } catch (err) {
       const appError = normalizeError(err)
@@ -251,6 +273,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
     handleClose,
     isCreateBlockedByCapacity,
     tenantCapacityGuidance,
+    selectedAdminInfo,
   ])
 
   /* ---- Step labels ---- */

@@ -59,6 +59,13 @@ vi.mock('../../components/UserSearchSelect', () => {
         >
           Select Replacement
         </button>
+        <button
+          type="button"
+          onClick={() => onChange(['user-10'])}
+          disabled={disabled}
+        >
+          Select Current Admin
+        </button>
         {error ? <span role="alert">{error}</span> : null}
       </div>
     )
@@ -117,7 +124,15 @@ describe('TenantAdminAssignmentDialog', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     mockUseTenants.mockReturnValue({
-      updateTenant: vi.fn().mockResolvedValue({}),
+      updateTenant: vi.fn().mockResolvedValue({
+        data: {
+          tenantAdminUser: {
+            id: 'user-20',
+            name: 'Morgan Backup',
+            customerRoles: ['TENANT_ADMIN', 'USER'],
+          },
+        },
+      }),
       updateTenantResult: { isLoading: false },
     })
     mockUseListUsersQuery.mockReturnValue({
@@ -161,7 +176,15 @@ describe('TenantAdminAssignmentDialog', () => {
 
   it('submits the selected replacement tenant admin and closes', async () => {
     const user = userEvent.setup()
-    const updateTenant = vi.fn().mockResolvedValue({})
+    const updateTenant = vi.fn().mockResolvedValue({
+      data: {
+        tenantAdminUser: {
+          id: 'user-20',
+          name: 'Morgan Backup',
+          customerRoles: ['TENANT_ADMIN', 'USER'],
+        },
+      },
+    })
     const onClose = vi.fn()
 
     mockUseTenants.mockReturnValue({
@@ -183,5 +206,121 @@ describe('TenantAdminAssignmentDialog', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled()
     })
+  })
+
+  it('warns when tenant-admin role is not confirmed in update response', async () => {
+    const user = userEvent.setup()
+    mockUseTenants.mockReturnValue({
+      updateTenant: vi.fn().mockResolvedValue({
+        data: {
+          tenantAdminUser: {
+            id: 'user-20',
+            name: 'Morgan Backup',
+            customerRoles: ['USER'],
+          },
+        },
+      }),
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /select replacement/i }))
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/tenant admin updated, role grant needs review/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows validation error when no user is selected before submitting', async () => {
+    const user = userEvent.setup()
+    const updateTenant = vi.fn()
+
+    mockUseTenants.mockReturnValue({
+      updateTenant,
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/select one tenant admin before continuing/i)
+    })
+    expect(updateTenant).not.toHaveBeenCalled()
+  })
+
+  it('shows validation error when selecting the same user as the current tenant admin', async () => {
+    const user = userEvent.setup()
+    const updateTenant = vi.fn()
+
+    mockUseTenants.mockReturnValue({
+      updateTenant,
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /select current admin/i }))
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/choose a different user to replace the current tenant admin/i)
+    })
+    expect(updateTenant).not.toHaveBeenCalled()
+  })
+
+  it('surfaces tenant-admin assignment validation errors from 422 responses', async () => {
+    const user = userEvent.setup()
+    mockUseTenants.mockReturnValue({
+      updateTenant: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please check the form for errors.',
+            requestId: 'tenant-admin-reassign-1',
+            details: {
+              reason: 'TENANT_ADMIN_ASSIGNMENTS_INVALID',
+              invalidTenantAdminUserIds: ['user-20'],
+              inactiveTenantAdminUserIds: ['user-20'],
+            },
+          },
+        },
+      }),
+      updateTenantResult: { isLoading: false },
+    })
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /select replacement/i }))
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/replace inactive tenant admins before continuing: user-20/i).length,
+      ).toBeGreaterThan(0)
+    })
+  })
+
+  it('renders ErrorSupportPanel when customer users fail to load', () => {
+    mockUseListUsersQuery.mockReturnValue({
+      data: null,
+      error: {
+        status: 500,
+        data: {
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Failed to load customer users.',
+          },
+        },
+      },
+    })
+
+    renderDialog()
+
+    expect(screen.getByText(/failed to load customer users/i)).toBeInTheDocument()
   })
 })

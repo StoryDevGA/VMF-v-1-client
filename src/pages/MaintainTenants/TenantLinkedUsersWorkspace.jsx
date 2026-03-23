@@ -43,6 +43,13 @@ const normalizeIdList = (ids) =>
   [...new Set((ids ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
 
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
+const getTenantAdminUserId = (tenant) =>
+  String(
+    tenant?.tenantAdmin?.id
+      ?? tenant?.tenantAdmin?._id
+      ?? tenant?.tenantAdminUserIds?.[0]
+      ?? '',
+  ).trim()
 
 const getUserRoles = (user) =>
   [...new Set(
@@ -198,30 +205,55 @@ function TenantLinkedUsersWorkspace() {
   const { addToast } = useToaster()
   const { customerId } = useTenantContext()
   const {
+    user,
     isSuperAdmin,
     hasCustomerRole,
     hasTenantRole,
+    getAccessibleTenants,
   } = useAuthorization()
   const { updateUser, updateUserResult } = useUsers(customerId, { skipListQuery: true })
 
   const isLoadingMutation = Boolean(updateUserResult?.isLoading)
+  const currentUserId = String(user?._id ?? user?.id ?? '').trim()
   const isCustomerAdmin = Boolean(customerId && hasCustomerRole(customerId, 'CUSTOMER_ADMIN'))
+  const isCustomerScopedTenantAdmin = Boolean(
+    customerId && hasCustomerRole(customerId, 'TENANT_ADMIN'),
+  )
   const isTenantAdminForTenant = Boolean(
     customerId
       && tenantId
       && hasTenantRole(customerId, tenantId, 'TENANT_ADMIN'),
   )
-  const hasWorkspaceAccess = isSuperAdmin || isCustomerAdmin || isTenantAdminForTenant
+  const scopedTenantAdminIds = useMemo(() => {
+    if (!customerId) return []
+
+    return getAccessibleTenants(customerId).filter(
+      (candidateTenantId) => hasTenantRole(customerId, candidateTenantId, 'TENANT_ADMIN'),
+    )
+  }, [customerId, getAccessibleTenants, hasTenantRole])
+  const hasTenantAdminScopeForRoute = scopedTenantAdminIds.some(
+    (candidateTenantId) => String(candidateTenantId) === tenantId,
+  )
+  const canResolveWorkspaceScope = Boolean(
+    isSuperAdmin
+      || isCustomerAdmin
+      || isTenantAdminForTenant
+      || hasTenantAdminScopeForRoute
+      || isCustomerScopedTenantAdmin,
+  )
 
   const routeTenant = location.state?.tenant
   const routeTenantId = getTenantId(routeTenant)
+  const routeTenantAdminUserId = getTenantAdminUserId(routeTenant)
 
   const {
     data: tenantListResponse,
+    isLoading: isTenantListLoading,
+    isFetching: isTenantListFetching,
     error: tenantListError,
   } = useListTenantsQuery(
     { customerId, page: 1, pageSize: 200 },
-    { skip: !customerId || !hasWorkspaceAccess },
+    { skip: !customerId || !canResolveWorkspaceScope },
   )
 
   const [triggerListTenants] = useLazyListTenantsQuery()
@@ -231,10 +263,37 @@ function TenantLinkedUsersWorkspace() {
     return rows.find((tenantRow) => getTenantId(tenantRow) === tenantId) ?? null
   }, [tenantId, tenantListResponse])
 
+  const tenantFromListAdminUserId = getTenantAdminUserId(tenantFromList)
   const [resolvedTenant, setResolvedTenant] = useState(null)
+  const resolvedTenantAdminUserId = getTenantAdminUserId(resolvedTenant)
+  const isCustomerScopedTenantAdminAssignedToTenant = Boolean(
+    isCustomerScopedTenantAdmin
+      && currentUserId
+      && (
+        (routeTenantId === tenantId && routeTenantAdminUserId === currentUserId)
+        || tenantFromListAdminUserId === currentUserId
+        || resolvedTenantAdminUserId === currentUserId
+      ),
+  )
+  const hasWorkspaceAccess = Boolean(
+    isSuperAdmin
+      || isCustomerAdmin
+      || isTenantAdminForTenant
+      || hasTenantAdminScopeForRoute
+      || isCustomerScopedTenantAdminAssignedToTenant,
+  )
+  const isResolvingTenantAdminScope = Boolean(
+    !isSuperAdmin
+      && !isCustomerAdmin
+      && !isTenantAdminForTenant
+      && !hasTenantAdminScopeForRoute
+      && isCustomerScopedTenantAdmin
+      && !isCustomerScopedTenantAdminAssignedToTenant
+      && (isTenantListLoading || isTenantListFetching),
+  )
 
   useEffect(() => {
-    if (!customerId || !tenantId || !hasWorkspaceAccess) return
+    if (!customerId || !tenantId || !canResolveWorkspaceScope) return
     if (routeTenant && routeTenantId === tenantId) {
       setResolvedTenant(routeTenant)
       return
@@ -269,8 +328,8 @@ function TenantLinkedUsersWorkspace() {
       cancelled = true
     }
   }, [
+    canResolveWorkspaceScope,
     customerId,
-    hasWorkspaceAccess,
     routeTenant,
     routeTenantId,
     tenantFromList,
@@ -646,6 +705,12 @@ function TenantLinkedUsersWorkspace() {
   }
 
   if (!hasWorkspaceAccess) {
+    if (isResolvingTenantAdminScope) {
+      return (
+        <LinkedUsersBoundaryState message="Checking access for linked users in this tenant." />
+      )
+    }
+
     return (
       <LinkedUsersBoundaryState message="You do not have permission to manage linked users for this tenant." />
     )

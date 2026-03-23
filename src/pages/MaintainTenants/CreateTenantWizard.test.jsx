@@ -66,14 +66,34 @@ vi.mock('../../components/UserSearchSelect', () => {
         />
         <button
           type="button"
-          onClick={() => onChange(['admin-user-1'])}
+          onClick={() => onChange(['admin-user-1'], {
+            'admin-user-1': {
+              name: 'Mock Admin One',
+              email: 'mock.admin.one@example.com',
+              roles: ['USER'],
+              isActive: true,
+            },
+          })}
           disabled={disabled || isLocked}
         >
           Add Mock Admin
         </button>
         <button
           type="button"
-          onClick={() => onChange(['admin-user-1', 'admin-user-2'])}
+          onClick={() => onChange(['admin-user-1', 'admin-user-2'], {
+            'admin-user-1': {
+              name: 'Mock Admin One',
+              email: 'mock.admin.one@example.com',
+              roles: ['USER'],
+              isActive: true,
+            },
+            'admin-user-2': {
+              name: 'Mock Admin Two',
+              email: 'mock.admin.two@example.com',
+              roles: ['USER'],
+              isActive: true,
+            },
+          })}
           disabled={disabled || isLocked}
         >
           Set Multiple Admins
@@ -93,7 +113,16 @@ vi.mock('../../components/UserSearchSelect', () => {
 beforeEach(() => {
   createTenantMutationMock.mockReset()
   createTenantMutationMock.mockReturnValue({
-    unwrap: vi.fn().mockResolvedValue({ data: { _id: 'tenant-1' } }),
+    unwrap: vi.fn().mockResolvedValue({
+      data: {
+        _id: 'tenant-1',
+        tenantAdminUser: {
+          id: 'admin-user-1',
+          name: 'Mock Admin One',
+          customerRoles: ['TENANT_ADMIN', 'USER'],
+        },
+      },
+    }),
   })
 
   HTMLDialogElement.prototype.showModal = vi.fn(function () {
@@ -366,6 +395,30 @@ describe('CreateTenantWizard', () => {
     })
   })
 
+  it('shows a warning when tenant-admin role is not confirmed in create response', async () => {
+    const user = userEvent.setup()
+    createTenantMutationMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          _id: 'tenant-1',
+          tenantAdminUser: {
+            id: 'admin-user-1',
+            name: 'Mock Admin One',
+            customerRoles: ['USER'],
+          },
+        },
+      }),
+    })
+
+    renderWizard()
+    await goToStep3(user)
+    await user.click(screen.getByRole('button', { name: /create tenant/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/tenant created, role grant needs review/i)).toBeInTheDocument()
+    })
+  })
+
   it('keeps only one tenant admin when the selector reports multiple IDs', async () => {
     const user = userEvent.setup()
     renderWizard()
@@ -377,7 +430,7 @@ describe('CreateTenantWizard', () => {
     await waitFor(() => {
       expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument()
       expect(screen.getByText(/^tenant admin$/i)).toBeInTheDocument()
-      expect(screen.getByText('admin-user-1')).toBeInTheDocument()
+      expect(screen.getByText('Mock Admin One')).toBeInTheDocument()
     })
   })
 

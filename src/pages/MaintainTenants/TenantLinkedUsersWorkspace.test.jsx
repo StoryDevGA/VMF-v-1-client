@@ -79,9 +79,11 @@ vi.mock('../../components/UserSearchSelect', () => {
 })
 
 function renderWorkspace(initialEntry = '/app/administration/maintain-tenants/tenant-1/linked-users') {
+  const entries = [initialEntry]
+
   return render(
     <ToasterProvider>
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter initialEntries={entries}>
         <Routes>
           <Route
             path="/app/administration/maintain-tenants/:tenantId/linked-users"
@@ -151,9 +153,11 @@ describe('TenantLinkedUsersWorkspace', () => {
     updateUserMock = vi.fn().mockResolvedValue({})
 
     mockUseAuthorization.mockReturnValue({
+      user: { id: 'user-2' },
       isSuperAdmin: false,
-      hasCustomerRole: vi.fn(() => true),
+      hasCustomerRole: vi.fn((customerId, role) => role === 'CUSTOMER_ADMIN'),
       hasTenantRole: vi.fn(() => false),
+      getAccessibleTenants: vi.fn(() => []),
     })
 
     mockUseTenantContext.mockReturnValue({
@@ -172,9 +176,12 @@ describe('TenantLinkedUsersWorkspace', () => {
             _id: 'tenant-1',
             name: 'Lidl Workspace',
             status: 'ENABLED',
+            tenantAdmin: { id: 'user-2', name: 'Taylor Reed' },
           },
         ],
       },
+      isLoading: false,
+      isFetching: false,
       error: null,
     })
 
@@ -239,9 +246,11 @@ describe('TenantLinkedUsersWorkspace', () => {
 
   it('shows unauthorized boundary state when the user lacks tenant-linked-users access', async () => {
     mockUseAuthorization.mockReturnValue({
+      user: { id: 'user-2' },
       isSuperAdmin: false,
       hasCustomerRole: vi.fn(() => false),
       hasTenantRole: vi.fn(() => false),
+      getAccessibleTenants: vi.fn(() => []),
     })
 
     renderWorkspace()
@@ -249,6 +258,31 @@ describe('TenantLinkedUsersWorkspace', () => {
     expect(
       await screen.findByText(/do not have permission to manage linked users for this tenant/i),
     ).toBeInTheDocument()
+  })
+
+  it('allows customer-scoped tenant admins to access linked users when assigned to the tenant', async () => {
+    mockUseAuthorization.mockReturnValue({
+      user: { id: 'user-2' },
+      isSuperAdmin: false,
+      hasCustomerRole: vi.fn((customerId, role) => role === 'TENANT_ADMIN'),
+      hasTenantRole: vi.fn(() => false),
+      getAccessibleTenants: vi.fn(() => []),
+    })
+
+    renderWorkspace({
+      pathname: '/app/administration/maintain-tenants/tenant-1/linked-users',
+      state: {
+        tenant: {
+          _id: 'tenant-1',
+          name: 'Lidl Workspace',
+          status: 'ENABLED',
+          tenantAdmin: { id: 'user-2', name: 'Taylor Reed' },
+        },
+      },
+    })
+
+    expect(await screen.findByRole('heading', { name: /linked users/i })).toBeInTheDocument()
+    expect(screen.queryByText(/do not have permission to manage linked users/i)).not.toBeInTheDocument()
   })
 
   it('links selected users by updating tenantVisibility for each selected user', async () => {
