@@ -28,6 +28,8 @@ import {
   getUserLifecycleMessage,
   isGovernanceLimitConflictError,
   getGovernanceLimitConflictMessage,
+  isRoleInUseConflictError,
+  getRoleInUseConflictMessage,
   isTenantAdminAssignmentsValidationError,
   getTenantAdminAssignmentsValidationMessage,
   isRateLimitError,
@@ -617,6 +619,45 @@ describe('errors', () => {
           details: {},
         }),
       ).toBe('A governance limit was reached. Update customer limits and retry.')
+    })
+  })
+
+  describe('role conflict helpers', () => {
+    it('detects ROLE_IN_USE delete conflicts', () => {
+      expect(
+        isRoleInUseConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          details: { reason: 'ROLE_IN_USE' },
+        }),
+      ).toBe(true)
+    })
+
+    it('returns false for non-role conflict reasons', () => {
+      expect(
+        isRoleInUseConflictError({
+          status: 409,
+          code: 'CONFLICT',
+          details: { reason: 'SOME_OTHER_REASON' },
+        }),
+      ).toBe(false)
+    })
+
+    it('builds role-in-use guidance with role key and count', () => {
+      expect(
+        getRoleInUseConflictMessage({
+          status: 409,
+          code: 'CONFLICT',
+          requestId: 'role-1',
+          details: {
+            reason: 'ROLE_IN_USE',
+            roleKey: 'VMF_CREATOR',
+            assignedUserCount: 2,
+          },
+        }),
+      ).toBe(
+        'Role cannot be deleted while assigned to 2 users. Remove role VMF_CREATOR assignments and retry. (Ref: role-1)',
+      )
     })
   })
 

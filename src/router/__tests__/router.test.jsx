@@ -124,7 +124,7 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should require the customer-admin route guard on edit-users and maintain-tenants', () => {
+    it('should require the customer-admin route guard on edit-users only', () => {
       const rootRoute = router.routes.find((route) => route.path === '/')
       const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
       const customerAppRoute = appRoute?.children?.[0]
@@ -140,7 +140,7 @@ describe('Router', () => {
         'CUSTOMER_ADMIN',
       )
       expect(guardedAdminGroup?.element?.props?.unauthorizedRedirect).toBe('/app/dashboard')
-      expect(guardedPaths).toEqual(['edit-users', 'maintain-tenants'])
+      expect(guardedPaths).toEqual(['edit-users'])
     })
 
     it('should render edit-users for customer admins when the selected customer context matches', async () => {
@@ -226,7 +226,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin dashboard$/i },
+          { name: /^super admin workspace$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -256,7 +256,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin dashboard$/i },
+          { name: /^super admin workspace$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -349,7 +349,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin dashboard$/i },
+          { name: /^super admin workspace$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -377,7 +377,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin dashboard$/i },
+          { name: /^super admin workspace$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -401,6 +401,7 @@ describe('Router', () => {
         'dashboard',
         'invitations',
         'license-levels',
+        'roles',
         'customers',
         'system-versioning',
         'audit-logs',

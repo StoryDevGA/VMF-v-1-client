@@ -1,0 +1,139 @@
+.super-admin-roles {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-roles__header {
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-roles__title,
+.super-admin-roles__section-title,
+.super-admin-roles__dialog-title {
+  margin: 0;
+}
+
+.super-admin-roles__subtitle,
+.super-admin-roles__pagination-info,
+.super-admin-roles__muted {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-roles__hint {
+  display: none;
+}
+
+.super-admin-roles__fieldset,
+.super-admin-roles__card {
+  height: 100%;
+}
+
+.super-admin-roles__card-body--compact {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.super-admin-roles__form {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-roles__dialog-body {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-roles__form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-roles__catalogue-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-xs);
+}
+
+.super-admin-roles__toolbar {
+  display: grid;
+  grid-template-columns: 1fr repeat(3, minmax(160px, 200px));
+  align-items: end;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.super-admin-roles__table-note {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-roles__table .table__header:last-child,
+.super-admin-roles__table .table__cell--actions {
+  width: 160px;
+}
+
+.super-admin-roles__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.super-admin-roles__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-roles__error {
+  margin: 0;
+  color: var(--color-danger-700);
+}
+
+@media (max-width: 768px) {
+  .super-admin-roles__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .super-admin-roles__catalogue-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .super-admin-roles__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-roles__toolbar .input--sm,
+  .super-admin-roles__toolbar .select--sm {
+    min-height: 44px;
+  }
+
+  .super-admin-roles__toolbar .select--sm {
+    padding-top: var(--spacing-md);
+    padding-bottom: var(--spacing-md);
+  }
+
+  .super-admin-roles__form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-roles__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .super-admin-roles__pagination-info {
+    text-align: center;
+  }
+
+  .super-admin-roles__pagination-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+

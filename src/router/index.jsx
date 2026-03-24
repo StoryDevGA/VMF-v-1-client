@@ -36,6 +36,9 @@ const SuperAdminDashboard = lazy(() => import('../pages/SuperAdminDashboard'))
 const SuperAdminLicenseLevels = lazy(
   () => import('../pages/SuperAdminLicenseLevels'),
 )
+const SuperAdminRoles = lazy(
+  () => import('../pages/SuperAdminRoles'),
+)
 const SuperAdminCustomers = lazy(
   () => import('../pages/SuperAdminCustomers'),
 )
@@ -51,6 +54,9 @@ const SuperAdminDeniedAccessLogs = lazy(
 const EditUsers = lazy(() => import('../pages/EditUsers/EditUsers'))
 const MaintainTenants = lazy(
   () => import('../pages/MaintainTenants/MaintainTenants'),
+)
+const MaintainVmfs = lazy(
+  () => import('../pages/MaintainVmfs'),
 )
 const TenantLinkedUsersWorkspace = lazy(
   () => import('../pages/MaintainTenants/TenantLinkedUsersWorkspace'),
@@ -182,6 +188,10 @@ export const router = createBrowserRouter([
                     ],
                   },
                   {
+                    path: 'manage-vmfs',
+                    element: <MaintainVmfs />,
+                  },
+                  {
                     path: 'maintain-tenants',
                     element: <MaintainTenants />,
                   },
@@ -225,6 +235,10 @@ export const router = createBrowserRouter([
           {
             path: 'license-levels',
             element: <SuperAdminLicenseLevels />,
+          },
+          {
+            path: 'roles',
+            element: <SuperAdminRoles />,
           },
           {
             path: 'customers',

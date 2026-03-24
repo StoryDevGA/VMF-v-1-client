@@ -1,0 +1,8 @@
+.super-admin-roles__table .table__cell[data-label='Permissions'] {
+  max-width: 24rem;
+}
+
+.super-admin-roles__table .table__cell[data-label='Permissions'] > :last-child {
+  overflow-wrap: anywhere;
+}
+

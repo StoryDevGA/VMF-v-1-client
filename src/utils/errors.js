@@ -132,6 +132,10 @@ const TENANT_ADMIN_ASSIGNMENT_REASONS = new Set([
   'TENANT_ADMIN_LIMIT_EXCEEDED',
 ])
 
+const ROLE_CONFLICT_REASONS = new Set([
+  'ROLE_IN_USE',
+])
+
 const GOVERNANCE_LIMIT_FALLBACKS = {
   TENANT_LIMIT_REACHED: 'Tenant limit reached for this customer.',
   VMF_LIMIT_REACHED: 'VMF limit reached for this tenant.',
@@ -593,6 +597,36 @@ export const getGovernanceLimitConflictMessage = (err) => {
   }
 
   return fallback
+}
+
+/**
+ * Check if an error indicates a role delete conflict caused by assigned users.
+ *
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isRoleInUseConflictError = (err) =>
+  err?.status === 409 &&
+  String(err?.code ?? '').trim().toUpperCase() === 'CONFLICT' &&
+  ROLE_CONFLICT_REASONS.has(String(err?.details?.reason ?? '').trim().toUpperCase())
+
+/**
+ * Resolve role-in-use delete conflicts to stable operator guidance.
+ *
+ * @param {AppError} err
+ * @returns {string}
+ */
+export const getRoleInUseConflictMessage = (err) => {
+  const assignedUserCount = Number(err?.details?.assignedUserCount)
+  const roleKey = String(err?.details?.roleKey ?? '').trim()
+
+  const base =
+    Number.isFinite(assignedUserCount) && assignedUserCount > 0
+      ? `Role cannot be deleted while assigned to ${assignedUserCount} user${assignedUserCount === 1 ? '' : 's'}.`
+      : 'Role cannot be deleted while assigned to users.'
+
+  const withRoleKey = roleKey ? `${base} Remove role ${roleKey} assignments and retry.` : base
+  return appendRequestReference(withRoleKey, err?.requestId)
 }
 
 const normalizeIdList = (value) =>

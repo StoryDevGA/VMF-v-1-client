@@ -189,6 +189,10 @@ describe('Navigation', () => {
       'href',
       '/app/administration/edit-users',
     )
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -213,6 +217,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -226,6 +234,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -239,6 +251,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -268,6 +284,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -282,6 +302,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -293,6 +317,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -304,6 +332,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -320,6 +352,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -343,6 +379,10 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
+      'href',
+      '/app/administration/manage-vmfs',
+    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -369,6 +409,10 @@ describe('Navigation', () => {
     expect(screen.getByRole('link', { name: /licence maintenance/i })).toHaveAttribute(
       'href',
       '/super-admin/license-levels',
+    )
+    expect(screen.getByRole('link', { name: /role definitions/i })).toHaveAttribute(
+      'href',
+      '/super-admin/roles',
     )
   })
 

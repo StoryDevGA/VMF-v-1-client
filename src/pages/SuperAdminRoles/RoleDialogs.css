@@ -1,0 +1,12 @@
+.super-admin-roles__dialog-body .input-label--floating,
+.super-admin-roles__dialog-body .textarea-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.super-admin-roles__dialog-body .input-container--error .input-label--floating,
+.super-admin-roles__dialog-body .textarea-container--error .textarea-label {
+  color: var(--color-danger);
+}
+

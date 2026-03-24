@@ -76,6 +76,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             label: 'Licence Maintenance',
             to: '/super-admin/license-levels',
           },
+          {
+            key: 'role-definitions',
+            label: 'Role Definitions',
+            to: '/super-admin/roles',
+          },
         ],
       })
 
@@ -99,6 +104,15 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   key: 'manage-users',
                   label: 'Manage Users',
                   to: '/app/administration/edit-users',
+                },
+              ]
+            : []),
+          ...(hasCustomerAdminAccess || hasTenantAdminAccess
+            ? [
+                {
+                  key: 'manage-vmfs',
+                  label: 'Manage VMFs',
+                  to: '/app/administration/manage-vmfs',
                 },
               ]
             : []),

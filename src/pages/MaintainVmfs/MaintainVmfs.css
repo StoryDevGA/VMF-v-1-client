@@ -1,0 +1,159 @@
+.maintain-vmfs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.maintain-vmfs__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.maintain-vmfs__title {
+  margin: 0;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.maintain-vmfs__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.maintain-vmfs__fieldset {
+  width: 100%;
+}
+
+.maintain-vmfs__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.maintain-vmfs__card-body--state {
+  align-items: flex-start;
+}
+
+.maintain-vmfs__state-message {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.maintain-vmfs__catalogue-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.maintain-vmfs__toolbar {
+  display: grid;
+  gap: var(--spacing-md);
+  grid-template-columns: minmax(220px, 1fr) minmax(170px, 220px) minmax(170px, 220px);
+}
+
+.maintain-vmfs__table-wrap {
+  width: 100%;
+}
+
+.maintain-vmfs__table-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.maintain-vmfs__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.maintain-vmfs__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.maintain-vmfs__pagination-info {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.maintain-vmfs__muted {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.maintain-vmfs__error {
+  margin: 0;
+  color: var(--color-error-400);
+  font-size: var(--font-size-sm);
+}
+
+.maintain-vmfs__dialog-title {
+  margin: 0;
+}
+
+.maintain-vmfs__dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.maintain-vmfs__dialog-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.maintain-vmfs__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.maintain-vmfs__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+@media (max-width: 1024px) {
+  .maintain-vmfs__toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .maintain-vmfs__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .maintain-vmfs__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .maintain-vmfs__catalogue-actions .btn {
+    width: 100%;
+  }
+
+  .maintain-vmfs__pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .maintain-vmfs__pagination-controls {
+    justify-content: space-between;
+  }
+
+  .maintain-vmfs__form-actions {
+    flex-direction: column;
+  }
+
+  .maintain-vmfs__form-actions .btn {
+    width: 100%;
+  }
+}
+
