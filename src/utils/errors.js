@@ -277,6 +277,12 @@ const getFirstDetailMessage = (details) => {
   return ''
 }
 
+const resolveLicenseFeatureMessage = (details) => {
+  const feature = String(details?.feature ?? '').trim().toUpperCase()
+  if (!feature) return getErrorMessage('LICENSE_FEATURE_NOT_ENABLED')
+  return `Your current licence does not include ${feature}.`
+}
+
 /* ------------------------------------------------------------------ */
 /*  Standard AppError shape                                           */
 /* ------------------------------------------------------------------ */
@@ -315,14 +321,19 @@ export const normalizeError = (error) => {
         : undefined
     const code =
       nested.code ?? data.code ?? (status ? `HTTP_${status}` : 'SERVER_ERROR')
+    const normalizedCode = String(code ?? '').trim().toUpperCase()
     const requestId =
       nested.requestId ?? data.requestId ?? data.requestID ?? undefined
     const retryAfterSeconds = Number(
       nested.retryAfterSeconds ?? data.retryAfterSeconds ?? data.retryAfter ?? 0,
     ) || undefined
+    const details = nested.details ?? data.details ?? undefined
 
     let message =
       nested.message ?? data.message ?? getErrorMessage(code) ?? ERROR_MESSAGES.SERVER_ERROR
+    if (normalizedCode === 'LICENSE_FEATURE_NOT_ENABLED') {
+      message = resolveLicenseFeatureMessage(details)
+    }
     if (RATE_LIMIT_CODES.has(code) && retryAfterSeconds) {
       message = `${message} Try again in ${formatRetryAfter(retryAfterSeconds)}.`
     }
@@ -336,7 +347,7 @@ export const normalizeError = (error) => {
       status,
       requestId,
       retryAfterSeconds,
-      details: nested.details ?? data.details ?? undefined,
+      details,
     }
   }
 

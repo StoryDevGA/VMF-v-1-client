@@ -68,6 +68,8 @@ const initialState = {
   status: 'idle', // idle → loading → authenticated | unauthenticated
 }
 
+const EMPTY_ARRAY = Object.freeze([])
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -124,7 +126,7 @@ export const { setCredentials, clearCredentials, tokenRefreshed, setLoading } =
 export const selectCurrentUser = (state) => state.auth.user
 
 /** @param {import('../index').RootState} state */
-export const selectCustomerScopes = (state) => state.auth.customerScopes ?? []
+export const selectCustomerScopes = (state) => state.auth.customerScopes ?? EMPTY_ARRAY
 
 /** @param {import('../index').RootState} state */
 export const selectAuthStatus = (state) => state.auth.status
@@ -133,12 +135,13 @@ export const selectAuthStatus = (state) => state.auth.status
 export const selectIsAuthenticated = (state) => state.auth.status === 'authenticated'
 
 /** @param {import('../index').RootState} state */
-export const selectUserMemberships = (state) => state.auth.user?.memberships ?? []
+export const selectUserMemberships = (state) => state.auth.user?.memberships ?? EMPTY_ARRAY
 
 /** @param {import('../index').RootState} state */
-export const selectUserTenantMemberships = (state) => state.auth.user?.tenantMemberships ?? []
+export const selectUserTenantMemberships = (state) =>
+  state.auth.user?.tenantMemberships ?? EMPTY_ARRAY
 
 /** @param {import('../index').RootState} state */
-export const selectUserVmfGrants = (state) => state.auth.user?.vmfGrants ?? []
+export const selectUserVmfGrants = (state) => state.auth.user?.vmfGrants ?? EMPTY_ARRAY
 
 export default authSlice.reducer

@@ -197,6 +197,28 @@ describe('errors', () => {
       expect(result.status).toBe(503)
     })
 
+    it('should normalize LICENSE_FEATURE_NOT_ENABLED to a stable feature-aware message', () => {
+      const rtkError = {
+        status: 403,
+        data: {
+          error: {
+            code: 'LICENSE_FEATURE_NOT_ENABLED',
+            message: 'Raw backend message',
+            requestId: 'req-license-1',
+            details: {
+              feature: 'DEALS',
+            },
+          },
+        },
+      }
+
+      const result = normalizeError(rtkError)
+      expect(result.code).toBe('LICENSE_FEATURE_NOT_ENABLED')
+      expect(result.message).toBe(
+        'Your current licence does not include DEALS. (Ref: req-license-1)',
+      )
+    })
+
     it('should recover nested error payload from PARSING_ERROR JSON string data', () => {
       const rtkError = {
         status: 'PARSING_ERROR',

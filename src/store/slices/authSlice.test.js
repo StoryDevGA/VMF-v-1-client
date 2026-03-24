@@ -108,6 +108,14 @@ describe('authSlice', () => {
       expect(selectCustomerScopes({ auth: {} })).toEqual([])
     })
 
+    it('selectCustomerScopes returns a stable empty-array reference when missing', () => {
+      const state = { auth: {} }
+      const first = selectCustomerScopes(state)
+      const second = selectCustomerScopes(state)
+
+      expect(first).toBe(second)
+    })
+
     it('selectAuthStatus returns the status', () => {
       expect(selectAuthStatus(rootAuthenticated)).toBe('authenticated')
     })
