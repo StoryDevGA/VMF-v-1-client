@@ -26,9 +26,14 @@ export const authApi = baseApi.injectEndpoints({
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled
-          const { user, accessToken, refreshToken } = data.data
+          const {
+            user,
+            customerScopes = [],
+            accessToken,
+            refreshToken,
+          } = data.data
           setTokens({ accessToken, refreshToken })
-          dispatch({ type: 'auth/setCredentials', payload: { user } })
+          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes } })
         } catch {
           // Error is handled by the component via the mutation result
         }
@@ -48,9 +53,14 @@ export const authApi = baseApi.injectEndpoints({
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled
-          const { user, accessToken, refreshToken } = data.data
+          const {
+            user,
+            customerScopes = [],
+            accessToken,
+            refreshToken,
+          } = data.data
           setTokens({ accessToken, refreshToken })
-          dispatch({ type: 'auth/setCredentials', payload: { user } })
+          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes } })
         } catch {
           // handled by component
         }
@@ -90,7 +100,10 @@ export const authApi = baseApi.injectEndpoints({
           const { data } = await queryFulfilled
           dispatch({
             type: 'auth/setCredentials',
-            payload: { user: data.data.user },
+            payload: {
+              user: data.data.user,
+              customerScopes: data.data.customerScopes ?? [],
+            },
           })
         } catch {
           dispatch({ type: 'auth/clearCredentials' })

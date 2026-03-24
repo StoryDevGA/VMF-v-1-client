@@ -27,6 +27,7 @@ const ERROR_MESSAGES = {
   AUTHZ_FORBIDDEN: 'You do not have permission to perform this action.',
   AUTHZ_ROLE_REQUIRED: 'This action requires a higher role.',
   AUTHZ_TENANT_DISABLED: 'This tenant has been disabled.',
+  LICENSE_FEATURE_NOT_ENABLED: 'Your current licence does not include this feature.',
   CUSTOMER_CONTEXT_REQUIRED:
     'No customer context is available for this action. Refresh and try again.',
   CUSTOMER_INACTIVE:
@@ -411,6 +412,16 @@ export const isCustomerInactiveError = (err) =>
   String(err?.details?.reason ?? '').trim().toUpperCase() === 'CUSTOMER_INACTIVE'
 
 /**
+ * Check if an error indicates selected-customer licence entitlement denial.
+ *
+ * @param {AppError} err
+ * @returns {boolean}
+ */
+export const isLicenseFeatureNotEnabledError = (err) =>
+  String(err?.code ?? '').trim().toUpperCase() === 'LICENSE_FEATURE_NOT_ENABLED' ||
+  String(err?.details?.reason ?? '').trim().toUpperCase() === 'LICENSE_FEATURE_NOT_ENABLED'
+
+/**
  * Resolve inactive-customer errors to stable operator guidance.
  *
  * @param {AppError | null | undefined} err
@@ -421,6 +432,25 @@ export const getCustomerInactiveMessage = (
   err,
   fallbackMessage = getErrorMessage('CUSTOMER_INACTIVE'),
 ) => appendRequestReference(fallbackMessage, err?.requestId)
+
+/**
+ * Resolve licence-feature denial errors to stable operator guidance.
+ *
+ * @param {AppError | null | undefined} err
+ * @param {string} [fallbackMessage]
+ * @returns {string}
+ */
+export const getLicenseFeatureNotEnabledMessage = (
+  err,
+  fallbackMessage = getErrorMessage('LICENSE_FEATURE_NOT_ENABLED'),
+) => {
+  const feature = String(err?.details?.feature ?? '').trim().toUpperCase()
+  const message = feature
+    ? `Your current licence does not include ${feature}.`
+    : fallbackMessage
+
+  return appendRequestReference(message, err?.requestId)
+}
 
 /**
  * Check if an error indicates canonical Customer Admin governance conflict.

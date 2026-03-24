@@ -47,14 +47,24 @@ import { createSlice } from '@reduxjs/toolkit'
  */
 
 /**
+ * @typedef {Object} CustomerScope
+ * @property {string} customerId
+ * @property {string[]} featureEntitlements
+ * @property {'LICENSE_LEVEL'|'CUSTOMER_OVERRIDE'|'LEGACY_UNRESTRICTED'|string} [entitlementSource]
+ * @property {string|null} [licenseLevelId]
+ */
+
+/**
  * @typedef {Object} AuthState
  * @property {AuthUser|null} user
+ * @property {CustomerScope[]} customerScopes
  * @property {'idle'|'loading'|'authenticated'|'unauthenticated'} status
  */
 
 /** @type {AuthState} */
 const initialState = {
   user: null,
+  customerScopes: [],
   status: 'idle', // idle → loading → authenticated | unauthenticated
 }
 
@@ -68,6 +78,9 @@ const authSlice = createSlice({
      */
     setCredentials: (state, action) => {
       state.user = action.payload.user
+      state.customerScopes = Array.isArray(action.payload.customerScopes)
+        ? action.payload.customerScopes
+        : []
       state.status = 'authenticated'
     },
 
@@ -77,6 +90,7 @@ const authSlice = createSlice({
      */
     clearCredentials: (state) => {
       state.user = null
+      state.customerScopes = []
       state.status = 'unauthenticated'
     },
 
@@ -108,6 +122,9 @@ export const { setCredentials, clearCredentials, tokenRefreshed, setLoading } =
 
 /** @param {import('../index').RootState} state */
 export const selectCurrentUser = (state) => state.auth.user
+
+/** @param {import('../index').RootState} state */
+export const selectCustomerScopes = (state) => state.auth.customerScopes ?? []
 
 /** @param {import('../index').RootState} state */
 export const selectAuthStatus = (state) => state.auth.status

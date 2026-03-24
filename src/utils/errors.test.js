@@ -20,6 +20,8 @@ import {
   isTenantDisabledError,
   isCustomerInactiveError,
   getCustomerInactiveMessage,
+  isLicenseFeatureNotEnabledError,
+  getLicenseFeatureNotEnabledMessage,
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
   getUserEmailConflictMessage,
@@ -368,6 +370,38 @@ describe('errors', () => {
       expect(getCustomerInactiveMessage({ code: 'CUSTOMER_INACTIVE' })).toBe(
         'This customer is inactive. Reactivate the customer to continue.',
       )
+    })
+  })
+
+  describe('license entitlement denial helpers', () => {
+    it('detects LICENSE_FEATURE_NOT_ENABLED code', () => {
+      expect(
+        isLicenseFeatureNotEnabledError({
+          status: 403,
+          code: 'LICENSE_FEATURE_NOT_ENABLED',
+        }),
+      ).toBe(true)
+    })
+
+    it('detects LICENSE_FEATURE_NOT_ENABLED reason from details', () => {
+      expect(
+        isLicenseFeatureNotEnabledError({
+          status: 403,
+          code: 'AUTHZ_FORBIDDEN',
+          details: { reason: 'LICENSE_FEATURE_NOT_ENABLED' },
+        }),
+      ).toBe(true)
+    })
+
+    it('builds feature-aware guidance and preserves request reference', () => {
+      expect(
+        getLicenseFeatureNotEnabledMessage({
+          status: 403,
+          code: 'LICENSE_FEATURE_NOT_ENABLED',
+          requestId: 'lic-1',
+          details: { feature: 'DEALS' },
+        }),
+      ).toBe('Your current licence does not include DEALS. (Ref: lic-1)')
     })
   })
 

@@ -38,6 +38,13 @@ const customerAdminUser = {
   name: 'Customer Admin',
   isActive: true,
   memberships: [{ customerId: CUSTOMER_ID, roles: ['CUSTOMER_ADMIN'] }],
+  customerScopes: [
+    {
+      customerId: CUSTOMER_ID,
+      featureEntitlements: ['VMF', 'DEALS'],
+      entitlementSource: 'LICENSE_LEVEL',
+    },
+  ],
   tenantMemberships: [
     { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roles: ['TENANT_ADMIN'] },
   ],
@@ -135,6 +142,20 @@ describe('useAuthorization', () => {
     it('getCustomerRoles returns roles', () => {
       const { result } = renderUseAuthorization(customerAdminUser)
       expect(result.current.getCustomerRoles(CUSTOMER_ID)).toEqual(['CUSTOMER_ADMIN'])
+    })
+
+    it('exposes customer-scoped entitlement helpers', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+
+      expect(result.current.getCustomerScope(CUSTOMER_ID)).toEqual({
+        customerId: CUSTOMER_ID,
+        featureEntitlements: ['VMF', 'DEALS'],
+        entitlementSource: 'LICENSE_LEVEL',
+      })
+      expect(result.current.getFeatureEntitlements(CUSTOMER_ID)).toEqual(['VMF', 'DEALS'])
+      expect(result.current.hasFeatureEntitlement(CUSTOMER_ID, 'DEALS')).toBe(true)
+      expect(result.current.hasFeatureEntitlement(CUSTOMER_ID, 'VIEWS')).toBe(false)
+      expect(result.current.getEntitlementSource(CUSTOMER_ID)).toBe('LICENSE_LEVEL')
     })
 
     it('hasCustomerRole works', () => {

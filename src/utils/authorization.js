@@ -285,6 +285,92 @@ export const hasAnyMultiTenantCustomerAdminScope = (user) => {
   return resolvedTopologies.includes('MULTI_TENANT')
 }
 
+/**
+ * Return the entitlement scope object for a selected customer when exposed in
+ * the authenticated user payload.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {Object|null}
+ */
+export const getCustomerScope = (user, customerId) => {
+  if (!customerId) return null
+  if (!Array.isArray(user?.customerScopes)) return null
+
+  const normalizedCustomerId = customerId.toString()
+
+  const scope = user.customerScopes.find((entry) => {
+    const scopeCustomerId = entry?.customerId
+    if (scopeCustomerId === null || scopeCustomerId === undefined) return false
+    return scopeCustomerId.toString() === normalizedCustomerId
+  })
+
+  return scope ?? null
+}
+
+/**
+ * Return normalized feature entitlements for the selected customer scope.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {string[]}
+ */
+export const getCustomerFeatureEntitlements = (user, customerId) => {
+  const scope = getCustomerScope(user, customerId)
+  if (!scope) return []
+
+  if (!Array.isArray(scope.featureEntitlements)) return []
+
+  return Array.from(
+    new Set(
+      scope.featureEntitlements
+        .map((feature) => String(feature ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+}
+
+/**
+ * Check if the selected customer scope includes a feature entitlement.
+ * Falls back to allow when no scope is available to preserve backward
+ * compatibility on stale sessions.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @param {string} featureKey
+ * @param {{ fallbackWhenScopeMissing?: boolean }} [options]
+ * @returns {boolean}
+ */
+export const hasCustomerFeatureEntitlement = (
+  user,
+  customerId,
+  featureKey,
+  { fallbackWhenScopeMissing = true } = {},
+) => {
+  const normalizedFeatureKey = String(featureKey ?? '').trim().toUpperCase()
+  if (!normalizedFeatureKey) return false
+  if (!customerId) return false
+
+  const scope = getCustomerScope(user, customerId)
+  if (!scope) return fallbackWhenScopeMissing
+
+  return getCustomerFeatureEntitlements(user, customerId).includes(normalizedFeatureKey)
+}
+
+/**
+ * Return normalized entitlement source metadata for the selected customer.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @returns {string}
+ */
+export const getCustomerEntitlementSource = (user, customerId) => {
+  const scope = getCustomerScope(user, customerId)
+  if (!scope) return ''
+
+  return String(scope.entitlementSource ?? '').trim().toUpperCase()
+}
+
 /* ------------------------------------------------------------------ */
 /*  Tenant                                                            */
 /* ------------------------------------------------------------------ */

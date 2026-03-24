@@ -46,6 +46,8 @@ function mockRole({
   userName = 'Test User',
   memberships = [],
   tenantMemberships = [],
+  featureEntitlements = ['VMF', 'DEALS'],
+  entitlementSource = 'LICENSE_LEVEL',
 } = {}) {
   const customerIds = accessibleCustomerIds ?? (isCustomerAdmin ? ['cust-1'] : [])
   const hasCustomerRole = vi.fn((customerId, role) => {
@@ -58,6 +60,8 @@ function mockRole({
     isSuperAdmin,
     accessibleCustomerIds: customerIds,
     hasCustomerRole,
+    getFeatureEntitlements: vi.fn(() => featureEntitlements),
+    getEntitlementSource: vi.fn(() => entitlementSource),
   })
 }
 
@@ -95,6 +99,12 @@ describe('Dashboard page', () => {
 
     expect(screen.getByText('Alice Wonderland')).toBeInTheDocument()
     expect(screen.getAllByText('Customer Administrator')).toHaveLength(2)
+  })
+
+  it('renders licensed feature summary from customerScopes metadata', () => {
+    renderDashboard()
+
+    expect(screen.getByText('VMF, DEALS (Licence level)')).toBeInTheDocument()
   })
 
   it('renders customer scope using customer display name when available', () => {

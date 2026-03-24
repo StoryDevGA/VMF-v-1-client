@@ -18,7 +18,14 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 
 function Dashboard() {
-  const { user, accessibleCustomerIds, isSuperAdmin, hasCustomerRole } = useAuthorization()
+  const authorization = useAuthorization()
+  const {
+    user,
+    accessibleCustomerIds,
+    isSuperAdmin,
+    hasCustomerRole,
+  } = authorization
+  const { getFeatureEntitlements, getEntitlementSource } = authorization
   const {
     customerId,
     tenantId,
@@ -127,6 +134,31 @@ function Dashboard() {
     return 'Not selected'
   }, [customerId, resolvedTenantName, selectedCustomerTopology, supportsTenantManagement, tenantId])
 
+  const licensedFeaturesValue = useMemo(() => {
+    if (!customerId) return 'Not selected'
+
+    const features = typeof getFeatureEntitlements === 'function'
+      ? getFeatureEntitlements(customerId)
+      : []
+    if (!Array.isArray(features) || features.length === 0) {
+      return 'Not available'
+    }
+
+    const source = String(
+      typeof getEntitlementSource === 'function'
+        ? getEntitlementSource(customerId)
+        : '',
+    ).trim().toUpperCase()
+    const sourceLabel = {
+      LICENSE_LEVEL: 'Licence level',
+      CUSTOMER_OVERRIDE: 'Customer override',
+      LEGACY_UNRESTRICTED: 'Legacy unrestricted',
+    }[source]
+
+    const featureListLabel = features.join(', ')
+    return sourceLabel ? `${featureListLabel} (${sourceLabel})` : featureListLabel
+  }, [customerId, getEntitlementSource, getFeatureEntitlements])
+
   const showCustomerSelector = isCustomerAdmin && accessibleCustomerIds.length > 1
   const showTenantSwitcher = isCustomerAdmin && supportsTenantManagement && Boolean(customerId)
   const controls = showCustomerSelector || showTenantSwitcher
@@ -153,8 +185,9 @@ function Dashboard() {
       { label: 'Customer scope', value: customerScopeValue },
       { label: 'Tenant scope', value: tenantScopeValue },
       { label: 'Topology', value: topologyLabel },
+      { label: 'Licensed features', value: licensedFeaturesValue },
     ],
-    [customerScopeValue, primaryRole, tenantScopeValue, topologyLabel],
+    [customerScopeValue, licensedFeaturesValue, primaryRole, tenantScopeValue, topologyLabel],
   )
 
   const futureItems = useMemo(

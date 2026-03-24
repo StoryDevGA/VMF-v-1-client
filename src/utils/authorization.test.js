@@ -26,6 +26,10 @@ import {
   hasAnyCustomerRole,
   hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
+  getCustomerScope,
+  getCustomerFeatureEntitlements,
+  hasCustomerFeatureEntitlement,
+  getCustomerEntitlementSource,
   getUserTenantRoles,
   hasTenantRole,
   hasTenantAccess,
@@ -56,6 +60,13 @@ const superAdminUser = {
 const customerAdminUser = {
   id: '2',
   memberships: [{ customerId: CUSTOMER_ID, roles: ['CUSTOMER_ADMIN'] }],
+  customerScopes: [
+    {
+      customerId: CUSTOMER_ID,
+      featureEntitlements: ['VMF', 'DEALS'],
+      entitlementSource: 'LICENSE_LEVEL',
+    },
+  ],
   tenantMemberships: [],
   vmfGrants: [],
 }
@@ -439,6 +450,42 @@ describe('Customer role helpers', () => {
 
     it('returns false for null user', () => {
       expect(hasAnyTenantRole(null, 'TENANT_ADMIN')).toBe(false)
+    })
+  })
+
+  describe('customer scope entitlement helpers', () => {
+    it('returns the selected customer scope and normalized feature entitlements', () => {
+      expect(getCustomerScope(customerAdminUser, CUSTOMER_ID)).toEqual({
+        customerId: CUSTOMER_ID,
+        featureEntitlements: ['VMF', 'DEALS'],
+        entitlementSource: 'LICENSE_LEVEL',
+      })
+      expect(getCustomerFeatureEntitlements(customerAdminUser, CUSTOMER_ID)).toEqual([
+        'VMF',
+        'DEALS',
+      ])
+      expect(getCustomerEntitlementSource(customerAdminUser, CUSTOMER_ID)).toBe(
+        'LICENSE_LEVEL',
+      )
+    })
+
+    it('checks feature entitlement membership for a selected customer', () => {
+      expect(hasCustomerFeatureEntitlement(customerAdminUser, CUSTOMER_ID, 'vmf')).toBe(true)
+      expect(hasCustomerFeatureEntitlement(customerAdminUser, CUSTOMER_ID, 'VIEWS')).toBe(false)
+    })
+
+    it('falls back to allow when customer scope metadata is missing', () => {
+      expect(
+        hasCustomerFeatureEntitlement({ memberships: [] }, CUSTOMER_ID, 'DEALS'),
+      ).toBe(true)
+      expect(
+        hasCustomerFeatureEntitlement(
+          { memberships: [] },
+          CUSTOMER_ID,
+          'DEALS',
+          { fallbackWhenScopeMissing: false },
+        ),
+      ).toBe(false)
     })
   })
 })
