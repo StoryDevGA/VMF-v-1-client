@@ -7,10 +7,11 @@
  * @module components/TenantSwitcher
  */
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { MdBusiness } from 'react-icons/md'
 import { CustomSelect } from '../CustomSelect'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { getTenantId } from '../../pages/MaintainTenants/tenantUtils.js'
 
 const ALL_TENANTS_VALUE = ''
 
@@ -23,29 +24,44 @@ export function TenantSwitcher({ className = '' }) {
     customerId,
     tenantId,
     tenants,
+    selectableTenants,
     isLoadingTenants,
     setTenantId,
   } = useTenantContext()
+
+  const selectableTenantRows = useMemo(
+    () => (Array.isArray(selectableTenants) ? selectableTenants : []),
+    [selectableTenants],
+  )
 
   const handleChange = useCallback(
     (value) => {
       if (value === ALL_TENANTS_VALUE) {
         setTenantId(null, null)
       } else {
-        const tenant = tenants.find((t) => t._id === value)
+        const tenantPool = selectableTenantRows.length > 0 ? selectableTenantRows : tenants
+        const tenant = tenantPool.find((t) => getTenantId(t) === value)
         setTenantId(value, tenant?.name ?? null)
       }
     },
-    [tenants, setTenantId],
+    [selectableTenantRows, setTenantId, tenants],
   )
 
   // Don't render if there's no customer context
   if (!customerId) return null
 
   const enabledTenants = tenants.filter((t) => t.status === 'ENABLED')
+  const tenantOptionsSource = selectableTenantRows.length > 0 ? selectableTenantRows : enabledTenants
   const options = [
     { value: ALL_TENANTS_VALUE, label: 'All Tenants' },
-    ...enabledTenants.map((t) => ({ value: t._id, label: t.name })),
+    ...tenantOptionsSource
+      .map((tenant) => {
+        const resolvedTenantId = getTenantId(tenant)
+        const resolvedTenantName = String(tenant?.name ?? '').trim()
+        if (!resolvedTenantId || !resolvedTenantName) return null
+        return { value: resolvedTenantId, label: resolvedTenantName }
+      })
+      .filter(Boolean),
   ]
 
   return (

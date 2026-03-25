@@ -79,6 +79,20 @@ describe('TenantSwitcher', () => {
     expect(screen.queryByRole('option', { name: 'Disabled Co' })).not.toBeInTheDocument()
   })
 
+  it('prefers selectable tenants over the raw enabled tenant list', async () => {
+    mockHook({
+      tenants: mixedTenants,
+      selectableTenants: [{ _id: 'ten-2', name: 'Bravo', status: 'ENABLED' }],
+    })
+    render(<TenantSwitcher />)
+
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
+
+    expect(screen.getByRole('option', { name: 'Bravo' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Alpha' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Disabled Co' })).not.toBeInTheDocument()
+  })
+
   it('calls setTenantId with tenant id/name when selection changes', async () => {
     const setTenantId = vi.fn()
     mockHook({ setTenantId })
