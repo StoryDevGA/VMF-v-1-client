@@ -83,17 +83,6 @@ const nestedCustomerAdminUser = {
   ],
 }
 
-const customerAdminWithoutVmfEntitlementUser = {
-  ...customerAdminUser,
-  customerScopes: [
-    {
-      customerId: 'cust-1',
-      featureEntitlements: ['DEALS'],
-      entitlementSource: 'LICENSE_LEVEL',
-    },
-  ],
-}
-
 const superAdminUser = {
   id: 'user-2',
   email: 'super@vmf.io',
@@ -200,10 +189,6 @@ describe('Navigation', () => {
       'href',
       '/app/administration/edit-users',
     )
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -228,10 +213,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -245,24 +226,7 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
-  })
-
-  it('hides Manage VMFs when selected customer scope lacks VMF entitlement', async () => {
-    const user = userEvent.setup()
-    const store = createTestStore(customerAdminWithoutVmfEntitlementUser, 'authenticated', {
-      customerId: 'cust-1',
-    })
-    renderNavigation(store)
-
-    await user.click(screen.getByRole('button', { name: /^admin$/i }))
-
-    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /manage vmfs/i })).not.toBeInTheDocument()
   })
 
   it('keeps the Admin menu available when customer-admin membership uses a nested customer id', async () => {
@@ -275,10 +239,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -308,10 +268,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -326,10 +282,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -341,10 +293,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
@@ -356,10 +304,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -376,10 +320,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',
@@ -403,10 +343,6 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
 
     expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /manage vmfs/i })).toHaveAttribute(
-      'href',
-      '/app/administration/manage-vmfs',
-    )
     expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
       'href',
       '/app/administration/maintain-tenants',

@@ -17,8 +17,6 @@ import {
   hasCustomerRole,
   hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
-  hasCustomerFeatureEntitlement,
-  getAccessibleCustomerIds,
   isSuperAdmin as checkIsSuperAdmin,
 } from '../../utils/authorization.js'
 import './Navigation.css'
@@ -60,25 +58,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const canAccessTenantMaintenance = hasCustomerAdminAccess
     ? supportsTenantManagement || hasSelectedCustomerTenantAdminAccess
     : hasSelectedCustomerTenantAdminAccess
-  const canAccessVmfMaintenance = useMemo(() => {
-    if (!hasCustomerAdminAccess && !hasTenantAdminAccess) return false
-
-    const hasVmfForCustomer = (customerScopeId) =>
-      hasCustomerFeatureEntitlement(user, customerScopeId, 'VMF', {
-        fallbackWhenScopeMissing: true,
-      })
-
-    if (selectedCustomerId) {
-      return hasVmfForCustomer(selectedCustomerId)
-    }
-
-    const accessibleCustomerIds = getAccessibleCustomerIds(user)
-    if (!Array.isArray(accessibleCustomerIds) || accessibleCustomerIds.length === 0) {
-      return true
-    }
-
-    return accessibleCustomerIds.some((customerScopeId) => hasVmfForCustomer(customerScopeId))
-  }, [hasCustomerAdminAccess, hasTenantAdminAccess, selectedCustomerId, user])
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -125,15 +104,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   key: 'manage-users',
                   label: 'Manage Users',
                   to: '/app/administration/edit-users',
-                },
-              ]
-            : []),
-          ...(canAccessVmfMaintenance
-            ? [
-                {
-                  key: 'manage-vmfs',
-                  label: 'Manage VMFs',
-                  to: '/app/administration/manage-vmfs',
                 },
               ]
             : []),
@@ -193,7 +163,6 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     return entries
   }, [
     canAccessTenantMaintenance,
-    canAccessVmfMaintenance,
     hasCustomerAdminAccess,
     hasTenantAdminAccess,
     isAuthenticated,
@@ -203,11 +172,21 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const [openMenuKey, setOpenMenuKey] = useState(null)
 
   useEffect(() => {
-    if (!isOpen) setOpenMenuKey(null)
+    if (isOpen) return undefined
+
+    const timeoutId = window.setTimeout(() => {
+      setOpenMenuKey(null)
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
   }, [isOpen])
 
   useEffect(() => {
-    setOpenMenuKey(null)
+    const timeoutId = window.setTimeout(() => {
+      setOpenMenuKey(null)
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
   }, [location.pathname])
 
   useEffect(() => {
