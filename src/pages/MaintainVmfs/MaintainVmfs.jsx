@@ -6,10 +6,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { MdArrowBack } from 'react-icons/md'
+import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
+import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
@@ -22,6 +25,7 @@ import { useToaster } from '../../components/Toaster'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
   useCreateVmfMutation,
   useDeleteVmfMutation,
@@ -30,8 +34,10 @@ import {
 } from '../../store/api/vmfApi.js'
 import {
   getCustomerInactiveMessage,
+  getGovernanceLimitConflictMessage,
   getLicenseFeatureNotEnabledMessage,
   isCustomerInactiveError,
+  isGovernanceLimitConflictError,
   isLicenseFeatureNotEnabledError,
   normalizeError,
 } from '../../utils/errors.js'
@@ -70,6 +76,9 @@ const VMF_INACTIVE_CUSTOMER_MESSAGE =
 const VMF_LICENCE_MESSAGE =
   'This customer licence does not include VMF. Contact your Super Admin to update entitlements.'
 
+const VMF_LIFECYCLE_NOTE =
+  'Use the Actions menu to edit VMFs or schedule a soft-delete. Active VMFs must be disabled before deletion.'
+
 const getLifecycleVariant = (value) => {
   if (value === 'PUBLISHED') return 'success'
   if (value === 'CANONISED') return 'info'
@@ -83,6 +92,95 @@ const getOperationalStatusVariant = (status) => {
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
+
+const getVmfCapacityCountLabel = (countMode) => {
+  const normalizedCountMode = String(countMode ?? '').trim().toUpperCase()
+  if (normalizedCountMode === 'NON_ARCHIVED') return 'non-archived'
+  return 'active'
+}
+
+const parsePositiveInteger = (value) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1) return null
+  return parsed
+}
+
+const normalizeVmfCapacity = (rawCapacity, fallbackMaxVmfsPerTenant = null) => {
+  const maxVmfs = parsePositiveInteger(
+    rawCapacity?.maxVmfs
+    ?? rawCapacity?.maxVmfsPerTenant
+    ?? rawCapacity?.limit
+    ?? fallbackMaxVmfsPerTenant,
+  )
+  const currentCountValue = Number(rawCapacity?.currentCount)
+  const remainingCountValue = Number(rawCapacity?.remainingCount)
+  const currentCount = Number.isFinite(currentCountValue) ? currentCountValue : null
+  const remainingCount = Number.isFinite(remainingCountValue)
+    ? remainingCountValue
+    : Number.isFinite(maxVmfs) && Number.isFinite(currentCount)
+      ? Math.max(maxVmfs - currentCount, 0)
+      : null
+
+  return {
+    maxVmfs,
+    currentCount,
+    remainingCount,
+    isAtCapacity:
+      rawCapacity?.isAtCapacity === true
+      || (Number.isFinite(maxVmfs) && Number.isFinite(currentCount) && currentCount >= maxVmfs),
+    countMode: String(rawCapacity?.countMode ?? '').trim().toUpperCase() || 'ACTIVE',
+  }
+}
+
+const getVmfCapacityGuidance = (vmfCapacity, { isLoading = false } = {}) => {
+  if (!vmfCapacity && !isLoading) return null
+
+  if (!vmfCapacity && isLoading) {
+    return {
+      tone: 'info',
+      title: 'Checking VMF capacity',
+      message: 'Loading active VMF usage for this tenant before enabling create guidance.',
+    }
+  }
+
+  const currentCount = vmfCapacity?.currentCount
+  const remainingCount = vmfCapacity?.remainingCount
+  const maxVmfs = vmfCapacity?.maxVmfs
+  const countLabel = getVmfCapacityCountLabel(vmfCapacity?.countMode)
+
+  if (vmfCapacity?.isAtCapacity && currentCount !== null && maxVmfs !== null) {
+    return {
+      tone: 'warning',
+      title: 'VMF capacity reached',
+      message:
+        `This tenant is already using ${currentCount} of ${maxVmfs} ${countLabel} VMF slots. `
+        + 'Disable or delete an existing VMF before creating another.',
+    }
+  }
+
+  if (remainingCount === 1 && currentCount !== null && maxVmfs !== null) {
+    return {
+      tone: 'warning',
+      title: 'Final VMF slot',
+      message:
+        `This tenant has 1 ${countLabel} VMF slot remaining (${currentCount} of ${maxVmfs} in use). `
+        + 'The next successful create will exhaust the current capacity.',
+    }
+  }
+
+  if (currentCount !== null && remainingCount !== null && maxVmfs !== null) {
+    const remainingLabel = remainingCount === 1 ? 'slot' : 'slots'
+    return {
+      tone: 'info',
+      title: 'VMF usage',
+      message:
+        `${currentCount} of ${maxVmfs} ${countLabel} VMF slots are in use. `
+        + `${remainingCount} ${remainingLabel} remaining.`,
+    }
+  }
+
+  return null
+}
 
 const getLifecycleOptionsForCurrentState = (value) => {
   const current = String(value ?? 'DRAFT').trim().toUpperCase()
@@ -110,10 +208,52 @@ const formatSoftDeleteMessage = (payload) => {
   return String(payload?.message ?? 'VMF soft-delete was scheduled.')
 }
 
-function MaintainVmfsBoundaryState({ message }) {
+function VmfRowActionsMenu({ row, actions, onAction }) {
+  const rowName = row?.name || row?.id || 'vmf'
+
+  const options = actions
+    .filter((action) => {
+      const isDisabled = typeof action.disabled === 'function'
+        ? action.disabled(row)
+        : Boolean(action.disabled)
+
+      return !isDisabled
+    })
+    .map((action) => ({ value: action.label, label: action.label }))
+
+  return (
+    <div className="maintain-vmfs__row-actions">
+      <Select
+        size="sm"
+        value=""
+        placeholder={options.length > 0 ? 'Actions' : 'No actions'}
+        options={options}
+        disabled={options.length === 0}
+        onChange={(event) => {
+          const label = event.target.value
+          if (label) onAction(label, row)
+        }}
+        aria-label={`Actions for ${rowName}`}
+      />
+    </div>
+  )
+}
+
+function MaintainVmfsBoundaryState({ message, onBack }) {
   return (
     <section className="maintain-vmfs container" aria-label="Maintain VMFs">
       <header className="maintain-vmfs__header">
+        <div className="maintain-vmfs__header-actions">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            leftIcon={<MdArrowBack aria-hidden="true" />}
+            onClick={onBack}
+          >
+            Back to Home
+          </Button>
+        </div>
         <h1 className="maintain-vmfs__title">Maintain VMFs</h1>
       </header>
       <Fieldset className="maintain-vmfs__fieldset">
@@ -129,6 +269,7 @@ function MaintainVmfsBoundaryState({ message }) {
 }
 
 function MaintainVmfs() {
+  const navigate = useNavigate()
   const { addToast } = useToaster()
   const {
     customerId,
@@ -167,6 +308,7 @@ function MaintainVmfs() {
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const debouncedSearch = useDebounce(search, 300)
+  const { data: customerDetails } = useGetCustomerQuery(customerId, { skip: !customerId })
 
   useEffect(() => {
     if (tenantId || !customerId) return
@@ -218,6 +360,22 @@ function MaintainVmfs() {
     { skip: !canQueryVmfs },
   )
 
+  const {
+    data: activeCountResponse,
+    isFetching: isFetchingActiveCount,
+  } = useListVmfsQuery(
+    {
+      customerId,
+      tenantId,
+      q: '',
+      status: 'ACTIVE',
+      lifecycleStatus: '',
+      page: 1,
+      pageSize: 1,
+    },
+    { skip: !canQueryVmfs },
+  )
+
   const [createVmf, createResult] = useCreateVmfMutation()
   const [updateVmf, updateResult] = useUpdateVmfMutation()
   const [deleteVmf, deleteResult] = useDeleteVmfMutation()
@@ -226,6 +384,7 @@ function MaintainVmfs() {
   const meta = listResponse?.meta ?? {}
   const currentPage = Number(meta.page) || page
   const totalPages = Number(meta.totalPages) || 1
+  const totalCount = Number(meta.total) || 0
 
   const listAppError = listError ? normalizeError(listError) : null
   const inactiveCustomerAppError = isCustomerInactiveError(listAppError) ? listAppError : null
@@ -243,6 +402,107 @@ function MaintainVmfs() {
   const isMutationLoading =
     createResult.isLoading || updateResult.isLoading || deleteResult.isLoading
 
+  const maxVmfsPerTenant = useMemo(() => {
+    const candidateValues = [
+      customerDetails?.data?.governance?.maxVmfsPerTenant,
+      customerDetails?.governance?.maxVmfsPerTenant,
+    ]
+
+    for (const candidate of candidateValues) {
+      const parsed = parsePositiveInteger(candidate)
+      if (parsed !== null) return parsed
+    }
+
+    return null
+  }, [customerDetails])
+
+  const vmfCapacity = useMemo(() => {
+    const metaCapacity = meta?.vmfCapacity
+    if (metaCapacity && typeof metaCapacity === 'object') {
+      return normalizeVmfCapacity(metaCapacity, maxVmfsPerTenant)
+    }
+
+    const activeCount = Number(activeCountResponse?.meta?.total)
+    if (maxVmfsPerTenant !== null && Number.isFinite(activeCount)) {
+      return normalizeVmfCapacity(
+        {
+          maxVmfs: maxVmfsPerTenant,
+          currentCount: activeCount,
+          remainingCount: Math.max(maxVmfsPerTenant - activeCount, 0),
+          isAtCapacity: activeCount >= maxVmfsPerTenant,
+          countMode: 'ACTIVE',
+        },
+        maxVmfsPerTenant,
+      )
+    }
+
+    return null
+  }, [activeCountResponse?.meta?.total, maxVmfsPerTenant, meta?.vmfCapacity])
+
+  const vmfCapacityGuidance = useMemo(
+    () => getVmfCapacityGuidance(vmfCapacity, { isLoading: isFetchingActiveCount }),
+    [isFetchingActiveCount, vmfCapacity],
+  )
+  const isCreateBlockedByCapacity = vmfCapacity?.isAtCapacity === true
+
+  const openCreateDialog = useCallback(() => {
+    setCreateErrors({})
+    setCreateOpen(true)
+  }, [])
+
+  const closeCreateDialog = useCallback(() => {
+    setCreateOpen(false)
+    setCreateForm({ name: '', description: '' })
+    setCreateErrors({})
+  }, [])
+
+  const openEditDialog = useCallback((vmf) => {
+    setSelectedVmf(vmf)
+    setEditErrors({})
+    setEditForm({
+      name: String(vmf?.name ?? ''),
+      description: String(vmf?.description ?? ''),
+      status: String(vmf?.status ?? 'ACTIVE').trim().toUpperCase(),
+      lifecycleStatus: String(vmf?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase(),
+    })
+    setEditOpen(true)
+  }, [])
+
+  const closeEditDialog = useCallback(() => {
+    setEditOpen(false)
+    setSelectedVmf(null)
+    setEditErrors({})
+    setEditForm({
+      name: '',
+      description: '',
+      status: 'ACTIVE',
+      lifecycleStatus: 'DRAFT',
+    })
+  }, [])
+
+  const rowActions = useMemo(
+    () => [
+      {
+        label: 'Edit',
+        disabled: isMutationLoading,
+      },
+      {
+        label: 'Delete',
+        disabled: (row) =>
+          isMutationLoading || String(row?.status ?? '').trim().toUpperCase() === 'ACTIVE',
+      },
+    ],
+    [isMutationLoading],
+  )
+
+  const handleRowAction = useCallback(
+    (label, row) => {
+      if (label === 'Edit') openEditDialog(row)
+      if (label === 'Delete') setDeleteTarget(row)
+    },
+    [openEditDialog],
+  )
+
   const columns = useMemo(
     () => [
       { key: 'name', label: 'Name' },
@@ -253,7 +513,7 @@ function MaintainVmfs() {
           const trimmed = String(value ?? '').trim()
           if (!trimmed) return '--'
           if (trimmed.length <= 80) return trimmed
-          return `${trimmed.slice(0, 80)}…`
+          return `${trimmed.slice(0, 80)}...`
         },
       },
       {
@@ -291,45 +551,18 @@ function MaintainVmfs() {
         width: '156px',
         render: (value) => <TableDateTime value={value} />,
       },
+      {
+        key: 'rowActions',
+        label: 'Actions',
+        align: 'center',
+        width: '168px',
+        render: (_value, row) => (
+          <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+        ),
+      },
     ],
-    [],
+    [handleRowAction, rowActions],
   )
-
-  const openCreateDialog = useCallback(() => {
-    setCreateErrors({})
-    setCreateOpen(true)
-  }, [])
-
-  const closeCreateDialog = useCallback(() => {
-    setCreateOpen(false)
-    setCreateForm({ name: '', description: '' })
-    setCreateErrors({})
-  }, [])
-
-  const openEditDialog = useCallback((vmf) => {
-    setSelectedVmf(vmf)
-    setEditErrors({})
-    setEditForm({
-      name: String(vmf?.name ?? ''),
-      description: String(vmf?.description ?? ''),
-      status: String(vmf?.status ?? 'ACTIVE').trim().toUpperCase(),
-      lifecycleStatus: String(vmf?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase(),
-    })
-    setEditOpen(true)
-  }, [])
-
-  const closeEditDialog = useCallback(() => {
-    setEditOpen(false)
-    setSelectedVmf(null)
-    setEditErrors({})
-    setEditForm({
-      name: '',
-      description: '',
-      status: 'ACTIVE',
-      lifecycleStatus: 'DRAFT',
-    })
-  }, [])
-
   const handleCreateSubmit = useCallback(
     async (event) => {
       event.preventDefault()
@@ -374,6 +607,16 @@ function MaintainVmfs() {
         setPage(1)
       } catch (error) {
         const appError = normalizeError(error)
+
+        if (isGovernanceLimitConflictError(appError, 'VMF_LIMIT_REACHED')) {
+          addToast({
+            title: 'VMF capacity reached',
+            description: getGovernanceLimitConflictMessage(appError),
+            variant: 'warning',
+          })
+          return
+        }
+
         const details = appError?.details
 
         if (details && typeof details === 'object') {
@@ -517,9 +760,16 @@ function MaintainVmfs() {
     }
   }, [addToast, deleteTarget, deleteVmf])
 
+  const handleBackToHome = useCallback(() => {
+    navigate('/app/dashboard')
+  }, [navigate])
+
   if (!customerId) {
     return (
-      <MaintainVmfsBoundaryState message="No customer context available. Select a customer to manage VMFs." />
+      <MaintainVmfsBoundaryState
+        message="No customer context available. Select a customer to manage VMFs."
+        onBack={handleBackToHome}
+      />
     )
   }
 
@@ -531,29 +781,41 @@ function MaintainVmfs() {
             ? 'Select a tenant from the tenant switcher before opening VMF management.'
             : 'Tenant context is still loading for this workspace. Refresh or re-open this page.'
         }
+        onBack={handleBackToHome}
       />
     )
   }
 
   if (!hasVmfWorkspaceAccess) {
-    return <MaintainVmfsBoundaryState message={VMF_UNAUTHORIZED_MESSAGE} />
+    return <MaintainVmfsBoundaryState message={VMF_UNAUTHORIZED_MESSAGE} onBack={handleBackToHome} />
   }
 
   if (!hasVmfEntitlement) {
-    return <MaintainVmfsBoundaryState message={VMF_LICENCE_MESSAGE} />
+    return <MaintainVmfsBoundaryState message={VMF_LICENCE_MESSAGE} onBack={handleBackToHome} />
   }
 
   if (inactiveCustomerAppError) {
-    return <MaintainVmfsBoundaryState message={inactiveCustomerMessage} />
+    return <MaintainVmfsBoundaryState message={inactiveCustomerMessage} onBack={handleBackToHome} />
   }
 
   if (licenceAppError) {
-    return <MaintainVmfsBoundaryState message={licenceMessage} />
+    return <MaintainVmfsBoundaryState message={licenceMessage} onBack={handleBackToHome} />
   }
 
   return (
     <section className="maintain-vmfs container" aria-label="Maintain VMFs">
       <header className="maintain-vmfs__header">
+        <div className="maintain-vmfs__header-actions">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            leftIcon={<MdArrowBack aria-hidden="true" />}
+            onClick={handleBackToHome}
+          >
+            Back to Home
+          </Button>
+        </div>
         <h1 className="maintain-vmfs__title">Maintain VMFs</h1>
         <p className="maintain-vmfs__subtitle">
           Manage VMF lifecycle, version snapshot metadata, and soft-delete behavior for
@@ -564,18 +826,34 @@ function MaintainVmfs() {
       <Fieldset className="maintain-vmfs__fieldset">
         <Fieldset.Legend className="sr-only">VMF catalogue</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card">
-          <Card.Body className="maintain-vmfs__card-body">
+          <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
             <div className="maintain-vmfs__catalogue-actions">
               <Button
                 type="button"
                 variant="primary"
                 size="sm"
                 onClick={openCreateDialog}
-                disabled={isMutationLoading}
+                disabled={isMutationLoading || isCreateBlockedByCapacity}
               >
                 Create VMF
               </Button>
             </div>
+
+            {vmfCapacityGuidance ? (
+              <div
+                className={[
+                  'maintain-vmfs__note',
+                  vmfCapacityGuidance.tone === 'warning' ? 'maintain-vmfs__note--warning' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                role={vmfCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
+                aria-label="VMF capacity guidance"
+              >
+                <p className="maintain-vmfs__note-title">{vmfCapacityGuidance.title}</p>
+                <p className="maintain-vmfs__note-text">{vmfCapacityGuidance.message}</p>
+              </div>
+            ) : null}
 
             <div className="maintain-vmfs__toolbar">
               <Input
@@ -615,14 +893,10 @@ function MaintainVmfs() {
             </div>
 
             {listAppError && !inactiveCustomerAppError && !licenceAppError ? (
-              <p className="maintain-vmfs__error" role="alert">
-                {listAppError.message}
-              </p>
+              <ErrorSupportPanel error={listAppError} context="maintain-vmfs-list" />
             ) : null}
 
-            <p className="maintain-vmfs__table-note">
-              Delete performs a soft-delete and schedules purge after the configured retention window.
-            </p>
+            <p className="maintain-vmfs__table-note">{VMF_LIFECYCLE_NOTE}</p>
 
             <HorizontalScroll
               className="maintain-vmfs__table-wrap"
@@ -633,20 +907,6 @@ function MaintainVmfs() {
                 className="maintain-vmfs__table"
                 columns={columns}
                 data={rows}
-                actions={[
-                  { label: 'Edit', variant: 'ghost' },
-                  {
-                    label: 'Delete',
-                    variant: 'ghost',
-                    disabled: (row) =>
-                      String(row?.status ?? '').trim().toUpperCase() === 'ACTIVE'
-                      || deleteResult.isLoading,
-                  },
-                ]}
-                onRowAction={(label, row) => {
-                  if (label === 'Edit') openEditDialog(row)
-                  if (label === 'Delete') setDeleteTarget(row)
-                }}
                 loading={isLoading}
                 hoverable
                 variant="striped"
@@ -656,7 +916,7 @@ function MaintainVmfs() {
             </HorizontalScroll>
 
             {isFetching && !isLoading ? (
-              <p className="maintain-vmfs__muted">Refreshing list…</p>
+              <p className="maintain-vmfs__muted">Refreshing list...</p>
             ) : null}
 
             {totalPages > 1 ? (
@@ -681,6 +941,7 @@ function MaintainVmfs() {
                 </div>
                 <p className="maintain-vmfs__pagination-info">
                   Page {currentPage} of {totalPages}
+                  {totalCount > 0 ? ` (${totalCount} VMFs)` : ''}
                 </p>
                 <div className="maintain-vmfs__pagination-controls">
                   <Button
@@ -868,4 +1129,5 @@ function MaintainVmfs() {
 }
 
 export default MaintainVmfs
+
 

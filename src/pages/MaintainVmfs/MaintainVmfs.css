@@ -10,6 +10,11 @@
   gap: var(--spacing-xs);
 }
 
+.maintain-vmfs__header-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .maintain-vmfs__title {
   margin: 0;
   font-size: var(--font-size-3xl);
@@ -31,6 +36,10 @@
   gap: var(--spacing-md);
 }
 
+.maintain-vmfs__card-body--compact {
+  gap: var(--spacing-md);
+}
+
 .maintain-vmfs__card-body--state {
   align-items: flex-start;
 }
@@ -45,6 +54,32 @@
   justify-content: flex-end;
 }
 
+.maintain-vmfs__note {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background-color: var(--color-background-secondary);
+}
+
+.maintain-vmfs__note--warning {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+}
+
+.maintain-vmfs__note-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.maintain-vmfs__note-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .maintain-vmfs__toolbar {
   display: grid;
   gap: var(--spacing-md);
@@ -53,6 +88,10 @@
 
 .maintain-vmfs__table-wrap {
   width: 100%;
+}
+
+.maintain-vmfs__row-actions {
+  min-width: 9rem;
 }
 
 .maintain-vmfs__table-note {
@@ -156,4 +195,3 @@
     width: 100%;
   }
 }
-
