@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -20,6 +20,72 @@ import {
 import './RoleListView.css'
 
 const getRoleId = (row, index) => row?.id ?? row?._id ?? `role-${index}`
+const getRoleName = (row) => row?.name || row?.key || row?.id || 'role'
+const getPermissionPreview = (permissions) => {
+  if (permissions.length === 0) return '--'
+  if (permissions.length <= 2) return permissions.join(', ')
+  return `${permissions.slice(0, 2).join(', ')} +${permissions.length - 2}`
+}
+
+function RolePermissionsPreview({ row, onViewPermissions }) {
+  const permissions = Array.isArray(row?.permissions) ? row.permissions : []
+
+  if (permissions.length === 0) {
+    return <span className="super-admin-roles__permissions-empty">No permissions</span>
+  }
+
+  return (
+    <div className="super-admin-roles__permissions-preview">
+      <span className="super-admin-roles__permissions-summary">
+        {getPermissionPreview(permissions)}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="super-admin-roles__permissions-trigger"
+        onClick={() => onViewPermissions(row)}
+      >
+        View all ({permissions.length})
+        <span className="sr-only">{` permissions for ${getRoleName(row)}`}</span>
+      </Button>
+    </div>
+  )
+}
+
+function RoleRowActionsMenu({ row, actions, onAction }) {
+  const rowName = getRoleName(row)
+
+  const options = actions
+    .filter((action) => {
+      const isDisabled = typeof action.disabled === 'function'
+        ? action.disabled(row)
+        : Boolean(action.disabled)
+
+      return !isDisabled
+    })
+    .map((action) => ({ value: action.label, label: action.label }))
+
+  if (options.length === 0) {
+    return <span className="super-admin-roles__row-actions-empty">Protected</span>
+  }
+
+  return (
+    <div className="super-admin-roles__row-actions">
+      <Select
+        size="sm"
+        value=""
+        placeholder="Actions"
+        options={options}
+        onChange={(event) => {
+          const label = event.target.value
+          if (label) onAction(label, row)
+        }}
+        aria-label={`Actions for ${rowName}`}
+      />
+    </div>
+  )
+}
 
 export function RoleListView({
   search,
@@ -40,9 +106,32 @@ export function RoleListView({
   openCreateDialog,
   createIsLoading,
   openEditDialog,
+  openPermissionsDialog,
   onDeleteRole,
   deleteIsLoading,
 }) {
+  const rowActions = useMemo(
+    () => [
+      {
+        label: 'Edit',
+        disabled: (row) => Boolean(row?.isSystem),
+      },
+      {
+        label: 'Delete',
+        disabled: (row) => Boolean(row?.isSystem) || deleteIsLoading,
+      },
+    ],
+    [deleteIsLoading],
+  )
+
+  const handleRowAction = useCallback(
+    (label, row) => {
+      if (label === 'Edit') openEditDialog(row)
+      if (label === 'Delete') onDeleteRole(row)
+    },
+    [onDeleteRole, openEditDialog],
+  )
+
   const columns = useMemo(
     () => [
       { key: 'key', label: 'Key' },
@@ -73,12 +162,9 @@ export function RoleListView({
       {
         key: 'permissions',
         label: 'Permissions',
-        render: (value) => {
-          const permissions = Array.isArray(value) ? value : []
-          if (permissions.length === 0) return '--'
-          if (permissions.length <= 3) return permissions.join(', ')
-          return `${permissions.slice(0, 3).join(', ')} +${permissions.length - 3}`
-        },
+        render: (_value, row) => (
+          <RolePermissionsPreview row={row} onViewPermissions={openPermissionsDialog} />
+        ),
       },
       {
         key: 'updatedAt',
@@ -86,8 +172,17 @@ export function RoleListView({
         width: '156px',
         render: (value) => <TableDateTime value={value} />,
       },
+      {
+        key: 'rowActions',
+        label: 'Actions',
+        align: 'center',
+        width: '168px',
+        render: (_value, row) => (
+          <RoleRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+        ),
+      },
     ],
-    [],
+    [handleRowAction, openPermissionsDialog, rowActions],
   )
 
   const tableRows = useMemo(
@@ -181,26 +276,6 @@ export function RoleListView({
               className="super-admin-roles__table"
               columns={columns}
               data={tableRows}
-              actions={[
-                {
-                  label: 'Edit',
-                  variant: 'ghost',
-                  disabled: (row) => Boolean(row?.isSystem),
-                },
-                {
-                  label: 'Delete',
-                  variant: 'ghost',
-                  disabled: (row) => Boolean(row?.isSystem) || deleteIsLoading,
-                },
-              ]}
-              onRowAction={(label, row) => {
-                if (label === 'Edit') {
-                  openEditDialog(row)
-                }
-                if (label === 'Delete') {
-                  onDeleteRole(row)
-                }
-              }}
               loading={isListLoading}
               hoverable
               variant="striped"
@@ -261,4 +336,3 @@ export function RoleListView({
     </Fieldset>
   )
 }
-

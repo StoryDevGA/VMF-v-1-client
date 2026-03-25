@@ -4,13 +4,23 @@
  * Manage custom role-catalogue entries for governance workflows.
  */
 
+import { useCallback, useState } from 'react'
 import { RoleListView } from './RoleListView.jsx'
-import { CreateRoleDialog, EditRoleDialog } from './RoleDialogs.jsx'
+import { CreateRoleDialog, EditRoleDialog, RolePermissionsDialog } from './RoleDialogs.jsx'
 import { useRoleManagement } from './useRoleManagement.js'
 import './SuperAdminRoles.css'
 
 function SuperAdminRoles() {
   const mgmt = useRoleManagement()
+  const [permissionsRole, setPermissionsRole] = useState(null)
+
+  const openPermissionsDialog = useCallback((role) => {
+    setPermissionsRole(role ?? null)
+  }, [])
+
+  const closePermissionsDialog = useCallback(() => {
+    setPermissionsRole(null)
+  }, [])
 
   return (
     <section className="super-admin-roles container" aria-label="Super admin roles">
@@ -20,11 +30,6 @@ function SuperAdminRoles() {
           Manage custom role-catalogue entries. Seeded system roles remain backend-protected.
         </p>
       </header>
-
-      <p className="super-admin-roles__hint" role="status">
-        This catalogue controls role-definition metadata. Runtime authorization still follows
-        existing role-key contracts for this phase.
-      </p>
 
       <RoleListView
         search={mgmt.search}
@@ -45,6 +50,7 @@ function SuperAdminRoles() {
         openCreateDialog={mgmt.openCreateDialog}
         createIsLoading={mgmt.createResult.isLoading}
         openEditDialog={mgmt.openEditDialog}
+        openPermissionsDialog={openPermissionsDialog}
         onDeleteRole={mgmt.handleDeleteRole}
         deleteIsLoading={mgmt.deleteResult.isLoading}
       />
@@ -72,9 +78,14 @@ function SuperAdminRoles() {
         selectedAppError={mgmt.selectedAppError}
         selectedRoleIsSystem={mgmt.selectedRoleIsSystem}
       />
+
+      <RolePermissionsDialog
+        open={Boolean(permissionsRole)}
+        onClose={closePermissionsDialog}
+        role={permissionsRole}
+      />
     </section>
   )
 }
 
 export default SuperAdminRoles
-

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminRoles from './SuperAdminRoles'
@@ -79,6 +79,7 @@ describe('SuperAdminRoles page', () => {
       screen.getByLabelText(/name/i, { selector: 'input#role-create-name' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create role/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /back to role definitions/i })).toBeInTheDocument()
   })
 
   it('normalizes key and permissions before create submit', async () => {
@@ -113,7 +114,9 @@ describe('SuperAdminRoles page', () => {
     )
   })
 
-  it('disables edit and delete actions for system roles', () => {
+  it('shows protected system roles without edit actions and exposes full permissions', async () => {
+    const user = userEvent.setup()
+
     useListRolesQuery.mockReturnValue({
       data: {
         data: [
@@ -137,8 +140,15 @@ describe('SuperAdminRoles page', () => {
 
     renderPage()
 
-    expect(screen.getByRole('button', { name: /edit super admin/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /delete super admin/i })).toBeDisabled()
+    expect(screen.getByText(/^protected$/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/actions for super admin/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /view all \(1\) permissions for super admin/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: /role permissions/i })).toBeInTheDocument()
+    expect(within(dialog).getByText('READ')).toBeInTheDocument()
+    expect(within(dialog).getByText('SUPER_ADMIN')).toBeInTheDocument()
   })
 
   it('surfaces role-in-use conflict guidance on delete', async () => {
@@ -185,12 +195,85 @@ describe('SuperAdminRoles page', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /delete vmf creator/i }))
+    await user.selectOptions(
+      screen.getByLabelText(/actions for vmf creator/i),
+      'Delete',
+    )
 
     expect(
       await screen.findByText(
         /role cannot be deleted while assigned to 2 users/i,
       ),
     ).toBeInTheDocument()
+  })
+
+  it('opens the update dialog from the row actions menu for custom roles', async () => {
+    const user = userEvent.setup()
+
+    useListRolesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'role-custom',
+            key: 'VMF_CREATOR',
+            name: 'VMF Creator',
+            scope: 'CUSTOMER',
+            isSystem: false,
+            isActive: true,
+            permissions: ['READ', 'WRITE', 'PUBLISH'],
+            updatedAt: '2026-03-24T10:00:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.selectOptions(
+      screen.getByLabelText(/actions for vmf creator/i),
+      'Edit',
+    )
+
+    expect(screen.getByRole('heading', { name: /update role/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /back to role definitions/i })).toBeInTheDocument()
+  })
+
+  it('opens the permissions dialog with the full permission list from the table cell', async () => {
+    const user = userEvent.setup()
+
+    useListRolesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'role-custom',
+            key: 'VMF_CREATOR',
+            name: 'VMF Creator',
+            scope: 'CUSTOMER',
+            isSystem: false,
+            isActive: true,
+            permissions: ['READ', 'WRITE', 'PUBLISH', 'APPROVE'],
+            updatedAt: '2026-03-24T10:00:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /view all \(4\) permissions for vmf creator/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('READ')).toBeInTheDocument()
+    expect(within(dialog).getByText('WRITE')).toBeInTheDocument()
+    expect(within(dialog).getByText('PUBLISH')).toBeInTheDocument()
+    expect(within(dialog).getByText('APPROVE')).toBeInTheDocument()
   })
 })

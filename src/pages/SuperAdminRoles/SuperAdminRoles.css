@@ -21,10 +21,6 @@
   color: var(--color-text-secondary);
 }
 
-.super-admin-roles__hint {
-  display: none;
-}
-
 .super-admin-roles__fieldset,
 .super-admin-roles__card {
   height: 100%;
@@ -42,12 +38,6 @@
 .super-admin-roles__dialog-body {
   display: grid;
   gap: var(--spacing-md);
-}
-
-.super-admin-roles__form-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-sm);
 }
 
 .super-admin-roles__catalogue-actions {
@@ -73,6 +63,66 @@
 .super-admin-roles__table .table__header:last-child,
 .super-admin-roles__table .table__cell--actions {
   width: 160px;
+}
+
+.super-admin-roles__permissions-dialog {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-roles__permissions-meta {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-secondary);
+}
+
+.super-admin-roles__permissions-heading {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-roles__dialog-subtitle,
+.super-admin-roles__permissions-panel-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-roles__role-key {
+  width: fit-content;
+}
+
+.super-admin-roles__permissions-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-roles__permissions-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-roles__permissions-panel {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-roles__permissions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.super-admin-roles__permissions-item {
+  display: flex;
 }
 
 .super-admin-roles__pagination {
@@ -118,10 +168,6 @@
     padding-bottom: var(--spacing-md);
   }
 
-  .super-admin-roles__form-actions {
-    grid-template-columns: 1fr;
-  }
-
   .super-admin-roles__pagination {
     flex-direction: column;
     align-items: stretch;
@@ -136,4 +182,3 @@
     justify-content: space-between;
   }
 }
-
