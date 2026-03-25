@@ -13,6 +13,7 @@
  * @param {Function} props.onClose           — called when the dialog closes
  * @param {string}   props.customerId        — customer scope for bulk endpoints
  * @param {string[]} [props.selectedUserIds]  — pre-selected user IDs for update/disable
+ * @param {string[]} [props.assignableRoles] — non-reserved roles currently assignable in FE
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -36,6 +37,11 @@ import {
   isCanonicalAdminConflictError,
   getCanonicalAdminConflictMessage,
 } from '../../utils/errors.js'
+import {
+  BASE_ASSIGNABLE_ROLE_KEYS,
+  getTopologyAwareRoles,
+  resolveAssignableUserRoles,
+} from './editUsers.roles.js'
 import './BulkUserOperations.css'
 
 const OPERATION_OPTIONS = [
@@ -51,7 +57,6 @@ const SOURCE_OPTIONS = [
 
 const BULK_LIMIT = 100
 
-const BULK_EDITABLE_ROLES = ['TENANT_ADMIN', 'USER']
 const GOVERNED_CUSTOMER_ADMIN_ROLE = 'CUSTOMER_ADMIN'
 
 const BULK_CUSTOMER_ADMIN_GOVERNANCE_MESSAGE =
@@ -89,18 +94,6 @@ const BULK_TENANT_VISIBILITY_MODE_OPTIONS = [
   { value: 'replace', label: 'Replace with selected tenants' },
   { value: 'clear', label: 'Clear explicit tenant visibility' },
 ]
-
-const getTopologyAwareRoles = (roles, topology) => {
-  const normalizedTopology = String(topology ?? '')
-    .trim()
-    .toUpperCase()
-
-  if (normalizedTopology === 'MULTI_TENANT') {
-    return roles
-  }
-
-  return roles.filter((role) => role !== 'TENANT_ADMIN')
-}
 
 const getSupportedBulkRolesMessage = (roles) =>
   `Supported bulk roles: ${roles.join(', ')}.`
@@ -668,6 +661,7 @@ function BulkUserOperations({
   onClose,
   customerId,
   selectedUserIds = [],
+  assignableRoles = BASE_ASSIGNABLE_ROLE_KEYS,
   initialOperation = 'create',
   availableOperations = OPERATION_OPTIONS.map((option) => option.value),
 }) {
@@ -744,14 +738,18 @@ function BulkUserOperations({
   const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
   const effectiveCustomerTopology = isCustomerContextAligned ? selectedCustomerTopology : ''
   const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+  const resolvedAssignableRoles = useMemo(
+    () => resolveAssignableUserRoles({ includeRoles: assignableRoles }),
+    [assignableRoles],
+  )
   const shouldShowTenantVisibilityUpdate =
     effectiveTenantVisibilityMeta?.allowed === true
     && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
   const shouldSuppressTenantVisibilityHint =
     effectiveTenantVisibilityMeta?.topology === 'SINGLE_TENANT'
   const supportedBulkRoles = useMemo(
-    () => getTopologyAwareRoles(BULK_EDITABLE_ROLES, effectiveCustomerTopology),
-    [effectiveCustomerTopology],
+    () => getTopologyAwareRoles(resolvedAssignableRoles, effectiveCustomerTopology),
+    [effectiveCustomerTopology, resolvedAssignableRoles],
   )
   const supportedBulkRolesMessage = useMemo(
     () => getSupportedBulkRolesMessage(supportedBulkRoles),

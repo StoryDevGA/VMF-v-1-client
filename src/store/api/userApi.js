@@ -20,6 +20,16 @@ const getListUsersRows = (result) => {
   return []
 }
 
+const getAssignableRoleRows = (result) => {
+  if (!result || typeof result !== 'object') return []
+
+  const payload = result.data
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+
+  return []
+}
+
 const getListUsersMeta = (result) => {
   if (!result || typeof result !== 'object') {
     return {}
@@ -122,6 +132,30 @@ export const userApi = baseApi.injectEndpoints({
               { type: 'User', id: 'LIST' },
             ]
           : [{ type: 'User', id: 'LIST' }],
+    }),
+
+    /**
+     * GET /customers/:customerId/users/assignable-roles
+     * Customer-scoped assignable role catalogue for create/edit/bulk user flows.
+     *
+     * @param {{ customerId: string }} params
+     */
+    listAssignableRoles: build.query({
+      query: ({ customerId }) => `/customers/${customerId}/users/assignable-roles`,
+      transformResponse: (response) => ({
+        data: getAssignableRoleRows(response),
+        meta: response?.meta ?? {},
+      }),
+      providesTags: (result) =>
+        (result?.data?.length ?? 0) > 0
+          ? [
+              ...result.data
+                .map((row) => row?.key)
+                .filter(Boolean)
+                .map((key) => ({ type: 'Role', id: key })),
+              { type: 'Role', id: 'LIST' },
+            ]
+          : [{ type: 'Role', id: 'LIST' }],
     }),
 
     /**
@@ -289,6 +323,7 @@ export const userApi = baseApi.injectEndpoints({
 export const {
   useListUsersQuery,
   useLazyListUsersQuery,
+  useListAssignableRolesQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,

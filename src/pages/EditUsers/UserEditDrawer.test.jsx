@@ -95,6 +95,14 @@ const singleTenantAdminUser = {
   ],
 }
 
+const customRoleUser = {
+  ...mockUser,
+  _id: 'user-6',
+  memberships: [
+    { customerId: 'cust-1', roles: ['ANALYST'] },
+  ],
+}
+
 function getTenantContextMockValue(overrides = {}) {
   return {
     customerId: 'cust-1',
@@ -271,6 +279,17 @@ describe('UserEditDrawer', () => {
     renderDrawer()
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+  })
+
+  it('renders custom assignable roles and preserves scoped custom-role memberships', () => {
+    renderDrawer({
+      user: customRoleUser,
+      assignableRoles: ['USER', 'TENANT_ADMIN', 'ANALYST', 'CUSTOMER_ADMIN'],
+    })
+
+    expect(screen.getByLabelText(/analyst/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/analyst/i)).toBeChecked()
     expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
   })
 

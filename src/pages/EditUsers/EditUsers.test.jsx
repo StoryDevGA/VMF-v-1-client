@@ -175,6 +175,20 @@ const multiRoleManagedUser = {
   identityPlus: { trustStatus: 'TRUSTED', trustedAt: '2026-01-17T11:15:00Z' },
 }
 
+const customRoleManagedUser = {
+  _id: 'user-7',
+  email: 'analyst@acme.com',
+  name: 'Analyst User',
+  isActive: true,
+  isCanonicalAdmin: false,
+  memberships: [
+    { customerId: 'cust-1', roles: ['ANALYST'] },
+  ],
+  tenantMemberships: [],
+  vmfGrants: [],
+  identityPlus: { trustStatus: 'TRUSTED', trustedAt: '2026-01-19T10:30:00Z' },
+}
+
 const inactiveCustomerAdminUser = {
   ...customerAdminUser,
   memberships: [
@@ -203,6 +217,9 @@ function buildUseUsersResult(overrides = {}) {
   return {
     users: [],
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    assignableRoleCatalogue: [],
+    isLoadingAssignableRoles: false,
+    assignableRolesError: null,
     isLoading: false,
     isFetching: false,
     error: null,
@@ -518,6 +535,55 @@ describe('EditUsers page', () => {
       expect(
         screen.getByRole('heading', { name: /create user/i }),
       ).toBeInTheDocument()
+    })
+  })
+
+  it('passes discovered custom customer roles into the create-user role step', async () => {
+    const user = userEvent.setup()
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, customRoleManagedUser],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.type(screen.getByLabelText(/full name/i), 'New Analyst')
+    await user.type(screen.getByLabelText(/email address/i), 'new.analyst@example.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: /analyst/i })).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /super admin/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('prefers the BE assignable-role catalogue when a new custom role has no current user assignment', async () => {
+    const user = userEvent.setup()
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser],
+        assignableRoleCatalogue: [
+          { key: 'USER', name: 'Standard User', isActive: true, isSystem: true },
+          { key: 'TENANT_ADMIN', name: 'Tenant Administrator', isActive: true, isSystem: true },
+          { key: 'VMF_CREATOR', name: 'VMF Creator', isActive: true, isSystem: false },
+        ],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.type(screen.getByLabelText(/full name/i), 'Creator User')
+    await user.type(screen.getByLabelText(/email address/i), 'creator.user@example.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: /vmf creator/i })).toBeInTheDocument()
     })
   })
 

@@ -12,6 +12,7 @@ import {
   userApi,
   useListUsersQuery,
   useLazyListUsersQuery,
+  useListAssignableRolesQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,
@@ -27,6 +28,7 @@ describe('userApi', () => {
   it('should expose injected endpoints', () => {
     const endpoints = userApi.endpoints
     expect(endpoints).toHaveProperty('listUsers')
+    expect(endpoints).toHaveProperty('listAssignableRoles')
     expect(endpoints).toHaveProperty('createUser')
     expect(endpoints).toHaveProperty('updateUser')
     expect(endpoints).toHaveProperty('disableUser')
@@ -41,6 +43,7 @@ describe('userApi', () => {
   it('should export query hooks', () => {
     expect(typeof useListUsersQuery).toBe('function')
     expect(typeof useLazyListUsersQuery).toBe('function')
+    expect(typeof useListAssignableRolesQuery).toBe('function')
   })
 
   it('should export mutation hooks', () => {
@@ -58,6 +61,11 @@ describe('userApi', () => {
   it('listUsers endpoint should be a query', () => {
     expect(userApi.endpoints.listUsers).toBeDefined()
     expect(typeof userApi.endpoints.listUsers.initiate).toBe('function')
+  })
+
+  it('listAssignableRoles endpoint should be a query', () => {
+    expect(userApi.endpoints.listAssignableRoles).toBeDefined()
+    expect(typeof userApi.endpoints.listAssignableRoles.initiate).toBe('function')
   })
 
   it('createUser endpoint should be a mutation', () => {

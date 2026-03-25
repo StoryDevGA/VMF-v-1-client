@@ -201,8 +201,21 @@ describe('BulkUserOperations', () => {
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/tenant visibility change/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/supported bulk roles: tenant_admin, user\./i),
+      screen.getByText(/supported bulk roles: user, tenant_admin\./i),
     ).toBeInTheDocument()
+  })
+
+  it('shows custom assignable roles in bulk update when FE discovers them', async () => {
+    const user = userEvent.setup()
+    renderDialog({
+      selectedUserIds: ['user-1'],
+      assignableRoles: ['USER', 'TENANT_ADMIN', 'ANALYST'],
+    })
+
+    await user.selectOptions(screen.getByLabelText(/operation/i), 'update')
+
+    expect(screen.getByLabelText(/analyst/i)).toBeInTheDocument()
+    expect(screen.getByText(/supported bulk roles: user, tenant_admin, analyst\./i)).toBeInTheDocument()
   })
 
   it('limits bulk-update role guidance to USER for single-tenant customers', async () => {

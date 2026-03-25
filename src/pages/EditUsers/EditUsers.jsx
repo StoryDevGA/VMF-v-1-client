@@ -25,6 +25,7 @@ import {
   getCanonicalAdminConflictMessage,
   getUserLifecycleMessage,
 } from '../../utils/errors.js'
+import { resolveAssignableUserRoles } from './editUsers.roles.js'
 import CreateUserWizard from './CreateUserWizard'
 import UserEditDrawer from './UserEditDrawer'
 import BulkUserOperations from './BulkUserOperations'
@@ -134,6 +135,7 @@ function EditUsers() {
   const {
     users,
     pagination,
+    assignableRoleCatalogue,
     isLoading,
     isFetching,
     error: usersError,
@@ -185,6 +187,10 @@ function EditUsers() {
   const selectedCustomerLifecycleStatus = useMemo(
     () => getCustomerLifecycleStatus(user, customerId),
     [customerId, user],
+  )
+  const assignableRoles = useMemo(
+    () => resolveAssignableUserRoles({ users, customerId, roleCatalogue: assignableRoleCatalogue }),
+    [assignableRoleCatalogue, customerId, users],
   )
 
   const inactiveCustomerAppError = useMemo(() => {
@@ -611,6 +617,7 @@ function EditUsers() {
         open={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         customerId={customerId}
+        assignableRoles={assignableRoles}
       />
 
       <BulkUserOperations
@@ -618,6 +625,7 @@ function EditUsers() {
         onClose={handleCloseBulkOperations}
         customerId={customerId}
         selectedUserIds={Array.from(selectedRowsSafe)}
+        assignableRoles={assignableRoles}
         initialOperation={bulkDialogConfig.initialOperation}
         availableOperations={bulkDialogConfig.availableOperations}
       />
@@ -627,6 +635,7 @@ function EditUsers() {
         onClose={() => setEditingUser(null)}
         user={editingUser}
         customerId={customerId}
+        assignableRoles={assignableRoles}
         onStartOwnershipTransfer={(targetUser) => {
           setEditingUser(null)
           setOwnershipTransferTarget(targetUser)

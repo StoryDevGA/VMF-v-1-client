@@ -3,16 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const {
   mockUseListUsersQuery,
+  mockUseListAssignableRolesQuery,
   mockUseDisableUserMutation,
   mockUseEnableUserMutation,
 } = vi.hoisted(() => ({
   mockUseListUsersQuery: vi.fn(),
+  mockUseListAssignableRolesQuery: vi.fn(),
   mockUseDisableUserMutation: vi.fn(),
   mockUseEnableUserMutation: vi.fn(),
 }))
 
 vi.mock('../store/api/userApi.js', () => ({
   useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
+  useListAssignableRolesQuery: (...args) => mockUseListAssignableRolesQuery(...args),
   useCreateUserMutation: () => [vi.fn(), {}],
   useUpdateUserMutation: () => [vi.fn(), {}],
   useDisableUserMutation: (...args) => mockUseDisableUserMutation(...args),
@@ -26,6 +29,7 @@ import { useUsers } from './useUsers.js'
 describe('useUsers', () => {
   beforeEach(() => {
     mockUseListUsersQuery.mockReset()
+    mockUseListAssignableRolesQuery.mockReset()
     mockUseDisableUserMutation.mockReset()
     mockUseEnableUserMutation.mockReset()
     mockUseListUsersQuery.mockReturnValue({
@@ -47,6 +51,16 @@ describe('useUsers', () => {
     })
     mockUseDisableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseEnableUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    mockUseListAssignableRolesQuery.mockReturnValue({
+      data: {
+        data: [
+          { key: 'USER', name: 'Standard User', isActive: true, isSystem: true },
+          { key: 'VMF_CREATOR', name: 'VMF Creator', isActive: true, isSystem: false },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    })
   })
 
   it('returns the full customer-scoped user list without client-side tenant filtering', () => {
@@ -79,6 +93,21 @@ describe('useUsers', () => {
     )
   })
 
+  it('returns the customer-scoped assignable role catalogue', () => {
+    const { result } = renderHook(() => useUsers('cust-1'))
+
+    expect(result.current.assignableRoleCatalogue).toEqual([
+      { key: 'USER', name: 'Standard User', isActive: true, isSystem: true },
+      { key: 'VMF_CREATOR', name: 'VMF Creator', isActive: true, isSystem: false },
+    ])
+    expect(result.current.isLoadingAssignableRoles).toBe(false)
+    expect(result.current.assignableRolesError).toBeNull()
+    expect(mockUseListAssignableRolesQuery).toHaveBeenCalledWith(
+      { customerId: 'cust-1' },
+      { skip: false },
+    )
+  })
+
   it('skips the list query when only mutation facades are needed', () => {
     renderHook(() => useUsers('cust-1', { skipListQuery: true }))
 
@@ -90,6 +119,10 @@ describe('useUsers', () => {
         page: 1,
         pageSize: 20,
       },
+      { skip: true },
+    )
+    expect(mockUseListAssignableRolesQuery).toHaveBeenCalledWith(
+      { customerId: 'cust-1' },
       { skip: true },
     )
   })

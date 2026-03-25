@@ -14,6 +14,7 @@
  * @param {boolean} props.open       — controls dialog visibility
  * @param {Function} props.onClose   — called when wizard should close
  * @param {string}  props.customerId — customer scope for the new user
+ * @param {string[]} [props.assignableRoles] — non-reserved roles currently assignable in FE
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
@@ -31,10 +32,13 @@ import {
   isCanonicalAdminConflictError,
   normalizeError,
 } from '../../utils/errors.js'
+import {
+  BASE_ASSIGNABLE_ROLE_KEYS,
+  getTopologyAwareRoles,
+  resolveAssignableUserRoles,
+} from './editUsers.roles.js'
 import './EditUsers.css'
 
-/** Available user roles (matches backend Role catalogue) */
-const AVAILABLE_ROLES = ['TENANT_ADMIN', 'USER']
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const CUSTOMER_ADMIN_CREATE_GUIDANCE =
@@ -177,18 +181,6 @@ const getCreateUserConflictMessage = (appError) => {
 
 const getTenantId = (tenant) => String(tenant?.id ?? tenant?._id ?? '').trim()
 
-const getTopologyAwareRoles = (roles, topology) => {
-  const normalizedTopology = String(topology ?? '')
-    .trim()
-    .toUpperCase()
-
-  if (normalizedTopology === 'MULTI_TENANT') {
-    return roles
-  }
-
-  return roles.filter((role) => role !== 'TENANT_ADMIN')
-}
-
 const normalizeTenantOption = (tenant) => {
   const id = getTenantId(tenant)
 
@@ -235,7 +227,12 @@ const getTenantVisibilityValidationMessage = (appError) => {
 /**
  * CreateUserWizard Component
  */
-function CreateUserWizard({ open, onClose, customerId }) {
+function CreateUserWizard({
+  open,
+  onClose,
+  customerId,
+  assignableRoles = BASE_ASSIGNABLE_ROLE_KEYS,
+}) {
   const { addToast } = useToaster()
   const [createUserMutation, { isLoading }] = useCreateUserMutation()
   const {
@@ -270,10 +267,14 @@ function CreateUserWizard({ open, onClose, customerId }) {
 
   const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
   const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+  const resolvedAssignableRoles = useMemo(
+    () => resolveAssignableUserRoles({ includeRoles: assignableRoles }),
+    [assignableRoles],
+  )
 
   const availableRoles = useMemo(
-    () => getTopologyAwareRoles(AVAILABLE_ROLES, effectiveTenantVisibilityMeta?.topology),
-    [effectiveTenantVisibilityMeta?.topology],
+    () => getTopologyAwareRoles(resolvedAssignableRoles, effectiveTenantVisibilityMeta?.topology),
+    [effectiveTenantVisibilityMeta?.topology, resolvedAssignableRoles],
   )
   const allowsTenantAdminRole = availableRoles.includes('TENANT_ADMIN')
 

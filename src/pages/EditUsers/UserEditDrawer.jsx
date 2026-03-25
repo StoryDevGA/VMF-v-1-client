@@ -9,6 +9,7 @@
  * @param {Function} props.onClose   — called when drawer should close
  * @param {Object}  props.user       — the user object being edited
  * @param {string}  props.customerId — customer scope
+ * @param {string[]} [props.assignableRoles] — non-reserved roles currently assignable in FE
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
@@ -31,9 +32,14 @@ import {
   getUserEmailConflictMessage,
   getUserLifecycleMessage,
 } from '../../utils/errors.js'
+import {
+  BASE_ASSIGNABLE_ROLE_KEYS,
+  getCustomerScopedRoles,
+  getTopologyAwareRoles,
+  resolveAssignableUserRoles,
+} from './editUsers.roles.js'
 import './UserEditDrawer.css'
 
-const EDITABLE_ROLES = ['TENANT_ADMIN', 'USER']
 const EMAIL_REGEX = /^\S+@\S+\.\S+$/
 
 const CUSTOMER_ADMIN_EDIT_GUIDANCE =
@@ -93,32 +99,10 @@ const getUpdateUserPayload = (result) => {
   return {}
 }
 
-const getCustomerScopedRoles = (user, customerId) => {
-  const memberships = Array.isArray(user?.memberships) ? user.memberships : []
-  const scopedMemberships = memberships.filter((membership) => {
-    if (!customerId) return true
-    return String(membership?.customerId ?? '') === String(customerId)
-  })
-
-  return scopedMemberships.flatMap((membership) => membership?.roles ?? []).filter(Boolean)
-}
-
 const getUserTrustStatus = (user) =>
   String(user?.trustStatus ?? user?.identityPlus?.trustStatus ?? 'UNTRUSTED')
     .trim()
     .toUpperCase()
-
-const getTopologyAwareRoles = (roles, topology) => {
-  const normalizedTopology = String(topology ?? '')
-    .trim()
-    .toUpperCase()
-
-  if (normalizedTopology === 'MULTI_TENANT') {
-    return roles
-  }
-
-  return roles.filter((role) => role !== 'TENANT_ADMIN')
-}
 
 const getTenantId = (tenant) => String(tenant?.id ?? tenant?._id ?? '').trim()
 
@@ -236,6 +220,7 @@ function UserEditDrawer({
   onClose,
   user,
   customerId,
+  assignableRoles = BASE_ASSIGNABLE_ROLE_KEYS,
   onStartOwnershipTransfer,
   hasCanonicalAdmin = false,
 }) {
@@ -257,17 +242,6 @@ function UserEditDrawer({
   const [tenantVisibility, setTenantVisibility] = useState([])
   const [fieldErrors, setFieldErrors] = useState({})
 
-  useEffect(() => {
-    if (!user) return
-    setName(String(user?.name ?? ''))
-    setEmail(String(user?.email ?? ''))
-    setSelectedRoles(
-      getCustomerScopedRoles(user, customerId).filter((role) => editableRoleOptions.includes(role)),
-    )
-    setTenantVisibility(normalizeTenantVisibilityIds(user?.tenantVisibility))
-    setFieldErrors({})
-  }, [user, customerId])
-
   const isCustomerContextAligned =
     !customerId
     || !activeCustomerId
@@ -285,9 +259,19 @@ function UserEditDrawer({
 
   const effectiveTenantVisibilityMeta = isCustomerContextAligned ? tenantVisibilityMeta : null
   const isLoadingTenants = isCustomerContextAligned ? rawIsLoadingTenants : false
+  const customerScopedRoles = useMemo(
+    () => getCustomerScopedRoles(user, customerId),
+    [customerId, user],
+  )
+  const resolvedAssignableRoles = useMemo(
+    () => resolveAssignableUserRoles({
+      includeRoles: [...assignableRoles, ...customerScopedRoles],
+    }),
+    [assignableRoles, customerScopedRoles],
+  )
   const editableRoleOptions = useMemo(
-    () => getTopologyAwareRoles(EDITABLE_ROLES, effectiveTenantVisibilityMeta?.topology),
-    [effectiveTenantVisibilityMeta?.topology],
+    () => getTopologyAwareRoles(resolvedAssignableRoles, effectiveTenantVisibilityMeta?.topology),
+    [effectiveTenantVisibilityMeta?.topology, resolvedAssignableRoles],
   )
   const allowsTenantAdminRole = editableRoleOptions.includes('TENANT_ADMIN')
   const shouldShowTenantVisibilityEditor =
@@ -295,12 +279,19 @@ function UserEditDrawer({
     && effectiveTenantVisibilityMeta?.topology === 'MULTI_TENANT'
   const shouldHideTenantVisibilitySection =
     effectiveTenantVisibilityMeta?.topology === 'SINGLE_TENANT'
-  const customerScopedRoles = useMemo(
-    () => getCustomerScopedRoles(user, customerId),
-    [customerId, user],
-  )
   const hasHiddenTenantAdminAssignment =
     !allowsTenantAdminRole && customerScopedRoles.includes('TENANT_ADMIN')
+
+  useEffect(() => {
+    if (!user) return
+    setName(String(user?.name ?? ''))
+    setEmail(String(user?.email ?? ''))
+    setSelectedRoles(
+      customerScopedRoles.filter((role) => editableRoleOptions.includes(role)),
+    )
+    setTenantVisibility(normalizeTenantVisibilityIds(user?.tenantVisibility))
+    setFieldErrors({})
+  }, [customerId, customerScopedRoles, editableRoleOptions, user])
 
   const initialRoles = useMemo(
     () => normalizeRoles(customerScopedRoles.filter((role) => editableRoleOptions.includes(role))),

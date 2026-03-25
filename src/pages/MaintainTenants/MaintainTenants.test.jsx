@@ -341,6 +341,37 @@ describe('MaintainTenants page', () => {
     expect(screen.getByRole('button', { name: /create tenant/i })).toBeDisabled()
   })
 
+  it('shows explicit tenant usage guidance when capacity metadata is available and capacity remains', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0,
+          tenantCapacity: {
+            maxTenants: 4,
+            currentCount: 2,
+            remainingCount: 2,
+            isAtCapacity: false,
+            countMode: 'NON_ARCHIVED',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    expect(
+      screen.getByText(/2 of 4 non-archived tenant slots are in use\. 2 slots remaining\./i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create tenant/i })).toBeEnabled()
+  })
+
   it('renders lifecycle helper copy and compact row-action menus with allowed actions only', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {

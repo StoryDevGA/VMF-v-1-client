@@ -261,6 +261,23 @@ describe('CreateUserWizard', () => {
     })
   })
 
+  it('renders custom non-reserved roles from assignable-role input', async () => {
+    const user = userEvent.setup()
+    renderWizard({
+      assignableRoles: ['USER', 'TENANT_ADMIN', 'ANALYST', 'CUSTOMER_ADMIN', 'SUPER_ADMIN'],
+    })
+
+    await user.type(screen.getByLabelText(/full name/i), 'Jane Doe')
+    await user.type(screen.getByLabelText(/email address/i), 'jane@acme.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: /analyst/i })).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /super admin/i })).not.toBeInTheDocument()
+    })
+  })
+
   it('shows validation error when no role is selected on step 2', async () => {
     const user = userEvent.setup()
     renderWizard()

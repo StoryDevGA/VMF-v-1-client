@@ -11,6 +11,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import {
   useListUsersQuery,
+  useListAssignableRolesQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
   useDisableUserMutation,
@@ -37,6 +38,9 @@ const createMissingCustomerScopeError = () => ({
  * @returns {{
  *   users: Array,
  *   pagination: { page: number, pageSize: number, total: number, totalPages: number },
+ *   assignableRoleCatalogue: Array,
+ *   isLoadingAssignableRoles: boolean,
+ *   assignableRolesError: object|null,
  *   isLoading: boolean,
  *   isFetching: boolean,
  *   error: object|null,
@@ -85,6 +89,15 @@ export function useUsers(customerId, options = {}) {
     { skip: !customerId || skipListQuery },
   )
 
+  const {
+    data: assignableRolesData,
+    isLoading: isLoadingAssignableRoles,
+    error: assignableRolesError,
+  } = useListAssignableRolesQuery(
+    { customerId },
+    { skip: !customerId || skipListQuery },
+  )
+
   const users = useMemo(
     () => listData?.data?.users ?? [],
     [listData],
@@ -98,6 +111,11 @@ export function useUsers(customerId, options = {}) {
       totalPages: listData?.data?.totalPages ?? 0,
     }),
     [listData, page, pageSize],
+  )
+
+  const assignableRoleCatalogue = useMemo(
+    () => assignableRolesData?.data ?? [],
+    [assignableRolesData],
   )
 
   /* ---- Mutations ---- */
@@ -167,6 +185,9 @@ export function useUsers(customerId, options = {}) {
     // List data
     users,
     pagination,
+    assignableRoleCatalogue,
+    isLoadingAssignableRoles,
+    assignableRolesError: assignableRolesError ?? null,
     isLoading,
     isFetching,
     error: listError ?? null,
