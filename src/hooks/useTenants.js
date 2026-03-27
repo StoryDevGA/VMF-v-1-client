@@ -8,7 +8,7 @@
  * const { tenants, pagination, isLoading, createTenant, enableTenant } = useTenants(customerId)
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import {
   useListTenantsQuery,
   useCreateTenantMutation,
@@ -87,6 +87,7 @@ const normalizeTenantCapacity = (tenantCapacity) => {
  */
 export function useTenants(customerId, options = {}) {
   const { pageSize = 20, skipListQuery = false } = options
+  const previousCustomerIdRef = useRef(customerId ?? null)
 
   /* ---- Local filter / pagination state ---- */
   const [search, setSearchRaw] = useState('')
@@ -102,6 +103,16 @@ export function useTenants(customerId, options = {}) {
     setStatusFilterRaw(value)
     setPage(1)
   }, [])
+
+  useEffect(() => {
+    const normalizedCustomerId = customerId ?? null
+    if (previousCustomerIdRef.current === normalizedCustomerId) return
+
+    previousCustomerIdRef.current = normalizedCustomerId
+    setSearchRaw('')
+    setStatusFilterRaw('')
+    setPage(1)
+  }, [customerId])
 
   /* ---- RTK Query: list tenants ---- */
   const {

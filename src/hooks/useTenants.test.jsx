@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const {
@@ -105,6 +105,48 @@ describe('useTenants', () => {
       },
       { skip: true },
     )
+  })
+
+  it('resets search, status, and page when the active customer changes', async () => {
+    const { result, rerender } = renderHook(
+      ({ customerId }) => useTenants(customerId),
+      { initialProps: { customerId: 'cust-1' } },
+    )
+
+    act(() => {
+      result.current.setSearch('Alpha')
+      result.current.setStatusFilter('ENABLED')
+      result.current.setPage(3)
+    })
+
+    expect(mockUseListTenantsQuery).toHaveBeenLastCalledWith(
+      {
+        customerId: 'cust-1',
+        q: 'Alpha',
+        status: 'ENABLED',
+        page: 3,
+        pageSize: 20,
+      },
+      { skip: false },
+    )
+
+    rerender({ customerId: 'cust-2' })
+
+    await waitFor(() => {
+      expect(result.current.search).toBe('')
+      expect(result.current.statusFilter).toBe('')
+      expect(result.current.page).toBe(1)
+      expect(mockUseListTenantsQuery).toHaveBeenLastCalledWith(
+        {
+          customerId: 'cust-2',
+          q: undefined,
+          status: undefined,
+          page: 1,
+          pageSize: 20,
+        },
+        { skip: false },
+      )
+    })
   })
 
   it('rejects customer-admin tenant lifecycle actions when customer scope is missing', async () => {

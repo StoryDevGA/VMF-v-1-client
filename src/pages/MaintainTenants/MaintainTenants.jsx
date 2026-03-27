@@ -6,7 +6,7 @@
  * search, status filter, pagination, and lifecycle actions.
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -508,6 +508,9 @@ function MaintainTenants() {
     : MAINTAIN_TENANTS_LIFECYCLE_NOTE
 
   const [searchInput, setSearchInput] = useState('')
+  const previousContextKeyRef = useRef(
+    `${customerId ?? ''}::${isTenantAdminScopedView ? 'tenant-scoped' : 'full'}`,
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -516,6 +519,17 @@ function MaintainTenants() {
     }, SEARCH_DEBOUNCE)
     return () => clearTimeout(timer)
   }, [searchInput, setSearch, setPage])
+
+  useEffect(() => {
+    const nextContextKey = `${customerId ?? ''}::${isTenantAdminScopedView ? 'tenant-scoped' : 'full'}`
+    if (previousContextKeyRef.current === nextContextKey) return
+
+    previousContextKeyRef.current = nextContextKey
+    setSearchInput('')
+    setSearch('')
+    setStatusFilter('')
+    setPage(1)
+  }, [customerId, isTenantAdminScopedView, setPage, setSearch, setStatusFilter])
 
   if (!customerId && !isSuperAdmin) {
     return (

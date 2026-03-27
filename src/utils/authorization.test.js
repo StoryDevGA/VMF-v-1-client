@@ -33,6 +33,8 @@ import {
   getUserTenantRoles,
   hasTenantRole,
   hasTenantAccess,
+  hasVmfWorkspaceAccess,
+  hasVmfWorkspaceManagementAccess,
   getUserVmfPermissions,
   hasVmfPermission,
   hasVmfAccess,
@@ -128,6 +130,13 @@ const tenantMembershipOnlyUser = {
     { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roles: ['TENANT_ADMIN'] },
     { customerId: CUSTOMER_ID_2, tenantId: TENANT_ID_2, roles: ['USER'] },
   ],
+  vmfGrants: [],
+}
+
+const singleTenantCustomerUser = {
+  id: '8',
+  memberships: [{ customerId: CUSTOMER_ID, roles: ['USER'] }],
+  tenantMemberships: [],
   vmfGrants: [],
 }
 
@@ -232,6 +241,14 @@ describe('Customer role helpers', () => {
 
     it('denies access when user has no membership', () => {
       expect(hasCustomerAccess(customerAdminUser, CUSTOMER_ID_2)).toBe(false)
+    })
+
+    it('grants access when user has only tenantMemberships for the customer', () => {
+      expect(hasCustomerAccess(tenantMembershipOnlyUser, CUSTOMER_ID)).toBe(true)
+    })
+
+    it('denies access when tenantMembership-only user has no entry for the customer', () => {
+      expect(hasCustomerAccess(tenantMembershipOnlyUser, 'unknown-customer')).toBe(false)
     })
   })
 
@@ -547,6 +564,43 @@ describe('Tenant role helpers', () => {
 /* ================================================================== */
 /*  VMF                                                               */
 /* ================================================================== */
+
+describe('VMF workspace helpers', () => {
+  it('allows single-tenant customer users to open the VMF workspace from customer scope', () => {
+    expect(
+      hasVmfWorkspaceAccess(singleTenantCustomerUser, CUSTOMER_ID, null, {
+        supportsTenantManagement: false,
+      }),
+    ).toBe(true)
+  })
+
+  it('allows tenantMembership-only users to open the VMF workspace for a single-tenant customer', () => {
+    expect(
+      hasVmfWorkspaceAccess(tenantMembershipOnlyUser, CUSTOMER_ID, null, {
+        supportsTenantManagement: false,
+      }),
+    ).toBe(true)
+  })
+
+  it('requires tenant scope for multi-tenant standard users', () => {
+    expect(
+      hasVmfWorkspaceAccess(singleTenantCustomerUser, CUSTOMER_ID, TENANT_ID, {
+        supportsTenantManagement: true,
+      }),
+    ).toBe(false)
+    expect(
+      hasVmfWorkspaceAccess(vmfUser, CUSTOMER_ID, TENANT_ID, {
+        supportsTenantManagement: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('keeps VMF management access restricted to administrators', () => {
+    expect(hasVmfWorkspaceManagementAccess(customerAdminUser, CUSTOMER_ID, TENANT_ID)).toBe(true)
+    expect(hasVmfWorkspaceManagementAccess(tenantAdminUser, CUSTOMER_ID, TENANT_ID)).toBe(true)
+    expect(hasVmfWorkspaceManagementAccess(vmfUser, CUSTOMER_ID, TENANT_ID)).toBe(false)
+  })
+})
 
 describe('VMF permission helpers', () => {
   describe('getUserVmfPermissions', () => {

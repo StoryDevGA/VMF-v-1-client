@@ -52,6 +52,8 @@ import { createSlice } from '@reduxjs/toolkit'
  * @property {string[]} featureEntitlements
  * @property {'LICENSE_LEVEL'|'CUSTOMER_OVERRIDE'|'LEGACY_UNRESTRICTED'|string} [entitlementSource]
  * @property {string|null} [licenseLevelId]
+ * @property {'SINGLE_TENANT'|'MULTI_TENANT'|string|null} [topology]
+ * @property {string|null} [defaultTenantId]
  */
 
 /**

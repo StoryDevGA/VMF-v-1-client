@@ -170,6 +170,15 @@ export const router = createBrowserRouter([
                 element: <Dashboard />,
               },
               {
+                path: 'workspaces',
+                children: [
+                  {
+                    path: 'vmf',
+                    element: <MaintainVmfs />,
+                  },
+                ],
+              },
+              {
                 path: 'administration',
                 children: [
                   {
@@ -189,7 +198,7 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: 'manage-vmfs',
-                    element: <MaintainVmfs />,
+                    element: <Navigate to="/app/workspaces/vmf" replace />,
                   },
                   {
                     path: 'maintain-tenants',

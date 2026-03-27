@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -17,7 +17,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { baseApi } from '../../store/api/baseApi.js'
 import authReducer from '../../store/slices/authSlice.js'
-import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
+import tenantContextReducer, { setCustomer } from '../../store/slices/tenantContextSlice.js'
 import MaintainTenants from './MaintainTenants'
 
 const {
@@ -156,6 +156,14 @@ const customerScopedTenantAdminUser = {
   memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
   tenantMemberships: [
     { customerId: 'cust-1', tenantId: 'tenant-enabled', roles: ['USER'] },
+  ],
+}
+
+const multiCustomerAdminUser = {
+  ...customerAdminUser,
+  memberships: [
+    { customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] },
+    { customerId: 'cust-2', roles: ['CUSTOMER_ADMIN'] },
   ],
 }
 
@@ -368,6 +376,65 @@ describe('MaintainTenants page', () => {
 
     expect(
       screen.getByText(/2 of 4 non-archived tenant slots are in use\. 2 slots remaining\./i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create tenant/i })).toBeEnabled()
+  })
+
+  it('clears the visible tenant search input when Redux customer context changes', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore({
+      auth: { user: multiCustomerAdminUser, status: 'authenticated' },
+      tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+    })
+
+    renderMaintainTenants(store)
+
+    const searchInput = screen.getByLabelText(/search/i)
+    await user.type(searchInput, 'Alpha')
+
+    expect(searchInput).toHaveValue('Alpha')
+
+    await act(async () => {
+      store.dispatch(setCustomer({ customerId: 'cust-2' }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/search/i)).toHaveValue('')
+    })
+  })
+
+  it('shows final-slot tenant guidance when only one tenant slot remains', () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0,
+          tenantCapacity: {
+            maxTenants: 3,
+            currentCount: 2,
+            remainingCount: 1,
+            isAtCapacity: false,
+            countMode: 'NON_ARCHIVED',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: undefined,
+    })
+
+    renderMaintainTenants()
+
+    const capacityGuidance = screen.getByRole('alert', { name: /tenant capacity guidance/i })
+
+    expect(within(capacityGuidance).getByText(/final tenant slot/i)).toBeInTheDocument()
+    expect(
+      within(capacityGuidance).getByText(
+        /this customer has 1 non-archived tenant slot remaining \(2 of 3 in use\)\./i,
+      ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create tenant/i })).toBeEnabled()
   })

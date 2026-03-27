@@ -26,6 +26,8 @@ import {
   getUserTenantRoles,
   hasTenantRole as _hasTenantRole,
   hasTenantAccess as _hasTenantAccess,
+  hasVmfWorkspaceAccess as _hasVmfWorkspaceAccess,
+  hasVmfWorkspaceManagementAccess as _hasVmfWorkspaceManagementAccess,
   getUserVmfPermissions,
   hasVmfPermission as _hasVmfPermission,
   hasVmfAccess as _hasVmfAccess,
@@ -135,6 +137,18 @@ export function useAuthorization() {
 
   /* ---- VMF ---- */
 
+  const hasVmfWorkspaceAccess = useCallback(
+    (customerId, tenantId, options) =>
+      _hasVmfWorkspaceAccess(authorizationUser, customerId, tenantId, options),
+    [authorizationUser],
+  )
+
+  const hasVmfWorkspaceManagementAccess = useCallback(
+    (customerId, tenantId) =>
+      _hasVmfWorkspaceManagementAccess(authorizationUser, customerId, tenantId),
+    [authorizationUser],
+  )
+
   const getVmfPermissions = useCallback(
     (customerId, tenantId, vmfId) =>
       getUserVmfPermissions(authorizationUser, customerId, tenantId, vmfId),
@@ -175,6 +189,8 @@ export function useAuthorization() {
     hasTenantAccess,
     getAccessibleTenants,
     // VMF
+    hasVmfWorkspaceAccess,
+    hasVmfWorkspaceManagementAccess,
     getVmfPermissions,
     hasVmfPermission,
     hasVmfAccess,

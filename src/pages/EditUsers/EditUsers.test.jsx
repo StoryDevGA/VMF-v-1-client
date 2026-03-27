@@ -587,6 +587,34 @@ describe('EditUsers page', () => {
     })
   })
 
+  it('passes catalogue-only custom roles into the edit-user workspace while keeping reserved roles hidden', async () => {
+    const user = userEvent.setup()
+    mockUseUsers.mockReturnValue(
+      buildUseUsersResult({
+        users: [canonicalManagedUser, standardManagedUser],
+        assignableRoleCatalogue: [
+          { key: 'USER', name: 'Standard User', isActive: true, isSystem: true },
+          { key: 'TENANT_ADMIN', name: 'Tenant Administrator', isActive: true, isSystem: true },
+          { key: 'VMF_CREATOR', name: 'VMF Creator', isActive: true, isSystem: false },
+          { key: 'CUSTOMER_ADMIN', name: 'Customer Administrator', isActive: true, isSystem: true },
+          { key: 'SUPER_ADMIN', name: 'Super Administrator', isActive: true, isSystem: true },
+        ],
+        pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+      }),
+    )
+
+    renderEditUsers()
+
+    await user.click(screen.getByRole('button', { name: /^member user$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /^edit user$/i })).toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: /vmf creator/i })).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: /super admin/i })).not.toBeInTheDocument()
+    })
+  })
+
   it('opens the bulk-create dialog from the action bar', async () => {
     const user = userEvent.setup()
     renderEditUsers()

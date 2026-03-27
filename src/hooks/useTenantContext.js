@@ -15,7 +15,7 @@
 
 import { useEffect, useCallback, useMemo } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { selectCurrentUser } from '../store/slices/authSlice.js'
+import { selectCurrentUser, selectCustomerScopes } from '../store/slices/authSlice.js'
 import {
   selectSelectedCustomerId,
   selectSelectedTenantId,
@@ -23,6 +23,7 @@ import {
   setCustomer,
   setTenant,
   initializeFromUser,
+  reconcileUserContext,
   clearTenantContext,
 } from '../store/slices/tenantContextSlice.js'
 import { useListTenantsQuery } from '../store/api/tenantApi.js'
@@ -52,19 +53,82 @@ const normalizeTenantVisibilityMeta = (meta) => {
   }
 }
 
+const getTenantRowId = (tenant) => {
+  const tenantId = tenant?._id ?? tenant?.id
+  return tenantId === null || tenantId === undefined ? null : String(tenantId)
+}
+
+const normalizeCustomerScopeTopology = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase()
+
+  return normalized === 'SINGLE_TENANT' || normalized === 'MULTI_TENANT'
+    ? normalized
+    : ''
+}
+
+const getCustomerScopeForCustomerId = (customerScopes, customerId) => {
+  if (!Array.isArray(customerScopes) || !customerId) return null
+
+  const normalizedCustomerId = String(customerId)
+  return customerScopes.find((scope) => {
+    const scopeCustomerId = scope?.customerId
+    if (scopeCustomerId === null || scopeCustomerId === undefined) return false
+    return String(scopeCustomerId) === normalizedCustomerId
+  }) ?? null
+}
+
+const getSingleTenantDefaultContext = (customerScopes, customerId) => {
+  const scope = getCustomerScopeForCustomerId(customerScopes, customerId)
+  if (!scope) return null
+  if (normalizeCustomerScopeTopology(scope.topology) !== 'SINGLE_TENANT') return null
+
+  const defaultTenantId = scope?.defaultTenantId
+  if (defaultTenantId === null || defaultTenantId === undefined) return null
+
+  const normalizedTenantId = String(defaultTenantId).trim()
+  if (!normalizedTenantId) return null
+
+  return {
+    tenantId: normalizedTenantId,
+    tenantName: null,
+  }
+}
+
 export function useTenantContext() {
   const dispatch = useDispatch()
   const user = useSelector(selectCurrentUser)
+  const customerScopes = useSelector(selectCustomerScopes)
   const customerId = useSelector(selectSelectedCustomerId)
   const tenantId = useSelector(selectSelectedTenantId)
   const tenantName = useSelector(selectSelectedTenantName)
+  const authCustomerScope = useMemo(
+    () => getCustomerScopeForCustomerId(customerScopes, customerId),
+    [customerId, customerScopes],
+  )
+  const authCustomerTopology = useMemo(() => {
+    const scopeTopology = normalizeCustomerScopeTopology(authCustomerScope?.topology)
+    if (scopeTopology) return scopeTopology
+    return getCustomerTopology(user, customerId)
+  }, [authCustomerScope?.topology, customerId, user])
+  const defaultTenantContext = useMemo(
+    () => getSingleTenantDefaultContext(customerScopes, customerId),
+    [customerId, customerScopes],
+  )
 
   /* ---- Auto-initialize when user arrives ---- */
   useEffect(() => {
     if (user && !customerId) {
-      dispatch(initializeFromUser(user))
+      dispatch(initializeFromUser({ user, customerScopes }))
     }
-  }, [user, customerId, dispatch])
+  }, [user, customerId, customerScopes, dispatch])
+
+  useEffect(() => {
+    if (user) {
+      dispatch(reconcileUserContext({ user, customerScopes }))
+    }
+  }, [customerScopes, dispatch, user])
 
   /* ---- Fetch tenant list for the active customer ---- */
   const {
@@ -81,10 +145,7 @@ export function useTenantContext() {
     () => normalizeTenantVisibilityMeta(tenantsData?.meta?.tenantVisibility),
     [tenantsData],
   )
-  const authCustomerTopology = useMemo(
-    () => getCustomerTopology(user, customerId),
-    [customerId, user],
-  )
+  const customerName = tenantsData?.meta?.customerName || null
   const selectedCustomerTopology = tenantVisibilityMeta?.topology ?? authCustomerTopology
   const supportsTenantManagement = selectedCustomerTopology === 'MULTI_TENANT'
   const selectableTenants = useMemo(
@@ -108,7 +169,7 @@ export function useTenantContext() {
       return tenantRowId === String(tenantId)
     }) ?? null
   }, [tenantId, tenants])
-  const resolvedTenantName = selectedTenant?.name ?? tenantName
+  const resolvedTenantName = tenantId ? (selectedTenant?.name ?? tenantName) : null
   const isResolvingSelectedTenantContext = Boolean(customerId && tenantId && isLoadingTenants)
   const hasInvalidTenantContext = Boolean(
     customerId
@@ -118,11 +179,57 @@ export function useTenantContext() {
       && !selectedTenant,
   )
 
+  useEffect(() => {
+    if (!customerId || !defaultTenantContext?.tenantId) return
+    if (tenantId === defaultTenantContext.tenantId && !hasInvalidTenantContext) return
+
+    dispatch(setTenant({
+      tenantId: defaultTenantContext.tenantId,
+      tenantName: defaultTenantContext.tenantName,
+    }))
+  }, [
+    customerId,
+    defaultTenantContext,
+    dispatch,
+    hasInvalidTenantContext,
+    tenantId,
+  ])
+
+  useEffect(() => {
+    if (!customerId || isLoadingTenants || tenantsError) return
+    if (!Array.isArray(selectableTenants) || selectableTenants.length !== 1) return
+    if (tenantId && !hasInvalidTenantContext) return
+
+    const onlyTenant = selectableTenants[0]
+    const onlyTenantId = getTenantRowId(onlyTenant)
+    if (!onlyTenantId) return
+
+    dispatch(setTenant({
+      tenantId: onlyTenantId,
+      tenantName: onlyTenant?.name ?? null,
+    }))
+  }, [
+    customerId,
+    dispatch,
+    hasInvalidTenantContext,
+    isLoadingTenants,
+    selectableTenants,
+    tenantId,
+    tenantsError,
+  ])
+
   /* ---- Actions ---- */
 
   const setCustomerId = useCallback(
-    (id) => dispatch(setCustomer({ customerId: id })),
-    [dispatch],
+    (id) => {
+      const nextDefaultTenantContext = getSingleTenantDefaultContext(customerScopes, id)
+      dispatch(setCustomer({
+        customerId: id,
+        tenantId: nextDefaultTenantContext?.tenantId ?? null,
+        tenantName: nextDefaultTenantContext?.tenantName ?? null,
+      }))
+    },
+    [customerScopes, dispatch],
   )
 
   const setTenantId = useCallback(
@@ -139,6 +246,7 @@ export function useTenantContext() {
     customerId,
     tenantId,
     tenantName,
+    customerName,
     resolvedTenantName,
     tenants,
     selectableTenants,

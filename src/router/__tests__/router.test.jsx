@@ -34,6 +34,10 @@ vi.mock('../../pages/MaintainTenants/MaintainTenants', () => ({
   default: () => <h1>Maintain Tenants</h1>,
 }))
 
+vi.mock('../../pages/MaintainVmfs', () => ({
+  default: () => <h1>VMF Workspace</h1>,
+}))
+
 vi.mock('../../pages/Dashboard', () => ({
   default: () => <h1>Dashboard</h1>,
 }))
@@ -203,6 +207,51 @@ describe('Router', () => {
         ),
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the VMF workspace at /app/workspaces/vmf for authenticated customer-app users', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/workspaces/vmf'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'vmf-user-1',
+            name: 'VMF User',
+            email: 'vmf@example.com',
+            memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^vmf workspace$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should redirect the legacy manage-vmfs route to the VMF workspace route', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
+      const customerAppRoute = appRoute?.children?.[0]
+      const administrationRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'administration',
+      )
+      const legacyVmfRoute = administrationRoute?.children?.find(
+        (route) => route.path === 'manage-vmfs',
+      )
+
+      expect(legacyVmfRoute?.element?.props?.to).toBe('/app/workspaces/vmf')
+      expect(legacyVmfRoute?.element?.props?.replace).toBe(true)
+    })
 
     it('should render super-admin dashboard at /super-admin/dashboard for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {

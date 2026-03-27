@@ -131,6 +131,15 @@ describe('useAuthorization', () => {
       const { result } = renderUseAuthorization(superAdminUser)
       expect(result.current.hasVmfAccess(CUSTOMER_ID, TENANT_ID, VMF_ID)).toBe(true)
     })
+
+    it('hasVmfWorkspaceAccess returns true for any scope', () => {
+      const { result } = renderUseAuthorization(superAdminUser)
+      expect(
+        result.current.hasVmfWorkspaceAccess(CUSTOMER_ID, null, {
+          supportsTenantManagement: false,
+        }),
+      ).toBe(true)
+    })
   })
 
   describe('when user is a Customer Admin', () => {
@@ -191,6 +200,17 @@ describe('useAuthorization', () => {
       const { result } = renderUseAuthorization(customerAdminUser)
       expect(result.current.hasVmfPermission(CUSTOMER_ID, TENANT_ID, VMF_ID, 'READ')).toBe(true)
       expect(result.current.hasVmfPermission(CUSTOMER_ID, TENANT_ID, VMF_ID, 'DELETE')).toBe(false)
+    })
+
+    it('exposes VMF workspace access helpers', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+
+      expect(
+        result.current.hasVmfWorkspaceAccess(CUSTOMER_ID, TENANT_ID, {
+          supportsTenantManagement: true,
+        }),
+      ).toBe(true)
+      expect(result.current.hasVmfWorkspaceManagementAccess(CUSTOMER_ID, TENANT_ID)).toBe(true)
     })
   })
 })

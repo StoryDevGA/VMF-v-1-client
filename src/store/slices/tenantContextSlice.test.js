@@ -15,7 +15,7 @@ import tenantContextReducer, {
 } from './tenantContextSlice.js'
 import { clearCredentials, setCredentials } from './authSlice.js'
 
-const initialState = { customerId: null, tenantId: null, tenantName: null }
+const initialState = { customerId: null, tenantId: null, tenantName: null, ownerUserId: null }
 
 describe('tenantContextSlice', () => {
   it('returns the initial state', () => {
@@ -33,6 +33,18 @@ describe('tenantContextSlice', () => {
     const state = tenantContextReducer(prev, setCustomer({ customerId: 'cust-2' }))
     expect(state.customerId).toBe('cust-2')
     expect(state.tenantId).toBeNull()
+    expect(state.tenantName).toBeNull()
+  })
+
+  it('setCustomer accepts an immediate default tenant context when provided', () => {
+    const prev = { customerId: 'cust-1', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const state = tenantContextReducer(
+      prev,
+      setCustomer({ customerId: 'cust-2', tenantId: 'ten-2', tenantName: null }),
+    )
+
+    expect(state.customerId).toBe('cust-2')
+    expect(state.tenantId).toBe('ten-2')
     expect(state.tenantName).toBeNull()
   })
 
@@ -58,6 +70,7 @@ describe('tenantContextSlice', () => {
 
   it('initializeFromUser sets customerId from first CUSTOMER_ADMIN membership', () => {
     const user = {
+      id: 'user-1',
       memberships: [
         { customerId: 'cust-9', roles: ['USER'] },
         { customerId: 'cust-5', roles: ['CUSTOMER_ADMIN'] },
@@ -66,6 +79,7 @@ describe('tenantContextSlice', () => {
     }
     const state = tenantContextReducer(initialState, initializeFromUser(user))
     expect(state.customerId).toBe('cust-5')
+    expect(state.ownerUserId).toBe('user-1')
   })
 
   it('initializeFromUser supports nested customer ids on customer-admin memberships', () => {
@@ -120,10 +134,40 @@ describe('tenantContextSlice', () => {
     expect(state.customerId).toBe('cust-1')
   })
 
-  it('initializeFromUser is a no-op when user has no manageable membership', () => {
+  it('initializeFromUser resolves customerId for USER with memberships via Priority 4', () => {
     const user = {
       memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
       tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
+    }
+    const state = tenantContextReducer(initialState, initializeFromUser(user))
+    expect(state.customerId).toBe('cust-1')
+  })
+
+  it('initializeFromUser admin priorities take precedence over USER fallback', () => {
+    const user = {
+      memberships: [
+        { customerId: 'cust-user', roles: ['USER'] },
+        { customerId: 'cust-admin', roles: ['CUSTOMER_ADMIN'] },
+      ],
+      tenantMemberships: [{ customerId: 'cust-user', tenantId: 'ten-1', roles: ['USER'] }],
+    }
+    const state = tenantContextReducer(initialState, initializeFromUser(user))
+    expect(state.customerId).toBe('cust-admin')
+  })
+
+  it('initializeFromUser resolves customerId for USER with only tenantMemberships via Priority 5', () => {
+    const user = {
+      memberships: [],
+      tenantMemberships: [{ customerId: 'cust-tm', tenantId: 'ten-1', roles: ['USER'] }],
+    }
+    const state = tenantContextReducer(initialState, initializeFromUser(user))
+    expect(state.customerId).toBe('cust-tm')
+  })
+
+  it('initializeFromUser is a no-op when user has no memberships at all', () => {
+    const user = {
+      memberships: [],
+      tenantMemberships: [],
     }
     const state = tenantContextReducer(initialState, initializeFromUser(user))
     expect(state).toEqual(initialState)
@@ -147,13 +191,23 @@ describe('tenantContextSlice', () => {
   })
 
   it('auth clearCredentials resets to initial state', () => {
-    const prev = { customerId: 'cust-1', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const prev = {
+      customerId: 'cust-1',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'user-1',
+    }
     const state = tenantContextReducer(prev, clearCredentials())
     expect(state).toEqual(initialState)
   })
 
   it('auth setCredentials reinitializes stale customer context for customer-admin session', () => {
-    const prev = { customerId: 'stale-customer', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const prev = {
+      customerId: 'stale-customer',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'stale-user',
+    }
     const nextUser = {
       id: 'user-2',
       memberships: [
@@ -169,11 +223,17 @@ describe('tenantContextSlice', () => {
       customerId: 'cust-5',
       tenantId: null,
       tenantName: null,
+      ownerUserId: 'user-2',
     })
   })
 
   it('auth setCredentials reinitializes stale customer context for tenant-admin session', () => {
-    const prev = { customerId: 'stale-customer', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const prev = {
+      customerId: 'stale-customer',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'stale-user',
+    }
     const nextUser = {
       id: 'user-4',
       memberships: [{ customerId: 'cust-9', roles: ['USER'] }],
@@ -188,11 +248,17 @@ describe('tenantContextSlice', () => {
       customerId: 'cust-tenant-5',
       tenantId: null,
       tenantName: null,
+      ownerUserId: 'user-4',
     })
   })
 
   it('auth setCredentials reinitializes stale customer context for customer-scoped tenant-admin session', () => {
-    const prev = { customerId: 'stale-customer', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const prev = {
+      customerId: 'stale-customer',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'stale-user',
+    }
     const nextUser = {
       id: 'user-6',
       memberships: [
@@ -208,11 +274,17 @@ describe('tenantContextSlice', () => {
       customerId: 'cust-tenant-6',
       tenantId: null,
       tenantName: null,
+      ownerUserId: 'user-6',
     })
   })
 
   it('auth setCredentials preserves customer context when user still has access via memberships', () => {
-    const prev = { customerId: 'cust-5', tenantId: 'ten-1', tenantName: 'Tenant One' }
+    const prev = {
+      customerId: 'cust-5',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'user-3',
+    }
     const nextUser = {
       id: 'user-3',
       memberships: [
@@ -226,11 +298,39 @@ describe('tenantContextSlice', () => {
     expect(state).toEqual(prev)
   })
 
-  it('auth setCredentials preserves customer context when user still has access via tenant memberships', () => {
-    const prev = { customerId: 'cust-tenant-5', tenantId: 'ten-1', tenantName: 'Tenant One' }
+  it('auth setCredentials clears stale tenant when the next user only keeps customer-level access', () => {
+    const prev = {
+      customerId: 'cust-5',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'user-3',
+    }
+    const nextUser = {
+      id: 'user-7',
+      memberships: [{ customerId: 'cust-5', roles: ['USER'] }],
+      tenantMemberships: [],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
+    expect(state).toEqual({
+      customerId: 'cust-5',
+      tenantId: null,
+      tenantName: null,
+      ownerUserId: 'user-7',
+    })
+  })
+
+  it('auth setCredentials clears stale tenant when tenant access moved to a different tenant', () => {
+    const prev = {
+      customerId: 'cust-tenant-5',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'user-5',
+    }
     const nextUser = {
       id: 'user-5',
-      memberships: [{ customerId: 'cust-9', roles: ['USER'] }],
+      memberships: [{ customerId: 'cust-tenant-5', roles: ['USER'] }],
       tenantMemberships: [
         { customerId: 'cust-tenant-5', tenantId: 'ten-12', roles: ['TENANT_ADMIN'] },
       ],
@@ -238,6 +338,86 @@ describe('tenantContextSlice', () => {
 
     const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
 
+    expect(state).toEqual({
+      customerId: 'cust-tenant-5',
+      tenantId: null,
+      tenantName: null,
+      ownerUserId: 'user-5',
+    })
+  })
+
+  it('auth setCredentials preserves tenant context when the next user still has access to that tenant', () => {
+    const prev = {
+      customerId: 'cust-tenant-5',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'user-8',
+    }
+    const nextUser = {
+      id: 'user-8',
+      memberships: [{ customerId: 'cust-tenant-5', roles: ['USER'] }],
+      tenantMemberships: [
+        { customerId: 'cust-tenant-5', tenantId: 'ten-1', roles: ['USER'] },
+      ],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
     expect(state).toEqual(prev)
+  })
+
+  it('auth setCredentials seeds default tenant context for a single-tenant customer scope', () => {
+    const prev = initialState
+    const nextUser = {
+      id: 'user-10',
+      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [],
+    }
+
+    const state = tenantContextReducer(
+      prev,
+      setCredentials({
+        user: nextUser,
+        customerScopes: [
+          {
+            customerId: 'cust-1',
+            featureEntitlements: ['VMF'],
+            entitlementSource: 'LICENSE_LEVEL',
+            topology: 'SINGLE_TENANT',
+            defaultTenantId: 'ten-default',
+          },
+        ],
+      }),
+    )
+
+    expect(state).toEqual({
+      customerId: 'cust-1',
+      tenantId: 'ten-default',
+      tenantName: null,
+      ownerUserId: 'user-10',
+    })
+  })
+
+  it('auth setCredentials clears tenant context when a different user signs in to the same customer', () => {
+    const prev = {
+      customerId: 'cust-1',
+      tenantId: 'ten-1',
+      tenantName: 'Tenant One',
+      ownerUserId: 'gary-user',
+    }
+    const nextUser = {
+      id: 'jena-user',
+      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
+    }
+
+    const state = tenantContextReducer(prev, setCredentials({ user: nextUser }))
+
+    expect(state).toEqual({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenantName: null,
+      ownerUserId: 'jena-user',
+    })
   })
 })

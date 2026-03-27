@@ -69,6 +69,12 @@ describe('SuperAdminRoles page', () => {
 
     expect(screen.getByRole('heading', { name: /role definitions/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^create$/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /system roles are protected by backend policy\. create and maintain custom role catalogue entries for controlled future use\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
@@ -80,6 +86,32 @@ describe('SuperAdminRoles page', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create role/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /back to role definitions/i })).toBeInTheDocument()
+  })
+
+  it('closes and resets the create dialog when returning to the catalogue', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.type(
+      screen.getByLabelText(/role key/i, { selector: 'input#role-create-key' }),
+      'temp_role',
+    )
+    await user.type(
+      screen.getByLabelText(/name/i, { selector: 'input#role-create-name' }),
+      'Temporary Role',
+    )
+
+    await user.click(screen.getByRole('button', { name: /back to role definitions/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    expect(screen.getByLabelText(/role key/i, { selector: 'input#role-create-key' })).toHaveValue('')
+    expect(screen.getByLabelText(/name/i, { selector: 'input#role-create-name' })).toHaveValue('')
   })
 
   it('normalizes key and permissions before create submit', async () => {
@@ -275,5 +307,65 @@ describe('SuperAdminRoles page', () => {
     expect(within(dialog).getByText('WRITE')).toBeInTheDocument()
     expect(within(dialog).getByText('PUBLISH')).toBeInTheDocument()
     expect(within(dialog).getByText('APPROVE')).toBeInTheDocument()
+  })
+
+  it('updates pagination and filter query state from the catalogue toolbar', async () => {
+    const user = userEvent.setup()
+
+    useListRolesQuery.mockImplementation((args = {}) => ({
+      data: {
+        data: [
+          {
+            id: 'role-custom',
+            key: 'VMF_CREATOR',
+            name: 'VMF Creator',
+            scope: 'CUSTOMER',
+            isSystem: false,
+            isActive: true,
+            permissions: ['READ', 'WRITE'],
+            updatedAt: '2026-03-24T10:00:00.000Z',
+          },
+        ],
+        meta: {
+          page: Number(args.page ?? 1),
+          totalPages: 3,
+          total: 3,
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => {
+      expect(useListRolesQuery).toHaveBeenLastCalledWith({
+        page: 2,
+        pageSize: 20,
+        q: '',
+        scope: undefined,
+        isSystem: undefined,
+        isActive: undefined,
+      })
+    })
+
+    await user.selectOptions(
+      screen.getByLabelText(/status/i, { selector: 'select#role-status-filter' }),
+      'false',
+    )
+
+    await waitFor(() => {
+      expect(useListRolesQuery).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        q: '',
+        scope: undefined,
+        isSystem: undefined,
+        isActive: 'false',
+      })
+    })
   })
 })

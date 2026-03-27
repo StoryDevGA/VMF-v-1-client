@@ -40,16 +40,24 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     if (!hasTenantAdminAccess) return false
     if (!selectedCustomerId) return true
 
-    if (hasCustomerRole(user, selectedCustomerId, 'TENANT_ADMIN')) {
-      return true
+    const customerTenantMemberships = Array.isArray(user?.tenantMemberships)
+      ? user.tenantMemberships.filter(
+        (tm) => tm?.customerId?.toString() === selectedCustomerId.toString(),
+      )
+      : []
+
+    // If the user has tenant-level assignments for this customer,
+    // require TENANT_ADMIN on at least one of them — the tenant-level
+    // roles override the broad customer-scoped TENANT_ADMIN designation.
+    if (customerTenantMemberships.length > 0) {
+      return customerTenantMemberships.some(
+        (tm) => (tm.roles ?? []).includes('TENANT_ADMIN'),
+      )
     }
 
-    return Array.isArray(user?.tenantMemberships) && user.tenantMemberships.some(
-      (tenantMembership) =>
-        tenantMembership?.customerId?.toString() === selectedCustomerId.toString()
-        && (tenantMembership.roles ?? []).includes('TENANT_ADMIN'),
-    )
-  }, [hasTenantAdminAccess, selectedCustomerId, user])
+    // No tenant-level assignments — fall back to customer-scoped role
+    return hasCustomerRole(user, selectedCustomerId, 'TENANT_ADMIN')
+  }, [hasTenantAdminAccess, hasCustomerRole, selectedCustomerId, user])
   const supportsTenantManagement = useMemo(() => {
     if (!hasCustomerAdminAccess) return false
     if (selectedCustomerId) return selectedCustomerSupportsTenantManagement
@@ -92,32 +100,36 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       })
     }
 
-    if (hasCustomerAdminAccess || hasTenantAdminAccess) {
-      entries.push({
-        type: 'group',
-        key: 'admin',
-        label: 'Admin',
-        links: [
-          ...(hasCustomerAdminAccess
-            ? [
-                {
-                  key: 'manage-users',
-                  label: 'Manage Users',
-                  to: '/app/administration/edit-users',
-                },
-              ]
-            : []),
-          ...(canAccessTenantMaintenance
-            ? [
-                {
-                  key: 'manage-tenants',
-                  label: 'Manage Tenants',
-                  to: '/app/administration/maintain-tenants',
-                },
-              ]
-            : []),
-        ],
-      })
+    {
+      const adminLinks = [
+        ...(hasCustomerAdminAccess
+          ? [
+              {
+                key: 'manage-users',
+                label: 'Manage Users',
+                to: '/app/administration/edit-users',
+              },
+            ]
+          : []),
+        ...(canAccessTenantMaintenance
+          ? [
+              {
+                key: 'manage-tenants',
+                label: 'Manage Tenants',
+                to: '/app/administration/maintain-tenants',
+              },
+            ]
+          : []),
+      ]
+
+      if (adminLinks.length > 0) {
+        entries.push({
+          type: 'group',
+          key: 'admin',
+          label: 'Admin',
+          links: adminLinks,
+        })
+      }
     }
 
     if (isSuperAdmin || hasCustomerAdminAccess) {

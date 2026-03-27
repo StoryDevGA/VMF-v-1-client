@@ -167,7 +167,12 @@ describe('useTenantContext', () => {
 
     const wrapper = createWrapper({
       auth: { user: customerAdminUser, status: 'authenticated' },
-      tenantContext: { customerId: 'cust-1', tenantId: 'ten-2', tenantName: null },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: 'ten-2',
+        tenantName: null,
+        ownerUserId: 'user-1',
+      },
     })
 
     const { result } = renderHook(() => useTenantContext(), { wrapper })
@@ -188,13 +193,60 @@ describe('useTenantContext', () => {
 
     const wrapper = createWrapper({
       auth: { user: customerAdminUser, status: 'authenticated' },
-      tenantContext: { customerId: 'cust-1', tenantId: 'ten-404', tenantName: 'Ghost' },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: 'ten-404',
+        tenantName: 'Ghost',
+        ownerUserId: 'user-1',
+      },
     })
 
     const { result } = renderHook(() => useTenantContext(), { wrapper })
 
     expect(result.current.selectedTenant).toBeNull()
     expect(result.current.hasInvalidTenantContext).toBe(true)
+  })
+
+  it('clears legacy cross-user tenant scope on mount when the stored owner is missing', async () => {
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          id: 'user-9',
+          email: 'jena@example.com',
+          name: 'Jena',
+          isActive: true,
+          memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+          tenantMemberships: [],
+          vmfGrants: [],
+        },
+        status: 'authenticated',
+      },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-1', tenantName: 'Aldi' },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.tenantId).toBeNull()
+    })
+
+    expect(result.current.tenantName).toBeNull()
+  })
+
+  it('does not expose a tenant label when tenantId is missing even if tenantName is stale', () => {
+    const wrapper = createWrapper({
+      auth: { user: customerAdminUser, status: 'authenticated' },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: null,
+        tenantName: 'Aldi',
+        ownerUserId: 'user-1',
+      },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.resolvedTenantName).toBeNull()
   })
 
   it('exposes normalized tenant-visibility metadata and selectable tenants', () => {
@@ -258,6 +310,98 @@ describe('useTenantContext', () => {
     const { result } = renderHook(() => useTenantContext(), { wrapper })
 
     expect(result.current.selectedCustomerTopology).toBe('SINGLE_TENANT')
+    expect(result.current.supportsTenantManagement).toBe(false)
+  })
+
+  it('hydrates tenantId from authenticated customer scope metadata before the tenant list resolves', async () => {
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          id: 'user-11',
+          email: 'viewer@example.com',
+          name: 'Viewer',
+          isActive: true,
+          memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+          tenantMemberships: [],
+          vmfGrants: [],
+        },
+        customerScopes: [
+          {
+            customerId: 'cust-1',
+            featureEntitlements: ['VMF'],
+            entitlementSource: 'LICENSE_LEVEL',
+            topology: 'SINGLE_TENANT',
+            defaultTenantId: 'ten-session-default',
+          },
+        ],
+        status: 'authenticated',
+      },
+      tenantContext: {
+        customerId: null,
+        tenantId: null,
+        tenantName: null,
+        ownerUserId: null,
+      },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.customerId).toBe('cust-1')
+      expect(result.current.tenantId).toBe('ten-session-default')
+    })
+
+    expect(result.current.selectedCustomerTopology).toBe('SINGLE_TENANT')
+    expect(result.current.supportsTenantManagement).toBe(false)
+  })
+
+  it('auto-selects the only selectable tenant for a single-tenant customer when tenant context is missing', async () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'ten-1', name: 'Solo Tenant', isSelectable: true }],
+        meta: {
+          tenantVisibility: {
+            mode: 'disallowed',
+            allowed: false,
+            topology: 'single_tenant',
+            isServiceProvider: false,
+            selectableStatuses: ['enabled'],
+          },
+        },
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          id: 'user-9',
+          email: 'viewer@example.com',
+          name: 'Viewer',
+          isActive: true,
+          memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+          tenantMemberships: [],
+          vmfGrants: [],
+        },
+        status: 'authenticated',
+      },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: null,
+        tenantName: null,
+        ownerUserId: 'user-9',
+      },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.tenantId).toBe('ten-1')
+    })
+
+    expect(result.current.tenantName).toBe('Solo Tenant')
+    expect(result.current.resolvedTenantName).toBe('Solo Tenant')
     expect(result.current.supportsTenantManagement).toBe(false)
   })
 })

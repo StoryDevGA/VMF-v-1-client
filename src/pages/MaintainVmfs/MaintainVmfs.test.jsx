@@ -39,19 +39,22 @@ const updateVmfMock = vi.fn()
 const deleteVmfMock = vi.fn()
 
 let listQueryResponse
-let activeCountQueryResponse
 
-function renderPage(initialEntry = '/app/administration/manage-vmfs') {
-  return render(
+function getPageTree(initialEntry = '/app/workspaces/vmf') {
+  return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <ToasterProvider>
         <Routes>
-          <Route path="/app/administration/manage-vmfs" element={<MaintainVmfs />} />
+          <Route path="/app/workspaces/vmf" element={<MaintainVmfs />} />
           <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
         </Routes>
       </ToasterProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+}
+
+function renderPage(initialEntry = '/app/workspaces/vmf') {
+  return render(getPageTree(initialEntry))
 }
 
 describe('MaintainVmfs', () => {
@@ -74,10 +77,9 @@ describe('MaintainVmfs', () => {
     })
 
     useAuthorization.mockReturnValue({
-      isSuperAdmin: false,
-      hasCustomerRole: (customerId, role) => customerId === 'cust-1' && role === 'CUSTOMER_ADMIN',
-      hasTenantRole: () => false,
       hasFeatureEntitlement: () => true,
+      hasVmfWorkspaceAccess: () => true,
+      hasVmfWorkspaceManagementAccess: () => true,
     })
 
     useGetCustomerQuery.mockReturnValue({
@@ -95,26 +97,7 @@ describe('MaintainVmfs', () => {
       isFetching: false,
       error: null,
     }
-
-    activeCountQueryResponse = {
-      data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
-      isLoading: false,
-      isFetching: false,
-      error: null,
-    }
-
-    useListVmfsQuery.mockImplementation((args = {}) => {
-      if (
-        args?.status === 'ACTIVE'
-        && args?.q === ''
-        && args?.lifecycleStatus === ''
-        && args?.pageSize === 1
-      ) {
-        return activeCountQueryResponse
-      }
-
-      return listQueryResponse
-    })
+    useListVmfsQuery.mockImplementation(() => listQueryResponse)
 
     createVmfMock.mockReset()
     createVmfMock.mockReturnValue({
@@ -150,12 +133,30 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(
-      screen.getByText(/select a tenant from the tenant switcher before opening vmf management/i),
+      screen.getByText(/select a tenant from the tenant switcher before opening the vmf workspace/i),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /back to home/i }))
 
     expect(screen.getByText('Dashboard Route')).toBeInTheDocument()
+  })
+
+  it('uses a non-permission boundary message when single-tenant tenant resolution fails', () => {
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      resolvedTenantName: '',
+      supportsTenantManagement: false,
+      selectableTenants: [],
+      isLoadingTenants: false,
+      setTenantId: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByText(/vmf access is available, but the workspace could not resolve its tenant context/i),
+    ).toBeInTheDocument()
   })
 
   it('submits create payload with optional description against customer-tenant scoped route', async () => {
@@ -190,10 +191,21 @@ describe('MaintainVmfs', () => {
   })
 
   it('shows VMF capacity guidance and disables create when the tenant is at capacity', () => {
-    activeCountQueryResponse = {
+    listQueryResponse = {
       data: {
-        data: [{ id: 'vmf-1', name: 'Active VMF', status: 'ACTIVE' }],
-        meta: { page: 1, totalPages: 4, total: 4 },
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 4,
+            currentCount: 4,
+            remainingCount: 0,
+            isAtCapacity: true,
+            countMode: 'ACTIVE',
+          },
+        },
       },
       isLoading: false,
       isFetching: false,
@@ -206,6 +218,113 @@ describe('MaintainVmfs', () => {
       screen.getByText(/this tenant is already using 4 of 4 active vmf slots/i),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^create vmf$/i })).toBeDisabled()
+  })
+
+  it('resets workspace filters and dialogs when the tenant context changes', async () => {
+    const user = userEvent.setup()
+    let currentTenantContext = {
+      customerId: 'cust-1',
+      tenantId: 'tenant-1',
+      resolvedTenantName: 'Orbit Core',
+      supportsTenantManagement: true,
+      selectableTenants: [],
+      setTenantId: vi.fn(),
+    }
+
+    useTenantContext.mockImplementation(() => currentTenantContext)
+
+    const view = renderPage()
+
+    await user.type(screen.getByLabelText(/search/i), 'Legacy')
+    await user.selectOptions(
+      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      'ARCHIVED',
+    )
+    await user.click(screen.getByRole('button', { name: /^create vmf$/i }))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')
+    expect(
+      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+    ).toHaveValue('ARCHIVED')
+
+    currentTenantContext = {
+      ...currentTenantContext,
+      tenantId: 'tenant-2',
+      resolvedTenantName: 'Orbit Edge',
+    }
+
+    view.rerender(getPageTree())
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/search/i)).toHaveValue('')
+      expect(
+        screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      ).toHaveValue('')
+      expect(useListVmfsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          tenantId: 'tenant-2',
+          q: '',
+          status: '',
+          lifecycleStatus: '',
+          page: 1,
+        }),
+        { skip: false },
+      )
+    })
+  })
+
+  it('renders a read-only VMF workspace for standard viewers', () => {
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => true,
+      hasVmfWorkspaceAccess: () => true,
+      hasVmfWorkspaceManagementAccess: () => false,
+    })
+
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-read-only',
+            name: 'Viewer VMF',
+            description: 'Visible in read-only mode',
+            status: 'ACTIVE',
+            lifecycleStatus: 'PUBLISHED',
+            frameworkVersion: '2.2',
+            updatedAt: '2026-03-24T21:08:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(useListVmfsQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        lifecycleStatus: 'PUBLISHED',
+      }),
+      { skip: false },
+    )
+    expect(screen.queryByRole('button', { name: /^create vmf$/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/standard users can review published vmfs only/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Viewer VMF')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /actions for viewer vmf/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
+    ).toHaveValue('PUBLISHED')
+    expect(
+      screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
+    ).toBeDisabled()
   })
 
   it('renders compact row-action menus with only the allowed actions per row state', () => {
@@ -233,13 +352,6 @@ describe('MaintainVmfs', () => {
         ],
         meta: { page: 1, totalPages: 1, total: 2 },
       },
-      isLoading: false,
-      isFetching: false,
-      error: null,
-    }
-
-    activeCountQueryResponse = {
-      data: { data: [], meta: { page: 1, totalPages: 1, total: 1 } },
       isLoading: false,
       isFetching: false,
       error: null,

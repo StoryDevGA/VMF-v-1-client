@@ -101,7 +101,8 @@ export const hasCustomerRole = (user, customerId, role) =>
  */
 export const hasCustomerAccess = (user, customerId) => {
   if (isSuperAdmin(user)) return true
-  return getUserCustomerRoles(user, customerId).length > 0
+  if (getUserCustomerRoles(user, customerId).length > 0) return true
+  return getAccessibleTenantIds(user, customerId).length > 0
 }
 
 /**
@@ -423,6 +424,58 @@ export const hasTenantAccess = (user, customerId, tenantId) => {
 /* ------------------------------------------------------------------ */
 /*  VMF                                                               */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Check whether the current customer/tenant scope can open the VMF workspace.
+ *
+ * This is intentionally broader than VMF-level grant checks:
+ * - single-tenant customer users can open the workspace from customer scope
+ * - multi-tenant users must resolve a tenant they can access
+ * - administrators keep their existing scope access
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @param {string | null | undefined} tenantId
+ * @param {{ supportsTenantManagement?: boolean }} [options]
+ * @returns {boolean}
+ */
+export const hasVmfWorkspaceAccess = (
+  user,
+  customerId,
+  tenantId,
+  { supportsTenantManagement = true } = {},
+) => {
+  if (!customerId) return false
+  if (isSuperAdmin(user)) return true
+  if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
+  if (hasCustomerRole(user, customerId, 'TENANT_ADMIN')) {
+    return supportsTenantManagement ? Boolean(tenantId) : true
+  }
+
+  if (!supportsTenantManagement) {
+    return hasCustomerAccess(user, customerId)
+  }
+
+  if (!tenantId) return false
+  return hasTenantAccess(user, customerId, tenantId)
+}
+
+/**
+ * Check whether the current customer/tenant scope can manage VMFs.
+ *
+ * @param {Object} user
+ * @param {string} customerId
+ * @param {string | null | undefined} tenantId
+ * @returns {boolean}
+ */
+export const hasVmfWorkspaceManagementAccess = (user, customerId, tenantId) => {
+  if (!customerId) return false
+  if (isSuperAdmin(user)) return true
+  if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
+  if (hasCustomerRole(user, customerId, 'TENANT_ADMIN')) return true
+  if (!tenantId) return false
+  return hasTenantRole(user, customerId, tenantId, 'TENANT_ADMIN')
+}
 
 /**
  * Extract VMF-level permissions for a specific VMF.

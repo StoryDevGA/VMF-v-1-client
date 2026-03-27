@@ -35,6 +35,7 @@ function Dashboard() {
     accessibleCustomerIds,
     isSuperAdmin,
     hasCustomerRole,
+    hasVmfWorkspaceAccess,
     getAccessibleTenants,
   } = authorization
   const { getFeatureEntitlements, getEntitlementSource } = authorization
@@ -43,6 +44,7 @@ function Dashboard() {
     tenantId,
     tenants,
     selectableTenants,
+    customerName,
     resolvedTenantName,
     supportsTenantManagement,
     selectedCustomerTopology,
@@ -86,6 +88,7 @@ function Dashboard() {
       : null
 
     const customerNameCandidates = [
+      customerName,
       customerDetails?.data?.name,
       customerDetails?.data?.companyName,
       customerDetails?.name,
@@ -107,10 +110,10 @@ function Dashboard() {
       .map((candidate) => String(candidate ?? '').trim())
       .find(Boolean)
 
-    return resolvedCustomerName || resolvedTenantName || 'Current customer'
-  }, [customerDetails, customerId, resolvedTenantName, tenants, user])
+    return resolvedCustomerName || 'Current customer'
+  }, [customerDetails, customerId, customerName, tenants, user])
 
-  const isCustomerAdmin = useMemo(
+  const hasAnyCustomerAdminAccess = useMemo(
     () => accessibleCustomerIds.some((id) => hasCustomerRole(id, 'CUSTOMER_ADMIN')),
     [accessibleCustomerIds, hasCustomerRole],
   )
@@ -126,9 +129,41 @@ function Dashboard() {
     return hasCustomerScopedTenantAdmin || hasTenantMembershipAdmin
   }, [accessibleCustomerIds, hasCustomerRole, user])
 
+  const hasSelectedCustomerAdminAccess = useMemo(
+    () => Boolean(customerId && hasCustomerRole(customerId, 'CUSTOMER_ADMIN')),
+    [customerId, hasCustomerRole],
+  )
+
   const hasCustomerScopedTenantAdmin = useMemo(
     () => Boolean(customerId && hasCustomerRole(customerId, 'TENANT_ADMIN')),
     [customerId, hasCustomerRole],
+  )
+
+  const hasSelectedCustomerTenantMembershipAdmin = useMemo(
+    () =>
+      Boolean(
+        customerId
+          && Array.isArray(user?.tenantMemberships)
+          && user.tenantMemberships.some(
+            (membership) =>
+              String(membership?.customerId ?? '') === String(customerId)
+              && (membership?.roles ?? []).includes('TENANT_ADMIN'),
+          ),
+      ),
+    [customerId, user],
+  )
+
+  const hasSelectedCustomerTenantAdminAccess = useMemo(
+    () => hasCustomerScopedTenantAdmin || hasSelectedCustomerTenantMembershipAdmin,
+    [hasCustomerScopedTenantAdmin, hasSelectedCustomerTenantMembershipAdmin],
+  )
+
+  const canOpenVmfWorkspace = useMemo(
+    () =>
+      typeof hasVmfWorkspaceAccess === 'function'
+        ? hasVmfWorkspaceAccess(customerId, tenantId, { supportsTenantManagement })
+        : false,
+    [customerId, hasVmfWorkspaceAccess, supportsTenantManagement, tenantId],
   )
 
   const accessibleTenantIds = useMemo(
@@ -140,18 +175,28 @@ function Dashboard() {
   )
 
   const hasTenantSelectionAccess = useMemo(
-    () => isCustomerAdmin || hasCustomerScopedTenantAdmin || accessibleTenantIds.length > 0,
-    [accessibleTenantIds.length, hasCustomerScopedTenantAdmin, isCustomerAdmin],
+    () => hasSelectedCustomerAdminAccess || accessibleTenantIds.length > 0,
+    [accessibleTenantIds.length, hasSelectedCustomerAdminAccess],
   )
 
   const primaryRole = useMemo(() => {
     if (isSuperAdmin) return 'Super Administrator'
-    if (isCustomerAdmin) return 'Customer Administrator'
-    const tenantAdmin = user?.tenantMemberships?.find((membership) =>
-      membership?.roles?.includes('TENANT_ADMIN'))
-    if (tenantAdmin) return 'Tenant Administrator'
+    if (customerId) {
+      if (hasSelectedCustomerAdminAccess) return 'Customer Administrator'
+      if (hasSelectedCustomerTenantAdminAccess) return 'Tenant Administrator'
+      return 'User'
+    }
+    if (hasAnyCustomerAdminAccess) return 'Customer Administrator'
+    if (hasAnyTenantAdminAccess) return 'Tenant Administrator'
     return 'User'
-  }, [isCustomerAdmin, isSuperAdmin, user])
+  }, [
+    customerId,
+    hasAnyCustomerAdminAccess,
+    hasAnyTenantAdminAccess,
+    hasSelectedCustomerAdminAccess,
+    hasSelectedCustomerTenantAdminAccess,
+    isSuperAdmin,
+  ])
 
   const topologyLabel = useMemo(() => {
     if (selectedCustomerTopology === 'MULTI_TENANT') return 'Multi-tenant'
@@ -163,11 +208,21 @@ function Dashboard() {
     if (selectedCustomerTopology === 'SINGLE_TENANT') {
       return resolvedTenantName || 'Single-tenant customer'
     }
+    if (supportsTenantManagement && !hasTenantSelectionAccess) {
+      return 'Not selected'
+    }
     if (resolvedTenantName) return resolvedTenantName
     if (tenantId) return tenantId
     if (customerId && supportsTenantManagement) return 'All tenants'
     return 'Not selected'
-  }, [customerId, resolvedTenantName, selectedCustomerTopology, supportsTenantManagement, tenantId])
+  }, [
+    customerId,
+    hasTenantSelectionAccess,
+    resolvedTenantName,
+    selectedCustomerTopology,
+    supportsTenantManagement,
+    tenantId,
+  ])
 
   const featureEntitlements = useMemo(
     () =>
@@ -199,17 +254,22 @@ function Dashboard() {
     return sourceLabel ? `${featureListLabel} (${sourceLabel})` : featureListLabel
   }, [customerId, featureEntitlements, getEntitlementSource])
 
-  const showCustomerSelector = isCustomerAdmin && accessibleCustomerIds.length > 1
+  const showCustomerSelector = hasAnyCustomerAdminAccess && accessibleCustomerIds.length > 1
   const showTenantSwitcher = Boolean(
     supportsTenantManagement
       && customerId
       && hasTenantSelectionAccess
-      && (isLoadingTenants || selectableTenantRows.length > 1),
+      && (
+        isLoadingTenants
+        || selectableTenantRows.length > 1
+        || (hasInvalidTenantContext && selectableTenantRows.length === 1)
+      ),
   )
 
   useEffect(() => {
-    if (!supportsTenantManagement || !customerId || tenantId || isLoadingTenants) return
+    if (!supportsTenantManagement || !customerId || isLoadingTenants || !hasTenantSelectionAccess) return
     if (selectableTenantRows.length !== 1) return
+    if (tenantId && !hasInvalidTenantContext) return
 
     const onlyTenant = selectableTenantRows[0]
     const onlyTenantId = getTenantId(onlyTenant)
@@ -218,6 +278,8 @@ function Dashboard() {
     setTenantId(onlyTenantId, onlyTenant?.name ?? null)
   }, [
     customerId,
+    hasTenantSelectionAccess,
+    hasInvalidTenantContext,
     isLoadingTenants,
     selectableTenantRows,
     setTenantId,
@@ -267,7 +329,7 @@ function Dashboard() {
       }
     }
 
-    if (!isCustomerAdmin && !hasAnyTenantAdminAccess) {
+    if (!canOpenVmfWorkspace) {
       return {
         badgeLabel: 'Role gated',
         badgeVariant: 'warning',
@@ -276,7 +338,9 @@ function Dashboard() {
         icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
         key: 'vmf',
         linkLabel: 'Value Message Framework unavailable',
-        reason: 'Available for customer admins and tenant admins in the current phase.',
+        reason: supportsTenantManagement
+          ? 'Available when the selected tenant is within your VMF workspace scope.'
+          : 'Available when the selected customer scope includes VMF workspace access.',
         title: 'Value Message Framework',
         to: '/app/dashboard',
       }
@@ -309,13 +373,12 @@ function Dashboard() {
         ? 'Uses the currently selected tenant and customer context.'
         : 'Uses the current customer scope and default tenant context.',
       title: 'Value Message Framework',
-      to: '/app/administration/manage-vmfs',
+      to: '/app/workspaces/vmf',
     }
   }, [
+    canOpenVmfWorkspace,
     customerId,
     featureEntitlements,
-    hasAnyTenantAdminAccess,
-    isCustomerAdmin,
     supportsTenantManagement,
     tenantId,
   ])
