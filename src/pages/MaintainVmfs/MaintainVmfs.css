@@ -82,6 +82,7 @@
 
 .maintain-vmfs__toolbar {
   display: grid;
+  align-items: end;
   gap: var(--spacing-md);
   grid-template-columns: minmax(220px, 1fr) minmax(170px, 220px) minmax(170px, 220px);
 }

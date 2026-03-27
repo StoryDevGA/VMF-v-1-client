@@ -239,7 +239,7 @@ export function CustomerUsersWorkspace({
                 size="sm"
                 onClick={onBackClick}
               >
-                Back to Customers
+                Back
               </Button>
               <Button
                 type="button"
@@ -248,7 +248,7 @@ export function CustomerUsersWorkspace({
                 onClick={onCreateUserClick}
                 disabled={createUserLoading}
               >
-                Create User
+                Create
               </Button>
               {showUsersAssignAdminAction || showUsersReplaceAdminAction ? (
                 <Button
