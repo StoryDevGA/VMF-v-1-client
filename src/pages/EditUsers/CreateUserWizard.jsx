@@ -837,7 +837,7 @@ function CreateUserWizard({
               loading={isLoading}
               disabled={isLoading}
             >
-              Create User
+              Create
             </Button>
           )}
         </div>

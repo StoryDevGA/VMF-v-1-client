@@ -485,7 +485,7 @@ function CreateTenantWizard({ open, onClose, customerId, tenantCapacity = null }
             loading={isLoading}
             disabled={isLoading || isCreateBlockedByCapacity}
           >
-            Create Tenant
+            Create
           </Button>
         )}
       </Dialog.Footer>

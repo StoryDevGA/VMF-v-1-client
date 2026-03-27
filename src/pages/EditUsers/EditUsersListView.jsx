@@ -405,7 +405,7 @@ export function EditUsersListView({
                 onClick={onCreateUserClick}
                 disabled={isListFetching}
               >
-                Create User
+                Create
               </Button>
             </div>
 

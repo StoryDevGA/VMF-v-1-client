@@ -119,7 +119,7 @@ export function CreateRoleDialog({
             onClose()
           }}
         >
-          Back to Role Definitions
+          Back
         </Button>
         <Button
           type="submit"
@@ -128,7 +128,7 @@ export function CreateRoleDialog({
           loading={isLoading}
           disabled={isLoading}
         >
-          Create Role
+          Create
         </Button>
       </Dialog.Footer>
     </Dialog>
@@ -253,7 +253,7 @@ export function EditRoleDialog({
       </Dialog.Body>
       <Dialog.Footer>
         <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-          Back to Role Definitions
+          Back
         </Button>
         <Button
           type="submit"
@@ -332,7 +332,7 @@ export function RolePermissionsDialog({ open, onClose, role }) {
       </Dialog.Body>
       <Dialog.Footer>
         <Button type="button" variant="outline" onClick={onClose}>
-          Back to Role Definitions
+          Back
         </Button>
       </Dialog.Footer>
     </Dialog>

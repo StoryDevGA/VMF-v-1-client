@@ -320,7 +320,7 @@ export function TenantListView({
                   onClick={onCreateClick}
                   disabled={createButtonDisabled}
                 >
-                  Create Tenant
+                  Create
                 </Button>
               </div>
             ) : null}

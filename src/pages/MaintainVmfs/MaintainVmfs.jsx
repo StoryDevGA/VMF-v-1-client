@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MdArrowBack } from 'react-icons/md'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
@@ -248,23 +247,22 @@ function MaintainVmfsBoundaryState({ message, onBack }) {
   return (
     <section className="maintain-vmfs container" aria-label="VMF workspace">
       <header className="maintain-vmfs__header">
-        <div className="maintain-vmfs__header-actions">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            leftIcon={<MdArrowBack aria-hidden="true" />}
-            onClick={onBack}
-          >
-            Back to Home
-          </Button>
-        </div>
         <h1 className="maintain-vmfs__title">VMF Workspace</h1>
       </header>
       <Fieldset className="maintain-vmfs__fieldset">
         <Fieldset.Legend className="sr-only">VMF workspace state</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--state">
+            <div className="maintain-vmfs__catalogue-actions">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onBack}
+              >
+                Back
+              </Button>
+            </div>
             <p className="maintain-vmfs__state-message">{message}</p>
           </Card.Body>
         </Card>
@@ -826,17 +824,6 @@ function MaintainVmfs() {
   return (
     <section className="maintain-vmfs container" aria-label="VMF workspace">
       <header className="maintain-vmfs__header">
-        <div className="maintain-vmfs__header-actions">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            leftIcon={<MdArrowBack aria-hidden="true" />}
-            onClick={handleBackToHome}
-          >
-            Back to Home
-          </Button>
-        </div>
         <h1 className="maintain-vmfs__title">VMF Workspace</h1>
         <p className="maintain-vmfs__subtitle">
           {canManageVmfs ? 'Manage' : 'Review'} VMF lifecycle, version snapshot metadata, and
@@ -848,8 +835,16 @@ function MaintainVmfs() {
         <Fieldset.Legend className="sr-only">VMF catalogue</Fieldset.Legend>
           <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
-            {canManageVmfs ? (
-              <div className="maintain-vmfs__catalogue-actions">
+            <div className="maintain-vmfs__catalogue-actions">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBackToHome}
+              >
+                Back
+              </Button>
+              {canManageVmfs ? (
                 <Button
                   type="button"
                   variant="primary"
@@ -857,10 +852,10 @@ function MaintainVmfs() {
                   onClick={openCreateDialog}
                   disabled={isMutationLoading || isCreateBlockedByCapacity}
                 >
-                  Create VMF
+                  Create
                 </Button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             {vmfCapacityGuidance ? (
               <div
@@ -1042,7 +1037,7 @@ function MaintainVmfs() {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" loading={createResult.isLoading}>
-                Create VMF
+                Create
               </Button>
             </div>
           </form>

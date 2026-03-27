@@ -68,6 +68,8 @@
 
 .super-admin-invitations__toolbar {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  align-items: end;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
 }

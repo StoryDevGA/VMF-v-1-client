@@ -790,7 +790,7 @@
 
 .tenant-linked-users__actions {
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
   margin-bottom: var(--spacing-xs, 0.25rem);
 }
 

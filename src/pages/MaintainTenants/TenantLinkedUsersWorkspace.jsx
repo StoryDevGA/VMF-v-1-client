@@ -740,7 +740,7 @@ function TenantLinkedUsersWorkspace() {
                 onClick={() => navigate('/app/administration/maintain-tenants')}
                 disabled={isLoadingMutation}
               >
-                Back to Maintain Tenants
+                Back
               </Button>
             </div>
 

@@ -133,7 +133,7 @@ export function CreateCustomerDialog({
               loading={isSubmitting}
               disabled={isSubmitting || licenseLevels.length === 0}
             >
-              Create Customer
+              Create
             </Button>
             <Button
               type="button"

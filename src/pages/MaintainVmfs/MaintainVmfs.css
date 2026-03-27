@@ -10,11 +10,6 @@
   gap: var(--spacing-xs);
 }
 
-.maintain-vmfs__header-actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
 .maintain-vmfs__title {
   margin: 0;
   font-size: var(--font-size-3xl);
@@ -52,6 +47,9 @@
 .maintain-vmfs__catalogue-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
 }
 
 .maintain-vmfs__note {
