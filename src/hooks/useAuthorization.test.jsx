@@ -58,6 +58,18 @@ const customerAdminUser = {
   ],
 }
 
+const customerScopedTenantAdminUser = {
+  id: '3',
+  email: 'ta@example.com',
+  name: 'Scoped Tenant Admin',
+  isActive: true,
+  memberships: [{ customerId: CUSTOMER_ID, roles: ['TENANT_ADMIN', 'USER'] }],
+  tenantMemberships: [
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roles: ['USER'] },
+  ],
+  vmfGrants: [],
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helper                                                            */
 /* ------------------------------------------------------------------ */
@@ -211,6 +223,27 @@ describe('useAuthorization', () => {
         }),
       ).toBe(true)
       expect(result.current.hasVmfWorkspaceManagementAccess(CUSTOMER_ID, TENANT_ID)).toBe(true)
+    })
+
+    it('lets customer-scoped tenant admins fall back to read-only access on non-admin tenants', () => {
+      const { result } = renderUseAuthorization(customerScopedTenantAdminUser)
+
+      expect(
+        result.current.hasVmfWorkspaceAccess(CUSTOMER_ID, TENANT_ID, {
+          supportsTenantManagement: true,
+          tenant: { tenantAdmin: { id: 'other-user', name: 'Other Admin' } },
+        }),
+      ).toBe(true)
+      expect(
+        result.current.hasVmfWorkspaceManagementAccess(CUSTOMER_ID, TENANT_ID, {
+          tenant: { tenantAdmin: { id: 'other-user', name: 'Other Admin' } },
+        }),
+      ).toBe(false)
+      expect(
+        result.current.hasVmfWorkspaceManagementAccess(CUSTOMER_ID, TENANT_ID, {
+          tenant: { tenantAdmin: { id: '3', name: 'Scoped Tenant Admin' } },
+        }),
+      ).toBe(true)
     })
   })
 })

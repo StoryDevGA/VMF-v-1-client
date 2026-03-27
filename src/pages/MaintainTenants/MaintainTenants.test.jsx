@@ -568,7 +568,7 @@ describe('MaintainTenants page', () => {
     expect(within(actions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
   })
 
-  it('allows customer-scoped tenant-admin users into maintain-tenants and scopes rows by associated tenant memberships', () => {
+  it('shows only actually managed tenants for customer-scoped tenant-admin users', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [
@@ -578,7 +578,7 @@ describe('MaintainTenants page', () => {
             website: 'https://associated.example.com',
             status: 'ENABLED',
             isDefault: false,
-            tenantAdmin: { id: 'user-99', name: 'Other Admin' },
+            tenantAdmin: { id: 'user-3', name: 'Tenant Admin' },
           },
           {
             _id: 'tenant-secondary',
@@ -626,7 +626,7 @@ describe('MaintainTenants page', () => {
     expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
     expect(screen.getByText('Associated Tenant')).toBeInTheDocument()
-    expect(screen.getByText('Second Associated Tenant')).toBeInTheDocument()
+    expect(screen.queryByText('Second Associated Tenant')).not.toBeInTheDocument()
     expect(screen.queryByText('Unscoped Tenant')).not.toBeInTheDocument()
 
     const actions = screen.getByRole('combobox', { name: /actions for associated tenant/i })

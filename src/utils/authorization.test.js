@@ -35,6 +35,7 @@ import {
   hasTenantAccess,
   hasVmfWorkspaceAccess,
   hasVmfWorkspaceManagementAccess,
+  isAssignedTenantAdmin,
   getUserVmfPermissions,
   hasVmfPermission,
   hasVmfAccess,
@@ -138,6 +139,26 @@ const singleTenantCustomerUser = {
   memberships: [{ customerId: CUSTOMER_ID, roles: ['USER'] }],
   tenantMemberships: [],
   vmfGrants: [],
+}
+
+const customerScopedTenantAdminUser = {
+  id: '9',
+  memberships: [{ customerId: CUSTOMER_ID, roles: ['TENANT_ADMIN', 'USER'] }],
+  tenantMemberships: [
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roles: ['USER'] },
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID_2, roles: ['USER'] },
+  ],
+  vmfGrants: [],
+}
+
+const assignedTenant = {
+  id: TENANT_ID,
+  tenantAdmin: { id: '9', name: 'Scoped Admin' },
+}
+
+const otherTenant = {
+  id: TENANT_ID_2,
+  tenantAdmin: { id: '77', name: 'Another Admin' },
 }
 
 /* ================================================================== */
@@ -558,6 +579,25 @@ describe('Tenant role helpers', () => {
     it('denies access when user has no tenant membership and is not admin', () => {
       expect(hasTenantAccess(tenantAdminUser, CUSTOMER_ID, TENANT_ID_2)).toBe(false)
     })
+
+    it('keeps linked-tenant access for customer-scoped tenant admins outside their admin assignment', () => {
+      expect(hasTenantAccess(customerScopedTenantAdminUser, CUSTOMER_ID, TENANT_ID_2)).toBe(true)
+    })
+
+    it('allows tenant access when tenant metadata confirms assigned tenant-admin ownership', () => {
+      const assignedOnlyUser = {
+        id: '10',
+        memberships: [{ customerId: CUSTOMER_ID, roles: ['TENANT_ADMIN', 'USER'] }],
+        tenantMemberships: [],
+        vmfGrants: [],
+      }
+
+      expect(
+        hasTenantAccess(assignedOnlyUser, CUSTOMER_ID, TENANT_ID, {
+          tenant: { tenantAdmin: { id: '10', name: 'Assigned Admin' } },
+        }),
+      ).toBe(true)
+    })
   })
 })
 
@@ -599,6 +639,35 @@ describe('VMF workspace helpers', () => {
     expect(hasVmfWorkspaceManagementAccess(customerAdminUser, CUSTOMER_ID, TENANT_ID)).toBe(true)
     expect(hasVmfWorkspaceManagementAccess(tenantAdminUser, CUSTOMER_ID, TENANT_ID)).toBe(true)
     expect(hasVmfWorkspaceManagementAccess(vmfUser, CUSTOMER_ID, TENANT_ID)).toBe(false)
+  })
+
+  it('treats customer-scoped tenant admins as read-only users on linked tenants they do not administer', () => {
+    expect(
+      hasVmfWorkspaceAccess(customerScopedTenantAdminUser, CUSTOMER_ID, TENANT_ID_2, {
+        supportsTenantManagement: true,
+        tenant: otherTenant,
+      }),
+    ).toBe(true)
+    expect(
+      hasVmfWorkspaceManagementAccess(customerScopedTenantAdminUser, CUSTOMER_ID, TENANT_ID_2, {
+        tenant: otherTenant,
+      }),
+    ).toBe(false)
+  })
+
+  it('allows customer-scoped tenant admins to manage VMFs only for assigned tenants', () => {
+    expect(
+      hasVmfWorkspaceManagementAccess(customerScopedTenantAdminUser, CUSTOMER_ID, TENANT_ID, {
+        tenant: assignedTenant,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('Assigned tenant-admin helper', () => {
+  it('detects tenant-admin ownership from tenant metadata', () => {
+    expect(isAssignedTenantAdmin(customerScopedTenantAdminUser, assignedTenant)).toBe(true)
+    expect(isAssignedTenantAdmin(customerScopedTenantAdminUser, otherTenant)).toBe(false)
   })
 })
 

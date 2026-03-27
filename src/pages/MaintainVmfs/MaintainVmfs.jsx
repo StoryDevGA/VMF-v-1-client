@@ -80,7 +80,7 @@ const VMF_LIFECYCLE_NOTE =
   'Use the Actions menu to edit VMFs or schedule a soft-delete. Active VMFs must be disabled before deletion.'
 
 const VMF_READ_ONLY_NOTE =
-  'This workspace is read-only for your current access level. Standard users can review published VMFs only; customer and tenant administrators can create, edit, or delete VMFs.'
+  "This workspace is read-only for your current access level. Standard users and linked tenant members can review published VMFs only; customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
@@ -279,6 +279,7 @@ function MaintainVmfs() {
   const {
     customerId,
     tenantId,
+    selectedTenant,
     resolvedTenantName,
     supportsTenantManagement,
     selectableTenants,
@@ -332,15 +333,18 @@ function MaintainVmfs() {
     () =>
       Boolean(customerId)
       && typeof hasVmfWorkspaceAccess === 'function'
-      && hasVmfWorkspaceAccess(customerId, tenantId, { supportsTenantManagement }),
-    [customerId, hasVmfWorkspaceAccess, supportsTenantManagement, tenantId],
+      && hasVmfWorkspaceAccess(customerId, tenantId, {
+        supportsTenantManagement,
+        tenant: selectedTenant,
+      }),
+    [customerId, hasVmfWorkspaceAccess, selectedTenant, supportsTenantManagement, tenantId],
   )
   const canManageVmfs = useMemo(
     () =>
       Boolean(customerId)
       && typeof hasVmfWorkspaceManagementAccess === 'function'
-      && hasVmfWorkspaceManagementAccess(customerId, tenantId),
-    [customerId, hasVmfWorkspaceManagementAccess, tenantId],
+      && hasVmfWorkspaceManagementAccess(customerId, tenantId, { tenant: selectedTenant }),
+    [customerId, hasVmfWorkspaceManagementAccess, selectedTenant, tenantId],
   )
   const isReadOnlyVmfViewer = canViewVmfs && !canManageVmfs
   const hasVmfEntitlement = Boolean(

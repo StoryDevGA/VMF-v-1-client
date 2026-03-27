@@ -28,6 +28,31 @@ const getMembershipCustomerId = (membership) => {
     : customerId.toString()
 }
 
+const getUserId = (user) => {
+  const userId = user?._id ?? user?.id
+  return userId === null || userId === undefined ? null : userId.toString()
+}
+
+const getTenantAdminIds = (tenant) => {
+  const directTenantAdminId = tenant?.tenantAdmin?.id ?? tenant?.tenantAdmin?._id
+  const tenantAdminUserIds = Array.isArray(tenant?.tenantAdminUserIds)
+    ? tenant.tenantAdminUserIds
+    : []
+
+  return [...new Set(
+    [directTenantAdminId, ...tenantAdminUserIds]
+      .filter((tenantAdminId) => tenantAdminId !== null && tenantAdminId !== undefined)
+      .map((tenantAdminId) => tenantAdminId.toString()),
+  )]
+}
+
+export const isAssignedTenantAdmin = (user, tenant) => {
+  const userId = getUserId(user)
+  if (!userId || !tenant) return false
+
+  return getTenantAdminIds(tenant).includes(userId)
+}
+
 /**
  * Extract all platform-level roles from a user object.
  * Platform memberships have customerId === null.
@@ -413,11 +438,15 @@ export const hasTenantRole = (user, customerId, tenantId, role) =>
  * @param {Object} user
  * @param {string} customerId
  * @param {string} tenantId
+ * @param {{ tenant?: Object | null }} [options]
  * @returns {boolean}
  */
-export const hasTenantAccess = (user, customerId, tenantId) => {
+export const hasTenantAccess = (user, customerId, tenantId, { tenant = null } = {}) => {
+  if (!customerId || !tenantId) return false
   if (isSuperAdmin(user)) return true
   if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
+  if (hasTenantRole(user, customerId, tenantId, 'TENANT_ADMIN')) return true
+  if (isAssignedTenantAdmin(user, tenant)) return true
   return getUserTenantRoles(user, customerId, tenantId).length > 0
 }
 
@@ -436,28 +465,25 @@ export const hasTenantAccess = (user, customerId, tenantId) => {
  * @param {Object} user
  * @param {string} customerId
  * @param {string | null | undefined} tenantId
- * @param {{ supportsTenantManagement?: boolean }} [options]
+ * @param {{ supportsTenantManagement?: boolean, tenant?: Object | null }} [options]
  * @returns {boolean}
  */
 export const hasVmfWorkspaceAccess = (
   user,
   customerId,
   tenantId,
-  { supportsTenantManagement = true } = {},
+  { supportsTenantManagement = true, tenant = null } = {},
 ) => {
   if (!customerId) return false
   if (isSuperAdmin(user)) return true
   if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
-  if (hasCustomerRole(user, customerId, 'TENANT_ADMIN')) {
-    return supportsTenantManagement ? Boolean(tenantId) : true
-  }
 
   if (!supportsTenantManagement) {
     return hasCustomerAccess(user, customerId)
   }
 
   if (!tenantId) return false
-  return hasTenantAccess(user, customerId, tenantId)
+  return hasTenantAccess(user, customerId, tenantId, { tenant })
 }
 
 /**
@@ -466,15 +492,21 @@ export const hasVmfWorkspaceAccess = (
  * @param {Object} user
  * @param {string} customerId
  * @param {string | null | undefined} tenantId
+ * @param {{ tenant?: Object | null }} [options]
  * @returns {boolean}
  */
-export const hasVmfWorkspaceManagementAccess = (user, customerId, tenantId) => {
+export const hasVmfWorkspaceManagementAccess = (
+  user,
+  customerId,
+  tenantId,
+  { tenant = null } = {},
+) => {
   if (!customerId) return false
   if (isSuperAdmin(user)) return true
   if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
-  if (hasCustomerRole(user, customerId, 'TENANT_ADMIN')) return true
   if (!tenantId) return false
-  return hasTenantRole(user, customerId, tenantId, 'TENANT_ADMIN')
+  if (hasTenantRole(user, customerId, tenantId, 'TENANT_ADMIN')) return true
+  return isAssignedTenantAdmin(user, tenant)
 }
 
 /**

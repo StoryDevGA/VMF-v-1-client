@@ -315,7 +315,7 @@ describe('MaintainVmfs', () => {
     )
     expect(screen.queryByRole('button', { name: /^create vmf$/i })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/standard users can review published vmfs only/i),
+      screen.getByText(/linked tenant members can review published vmfs only/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Viewer VMF')).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: /actions for viewer vmf/i })).not.toBeInTheDocument()

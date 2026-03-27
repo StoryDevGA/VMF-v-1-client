@@ -409,19 +409,9 @@ function MaintainTenants() {
 
   const selectedCustomerManagedTenantIds = useMemo(() => {
     if (selectedCustomerTenantAdminIds.length > 0) return selectedCustomerTenantAdminIds
-    if (
-      isSelectedCustomerCustomerScopedTenantAdmin
-      && selectedCustomerAccessibleTenantIds.length > 0
-    ) {
-      return selectedCustomerAccessibleTenantIds
-    }
 
     return []
-  }, [
-    isSelectedCustomerCustomerScopedTenantAdmin,
-    selectedCustomerAccessibleTenantIds,
-    selectedCustomerTenantAdminIds,
-  ])
+  }, [selectedCustomerTenantAdminIds])
 
   const isSelectedCustomerTenantAdmin =
     selectedCustomerManagedTenantIds.length > 0 || isSelectedCustomerCustomerScopedTenantAdmin

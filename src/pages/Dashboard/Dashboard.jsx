@@ -42,6 +42,7 @@ function Dashboard() {
   const {
     customerId,
     tenantId,
+    selectedTenant,
     tenants,
     selectableTenants,
     customerName,
@@ -161,9 +162,12 @@ function Dashboard() {
   const canOpenVmfWorkspace = useMemo(
     () =>
       typeof hasVmfWorkspaceAccess === 'function'
-        ? hasVmfWorkspaceAccess(customerId, tenantId, { supportsTenantManagement })
+        ? hasVmfWorkspaceAccess(customerId, tenantId, {
+          supportsTenantManagement,
+          tenant: selectedTenant,
+        })
         : false,
-    [customerId, hasVmfWorkspaceAccess, supportsTenantManagement, tenantId],
+    [customerId, hasVmfWorkspaceAccess, selectedTenant, supportsTenantManagement, tenantId],
   )
 
   const accessibleTenantIds = useMemo(

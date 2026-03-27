@@ -126,7 +126,8 @@ export function useAuthorization() {
   )
 
   const hasTenantAccess = useCallback(
-    (customerId, tenantId) => _hasTenantAccess(authorizationUser, customerId, tenantId),
+    (customerId, tenantId, options) =>
+      _hasTenantAccess(authorizationUser, customerId, tenantId, options),
     [authorizationUser],
   )
 
@@ -144,8 +145,8 @@ export function useAuthorization() {
   )
 
   const hasVmfWorkspaceManagementAccess = useCallback(
-    (customerId, tenantId) =>
-      _hasVmfWorkspaceManagementAccess(authorizationUser, customerId, tenantId),
+    (customerId, tenantId, options) =>
+      _hasVmfWorkspaceManagementAccess(authorizationUser, customerId, tenantId, options),
     [authorizationUser],
   )
 
