@@ -553,7 +553,7 @@ describe('MaintainTenants page', () => {
     renderMaintainTenants(store)
 
     expect(
-      screen.getByText(/showing only tenants where you are the assigned tenant admin/i),
+      screen.getByText(/showing only tenants within your tenant-admin scope/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
@@ -568,28 +568,36 @@ describe('MaintainTenants page', () => {
     expect(within(actions).getByRole('option', { name: /disable/i })).toBeInTheDocument()
   })
 
-  it('allows customer-scoped tenant-admin users into maintain-tenants and scopes rows by tenantAdmin id', () => {
+  it('allows customer-scoped tenant-admin users into maintain-tenants and scopes rows by associated tenant memberships', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [
           {
-            _id: 'tenant-owned',
-            name: 'Owned Tenant',
-            website: 'https://owned.example.com',
+            _id: 'tenant-enabled',
+            name: 'Associated Tenant',
+            website: 'https://associated.example.com',
             status: 'ENABLED',
             isDefault: false,
-            tenantAdmin: { id: 'user-3', name: 'Tenant Admin' },
+            tenantAdmin: { id: 'user-99', name: 'Other Admin' },
+          },
+          {
+            _id: 'tenant-secondary',
+            name: 'Second Associated Tenant',
+            website: 'https://second.example.com',
+            status: 'DISABLED',
+            isDefault: false,
+            tenantAdmin: { id: 'user-88', name: 'Another Admin' },
           },
           {
             _id: 'tenant-other',
-            name: 'Other Tenant',
+            name: 'Unscoped Tenant',
             website: 'https://other.example.com',
             status: 'ENABLED',
             isDefault: false,
             tenantAdmin: { id: 'user-99', name: 'Other Admin' },
           },
         ],
-        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        meta: { page: 1, pageSize: 20, total: 3, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -597,21 +605,31 @@ describe('MaintainTenants page', () => {
     })
 
     const store = createTestStore({
-      auth: { user: customerScopedTenantAdminUser, status: 'authenticated' },
+      auth: {
+        user: {
+          ...customerScopedTenantAdminUser,
+          tenantMemberships: [
+            { customerId: 'cust-1', tenantId: 'tenant-enabled', roles: ['USER'] },
+            { customerId: 'cust-1', tenantId: 'tenant-secondary', roles: ['USER'] },
+          ],
+        },
+        status: 'authenticated',
+      },
       tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
     })
 
     renderMaintainTenants(store)
 
     expect(
-      screen.getByText(/showing only tenants where you are the assigned tenant admin/i),
+      screen.getByText(/showing only tenants within your tenant-admin scope/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Owned Tenant')).toBeInTheDocument()
-    expect(screen.queryByText('Other Tenant')).not.toBeInTheDocument()
+    expect(screen.getByText('Associated Tenant')).toBeInTheDocument()
+    expect(screen.getByText('Second Associated Tenant')).toBeInTheDocument()
+    expect(screen.queryByText('Unscoped Tenant')).not.toBeInTheDocument()
 
-    const actions = screen.getByRole('combobox', { name: /actions for owned tenant/i })
+    const actions = screen.getByRole('combobox', { name: /actions for associated tenant/i })
     expect(within(actions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
     expect(within(actions).getByRole('option', { name: /linked users/i })).toBeInTheDocument()
     expect(within(actions).queryByRole('option', { name: /assign admin/i })).not.toBeInTheDocument()

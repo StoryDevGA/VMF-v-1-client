@@ -40,24 +40,17 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     if (!hasTenantAdminAccess) return false
     if (!selectedCustomerId) return true
 
-    const customerTenantMemberships = Array.isArray(user?.tenantMemberships)
-      ? user.tenantMemberships.filter(
-        (tm) => tm?.customerId?.toString() === selectedCustomerId.toString(),
-      )
-      : []
-
-    // If the user has tenant-level assignments for this customer,
-    // require TENANT_ADMIN on at least one of them — the tenant-level
-    // roles override the broad customer-scoped TENANT_ADMIN designation.
-    if (customerTenantMemberships.length > 0) {
-      return customerTenantMemberships.some(
-        (tm) => (tm.roles ?? []).includes('TENANT_ADMIN'),
-      )
+    if (hasCustomerRole(user, selectedCustomerId, 'TENANT_ADMIN')) {
+      return true
     }
 
-    // No tenant-level assignments — fall back to customer-scoped role
-    return hasCustomerRole(user, selectedCustomerId, 'TENANT_ADMIN')
-  }, [hasTenantAdminAccess, hasCustomerRole, selectedCustomerId, user])
+    return Array.isArray(user?.tenantMemberships)
+      && user.tenantMemberships.some(
+        (tm) =>
+          tm?.customerId?.toString() === selectedCustomerId.toString()
+          && (tm.roles ?? []).includes('TENANT_ADMIN'),
+      )
+  }, [hasTenantAdminAccess, selectedCustomerId, user])
   const supportsTenantManagement = useMemo(() => {
     if (!hasCustomerAdminAccess) return false
     if (selectedCustomerId) return selectedCustomerSupportsTenantManagement
