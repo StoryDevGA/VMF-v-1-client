@@ -8,13 +8,9 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
-import { Tooltip } from '../../components/Tooltip'
-import { MdInfoOutline } from 'react-icons/md'
 import {
   STATUS_FILTER_OPTIONS,
   TOPOLOGY_FILTER_OPTIONS,
-  CANONICAL_ADMIN_TOOLTIP_TEXT,
-  CANONICAL_ADMIN_HELP_TEXT,
 } from './superAdminCustomers.constants.js'
 import {
   getCustomerId,
@@ -50,33 +46,6 @@ export function CustomerRowActionsMenu({ row, actions, onAction, className = '' 
     </div>
   )
 }
-
-function CanonicalAdminHeaderLabel() {
-  return (
-    <span className="super-admin-customers__canonical-header">
-      <span>Canonical Admin</span>
-      <Tooltip
-        content={CANONICAL_ADMIN_TOOLTIP_TEXT}
-        position="bottom"
-        align="end"
-        openDelay={0}
-        closeDelay={0}
-        className="super-admin-customers__canonical-tooltip"
-      >
-        <button
-          type="button"
-          className="super-admin-customers__canonical-help-trigger"
-          aria-label="Explain Canonical Admin"
-        >
-          <MdInfoOutline aria-hidden="true" focusable="false" />
-          <span className="sr-only">Explain Canonical Admin</span>
-        </button>
-      </Tooltip>
-    </span>
-  )
-}
-
-export { CanonicalAdminHeaderLabel }
 
 export function CustomerListView({
   search,
@@ -166,19 +135,6 @@ export function CustomerListView({
           `${row?.governance?.maxTenants ?? '--'} / ${row?.governance?.maxVmfsPerTenant ?? '--'}`,
       },
       {
-        key: 'customerAdminUserId',
-        label: <CanonicalAdminHeaderLabel />,
-        mobileLabel: 'Canonical Admin',
-        width: '220px',
-        render: (_value, row) => {
-          const canonicalAdminUserId = row?.governance?.customerAdminUserId
-          if (!canonicalAdminUserId) {
-            return <span className="super-admin-customers__canonical-admin-empty">Not assigned</span>
-          }
-          return <code className="super-admin-customers__canonical-admin-id">{canonicalAdminUserId}</code>
-        },
-      },
-      {
         key: 'updatedAt',
         label: 'Updated',
         width: '156px',
@@ -261,7 +217,6 @@ export function CustomerListView({
                 {listAppError.message}
               </p>
             ) : null}
-            <p className="super-admin-customers__table-note">{CANONICAL_ADMIN_HELP_TEXT}</p>
             <HorizontalScroll className="super-admin-customers__table-wrap" ariaLabel="Customers table" gap="sm">
               <Table
                 className="super-admin-customers__table"

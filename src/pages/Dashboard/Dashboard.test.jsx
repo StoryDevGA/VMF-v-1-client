@@ -234,6 +234,43 @@ describe('Dashboard page', () => {
     expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
   })
 
+  it('hides the tenant switcher and auto-selects the only accessible tenant for a standard user', async () => {
+    const setTenantId = vi.fn()
+    mockRole({
+      isCustomerAdmin: false,
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
+    })
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenants: [
+        { id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true },
+        { id: 'ten-2', name: 'Secondary Tenant', status: 'ENABLED', isSelectable: true },
+      ],
+      selectableTenants: [
+        { id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true },
+        { id: 'ten-2', name: 'Secondary Tenant', status: 'ENABLED', isSelectable: true },
+      ],
+      resolvedTenantName: null,
+      supportsTenantManagement: true,
+      selectedCustomerTopology: 'MULTI_TENANT',
+      isLoadingTenants: false,
+      hasInvalidTenantContext: false,
+      setTenantId,
+    })
+
+    renderDashboard()
+
+    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
+    expect(screen.getByText('Single-tenant')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Only Tenant')
+    })
+  })
+
   it('shows customer and tenant scope controls when the admin can switch customers', () => {
     mockRole({ isCustomerAdmin: true, accessibleCustomerIds: ['cust-1', 'cust-2'] })
     renderDashboard()
@@ -519,7 +556,9 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
+    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
+    expect(screen.getByText('Selection needs review')).toBeInTheDocument()
+    expect(screen.getByText('Choose another tenant')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Only Tenant')

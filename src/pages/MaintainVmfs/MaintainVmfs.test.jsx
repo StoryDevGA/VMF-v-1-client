@@ -136,7 +136,7 @@ describe('MaintainVmfs', () => {
       screen.getByText(/select a tenant from the tenant switcher before opening the vmf workspace/i),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /back to home/i }))
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
 
     expect(screen.getByText('Dashboard Route')).toBeInTheDocument()
   })
@@ -163,7 +163,7 @@ describe('MaintainVmfs', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create vmf$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
     const dialog = screen.getByRole('dialog')
 
     await user.type(
@@ -174,7 +174,7 @@ describe('MaintainVmfs', () => {
       within(dialog).getByLabelText(/description/i, { selector: 'textarea#vmf-create-description' }),
       'Launch planning workspace',
     )
-    await user.click(within(dialog).getByRole('button', { name: /^create vmf$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(createVmfMock).toHaveBeenCalledTimes(1)
@@ -214,10 +214,40 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(
-      screen.getByText(/this tenant is already using 4 of 4 active vmf slots/i),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^create vmf$/i })).toBeDisabled()
+    const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity reached/i })
+
+    expect(capacityGuidance).toHaveTextContent(/0 of 4 left/i)
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled()
+  })
+
+  it('shows compact VMF usage guidance when capacity remains', () => {
+    listQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 4,
+            currentCount: 2,
+            remainingCount: 2,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity/i })
+
+    expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled()
   })
 
   it('resets workspace filters and dialogs when the tenant context changes', async () => {
@@ -240,7 +270,7 @@ describe('MaintainVmfs', () => {
       screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
       'ARCHIVED',
     )
-    await user.click(screen.getByRole('button', { name: /^create vmf$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')
@@ -313,7 +343,7 @@ describe('MaintainVmfs', () => {
       }),
       { skip: false },
     )
-    expect(screen.queryByRole('button', { name: /^create vmf$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(
       screen.getByText(/linked tenant members can review published vmfs only/i),
     ).toBeInTheDocument()

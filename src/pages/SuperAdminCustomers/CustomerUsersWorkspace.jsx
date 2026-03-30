@@ -13,6 +13,7 @@ import { MdInfoOutline } from 'react-icons/md'
 import {
   USER_ROLE_FILTER_OPTIONS,
   USER_STATUS_FILTER_OPTIONS,
+  CANONICAL_ADMIN_TOOLTIP_TEXT,
   CANONICAL_ADMIN_USERS_HELP_TEXT,
 } from './superAdminCustomers.constants.js'
 import {
@@ -20,8 +21,82 @@ import {
   normalizeUserStatus,
   getUserTrustStatus,
 } from './superAdminCustomers.utils.js'
-import { CustomerRowActionsMenu, CanonicalAdminHeaderLabel } from './CustomerListView.jsx'
+import { CustomerRowActionsMenu } from './CustomerListView.jsx'
 import './CustomerUsersWorkspace.css'
+
+function CustomerAdminHeaderLabel() {
+  const tooltipId = useId()
+  const containerRef = useRef(null)
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+
+  useEffect(() => {
+    if (!isTooltipOpen) return undefined
+
+    const handleDocumentPointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsTooltipOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentPointerDown)
+    document.addEventListener('touchstart', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentPointerDown)
+      document.removeEventListener('touchstart', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [isTooltipOpen])
+
+  return (
+    <span className="super-admin-customers__canonical-header" ref={containerRef}>
+      <span>Customer Admin</span>
+      <Tooltip
+        id={tooltipId}
+        content={(
+          <span>
+            {CANONICAL_ADMIN_TOOLTIP_TEXT}
+          </span>
+        )}
+        position="top"
+        align="start"
+        open={isTooltipOpen}
+        openDelay={0}
+        closeDelay={0}
+        className="super-admin-customers__canonical-tooltip"
+      >
+        <button
+          type="button"
+          className="super-admin-customers__canonical-help-trigger"
+          aria-label="Explain Customer Admin"
+          aria-controls={tooltipId}
+          aria-expanded={isTooltipOpen}
+          onClick={() => setIsTooltipOpen(true)}
+          onFocus={() => setIsTooltipOpen(true)}
+          onBlur={(event) => {
+            if (containerRef.current?.contains(event.relatedTarget)) return
+            setIsTooltipOpen(false)
+          }}
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <MdInfoOutline
+            aria-hidden="true"
+            focusable="false"
+            className="super-admin-customers__canonical-help-icon"
+          />
+        </button>
+      </Tooltip>
+    </span>
+  )
+}
 
 function CustomerUserRolesCell({ row, customerId }) {
   const roles = getCustomerUserRoles(row, customerId)
@@ -182,14 +257,14 @@ export function CustomerUsersWorkspace({
       },
       {
         key: 'isCanonicalAdmin',
-        label: <CanonicalAdminHeaderLabel />,
-        mobileLabel: 'Canonical Admin',
+        label: <CustomerAdminHeaderLabel />,
+        mobileLabel: 'Customer Admin',
         width: '220px',
         render: (_value, row) =>
           row?.isCanonicalAdmin
             ? (
               <Status size="sm" variant="info" className="super-admin-customers__canonical-status">
-                Canonical
+                Customer Admin
               </Status>
             )
             : <span className="super-admin-customers__canonical-admin-empty">--</span>,

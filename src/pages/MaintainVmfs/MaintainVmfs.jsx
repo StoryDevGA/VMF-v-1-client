@@ -142,8 +142,8 @@ const getVmfCapacityGuidance = (vmfCapacity, { isLoading = false } = {}) => {
   if (!vmfCapacity && isLoading) {
     return {
       tone: 'info',
-      title: 'Checking VMF capacity',
-      message: 'Loading active VMF usage for this tenant before enabling create guidance.',
+      ariaLabel: 'Checking VMF capacity',
+      displayValue: 'Checking...',
     }
   }
 
@@ -151,36 +151,28 @@ const getVmfCapacityGuidance = (vmfCapacity, { isLoading = false } = {}) => {
   const remainingCount = vmfCapacity?.remainingCount
   const maxVmfs = vmfCapacity?.maxVmfs
   const countLabel = getVmfCapacityCountLabel(vmfCapacity?.countMode)
+  const displayCount = Number.isFinite(remainingCount) ? Math.max(remainingCount, 0) : null
+  const capacityNoun = `${countLabel} VMF slot${maxVmfs === 1 ? '' : 's'}`
+  const visibleValue = displayCount !== null && maxVmfs !== null
+    ? `${displayCount} of ${maxVmfs} left`
+    : null
+
+  const buildGuidance = (tone, label) => ({
+    tone,
+    ariaLabel: `${label}: ${visibleValue} in ${capacityNoun}`.trim(),
+    displayValue: visibleValue,
+  })
 
   if (vmfCapacity?.isAtCapacity && currentCount !== null && maxVmfs !== null) {
-    return {
-      tone: 'warning',
-      title: 'VMF capacity reached',
-      message:
-        `This tenant is already using ${currentCount} of ${maxVmfs} ${countLabel} VMF slots. `
-        + 'Disable or delete an existing VMF before creating another.',
-    }
+    return buildGuidance('warning', 'VMF capacity reached')
   }
 
   if (remainingCount === 1 && currentCount !== null && maxVmfs !== null) {
-    return {
-      tone: 'warning',
-      title: 'Final VMF slot',
-      message:
-        `This tenant has 1 ${countLabel} VMF slot remaining (${currentCount} of ${maxVmfs} in use). `
-        + 'The next successful create will exhaust the current capacity.',
-    }
+    return buildGuidance('warning', 'Final VMF slot')
   }
 
   if (currentCount !== null && remainingCount !== null && maxVmfs !== null) {
-    const remainingLabel = remainingCount === 1 ? 'slot' : 'slots'
-    return {
-      tone: 'info',
-      title: 'VMF usage',
-      message:
-        `${currentCount} of ${maxVmfs} ${countLabel} VMF slots are in use. `
-        + `${remainingCount} ${remainingLabel} remaining.`,
-    }
+    return buildGuidance('info', 'VMF capacity')
   }
 
   return null
@@ -836,42 +828,38 @@ function MaintainVmfs() {
           <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
             <div className="maintain-vmfs__catalogue-actions">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleBackToHome}
-              >
-                Back
-              </Button>
-              {canManageVmfs ? (
+              <div className="maintain-vmfs__catalogue-actions-row">
                 <Button
                   type="button"
-                  variant="primary"
+                  variant="outline"
                   size="sm"
-                  onClick={openCreateDialog}
-                  disabled={isMutationLoading || isCreateBlockedByCapacity}
+                  onClick={handleBackToHome}
                 >
-                  Create
+                  Back
                 </Button>
+                {canManageVmfs ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={openCreateDialog}
+                    disabled={isMutationLoading || isCreateBlockedByCapacity}
+                  >
+                    Create
+                  </Button>
+                ) : null}
+              </div>
+              {canManageVmfs && vmfCapacityGuidance ? (
+                <Status
+                  variant={vmfCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
+                  size="sm"
+                  className="maintain-vmfs__capacity-status"
+                  aria-label={vmfCapacityGuidance.ariaLabel}
+                >
+                  {vmfCapacityGuidance.displayValue}
+                </Status>
               ) : null}
             </div>
-
-            {vmfCapacityGuidance ? (
-              <div
-                className={[
-                  'maintain-vmfs__note',
-                  vmfCapacityGuidance.tone === 'warning' ? 'maintain-vmfs__note--warning' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                role={vmfCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
-                aria-label="VMF capacity guidance"
-              >
-                <p className="maintain-vmfs__note-title">{vmfCapacityGuidance.title}</p>
-                <p className="maintain-vmfs__note-text">{vmfCapacityGuidance.message}</p>
-              </div>
-            ) : null}
 
             <div className="maintain-vmfs__toolbar">
               <Input
@@ -1154,5 +1142,3 @@ function MaintainVmfs() {
 }
 
 export default MaintainVmfs
-
-

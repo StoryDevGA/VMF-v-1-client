@@ -92,48 +92,38 @@
 
 .maintain-tenants__catalogue-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-xs, 0.25rem);
   margin-bottom: var(--spacing-xs, 0.25rem);
+}
+
+.maintain-tenants__catalogue-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+  flex-wrap: wrap;
+}
+
+.maintain-tenants__capacity-status {
+  align-self: flex-end;
+}
+
+.maintain-tenants__capacity-status .status__text {
+  white-space: nowrap;
+  padding-top: var(--spacing-sm, 0.5rem);
+  padding-right: var(--spacing-sm, 0.5rem);
+}
+
+.maintain-tenants__capacity-status .status__indicator {
+  display: none;
 }
 
 .maintain-tenants__table-note {
   margin: 0 0 var(--spacing-xs, 0.25rem);
   font-size: var(--font-size-sm, 0.875rem);
   color: var(--color-text-secondary);
-}
-
-.maintain-tenants__note {
-  display: grid;
-  gap: var(--spacing-2xs, 0.25rem);
-  margin-bottom: var(--spacing-lg, 1.5rem);
-  padding: var(--spacing-md, 1rem);
-  border: var(--border-width-thin, 1px) solid var(--color-border);
-  border-radius: var(--border-radius-md, 0.5rem);
-  background-color: var(--color-background-secondary);
-}
-
-.maintain-tenants__note--warning,
-.create-wizard__note--warning,
-.tenant-edit-drawer__hint {
-  border: var(--border-width-thin, 1px) solid var(--color-warning-border, var(--color-border));
-  background-color: var(--color-warning-background, var(--color-background-secondary));
-}
-
-.maintain-tenants__note-title,
-.create-wizard__note-title {
-  margin: 0;
-  font-size: var(--font-size-sm, 0.875rem);
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-text-primary);
-}
-
-.maintain-tenants__note-text,
-.create-wizard__note-text {
-  margin: 0;
-  font-size: var(--font-size-sm, 0.875rem);
-  line-height: var(--line-height-normal, 1.5);
-  color: var(--color-text-secondary);
-  overflow-wrap: anywhere;
 }
 
 .maintain-tenants__lifecycle-note,
@@ -936,6 +926,16 @@
     grid-template-columns: 1fr;
   }
 
+  .maintain-tenants__catalogue-actions {
+    align-items: stretch;
+  }
+
+  .maintain-tenants__catalogue-actions-row {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .maintain-tenants__catalogue-actions .btn,
   .maintain-tenants__dialog-footer .btn,
   .maintain-tenants__confirm-footer .btn,
@@ -965,6 +965,10 @@
   .maintain-tenants__toolbar .input--sm,
   .maintain-tenants__toolbar .select--sm {
     min-height: 44px;
+  }
+
+  .maintain-tenants__capacity-status {
+    align-self: flex-end;
   }
 
   .maintain-tenants__toolbar .select--sm {

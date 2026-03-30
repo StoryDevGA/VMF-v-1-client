@@ -83,37 +83,28 @@ const getTenantCapacityGuidance = (tenantCapacity) => {
   const maxTenants = tenantCapacity.maxTenants
   const remainingCount = tenantCapacity.remainingCount
   const countLabel = getTenantCapacityCountLabel(tenantCapacity.countMode)
+  const displayCount = Number.isFinite(remainingCount) ? Math.max(remainingCount, 0) : null
+  const capacityNoun = `${countLabel} tenant slot${maxTenants === 1 ? '' : 's'}`
+  const visibleValue = displayCount !== null && maxTenants !== null
+    ? `${displayCount} of ${maxTenants} left`
+    : null
+
+  const buildGuidance = (tone, label) => ({
+    tone,
+    ariaLabel: `${label}: ${visibleValue} in ${capacityNoun}`.trim(),
+    displayValue: visibleValue,
+  })
 
   if (tenantCapacity.isAtCapacity && currentCount !== null && maxTenants !== null) {
-    return {
-      tone: 'warning',
-      title: 'Tenant capacity reached',
-      message:
-        `This customer is already using ${currentCount} of ${maxTenants} ${countLabel} tenant slots. `
-        + 'Disable or archive an existing tenant, or update customer limits before creating another.',
-    }
+    return buildGuidance('warning', 'Tenant capacity reached')
   }
 
   if (remainingCount === 1 && currentCount !== null && maxTenants !== null) {
-    return {
-      tone: 'warning',
-      title: 'Final tenant slot',
-      message:
-        `This customer has 1 ${countLabel} tenant slot remaining (${currentCount} of ${maxTenants} in use). `
-        + 'The next successful create will exhaust the current capacity.',
-    }
+    return buildGuidance('warning', 'Final tenant slot')
   }
 
   if (currentCount !== null && remainingCount !== null && maxTenants !== null) {
-    const remainingLabel = remainingCount === 1 ? 'slot' : 'slots'
-
-    return {
-      tone: 'info',
-      title: 'Tenant usage',
-      message:
-        `${currentCount} of ${maxTenants} ${countLabel} tenant slots are in use. `
-        + `${remainingCount} ${remainingLabel} remaining.`,
-    }
+    return buildGuidance('info', 'Tenant capacity')
   }
 
   return null
@@ -172,6 +163,9 @@ function MaintainTenantsWorkspace({
 }) {
   const navigate = useNavigate()
   const { addToast } = useToaster()
+  const handleBackToDashboard = useCallback(() => {
+    navigate('/app/dashboard')
+  }, [navigate])
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
   const [assigningTenantAdmin, setAssigningTenantAdmin] = useState(null)
@@ -278,6 +272,7 @@ function MaintainTenantsWorkspace({
         showTenantAdminColumn={showTenantAdminColumn}
         allowAssignAdmin={allowAssignAdmin}
         allowLifecycleActions={allowLifecycleActions}
+        onBackClick={handleBackToDashboard}
         tenantAdminScopeNote={tenantAdminScopeNote}
         onCreateClick={() => setShowCreateWizard(true)}
         onEditClick={(tenant) => {

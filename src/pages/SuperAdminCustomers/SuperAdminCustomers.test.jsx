@@ -159,8 +159,7 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByRole('heading', { name: /^create customer$/i })).not.toBeInTheDocument()
   })
 
-  it('clarifies canonical-admin meaning and normalizes updated timestamp rendering in customer rows', async () => {
-    const user = userEvent.setup()
+  it('removes the canonical-admin column from customer rows and normalizes updated timestamp rendering', () => {
     const updatedAt = '2026-03-05T14:30:00.000Z'
     useListCustomersQuery.mockReturnValue({
       data: {
@@ -198,20 +197,12 @@ describe('SuperAdminCustomers page', () => {
 
     renderPage()
 
+    expect(screen.queryByRole('button', { name: /explain canonical admin/i })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/canonical admin shows the governance owner user id for each customer\./i),
-    ).toBeInTheDocument()
-    expect(screen.getByText('admin-user-123', { selector: 'code' })).toBeInTheDocument()
-    expect(screen.getByText(/not assigned/i)).toBeInTheDocument()
-    const customerTooltipTrigger = screen.getByRole('button', { name: /explain canonical admin/i })
-    await user.hover(customerTooltipTrigger)
-    expect(screen.getByRole('tooltip')).toHaveAttribute('aria-hidden', 'false')
-    expect(
-      screen.getByText(/canonical admin identifies the governance owner user for the customer/i),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/use replace customer admin to transfer ownership/i),
-    ).toBeInTheDocument()
+      screen.queryByText(/canonical admin shows the governance owner user id for each customer\./i),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('admin-user-123', { selector: 'code' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/not assigned/i)).not.toBeInTheDocument()
 
     const parsedUpdatedAt = new Date(updatedAt)
     const padTwoDigits = (value) => String(value).padStart(2, '0')
@@ -234,7 +225,7 @@ describe('SuperAdminCustomers page', () => {
     )
   })
 
-  it('shows canonical-admin tooltip help in the customer users workspace', async () => {
+  it('shows customer-admin tooltip help in the customer users workspace', async () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
@@ -285,11 +276,12 @@ describe('SuperAdminCustomers page', () => {
     expect(
       screen.getByText(/use replace customer admin to transfer ownership when needed\./i),
     ).toBeInTheDocument()
-    const tooltipTriggers = screen.getAllByRole('button', { name: /explain canonical admin/i })
+    const tooltipTriggers = screen.getAllByRole('button', { name: /explain customer admin/i })
     await user.hover(tooltipTriggers[0])
-    expect(screen.getByRole('tooltip')).toHaveAttribute('aria-hidden', 'false')
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveAttribute('aria-hidden', 'false')
     expect(
-      screen.getByText(/canonical admin identifies the governance owner user for the customer/i),
+      within(tooltip).getByText(/customer admin identifies the governance owner user for the customer/i),
     ).toBeInTheDocument()
   })
 
@@ -534,7 +526,7 @@ describe('SuperAdminCustomers page', () => {
     )
   })
 
-  it('renders customer users table with roles, trust, status, and canonical-admin marker', async () => {
+  it('renders customer users table with roles, trust, status, and customer-admin marker', async () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
@@ -592,6 +584,8 @@ describe('SuperAdminCustomers page', () => {
     selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('columnheader', { name: /^user$/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /^customer admin$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /^canonical admin$/i })).not.toBeInTheDocument()
     const actionsHeader = screen.getByRole('columnheader', { name: /^actions$/i })
     expect(actionsHeader).toHaveClass('table__header--align-center')
     expect(screen.queryByRole('columnheader', { name: /^name$/i })).not.toBeInTheDocument()
@@ -620,8 +614,9 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByText(/^trusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^untrusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^INACTIVE$/)).toBeInTheDocument()
-    const canonicalStatus = screen.getByText('Canonical').closest('.status')
-    expect(canonicalStatus).toHaveClass('super-admin-customers__canonical-status')
+    const customerAdminStatus = document.querySelector('.super-admin-customers__canonical-status')
+    expect(customerAdminStatus).not.toBeNull()
+    expect(customerAdminStatus).toHaveTextContent('Customer Admin')
   })
 
   it('applies server-driven search/role/status filters and pagination in customer users workspace', async () => {

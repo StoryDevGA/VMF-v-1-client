@@ -195,6 +195,7 @@ function renderMaintainTenants(store) {
               path="/app/administration/maintain-tenants"
               element={<MaintainTenants />}
             />
+            <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
           </Routes>
         </MemoryRouter>
       </ToasterProvider>
@@ -239,14 +240,25 @@ describe('MaintainTenants page', () => {
     ])
   })
 
-  it('renders the page heading, subtitle, and create action bar', () => {
+  it('renders the page heading, subtitle, and back/create action bar', () => {
     renderMaintainTenants()
 
     expect(screen.getByRole('heading', { name: /maintain tenants/i })).toBeInTheDocument()
     expect(
       screen.getByText(/manage tenant lifecycle, capacity, and linked tenant-admin assignments/i),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create tenant/i })).toHaveClass('btn--sm')
+    expect(screen.getByRole('button', { name: /^back$/i })).toHaveClass('btn--sm')
+    expect(screen.getByRole('button', { name: /^create$/i })).toHaveClass('btn--sm')
+  })
+
+  it('returns to the dashboard when back is clicked', async () => {
+    const user = userEvent.setup()
+
+    renderMaintainTenants()
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(screen.getByText('Dashboard Route')).toBeInTheDocument()
   })
 
   it('renders the search input, status filter, and tenants table region', () => {
@@ -278,7 +290,7 @@ describe('MaintainTenants page', () => {
     expect(
       screen.getByText(/tenant-management actions are unavailable until a super admin reactivates the customer/i),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/tenants table/i)).not.toBeInTheDocument()
   })
 
@@ -314,7 +326,7 @@ describe('MaintainTenants page', () => {
     expect(
       screen.getByText(/tenant management is only available for multi-tenant customers/i),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/tenants table/i)).not.toBeInTheDocument()
   })
 
@@ -343,10 +355,10 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    expect(
-      screen.getAllByText(/this customer is already using 3 of 3 non-archived tenant slots/i).length,
-    ).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: /create tenant/i })).toBeDisabled()
+    const capacityGuidance = screen.getByRole('status', { name: /^tenant capacity reached/i })
+
+    expect(capacityGuidance).toHaveTextContent(/0 of 3 left/i)
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled()
   })
 
   it('shows explicit tenant usage guidance when capacity metadata is available and capacity remains', () => {
@@ -374,10 +386,10 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    expect(
-      screen.getByText(/2 of 4 non-archived tenant slots are in use\. 2 slots remaining\./i),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create tenant/i })).toBeEnabled()
+    const capacityGuidance = screen.getByRole('status', { name: /^tenant capacity/i })
+
+    expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled()
   })
 
   it('clears the visible tenant search input when Redux customer context changes', async () => {
@@ -428,15 +440,10 @@ describe('MaintainTenants page', () => {
 
     renderMaintainTenants()
 
-    const capacityGuidance = screen.getByRole('alert', { name: /tenant capacity guidance/i })
+    const capacityGuidance = screen.getByRole('status', { name: /^final tenant slot/i })
 
-    expect(within(capacityGuidance).getByText(/final tenant slot/i)).toBeInTheDocument()
-    expect(
-      within(capacityGuidance).getByText(
-        /this customer has 1 non-archived tenant slot remaining \(2 of 3 in use\)\./i,
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create tenant/i })).toBeEnabled()
+    expect(capacityGuidance).toHaveTextContent(/1 of 3 left/i)
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled()
   })
 
   it('renders lifecycle helper copy and compact row-action menus with allowed actions only', () => {
@@ -555,7 +562,7 @@ describe('MaintainTenants page', () => {
     expect(
       screen.getByText(/showing only tenants within your tenant-admin scope/i),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
     expect(screen.getByText('Enabled Tenant')).toBeInTheDocument()
     expect(screen.queryByText('Other Tenant')).not.toBeInTheDocument()
@@ -623,7 +630,8 @@ describe('MaintainTenants page', () => {
     expect(
       screen.getByText(/showing only tenants within your tenant-admin scope/i),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create tenant/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /tenant admin/i })).not.toBeInTheDocument()
     expect(screen.getByText('Associated Tenant')).toBeInTheDocument()
     expect(screen.queryByText('Second Associated Tenant')).not.toBeInTheDocument()
@@ -831,7 +839,7 @@ describe('MaintainTenants page', () => {
     const user = userEvent.setup()
     renderMaintainTenants()
 
-    await user.click(screen.getByRole('button', { name: /create tenant/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /create tenant/i })).toBeInTheDocument()

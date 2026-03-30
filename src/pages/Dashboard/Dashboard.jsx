@@ -178,6 +178,33 @@ function Dashboard() {
     [customerId, getAccessibleTenants],
   )
 
+  const accessibleSelectableTenantRows = useMemo(
+    () =>
+      selectableTenantRows.filter((tenant) => {
+        const tenantRowId = getTenantId(tenant)
+        return tenantRowId !== null && accessibleTenantIds.includes(tenantRowId)
+      }),
+    [accessibleTenantIds, selectableTenantRows],
+  )
+
+  const useSelectableTenantRowsForSwitcher = Boolean(
+    isSuperAdmin
+      || hasSelectedCustomerAdminAccess
+      || hasSelectedCustomerTenantAdminAccess,
+  )
+
+  const tenantRowsForSwitcher = useMemo(
+    () =>
+      useSelectableTenantRowsForSwitcher
+        ? selectableTenantRows
+        : accessibleSelectableTenantRows,
+    [
+      accessibleSelectableTenantRows,
+      selectableTenantRows,
+      useSelectableTenantRowsForSwitcher,
+    ],
+  )
+
   const hasTenantSelectionAccess = useMemo(
     () => hasSelectedCustomerAdminAccess || accessibleTenantIds.length > 0,
     [accessibleTenantIds.length, hasSelectedCustomerAdminAccess],
@@ -203,10 +230,20 @@ function Dashboard() {
   ])
 
   const topologyLabel = useMemo(() => {
+    // Standard users with exactly one accessible tenant behave like a single-tenant scope
+    // in the dashboard summary, even when the customer itself is multi-tenant.
+    if (!useSelectableTenantRowsForSwitcher && tenantRowsForSwitcher.length === 1) {
+      return 'Single-tenant'
+    }
+
     if (selectedCustomerTopology === 'MULTI_TENANT') return 'Multi-tenant'
     if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant'
     return 'Not available'
-  }, [selectedCustomerTopology])
+  }, [
+    selectedCustomerTopology,
+    tenantRowsForSwitcher.length,
+    useSelectableTenantRowsForSwitcher,
+  ])
 
   const tenantScopeValue = useMemo(() => {
     if (selectedCustomerTopology === 'SINGLE_TENANT') {
@@ -259,23 +296,19 @@ function Dashboard() {
   }, [customerId, featureEntitlements, getEntitlementSource])
 
   const showCustomerSelector = hasAnyCustomerAdminAccess && accessibleCustomerIds.length > 1
-  const showTenantSwitcher = Boolean(
+  const showAccessibleTenantSwitcher = Boolean(
     supportsTenantManagement
       && customerId
       && hasTenantSelectionAccess
-      && (
-        isLoadingTenants
-        || selectableTenantRows.length > 1
-        || (hasInvalidTenantContext && selectableTenantRows.length === 1)
-      ),
+      && tenantRowsForSwitcher.length > 1,
   )
 
   useEffect(() => {
     if (!supportsTenantManagement || !customerId || isLoadingTenants || !hasTenantSelectionAccess) return
-    if (selectableTenantRows.length !== 1) return
+    if (tenantRowsForSwitcher.length !== 1) return
     if (tenantId && !hasInvalidTenantContext) return
 
-    const onlyTenant = selectableTenantRows[0]
+    const onlyTenant = tenantRowsForSwitcher[0]
     const onlyTenantId = getTenantId(onlyTenant)
     if (!onlyTenantId) return
 
@@ -285,10 +318,10 @@ function Dashboard() {
     hasTenantSelectionAccess,
     hasInvalidTenantContext,
     isLoadingTenants,
-    selectableTenantRows,
     setTenantId,
     supportsTenantManagement,
     tenantId,
+    tenantRowsForSwitcher,
   ])
 
   const summaryItems = useMemo(
@@ -534,7 +567,7 @@ function Dashboard() {
           </p>
         </Card.Header>
         <Card.Body className="dashboard__section-body">
-          {showCustomerSelector || showTenantSwitcher || tenantSelectionState ? (
+          {showCustomerSelector || showAccessibleTenantSwitcher || tenantSelectionState ? (
             <div className="dashboard__context-controls">
               {tenantSelectionState ? (
                 <div
@@ -553,7 +586,7 @@ function Dashboard() {
               {showCustomerSelector ? (
                 <CustomerSelector className="dashboard__control" />
               ) : null}
-              {showTenantSwitcher ? (
+              {showAccessibleTenantSwitcher ? (
                 <TenantSwitcher className="dashboard__control" />
               ) : null}
             </div>
@@ -566,20 +599,21 @@ function Dashboard() {
 
           <div className="dashboard__tiles" role="list" aria-label="Dashboard workflows">
             {workflowTiles.map((tile) => (
-              <article
+              <Card
                 key={tile.key}
+                variant={tile.disabled ? 'default' : 'elevated'}
+                hoverable={!tile.disabled}
                 className={[
                   'dashboard__tile',
                   tile.disabled ? 'dashboard__tile--disabled' : '',
                 ].filter(Boolean).join(' ')}
                 role="listitem"
               >
-                <div className="dashboard__tile-header">
+                <Card.Header className="dashboard__tile-header">
                   <div className="dashboard__tile-title-row">
                     <span className="dashboard__tile-icon">{tile.icon}</span>
                     <div className="dashboard__tile-copy">
                       <h3 className="dashboard__tile-title">{tile.title}</h3>
-                      <p className="dashboard__tile-description">{tile.description}</p>
                     </div>
                   </div>
                   <Badge
@@ -591,20 +625,23 @@ function Dashboard() {
                   >
                     {tile.badgeLabel}
                   </Badge>
-                </div>
-
-                <p className="dashboard__tile-reason">{tile.reason}</p>
-
-                <Link
-                  to={tile.to}
-                  disabled={tile.disabled}
-                  className="dashboard__tile-link"
-                  variant="primary"
-                  underline="none"
-                >
-                  {tile.linkLabel}
-                </Link>
-              </article>
+                </Card.Header>
+                <Card.Body className="dashboard__tile-body">
+                  <p className="dashboard__tile-description">{tile.description}</p>
+                  <p className="dashboard__tile-reason">{tile.reason}</p>
+                </Card.Body>
+                <Card.Footer className="dashboard__tile-footer">
+                  <Link
+                    to={tile.to}
+                    disabled={tile.disabled}
+                    className="dashboard__tile-link"
+                    variant="primary"
+                    underline="none"
+                  >
+                    {tile.linkLabel}
+                  </Link>
+                </Card.Footer>
+              </Card>
             ))}
           </div>
         </Card.Body>

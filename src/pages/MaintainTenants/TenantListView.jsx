@@ -160,6 +160,7 @@ export function TenantListView({
   showTenantAdminColumn = true,
   allowAssignAdmin = true,
   allowLifecycleActions = true,
+  onBackClick = null,
   allowLinkedUsers = true,
   tenantAdminScopeNote = null,
   onCreateClick,
@@ -220,6 +221,7 @@ export function TenantListView({
     },
     [onAssignAdminClick, onDisableClick, onEditClick, onEnableClick, onLinkedUsersClick],
   )
+  const showActionBar = Boolean(onBackClick) || showCreateAction
 
   const columns = useMemo(() => {
     const baseColumns = [
@@ -311,35 +313,41 @@ export function TenantListView({
         <Fieldset.Legend className="sr-only">Tenant catalogue</Fieldset.Legend>
         <Card variant="elevated" className="maintain-tenants__card">
           <Card.Body className="maintain-tenants__card-body maintain-tenants__card-body--compact">
-            {showCreateAction ? (
+            {showActionBar ? (
               <div className="maintain-tenants__catalogue-actions">
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={onCreateClick}
-                  disabled={createButtonDisabled}
-                >
-                  Create
-                </Button>
-              </div>
-            ) : null}
-
-            {showCreateAction && tenantCapacityGuidance ? (
-              <div
-                className={[
-                  'maintain-tenants__note',
-                  tenantCapacityGuidance.tone === 'warning'
-                    ? 'maintain-tenants__note--warning'
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                role={tenantCapacityGuidance.tone === 'warning' ? 'alert' : 'status'}
-                aria-label="Tenant capacity guidance"
-              >
-                <p className="maintain-tenants__note-title">{tenantCapacityGuidance.title}</p>
-                <p className="maintain-tenants__note-text">{tenantCapacityGuidance.message}</p>
+                <div className="maintain-tenants__catalogue-actions-row">
+                  {onBackClick ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onBackClick}
+                    >
+                      Back
+                    </Button>
+                  ) : null}
+                  {showCreateAction ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={onCreateClick}
+                      disabled={createButtonDisabled}
+                    >
+                      Create
+                    </Button>
+                  ) : null}
+                </div>
+                {showCreateAction && tenantCapacityGuidance ? (
+                  <Status
+                    variant={tenantCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
+                    size="sm"
+                    className="maintain-tenants__capacity-status"
+                    aria-label={tenantCapacityGuidance.ariaLabel}
+                  >
+                    {tenantCapacityGuidance.displayValue}
+                  </Status>
+                ) : null}
               </div>
             ) : null}
 
