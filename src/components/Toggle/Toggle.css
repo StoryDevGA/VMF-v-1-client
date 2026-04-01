@@ -1,0 +1,156 @@
+/**
+ * Toggle Component Styles
+ *
+ * Custom-styled, accessible switch.
+ */
+
+.toggle-container {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--font-sans);
+}
+
+.toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  border: var(--border-width-medium) solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  border-radius: var(--border-radius-pill);
+  background-color: color-mix(in srgb, var(--color-border) 25%, var(--color-background));
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--toggle-thumb-offset);
+  border-radius: var(--border-radius-full);
+  background-color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+  transform: translate(0, -50%);
+  transition:
+    transform var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.toggle-label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.toggle-container--sm {
+  --toggle-track-width: 40px;
+  --toggle-track-height: 22px;
+  --toggle-thumb-size: 14px;
+  --toggle-thumb-offset: 1px;
+  --toggle-thumb-translate: 18px;
+}
+
+.toggle-container--sm .toggle-track {
+  width: var(--toggle-track-width);
+  height: var(--toggle-track-height);
+}
+
+.toggle-container--sm .toggle-thumb {
+  width: var(--toggle-thumb-size);
+  height: var(--toggle-thumb-size);
+}
+
+.toggle-container--sm .toggle-label {
+  font-size: var(--font-size-sm);
+}
+
+.toggle-container--md {
+  --toggle-track-width: 48px;
+  --toggle-track-height: 26px;
+  --toggle-thumb-size: 18px;
+  --toggle-thumb-offset: 2px;
+  --toggle-thumb-translate: 22px;
+}
+
+.toggle-container--md .toggle-track {
+  width: var(--toggle-track-width);
+  height: var(--toggle-track-height);
+}
+
+.toggle-container--md .toggle-thumb {
+  width: var(--toggle-thumb-size);
+  height: var(--toggle-thumb-size);
+}
+
+.toggle-container--md .toggle-label {
+  font-size: var(--font-size-base);
+}
+
+.toggle-input:focus-visible + .toggle-track {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.toggle-container:not(.toggle-container--disabled):hover .toggle-track {
+  border-color: var(--color-primary);
+}
+
+.toggle-input:checked + .toggle-track {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+}
+
+.toggle-input:checked + .toggle-track .toggle-thumb {
+  background-color: var(--color-text-inverse);
+  transform: translate(var(--toggle-thumb-translate), -50%);
+}
+
+.toggle-container--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.toggle-container--disabled:hover .toggle-track {
+  border-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+@media (forced-colors: active) {
+  .toggle-track,
+  .toggle-thumb {
+    forced-color-adjust: none;
+  }
+
+  .toggle-track {
+    border-color: CanvasText;
+    background-color: Canvas;
+  }
+
+  .toggle-thumb {
+    background-color: CanvasText;
+  }
+
+  .toggle-input:checked + .toggle-track {
+    background-color: Highlight;
+    border-color: Highlight;
+  }
+
+  .toggle-input:checked + .toggle-track .toggle-thumb {
+    background-color: HighlightText;
+  }
+}

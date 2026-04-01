@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useToaster } from '../../components/Toaster'
-import { useDebounce } from '../../hooks/useDebounce.js'
 import {
   useCreateRoleMutation,
   useDeleteRoleMutation,
   useGetRoleQuery,
-  useListRolesQuery,
   useUpdateRoleMutation,
 } from '../../store/api/roleApi.js'
 import {
@@ -15,9 +13,7 @@ import {
 } from '../../utils/errors.js'
 import {
   INITIAL_ROLE_FORM,
-  formatPermissions,
   mapRoleValidationErrors,
-  parsePermissions,
   validateRoleForm,
 } from './superAdminRoles.constants.js'
 
@@ -25,22 +21,8 @@ const getRoleId = (role) => String(role?.id ?? role?._id ?? '').trim()
 
 const getRoleDetails = (response) => response?.data?.data ?? response?.data ?? null
 
-const getRoleRows = (response) => {
-  if (Array.isArray(response?.data?.data)) return response.data.data
-  if (Array.isArray(response?.data)) return response.data
-  return []
-}
-
-const getRoleMeta = (response) => response?.meta ?? response?.data?.meta ?? {}
-
 export function useRoleManagement() {
   const { addToast } = useToaster()
-
-  const [search, setSearch] = useState('')
-  const [scopeFilter, setScopeFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [systemFilter, setSystemFilter] = useState('')
-  const [page, setPage] = useState(1)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState(INITIAL_ROLE_FORM)
@@ -52,22 +34,6 @@ export function useRoleManagement() {
   const [editForm, setEditForm] = useState(INITIAL_ROLE_FORM)
   const [editBase, setEditBase] = useState(INITIAL_ROLE_FORM)
   const [editErrors, setEditErrors] = useState({})
-
-  const debouncedSearch = useDebounce(search, 300)
-
-  const {
-    data: listResponse,
-    isLoading: isListLoading,
-    isFetching: isListFetching,
-    error: listError,
-  } = useListRolesQuery({
-    page,
-    pageSize: 20,
-    q: debouncedSearch.trim(),
-    scope: scopeFilter || undefined,
-    isSystem: systemFilter || undefined,
-    isActive: statusFilter || undefined,
-  })
 
   const {
     data: selectedResponse,
@@ -81,11 +47,6 @@ export function useRoleManagement() {
   const [updateRole, updateResult] = useUpdateRoleMutation()
   const [deleteRole, deleteResult] = useDeleteRoleMutation()
 
-  const rows = useMemo(() => getRoleRows(listResponse), [listResponse])
-  const meta = useMemo(() => getRoleMeta(listResponse), [listResponse])
-  const totalPages = Number(meta.totalPages) || 1
-  const currentPage = Number(meta.page) || page
-
   useEffect(() => {
     const details = getRoleDetails(selectedResponse)
     if (!details) return
@@ -95,7 +56,6 @@ export function useRoleManagement() {
       name: String(details.name ?? ''),
       description: String(details.description ?? ''),
       scope: String(details.scope ?? 'CUSTOMER').trim().toUpperCase(),
-      permissions: formatPermissions(details.permissions),
       isActive: Boolean(details.isActive),
     }
 
@@ -202,12 +162,6 @@ export function useRoleManagement() {
       patch.isActive = payload.isActive
     }
 
-    const basePermissions = parsePermissions(editBase.permissions).join('|')
-    const nextPermissions = (payload.permissions ?? []).join('|')
-    if (basePermissions !== nextPermissions) {
-      patch.permissions = payload.permissions ?? []
-    }
-
     if (Object.keys(patch).length === 0) {
       setEditErrors({
         form: 'Make at least one change before saving.',
@@ -255,15 +209,6 @@ export function useRoleManagement() {
       const roleId = getRoleId(row)
       if (!roleId) return
 
-      if (Boolean(row?.isSystem)) {
-        addToast({
-          title: 'Protected role',
-          description: 'System roles are protected and cannot be deleted.',
-          variant: 'warning',
-        })
-        return
-      }
-
       try {
         await deleteRole({ roleId }).unwrap()
         addToast({
@@ -287,28 +232,39 @@ export function useRoleManagement() {
     [addToast, deleteRole],
   )
 
-  const listAppError = listError ? normalizeError(listError) : null
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [roleToDelete, setRoleToDelete] = useState(null)
+
+  const openDeleteConfirm = useCallback(
+    (row) => {
+      if (Boolean(row?.isSystem)) {
+        addToast({
+          title: 'Protected role',
+          description: 'System roles are protected and cannot be deleted.',
+          variant: 'warning',
+        })
+        return
+      }
+      setRoleToDelete(row)
+      setDeleteConfirmOpen(true)
+    },
+    [addToast],
+  )
+
+  const closeDeleteConfirm = useCallback(() => {
+    setDeleteConfirmOpen(false)
+    setRoleToDelete(null)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!roleToDelete) return
+    await handleDeleteRole(roleToDelete)
+    closeDeleteConfirm()
+  }, [closeDeleteConfirm, handleDeleteRole, roleToDelete])
+
   const selectedAppError = selectedError ? normalizeError(selectedError) : null
 
   return {
-    search,
-    setSearch,
-    scopeFilter,
-    setScopeFilter,
-    statusFilter,
-    setStatusFilter,
-    systemFilter,
-    setSystemFilter,
-    page,
-    setPage,
-
-    rows,
-    currentPage,
-    totalPages,
-    isListLoading,
-    isListFetching,
-    listAppError,
-
     openCreateDialog,
     createOpen,
     closeCreateDialog,
@@ -331,7 +287,11 @@ export function useRoleManagement() {
     selectedAppError,
     selectedRoleIsSystem,
 
-    handleDeleteRole,
+    openDeleteConfirm,
+    deleteConfirmOpen,
+    closeDeleteConfirm,
+    confirmDelete,
+    roleToDelete,
     deleteResult,
   }
 }

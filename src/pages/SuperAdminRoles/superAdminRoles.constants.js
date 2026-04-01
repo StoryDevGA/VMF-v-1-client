@@ -1,6 +1,5 @@
 export const ROLE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
 export const ROLE_SCOPE_VALUES = ['PLATFORM', 'CUSTOMER', 'TENANT']
-export const ROLE_PERMISSION_PATTERN = /^[A-Z][A-Z0-9_]*$/
 
 export const ROLE_SCOPE_OPTIONS = [
   { value: '', label: 'All scopes' },
@@ -32,7 +31,6 @@ export const INITIAL_ROLE_FORM = {
   name: '',
   description: '',
   scope: 'CUSTOMER',
-  permissions: '',
   isActive: true,
 }
 
@@ -41,25 +39,6 @@ export const normalizeRoleKey = (value) =>
     .trim()
     .replace(/\s+/g, '_')
     .toUpperCase()
-
-export const normalizePermissionToken = (value) =>
-  String(value ?? '')
-    .trim()
-    .replace(/^[\[{(]+/, '')
-    .replace(/[\]})]+$/, '')
-    .replace(/^["'`]+|["'`]+$/g, '')
-    .toUpperCase()
-
-export const parsePermissions = (value) =>
-  [...new Set(
-    String(value ?? '')
-      .split(/[\n,;|]+/)
-      .map(normalizePermissionToken)
-      .filter(Boolean),
-  )]
-
-export const formatPermissions = (permissions) =>
-  Array.isArray(permissions) ? permissions.join('\n') : ''
 
 export const getRoleStatusVariant = (isActive) => (isActive ? 'success' : 'neutral')
 
@@ -77,8 +56,6 @@ export const mapRoleValidationErrors = (appError) => {
   if (details.name) nextErrors.name = details.name
   if (details.description) nextErrors.description = details.description
   if (details.scope) nextErrors.scope = details.scope
-  if (details.permissions) nextErrors.permissions = details.permissions
-  if (details['']) nextErrors.permissions = details['']
 
   return nextErrors
 }
@@ -89,7 +66,6 @@ export function validateRoleForm(formState, { mode = 'create' } = {}) {
   const name = String(formState.name ?? '').trim()
   const description = String(formState.description ?? '').trim()
   const scope = String(formState.scope ?? '').trim().toUpperCase()
-  const permissions = parsePermissions(formState.permissions)
 
   if (mode === 'create') {
     if (!roleKey) {
@@ -116,12 +92,6 @@ export function validateRoleForm(formState, { mode = 'create' } = {}) {
     errors.scope = `Scope must be one of: ${ROLE_SCOPE_VALUES.join(', ')}.`
   }
 
-  const invalidPermission = permissions.find((permission) => !ROLE_PERMISSION_PATTERN.test(permission))
-  if (invalidPermission) {
-    errors.permissions =
-      `Invalid permission "${invalidPermission}". Use uppercase letters, numbers, and underscores.`
-  }
-
   return {
     errors,
     payload: {
@@ -129,7 +99,7 @@ export function validateRoleForm(formState, { mode = 'create' } = {}) {
       name,
       ...(description ? { description } : {}),
       scope,
-      permissions,
+      ...(mode === 'create' ? { permissions: [] } : {}),
       isActive: Boolean(formState.isActive),
     },
   }

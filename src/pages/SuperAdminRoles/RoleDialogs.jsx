@@ -1,16 +1,11 @@
-import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
-import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import {
-  INITIAL_ROLE_FORM,
   ROLE_FORM_SCOPE_OPTIONS,
-  getRoleStatusVariant,
-  getRoleTypeVariant,
 } from './superAdminRoles.constants.js'
 import './RoleDialogs.css'
 
@@ -85,18 +80,9 @@ export function CreateRoleDialog({
             fullWidth
           />
 
-          <Textarea
-            id="role-create-permissions"
-            label="Permissions"
-            helperText="Use commas, pipes, semicolons, or new lines."
-            value={createForm.permissions}
-            onChange={(event) =>
-              setCreateForm((current) => ({ ...current, permissions: event.target.value }))
-            }
-            error={createErrors.permissions}
-            rows={5}
-            fullWidth
-          />
+          <p className="super-admin-roles__muted" role="note">
+            Permissions are assigned from the matrix after the role is created.
+          </p>
 
           <Tickbox
             id="role-create-active"
@@ -113,11 +99,7 @@ export function CreateRoleDialog({
           type="button"
           variant="outline"
           disabled={isLoading}
-          onClick={() => {
-            setCreateForm(INITIAL_ROLE_FORM)
-            setCreateErrors({})
-            onClose()
-          }}
+          onClick={onClose}
         >
           Back
         </Button>
@@ -227,18 +209,11 @@ export function EditRoleDialog({
             disabled={isFetchingSelected || selectedRoleIsSystem}
           />
 
-          <Textarea
-            id="role-edit-permissions"
-            label="Permissions"
-            value={editForm.permissions}
-            onChange={(event) =>
-              setEditForm((current) => ({ ...current, permissions: event.target.value }))
-            }
-            error={editErrors.permissions}
-            rows={5}
-            fullWidth
-            disabled={isFetchingSelected || selectedRoleIsSystem}
-          />
+          {!selectedRoleIsSystem ? (
+            <p className="super-admin-roles__muted" role="note">
+              Permissions are managed from the role matrix on the main page.
+            </p>
+          ) : null}
 
           <Tickbox
             id="role-edit-active"
@@ -269,70 +244,32 @@ export function EditRoleDialog({
   )
 }
 
-export function RolePermissionsDialog({ open, onClose, role }) {
-  const permissions = Array.isArray(role?.permissions) ? role.permissions : []
-  const roleKey = String(role?.key ?? '--').trim() || '--'
-  const roleName = String(role?.name ?? 'Role').trim() || 'Role'
-  const roleScope = String(role?.scope ?? '--').trim() || '--'
-  const roleDescription = String(role?.description ?? '').trim()
+export function ConfirmDeleteRoleDialog({ open, onClose, onConfirm, role, isLoading }) {
+  const roleName = role?.name ?? role?.key ?? 'this role'
 
   return (
-    <Dialog open={open} onClose={onClose} size="md">
+    <Dialog open={open} onClose={onClose} size="sm">
       <Dialog.Header>
-        <h2 className="super-admin-roles__dialog-title">Role Permissions</h2>
+        <h2 className="super-admin-roles__dialog-title">Delete Role</h2>
       </Dialog.Header>
       <Dialog.Body className="super-admin-roles__dialog-body">
-        <div className="super-admin-roles__permissions-dialog">
-          <div className="super-admin-roles__permissions-meta">
-            <div className="super-admin-roles__permissions-heading">
-              <p className="super-admin-roles__dialog-subtitle">{roleName}</p>
-              <code className="super-admin-roles__role-key">{roleKey}</code>
-            </div>
-            <div className="super-admin-roles__permissions-badges">
-              <Badge size="sm" variant={getRoleTypeVariant(Boolean(role?.isSystem))} pill>
-                {role?.isSystem ? 'System' : 'Custom'}
-              </Badge>
-              <Badge size="sm" variant="neutral" pill>
-                {roleScope}
-              </Badge>
-              <Status
-                size="sm"
-                showIcon
-                variant={getRoleStatusVariant(Boolean(role?.isActive))}
-              >
-                {role?.isActive ? 'active' : 'inactive'}
-              </Status>
-            </div>
-          </div>
-
-          {roleDescription ? (
-            <p className="super-admin-roles__permissions-description">{roleDescription}</p>
-          ) : null}
-
-          <div className="super-admin-roles__permissions-panel">
-            <p className="super-admin-roles__permissions-panel-title">
-              Permissions ({permissions.length})
-            </p>
-
-            {permissions.length > 0 ? (
-              <ul className="super-admin-roles__permissions-list" aria-label={`${roleName} permissions`}>
-                {permissions.map((permission) => (
-                  <li key={permission} className="super-admin-roles__permissions-item">
-                    <Badge size="sm" variant="neutral" pill>
-                      {permission}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="super-admin-roles__muted">No permissions defined for this role.</p>
-            )}
-          </div>
-        </div>
+        <p className="super-admin-roles__confirm-copy">
+          Are you sure you want to delete <strong>{roleName}</strong>? This action cannot be
+          undone.
+        </p>
       </Dialog.Body>
       <Dialog.Footer>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Back
+        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          onClick={onConfirm}
+          loading={isLoading}
+          disabled={isLoading}
+        >
+          Delete
         </Button>
       </Dialog.Footer>
     </Dialog>
