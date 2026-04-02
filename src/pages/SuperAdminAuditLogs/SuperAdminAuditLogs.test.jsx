@@ -75,6 +75,7 @@ describe('SuperAdminAuditLogs page', () => {
             id: 'log-1',
             ts: timestamp,
             action: 'CUSTOMER_UPDATED',
+            summary: 'Super Admin updated customer Acme Corp',
             resourceType: 'Customer',
             resourceId: 'cust-1',
             actorUserId: 'admin-1',
@@ -95,6 +96,39 @@ describe('SuperAdminAuditLogs page', () => {
     expect(timestampNode).toHaveAttribute('datetime', timestampParts.iso)
     expect(timestampNode.querySelector('.table-date-time__date')).toHaveTextContent(timestampParts.dateLabel)
     expect(timestampNode.querySelector('.table-date-time__time')).toHaveTextContent(timestampParts.timeLabel)
+    expect(screen.getByText('Super Admin updated customer Acme Corp')).toBeInTheDocument()
+  })
+
+  it('renders readable fallback event text when summary is missing', () => {
+    useQueryAuditLogsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'log-2',
+            ts: '2026-03-05T14:30:00.000Z',
+            action: 'VMF_GRANT_CREATED',
+            resourceType: 'User',
+            resourceId: '69c5205f9510a816ace195e4',
+            actorUserId: { name: 'Jane Admin' },
+            display: {
+              targetLabel: 'John User <john@example.com>',
+              scopeLabel: 'Alpha VMF',
+              permissionLabels: ['READ'],
+            },
+            requestId: 'req-2',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, totalCount: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    expect(screen.getByText('Jane Admin granted John User <john@example.com> READ access to Alpha VMF')).toBeInTheDocument()
+    expect(screen.getByText('VMF Grant Created')).toBeInTheDocument()
   })
 
   it('supports first/last pagination controls in audit log query results', async () => {
@@ -123,6 +157,7 @@ describe('SuperAdminAuditLogs page', () => {
     await waitFor(() => {
       expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
         expect.objectContaining({ page: 4, pageSize: 20 }),
+        expect.any(Object),
       )
     })
     expect(screen.getByText(/page 4 of 4/i)).toBeInTheDocument()
@@ -132,6 +167,7 @@ describe('SuperAdminAuditLogs page', () => {
     await waitFor(() => {
       expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
         expect.objectContaining({ page: 1, pageSize: 20 }),
+        expect.any(Object),
       )
     })
     expect(screen.getByText(/page 1 of 4/i)).toBeInTheDocument()

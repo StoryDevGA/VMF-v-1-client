@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
@@ -11,6 +11,8 @@ import {
   ACTION_OPTIONS,
   RESOURCE_TYPE_OPTIONS,
   actorLabel,
+  auditSummaryLabel,
+  humanizeAuditAction,
 } from './superAdminAuditLogs.constants.js'
 import './AuditLogListView.css'
 
@@ -25,15 +27,23 @@ export function AuditLogListView({
   isAuditListFetching,
   listAppError,
 }) {
+  const handleFilterChange = useCallback((key) => (event) => {
+    setFilters((current) => ({ ...current, [key]: event.target.value }))
+    setPage(1)
+  }, [setFilters, setPage])
+
   const columns = useMemo(
     () => [
       { key: 'ts', label: 'Timestamp', width: '156px', render: (value) => <TableDateTime value={value} /> },
-      { key: 'action', label: 'Action' },
+      { key: 'action', label: 'Action', render: (value) => humanizeAuditAction(value) },
       {
-        key: 'resourceType',
-        label: 'Resource',
-        render: (_value, row) =>
-          `${row?.resourceType ?? '--'}${row?.resourceId ? `:${row.resourceId}` : ''}`,
+        key: 'summary',
+        label: 'Event',
+        render: (_value, row) => (
+          <div className="super-admin-audit-logs__summary">
+            <span className="super-admin-audit-logs__summary-text">{auditSummaryLabel(row)}</span>
+          </div>
+        ),
       },
       { key: 'actor', label: 'Actor', render: (_value, row) => actorLabel(row) },
       { key: 'requestId', label: 'Request ID' },
@@ -49,14 +59,14 @@ export function AuditLogListView({
       <Card variant="elevated" className="super-admin-audit-logs__card">
         <Card.Body>
           <div className="super-admin-audit-logs__filters">
-            <Input id="audit-filter-request-id" label="Request ID" value={filters.requestId} onChange={(event) => { setFilters((current) => ({ ...current, requestId: event.target.value })); setPage(1) }} fullWidth />
-            <Select id="audit-filter-action" label="Action" value={filters.action} options={ACTION_OPTIONS} onChange={(event) => { setFilters((current) => ({ ...current, action: event.target.value })); setPage(1) }} />
-            <Select id="audit-filter-resource-type" label="Resource Type" value={filters.resourceType} options={RESOURCE_TYPE_OPTIONS} onChange={(event) => { setFilters((current) => ({ ...current, resourceType: event.target.value })); setPage(1) }} />
-            <Input id="audit-filter-resource-id" label="Resource ID" value={filters.resourceId} onChange={(event) => { setFilters((current) => ({ ...current, resourceId: event.target.value })); setPage(1) }} fullWidth />
-            <Input id="audit-filter-actor-user-id" label="Actor User ID" value={filters.actorUserId} onChange={(event) => { setFilters((current) => ({ ...current, actorUserId: event.target.value })); setPage(1) }} fullWidth />
-            <Input id="audit-filter-customer-id" label="Customer ID" value={filters.customerId} onChange={(event) => { setFilters((current) => ({ ...current, customerId: event.target.value })); setPage(1) }} fullWidth />
-            <Input id="audit-filter-start-date" type="date" label="Start Date" value={filters.startDate} onChange={(event) => { setFilters((current) => ({ ...current, startDate: event.target.value })); setPage(1) }} fullWidth />
-            <Input id="audit-filter-end-date" type="date" label="End Date" value={filters.endDate} onChange={(event) => { setFilters((current) => ({ ...current, endDate: event.target.value })); setPage(1) }} fullWidth />
+            <Input id="audit-filter-request-id" label="Request ID" value={filters.requestId} onChange={handleFilterChange('requestId')} fullWidth />
+            <Select id="audit-filter-action" label="Action" value={filters.action} options={ACTION_OPTIONS} onChange={handleFilterChange('action')} />
+            <Select id="audit-filter-resource-type" label="Resource Type" value={filters.resourceType} options={RESOURCE_TYPE_OPTIONS} onChange={handleFilterChange('resourceType')} />
+            <Input id="audit-filter-resource-id" label="Resource ID" value={filters.resourceId} onChange={handleFilterChange('resourceId')} fullWidth />
+            <Input id="audit-filter-actor-user-id" label="Actor User ID" value={filters.actorUserId} onChange={handleFilterChange('actorUserId')} fullWidth />
+            <Input id="audit-filter-customer-id" label="Customer ID" value={filters.customerId} onChange={handleFilterChange('customerId')} fullWidth />
+            <Input id="audit-filter-start-date" type="date" label="Start Date" value={filters.startDate} onChange={handleFilterChange('startDate')} fullWidth />
+            <Input id="audit-filter-end-date" type="date" label="End Date" value={filters.endDate} onChange={handleFilterChange('endDate')} fullWidth />
           </div>
           {listAppError ? <p className="super-admin-audit-logs__error" role="alert">{listAppError.message}</p> : null}
           <HorizontalScroll className="super-admin-audit-logs__table-wrap" ariaLabel="Audit logs table" gap="sm">

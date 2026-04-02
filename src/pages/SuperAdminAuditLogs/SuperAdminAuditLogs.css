@@ -54,6 +54,16 @@
   margin-top: var(--spacing-xs);
 }
 
+.super-admin-audit-logs__summary {
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-audit-logs__summary-text {
+  color: var(--color-text-primary);
+  line-height: var(--line-height-normal);
+}
+
 .super-admin-audit-logs__table .table__header:last-child,
 .super-admin-audit-logs__table .table__cell:last-child {
   min-width: 180px;

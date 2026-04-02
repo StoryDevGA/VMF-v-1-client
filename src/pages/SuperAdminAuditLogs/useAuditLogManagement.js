@@ -57,13 +57,13 @@ export function useAuditLogManagement() {
     customerId: filters.customerId.trim(),
     startDate: filters.startDate ? `${filters.startDate}T00:00:00.000Z` : '',
     endDate: filters.endDate ? `${filters.endDate}T23:59:59.999Z` : '',
-  })
+  }, { refetchOnMountOrArgChange: true })
 
   const { data: statsResponse, isFetching: isStatsFetching } = useGetAuditStatsQuery({
     customerId: filters.customerId.trim(),
     startDate: filters.startDate ? `${filters.startDate}T00:00:00.000Z` : '',
     endDate: filters.endDate ? `${filters.endDate}T23:59:59.999Z` : '',
-  })
+  }, { refetchOnMountOrArgChange: true })
 
   const [lookupByRequest, requestLookupResult] = useLazyGetAuditLogsByRequestQuery()
   const [lookupByResource, resourceLookupResult] = useLazyGetAuditLogsByResourceQuery()
