@@ -364,7 +364,7 @@ export function useSystemMonitoring({
   pollingInterval = 30000,
 } = {}) {
   const { addToast } = useToaster()
-  const { isSuperAdmin, hasCustomerRole, accessibleCustomerIds } = useAuthorization()
+  const { isSuperAdmin, hasPlatformPermission, hasCustomerRole, accessibleCustomerIds } = useAuthorization()
   const alertRef = useRef({
     healthKey: '',
     metricsKey: '',
@@ -379,7 +379,7 @@ export function useSystemMonitoring({
     [accessibleCustomerIds, hasCustomerRole],
   )
 
-  const isAdmin = isSuperAdmin || isCustomerAdmin
+  const isAdmin = hasPlatformPermission('SYSTEM_HEALTH_VIEW') || isCustomerAdmin
   const isMonitoringEnabled = enabled && isAdmin
   const isAdvancedMonitoringEnabled = isMonitoringEnabled && isSuperAdmin
 

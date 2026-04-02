@@ -20,6 +20,7 @@ import authReducer, {
   selectCustomerScopes,
   selectAuthStatus,
   selectIsAuthenticated,
+  selectResolvedPermissions,
 } from './authSlice.js'
 
 const mockUser = {
@@ -37,13 +38,23 @@ const mockCustomerScopes = [
   },
 ]
 
+const mockResolvedPermissions = {
+  platform: { roleKeys: ['SUPER_ADMIN'], permissions: ['PLATFORM_MANAGE'] },
+  customers: [
+    { customerId: 'cust-1', roleKeys: ['CUSTOMER_ADMIN'], permissions: ['CUSTOMER_VIEW', 'VMF_VIEW', 'VMF_CREATE'] },
+  ],
+  tenants: [
+    { customerId: 'cust-1', tenantId: 'tenant-1', roleKeys: ['TENANT_ADMIN'], permissions: ['TENANT_VIEW', 'VMF_VIEW', 'VMF_CREATE'] },
+  ],
+}
+
 describe('authSlice', () => {
   /* ---------- Reducer ---------- */
 
   describe('reducer', () => {
     it('should return the initial state', () => {
       const state = authReducer(undefined, { type: '@@INIT' })
-      expect(state).toEqual({ user: null, customerScopes: [], status: 'idle' })
+      expect(state).toEqual({ user: null, customerScopes: [], resolvedPermissions: null, status: 'idle' })
     })
 
     it('should handle setCredentials', () => {
@@ -56,16 +67,36 @@ describe('authSlice', () => {
       expect(state.status).toBe('authenticated')
     })
 
+    it('should store resolvedPermissions from setCredentials', () => {
+      const state = authReducer(
+        undefined,
+        setCredentials({ user: mockUser, customerScopes: mockCustomerScopes, resolvedPermissions: mockResolvedPermissions }),
+      )
+      expect(state.resolvedPermissions).toEqual(mockResolvedPermissions)
+    })
+
+    it('should default resolvedPermissions to null when omitted from setCredentials', () => {
+      const state = authReducer(
+        undefined,
+        setCredentials({ user: mockUser, customerScopes: mockCustomerScopes }),
+      )
+      expect(state.resolvedPermissions).toBeNull()
+    })
+
     it('should default customerScopes to an empty array when omitted', () => {
       const state = authReducer(undefined, setCredentials({ user: mockUser }))
       expect(state.customerScopes).toEqual([])
     })
 
     it('should handle clearCredentials', () => {
-      const authed = authReducer(undefined, setCredentials({ user: mockUser }))
+      const authed = authReducer(
+        undefined,
+        setCredentials({ user: mockUser, resolvedPermissions: mockResolvedPermissions }),
+      )
       const state = authReducer(authed, clearCredentials())
       expect(state.user).toBeNull()
       expect(state.customerScopes).toEqual([])
+      expect(state.resolvedPermissions).toBeNull()
       expect(state.status).toBe('unauthenticated')
     })
 
@@ -86,10 +117,10 @@ describe('authSlice', () => {
 
   describe('selectors', () => {
     const rootAuthenticated = {
-      auth: { user: mockUser, customerScopes: mockCustomerScopes, status: 'authenticated' },
+      auth: { user: mockUser, customerScopes: mockCustomerScopes, resolvedPermissions: mockResolvedPermissions, status: 'authenticated' },
     }
     const rootIdle = {
-      auth: { user: null, customerScopes: [], status: 'idle' },
+      auth: { user: null, customerScopes: [], resolvedPermissions: null, status: 'idle' },
     }
 
     it('selectCurrentUser returns the user', () => {
@@ -126,6 +157,14 @@ describe('authSlice', () => {
 
     it('selectIsAuthenticated returns false when idle', () => {
       expect(selectIsAuthenticated(rootIdle)).toBe(false)
+    })
+
+    it('selectResolvedPermissions returns the resolved permissions', () => {
+      expect(selectResolvedPermissions(rootAuthenticated)).toEqual(mockResolvedPermissions)
+    })
+
+    it('selectResolvedPermissions returns null when not set', () => {
+      expect(selectResolvedPermissions(rootIdle)).toBeNull()
     })
   })
 })

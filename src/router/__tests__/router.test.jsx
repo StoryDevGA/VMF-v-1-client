@@ -208,35 +208,22 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
-    it('should render the VMF workspace at /app/workspaces/vmf for authenticated customer-app users', async () => {
-      const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/app/workspaces/vmf'],
-      })
+    it('should require selected-scope VMF_VIEW permission on the VMF workspace route', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
+      const customerAppRoute = appRoute?.children?.[0]
+      const workspacesRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'workspaces',
+      )
+      const vmfGuardRoute = workspacesRoute?.children?.find(
+        (route) => route.element?.props?.requiredSelectedScopePermission === 'VMF_VIEW',
+      )
+      const vmfRoute = vmfGuardRoute?.children?.find((route) => route.path === 'vmf')
 
-      const store = createTestStore({
-        auth: {
-          user: {
-            id: 'vmf-user-1',
-            name: 'VMF User',
-            email: 'vmf@example.com',
-            memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-            tenantMemberships: [],
-            vmfGrants: [],
-          },
-          status: 'authenticated',
-        },
-      })
-
-      renderWithProviders(<RouterProvider router={testRouter} />, { store })
-
-      expect(
-        await screen.findByRole(
-          'heading',
-          { name: /^vmf workspace$/i },
-          { timeout: 10000 },
-        ),
-      ).toBeInTheDocument()
-    }, ROUTE_TEST_TIMEOUT)
+      expect(vmfGuardRoute?.element?.props?.requiredSelectedScopePermission).toBe('VMF_VIEW')
+      expect(vmfGuardRoute?.element?.props?.unauthorizedRedirect).toBe('/app/dashboard')
+      expect(vmfRoute?.path).toBe('vmf')
+    })
 
     it('should redirect the legacy manage-vmfs route to the VMF workspace route', () => {
       const rootRoute = router.routes.find((route) => route.path === '/')

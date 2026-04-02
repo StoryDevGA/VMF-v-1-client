@@ -216,7 +216,7 @@ describe('SuperAdminRoles page', () => {
     expect(screen.getByRole('button', { name: /\+ new role/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/search permissions/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/runtime api authorization still follows fixed role-key checks/i),
+      screen.getByText(/permission changes update role definitions immediately/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Manage Platform')).toBeInTheDocument()
     expect(screen.getByText('View Customers')).toBeInTheDocument()

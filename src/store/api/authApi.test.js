@@ -67,3 +67,22 @@ describe('authApi', () => {
     expect(typeof authApi.endpoints.requestStepUp.initiate).toBe('function')
   })
 })
+
+// FE-05: Permission refresh behavior contract
+// Resolved permissions are propagated at three deterministic boundaries:
+//   1. Login (login / superAdminLogin onQueryStarted → setCredentials)
+//   2. App bootstrap (AppInit → useLazyGetMeQuery → getMe onQueryStarted → setCredentials)
+//   3. Token refresh (baseApi attemptRefresh → POST /auth/refresh → GET /auth/me → setCredentials)
+// Route changes alone are NOT a propagation boundary.
+// These contracts are verified structurally here; behavioural coverage lives in AppInit.test.jsx.
+describe('authApi FE-05 refresh propagation contract', () => {
+  it('exposes useLazyGetMeQuery for on-demand session refresh', () => {
+    expect(typeof useLazyGetMeQuery).toBe('function')
+  })
+
+  it('getMe endpoint is a query (not a mutation) so RTK Query can cache and re-run it', () => {
+    expect(authApi.endpoints.getMe).toBeDefined()
+    // Query endpoints expose `select` for cache reads; mutations do not
+    expect(typeof authApi.endpoints.getMe.select).toBe('function')
+  })
+})

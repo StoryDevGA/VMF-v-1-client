@@ -269,7 +269,6 @@ function MaintainVmfs() {
   const {
     customerId,
     tenantId,
-    selectedTenant,
     resolvedTenantName,
     supportsTenantManagement,
     selectableTenants,
@@ -278,8 +277,8 @@ function MaintainVmfs() {
   } = useTenantContext()
   const {
     hasFeatureEntitlement,
-    hasVmfWorkspaceAccess,
-    hasVmfWorkspaceManagementAccess,
+    hasCustomerPermission,
+    hasTenantPermission,
   } = useAuthorization()
 
   const [search, setSearch] = useState('')
@@ -306,7 +305,6 @@ function MaintainVmfs() {
 
   const debouncedSearch = useDebounce(search, 300)
   const querySearch = search.trim() ? debouncedSearch.trim() : ''
-  const { data: customerDetails } = useGetCustomerQuery(customerId, { skip: !customerId })
 
   useEffect(() => {
     if (tenantId || !customerId) return
@@ -319,27 +317,33 @@ function MaintainVmfs() {
     setTenantId(onlyTenantId, onlyTenant?.name ?? null)
   }, [customerId, selectableTenants, setTenantId, supportsTenantManagement, tenantId])
 
-  const canViewVmfs = useMemo(
-    () =>
-      Boolean(customerId)
-      && typeof hasVmfWorkspaceAccess === 'function'
-      && hasVmfWorkspaceAccess(customerId, tenantId, {
-        supportsTenantManagement,
-        tenant: selectedTenant,
-      }),
-    [customerId, hasVmfWorkspaceAccess, selectedTenant, supportsTenantManagement, tenantId],
-  )
-  const canManageVmfs = useMemo(
-    () =>
-      Boolean(customerId)
-      && typeof hasVmfWorkspaceManagementAccess === 'function'
-      && hasVmfWorkspaceManagementAccess(customerId, tenantId, { tenant: selectedTenant }),
-    [customerId, hasVmfWorkspaceManagementAccess, selectedTenant, tenantId],
-  )
-  const isReadOnlyVmfViewer = canViewVmfs && !canManageVmfs
+  const canViewVmfs = useMemo(() => {
+    if (!customerId) return false
+    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_VIEW')) return true
+    if (tenantId && typeof hasTenantPermission === 'function') return hasTenantPermission(customerId, tenantId, 'VMF_VIEW')
+    return false
+  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
+  const canCreateVmfs = useMemo(() => {
+    if (!customerId) return false
+    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_CREATE')) return true
+    if (tenantId && typeof hasTenantPermission === 'function') return hasTenantPermission(customerId, tenantId, 'VMF_CREATE')
+    return false
+  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
+  const canUpdateVmfs = useMemo(() => {
+    if (!customerId) return false
+    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_UPDATE')) return true
+    if (tenantId && typeof hasTenantPermission === 'function') return hasTenantPermission(customerId, tenantId, 'VMF_UPDATE')
+    return false
+  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
+  const canMutateVmfs = canCreateVmfs || canUpdateVmfs
+  const isReadOnlyVmfViewer = canViewVmfs && !canMutateVmfs
   const hasVmfEntitlement = Boolean(
     customerId && hasFeatureEntitlement(customerId, 'VMF'),
   )
+
+  const { data: customerDetails } = useGetCustomerQuery(customerId, {
+    skip: !customerId || !canCreateVmfs,
+  })
 
   const canQueryVmfs = Boolean(customerId && tenantId && canViewVmfs && hasVmfEntitlement)
   const effectiveLifecycleFilter = isReadOnlyVmfViewer
@@ -405,7 +409,7 @@ function MaintainVmfs() {
   }, [customerDetails])
 
   const vmfCapacity = useMemo(() => {
-    if (!canManageVmfs) return null
+    if (!canCreateVmfs) return null
 
     const metaCapacity = meta?.vmfCapacity
     if (metaCapacity && typeof metaCapacity === 'object') {
@@ -413,20 +417,30 @@ function MaintainVmfs() {
     }
 
     return null
-  }, [canManageVmfs, maxVmfsPerTenant, meta?.vmfCapacity])
+  }, [canCreateVmfs, maxVmfsPerTenant, meta?.vmfCapacity])
 
   const vmfCapacityGuidance = useMemo(
-    () => getVmfCapacityGuidance(vmfCapacity, { isLoading: isFetching && canManageVmfs }),
-    [canManageVmfs, isFetching, vmfCapacity],
+    () => getVmfCapacityGuidance(vmfCapacity, { isLoading: isFetching && canCreateVmfs }),
+    [canCreateVmfs, isFetching, vmfCapacity],
   )
   const isCreateBlockedByCapacity = vmfCapacity?.isAtCapacity === true
-  const workspaceTableNote = canManageVmfs ? VMF_LIFECYCLE_NOTE : VMF_READ_ONLY_NOTE
+  const workspaceTableNote = canMutateVmfs ? VMF_LIFECYCLE_NOTE : VMF_READ_ONLY_NOTE
+
+  const canManageVmfRow = useCallback(
+    () => Boolean(canUpdateVmfs && customerId && tenantId),
+    [canUpdateVmfs, customerId, tenantId],
+  )
+
+  const showRowActionsColumn = useMemo(
+    () => canUpdateVmfs && rows.length > 0,
+    [canUpdateVmfs, rows.length],
+  )
 
   const openCreateDialog = useCallback(() => {
-    if (!canManageVmfs) return
+    if (!canCreateVmfs) return
     setCreateErrors({})
     setCreateOpen(true)
-  }, [canManageVmfs])
+  }, [canCreateVmfs])
 
   const closeCreateDialog = useCallback(() => {
     setCreateOpen(false)
@@ -435,7 +449,7 @@ function MaintainVmfs() {
   }, [])
 
   const openEditDialog = useCallback((vmf) => {
-    if (!canManageVmfs) return
+    if (!canManageVmfRow(vmf)) return
     setSelectedVmf(vmf)
     setEditErrors({})
     setEditForm({
@@ -445,7 +459,7 @@ function MaintainVmfs() {
       lifecycleStatus: String(vmf?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase(),
     })
     setEditOpen(true)
-  }, [canManageVmfs])
+  }, [canManageVmfRow])
 
   const closeEditDialog = useCallback(() => {
     setEditOpen(false)
@@ -474,16 +488,16 @@ function MaintainVmfs() {
   }, [closeCreateDialog, closeEditDialog, customerId, tenantId])
 
   useEffect(() => {
-    if (canManageVmfs) return
+    if (canMutateVmfs) return
 
     closeCreateDialog()
     closeEditDialog()
     setDeleteTarget(null)
-  }, [canManageVmfs, closeCreateDialog, closeEditDialog])
+  }, [canMutateVmfs, closeCreateDialog, closeEditDialog])
 
   const rowActions = useMemo(
     () =>
-      canManageVmfs
+      showRowActionsColumn
         ? [
           {
             label: 'Edit',
@@ -496,16 +510,16 @@ function MaintainVmfs() {
           },
         ]
         : [],
-    [canManageVmfs, isMutationLoading],
+    [isMutationLoading, showRowActionsColumn],
   )
 
   const handleRowAction = useCallback(
     (label, row) => {
-      if (!canManageVmfs) return
+      if (!canManageVmfRow(row)) return
       if (label === 'Edit') openEditDialog(row)
       if (label === 'Delete') setDeleteTarget(row)
     },
-    [canManageVmfs, openEditDialog],
+    [canManageVmfRow, openEditDialog],
   )
 
   const columns = useMemo(
@@ -556,21 +570,22 @@ function MaintainVmfs() {
         width: '156px',
         render: (value) => <TableDateTime value={value} />,
       },
-      ...(canManageVmfs
+      ...(showRowActionsColumn
         ? [
           {
             key: 'rowActions',
             label: 'Actions',
             align: 'center',
             width: '168px',
-            render: (_value, row) => (
-              <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
-            ),
+            render: (_value, row) =>
+              canManageVmfRow(row)
+                ? <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+                : null,
           },
         ]
         : []),
     ],
-    [canManageVmfs, handleRowAction, rowActions],
+    [canManageVmfRow, handleRowAction, rowActions, showRowActionsColumn],
   )
   const handleCreateSubmit = useCallback(
     async (event) => {
@@ -818,7 +833,7 @@ function MaintainVmfs() {
       <header className="maintain-vmfs__header">
         <h1 className="maintain-vmfs__title">VMF Workspace</h1>
         <p className="maintain-vmfs__subtitle">
-          {canManageVmfs ? 'Manage' : 'Review'} VMF lifecycle, version snapshot metadata, and
+          {canMutateVmfs ? 'Manage' : 'Review'} VMF lifecycle, version snapshot metadata, and
           workspace scope for{` ${resolvedTenantName || 'the selected tenant'}.`}
         </p>
       </header>
@@ -837,7 +852,7 @@ function MaintainVmfs() {
                 >
                   Back
                 </Button>
-                {canManageVmfs ? (
+                {canCreateVmfs ? (
                   <Button
                     type="button"
                     variant="primary"
@@ -849,7 +864,7 @@ function MaintainVmfs() {
                   </Button>
                 ) : null}
               </div>
-              {canManageVmfs && vmfCapacityGuidance ? (
+              {canCreateVmfs && vmfCapacityGuidance ? (
                 <Status
                   variant={vmfCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
                   size="sm"

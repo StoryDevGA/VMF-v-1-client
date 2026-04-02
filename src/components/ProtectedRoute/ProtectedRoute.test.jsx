@@ -73,6 +73,32 @@ const tenantAdminUser = {
   vmfGrants: [],
 }
 
+const tenantResolvedPermissionsWithVmfView = {
+  platform: { roleKeys: [], permissions: [] },
+  customers: [],
+  tenants: [
+    {
+      customerId: CUSTOMER_ID,
+      tenantId: TENANT_ID,
+      roleKeys: ['TENANT_ADMIN'],
+      permissions: ['VMF_VIEW'],
+    },
+  ],
+}
+
+const tenantResolvedPermissionsWithoutVmfView = {
+  platform: { roleKeys: [], permissions: [] },
+  customers: [],
+  tenants: [
+    {
+      customerId: CUSTOMER_ID,
+      tenantId: TENANT_ID,
+      roleKeys: ['TENANT_ADMIN'],
+      permissions: ['VMF_CREATE', 'VMF_UPDATE'],
+    },
+  ],
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -96,6 +122,7 @@ function renderProtected({
   requiredCustomerRole,
   requiredSelectedCustomerRole,
   requiredTenantRole,
+  requiredSelectedScopePermission,
   unauthorizedRedirect,
   tenantContextState,
 } = {}) {
@@ -118,6 +145,7 @@ function renderProtected({
                 requiredCustomerRole={requiredCustomerRole}
                 requiredSelectedCustomerRole={requiredSelectedCustomerRole}
                 requiredTenantRole={requiredTenantRole}
+                requiredSelectedScopePermission={requiredSelectedScopePermission}
                 unauthorizedRedirect={unauthorizedRedirect}
               />
             }
@@ -268,6 +296,32 @@ describe('ProtectedRoute', () => {
       },
     })
     expect(screen.getByText('Protected Content')).toBeInTheDocument()
+  })
+
+  it('renders when requiredSelectedScopePermission is satisfied from the selected tenant bucket', () => {
+    renderProtected({
+      authState: {
+        user: tenantAdminUser,
+        status: 'authenticated',
+        resolvedPermissions: tenantResolvedPermissionsWithVmfView,
+      },
+      tenantContextState: { customerId: CUSTOMER_ID, tenantId: TENANT_ID, tenantName: 'Tenant One' },
+      requiredSelectedScopePermission: 'VMF_VIEW',
+    })
+    expect(screen.getByText('Protected Content')).toBeInTheDocument()
+  })
+
+  it('redirects when requiredSelectedScopePermission is missing from the selected scope', () => {
+    renderProtected({
+      authState: {
+        user: tenantAdminUser,
+        status: 'authenticated',
+        resolvedPermissions: tenantResolvedPermissionsWithoutVmfView,
+      },
+      tenantContextState: { customerId: CUSTOMER_ID, tenantId: TENANT_ID, tenantName: 'Tenant One' },
+      requiredSelectedScopePermission: 'VMF_VIEW',
+    })
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 
   // --- custom unauthorizedRedirect ---

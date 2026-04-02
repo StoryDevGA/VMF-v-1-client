@@ -22,6 +22,7 @@ const ALL_TENANTS_VALUE = ''
 export function TenantSwitcher({ className = '' }) {
   const {
     customerId,
+    canViewTenants,
     tenantId,
     tenants,
     selectableTenants,
@@ -48,7 +49,7 @@ export function TenantSwitcher({ className = '' }) {
   )
 
   // Don't render if there's no customer context
-  if (!customerId) return null
+  if (!customerId || !canViewTenants) return null
 
   const enabledTenants = tenants.filter((t) => t.status === 'ENABLED')
   const tenantOptionsSource = selectableTenantRows.length > 0 ? selectableTenantRows : enabledTenants

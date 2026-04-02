@@ -210,6 +210,8 @@ function TenantLinkedUsersWorkspace() {
     hasCustomerRole,
     hasTenantRole,
     getAccessibleTenants,
+    hasCustomerPermission,
+    hasTenantPermission,
   } = useAuthorization()
   const { updateUser, updateUserResult } = useUsers(customerId, { skipListQuery: true })
 
@@ -234,12 +236,25 @@ function TenantLinkedUsersWorkspace() {
   const hasTenantAdminScopeForRoute = scopedTenantAdminIds.some(
     (candidateTenantId) => String(candidateTenantId) === tenantId,
   )
+  const hasUserViewPermission = Boolean(
+    customerId
+    && typeof hasCustomerPermission === 'function'
+    && hasCustomerPermission(customerId, 'USER_VIEW'),
+  )
+  const hasTenantViewPermissionForTenant = Boolean(
+    customerId
+    && tenantId
+    && typeof hasTenantPermission === 'function'
+    && hasTenantPermission(customerId, tenantId, 'TENANT_VIEW'),
+  )
   const canResolveWorkspaceScope = Boolean(
     isSuperAdmin
       || isCustomerAdmin
       || isTenantAdminForTenant
       || hasTenantAdminScopeForRoute
-      || isCustomerScopedTenantAdmin,
+      || isCustomerScopedTenantAdmin
+      || hasUserViewPermission
+      || hasTenantViewPermissionForTenant,
   )
 
   const routeTenant = location.state?.tenant
@@ -280,7 +295,9 @@ function TenantLinkedUsersWorkspace() {
       || isCustomerAdmin
       || isTenantAdminForTenant
       || hasTenantAdminScopeForRoute
-      || isCustomerScopedTenantAdminAssignedToTenant,
+      || isCustomerScopedTenantAdminAssignedToTenant
+      || hasUserViewPermission
+      || hasTenantViewPermissionForTenant,
   )
   const isResolvingTenantAdminScope = Boolean(
     !isSuperAdmin

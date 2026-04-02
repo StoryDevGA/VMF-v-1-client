@@ -21,7 +21,7 @@ const LOCKED_PERMISSION_KEYS_BY_ROLE_KEY = {
   SUPER_ADMIN: SUPER_ADMIN_LOCKED_PERMISSION_KEYS,
 }
 const MATRIX_HELP_TEXT =
-  'Use the matrix to compare role-catalogue permissions across system and custom roles. These toggles update role metadata only; runtime API authorization still follows fixed role-key checks.'
+  'Use the matrix to compare role-catalogue permissions across system and custom roles. Permission changes update role definitions immediately. Affected users receive new runtime access after their next session refresh, token refresh, or sign-in.'
 
 function SuperAdminRoles() {
   const mgmt = useRoleManagement()

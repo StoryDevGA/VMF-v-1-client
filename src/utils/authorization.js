@@ -560,6 +560,109 @@ export const hasVmfAccess = (user, customerId, tenantId, vmfId) => {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Resolved-permission helpers (FE-02)                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Check whether a `resolvedPermissions` platform bucket includes a permission.
+ * Super Admin platform role is treated as an implicit bypass for all checks.
+ *
+ * @param {import('../store/slices/authSlice.js').ResolvedPermissions|null|undefined} resolvedPermissions
+ * @param {string} permission  – e.g. 'PLATFORM_MANAGE'
+ * @returns {boolean}
+ */
+export const hasPlatformPermission = (resolvedPermissions, permission) => {
+  if (!resolvedPermissions || !permission) return false
+  const platform = resolvedPermissions.platform
+  if (!platform) return false
+  const normalizedPermission = permission.trim().toUpperCase()
+  if (platform.roleKeys?.includes('SUPER_ADMIN')) return true
+  return Array.isArray(platform.permissions) && platform.permissions.includes(normalizedPermission)
+}
+
+/**
+ * Check whether a `resolvedPermissions` customers bucket includes a permission
+ * for the given customer ID. Falls back to the platform bucket's SUPER_ADMIN bypass.
+ *
+ * @param {import('../store/slices/authSlice.js').ResolvedPermissions|null|undefined} resolvedPermissions
+ * @param {string} customerId
+ * @param {string} permission  – e.g. 'CUSTOMER_VIEW'
+ * @returns {boolean}
+ */
+export const hasCustomerPermission = (resolvedPermissions, customerId, permission) => {
+  if (!resolvedPermissions || !customerId || !permission) return false
+  if (resolvedPermissions.platform?.roleKeys?.includes('SUPER_ADMIN')) return true
+  const normalizedCustomerId = customerId.toString()
+  const normalizedPermission = permission.trim().toUpperCase()
+  const bucket = Array.isArray(resolvedPermissions.customers)
+    ? resolvedPermissions.customers.find(
+        (c) => c.customerId?.toString() === normalizedCustomerId,
+      )
+    : null
+  return bucket != null && Array.isArray(bucket.permissions) &&
+    bucket.permissions.includes(normalizedPermission)
+}
+
+/**
+ * Check whether a `resolvedPermissions` tenants bucket includes a permission
+ * for the given customer + tenant pair. Falls back to platform SUPER_ADMIN.
+ *
+ * @param {import('../store/slices/authSlice.js').ResolvedPermissions|null|undefined} resolvedPermissions
+ * @param {string} customerId
+ * @param {string} tenantId
+ * @param {string} permission  – e.g. 'VMF_CREATE'
+ * @returns {boolean}
+ */
+export const hasTenantPermission = (resolvedPermissions, customerId, tenantId, permission) => {
+  if (!resolvedPermissions || !customerId || !tenantId || !permission) return false
+  if (resolvedPermissions.platform?.roleKeys?.includes('SUPER_ADMIN')) return true
+  const normalizedCustomerId = customerId.toString()
+  const normalizedTenantId = tenantId.toString()
+  const normalizedPermission = permission.trim().toUpperCase()
+  const bucket = Array.isArray(resolvedPermissions.tenants)
+    ? resolvedPermissions.tenants.find(
+        (t) =>
+          t.customerId?.toString() === normalizedCustomerId &&
+          t.tenantId?.toString() === normalizedTenantId,
+      )
+    : null
+  return bucket != null && Array.isArray(bucket.permissions) &&
+    bucket.permissions.includes(normalizedPermission)
+}
+
+/**
+ * Check whether `resolvedPermissions` contains a permission in ANY bucket
+ * (platform, any customer, or any tenant). Useful for navigation visibility
+ * where the precise scope is not needed.
+ *
+ * @param {import('../store/slices/authSlice.js').ResolvedPermissions|null|undefined} resolvedPermissions
+ * @param {string} permission
+ * @returns {boolean}
+ */
+export const hasAnyPermission = (resolvedPermissions, permission) => {
+  if (!resolvedPermissions || !permission) return false
+  const normalizedPermission = permission.trim().toUpperCase()
+  if (resolvedPermissions.platform?.roleKeys?.includes('SUPER_ADMIN')) return true
+  if (
+    Array.isArray(resolvedPermissions.platform?.permissions) &&
+    resolvedPermissions.platform.permissions.includes(normalizedPermission)
+  ) return true
+  if (
+    Array.isArray(resolvedPermissions.customers) &&
+    resolvedPermissions.customers.some(
+      (c) => Array.isArray(c.permissions) && c.permissions.includes(normalizedPermission),
+    )
+  ) return true
+  if (
+    Array.isArray(resolvedPermissions.tenants) &&
+    resolvedPermissions.tenants.some(
+      (t) => Array.isArray(t.permissions) && t.permissions.includes(normalizedPermission),
+    )
+  ) return true
+  return false
+}
+
+/* ------------------------------------------------------------------ */
 /*  Aggregate helpers                                                 */
 /* ------------------------------------------------------------------ */
 

@@ -78,7 +78,9 @@ describe('MaintainVmfs', () => {
 
     useAuthorization.mockReturnValue({
       hasFeatureEntitlement: () => true,
-      hasVmfWorkspaceAccess: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: () => true,
+      hasVmfPermission: () => false,
       hasVmfWorkspaceManagementAccess: () => true,
     })
 
@@ -309,7 +311,9 @@ describe('MaintainVmfs', () => {
   it('renders a read-only VMF workspace for standard viewers', () => {
     useAuthorization.mockReturnValue({
       hasFeatureEntitlement: () => true,
-      hasVmfWorkspaceAccess: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) => permission === 'VMF_VIEW',
+      hasVmfPermission: () => false,
       hasVmfWorkspaceManagementAccess: () => false,
     })
 
@@ -355,6 +359,100 @@ describe('MaintainVmfs', () => {
     expect(
       screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
     ).toBeDisabled()
+    expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
+  })
+
+  it('denies the VMF workspace when VMF_CREATE and VMF_UPDATE exist without VMF_VIEW', () => {
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) =>
+        permission === 'VMF_CREATE' || permission === 'VMF_UPDATE',
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByText(/you do not have permission to manage vmfs for this tenant/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
+    expect(useListVmfsQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true })
+  })
+
+  it('shows edit and delete controls when VMF_UPDATE is granted', async () => {
+    const user = userEvent.setup()
+
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) => permission === 'VMF_VIEW' || permission === 'VMF_UPDATE',
+    })
+
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-editable',
+            name: 'Editable VMF',
+            description: 'Update-only workspace',
+            status: 'ARCHIVED',
+            lifecycleStatus: 'PUBLISHED',
+            frameworkVersion: '2.2',
+            updatedAt: '2026-03-24T21:08:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
+    expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
+
+    const actions = screen.getByRole('combobox', { name: /actions for editable vmf/i })
+    expect(within(actions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: /delete/i })).toBeInTheDocument()
+
+    await user.selectOptions(actions, 'Edit')
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /edit vmf/i })).toBeInTheDocument()
+  })
+
+  it('hides row actions when VMF_UPDATE is not granted', () => {
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) => permission === 'VMF_VIEW',
+    })
+
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-read-only',
+            name: 'Read Only VMF',
+            description: 'Viewer access only',
+            status: 'ARCHIVED',
+            lifecycleStatus: 'PUBLISHED',
+            frameworkVersion: '2.2',
+            updatedAt: '2026-03-24T21:08:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(screen.queryByRole('combobox', { name: /actions for read only vmf/i })).not.toBeInTheDocument()
   })
 
   it('renders compact row-action menus with only the allowed actions per row state', () => {

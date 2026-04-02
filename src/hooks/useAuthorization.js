@@ -11,7 +11,7 @@
 
 import { useMemo, useCallback } from 'react'
 import { useSelector } from 'react-redux'
-import { selectCurrentUser, selectCustomerScopes } from '../store/slices/authSlice.js'
+import { selectCurrentUser, selectCustomerScopes, selectResolvedPermissions } from '../store/slices/authSlice.js'
 import {
   getUserPlatformRoles,
   hasPlatformRole as _hasPlatformRole,
@@ -33,11 +33,16 @@ import {
   hasVmfAccess as _hasVmfAccess,
   getAccessibleCustomerIds,
   getAccessibleTenantIds,
+  hasPlatformPermission as _hasPlatformPermission,
+  hasCustomerPermission as _hasCustomerPermission,
+  hasTenantPermission as _hasTenantPermission,
+  hasAnyPermission as _hasAnyPermission,
 } from '../utils/authorization.js'
 
 export function useAuthorization() {
   const user = useSelector(selectCurrentUser)
   const customerScopes = useSelector(selectCustomerScopes)
+  const resolvedPermissions = useSelector(selectResolvedPermissions)
   const resolvedCustomerScopes = useMemo(() => {
     if (Array.isArray(customerScopes) && customerScopes.length > 0) {
       return customerScopes
@@ -168,9 +173,33 @@ export function useAuthorization() {
     [authorizationUser],
   )
 
+  /* ---- Resolved-permission helpers (FE-02) ---- */
+
+  const hasPlatformPermission = useCallback(
+    (permission) => _hasPlatformPermission(resolvedPermissions, permission),
+    [resolvedPermissions],
+  )
+
+  const hasCustomerPermission = useCallback(
+    (customerId, permission) => _hasCustomerPermission(resolvedPermissions, customerId, permission),
+    [resolvedPermissions],
+  )
+
+  const hasTenantPermission = useCallback(
+    (customerId, tenantId, permission) =>
+      _hasTenantPermission(resolvedPermissions, customerId, tenantId, permission),
+    [resolvedPermissions],
+  )
+
+  const hasAnyPermission = useCallback(
+    (permission) => _hasAnyPermission(resolvedPermissions, permission),
+    [resolvedPermissions],
+  )
+
   return {
     user,
     customerScopes: resolvedCustomerScopes,
+    resolvedPermissions,
     // Platform
     platformRoles,
     isSuperAdmin,
@@ -195,6 +224,11 @@ export function useAuthorization() {
     getVmfPermissions,
     hasVmfPermission,
     hasVmfAccess,
+    // Resolved permissions
+    hasPlatformPermission,
+    hasCustomerPermission,
+    hasTenantPermission,
+    hasAnyPermission,
   }
 }
 

@@ -29,11 +29,12 @@ export const authApi = baseApi.injectEndpoints({
           const {
             user,
             customerScopes = [],
+            resolvedPermissions = null,
             accessToken,
             refreshToken,
           } = data.data
           setTokens({ accessToken, refreshToken })
-          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes } })
+          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes, resolvedPermissions } })
         } catch {
           // Error is handled by the component via the mutation result
         }
@@ -56,11 +57,12 @@ export const authApi = baseApi.injectEndpoints({
           const {
             user,
             customerScopes = [],
+            resolvedPermissions = null,
             accessToken,
             refreshToken,
           } = data.data
           setTokens({ accessToken, refreshToken })
-          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes } })
+          dispatch({ type: 'auth/setCredentials', payload: { user, customerScopes, resolvedPermissions } })
         } catch {
           // handled by component
         }
@@ -103,6 +105,7 @@ export const authApi = baseApi.injectEndpoints({
             payload: {
               user: data.data.user,
               customerScopes: data.data.customerScopes ?? [],
+              resolvedPermissions: data.data.resolvedPermissions ?? null,
             },
           })
         } catch {

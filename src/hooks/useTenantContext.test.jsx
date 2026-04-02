@@ -20,6 +20,12 @@ import authReducer from '../store/slices/authSlice.js'
 import tenantContextReducer from '../store/slices/tenantContextSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
 
+const defaultResolvedPermissions = {
+  platform: { roleKeys: [], permissions: [] },
+  customers: [{ customerId: 'cust-1', roleKeys: ['CUSTOMER_ADMIN'], permissions: ['TENANT_VIEW'] }],
+  tenants: [{ customerId: 'cust-1', tenantId: 'ten-1', roleKeys: ['TENANT_ADMIN'], permissions: ['TENANT_VIEW'] }],
+}
+
 // ── Polyfills ────────────────────────────────────────────
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
@@ -54,6 +60,17 @@ const superAdminUser = {
 
 // ── Helpers ──────────────────────────────────────────────
 function createWrapper(preloadedState) {
+  const mergedPreloadedState = {
+    ...preloadedState,
+    auth: {
+      user: null,
+      customerScopes: [],
+      resolvedPermissions: defaultResolvedPermissions,
+      status: 'idle',
+      ...(preloadedState?.auth ?? {}),
+    },
+  }
+
   const testStore = configureStore({
     reducer: {
       auth: authReducer,
@@ -61,7 +78,7 @@ function createWrapper(preloadedState) {
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (gDM) => gDM().concat(baseApi.middleware),
-    preloadedState,
+    preloadedState: mergedPreloadedState,
   })
 
   return function Wrapper({ children }) {
@@ -403,5 +420,42 @@ describe('useTenantContext', () => {
     expect(result.current.tenantName).toBe('Solo Tenant')
     expect(result.current.resolvedTenantName).toBe('Solo Tenant')
     expect(result.current.supportsTenantManagement).toBe(false)
+  })
+
+  it('returns no tenant visibility when resolved permissions lack TENANT_VIEW', () => {
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          id: 'user-12',
+          email: 'tenant.admin@example.com',
+          name: 'Tenant Admin',
+          isActive: true,
+          memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+          tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['TENANT_ADMIN'] }],
+          vmfGrants: [],
+        },
+        resolvedPermissions: {
+          platform: { roleKeys: [], permissions: [] },
+          customers: [],
+          tenants: [],
+        },
+        status: 'authenticated',
+      },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: null,
+        tenantName: null,
+        ownerUserId: 'user-12',
+      },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.canViewTenants).toBe(false)
+    expect(result.current.selectableTenants).toEqual([])
+    expect(mockUseListTenantsQuery).toHaveBeenLastCalledWith(
+      { customerId: 'cust-1', page: 1, pageSize: 100 },
+      { skip: true },
+    )
   })
 })

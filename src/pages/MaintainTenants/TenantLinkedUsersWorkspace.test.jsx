@@ -158,6 +158,8 @@ describe('TenantLinkedUsersWorkspace', () => {
       hasCustomerRole: vi.fn((customerId, role) => role === 'CUSTOMER_ADMIN'),
       hasTenantRole: vi.fn(() => false),
       getAccessibleTenants: vi.fn(() => []),
+      hasCustomerPermission: vi.fn(() => false),
+      hasTenantPermission: vi.fn(() => false),
     })
 
     mockUseTenantContext.mockReturnValue({
@@ -209,7 +211,7 @@ describe('TenantLinkedUsersWorkspace', () => {
     expect(screen.getByText('Avery North')).toBeInTheDocument()
     expect(screen.getByText('Taylor Reed')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /back to maintain tenants/i }))
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
 
     expect(await screen.findByRole('heading', { name: /maintain tenants/i })).toBeInTheDocument()
   })
@@ -251,6 +253,8 @@ describe('TenantLinkedUsersWorkspace', () => {
       hasCustomerRole: vi.fn(() => false),
       hasTenantRole: vi.fn(() => false),
       getAccessibleTenants: vi.fn(() => []),
+      hasCustomerPermission: vi.fn(() => false),
+      hasTenantPermission: vi.fn(() => false),
     })
 
     renderWorkspace()
@@ -267,6 +271,8 @@ describe('TenantLinkedUsersWorkspace', () => {
       hasCustomerRole: vi.fn((customerId, role) => role === 'TENANT_ADMIN'),
       hasTenantRole: vi.fn(() => false),
       getAccessibleTenants: vi.fn(() => []),
+      hasCustomerPermission: vi.fn(() => false),
+      hasTenantPermission: vi.fn(() => false),
     })
 
     renderWorkspace({
@@ -366,5 +372,22 @@ describe('TenantLinkedUsersWorkspace', () => {
     expect(screen.getByRole('button', { name: /remove selected/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /mock select linked user/i })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: /actions for avery north/i })).toBeDisabled()
+  })
+
+  it('grants workspace access when USER_VIEW permission is present in resolved permissions', async () => {
+    mockUseAuthorization.mockReturnValue({
+      user: { id: 'user-99' },
+      isSuperAdmin: false,
+      hasCustomerRole: vi.fn(() => false),
+      hasTenantRole: vi.fn(() => false),
+      getAccessibleTenants: vi.fn(() => []),
+      hasCustomerPermission: vi.fn((_cId, permission) => permission === 'USER_VIEW'),
+      hasTenantPermission: vi.fn(() => false),
+    })
+
+    renderWorkspace()
+
+    expect(await screen.findByRole('heading', { name: /linked users/i })).toBeInTheDocument()
+    expect(screen.queryByText(/do not have permission to manage linked users/i)).not.toBeInTheDocument()
   })
 })

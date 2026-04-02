@@ -57,9 +57,38 @@ import { createSlice } from '@reduxjs/toolkit'
  */
 
 /**
+ * @typedef {Object} ResolvedPermissionPlatformBucket
+ * @property {string[]} roleKeys
+ * @property {string[]} permissions
+ */
+
+/**
+ * @typedef {Object} ResolvedPermissionCustomerBucket
+ * @property {string} customerId
+ * @property {string[]} roleKeys
+ * @property {string[]} permissions
+ */
+
+/**
+ * @typedef {Object} ResolvedPermissionTenantBucket
+ * @property {string} customerId
+ * @property {string} tenantId
+ * @property {string[]} roleKeys
+ * @property {string[]} permissions
+ */
+
+/**
+ * @typedef {Object} ResolvedPermissions
+ * @property {ResolvedPermissionPlatformBucket} platform
+ * @property {ResolvedPermissionCustomerBucket[]} customers
+ * @property {ResolvedPermissionTenantBucket[]} tenants
+ */
+
+/**
  * @typedef {Object} AuthState
  * @property {AuthUser|null} user
  * @property {CustomerScope[]} customerScopes
+ * @property {ResolvedPermissions|null} resolvedPermissions
  * @property {'idle'|'loading'|'authenticated'|'unauthenticated'} status
  */
 
@@ -67,6 +96,7 @@ import { createSlice } from '@reduxjs/toolkit'
 const initialState = {
   user: null,
   customerScopes: [],
+  resolvedPermissions: null,
   status: 'idle', // idle → loading → authenticated | unauthenticated
 }
 
@@ -78,13 +108,15 @@ const authSlice = createSlice({
   reducers: {
     /**
      * Called after a successful login or /api/me fetch.
-     * Stores the user profile in Redux (tokens are in tokenStorage).
+     * Stores the user profile and resolved permissions in Redux
+     * (tokens are in tokenStorage).
      */
     setCredentials: (state, action) => {
       state.user = action.payload.user
       state.customerScopes = Array.isArray(action.payload.customerScopes)
         ? action.payload.customerScopes
         : []
+      state.resolvedPermissions = action.payload.resolvedPermissions ?? null
       state.status = 'authenticated'
     },
 
@@ -95,6 +127,7 @@ const authSlice = createSlice({
     clearCredentials: (state) => {
       state.user = null
       state.customerScopes = []
+      state.resolvedPermissions = null
       state.status = 'unauthenticated'
     },
 
@@ -145,5 +178,8 @@ export const selectUserTenantMemberships = (state) =>
 
 /** @param {import('../index').RootState} state */
 export const selectUserVmfGrants = (state) => state.auth.user?.vmfGrants ?? EMPTY_ARRAY
+
+/** @param {import('../index').RootState} state */
+export const selectResolvedPermissions = (state) => state.auth.resolvedPermissions
 
 export default authSlice.reducer

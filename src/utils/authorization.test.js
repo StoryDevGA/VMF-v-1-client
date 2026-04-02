@@ -41,6 +41,10 @@ import {
   hasVmfAccess,
   getAccessibleCustomerIds,
   getAccessibleTenantIds,
+  hasPlatformPermission,
+  hasCustomerPermission,
+  hasTenantPermission,
+  hasAnyPermission,
 } from './authorization.js'
 
 /* ------------------------------------------------------------------ */
@@ -781,5 +785,210 @@ describe('Aggregate helpers', () => {
     it('returns empty for null user', () => {
       expect(getAccessibleTenantIds(null, CUSTOMER_ID)).toEqual([])
     })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/*  Resolved-permission helpers (FE-02)                               */
+/* ------------------------------------------------------------------ */
+
+const PERM_PLATFORM = 'PLATFORM_MANAGE'
+const PERM_CUSTOMER = 'CUSTOMER_VIEW'
+const PERM_TENANT = 'VMF_CREATE'
+
+const resolvedSuperAdmin = {
+  platform: { roleKeys: ['SUPER_ADMIN'], permissions: [] },
+  customers: [],
+  tenants: [],
+}
+
+const resolvedCustomerUser = {
+  platform: { roleKeys: [], permissions: [] },
+  customers: [
+    { customerId: CUSTOMER_ID, roleKeys: ['CUSTOMER_ADMIN'], permissions: [PERM_CUSTOMER] },
+  ],
+  tenants: [
+    {
+      customerId: CUSTOMER_ID,
+      tenantId: TENANT_ID,
+      roleKeys: ['TENANT_ADMIN'],
+      permissions: [PERM_TENANT],
+    },
+  ],
+}
+
+const resolvedPlatformUser = {
+  platform: { roleKeys: ['PLATFORM_ADMIN'], permissions: [PERM_PLATFORM] },
+  customers: [],
+  tenants: [],
+}
+
+describe('Resolved-permission helpers (FE-02)', () => {
+  /* ---- hasPlatformPermission ---- */
+  describe('hasPlatformPermission', () => {
+    it('returns false for null resolvedPermissions', () => {
+      expect(hasPlatformPermission(null, PERM_PLATFORM)).toBe(false)
+    })
+
+    it('returns false for undefined resolvedPermissions', () => {
+      expect(hasPlatformPermission(undefined, PERM_PLATFORM)).toBe(false)
+    })
+
+    it('returns true when SUPER_ADMIN roleKey is present (bypass)', () => {
+      expect(hasPlatformPermission(resolvedSuperAdmin, PERM_PLATFORM)).toBe(true)
+    })
+
+    it('returns true when permission is in platform.permissions', () => {
+      expect(hasPlatformPermission(resolvedPlatformUser, PERM_PLATFORM)).toBe(true)
+    })
+
+    it('returns false when permission is not in platform.permissions', () => {
+      expect(hasPlatformPermission(resolvedPlatformUser, PERM_TENANT)).toBe(false)
+    })
+
+    it('returns false when platform bucket is missing', () => {
+      expect(hasPlatformPermission({ customers: [], tenants: [] }, PERM_PLATFORM)).toBe(false)
+    })
+  })
+
+  /* ---- hasCustomerPermission ---- */
+  describe('hasCustomerPermission', () => {
+    it('returns false for null resolvedPermissions', () => {
+      expect(hasCustomerPermission(null, CUSTOMER_ID, PERM_CUSTOMER)).toBe(false)
+    })
+
+    it('returns true when SUPER_ADMIN roleKey is present (bypass)', () => {
+      expect(hasCustomerPermission(resolvedSuperAdmin, CUSTOMER_ID, PERM_CUSTOMER)).toBe(true)
+    })
+
+    it('returns true when customerId matches and permission is present', () => {
+      expect(hasCustomerPermission(resolvedCustomerUser, CUSTOMER_ID, PERM_CUSTOMER)).toBe(true)
+    })
+
+    it('returns false when customerId does not match', () => {
+      expect(hasCustomerPermission(resolvedCustomerUser, CUSTOMER_ID_2, PERM_CUSTOMER)).toBe(false)
+    })
+
+    it('returns false when permission is not in the matched customer bucket', () => {
+      expect(hasCustomerPermission(resolvedCustomerUser, CUSTOMER_ID, PERM_PLATFORM)).toBe(false)
+    })
+
+    it('returns false when customers array is empty', () => {
+      expect(hasCustomerPermission(resolvedPlatformUser, CUSTOMER_ID, PERM_CUSTOMER)).toBe(false)
+    })
+  })
+
+  /* ---- hasTenantPermission ---- */
+  describe('hasTenantPermission', () => {
+    it('returns false for null resolvedPermissions', () => {
+      expect(hasTenantPermission(null, CUSTOMER_ID, TENANT_ID, PERM_TENANT)).toBe(false)
+    })
+
+    it('returns true when SUPER_ADMIN roleKey is present (bypass)', () => {
+      expect(hasTenantPermission(resolvedSuperAdmin, CUSTOMER_ID, TENANT_ID, PERM_TENANT)).toBe(true)
+    })
+
+    it('returns true when customerId+tenantId match and permission is present', () => {
+      expect(hasTenantPermission(resolvedCustomerUser, CUSTOMER_ID, TENANT_ID, PERM_TENANT)).toBe(true)
+    })
+
+    it('returns false when tenantId does not match', () => {
+      expect(hasTenantPermission(resolvedCustomerUser, CUSTOMER_ID, TENANT_ID_2, PERM_TENANT)).toBe(false)
+    })
+
+    it('returns false when customerId does not match', () => {
+      expect(hasTenantPermission(resolvedCustomerUser, CUSTOMER_ID_2, TENANT_ID, PERM_TENANT)).toBe(false)
+    })
+
+    it('returns false when permission is not in the matched tenant bucket', () => {
+      expect(hasTenantPermission(resolvedCustomerUser, CUSTOMER_ID, TENANT_ID, PERM_PLATFORM)).toBe(false)
+    })
+
+    it('returns false when tenants array is empty', () => {
+      expect(hasTenantPermission(resolvedPlatformUser, CUSTOMER_ID, TENANT_ID, PERM_TENANT)).toBe(false)
+    })
+  })
+
+  /* ---- hasAnyPermission ---- */
+  describe('hasAnyPermission', () => {
+    it('returns false for null resolvedPermissions', () => {
+      expect(hasAnyPermission(null, PERM_PLATFORM)).toBe(false)
+    })
+
+    it('returns true when SUPER_ADMIN roleKey is present (bypass)', () => {
+      expect(hasAnyPermission(resolvedSuperAdmin, PERM_CUSTOMER)).toBe(true)
+    })
+
+    it('returns true when permission is found in platform bucket', () => {
+      expect(hasAnyPermission(resolvedPlatformUser, PERM_PLATFORM)).toBe(true)
+    })
+
+    it('returns true when permission is found in customers bucket', () => {
+      expect(hasAnyPermission(resolvedCustomerUser, PERM_CUSTOMER)).toBe(true)
+    })
+
+    it('returns true when permission is found in tenants bucket', () => {
+      expect(hasAnyPermission(resolvedCustomerUser, PERM_TENANT)).toBe(true)
+    })
+
+    it('returns false when permission is not found in any bucket', () => {
+      expect(hasAnyPermission(resolvedCustomerUser, PERM_PLATFORM)).toBe(false)
+    })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/*  FE-06 regression: boundary and mixed cases                        */
+/* ------------------------------------------------------------------ */
+
+const resolvedMultiTenantUser = {
+  platform: { roleKeys: [], permissions: [] },
+  customers: [
+    { customerId: CUSTOMER_ID, roleKeys: ['USER'], permissions: [PERM_CUSTOMER] },
+    { customerId: CUSTOMER_ID_2, roleKeys: ['USER'], permissions: ['DIFFERENT_PERM'] },
+  ],
+  tenants: [
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID, roleKeys: ['USER'], permissions: [PERM_TENANT] },
+    { customerId: CUSTOMER_ID, tenantId: TENANT_ID_2, roleKeys: ['USER'], permissions: ['OTHER_TENANT_PERM'] },
+  ],
+}
+
+const resolvedSuperAdminWithPermissions = {
+  platform: { roleKeys: ['SUPER_ADMIN'], permissions: [PERM_PLATFORM] },
+  customers: [
+    { customerId: CUSTOMER_ID, roleKeys: ['USER'], permissions: [] },
+  ],
+  tenants: [],
+}
+
+describe('FE-06 regression: boundary and mixed cases', () => {
+  it('hasPlatformPermission: SUPER_ADMIN bypass fires even when permissions array contains values', () => {
+    expect(hasPlatformPermission(resolvedSuperAdminWithPermissions, 'NOT_IN_ARRAY')).toBe(true)
+  })
+
+  it('hasCustomerPermission: permission in cust-A does not grant access for cust-B', () => {
+    expect(hasCustomerPermission(resolvedMultiTenantUser, CUSTOMER_ID_2, PERM_CUSTOMER)).toBe(false)
+    expect(hasCustomerPermission(resolvedMultiTenantUser, CUSTOMER_ID, PERM_CUSTOMER)).toBe(true)
+  })
+
+  it('hasTenantPermission: permission in tenant-1 does not grant access for tenant-2 of same customer', () => {
+    expect(hasTenantPermission(resolvedMultiTenantUser, CUSTOMER_ID, TENANT_ID_2, PERM_TENANT)).toBe(false)
+    expect(hasTenantPermission(resolvedMultiTenantUser, CUSTOMER_ID, TENANT_ID, PERM_TENANT)).toBe(true)
+  })
+
+  it('hasTenantPermission: SUPER_ADMIN bypass fires even when tenants array is empty', () => {
+    expect(hasTenantPermission(resolvedSuperAdminWithPermissions, CUSTOMER_ID, TENANT_ID, 'UNKNOWN_PERM')).toBe(true)
+  })
+
+  it('hasAnyPermission: finds permission from second customer bucket', () => {
+    expect(hasAnyPermission(resolvedMultiTenantUser, 'DIFFERENT_PERM')).toBe(true)
+  })
+
+  it('hasAnyPermission: finds permission from second tenant bucket', () => {
+    expect(hasAnyPermission(resolvedMultiTenantUser, 'OTHER_TENANT_PERM')).toBe(true)
+  })
+
+  it('hasAnyPermission: returns false when permission is absent from all buckets', () => {
+    expect(hasAnyPermission(resolvedMultiTenantUser, 'NOT_ANYWHERE')).toBe(false)
   })
 })

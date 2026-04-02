@@ -489,4 +489,101 @@ describe('Navigation', () => {
 
     expect(mockLogout).toHaveBeenCalledTimes(1)
   })
+
+  it('shows System Health menu when SYSTEM_HEALTH_VIEW is in platform permissions without CUSTOMER_ADMIN role', async () => {
+    const user = userEvent.setup()
+    const store = configureStore({
+      reducer: {
+        auth: authReducer,
+        tenantContext: tenantContextReducer,
+        [baseApi.reducerPath]: baseApi.reducer,
+      },
+      middleware: (gDM) => gDM().concat(baseApi.middleware),
+      preloadedState: {
+        auth: {
+          user: basicUser,
+          status: 'authenticated',
+          resolvedPermissions: {
+            platform: { roleKeys: [], permissions: ['SYSTEM_HEALTH_VIEW'] },
+            customers: [],
+            tenants: [],
+          },
+        },
+        tenantContext: { customerId: null, tenantId: null, tenantName: null },
+      },
+    })
+    renderNavigation(store)
+
+    expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /system health/i }))
+    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
+      'href',
+      '/app/administration/system-monitoring',
+    )
+  })
+
+  it('shows Manage Users link when USER_VIEW is in customer resolved permissions without CUSTOMER_ADMIN role', async () => {
+    const user = userEvent.setup()
+    const store = configureStore({
+      reducer: {
+        auth: authReducer,
+        tenantContext: tenantContextReducer,
+        [baseApi.reducerPath]: baseApi.reducer,
+      },
+      middleware: (gDM) => gDM().concat(baseApi.middleware),
+      preloadedState: {
+        auth: {
+          user: basicUser,
+          status: 'authenticated',
+          resolvedPermissions: {
+            platform: { roleKeys: [], permissions: [] },
+            customers: [{ customerId: 'cust-1', roleKeys: ['USER'], permissions: ['USER_VIEW'] }],
+            tenants: [],
+          },
+        },
+        tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+      },
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+    expect(screen.getByRole('link', { name: /manage users/i })).toHaveAttribute(
+      'href',
+      '/app/administration/edit-users',
+    )
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Manage Tenants link when TENANT_VIEW is in customer resolved permissions without admin role', async () => {
+    const user = userEvent.setup()
+    const store = configureStore({
+      reducer: {
+        auth: authReducer,
+        tenantContext: tenantContextReducer,
+        [baseApi.reducerPath]: baseApi.reducer,
+      },
+      middleware: (gDM) => gDM().concat(baseApi.middleware),
+      preloadedState: {
+        auth: {
+          user: basicUser,
+          status: 'authenticated',
+          resolvedPermissions: {
+            platform: { roleKeys: [], permissions: [] },
+            customers: [{ customerId: 'cust-1', roleKeys: ['USER'], permissions: ['TENANT_VIEW'] }],
+            tenants: [],
+          },
+        },
+        tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+      },
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+    expect(screen.getByRole('link', { name: /manage tenants/i })).toHaveAttribute(
+      'href',
+      '/app/administration/maintain-tenants',
+    )
+    expect(screen.queryByRole('link', { name: /manage users/i })).not.toBeInTheDocument()
+  })
 })

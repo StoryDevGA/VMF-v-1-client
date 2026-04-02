@@ -36,6 +36,7 @@ const mixedTenants = [
 function mockHook(overrides = {}) {
   useTenantContext.mockReturnValue({
     customerId: 'cust-1',
+    canViewTenants: true,
     tenantId: null,
     tenantName: null,
     tenants: enabledTenants,
@@ -49,6 +50,12 @@ function mockHook(overrides = {}) {
 describe('TenantSwitcher', () => {
   it('renders nothing when no customerId', () => {
     mockHook({ customerId: null })
+    const { container } = render(<TenantSwitcher />)
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('renders nothing when tenant visibility is not allowed', () => {
+    mockHook({ canViewTenants: false })
     const { container } = render(<TenantSwitcher />)
     expect(container.innerHTML).toBe('')
   })

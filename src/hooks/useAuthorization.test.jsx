@@ -7,10 +7,10 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
-import authReducer from '../store/slices/authSlice.js'
+import authReducer, { setCredentials } from '../store/slices/authSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
 import { useAuthorization } from './useAuthorization.js'
 
@@ -19,6 +19,7 @@ import { useAuthorization } from './useAuthorization.js'
 /* ------------------------------------------------------------------ */
 
 const CUSTOMER_ID = '607f1f77bcf86cd799439022'
+const CUSTOMER_ID_2 = '607f1f77bcf86cd799439033'
 const TENANT_ID = '707f1f77bcf86cd799439044'
 const VMF_ID = '807f1f77bcf86cd799439066'
 
@@ -74,7 +75,7 @@ const customerScopedTenantAdminUser = {
 /*  Helper                                                            */
 /* ------------------------------------------------------------------ */
 
-function renderUseAuthorization(user) {
+function renderUseAuthorization(user, resolvedPermissions = null) {
   const store = configureStore({
     reducer: {
       auth: authReducer,
@@ -84,6 +85,7 @@ function renderUseAuthorization(user) {
     preloadedState: {
       auth: {
         user: user ?? null,
+        resolvedPermissions,
         status: user ? 'authenticated' : 'unauthenticated',
       },
     },
@@ -244,6 +246,196 @@ describe('useAuthorization', () => {
           tenant: { tenantAdmin: { id: '3', name: 'Scoped Tenant Admin' } },
         }),
       ).toBe(true)
+    })
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  Resolved-permission helpers (FE-06)                            */
+  /* ---------------------------------------------------------------- */
+
+  describe('resolved-permission helpers (FE-06)', () => {
+    const resolvedBase = {
+      platform: { roleKeys: [], permissions: [] },
+      customers: [
+        { customerId: CUSTOMER_ID, roleKeys: ['USER'], permissions: ['USER_VIEW'] },
+      ],
+      tenants: [
+        {
+          customerId: CUSTOMER_ID,
+          tenantId: TENANT_ID,
+          roleKeys: ['USER'],
+          permissions: ['VMF_VIEW', 'VMF_CREATE'],
+        },
+      ],
+    }
+
+    const resolvedSuperAdminPerms = {
+      platform: { roleKeys: ['SUPER_ADMIN'], permissions: [] },
+      customers: [],
+      tenants: [],
+    }
+
+    it('hasPlatformPermission returns false when resolvedPermissions is null', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+      expect(result.current.hasPlatformPermission('SYSTEM_HEALTH_VIEW')).toBe(false)
+    })
+
+    it('hasPlatformPermission returns true when permission is in platform bucket', () => {
+      const { result } = renderUseAuthorization(customerAdminUser, {
+        platform: { roleKeys: [], permissions: ['SYSTEM_HEALTH_VIEW'] },
+        customers: [],
+        tenants: [],
+      })
+      expect(result.current.hasPlatformPermission('SYSTEM_HEALTH_VIEW')).toBe(true)
+    })
+
+    it('hasCustomerPermission returns false when resolvedPermissions is null', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID, 'USER_VIEW')).toBe(false)
+    })
+
+    it('hasCustomerPermission returns true when permission is in customers bucket', () => {
+      const { result } = renderUseAuthorization(customerAdminUser, resolvedBase)
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID, 'USER_VIEW')).toBe(true)
+    })
+
+    it('hasCustomerPermission returns false for a different customer id', () => {
+      const { result } = renderUseAuthorization(customerAdminUser, resolvedBase)
+      expect(result.current.hasCustomerPermission('other-cust', 'USER_VIEW')).toBe(false)
+    })
+
+    it('hasTenantPermission returns false when resolvedPermissions is null', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, TENANT_ID, 'VMF_VIEW')).toBe(false)
+    })
+
+    it('hasTenantPermission returns true when permission is in tenant bucket', () => {
+      const { result } = renderUseAuthorization(customerAdminUser, resolvedBase)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, TENANT_ID, 'VMF_VIEW')).toBe(true)
+    })
+
+    it('hasAnyPermission returns false when resolvedPermissions is null', () => {
+      const { result } = renderUseAuthorization(customerAdminUser)
+      expect(result.current.hasAnyPermission('VMF_VIEW')).toBe(false)
+    })
+
+    it('hasAnyPermission returns true for permission found in tenant bucket', () => {
+      const { result } = renderUseAuthorization(customerAdminUser, resolvedBase)
+      expect(result.current.hasAnyPermission('VMF_CREATE')).toBe(true)
+    })
+
+    it('SUPER_ADMIN roleKey bypasses all four permission helpers', () => {
+      const { result } = renderUseAuthorization(superAdminUser, resolvedSuperAdminPerms)
+      expect(result.current.hasPlatformPermission('ANY_PERM')).toBe(true)
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID, 'ANY_PERM')).toBe(true)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, TENANT_ID, 'ANY_PERM')).toBe(true)
+      expect(result.current.hasAnyPermission('ANY_PERM')).toBe(true)
+    })
+
+    it('permission helpers recompute after session refresh dispatches new resolvedPermissions', async () => {
+      const store = configureStore({
+        reducer: {
+          auth: authReducer,
+          [baseApi.reducerPath]: baseApi.reducer,
+        },
+        middleware: (gDM) => gDM().concat(baseApi.middleware),
+        preloadedState: {
+          auth: {
+            user: customerAdminUser,
+            resolvedPermissions: null,
+            status: 'authenticated',
+          },
+        },
+      })
+
+      const { result } = renderHook(() => useAuthorization(), {
+        wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
+      })
+
+      expect(result.current.hasPlatformPermission('SYSTEM_HEALTH_VIEW')).toBe(false)
+
+      await act(async () => {
+        store.dispatch(
+          setCredentials({
+            user: customerAdminUser,
+            customerScopes: [],
+            resolvedPermissions: {
+              platform: { roleKeys: [], permissions: ['SYSTEM_HEALTH_VIEW'] },
+              customers: [],
+              tenants: [],
+            },
+          }),
+        )
+      })
+
+      expect(result.current.hasPlatformPermission('SYSTEM_HEALTH_VIEW')).toBe(true)
+    })
+
+    it('refreshing credentials replaces stale customer and tenant permissions instead of bleeding into other scopes', async () => {
+      const store = configureStore({
+        reducer: {
+          auth: authReducer,
+          [baseApi.reducerPath]: baseApi.reducer,
+        },
+        middleware: (gDM) => gDM().concat(baseApi.middleware),
+        preloadedState: {
+          auth: {
+            user: customerAdminUser,
+            resolvedPermissions: {
+              platform: { roleKeys: [], permissions: [] },
+              customers: [
+                { customerId: CUSTOMER_ID, roleKeys: ['USER'], permissions: ['CUSTOMER_VIEW'] },
+              ],
+              tenants: [
+                {
+                  customerId: CUSTOMER_ID,
+                  tenantId: TENANT_ID,
+                  roleKeys: ['USER'],
+                  permissions: ['VMF_CREATE'],
+                },
+              ],
+            },
+            status: 'authenticated',
+          },
+        },
+      })
+
+      const { result } = renderHook(() => useAuthorization(), {
+        wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
+      })
+
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID, 'CUSTOMER_VIEW')).toBe(true)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, TENANT_ID, 'VMF_CREATE')).toBe(true)
+      expect(result.current.hasCustomerPermission('other-customer', 'CUSTOMER_VIEW')).toBe(false)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, 'other-tenant', 'VMF_CREATE')).toBe(false)
+
+      await act(async () => {
+        store.dispatch(
+          setCredentials({
+            user: customerAdminUser,
+            customerScopes: [],
+            resolvedPermissions: {
+              platform: { roleKeys: [], permissions: [] },
+              customers: [
+                { customerId: CUSTOMER_ID_2, roleKeys: ['USER'], permissions: ['CUSTOMER_VIEW'] },
+              ],
+              tenants: [
+                {
+                  customerId: CUSTOMER_ID_2,
+                  tenantId: 'tenant-2',
+                  roleKeys: ['USER'],
+                  permissions: ['VMF_CREATE'],
+                },
+              ],
+            },
+          }),
+        )
+      })
+
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID, 'CUSTOMER_VIEW')).toBe(false)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID, TENANT_ID, 'VMF_CREATE')).toBe(false)
+      expect(result.current.hasCustomerPermission(CUSTOMER_ID_2, 'CUSTOMER_VIEW')).toBe(true)
+      expect(result.current.hasTenantPermission(CUSTOMER_ID_2, 'tenant-2', 'VMF_CREATE')).toBe(true)
     })
   })
 })

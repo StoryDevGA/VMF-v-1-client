@@ -373,6 +373,8 @@ function MaintainTenants() {
     hasCustomerRole,
     hasTenantRole,
     getAccessibleTenants,
+    hasCustomerPermission,
+    hasTenantPermission,
   } = useAuthorization()
   const { customerId, selectedCustomerTopology, supportsTenantManagement } = useTenantContext()
   const currentUserId = useMemo(
@@ -402,6 +404,29 @@ function MaintainTenants() {
     [customerId, hasTenantRole, selectedCustomerAccessibleTenantIds],
   )
 
+  const hasTenantViewPermission = useMemo(
+    () => {
+      if (!customerId) return false
+      if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'TENANT_VIEW')) return true
+      if (typeof hasTenantPermission === 'function') {
+        return selectedCustomerAccessibleTenantIds.some(
+          (tenantId) => hasTenantPermission(customerId, tenantId, 'TENANT_VIEW'),
+        )
+      }
+      return false
+    },
+    [customerId, hasCustomerPermission, hasTenantPermission, selectedCustomerAccessibleTenantIds],
+  )
+
+  const hasTenantCreatePermission = useMemo(
+    () => Boolean(
+      customerId
+      && typeof hasCustomerPermission === 'function'
+      && hasCustomerPermission(customerId, 'TENANT_CREATE'),
+    ),
+    [customerId, hasCustomerPermission],
+  )
+
   const selectedCustomerManagedTenantIds = useMemo(() => {
     if (selectedCustomerTenantAdminIds.length > 0) return selectedCustomerTenantAdminIds
 
@@ -411,7 +436,7 @@ function MaintainTenants() {
   const isSelectedCustomerTenantAdmin =
     selectedCustomerManagedTenantIds.length > 0 || isSelectedCustomerCustomerScopedTenantAdmin
   const hasTenantMaintenanceAccess =
-    isSuperAdmin || isSelectedCustomerCustomerAdmin || isSelectedCustomerTenantAdmin
+    isSuperAdmin || hasTenantViewPermission || isSelectedCustomerCustomerAdmin || isSelectedCustomerTenantAdmin
   const isTenantAdminScopedView =
     !isSuperAdmin && !isSelectedCustomerCustomerAdmin && isSelectedCustomerTenantAdmin
 
@@ -504,8 +529,8 @@ function MaintainTenants() {
     [inactiveCustomerAppError],
   )
 
-  const canCreateTenant = !isTenantAdminScopedView
-  const canAssignTenantAdmin = !isTenantAdminScopedView
+  const canCreateTenant = hasTenantCreatePermission || !isTenantAdminScopedView
+  const canAssignTenantAdmin = hasTenantCreatePermission || !isTenantAdminScopedView
   const canRunLifecycleActions = hasTenantMaintenanceAccess
   const showTenantAdminColumn = !isTenantAdminScopedView
 

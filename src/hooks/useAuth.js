@@ -15,6 +15,7 @@ import {
   selectCurrentUser,
   selectAuthStatus,
   selectIsAuthenticated,
+  selectResolvedPermissions,
   clearCredentials,
 } from '../store/slices/authSlice.js'
 import {
@@ -31,6 +32,7 @@ import { clearTokens } from '../utils/tokenStorage.js'
  *   user: object|null,
  *   status: string,
  *   isAuthenticated: boolean,
+ *   resolvedPermissions: import('../store/slices/authSlice.js').ResolvedPermissions|null,
  *   login: Function,
  *   superAdminLogin: Function,
  *   logout: Function,
@@ -44,6 +46,7 @@ export function useAuth() {
   const user = useSelector(selectCurrentUser)
   const status = useSelector(selectAuthStatus)
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const resolvedPermissions = useSelector(selectResolvedPermissions)
 
   const [loginMutation, loginResult] = useLoginMutation()
   const [superAdminLoginMutation, superAdminLoginResult] =
@@ -81,6 +84,7 @@ export function useAuth() {
     user,
     status,
     isAuthenticated,
+    resolvedPermissions,
     login,
     superAdminLogin,
     logout,

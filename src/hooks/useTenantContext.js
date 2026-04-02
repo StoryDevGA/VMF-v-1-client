@@ -15,7 +15,7 @@
 
 import { useEffect, useCallback, useMemo } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { selectCurrentUser, selectCustomerScopes } from '../store/slices/authSlice.js'
+import { selectCurrentUser, selectCustomerScopes, selectResolvedPermissions } from '../store/slices/authSlice.js'
 import {
   selectSelectedCustomerId,
   selectSelectedTenantId,
@@ -31,6 +31,7 @@ import {
   isSuperAdmin as checkIsSuperAdmin,
   getAccessibleCustomerIds,
   getCustomerTopology,
+  hasCustomerPermission,
 } from '../utils/authorization.js'
 
 const normalizeTenantVisibilityMeta = (meta) => {
@@ -100,6 +101,7 @@ export function useTenantContext() {
   const dispatch = useDispatch()
   const user = useSelector(selectCurrentUser)
   const customerScopes = useSelector(selectCustomerScopes)
+  const resolvedPermissions = useSelector(selectResolvedPermissions)
   const customerId = useSelector(selectSelectedCustomerId)
   const tenantId = useSelector(selectSelectedTenantId)
   const tenantName = useSelector(selectSelectedTenantName)
@@ -116,6 +118,20 @@ export function useTenantContext() {
     () => getSingleTenantDefaultContext(customerScopes, customerId),
     [customerId, customerScopes],
   )
+  const isSuperAdminUser = useMemo(() => checkIsSuperAdmin(user), [user])
+  const canViewTenants = useMemo(() => {
+    if (!customerId) return false
+    if (isSuperAdminUser) return true
+    if (hasCustomerPermission(resolvedPermissions, customerId, 'TENANT_VIEW')) return true
+
+    const normalizedCustomerId = String(customerId)
+    return Array.isArray(resolvedPermissions?.tenants) && resolvedPermissions.tenants.some(
+      (tenantScope) =>
+        String(tenantScope?.customerId ?? '') === normalizedCustomerId
+        && Array.isArray(tenantScope?.permissions)
+        && tenantScope.permissions.includes('TENANT_VIEW'),
+    )
+  }, [customerId, isSuperAdminUser, resolvedPermissions])
 
   /* ---- Auto-initialize when user arrives ---- */
   useEffect(() => {
@@ -137,7 +153,7 @@ export function useTenantContext() {
     error: tenantsError,
   } = useListTenantsQuery(
     { customerId, page: 1, pageSize: 100 },
-    { skip: !customerId },
+    { skip: !customerId || !canViewTenants },
   )
 
   const tenants = useMemo(() => tenantsData?.data ?? [], [tenantsData])
@@ -149,12 +165,11 @@ export function useTenantContext() {
   const selectedCustomerTopology = tenantVisibilityMeta?.topology ?? authCustomerTopology
   const supportsTenantManagement = selectedCustomerTopology === 'MULTI_TENANT'
   const selectableTenants = useMemo(
-    () => tenants.filter((tenant) => tenant?.isSelectable === true),
-    [tenants],
+    () => (canViewTenants ? tenants.filter((tenant) => tenant?.isSelectable === true) : []),
+    [canViewTenants, tenants],
   )
 
   /* ---- Derived state ---- */
-  const isSuperAdminUser = useMemo(() => checkIsSuperAdmin(user), [user])
   const accessibleCustomerIds = useMemo(() => getAccessibleCustomerIds(user), [user])
   const hasSelectedCustomerAccess = useMemo(() => {
     if (!customerId) return false
@@ -250,6 +265,7 @@ export function useTenantContext() {
     resolvedTenantName,
     tenants,
     selectableTenants,
+    canViewTenants,
     tenantVisibilityMeta,
     selectedCustomerTopology,
     supportsTenantManagement,

@@ -173,8 +173,19 @@ export const router = createBrowserRouter([
                 path: 'workspaces',
                 children: [
                   {
-                    path: 'vmf',
-                    element: <MaintainVmfs />,
+                    element: (
+                      <ProtectedRoute
+                        redirectTo="/app/login"
+                        requiredSelectedScopePermission="VMF_VIEW"
+                        unauthorizedRedirect="/app/dashboard"
+                      />
+                    ),
+                    children: [
+                      {
+                        path: 'vmf',
+                        element: <MaintainVmfs />,
+                      },
+                    ],
                   },
                 ],
               },

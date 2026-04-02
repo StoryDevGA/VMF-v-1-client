@@ -67,27 +67,20 @@ function mockRole({
         && (membership?.roles ?? []).includes(role)))
   }
 
-  const hasVmfWorkspaceAccess = vi.fn((customerId, tenantId, options = {}) => {
-    const supportsTenantManagement = options?.supportsTenantManagement ?? true
+  const hasCustomerPermission = vi.fn((customerId, _permission) => {
     if (!customerId) return false
     if (isSuperAdmin) return true
-    if (hasCustomerRole(customerId, 'CUSTOMER_ADMIN')) return true
-    if (hasCustomerRole(customerId, 'TENANT_ADMIN')) {
-      return supportsTenantManagement ? Boolean(tenantId) : true
-    }
+    return isCustomerAdmin && customerIds.includes(customerId)
+  })
 
-    const hasCustomerMembership = memberships.some((membership) =>
-      String(membership?.customerId ?? '') === String(customerId ?? ''))
-
-    if (!supportsTenantManagement) {
-      return hasCustomerMembership
-    }
-
-    if (!tenantId) return false
-
-    return tenantMemberships.some((membership) =>
-      String(membership?.customerId ?? '') === String(customerId ?? '')
-      && String(membership?.tenantId ?? '') === String(tenantId ?? ''))
+  const hasTenantPermission = vi.fn((customerId, tenantId, _permission) => {
+    if (!customerId || !tenantId) return false
+    if (isSuperAdmin) return true
+    return (tenantMemberships ?? []).some(
+      (membership) =>
+        String(membership?.customerId ?? '') === String(customerId ?? '')
+        && String(membership?.tenantId ?? '') === String(tenantId ?? ''),
+    )
   })
 
   useAuthorization.mockReturnValue({
@@ -95,7 +88,8 @@ function mockRole({
     isSuperAdmin,
     accessibleCustomerIds: customerIds,
     hasCustomerRole,
-    hasVmfWorkspaceAccess,
+    hasCustomerPermission,
+    hasTenantPermission,
     getAccessibleTenants,
     getFeatureEntitlements: vi.fn(() => featureEntitlements),
     getEntitlementSource: vi.fn(() => entitlementSource),
@@ -116,6 +110,7 @@ beforeEach(() => {
       { id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true },
       { id: 'ten-2', name: 'Beta Tenant', status: 'ENABLED', isSelectable: true },
     ],
+    canViewTenants: true,
     resolvedTenantName: null,
     supportsTenantManagement: true,
     selectedCustomerTopology: 'MULTI_TENANT',
@@ -195,6 +190,7 @@ describe('Dashboard page', () => {
       tenantId: null,
       tenants: [],
       selectableTenants: [],
+      canViewTenants: false,
       resolvedTenantName: 'Aldi',
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -251,8 +247,8 @@ describe('Dashboard page', () => {
       ],
       selectableTenants: [
         { id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true },
-        { id: 'ten-2', name: 'Secondary Tenant', status: 'ENABLED', isSelectable: true },
       ],
+      canViewTenants: true,
       resolvedTenantName: null,
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -285,6 +281,7 @@ describe('Dashboard page', () => {
       tenantId: null,
       tenants: [],
       selectableTenants: [],
+      canViewTenants: false,
       resolvedTenantName: null,
       supportsTenantManagement: false,
       selectedCustomerTopology: 'SINGLE_TENANT',
@@ -305,6 +302,7 @@ describe('Dashboard page', () => {
       tenantId: 'ten-1',
       tenants: [],
       selectableTenants: [],
+      canViewTenants: false,
       resolvedTenantName: 'My Tenant',
       supportsTenantManagement: false,
       selectedCustomerTopology: 'SINGLE_TENANT',
@@ -339,18 +337,20 @@ describe('Dashboard page', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders live VMF tile for USER with single-tenant customer context', () => {
+  it('renders live VMF tile for USER with single-tenant customer context and VMF_VIEW permission', () => {
     mockRole({
       isSuperAdmin: false,
       isCustomerAdmin: false,
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
     })
     useTenantContext.mockReturnValue({
       customerId: 'cust-1',
       tenantId: 'ten-1',
       tenants: [],
       selectableTenants: [],
+      canViewTenants: false,
       resolvedTenantName: 'Default Tenant',
       supportsTenantManagement: false,
       selectedCustomerTopology: 'SINGLE_TENANT',
@@ -380,6 +380,7 @@ describe('Dashboard page', () => {
       tenantId: null,
       tenants: [],
       selectableTenants: [],
+      canViewTenants: false,
       resolvedTenantName: null,
       supportsTenantManagement: false,
       selectedCustomerTopology: null,
@@ -420,6 +421,19 @@ describe('Dashboard page', () => {
         { customerId: 'cust-2', roles: ['TENANT_ADMIN'] },
       ],
     })
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenants: [],
+      selectableTenants: [],
+      canViewTenants: false,
+      resolvedTenantName: null,
+      supportsTenantManagement: true,
+      selectedCustomerTopology: 'MULTI_TENANT',
+      isLoadingTenants: false,
+      hasInvalidTenantContext: false,
+      setTenantId: vi.fn(),
+    })
 
     renderDashboard()
 
@@ -436,6 +450,19 @@ describe('Dashboard page', () => {
         { customerId: 'cust-1', roles: ['USER'] },
         { customerId: 'cust-2', roles: ['CUSTOMER_ADMIN'] },
       ],
+    })
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenants: [],
+      selectableTenants: [],
+      canViewTenants: false,
+      resolvedTenantName: null,
+      supportsTenantManagement: true,
+      selectedCustomerTopology: 'MULTI_TENANT',
+      isLoadingTenants: false,
+      hasInvalidTenantContext: false,
+      setTenantId: vi.fn(),
     })
 
     renderDashboard()
@@ -458,6 +485,7 @@ describe('Dashboard page', () => {
       tenantId: null,
       tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
       selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
+      canViewTenants: false,
       resolvedTenantName: null,
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -484,6 +512,7 @@ describe('Dashboard page', () => {
       tenantId: 'ten-1',
       tenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
       selectableTenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
+      canViewTenants: true,
       resolvedTenantName: 'North Tenant',
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -517,6 +546,75 @@ describe('Dashboard page', () => {
     expect(screen.getByText(/no tenant selected/i)).toBeInTheDocument()
   })
 
+  it('hides tenant selection for a tenant admin when TENANT_VIEW is removed', () => {
+    mockRole({
+      isCustomerAdmin: false,
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['TENANT_ADMIN'] }],
+    })
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
+      selectableTenants: [],
+      canViewTenants: false,
+      resolvedTenantName: null,
+      supportsTenantManagement: true,
+      selectedCustomerTopology: 'MULTI_TENANT',
+      isLoadingTenants: false,
+      hasInvalidTenantContext: false,
+      setTenantId: vi.fn(),
+    })
+
+    renderDashboard()
+
+    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
+    expect(screen.getByText('Not selected')).toBeInTheDocument()
+  })
+
+  it('does not ask a user to select a tenant when VMF view exists but tenant selection is unavailable', () => {
+    useAuthorization.mockReturnValue({
+      user: {
+        id: 'u-1',
+        name: 'Gus G',
+        memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+        tenantMemberships: [],
+      },
+      isSuperAdmin: false,
+      accessibleCustomerIds: ['cust-1'],
+      hasCustomerRole: vi.fn(() => false),
+      hasCustomerPermission: vi.fn((_customerId, permission) => permission === 'VMF_VIEW'),
+      hasTenantPermission: vi.fn(() => false),
+      getFeatureEntitlements: vi.fn(() => ['VMF', 'DEALS', 'VIEWS']),
+      getEntitlementSource: vi.fn(() => 'LICENSE_LEVEL'),
+    })
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: null,
+      tenants: [],
+      selectableTenants: [],
+      canViewTenants: false,
+      resolvedTenantName: null,
+      supportsTenantManagement: true,
+      selectedCustomerTopology: 'MULTI_TENANT',
+      isLoadingTenants: false,
+      hasInvalidTenantContext: false,
+      setTenantId: vi.fn(),
+    })
+
+    renderDashboard()
+
+    expect(screen.getByRole('link', { name: /value message framework unavailable/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.queryByText(/select a tenant to open the vmf workspace/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/available when the current scope includes tenant visibility and a selected tenant/i),
+    ).toBeInTheDocument()
+  })
+
   it('auto-selects the only selectable tenant on the dashboard', async () => {
     const setTenantId = vi.fn()
     useTenantContext.mockReturnValue({
@@ -524,6 +622,7 @@ describe('Dashboard page', () => {
       tenantId: null,
       tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
       selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
+      canViewTenants: true,
       resolvedTenantName: null,
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -546,6 +645,7 @@ describe('Dashboard page', () => {
       tenantId: 'ghost-tenant',
       tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
       selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
+      canViewTenants: true,
       resolvedTenantName: null,
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',
@@ -597,6 +697,7 @@ describe('Dashboard page', () => {
       tenantId: 'ghost-tenant',
       tenants: [{ id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true }],
       selectableTenants: [{ id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true }],
+      canViewTenants: true,
       resolvedTenantName: null,
       supportsTenantManagement: true,
       selectedCustomerTopology: 'MULTI_TENANT',

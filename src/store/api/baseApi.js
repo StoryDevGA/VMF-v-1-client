@@ -229,6 +229,27 @@ async function attemptRefresh(api) {
         type: 'auth/tokenRefreshed',
         payload: { accessToken },
       })
+
+      // Fetch fresh resolved permissions so the renewed session reflects any
+      // role changes that occurred since the previous login or /auth/me call.
+      // Failure is non-blocking — the new access token is still valid.
+      try {
+        const meResult = await rawBaseQuery({ url: '/auth/me', method: 'GET' }, api, {})
+        if (meResult.data) {
+          const meData = meResult.data.data ?? meResult.data
+          api.dispatch({
+            type: 'auth/setCredentials',
+            payload: {
+              user: meData.user,
+              customerScopes: meData.customerScopes ?? [],
+              resolvedPermissions: meData.resolvedPermissions ?? null,
+            },
+          })
+        }
+      } catch {
+        // /auth/me failure is non-blocking — the refreshed token is still usable
+      }
+
       return true
     }
   } catch {

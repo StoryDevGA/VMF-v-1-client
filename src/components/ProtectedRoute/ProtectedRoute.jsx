@@ -22,24 +22,35 @@ import {
   selectAuthStatus,
   selectIsAuthenticated,
   selectCurrentUser,
+  selectResolvedPermissions,
 } from '../../store/slices/authSlice.js'
-import { selectSelectedCustomerId } from '../../store/slices/tenantContextSlice.js'
+import {
+  selectSelectedCustomerId,
+  selectSelectedTenantId,
+} from '../../store/slices/tenantContextSlice.js'
 import {
   hasPlatformRole,
   hasCustomerRole,
   hasAnyCustomerRole,
   hasTenantRole,
+  hasPlatformPermission,
+  hasCustomerPermission,
+  hasTenantPermission,
 } from '../../utils/authorization.js'
 import { Spinner } from '../Spinner'
 import './ProtectedRoute.css'
 
 /**
  * @param {Object}  props
- * @param {string}  [props.redirectTo='/app/login']   – unauthenticated redirect target
- * @param {string}  [props.requiredRole]              – DEPRECATED: flat role check (backward compat)
- * @param {string}  [props.requiredPlatformRole]      – platform role gate (e.g. 'SUPER_ADMIN')
- * @param {Object}  [props.requiredCustomerRole]      – { customerId, role } gate
- * @param {Object}  [props.requiredTenantRole]        – { customerId, tenantId, role } gate
+ * @param {string}  [props.redirectTo='/app/login']             – unauthenticated redirect target
+ * @param {string}  [props.requiredRole]                      – DEPRECATED: flat role check (backward compat)
+ * @param {string}  [props.requiredPlatformRole]              – platform role gate (e.g. 'SUPER_ADMIN')
+ * @param {Object}  [props.requiredCustomerRole]              – { customerId, role } gate
+ * @param {Object}  [props.requiredTenantRole]                – { customerId, tenantId, role } gate
+ * @param {string}  [props.requiredPlatformPermission]        – platform capability permission gate (e.g. 'PLATFORM_MANAGE')
+ * @param {Object}  [props.requiredCustomerPermission]        – { customerId, permission } capability gate
+ * @param {Object}  [props.requiredTenantCapabilityPermission] – { customerId, tenantId, permission } capability gate
+ * @param {string}  [props.requiredSelectedScopePermission]   – capability gate that passes when the selected customer OR selected tenant bucket includes the permission
  * @param {string}  [props.unauthorizedRedirect='/app/dashboard'] – unauthorized redirect target
  */
 export function ProtectedRoute({
@@ -49,12 +60,18 @@ export function ProtectedRoute({
   requiredCustomerRole,
   requiredSelectedCustomerRole,
   requiredTenantRole,
+  requiredPlatformPermission,
+  requiredCustomerPermission,
+  requiredTenantCapabilityPermission,
+  requiredSelectedScopePermission,
   unauthorizedRedirect = '/app/dashboard',
 }) {
   const status = useSelector(selectAuthStatus)
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectCurrentUser)
   const selectedCustomerId = useSelector(selectSelectedCustomerId)
+  const selectedTenantId = useSelector(selectSelectedTenantId)
+  const resolvedPermissions = useSelector(selectResolvedPermissions)
   const location = useLocation()
 
   // Still resolving session — show a full-screen spinner
@@ -115,6 +132,58 @@ export function ProtectedRoute({
     )
   ) {
     return <Navigate to={unauthorizedRedirect} replace />
+  }
+
+  // Platform permission gate
+  if (requiredPlatformPermission && !hasPlatformPermission(resolvedPermissions, requiredPlatformPermission)) {
+    return <Navigate to={unauthorizedRedirect} replace />
+  }
+
+  // Customer permission gate
+  if (
+    requiredCustomerPermission &&
+    !hasCustomerPermission(
+      resolvedPermissions,
+      requiredCustomerPermission.customerId,
+      requiredCustomerPermission.permission,
+    )
+  ) {
+    return <Navigate to={unauthorizedRedirect} replace />
+  }
+
+  // Tenant capability permission gate
+  if (
+    requiredTenantCapabilityPermission &&
+    !hasTenantPermission(
+      resolvedPermissions,
+      requiredTenantCapabilityPermission.customerId,
+      requiredTenantCapabilityPermission.tenantId,
+      requiredTenantCapabilityPermission.permission,
+    )
+  ) {
+    return <Navigate to={unauthorizedRedirect} replace />
+  }
+
+  if (requiredSelectedScopePermission) {
+    const hasSelectedScopePermission = selectedCustomerId && (
+      hasCustomerPermission(
+        resolvedPermissions,
+        selectedCustomerId,
+        requiredSelectedScopePermission,
+      ) || (
+        selectedTenantId &&
+        hasTenantPermission(
+          resolvedPermissions,
+          selectedCustomerId,
+          selectedTenantId,
+          requiredSelectedScopePermission,
+        )
+      )
+    )
+
+    if (!hasSelectedScopePermission) {
+      return <Navigate to={unauthorizedRedirect} replace />
+    }
   }
 
   return <Outlet />

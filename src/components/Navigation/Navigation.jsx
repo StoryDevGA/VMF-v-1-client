@@ -11,13 +11,15 @@ import { useSelector } from 'react-redux'
 import { MdExpandMore } from 'react-icons/md'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { selectCurrentUser, selectIsAuthenticated } from '../../store/slices/authSlice.js'
+import { selectCurrentUser, selectIsAuthenticated, selectResolvedPermissions } from '../../store/slices/authSlice.js'
 import {
   hasAnyCustomerRole,
   hasCustomerRole,
   hasAnyTenantRole,
   hasAnyMultiTenantCustomerAdminScope,
   isSuperAdmin as checkIsSuperAdmin,
+  hasAnyPermission,
+  hasPlatformPermission,
 } from '../../utils/authorization.js'
 import './Navigation.css'
 
@@ -33,6 +35,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   } = useTenantContext()
 
   const isSuperAdmin = checkIsSuperAdmin(user)
+  const resolvedPermissions = useSelector(selectResolvedPermissions)
   const hasCustomerAdminAccess = hasAnyCustomerRole(user, 'CUSTOMER_ADMIN')
   const hasTenantAdminAccess =
     hasAnyTenantRole(user, 'TENANT_ADMIN') || hasAnyCustomerRole(user, 'TENANT_ADMIN')
@@ -59,6 +62,10 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const canAccessTenantMaintenance = hasCustomerAdminAccess
     ? supportsTenantManagement || hasSelectedCustomerTenantAdminAccess
     : hasSelectedCustomerTenantAdminAccess
+
+  const canManageUsers = hasAnyPermission(resolvedPermissions, 'USER_VIEW') || hasCustomerAdminAccess
+  const canManageTenants = hasAnyPermission(resolvedPermissions, 'TENANT_VIEW') || canAccessTenantMaintenance
+  const canViewSystemHealth = hasPlatformPermission(resolvedPermissions, 'SYSTEM_HEALTH_VIEW') || hasCustomerAdminAccess
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -95,7 +102,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
     {
       const adminLinks = [
-        ...(hasCustomerAdminAccess
+        ...(canManageUsers
           ? [
               {
                 key: 'manage-users',
@@ -104,7 +111,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
               },
             ]
           : []),
-        ...(canAccessTenantMaintenance
+        ...(canManageTenants
           ? [
               {
                 key: 'manage-tenants',
@@ -125,7 +132,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       }
     }
 
-    if (isSuperAdmin || hasCustomerAdminAccess) {
+    if (isSuperAdmin || canViewSystemHealth) {
       entries.push({
         type: 'group',
         key: 'system-health',
@@ -167,9 +174,9 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
     return entries
   }, [
-    canAccessTenantMaintenance,
-    hasCustomerAdminAccess,
-    hasTenantAdminAccess,
+    canManageTenants,
+    canManageUsers,
+    canViewSystemHealth,
     isAuthenticated,
     isSuperAdmin,
   ])

@@ -35,8 +35,8 @@ function Dashboard() {
     accessibleCustomerIds,
     isSuperAdmin,
     hasCustomerRole,
-    hasVmfWorkspaceAccess,
-    getAccessibleTenants,
+    hasCustomerPermission,
+    hasTenantPermission,
   } = authorization
   const { getFeatureEntitlements, getEntitlementSource } = authorization
   const {
@@ -45,6 +45,7 @@ function Dashboard() {
     selectedTenant,
     tenants,
     selectableTenants,
+    canViewTenants,
     customerName,
     resolvedTenantName,
     supportsTenantManagement,
@@ -159,55 +160,21 @@ function Dashboard() {
     [hasCustomerScopedTenantAdmin, hasSelectedCustomerTenantMembershipAdmin],
   )
 
-  const canOpenVmfWorkspace = useMemo(
-    () =>
-      typeof hasVmfWorkspaceAccess === 'function'
-        ? hasVmfWorkspaceAccess(customerId, tenantId, {
-          supportsTenantManagement,
-          tenant: selectedTenant,
-        })
-        : false,
-    [customerId, hasVmfWorkspaceAccess, selectedTenant, supportsTenantManagement, tenantId],
-  )
-
-  const accessibleTenantIds = useMemo(
-    () =>
-      customerId && typeof getAccessibleTenants === 'function'
-        ? getAccessibleTenants(customerId)
-        : [],
-    [customerId, getAccessibleTenants],
-  )
-
-  const accessibleSelectableTenantRows = useMemo(
-    () =>
-      selectableTenantRows.filter((tenant) => {
-        const tenantRowId = getTenantId(tenant)
-        return tenantRowId !== null && accessibleTenantIds.includes(tenantRowId)
-      }),
-    [accessibleTenantIds, selectableTenantRows],
-  )
-
-  const useSelectableTenantRowsForSwitcher = Boolean(
-    isSuperAdmin
-      || hasSelectedCustomerAdminAccess
-      || hasSelectedCustomerTenantAdminAccess,
-  )
+  const canOpenVmfWorkspace = useMemo(() => {
+    if (!customerId) return false
+    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_VIEW')) return true
+    if (tenantId && typeof hasTenantPermission === 'function') return hasTenantPermission(customerId, tenantId, 'VMF_VIEW')
+    return false
+  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
 
   const tenantRowsForSwitcher = useMemo(
-    () =>
-      useSelectableTenantRowsForSwitcher
-        ? selectableTenantRows
-        : accessibleSelectableTenantRows,
-    [
-      accessibleSelectableTenantRows,
-      selectableTenantRows,
-      useSelectableTenantRowsForSwitcher,
-    ],
+    () => selectableTenantRows,
+    [selectableTenantRows],
   )
 
   const hasTenantSelectionAccess = useMemo(
-    () => hasSelectedCustomerAdminAccess || accessibleTenantIds.length > 0,
-    [accessibleTenantIds.length, hasSelectedCustomerAdminAccess],
+    () => Boolean(customerId && supportsTenantManagement && canViewTenants),
+    [canViewTenants, customerId, supportsTenantManagement],
   )
 
   const primaryRole = useMemo(() => {
@@ -232,7 +199,13 @@ function Dashboard() {
   const topologyLabel = useMemo(() => {
     // Standard users with exactly one accessible tenant behave like a single-tenant scope
     // in the dashboard summary, even when the customer itself is multi-tenant.
-    if (!useSelectableTenantRowsForSwitcher && tenantRowsForSwitcher.length === 1) {
+    if (
+      supportsTenantManagement
+      && canViewTenants
+      && !hasSelectedCustomerAdminAccess
+      && !hasSelectedCustomerTenantAdminAccess
+      && tenantRowsForSwitcher.length === 1
+    ) {
       return 'Single-tenant'
     }
 
@@ -240,9 +213,12 @@ function Dashboard() {
     if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant'
     return 'Not available'
   }, [
+    canViewTenants,
+    hasSelectedCustomerAdminAccess,
+    hasSelectedCustomerTenantAdminAccess,
     selectedCustomerTopology,
+    supportsTenantManagement,
     tenantRowsForSwitcher.length,
-    useSelectableTenantRowsForSwitcher,
   ])
 
   const tenantScopeValue = useMemo(() => {
@@ -384,6 +360,21 @@ function Dashboard() {
     }
 
     if (supportsTenantManagement && !tenantId) {
+      if (!hasTenantSelectionAccess) {
+        return {
+          badgeLabel: 'Scope gated',
+          badgeVariant: 'warning',
+          description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
+          disabled: true,
+          icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
+          key: 'vmf',
+          linkLabel: 'Value Message Framework unavailable',
+          reason: 'Available when the current scope includes tenant visibility and a selected tenant.',
+          title: 'Value Message Framework',
+          to: '/app/dashboard',
+        }
+      }
+
       return {
         badgeLabel: 'Select tenant',
         badgeVariant: 'warning',
@@ -416,6 +407,7 @@ function Dashboard() {
     canOpenVmfWorkspace,
     customerId,
     featureEntitlements,
+    hasTenantSelectionAccess,
     supportsTenantManagement,
     tenantId,
   ])
