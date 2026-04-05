@@ -225,66 +225,6 @@ describe('SuperAdminCustomers page', () => {
     )
   })
 
-  it('shows customer-admin tooltip help in the customer users workspace', async () => {
-    const user = userEvent.setup()
-    useListCustomersQuery.mockReturnValue({
-      data: {
-        data: [
-          {
-            id: 'c-1',
-            name: 'Acme Corp',
-            status: 'ACTIVE',
-            topology: 'SINGLE_TENANT',
-            governance: { customerAdminUserId: 'admin-user-123' },
-          },
-        ],
-        meta: { page: 1, totalPages: 1, total: 1 },
-      },
-      isLoading: false,
-      isFetching: false,
-      error: null,
-    })
-    useListUsersQuery.mockReturnValue({
-      data: {
-        data: {
-          users: [
-            {
-              id: 'u-1',
-              name: 'Alex Admin',
-              email: 'alex@example.com',
-              customerRoles: ['CUSTOMER_ADMIN'],
-              isCanonicalAdmin: true,
-            },
-          ],
-          page: 1,
-          pageSize: 20,
-          total: 1,
-          totalPages: 1,
-          filters: {},
-        },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
-      },
-      isLoading: false,
-      isFetching: false,
-      error: null,
-    })
-
-    renderPage()
-
-    openCustomerUsersWorkspace()
-
-    expect(
-      screen.getByText(/use replace customer admin to transfer ownership when needed\./i),
-    ).toBeInTheDocument()
-    const tooltipTriggers = screen.getAllByRole('button', { name: /explain customer admin/i })
-    await user.hover(tooltipTriggers[0])
-    const tooltip = screen.getByRole('tooltip')
-    expect(tooltip).toHaveAttribute('aria-hidden', 'false')
-    expect(
-      within(tooltip).getByText(/customer admin identifies the governance owner user for the customer/i),
-    ).toBeInTheDocument()
-  })
-
   it('opens create customer dialog from the catalogue create button', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -504,11 +444,8 @@ describe('SuperAdminCustomers page', () => {
     selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('heading', { name: /customer users/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /back to customers/i })).toHaveClass('btn--sm')
-    expect(screen.getByRole('button', { name: /create user/i })).toHaveClass('btn--sm')
-    expect(
-      screen.getByText(/use replace customer admin to transfer ownership when needed\./i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toHaveClass('btn--sm')
+    expect(screen.getByRole('button', { name: /^create$/i })).toHaveClass('btn--sm')
     expect(screen.queryByText(/\[object object\]/i)).not.toBeInTheDocument()
     const usersCardBody = document.querySelector('.super-admin-customers__card-body--compact')
     expect(usersCardBody).not.toBeNull()
@@ -526,7 +463,7 @@ describe('SuperAdminCustomers page', () => {
     )
   })
 
-  it('renders customer users table with roles, trust, status, and customer-admin marker', async () => {
+  it('renders customer users table with roles, trust, status, and row actions', async () => {
     const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
@@ -584,12 +521,11 @@ describe('SuperAdminCustomers page', () => {
     selectRowAction('acme corp', 'View Users')
 
     expect(screen.getByRole('columnheader', { name: /^user$/i })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: /^customer admin$/i })).toBeInTheDocument()
-    expect(screen.queryByRole('columnheader', { name: /^canonical admin$/i })).not.toBeInTheDocument()
     const actionsHeader = screen.getByRole('columnheader', { name: /^actions$/i })
     expect(actionsHeader).toHaveClass('table__header--align-center')
     expect(screen.queryByRole('columnheader', { name: /^name$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: /^email$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /customer admin/i })).not.toBeInTheDocument()
     expect(screen.getByText('Alex Admin')).toHaveClass('super-admin-customers__user-name')
     expect(screen.getByText('alex@example.com')).toHaveClass('super-admin-customers__user-email')
     expect(screen.queryByText('CUSTOMER_ADMIN, TENANT_ADMIN')).not.toBeInTheDocument()
@@ -614,9 +550,7 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByText(/^trusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^untrusted$/i)).toBeInTheDocument()
     expect(screen.getByText(/^INACTIVE$/)).toBeInTheDocument()
-    const customerAdminStatus = document.querySelector('.super-admin-customers__canonical-status')
-    expect(customerAdminStatus).not.toBeNull()
-    expect(customerAdminStatus).toHaveTextContent('Customer Admin')
+    expect(document.querySelector('.super-admin-customers__canonical-status')).toBeNull()
   })
 
   it('applies server-driven search/role/status filters and pagination in customer users workspace', async () => {

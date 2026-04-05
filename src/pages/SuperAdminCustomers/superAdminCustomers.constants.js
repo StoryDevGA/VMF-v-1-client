@@ -71,10 +71,6 @@ export const INVITATION_ALREADY_ACTIVE_REASON_MESSAGE_MAP = {
   INVITATION_ALREADY_ACTIVE_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
   EMAIL_ACTIVE_FOR_DIFFERENT_USER: ASSIGN_INVITATION_ALREADY_ACTIVE_MESSAGE,
 }
-export const CANONICAL_ADMIN_TOOLTIP_TEXT =
-  'Customer Admin identifies the governance owner user for the customer. Use Replace Customer Admin to transfer ownership.'
-export const CANONICAL_ADMIN_USERS_HELP_TEXT =
-  'Customer Admin identifies the governance owner user for the customer. Use Replace Customer Admin to transfer ownership when needed.'
 
 export const INITIAL_FORM = {
   name: '',
