@@ -7,7 +7,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { useToaster } from '../../components/Toaster'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useTenants } from '../../hooks/useTenants.js'
-import { useListUsersQuery } from '../../store/api/userApi.js'
+import { useListUsersQuery, useUpdateUserMutation } from '../../store/api/userApi.js'
 import {
   normalizeError,
   isTenantAdminAssignmentsValidationError,
@@ -17,6 +17,8 @@ import { TENANT_ADMIN_ROLE, normalizeRoles } from './tenantUtils.js'
 
 const getTenantId = (tenant) => String(tenant?._id ?? tenant?.id ?? '').trim()
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
+const getMembershipCustomerId = (membership) =>
+  String(membership?.customerId ?? membership?.customer?.id ?? membership?.customer?._id ?? '').trim()
 
 const getFallbackUserSummary = (userId, name = '') => ({
   id: userId,
@@ -24,10 +26,48 @@ const getFallbackUserSummary = (userId, name = '') => ({
   email: '',
 })
 
+const getCustomerScopedRoles = (user, customerId) => {
+  if (Array.isArray(user?.customerRoles) && user.customerRoles.length > 0) {
+    return normalizeRoles(user.customerRoles)
+  }
+
+  const normalizedCustomerId = String(customerId ?? '').trim()
+  if (!normalizedCustomerId || !Array.isArray(user?.memberships)) return []
+
+  return normalizeRoles(
+    user.memberships
+      .filter((membership) => getMembershipCustomerId(membership) === normalizedCustomerId)
+      .flatMap((membership) => membership?.roles ?? []),
+  )
+}
+
+const getCustomerTenantAdminTenantIds = (user, customerId) => {
+  const normalizedCustomerId = String(customerId ?? '').trim()
+  if (!normalizedCustomerId || !Array.isArray(user?.tenantMemberships)) return []
+
+  return [...new Set(
+    user.tenantMemberships
+      .filter(
+        (membership) =>
+          String(membership?.customerId ?? '').trim() === normalizedCustomerId
+          && (membership?.roles ?? []).includes(TENANT_ADMIN_ROLE),
+      )
+      .map((membership) => String(membership?.tenantId ?? '').trim())
+      .filter(Boolean),
+  )]
+}
+
+const getDowngradedCustomerRoles = (roles) =>
+  normalizeRoles([
+    ...(roles ?? []).filter((role) => String(role ?? '').trim().toUpperCase() !== TENANT_ADMIN_ROLE),
+    'USER',
+  ])
+
 function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
   const { addToast } = useToaster()
   const { updateTenant, updateTenantResult } = useTenants(customerId, { skipListQuery: true })
-  const isLoading = Boolean(updateTenantResult?.isLoading)
+  const [updateUserMutation, updateUserResult] = useUpdateUserMutation()
+  const isLoading = Boolean(updateTenantResult?.isLoading) || Boolean(updateUserResult?.isLoading)
   const [tenantAdminUserIds, setTenantAdminUserIds] = useState([])
   const [fieldError, setFieldError] = useState('')
 
@@ -38,7 +78,7 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
     {
       customerId,
       page: 1,
-      pageSize: 100,
+      pageSize: 500,
     },
     { skip: !open || !customerId },
   )
@@ -60,11 +100,13 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
         id: userId,
         name: String(user?.name ?? '').trim() || String(user?.email ?? '').trim() || userId,
         email: String(user?.email ?? '').trim(),
+        customerRoles: getCustomerScopedRoles(user, customerId),
+        tenantAdminTenantIds: getCustomerTenantAdminTenantIds(user, customerId),
       }
     }
 
     return lookup
-  }, [customerUsers])
+  }, [customerId, customerUsers])
 
   const currentTenantAdmin = useMemo(() => {
     const currentTenantAdminId =
@@ -96,6 +138,11 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
     if (!replacementId) return null
     return selectedTenantAdminUsers[replacementId] ?? getFallbackUserSummary(replacementId)
   }, [selectedTenantAdminUsers, tenantAdminUserIds])
+
+  const currentTenantAdminRecord = useMemo(() => {
+    if (!currentTenantAdmin?.id) return null
+    return customerUserLookup[currentTenantAdmin.id] ?? null
+  }, [currentTenantAdmin?.id, customerUserLookup])
 
   useEffect(() => {
     if (!open) return
@@ -140,6 +187,7 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
       const updateTenantResponse = await updateTenant(tenantId, {
         tenantAdminUserIds: tenantAdminUserIds.slice(0, 1),
       })
+      const replacementUserId = tenantAdminUserIds[0]
       const updatedTenantAdminRoles = normalizeRoles(
         updateTenantResponse?.data?.tenantAdminUser?.customerRoles ?? [],
       )
@@ -148,6 +196,20 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
         String(updateTenantResponse?.data?.tenantAdminUser?.name ?? '').trim()
         || replacementTenantAdmin?.name
         || 'Selected tenant admin'
+      const outgoingTenantAdminName =
+        currentTenantAdminRecord?.name
+        || currentTenantAdmin?.name
+        || 'the previous tenant admin'
+      const outgoingTenantAdminRoles = currentTenantAdminRecord?.customerRoles ?? []
+      const outgoingRemainingTenantAdminAssignments =
+        (currentTenantAdminRecord?.tenantAdminTenantIds ?? []).filter(
+          (assignedTenantId) => assignedTenantId !== tenantId,
+        )
+      const shouldDowngradeOutgoingTenantAdmin =
+        Boolean(currentTenantAdmin?.id)
+        && currentTenantAdmin.id !== replacementUserId
+        && outgoingRemainingTenantAdminAssignments.length === 0
+      const downgradedOutgoingRoles = getDowngradedCustomerRoles(outgoingTenantAdminRoles)
 
       addToast({
         title: currentTenantAdmin ? 'Tenant admin replaced' : 'Tenant admin assigned',
@@ -156,6 +218,35 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
           : `${replacementTenantAdmin?.name ?? 'The selected user'} is now assigned as tenant admin for ${tenant?.name ?? 'this tenant'}.`,
         variant: 'success',
       })
+
+      if (
+        shouldDowngradeOutgoingTenantAdmin
+        && currentTenantAdmin?.id
+        && downgradedOutgoingRoles.join('|') !== normalizeRoles(outgoingTenantAdminRoles).join('|')
+      ) {
+        try {
+          const roleUpdateRequest = updateUserMutation({
+            customerId,
+            userId: currentTenantAdmin.id,
+            body: { roles: downgradedOutgoingRoles },
+          })
+
+          if (typeof roleUpdateRequest?.unwrap === 'function') {
+            await roleUpdateRequest.unwrap()
+          } else {
+            await roleUpdateRequest
+          }
+        } catch (roleUpdateError) {
+          const normalizedRoleUpdateError = normalizeError(roleUpdateError)
+          addToast({
+            title: 'Previous tenant-admin role needs review',
+            description:
+              `${outgoingTenantAdminName} was replaced successfully, but their role could not be normalized to USER. `
+              + `${normalizedRoleUpdateError.message}`,
+            variant: 'warning',
+          })
+        }
+      }
 
       if (!hasTenantAdminRole) {
         addToast({
@@ -205,11 +296,14 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
   }, [
     addToast,
     currentTenantAdmin,
+    currentTenantAdminRecord,
+    customerId,
     handleDialogClose,
     replacementTenantAdmin,
     tenant,
     tenantAdminUserIds,
     updateTenant,
+    updateUserMutation,
   ])
 
   if (!tenant) return null

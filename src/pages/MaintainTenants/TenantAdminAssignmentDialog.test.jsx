@@ -12,9 +12,11 @@ import TenantAdminAssignmentDialog from './TenantAdminAssignmentDialog'
 const {
   mockUseTenants,
   mockUseListUsersQuery,
+  mockUseUpdateUserMutation,
 } = vi.hoisted(() => ({
   mockUseTenants: vi.fn(),
   mockUseListUsersQuery: vi.fn(),
+  mockUseUpdateUserMutation: vi.fn(),
 }))
 
 vi.mock('../../hooks/useTenants.js', () => ({
@@ -23,6 +25,7 @@ vi.mock('../../hooks/useTenants.js', () => ({
 
 vi.mock('../../store/api/userApi.js', () => ({
   useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
+  useUpdateUserMutation: (...args) => mockUseUpdateUserMutation(...args),
 }))
 
 vi.mock('../../components/UserSearchSelect', () => {
@@ -143,17 +146,27 @@ describe('TenantAdminAssignmentDialog', () => {
               _id: 'user-10',
               name: 'Jordan Manager',
               email: 'jordan.manager@acme.test',
+              memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+              tenantMemberships: [{ customerId: 'cust-1', tenantId: 'tenant-1', roles: ['TENANT_ADMIN'] }],
             },
             {
               _id: 'user-20',
               name: 'Morgan Backup',
               email: 'morgan.backup@acme.test',
+              memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+              tenantMemberships: [],
             },
           ],
         },
       },
       error: null,
     })
+    mockUseUpdateUserMutation.mockReturnValue([
+      vi.fn().mockReturnValue({
+        unwrap: vi.fn().mockResolvedValue({}),
+      }),
+      { isLoading: false },
+    ])
 
     HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
       this.open = true
@@ -185,12 +198,16 @@ describe('TenantAdminAssignmentDialog', () => {
         },
       },
     })
+    const updateUser = vi.fn().mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({}),
+    })
     const onClose = vi.fn()
 
     mockUseTenants.mockReturnValue({
       updateTenant,
       updateTenantResult: { isLoading: false },
     })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
 
     renderDialog({ onClose })
 
@@ -204,8 +221,59 @@ describe('TenantAdminAssignmentDialog', () => {
     })
 
     await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith({
+        customerId: 'cust-1',
+        userId: 'user-10',
+        body: { roles: ['USER'] },
+      })
+    })
+
+    await waitFor(() => {
       expect(onClose).toHaveBeenCalled()
     })
+  })
+
+  it('preserves TENANT_ADMIN for the outgoing user when they still administer another tenant', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn()
+
+    mockUseListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              _id: 'user-10',
+              name: 'Jordan Manager',
+              email: 'jordan.manager@acme.test',
+              memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
+              tenantMemberships: [
+                { customerId: 'cust-1', tenantId: 'tenant-1', roles: ['TENANT_ADMIN'] },
+                { customerId: 'cust-1', tenantId: 'tenant-2', roles: ['TENANT_ADMIN'] },
+              ],
+            },
+            {
+              _id: 'user-20',
+              name: 'Morgan Backup',
+              email: 'morgan.backup@acme.test',
+              memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+              tenantMemberships: [],
+            },
+          ],
+        },
+      },
+      error: null,
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /select replacement/i }))
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/tenant admin replaced/i)).toBeInTheDocument()
+    })
+    expect(updateUser).not.toHaveBeenCalled()
   })
 
   it('warns when tenant-admin role is not confirmed in update response', async () => {
