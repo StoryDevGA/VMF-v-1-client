@@ -30,7 +30,9 @@ import { useListTenantsQuery } from '../store/api/tenantApi.js'
 import {
   isSuperAdmin as checkIsSuperAdmin,
   getAccessibleCustomerIds,
+  getAccessibleTenantIds,
   getCustomerTopology,
+  hasCustomerRole,
   hasCustomerPermission,
 } from '../utils/authorization.js'
 
@@ -95,6 +97,25 @@ const getSingleTenantDefaultContext = (customerScopes, customerId) => {
     tenantId: normalizedTenantId,
     tenantName: null,
   }
+}
+
+const getResolvedTenantScopeIds = (resolvedPermissions, customerId) => {
+  if (!resolvedPermissions || !customerId) return []
+  if (!Array.isArray(resolvedPermissions?.tenants)) return []
+
+  const normalizedCustomerId = String(customerId)
+  return Array.from(new Set(
+    resolvedPermissions.tenants
+      .filter((tenantScope) => String(tenantScope?.customerId ?? '') === normalizedCustomerId)
+      .filter((tenantScope) => {
+        const hasPermissions = Array.isArray(tenantScope?.permissions) && tenantScope.permissions.length > 0
+        const hasRoleKeys = Array.isArray(tenantScope?.roleKeys) && tenantScope.roleKeys.length > 0
+        return hasPermissions || hasRoleKeys
+      })
+      .map((tenantScope) => tenantScope?.tenantId)
+      .filter((tenantId) => tenantId !== null && tenantId !== undefined)
+      .map((tenantId) => String(tenantId)),
+  ))
 }
 
 export function useTenantContext() {
@@ -164,9 +185,34 @@ export function useTenantContext() {
   const customerName = tenantsData?.meta?.customerName || null
   const selectedCustomerTopology = tenantVisibilityMeta?.topology ?? authCustomerTopology
   const supportsTenantManagement = selectedCustomerTopology === 'MULTI_TENANT'
+  const hasCustomerWideTenantScope = useMemo(() => {
+    if (!customerId) return isSuperAdminUser
+    if (isSuperAdminUser) return true
+    if (hasCustomerRole(user, customerId, 'CUSTOMER_ADMIN')) return true
+    return hasCustomerRole(user, customerId, 'TENANT_ADMIN')
+  }, [customerId, isSuperAdminUser, user])
+  const restrictedTenantScopeIds = useMemo(() => {
+    if (!customerId || hasCustomerWideTenantScope) return []
+
+    return Array.from(new Set([
+      ...getAccessibleTenantIds(user, customerId),
+      ...getResolvedTenantScopeIds(resolvedPermissions, customerId),
+    ]))
+  }, [customerId, hasCustomerWideTenantScope, resolvedPermissions, user])
+  const visibleTenants = useMemo(() => {
+    if (!canViewTenants) return []
+    if (hasCustomerWideTenantScope) return tenants
+    if (restrictedTenantScopeIds.length === 0) return []
+
+    const restrictedTenantScopeIdSet = new Set(restrictedTenantScopeIds)
+    return tenants.filter((tenant) => {
+      const tenantRowId = getTenantRowId(tenant)
+      return tenantRowId ? restrictedTenantScopeIdSet.has(tenantRowId) : false
+    })
+  }, [canViewTenants, hasCustomerWideTenantScope, restrictedTenantScopeIds, tenants])
   const selectableTenants = useMemo(
-    () => (canViewTenants ? tenants.filter((tenant) => tenant?.isSelectable === true) : []),
-    [canViewTenants, tenants],
+    () => visibleTenants.filter((tenant) => tenant?.isSelectable === true),
+    [visibleTenants],
   )
 
   /* ---- Derived state ---- */
@@ -179,11 +225,13 @@ export function useTenantContext() {
   const selectedTenant = useMemo(() => {
     if (!tenantId) return null
 
-    return tenants.find((tenant) => {
+    const tenantPool = canViewTenants ? visibleTenants : tenants
+
+    return tenantPool.find((tenant) => {
       const tenantRowId = String(tenant?._id ?? tenant?.id ?? '')
       return tenantRowId === String(tenantId)
     }) ?? null
-  }, [tenantId, tenants])
+  }, [canViewTenants, tenantId, tenants, visibleTenants])
   const resolvedTenantName = tenantId ? (selectedTenant?.name ?? tenantName) : null
   const isResolvingSelectedTenantContext = Boolean(customerId && tenantId && isLoadingTenants)
   const hasInvalidTenantContext = Boolean(

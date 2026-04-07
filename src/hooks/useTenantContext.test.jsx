@@ -306,6 +306,72 @@ describe('useTenantContext', () => {
     expect(result.current.selectableTenants.map((tenant) => tenant.id)).toEqual(['ten-1'])
   })
 
+  it('filters selectable tenants to the linked tenant scope for non-admin users', async () => {
+    mockUseListTenantsQuery.mockReturnValue({
+      data: {
+        data: [
+          { id: 'ten-1', name: 'Linked Tenant', isSelectable: true },
+          { id: 'ten-2', name: 'Other Tenant', isSelectable: true },
+        ],
+        meta: {
+          tenantVisibility: {
+            mode: 'guided',
+            allowed: true,
+            topology: 'multi_tenant',
+            isServiceProvider: false,
+            selectableStatuses: ['enabled'],
+          },
+        },
+      },
+      isLoading: false,
+      error: undefined,
+    })
+
+    const wrapper = createWrapper({
+      auth: {
+        user: {
+          id: 'user-13',
+          email: 'gus@mail.com',
+          name: 'Gus',
+          isActive: true,
+          memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+          tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
+          vmfGrants: [],
+        },
+        resolvedPermissions: {
+          platform: { roleKeys: [], permissions: [] },
+          customers: [{ customerId: 'cust-1', roleKeys: ['USER'], permissions: ['USER_VIEW'] }],
+          tenants: [
+            {
+              customerId: 'cust-1',
+              tenantId: 'ten-1',
+              roleKeys: ['USER'],
+              permissions: ['TENANT_VIEW', 'VMF_VIEW'],
+            },
+          ],
+        },
+        status: 'authenticated',
+      },
+      tenantContext: {
+        customerId: 'cust-1',
+        tenantId: null,
+        tenantName: null,
+        ownerUserId: 'user-13',
+      },
+    })
+
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+
+    expect(result.current.tenants.map((tenant) => tenant.id)).toEqual(['ten-1', 'ten-2'])
+    expect(result.current.selectableTenants.map((tenant) => tenant.id)).toEqual(['ten-1'])
+
+    await waitFor(() => {
+      expect(result.current.tenantId).toBe('ten-1')
+    })
+
+    expect(result.current.tenantName).toBe('Linked Tenant')
+  })
+
   it('falls back to authenticated customer topology when tenant metadata is not present', () => {
     const wrapper = createWrapper({
       auth: {
