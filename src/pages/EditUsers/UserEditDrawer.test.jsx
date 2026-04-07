@@ -103,6 +103,14 @@ const customRoleUser = {
   ],
 }
 
+const legacyMultiRoleUser = {
+  ...mockUser,
+  _id: 'user-7',
+  memberships: [
+    { customerId: 'cust-1', roles: ['USER', 'TENANT_ADMIN'] },
+  ],
+}
+
 function getTenantContextMockValue(overrides = {}) {
   return {
     customerId: 'cust-1',
@@ -275,11 +283,11 @@ describe('UserEditDrawer', () => {
     expect(screen.getAllByText('Trusted').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders role checkboxes', () => {
+  it('renders single-select role radios', () => {
     renderDrawer()
     expect(screen.getByLabelText(/tenant admin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /customer admin/i })).not.toBeInTheDocument()
   })
 
   it('renders custom assignable roles and preserves scoped custom-role memberships', () => {
@@ -290,7 +298,40 @@ describe('UserEditDrawer', () => {
 
     expect(screen.getByLabelText(/analyst/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/analyst/i)).toBeChecked()
-    expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /customer admin/i })).not.toBeInTheDocument()
+  })
+
+  it('normalizes legacy multi-role users to a single editable role on save', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn().mockResolvedValue({
+      data: {
+        _id: 'user-7',
+        name: 'Legacy Role User',
+        email: 'jane@acme.com',
+        isActive: true,
+        trustStatus: 'TRUSTED',
+      },
+    })
+    mockUseUsers.mockReturnValue({
+      updateUser,
+      updateUserResult: { isLoading: false },
+    })
+
+    renderDrawer({ user: legacyMultiRoleUser })
+
+    expect(screen.getByRole('radio', { name: /tenant admin/i })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^user$/i })).not.toBeChecked()
+
+    await user.clear(screen.getByLabelText(/name/i))
+    await user.type(screen.getByLabelText(/name/i), 'Legacy Role User')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateUser).toHaveBeenCalledWith('user-7', {
+        name: 'Legacy Role User',
+        roles: ['TENANT_ADMIN'],
+      })
+    })
   })
 
   it('hides TENANT_ADMIN for single-tenant customers and shows topology guidance', () => {

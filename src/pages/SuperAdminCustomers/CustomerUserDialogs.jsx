@@ -1,8 +1,8 @@
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
+import { Radio } from '../../components/Radio'
 import { Select } from '../../components/Select'
-import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import { USER_CREATE_MODE_OPTIONS } from './superAdminCustomers.constants.js'
 import { getLifecycleActionVerb } from './superAdminCustomers.utils.js'
@@ -92,12 +92,14 @@ export function CreateUserDialog({
           </>
         )}
         <fieldset className="super-admin-customers__roles-fieldset">
-          <legend className="super-admin-customers__roles-legend">Roles</legend>
-          <div className="super-admin-customers__roles-grid">
+          <legend className="super-admin-customers__roles-legend">Role</legend>
+          <div className="super-admin-customers__roles-grid" role="radiogroup" aria-label="Role">
             {roleOptions.map((roleOption) => (
-              <Tickbox
+              <Radio
                 key={roleOption.value}
                 id={`sa-customer-user-role-${String(roleOption.value).toLowerCase()}`}
+                name="sa-customer-user-role"
+                value={roleOption.value}
                 label={roleOption.label}
                 checked={roles.includes(roleOption.value)}
                 onChange={() => onToggleRole(roleOption.value)}
@@ -187,12 +189,14 @@ export function EditUserDialog({
           fullWidth
         />
         <fieldset className="super-admin-customers__roles-fieldset">
-          <legend className="super-admin-customers__roles-legend">Roles</legend>
-          <div className="super-admin-customers__roles-grid">
+          <legend className="super-admin-customers__roles-legend">Role</legend>
+          <div className="super-admin-customers__roles-grid" role="radiogroup" aria-label="Role">
             {roleOptions.map((roleOption) => (
-              <Tickbox
+              <Radio
                 key={roleOption.value}
                 id={`sa-customer-user-edit-role-${String(roleOption.value).toLowerCase()}`}
+                name="sa-customer-user-edit-role"
+                value={roleOption.value}
                 label={roleOption.label}
                 checked={roles.includes(roleOption.value)}
                 onChange={() => onToggleRole(roleOption.value)}

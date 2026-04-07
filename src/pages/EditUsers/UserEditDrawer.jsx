@@ -18,6 +18,7 @@ import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Button } from '../../components/Button'
+import { Radio } from '../../components/Radio'
 import { Tickbox } from '../../components/Tickbox'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Status } from '../../components/Status'
@@ -36,6 +37,7 @@ import {
   BASE_ASSIGNABLE_ROLE_KEYS,
   getCustomerScopedRoles,
   getTopologyAwareRoles,
+  normalizeSingleRoleSelection,
   resolveAssignableUserRoles,
 } from './editUsers.roles.js'
 import './UserEditDrawer.css'
@@ -287,7 +289,10 @@ function UserEditDrawer({
     setName(String(user?.name ?? ''))
     setEmail(String(user?.email ?? ''))
     setSelectedRoles(
-      customerScopedRoles.filter((role) => editableRoleOptions.includes(role)),
+      normalizeSingleRoleSelection({
+        roles: customerScopedRoles,
+        availableRoles: editableRoleOptions,
+      }),
     )
     setTenantVisibility(normalizeTenantVisibilityIds(user?.tenantVisibility))
     setFieldErrors({})
@@ -298,8 +303,11 @@ function UserEditDrawer({
     [customerScopedRoles, editableRoleOptions],
   )
   const normalizedSelectedRoles = useMemo(
-    () => normalizeRoles(selectedRoles),
-    [selectedRoles],
+    () => normalizeSingleRoleSelection({
+      roles: selectedRoles,
+      availableRoles: editableRoleOptions,
+    }),
+    [editableRoleOptions, selectedRoles],
   )
   const initialTenantVisibility = useMemo(
     () => normalizeTenantVisibilityIds(user?.tenantVisibility),
@@ -369,7 +377,10 @@ function UserEditDrawer({
 
   useEffect(() => {
     setSelectedRoles((prev) => {
-      const next = prev.filter((role) => editableRoleOptions.includes(role))
+      const next = normalizeSingleRoleSelection({
+        roles: prev,
+        availableRoles: editableRoleOptions,
+      })
       return next.length === prev.length ? prev : next
     })
   }, [editableRoleOptions])
@@ -394,10 +405,8 @@ function UserEditDrawer({
     }
   }, [open, user])
 
-  const toggleRole = useCallback((role) => {
-    setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((candidate) => candidate !== role) : [...prev, role],
-    )
+  const handleRoleChange = useCallback((role) => {
+    setSelectedRoles(role ? [role] : [])
     clearFieldErrors('roles')
   }, [clearFieldErrors])
 
@@ -589,7 +598,7 @@ function UserEditDrawer({
   if (!open || !user) return null
 
   const hasGovernedCustomerAdminRole =
-    user.isCanonicalAdmin || selectedRoles.includes('CUSTOMER_ADMIN')
+    user.isCanonicalAdmin || normalizedSelectedRoles.includes('CUSTOMER_ADMIN')
   const canStartOwnershipTransfer =
     Boolean(onStartOwnershipTransfer) &&
     hasCanonicalAdmin &&
@@ -741,7 +750,7 @@ function UserEditDrawer({
                     </dd>
                   </div>
                   <div className="user-edit-drawer__snapshot-item">
-                    <dt className="user-edit-drawer__label">Draft roles</dt>
+                    <dt className="user-edit-drawer__label">Draft role</dt>
                     <dd className="user-edit-drawer__snapshot-value">
                       <div className="user-edit-drawer__badge-list">
                         {draftRoles.length > 0
@@ -769,7 +778,7 @@ function UserEditDrawer({
               </Card.Header>
               <Card.Body className="user-edit-drawer__section-body">
                 <Fieldset className="user-edit-drawer__fieldset">
-                  <Fieldset.Legend className="user-edit-drawer__legend">Editable Roles</Fieldset.Legend>
+                  <Fieldset.Legend className="user-edit-drawer__legend">Editable Role</Fieldset.Legend>
                   <Fieldset.Content className="user-edit-drawer__fieldset-content">
                     <div
                       className="user-edit-drawer__governance"
@@ -803,14 +812,20 @@ function UserEditDrawer({
                         </Button>
                       ) : null}
                     </div>
-                    <div className="user-edit-drawer__role-list">
+                    <div
+                      className="user-edit-drawer__role-list"
+                      role="radiogroup"
+                      aria-label="Editable role"
+                    >
                       {editableRoleOptions.map((role) => (
-                        <Tickbox
+                        <Radio
                           key={role}
                           id={`edit-role-${role}`}
+                          name="edit-user-role"
+                          value={role}
                           label={role.replace(/_/g, ' ')}
-                          checked={selectedRoles.includes(role)}
-                          onChange={() => toggleRole(role)}
+                          checked={normalizedSelectedRoles.includes(role)}
+                          onChange={() => handleRoleChange(role)}
                           disabled={isLoading}
                         />
                       ))}

@@ -1757,7 +1757,7 @@ describe('SuperAdminCustomers page', () => {
         userId: 'u-1',
         body: {
           name: 'Taylor Updated',
-          roles: ['USER', 'CUSTOMER_ADMIN'],
+          roles: ['CUSTOMER_ADMIN'],
         },
       })
     })

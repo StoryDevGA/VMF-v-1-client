@@ -22,6 +22,7 @@ import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Input } from '../../components/Input'
+import { Radio } from '../../components/Radio'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
@@ -35,6 +36,7 @@ import {
 import {
   BASE_ASSIGNABLE_ROLE_KEYS,
   getTopologyAwareRoles,
+  normalizeSingleRoleSelection,
   resolveAssignableUserRoles,
 } from './editUsers.roles.js'
 import './EditUsers.css'
@@ -276,7 +278,13 @@ function CreateUserWizard({
     () => getTopologyAwareRoles(resolvedAssignableRoles, effectiveTenantVisibilityMeta?.topology),
     [effectiveTenantVisibilityMeta?.topology, resolvedAssignableRoles],
   )
-  const allowsTenantAdminRole = availableRoles.includes('TENANT_ADMIN')
+  const normalizedSelectedRoles = useMemo(
+    () => normalizeSingleRoleSelection({
+      roles: selectedRoles,
+      availableRoles,
+    }),
+    [availableRoles, selectedRoles],
+  )
 
   const shouldShowTenantVisibilityStep =
     effectiveTenantVisibilityMeta?.allowed === true
@@ -285,7 +293,7 @@ function CreateUserWizard({
   const stepDefinitions = useMemo(() => {
     const steps = [
       { key: 'details', label: 'User Details' },
-      { key: 'roles', label: 'Assign Roles' },
+      { key: 'roles', label: 'Assign Role' },
     ]
 
     if (shouldShowTenantVisibilityStep) {
@@ -360,7 +368,10 @@ function CreateUserWizard({
 
   useEffect(() => {
     setSelectedRoles((prev) => {
-      const next = prev.filter((role) => availableRoles.includes(role))
+      const next = normalizeSingleRoleSelection({
+        roles: prev,
+        availableRoles,
+      })
       return next.length === prev.length ? prev : next
     })
   }, [availableRoles])
@@ -407,7 +418,7 @@ function CreateUserWizard({
       }
     }
 
-    if (currentStepKey === 'roles' && selectedRoles.length === 0) {
+    if (currentStepKey === 'roles' && normalizedSelectedRoles.length === 0) {
       errors.roles = 'Select at least one role.'
     }
 
@@ -417,7 +428,7 @@ function CreateUserWizard({
 
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
-  }, [currentStepKey, email, name, normalizedTenantsError, selectedRoles.length])
+  }, [currentStepKey, email, name, normalizedSelectedRoles.length, normalizedTenantsError])
 
   const handleNext = useCallback(() => {
     if (!validateStep()) return
@@ -430,10 +441,8 @@ function CreateUserWizard({
     setStep((prev) => Math.max(1, prev - 1))
   }, [])
 
-  const toggleRole = useCallback((role) => {
-    setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((candidate) => candidate !== role) : [...prev, role],
-    )
+  const handleRoleChange = useCallback((role) => {
+    setSelectedRoles(role ? [role] : [])
     clearFieldErrors('roles')
   }, [clearFieldErrors])
 
@@ -468,7 +477,7 @@ function CreateUserWizard({
       const body = {
         name: name.trim(),
         email: email.trim(),
-        roles: selectedRoles,
+        roles: normalizedSelectedRoles,
       }
 
       if (shouldShowTenantVisibilityStep && tenantVisibility.length > 0) {
@@ -515,7 +524,7 @@ function CreateUserWizard({
       const appError = normalizeError(err)
 
       if (
-        selectedRoles.includes('CUSTOMER_ADMIN') &&
+        normalizedSelectedRoles.includes('CUSTOMER_ADMIN') &&
         isCanonicalAdminConflictError(appError)
       ) {
         const conflictMessage = getCanonicalAdminConflictMessage(appError, 'assign')
@@ -591,6 +600,7 @@ function CreateUserWizard({
   }, [
     name,
     email,
+    normalizedSelectedRoles,
     selectedRoles,
     tenantVisibility,
     customerId,
@@ -658,20 +668,24 @@ function CreateUserWizard({
         {currentStepKey === 'roles' && (
           <div className="create-wizard__step">
             <fieldset className="create-wizard__fieldset">
-              <legend className="create-wizard__legend">Select Roles</legend>
+              <legend className="create-wizard__legend">Select Role</legend>
               <p className="create-wizard__info" role="note">
                 {CUSTOMER_ADMIN_CREATE_GUIDANCE}
               </p>
-              {availableRoles.map((role) => (
-                <Tickbox
-                  key={role}
-                  id={`role-${role}`}
-                  label={role.replace(/_/g, ' ')}
-                  checked={selectedRoles.includes(role)}
-                  onChange={() => toggleRole(role)}
-                  disabled={isLoading}
-                />
-              ))}
+              <div role="radiogroup" aria-label="Select role">
+                {availableRoles.map((role) => (
+                  <Radio
+                    key={role}
+                    id={`role-${role}`}
+                    name="create-user-role"
+                    value={role}
+                    label={role.replace(/_/g, ' ')}
+                    checked={normalizedSelectedRoles.includes(role)}
+                    onChange={() => handleRoleChange(role)}
+                    disabled={isLoading}
+                  />
+                ))}
+              </div>
               {fieldErrors.roles ? (
                 <p className="create-wizard__error" role="alert">
                   {fieldErrors.roles}
@@ -801,8 +815,8 @@ function CreateUserWizard({
               <dd>{name}</dd>
               <dt>Email</dt>
               <dd>{email}</dd>
-              <dt>Roles</dt>
-              <dd>{selectedRoles.map((role) => role.replace(/_/g, ' ')).join(', ')}</dd>
+              <dt>Role</dt>
+              <dd>{normalizedSelectedRoles.map((role) => role.replace(/_/g, ' ')).join(', ')}</dd>
               {shouldShowTenantVisibilityStep ? (
                 <>
                   <dt>Tenant Visibility</dt>

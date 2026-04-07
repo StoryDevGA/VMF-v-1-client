@@ -238,11 +238,11 @@ describe('CreateUserWizard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument()
-      expect(screen.getByText(/select roles/i)).toBeInTheDocument()
+      expect(screen.getByText(/select role/i)).toBeInTheDocument()
     })
   })
 
-  it('shows role checkboxes on step 2', async () => {
+  it('shows single-select role radios on step 2', async () => {
     const user = userEvent.setup()
     renderWizard()
 
@@ -272,10 +272,31 @@ describe('CreateUserWizard', () => {
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: /analyst/i })).toBeInTheDocument()
-      expect(screen.queryByRole('checkbox', { name: /customer admin/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('checkbox', { name: /super admin/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: /analyst/i })).toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: /customer admin/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: /super admin/i })).not.toBeInTheDocument()
     })
+  })
+
+  it('replaces the selected role when a different role is chosen', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByLabelText(/full name/i), 'Jane Doe')
+    await user.type(screen.getByLabelText(/email address/i), 'jane@acme.com')
+    await user.click(screen.getByRole('button', { name: /next/i }))
+
+    await waitFor(() => screen.getByText(/step 2 of 4/i))
+
+    const userRole = screen.getByRole('radio', { name: /^user$/i })
+    const tenantAdminRole = screen.getByRole('radio', { name: /tenant admin/i })
+
+    await user.click(userRole)
+    expect(userRole).toBeChecked()
+
+    await user.click(tenantAdminRole)
+    expect(tenantAdminRole).toBeChecked()
+    expect(userRole).not.toBeChecked()
   })
 
   it('shows validation error when no role is selected on step 2', async () => {
@@ -382,7 +403,7 @@ describe('CreateUserWizard', () => {
       expect(screen.queryByText(/no explicit tenant visibility selected/i)).not.toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(createUserMock).toHaveBeenCalledWith({
@@ -418,7 +439,7 @@ describe('CreateUserWizard', () => {
       expect(screen.getByText(/north hub, south hub/i)).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(createUserMock).toHaveBeenCalledWith({
@@ -496,7 +517,7 @@ describe('CreateUserWizard', () => {
     const { onClose } = renderWizard()
 
     await completeWizardToReview(user)
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
@@ -521,7 +542,7 @@ describe('CreateUserWizard', () => {
     const { onClose } = renderWizard()
 
     await completeWizardToReview(user)
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
@@ -553,7 +574,7 @@ describe('CreateUserWizard', () => {
     const { onClose } = renderWizard()
 
     await completeWizardToReview(user)
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(onClose).not.toHaveBeenCalled()
@@ -587,7 +608,7 @@ describe('CreateUserWizard', () => {
     const { onClose } = renderWizard()
 
     await completeWizardToReview(user)
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(onClose).not.toHaveBeenCalled()
@@ -623,7 +644,7 @@ describe('CreateUserWizard', () => {
     renderWizard()
 
     await completeWizardToReview(user, { tenantLabel: /north hub/i })
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument()

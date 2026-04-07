@@ -38,6 +38,29 @@ import {
   mapEditUserFieldErrorsFromDetails,
 } from './superAdminCustomers.utils.js'
 
+const normalizeSingleRoleSelection = (roles, roleOptions, fallbackRoles = []) => {
+  const allowedRolesInOrder = roleOptions
+    .map((option) => String(option?.value ?? '').trim())
+    .filter(Boolean)
+  const allowedRoleSet = new Set(allowedRolesInOrder)
+  const normalizedRoles = normalizeRoles(roles)
+
+  for (const allowedRole of allowedRolesInOrder) {
+    if (normalizedRoles.includes(allowedRole)) {
+      return [allowedRole]
+    }
+  }
+
+  const normalizedFallbackRoles = normalizeRoles(fallbackRoles)
+  for (const fallbackRole of normalizedFallbackRoles) {
+    if (allowedRoleSet.has(fallbackRole)) {
+      return [fallbackRole]
+    }
+  }
+
+  return []
+}
+
 export function useUserManagement({ customer, onAuthLink }) {
   const { addToast } = useToaster()
   const customerId = getCustomerId(customer)
@@ -121,14 +144,18 @@ export function useUserManagement({ customer, onAuthLink }) {
   )
 
   useEffect(() => {
-    const allowedRoles = new Set(createUserRoleOptions.map((option) => option.value))
     setUserCreateRoles((currentRoles) => {
-      const nextRoles = currentRoles.filter((role) => allowedRoles.has(role))
-      if (nextRoles.length > 0) return nextRoles
-      return DEFAULT_USER_CREATE_ROLES.filter((role) => allowedRoles.has(role))
+      const nextRoles = normalizeSingleRoleSelection(
+        currentRoles,
+        createUserRoleOptions,
+        DEFAULT_USER_CREATE_ROLES,
+      )
+      return nextRoles.length > 0 ? nextRoles : currentRoles
     })
-    setUserEditRoles((currentRoles) => currentRoles.filter((role) => allowedRoles.has(role)))
-  }, [createUserRoleOptions])
+    setUserEditRoles((currentRoles) =>
+      normalizeSingleRoleSelection(currentRoles, editUserRoleOptions),
+    )
+  }, [createUserRoleOptions, editUserRoleOptions])
 
   const listUsersAppError = listUsersError ? normalizeError(listUsersError) : null
   const listUsersErrorMessage = getFirstErrorDetailMessage(listUsersAppError?.details)
@@ -175,12 +202,15 @@ export function useUserManagement({ customer, onAuthLink }) {
     setUserEditTarget(row)
     setUserEditName(String(row?.name ?? ''))
     setUserEditRoles(
-      normalizeRoles(getCustomerUserRoles(row, customerId))
-        .filter((role) => allowedEditRoleValues.has(role)),
+      normalizeSingleRoleSelection(
+        normalizeRoles(getCustomerUserRoles(row, customerId))
+          .filter((role) => allowedEditRoleValues.has(role)),
+        editUserRoleOptions,
+      ),
     )
     setUserEditErrors({})
     setUserEditOpen(true)
-  }, [allowedEditRoleValues, customerId])
+  }, [allowedEditRoleValues, customerId, editUserRoleOptions])
 
   const closeUserEditDialog = useCallback(() => {
     setUserEditOpen(false)
@@ -191,11 +221,7 @@ export function useUserManagement({ customer, onAuthLink }) {
   }, [])
 
   const toggleUserCreateRole = useCallback((role) => {
-    setUserCreateRoles((previousRoles) => (
-      previousRoles.includes(role)
-        ? previousRoles.filter((currentRole) => currentRole !== role)
-        : [...previousRoles, role]
-    ))
+    setUserCreateRoles(role ? [role] : [])
     setUserCreateErrors((currentErrors) => {
       if (!currentErrors.roles && !currentErrors.form) return currentErrors
       const nextErrors = { ...currentErrors }
@@ -206,11 +232,7 @@ export function useUserManagement({ customer, onAuthLink }) {
   }, [])
 
   const toggleUserEditRole = useCallback((role) => {
-    setUserEditRoles((previousRoles) => (
-      previousRoles.includes(role)
-        ? previousRoles.filter((currentRole) => currentRole !== role)
-        : [...previousRoles, role]
-    ))
+    setUserEditRoles(role ? [role] : [])
     setUserEditErrors((currentErrors) => {
       if (!currentErrors.roles && !currentErrors.form) return currentErrors
       const nextErrors = { ...currentErrors }
@@ -232,8 +254,11 @@ export function useUserManagement({ customer, onAuthLink }) {
     }
 
     const trimmedName = userEditName.trim()
-    const normalizedRoles = normalizeRoles(userEditRoles)
-      .filter((role) => allowedEditRoleValues.has(role))
+    const normalizedRoles = normalizeSingleRoleSelection(
+      normalizeRoles(userEditRoles)
+        .filter((role) => allowedEditRoleValues.has(role)),
+      editUserRoleOptions,
+    )
     const validationErrors = {}
 
     if (!trimmedName) {
@@ -297,6 +322,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     userEditTarget,
     allowedEditRoleValues,
     customerId,
+    editUserRoleOptions,
   ])
 
   const handleUserCreateMutation = useCallback(async () => {
@@ -318,7 +344,13 @@ export function useUserManagement({ customer, onAuthLink }) {
       }
     }
 
-    if (userCreateRoles.length === 0) {
+    const normalizedCreateRoles = normalizeSingleRoleSelection(
+      userCreateRoles,
+      createUserRoleOptions,
+      DEFAULT_USER_CREATE_ROLES,
+    )
+
+    if (normalizedCreateRoles.length === 0) {
       validationErrors.roles = 'Select at least one role.'
     }
 
@@ -328,7 +360,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     }
 
     const body = {
-      roles: userCreateRoles,
+      roles: normalizedCreateRoles,
     }
 
     if (userCreateMode === 'assign_existing') {
@@ -396,7 +428,7 @@ export function useUserManagement({ customer, onAuthLink }) {
       const appError = normalizeError(err)
 
       if (
-        userCreateRoles.includes('CUSTOMER_ADMIN')
+        normalizedCreateRoles.includes('CUSTOMER_ADMIN')
         && isCanonicalAdminConflictError(appError)
       ) {
         setUserCreateErrors({
@@ -444,6 +476,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     userCreateMode,
     userCreateName,
     userCreateRoles,
+    createUserRoleOptions,
     customerId,
     onAuthLink,
   ])
