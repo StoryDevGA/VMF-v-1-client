@@ -276,6 +276,42 @@ describe('TenantAdminAssignmentDialog', () => {
     expect(updateUser).not.toHaveBeenCalled()
   })
 
+  it('warns for manual role review when the outgoing admin is not present in the loaded customer users', async () => {
+    const user = userEvent.setup()
+    const updateUser = vi.fn()
+
+    mockUseListUsersQuery.mockReturnValue({
+      data: {
+        data: {
+          users: [
+            {
+              _id: 'user-20',
+              name: 'Morgan Backup',
+              email: 'morgan.backup@acme.test',
+              memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+              tenantMemberships: [],
+            },
+          ],
+        },
+      },
+      error: null,
+    })
+    mockUseUpdateUserMutation.mockReturnValue([updateUser, { isLoading: false }])
+
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: /select replacement/i }))
+    await user.click(screen.getByRole('button', { name: /replace admin/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/previous tenant-admin role needs review/i)).toBeInTheDocument()
+    })
+    expect(updateUser).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/could not be verified from the loaded customer user list/i),
+    ).toBeInTheDocument()
+  })
+
   it('warns when tenant-admin role is not confirmed in update response', async () => {
     const user = userEvent.setup()
     mockUseTenants.mockReturnValue({

@@ -20,6 +20,7 @@ import {
   isSuperAdmin as checkIsSuperAdmin,
   hasAnyPermission,
   hasPlatformPermission,
+  hasCustomerPermission,
 } from '../../utils/authorization.js'
 import './Navigation.css'
 
@@ -31,6 +32,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const { logout, logoutResult } = useAuth()
   const {
     customerId: selectedCustomerId,
+    selectedCustomerTopology,
     supportsTenantManagement: selectedCustomerSupportsTenantManagement,
   } = useTenantContext()
 
@@ -59,12 +61,44 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     if (selectedCustomerId) return selectedCustomerSupportsTenantManagement
     return hasAnyMultiTenantCustomerAdminScope(user)
   }, [hasCustomerAdminAccess, selectedCustomerId, selectedCustomerSupportsTenantManagement, user])
+  const hasSelectedCustomerTenantViewPermission = useMemo(() => {
+    if (!selectedCustomerId) return false
+    if (hasCustomerPermission(resolvedPermissions, selectedCustomerId, 'TENANT_VIEW')) return true
+
+    return Array.isArray(resolvedPermissions?.tenants) && resolvedPermissions.tenants.some(
+      (tenantScope) =>
+        String(tenantScope?.customerId ?? '') === String(selectedCustomerId)
+        && Array.isArray(tenantScope?.permissions)
+        && tenantScope.permissions.includes('TENANT_VIEW'),
+    )
+  }, [resolvedPermissions, selectedCustomerId])
   const canAccessTenantMaintenance = hasCustomerAdminAccess
     ? supportsTenantManagement || hasSelectedCustomerTenantAdminAccess
     : hasSelectedCustomerTenantAdminAccess
 
   const canManageUsers = hasAnyPermission(resolvedPermissions, 'USER_VIEW') || hasCustomerAdminAccess
-  const canManageTenants = hasAnyPermission(resolvedPermissions, 'TENANT_VIEW') || canAccessTenantMaintenance
+  const canManageTenants = useMemo(() => {
+    if (
+      selectedCustomerId
+      && selectedCustomerTopology === 'SINGLE_TENANT'
+      && !hasSelectedCustomerTenantAdminAccess
+    ) {
+      return false
+    }
+
+    if (selectedCustomerId) {
+      return hasSelectedCustomerTenantViewPermission || canAccessTenantMaintenance
+    }
+
+    return hasAnyPermission(resolvedPermissions, 'TENANT_VIEW') || canAccessTenantMaintenance
+  }, [
+    canAccessTenantMaintenance,
+    hasSelectedCustomerTenantAdminAccess,
+    hasSelectedCustomerTenantViewPermission,
+    resolvedPermissions,
+    selectedCustomerId,
+    selectedCustomerTopology,
+  ])
   const canViewSystemHealth = hasPlatformPermission(resolvedPermissions, 'SYSTEM_HEALTH_VIEW') || hasCustomerAdminAccess
 
   const menuEntries = useMemo(() => {

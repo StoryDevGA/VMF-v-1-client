@@ -201,12 +201,22 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
         || currentTenantAdmin?.name
         || 'the previous tenant admin'
       const outgoingTenantAdminRoles = currentTenantAdminRecord?.customerRoles ?? []
-      const outgoingRemainingTenantAdminAssignments =
-        (currentTenantAdminRecord?.tenantAdminTenantIds ?? []).filter(
-          (assignedTenantId) => assignedTenantId !== tenantId,
-        )
-      const shouldDowngradeOutgoingTenantAdmin =
+      const canVerifyOutgoingTenantAdminAssignments =
         Boolean(currentTenantAdmin?.id)
+        && Boolean(currentTenantAdminRecord?.id)
+        && currentTenantAdminRecord.id === currentTenantAdmin.id
+      const outgoingRemainingTenantAdminAssignments =
+        canVerifyOutgoingTenantAdminAssignments
+          ? (currentTenantAdminRecord?.tenantAdminTenantIds ?? []).filter(
+            (assignedTenantId) => assignedTenantId !== tenantId,
+          )
+          : []
+      const shouldReviewOutgoingTenantAdminRole =
+        Boolean(currentTenantAdmin?.id)
+        && currentTenantAdmin.id !== replacementUserId
+        && !canVerifyOutgoingTenantAdminAssignments
+      const shouldDowngradeOutgoingTenantAdmin =
+        canVerifyOutgoingTenantAdminAssignments
         && currentTenantAdmin.id !== replacementUserId
         && outgoingRemainingTenantAdminAssignments.length === 0
       const downgradedOutgoingRoles = getDowngradedCustomerRoles(outgoingTenantAdminRoles)
@@ -219,7 +229,15 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
         variant: 'success',
       })
 
-      if (
+      if (shouldReviewOutgoingTenantAdminRole) {
+        addToast({
+          title: 'Previous tenant-admin role needs review',
+          description:
+            `${outgoingTenantAdminName} was replaced successfully, but their remaining tenant-admin assignments `
+            + 'could not be verified from the loaded customer user list. Refresh and confirm whether their role should be normalized to USER.',
+          variant: 'warning',
+        })
+      } else if (
         shouldDowngradeOutgoingTenantAdmin
         && currentTenantAdmin?.id
         && downgradedOutgoingRoles.join('|') !== normalizeRoles(outgoingTenantAdminRoles).join('|')

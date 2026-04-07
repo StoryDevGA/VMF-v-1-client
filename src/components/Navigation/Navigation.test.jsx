@@ -216,6 +216,36 @@ describe('Navigation', () => {
     expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
   })
 
+  it('keeps Manage Tenants hidden for a selected single-tenant customer admin even when resolved permissions include TENANT_VIEW', async () => {
+    const user = userEvent.setup()
+    const store = configureStore({
+      reducer: {
+        auth: authReducer,
+        tenantContext: tenantContextReducer,
+        [baseApi.reducerPath]: baseApi.reducer,
+      },
+      middleware: (gDM) => gDM().concat(baseApi.middleware),
+      preloadedState: {
+        auth: {
+          user: singleTenantCustomerAdminUser,
+          status: 'authenticated',
+          resolvedPermissions: {
+            platform: { roleKeys: [], permissions: [] },
+            customers: [{ customerId: 'cust-1', roleKeys: ['CUSTOMER_ADMIN'], permissions: ['TENANT_VIEW'] }],
+            tenants: [],
+          },
+        },
+        tenantContext: { customerId: 'cust-1', tenantId: null, tenantName: null },
+      },
+    })
+    renderNavigation(store)
+
+    await user.click(screen.getByRole('button', { name: /^admin$/i }))
+
+    expect(screen.getByRole('link', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage tenants/i })).not.toBeInTheDocument()
+  })
+
   it('hides Manage Tenants while selected customer topology is unresolved', async () => {
     const user = userEvent.setup()
     const store = createTestStore(customerAdminUser, 'authenticated', {
