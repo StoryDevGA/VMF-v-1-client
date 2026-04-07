@@ -187,6 +187,19 @@ describe('TenantAdminAssignmentDialog', () => {
     expect(screen.getByRole('button', { name: /replace admin/i })).toBeInTheDocument()
   })
 
+  it('loads customer users with the supported page size', () => {
+    renderDialog()
+
+    expect(mockUseListUsersQuery).toHaveBeenCalledWith(
+      {
+        customerId: 'cust-1',
+        page: 1,
+        pageSize: 100,
+      },
+      { skip: false },
+    )
+  })
+
   it('submits the selected replacement tenant admin and closes', async () => {
     const user = userEvent.setup()
     const updateTenant = vi.fn().mockResolvedValue({

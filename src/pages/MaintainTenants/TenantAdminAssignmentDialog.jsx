@@ -19,6 +19,7 @@ const getTenantId = (tenant) => String(tenant?._id ?? tenant?.id ?? '').trim()
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
 const getMembershipCustomerId = (membership) =>
   String(membership?.customerId ?? membership?.customer?.id ?? membership?.customer?._id ?? '').trim()
+const CUSTOMER_USERS_PAGE_SIZE = 100
 
 const getFallbackUserSummary = (userId, name = '') => ({
   id: userId,
@@ -78,7 +79,7 @@ function TenantAdminAssignmentDialog({ open, onClose, tenant, customerId }) {
     {
       customerId,
       page: 1,
-      pageSize: 500,
+      pageSize: CUSTOMER_USERS_PAGE_SIZE,
     },
     { skip: !open || !customerId },
   )
