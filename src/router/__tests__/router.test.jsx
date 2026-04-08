@@ -22,6 +22,26 @@ vi.mock('../../pages/SuperAdminSystemVersioning', () => ({
   default: () => <h1>System Versioning Policy</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminRuntimeControl', () => ({
+  default: () => <h1>Runtime Control Dashboard</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminFrameworkPackages', () => ({
+  default: () => <h1>Framework Packages</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminAgents', () => ({
+  default: () => <h1>Agents</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminSkills', () => ({
+  default: () => <h1>Skills</h1>,
+}))
+
+vi.mock('../../pages/SuperAdminWorkflowPolicies', () => ({
+  default: () => <h1>Workflow Policies</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminDeniedAccessLogs', () => ({
   default: () => <h1>Denied Access Logs</h1>,
 }))
@@ -335,6 +355,146 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render the Runtime Control dashboard at /super-admin/runtime-control for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-runtime-control-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^runtime control dashboard$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Framework Packages page at /super-admin/runtime-control/framework-packages for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/framework-packages'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-framework-packages-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^framework packages$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Agents page at /super-admin/runtime-control/agents for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/agents'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-agents-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^agents$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Skills page at /super-admin/runtime-control/skills for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/skills'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-skills-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^skills$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Workflow Policies page at /super-admin/runtime-control/workflow-policies for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/workflow-policies'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-workflow-policies-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /workflow policies/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render super-admin denied access logs page at /super-admin/denied-access-logs for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/denied-access-logs'],
@@ -435,6 +595,11 @@ describe('Router', () => {
       expect(childPaths).toEqual([
         'index',
         'dashboard',
+        'runtime-control',
+        'runtime-control/framework-packages',
+        'runtime-control/agents',
+        'runtime-control/skills',
+        'runtime-control/workflow-policies',
         'invitations',
         'license-levels',
         'roles',
@@ -483,12 +648,9 @@ describe('Router', () => {
 
       await screen.findByRole('navigation')
 
-      expect(screen.getByRole('button', { name: /system admin/i })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
-        'href',
-        '/super-admin/customers',
-      )
-      expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /customer governance/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /runtime control/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /runtime observability/i })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
     })
 

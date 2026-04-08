@@ -1,0 +1,19 @@
+.super-admin-workflow-policies {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-workflow-policies__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-workflow-policies__title,
+.super-admin-workflow-policies__subtitle {
+  margin: 0;
+}
+
+.super-admin-workflow-policies__subtitle {
+  color: var(--color-text-secondary);
+}

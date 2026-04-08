@@ -293,6 +293,10 @@ export const baseApi = createApi({
     'LicenseLevel',
     'SystemVersioningPolicy',
     'AuditLog',
+    'RuntimeFrameworkPackage',
+    'RuntimeAgent',
+    'RuntimeSkill',
+    'RuntimeWorkflowPolicy',
   ],
   endpoints: () => ({}), // feature slices inject their own
 })

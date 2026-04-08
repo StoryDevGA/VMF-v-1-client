@@ -1,0 +1,19 @@
+.super-admin-framework-packages {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-framework-packages__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-framework-packages__title,
+.super-admin-framework-packages__subtitle {
+  margin: 0;
+}
+
+.super-admin-framework-packages__subtitle {
+  color: var(--color-text-secondary);
+}

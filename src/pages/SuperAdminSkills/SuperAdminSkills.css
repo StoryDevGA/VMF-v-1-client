@@ -1,0 +1,19 @@
+.super-admin-skills {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-skills__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-skills__title,
+.super-admin-skills__subtitle {
+  margin: 0;
+}
+
+.super-admin-skills__subtitle {
+  color: var(--color-text-secondary);
+}

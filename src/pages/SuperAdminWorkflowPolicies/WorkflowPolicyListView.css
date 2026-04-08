@@ -1,0 +1,100 @@
+.super-admin-workflow-policies__fieldset,
+.super-admin-workflow-policies__card {
+  height: 100%;
+}
+
+.super-admin-workflow-policies__card-body {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-workflow-policies__card-body--compact {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.super-admin-workflow-policies__catalogue-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-xs);
+}
+
+.super-admin-workflow-policies__toolbar {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
+  align-items: end;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.super-admin-workflow-policies__table-note,
+.super-admin-workflow-policies__pagination-info,
+.super-admin-workflow-policies__muted,
+.super-admin-workflow-policies__policy-key,
+.super-admin-workflow-policies__dependency-summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-workflow-policies__policy-summary,
+.super-admin-workflow-policies__token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+.super-admin-workflow-policies__policy-summary {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-workflow-policies__policy-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-workflow-policies__policy-key {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-workflow-policies__dependency-summary {
+  display: grid;
+  gap: var(--spacing-2xs);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-workflow-policies__row-actions {
+  min-width: 120px;
+}
+
+.super-admin-workflow-policies__table-wrap {
+  margin-top: 0;
+}
+
+.super-admin-workflow-policies__pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-workflow-policies__pagination-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1023px) {
+  .super-admin-workflow-policies__toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (forced-colors: active) {
+  .super-admin-workflow-policies__policy-key {
+    color: CanvasText;
+  }
+}

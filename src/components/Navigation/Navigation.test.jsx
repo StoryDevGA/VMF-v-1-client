@@ -379,30 +379,54 @@ describe('Navigation', () => {
     )
   })
 
-  it('shows system admin submenu links for SUPER_ADMIN', async () => {
+  it('shows Phase 1A grouped submenu links for SUPER_ADMIN', async () => {
     const user = userEvent.setup()
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    expect(screen.getByRole('button', { name: /system admin/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /customer governance/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /runtime control/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /runtime observability/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    await user.click(screen.getByRole('button', { name: /customer governance/i }))
+
+    expect(screen.getByRole('link', { name: /^customers$/i })).toHaveAttribute(
       'href',
       '/super-admin/customers',
     )
-    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
-    await user.click(screen.getByRole('button', { name: /system admin/i }))
-
-    expect(screen.getByRole('link', { name: /versioning/i })).toHaveAttribute(
-      'href',
-      '/super-admin/system-versioning',
-    )
-    expect(screen.getByRole('link', { name: /licence maintenance/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /licence levels/i })).toHaveAttribute(
       'href',
       '/super-admin/license-levels',
     )
-    expect(screen.getByRole('link', { name: /role definitions/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /roles and permissions/i })).toHaveAttribute(
       'href',
       '/super-admin/roles',
+    )
+
+    await user.click(screen.getByRole('button', { name: /runtime control/i }))
+    expect(screen.getByRole('link', { name: /^runtime control$/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control',
+    )
+    expect(screen.getByRole('link', { name: /system versioning/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-versioning',
+    )
+    expect(screen.getByRole('link', { name: /framework packages/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/framework-packages',
+    )
+    expect(screen.getByRole('link', { name: /^agents$/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/agents',
+    )
+    expect(screen.getByRole('link', { name: /^skills$/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/skills',
+    )
+    expect(screen.getByRole('link', { name: /workflow policies/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/workflow-policies',
     )
   })
 
@@ -413,12 +437,9 @@ describe('Navigation', () => {
     const primaryMenu = screen.getByRole('list', { name: /primary menu/i })
     const topLevelItems = Array.from(primaryMenu.children)
 
-    expect(within(topLevelItems[0]).getByRole('button', { name: /^system admin$/i })).toBeInTheDocument()
-    expect(within(topLevelItems[1]).getByRole('link', { name: /^customer admin$/i })).toHaveAttribute(
-      'href',
-      '/super-admin/customers',
-    )
-    expect(within(topLevelItems[2]).getByRole('button', { name: /^system health$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[0]).getByRole('button', { name: /^customer governance$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[1]).getByRole('button', { name: /^runtime control$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[2]).getByRole('button', { name: /^runtime observability$/i })).toBeInTheDocument()
     expect(within(topLevelItems[3]).getByRole('link', { name: /^help$/i })).toHaveAttribute(
       'href',
       '/help',
@@ -434,12 +455,12 @@ describe('Navigation', () => {
     expect(screen.queryByRole('button', { name: /^dashboard$/i })).not.toBeInTheDocument()
   })
 
-  it('shows system health submenu links for SUPER_ADMIN', async () => {
+  it('shows runtime observability submenu links for SUPER_ADMIN', async () => {
     const user = userEvent.setup()
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    await user.click(screen.getByRole('button', { name: /system health/i }))
+    await user.click(screen.getByRole('button', { name: /runtime observability/i }))
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
       'href',
       '/super-admin/system-monitoring',
@@ -460,19 +481,19 @@ describe('Navigation', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store, onLinkClick)
 
-    await user.click(screen.getByRole('button', { name: /system admin/i }))
-    await user.click(screen.getByRole('link', { name: /versioning/i }))
+    await user.click(screen.getByRole('button', { name: /runtime control/i }))
+    await user.click(screen.getByRole('link', { name: /^runtime control$/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 
   it('marks active submenu link with correct class', async () => {
     const user = userEvent.setup()
     const store = createTestStore(superAdminUser)
-    renderNavigation(store, undefined, ['/super-admin/system-versioning'])
+    renderNavigation(store, undefined, ['/super-admin/runtime-control/framework-packages'])
 
-    await user.click(screen.getByRole('button', { name: /system admin/i }))
-    const versioningLink = screen.getByRole('link', { name: /versioning/i })
-    expect(versioningLink.className).toMatch(/active/i)
+    await user.click(screen.getByRole('button', { name: /runtime control/i }))
+    const frameworkPackagesLink = screen.getByRole('link', { name: /framework packages/i })
+    expect(frameworkPackagesLink.className).toMatch(/active/i)
   })
 
   it('closes an open submenu when Escape is pressed', async () => {
@@ -480,11 +501,11 @@ describe('Navigation', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
-    await user.click(screen.getByRole('button', { name: /system admin/i }))
-    expect(screen.getByRole('link', { name: /versioning/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /runtime control/i }))
+    expect(screen.getByRole('link', { name: /system versioning/i })).toBeInTheDocument()
 
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('link', { name: /versioning/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /system versioning/i })).not.toBeInTheDocument()
   })
 
   it('renders navigation with expected accessibility attributes', () => {
@@ -493,7 +514,7 @@ describe('Navigation', () => {
 
     const navigation = screen.getByRole('navigation', { name: /main navigation/i })
     expect(navigation).toHaveAttribute('id', 'mobile-navigation')
-    expect(screen.getByRole('button', { name: /system admin/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /customer governance/i })).toHaveAttribute(
       'aria-expanded',
       'false',
     )

@@ -1,0 +1,220 @@
+.super-admin-runtime-control {
+  display: grid;
+  gap: var(--spacing-xl);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-runtime-control__hero,
+.super-admin-runtime-control__bridge-card,
+.super-admin-runtime-control__module-card {
+  overflow: hidden;
+}
+
+.super-admin-runtime-control__hero-body,
+.super-admin-runtime-control__layout,
+.super-admin-runtime-control__modules,
+.super-admin-runtime-control__module-grid {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.super-admin-runtime-control__hero-copy,
+.super-admin-runtime-control__hero-note,
+.super-admin-runtime-control__bridge-header,
+.super-admin-runtime-control__bridge-body,
+.super-admin-runtime-control__modules-header,
+.super-admin-runtime-control__module-header,
+.super-admin-runtime-control__module-body {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-runtime-control__hero-eyebrow,
+.super-admin-runtime-control__bridge-eyebrow,
+.super-admin-runtime-control__module-eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.super-admin-runtime-control__role,
+.super-admin-runtime-control__modules-eyebrow,
+.super-admin-runtime-control__module-path-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.super-admin-runtime-control__title,
+.super-admin-runtime-control__section-title,
+.super-admin-runtime-control__module-title,
+.super-admin-runtime-control__hero-note-title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.super-admin-runtime-control__title {
+  font-size: var(--font-size-2xl);
+  line-height: var(--line-height-tight);
+}
+
+.super-admin-runtime-control__module-title {
+  font-size: var(--font-size-lg);
+}
+
+.super-admin-runtime-control__subtitle,
+.super-admin-runtime-control__signed-in,
+.super-admin-runtime-control__hero-note-copy,
+.super-admin-runtime-control__section-copy,
+.super-admin-runtime-control__module-description,
+.super-admin-runtime-control__module-note,
+.super-admin-runtime-control__bridge-helper {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-runtime-control__hero-note,
+.super-admin-runtime-control__bridge-link,
+.super-admin-runtime-control__module-link,
+.super-admin-runtime-control__module-card {
+  border: var(--border-width-thin) solid var(--color-border);
+}
+
+.super-admin-runtime-control__hero-note {
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-action-primary) 12%, transparent), transparent 65%),
+    var(--color-background-secondary);
+}
+
+.super-admin-runtime-control__layout {
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.super-admin-runtime-control__bridge-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-height: 44px;
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  background-color: var(--color-background-secondary);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.super-admin-runtime-control__bridge-link:hover,
+.super-admin-runtime-control__bridge-link:focus-visible,
+.super-admin-runtime-control__module-link:hover,
+.super-admin-runtime-control__module-link:focus-visible {
+  border-color: var(--color-border-hover);
+  background-color: var(--color-surface);
+  transform: translateY(-1px);
+}
+
+.super-admin-runtime-control__module-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-height: 44px;
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  background-color: var(--color-background-secondary);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.super-admin-runtime-control__bridge-link-copy {
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-runtime-control__bridge-link-label,
+.super-admin-runtime-control__module-path {
+  color: var(--color-text-primary);
+}
+
+.super-admin-runtime-control__bridge-link-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.super-admin-runtime-control__bridge-link-meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-runtime-control__module-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.super-admin-runtime-control__module-item,
+.super-admin-runtime-control__module-card {
+  min-width: 0;
+  height: 100%;
+}
+
+.super-admin-runtime-control__module-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--spacing-xl);
+  height: var(--spacing-xl);
+  border-radius: var(--border-radius-md);
+  background-color: color-mix(in srgb, var(--color-action-primary) 14%, transparent);
+  color: var(--color-action-primary);
+  font-size: var(--font-size-lg);
+}
+
+.super-admin-runtime-control__module-path {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-background-secondary);
+}
+
+@media (max-width: 1023px) {
+  .super-admin-runtime-control__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .super-admin-runtime-control__hero-body {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: var(--spacing-lg);
+    align-items: start;
+  }
+}
+
+@media (forced-colors: active) {
+.super-admin-runtime-control__hero-note,
+  .super-admin-runtime-control__bridge-link,
+  .super-admin-runtime-control__module-link,
+  .super-admin-runtime-control__module-card {
+    border-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .super-admin-runtime-control__bridge-link,
+  .super-admin-runtime-control__module-link {
+    transition: none;
+  }
+}

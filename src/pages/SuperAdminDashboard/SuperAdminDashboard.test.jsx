@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import SuperAdminDashboard from './SuperAdminDashboard'
 
@@ -32,13 +32,50 @@ beforeEach(() => {
 })
 
 describe('SuperAdminDashboard page', () => {
-  it('renders a minimal holding page for super admins', () => {
+  it('renders grouped launch cards for super admins', () => {
     renderDashboard()
 
     expect(screen.getByRole('heading', { name: /super admin workspace/i })).toBeInTheDocument()
-    expect(screen.getByText(/future modules in progress/i)).toBeInTheDocument()
-    expect(screen.getByText(/use the main navigation for customers, licence maintenance, versioning, monitoring, audit, and denied-access workflows/i)).toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText(/phased launch surface/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /customer governance/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /runtime control/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /runtime observability/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /customers/i })).toHaveAttribute(
+      'href',
+      '/super-admin/customers',
+    )
+    expect(screen.getByRole('link', { name: /licence levels/i })).toHaveAttribute(
+      'href',
+      '/super-admin/license-levels',
+    )
+    expect(screen.getByRole('link', { name: /runtime control open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control',
+    )
+    expect(screen.getByRole('link', { name: /system versioning/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-versioning',
+    )
+    expect(screen.getByRole('link', { name: /framework packages open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/framework-packages',
+    )
+    expect(screen.getByRole('link', { name: /agents open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/agents',
+    )
+    expect(screen.getByRole('link', { name: /skills open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/skills',
+    )
+    expect(screen.getByRole('link', { name: /workflow policies open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/workflow-policies',
+    )
+    expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
+      'href',
+      '/super-admin/system-monitoring',
+    )
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument()
   })
 
@@ -49,13 +86,35 @@ describe('SuperAdminDashboard page', () => {
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
   })
 
-  it('renders the platform summary and planned modules panels', () => {
+  it('shows the current rollout note and staged Runtime Control modules', () => {
     renderDashboard()
 
-    expect(screen.getByRole('heading', { name: /current session/i })).toBeInTheDocument()
-    expect(screen.getByText('Platform-wide')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /planned dashboard modules/i })).toBeInTheDocument()
-    expect(screen.getByText(/platform snapshot/i)).toBeInTheDocument()
-    expect(screen.getByText(/security attention queue/i)).toBeInTheDocument()
+    const runtimeControlCard = screen
+      .getByRole('heading', { name: /runtime control/i })
+      .closest('.super-admin-dashboard__group-card')
+
+    expect(runtimeControlCard).not.toBeNull()
+    expect(screen.getByRole('heading', { name: /current rollout/i })).toBeInTheDocument()
+    expect(screen.getByText(/runtime control now has a dedicated dashboard/i)).toBeInTheDocument()
+    expect(within(runtimeControlCard).getByRole('link', { name: /runtime control open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control',
+    )
+    expect(within(runtimeControlCard).getByRole('link', { name: /framework packages open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/framework-packages',
+    )
+    expect(within(runtimeControlCard).getByRole('link', { name: /agents open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/agents',
+    )
+    expect(within(runtimeControlCard).getByRole('link', { name: /skills open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/skills',
+    )
+    expect(within(runtimeControlCard).getByRole('link', { name: /workflow policies open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/workflow-policies',
+    )
   })
 })

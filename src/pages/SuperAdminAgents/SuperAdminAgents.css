@@ -1,0 +1,19 @@
+.super-admin-agents {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-agents__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-agents__title,
+.super-admin-agents__subtitle {
+  margin: 0;
+}
+
+.super-admin-agents__subtitle {
+  color: var(--color-text-secondary);
+}

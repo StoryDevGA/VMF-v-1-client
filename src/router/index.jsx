@@ -18,6 +18,7 @@ import { Footer } from '../components/Footer'
 import { Spinner } from '../components/Spinner'
 import { Logo } from '../components/Logo'
 import { ProtectedRoute } from '../components/ProtectedRoute'
+import { isSuperAdminRuntimeControlEnabled } from '../constants/superAdminNavigation.js'
 import { selectCurrentUser } from '../store/slices/authSlice.js'
 import { isSuperAdmin as checkIsSuperAdmin } from '../utils/authorization.js'
 import './router.css'
@@ -33,6 +34,21 @@ const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
 )
 const SuperAdminDashboard = lazy(() => import('../pages/SuperAdminDashboard'))
+const SuperAdminRuntimeControl = lazy(
+  () => import('../pages/SuperAdminRuntimeControl'),
+)
+const SuperAdminFrameworkPackages = lazy(
+  () => import('../pages/SuperAdminFrameworkPackages'),
+)
+const SuperAdminAgents = lazy(
+  () => import('../pages/SuperAdminAgents'),
+)
+const SuperAdminSkills = lazy(
+  () => import('../pages/SuperAdminSkills'),
+)
+const SuperAdminWorkflowPolicies = lazy(
+  () => import('../pages/SuperAdminWorkflowPolicies'),
+)
 const SuperAdminLicenseLevels = lazy(
   () => import('../pages/SuperAdminLicenseLevels'),
 )
@@ -248,6 +264,30 @@ export const router = createBrowserRouter([
             path: 'dashboard',
             element: <SuperAdminDashboard />,
           },
+          ...(isSuperAdminRuntimeControlEnabled()
+            ? [
+                {
+                  path: 'runtime-control',
+                  element: <SuperAdminRuntimeControl />,
+                },
+                {
+                  path: 'runtime-control/framework-packages',
+                  element: <SuperAdminFrameworkPackages />,
+                },
+                {
+                  path: 'runtime-control/agents',
+                  element: <SuperAdminAgents />,
+                },
+                {
+                  path: 'runtime-control/skills',
+                  element: <SuperAdminSkills />,
+                },
+                {
+                  path: 'runtime-control/workflow-policies',
+                  element: <SuperAdminWorkflowPolicies />,
+                },
+              ]
+            : []),
           {
             path: 'invitations',
             element: <Navigate to="/super-admin/customers?view=invitations" replace />,

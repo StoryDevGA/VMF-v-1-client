@@ -22,6 +22,7 @@ import {
   hasPlatformPermission,
   hasCustomerPermission,
 } from '../../utils/authorization.js'
+import { getPhase1aSuperAdminNavigationEntries } from '../../constants/superAdminNavigation.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
@@ -107,31 +108,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     const entries = []
 
     if (isSuperAdmin) {
-      entries.push({
-        type: 'group',
-        key: 'system-admin',
-        label: 'System Admin',
-        links: [
-          { key: 'versioning', label: 'Versioning', to: '/super-admin/system-versioning' },
-          {
-            key: 'licence-maintenance',
-            label: 'Licence Maintenance',
-            to: '/super-admin/license-levels',
-          },
-          {
-            key: 'role-definitions',
-            label: 'Role Definitions',
-            to: '/super-admin/roles',
-          },
-        ],
-      })
-
-      entries.push({
-        type: 'link',
-        key: 'customer-admin',
-        label: 'Customer Admin',
-        to: '/super-admin/customers',
-      })
+      entries.push(...getPhase1aSuperAdminNavigationEntries())
     }
 
     {
@@ -166,7 +143,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       }
     }
 
-    if (isSuperAdmin || canViewSystemHealth) {
+    if (!isSuperAdmin && canViewSystemHealth) {
       entries.push({
         type: 'group',
         key: 'system-health',

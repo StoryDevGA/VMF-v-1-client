@@ -5,107 +5,128 @@ import {
   MdSettings,
   MdTune,
 } from 'react-icons/md'
+import { getSuperAdminRoute } from '../../constants/superAdminNavigation.js'
+
+const monitoringRoute = getSuperAdminRoute('systemMonitoring', {
+  labelVariant: 'legacyNav',
+})
+const invitationsRoute = getSuperAdminRoute('invitations', {
+  labelVariant: 'legacyNav',
+})
+const licenseLevelsRoute = getSuperAdminRoute('licenseLevels', {
+  labelVariant: 'legacyNav',
+})
+const customersRoute = getSuperAdminRoute('customers')
+const versioningRoute = getSuperAdminRoute('systemVersioning', {
+  labelVariant: 'legacyNav',
+})
+const auditLogsRoute = getSuperAdminRoute('auditLogs', {
+  labelVariant: 'legacyNav',
+})
+const deniedAccessLogsRoute = getSuperAdminRoute('deniedAccessLogs', {
+  labelVariant: 'legacyNav',
+})
 
 export const PRIMARY_ACTIONS = [
   {
-    key: 'monitoring',
+    key: monitoringRoute.key,
     title: 'Platform Monitoring',
     description:
       'Review platform health and operational telemetry across environments.',
-    to: '/super-admin/system-monitoring',
+    to: monitoringRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
   {
-    key: 'invitations',
+    key: invitationsRoute.key,
     title: 'Invitation Management',
     description:
       'Create, resend, and revoke onboarding invitations for customer administrators.',
-    to: '/super-admin/invitations',
+    to: invitationsRoute.to,
     icon: <MdMarkEmailUnread aria-hidden="true" />,
   },
   {
-    key: 'license-levels',
-    title: 'Licence Levels',
+    key: licenseLevelsRoute.key,
+    title: licenseLevelsRoute.canonicalLabel,
     description:
       'Create and update governance licence tiers and feature entitlements.',
-    to: '/super-admin/license-levels',
+    to: licenseLevelsRoute.to,
     icon: <MdTune aria-hidden="true" />,
   },
   {
-    key: 'customers',
+    key: customersRoute.key,
     title: 'Customer Governance',
     description:
       'Manage customers, lifecycle status, and canonical admin assignment flows.',
-    to: '/super-admin/customers',
+    to: customersRoute.to,
     icon: <MdSettings aria-hidden="true" />,
   },
   {
-    key: 'versioning',
-    title: 'System Versioning',
+    key: versioningRoute.key,
+    title: versioningRoute.canonicalLabel,
     description:
       'Review and update platform governance policy versions with step-up controls.',
-    to: '/super-admin/system-versioning',
+    to: versioningRoute.to,
     icon: <MdSettings aria-hidden="true" />,
   },
   {
-    key: 'audit-logs',
+    key: auditLogsRoute.key,
     title: 'Audit Logs',
     description:
       'Query immutable audit records and run integrity verification checks.',
-    to: '/super-admin/audit-logs',
+    to: auditLogsRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
   {
-    key: 'denied-access',
-    title: 'Denied Access Logs',
+    key: deniedAccessLogsRoute.key,
+    title: deniedAccessLogsRoute.canonicalLabel,
     description:
       'Review authorization denials across platform workflows for audit visibility.',
-    to: '/super-admin/denied-access-logs',
+    to: deniedAccessLogsRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
 ]
 
 export const SUPPORT_ACTIONS = [
   {
-    key: 'monitoring',
-    label: 'Monitoring',
-    to: '/super-admin/system-monitoring',
+    key: monitoringRoute.key,
+    label: monitoringRoute.label,
+    to: monitoringRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
   {
-    key: 'invitations',
-    label: 'Invitations',
-    to: '/super-admin/invitations',
+    key: invitationsRoute.key,
+    label: invitationsRoute.label,
+    to: invitationsRoute.to,
     icon: <MdMarkEmailUnread aria-hidden="true" />,
   },
   {
-    key: 'license-levels',
-    label: 'Licence Levels',
-    to: '/super-admin/license-levels',
+    key: licenseLevelsRoute.key,
+    label: licenseLevelsRoute.canonicalLabel,
+    to: licenseLevelsRoute.to,
     icon: <MdTune aria-hidden="true" />,
   },
   {
-    key: 'customers',
-    label: 'Customers',
-    to: '/super-admin/customers',
+    key: customersRoute.key,
+    label: customersRoute.label,
+    to: customersRoute.to,
     icon: <MdSettings aria-hidden="true" />,
   },
   {
-    key: 'versioning',
-    label: 'Versioning',
-    to: '/super-admin/system-versioning',
+    key: versioningRoute.key,
+    label: versioningRoute.label,
+    to: versioningRoute.to,
     icon: <MdSettings aria-hidden="true" />,
   },
   {
-    key: 'audit-logs',
-    label: 'Audit Logs',
-    to: '/super-admin/audit-logs',
+    key: auditLogsRoute.key,
+    label: auditLogsRoute.label,
+    to: auditLogsRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
   {
-    key: 'denied-access',
-    label: 'Denied Access',
-    to: '/super-admin/denied-access-logs',
+    key: deniedAccessLogsRoute.key,
+    label: deniedAccessLogsRoute.label,
+    to: deniedAccessLogsRoute.to,
     icon: <MdMonitorHeart aria-hidden="true" />,
   },
   {

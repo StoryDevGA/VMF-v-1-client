@@ -1,0 +1,16 @@
+.super-admin-skills__form,
+.super-admin-skills__dialog-body {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-skills__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-skills__dialog-title {
+  margin: 0;
+}
