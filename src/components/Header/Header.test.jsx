@@ -485,8 +485,8 @@ describe('Header Component', () => {
       expect(screen.getByLabelText('Close menu')).toBeInTheDocument()
 
       // Click a navigation link
-      await user.click(screen.getByRole('button', { name: /system admin/i }))
-      await user.click(screen.getByRole('link', { name: /versioning/i }))
+      await user.click(screen.getByRole('button', { name: /runtime control/i }))
+      await user.click(screen.getByRole('link', { name: /system versioning/i }))
 
       // Menu should close
       expect(screen.getByLabelText('Open menu')).toBeInTheDocument()

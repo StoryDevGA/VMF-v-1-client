@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { MdExpandMore } from 'react-icons/md'
+import { Avatar } from '../Avatar'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser, selectIsAuthenticated, selectResolvedPermissions } from '../../store/slices/authSlice.js'
@@ -101,6 +102,20 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     selectedCustomerTopology,
   ])
   const canViewSystemHealth = hasPlatformPermission(resolvedPermissions, 'SYSTEM_HEALTH_VIEW') || hasCustomerAdminAccess
+  const userDisplayName = useMemo(() => {
+    const preferredName = typeof user?.name === 'string' ? user.name.trim() : ''
+    if (preferredName) return preferredName
+
+    const email = typeof user?.email === 'string' ? user.email.trim() : ''
+    if (email) return email
+
+    return 'Account'
+  }, [user])
+  const userEmail = useMemo(() => {
+    const email = typeof user?.email === 'string' ? user.email.trim() : ''
+    if (!email || email === userDisplayName) return null
+    return email
+  }, [user, userDisplayName])
 
   const menuEntries = useMemo(() => {
     if (!isAuthenticated) return []
@@ -171,16 +186,23 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     }
 
     entries.push({
-      type: 'link',
-      key: 'help',
-      label: 'Help',
-      to: '/help',
-    })
-
-    entries.push({
-      type: 'action',
-      key: 'sign-out',
-      label: 'Sign Out',
+      type: 'user-menu',
+      key: 'account',
+      label: userDisplayName,
+      secondaryLabel: userEmail,
+      links: [
+        {
+          key: 'help',
+          label: 'Help',
+          to: '/help',
+        },
+      ],
+      actions: [
+        {
+          key: 'sign-out',
+          label: 'Sign Out',
+        },
+      ],
     })
 
     return entries
@@ -190,6 +212,8 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     canViewSystemHealth,
     isAuthenticated,
     isSuperAdmin,
+    userDisplayName,
+    userEmail,
   ])
 
   const [openMenuKey, setOpenMenuKey] = useState(null)
@@ -287,6 +311,102 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   >
                     <span className="nav__text">{entry.label}</span>
                   </button>
+                </li>
+              )
+            }
+
+            if (entry.type === 'user-menu') {
+              const isOpenGroup = openMenuKey === entry.key
+              const activeGroup = isGroupActive(entry.links)
+              const submenuId = `nav-submenu-${entry.key}`
+              const accountMenuLabel = entry.label === 'Account'
+                ? 'Account menu'
+                : `${entry.label} account menu`
+
+              const groupClasses = ['nav__item', 'nav__item--group', 'nav__item--user', activeGroup && 'nav__item--active']
+                .filter(Boolean)
+                .join(' ')
+
+              return (
+                <li
+                  key={entry.key}
+                  className={groupClasses}
+                >
+                  <button
+                    type="button"
+                    className="nav__group-toggle nav__user-toggle"
+                    onClick={() => toggleMenuGroup(entry.key)}
+                    aria-expanded={isOpenGroup}
+                    aria-controls={submenuId}
+                    aria-label={accountMenuLabel}
+                  >
+                    <Avatar
+                      name={entry.label}
+                      size="sm"
+                      className="nav__user-avatar"
+                      aria-hidden="true"
+                    />
+                    <span className="nav__user-summary">
+                      <span className="nav__user-name">{entry.label}</span>
+                      {entry.secondaryLabel ? (
+                        <span className="nav__user-email">{entry.secondaryLabel}</span>
+                      ) : null}
+                    </span>
+                    <MdExpandMore
+                      className={`nav__group-icon ${isOpenGroup ? 'nav__group-icon--open' : ''}`}
+                      aria-hidden="true"
+                      focusable="false"
+                    />
+                  </button>
+
+                  <div
+                    id={submenuId}
+                    className="nav__submenu-panel nav__submenu-panel--user"
+                    hidden={!isOpenGroup}
+                  >
+                    <div className="nav__submenu-header">
+                      <Avatar
+                        name={entry.label}
+                        size="md"
+                        className="nav__submenu-avatar"
+                        aria-hidden="true"
+                      />
+                      <div className="nav__submenu-identity">
+                        <p className="nav__submenu-heading">{entry.label}</p>
+                        {entry.secondaryLabel ? (
+                          <p className="nav__submenu-meta">{entry.secondaryLabel}</p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <ul className="nav__submenu">
+                      {entry.links.map((link) => (
+                        <li key={link.key} className="nav__submenu-item">
+                          <NavLink
+                            to={link.to}
+                            className={({ isActive }) =>
+                              isActive ? 'nav__submenu-link nav__submenu-link--active' : 'nav__submenu-link'
+                            }
+                            onClick={handleSubmenuLinkClick}
+                          >
+                            <span className="nav__text">{link.label}</span>
+                          </NavLink>
+                        </li>
+                      ))}
+                      {entry.actions.map((action) => (
+                        <li key={action.key} className="nav__submenu-item">
+                          <button
+                            type="button"
+                            className="nav__submenu-action"
+                            onClick={() => handleActionClick(action)}
+                            disabled={logoutResult.isLoading}
+                          >
+                            <span className="nav__text">{action.label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </li>
               )
             }

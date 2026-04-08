@@ -159,15 +159,21 @@ describe('Navigation', () => {
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 
-  it('renders help and sign-out navigation for basic users', () => {
+  it('renders an account menu for basic users', async () => {
+    const user = userEvent.setup()
     const store = createTestStore(basicUser)
     renderNavigation(store)
 
     expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /basic account menu/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^help$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system health/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /basic account menu/i }))
+    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
   })
 
   it('shows Admin and System Health menus for CUSTOMER_ADMIN', async () => {
@@ -181,8 +187,7 @@ describe('Navigation', () => {
     expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^customer admin$/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /admin account menu/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^admin$/i }))
     expect(screen.getByRole('link', { name: /manage users/i })).toHaveAttribute(
@@ -387,7 +392,7 @@ describe('Navigation', () => {
     expect(screen.getByRole('button', { name: /customer governance/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /runtime control/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /runtime observability/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+    expect(screen.getByRole('button', { name: /super admin account menu/i })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /customer governance/i }))
 
     expect(screen.getByRole('link', { name: /^customers$/i })).toHaveAttribute(
@@ -440,11 +445,7 @@ describe('Navigation', () => {
     expect(within(topLevelItems[0]).getByRole('button', { name: /^customer governance$/i })).toBeInTheDocument()
     expect(within(topLevelItems[1]).getByRole('button', { name: /^runtime control$/i })).toBeInTheDocument()
     expect(within(topLevelItems[2]).getByRole('button', { name: /^runtime observability$/i })).toBeInTheDocument()
-    expect(within(topLevelItems[3]).getByRole('link', { name: /^help$/i })).toHaveAttribute(
-      'href',
-      '/help',
-    )
-    expect(within(topLevelItems[4]).getByRole('button', { name: /^sign out$/i })).toBeInTheDocument()
+    expect(within(topLevelItems[3]).getByRole('button', { name: /super admin account menu/i })).toBeInTheDocument()
   })
 
   it('does not render a Dashboard top-level menu item for SUPER_ADMIN', () => {
@@ -518,9 +519,13 @@ describe('Navigation', () => {
       'aria-expanded',
       'false',
     )
+    expect(screen.getByRole('button', { name: /super admin account menu/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
-  it('renders Sign Out as the last top-level navigation item for admin users', () => {
+  it('renders the account menu as the last top-level navigation item for admin users', () => {
     const store = createTestStore(superAdminUser)
     renderNavigation(store)
 
@@ -528,7 +533,7 @@ describe('Navigation', () => {
     const topLevelItems = Array.from(primaryMenu.children)
     const lastItem = topLevelItems[topLevelItems.length - 1]
 
-    expect(within(lastItem).getByRole('button', { name: /^sign out$/i })).toBeInTheDocument()
+    expect(within(lastItem).getByRole('button', { name: /super admin account menu/i })).toBeInTheDocument()
   })
 
   it('calls logout when Sign Out is clicked', async () => {
@@ -536,6 +541,7 @@ describe('Navigation', () => {
     const store = createTestStore(customerAdminUser, 'authenticated', { customerId: 'cust-1' })
     renderNavigation(store)
 
+    await user.click(screen.getByRole('button', { name: /admin account menu/i }))
     await user.click(screen.getByRole('button', { name: /^sign out$/i }))
 
     expect(mockLogout).toHaveBeenCalledTimes(1)
