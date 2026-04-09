@@ -8,6 +8,8 @@ import { baseApi } from '../store/api/baseApi.js'
 import { __resetRuntimeControlApiStateForTests } from '../store/api/runtimeControlApi.js'
 
 export function setupRuntimeControlTestEnvironment() {
+  vi.restoreAllMocks()
+  globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
   __resetRuntimeControlApiStateForTests()
   HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
     this.open = true

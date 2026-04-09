@@ -26,6 +26,7 @@ export function useFrameworkPackageManagement() {
   const [statusFilter, setStatusFilter] = useState('')
   const [frameworkFilter, setFrameworkFilter] = useState('')
   const [page, setPage] = useState(1)
+  const [stepUpToken, setStepUpToken] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -90,8 +91,17 @@ export function useFrameworkPackageManagement() {
         return
       }
 
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before creating a framework package.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await createFrameworkPackage(payload).unwrap()
+        await createFrameworkPackage({ ...payload, stepUpToken }).unwrap()
         closeCreateDialog()
         setPage(1)
         addToast({
@@ -115,7 +125,7 @@ export function useFrameworkPackageManagement() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm, createFrameworkPackage],
+    [addToast, closeCreateDialog, createForm, createFrameworkPackage, stepUpToken],
   )
 
   const openEditDialog = useCallback((pkg) => {
@@ -145,10 +155,20 @@ export function useFrameworkPackageManagement() {
         return
       }
 
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before updating a framework package.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
         await updateFrameworkPackage({
           packageId: editPackageId,
           ...payload,
+          stepUpToken,
         }).unwrap()
 
         addToast({
@@ -173,13 +193,22 @@ export function useFrameworkPackageManagement() {
         })
       }
     },
-    [addToast, closeEditDialog, editForm, editPackageId, updateFrameworkPackage],
+    [addToast, closeEditDialog, editForm, editPackageId, stepUpToken, updateFrameworkPackage],
   )
 
   const activatePackage = useCallback(
     async (pkg) => {
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before activating a framework package.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await activateFrameworkPackage({ packageId: pkg.id }).unwrap()
+        await activateFrameworkPackage({ packageId: pkg.id, stepUpToken }).unwrap()
         addToast({
           title: 'Framework package activated',
           description: `${pkg.frameworkKey} ${pkg.version} is now the active default package.`,
@@ -194,7 +223,7 @@ export function useFrameworkPackageManagement() {
         })
       }
     },
-    [activateFrameworkPackage, addToast],
+    [activateFrameworkPackage, addToast, stepUpToken],
   )
 
   return {
@@ -206,6 +235,8 @@ export function useFrameworkPackageManagement() {
     setFrameworkFilter,
     page,
     setPage,
+    stepUpToken,
+    setStepUpToken,
     rows,
     currentPage,
     totalPages,

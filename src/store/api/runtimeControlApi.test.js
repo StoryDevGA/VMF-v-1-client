@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   runtimeControlApi,
+  buildRuntimeControlDetailRequest,
+  buildRuntimeControlListRequest,
+  buildRuntimeControlMutationRequest,
   useActivateFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
   useCreateRuntimeAgentMutation,
@@ -21,6 +24,10 @@ import {
 } from './runtimeControlApi.js'
 
 describe('runtimeControlApi', () => {
+  beforeEach(() => {
+    globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
+  })
+
   it('exposes Runtime Control endpoints', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('listFrameworkPackages')
     expect(runtimeControlApi.endpoints).toHaveProperty('createFrameworkPackage')
@@ -82,5 +89,113 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.createWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateWorkflowPolicy.initiate).toBe('function')
+  })
+
+  it('builds live framework package requests with step-up headers for protected mutations', () => {
+    expect(
+      buildRuntimeControlListRequest({
+        resourcePath: 'framework-packages',
+        page: 2,
+        pageSize: 20,
+        q: 'vmf',
+        status: 'ACTIVE',
+        frameworkKey: 'vmf',
+        defaultPageSize: 4,
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages',
+      params: {
+        page: 2,
+        pageSize: 20,
+        q: 'vmf',
+        status: 'ACTIVE',
+        frameworkKey: 'VMF',
+      },
+    })
+
+    expect(
+      buildRuntimeControlDetailRequest('framework-packages', 'pkg-live-2'),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'framework-packages',
+        entityId: 'pkg-live-2',
+        method: 'PATCH',
+        body: { version: '3.1.1' },
+        stepUpToken: 'step-up-token',
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
+      method: 'PATCH',
+      body: { version: '3.1.1' },
+      headers: { 'X-Step-Up-Token': 'step-up-token' },
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'framework-packages',
+        entityId: 'pkg-live-2',
+        method: 'POST',
+        body: null,
+        stepUpToken: 'step-up-token',
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
+      method: 'POST',
+      body: null,
+      headers: { 'X-Step-Up-Token': 'step-up-token' },
+    })
+  })
+
+  it('builds live workflow policy requests with step-up headers for protected mutations', () => {
+    expect(
+      buildRuntimeControlListRequest({
+        resourcePath: 'workflow-policies',
+        page: 1,
+        pageSize: 20,
+        q: '',
+        status: '',
+        frameworkKey: '',
+        defaultPageSize: 4,
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/workflow-policies',
+      params: {
+        page: 1,
+        pageSize: 20,
+      },
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'workflow-policies',
+        method: 'POST',
+        body: { key: 'vmf-review' },
+        stepUpToken: 'step-up-token',
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/workflow-policies',
+      method: 'POST',
+      body: { key: 'vmf-review' },
+      headers: { 'X-Step-Up-Token': 'step-up-token' },
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'workflow-policies',
+        entityId: 'policy-live-1',
+        method: 'PATCH',
+        body: { name: 'VMF Release Policy' },
+        stepUpToken: 'step-up-token',
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/workflow-policies/policy-live-1',
+      method: 'PATCH',
+      body: { name: 'VMF Release Policy' },
+      headers: { 'X-Step-Up-Token': 'step-up-token' },
+    })
   })
 })

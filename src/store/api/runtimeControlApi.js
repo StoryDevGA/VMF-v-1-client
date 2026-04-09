@@ -25,10 +25,76 @@ const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST'
 const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
 const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
+const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
   id: 'sa-local',
   name: 'Super Admin',
+})
+
+const isRuntimeControlMockMode = () => globalThis.__RUNTIME_CONTROL_API_MOCK__ === true
+
+const withStepUpHeader = (stepUpToken) =>
+  stepUpToken
+    ? { 'X-Step-Up-Token': stepUpToken }
+    : undefined
+
+const buildListParams = ({
+  page,
+  pageSize,
+  q,
+  status,
+  frameworkKey,
+  defaultPageSize,
+}) => ({
+  page: normalizePositiveInteger(page, 1),
+  pageSize: normalizePositiveInteger(pageSize, defaultPageSize),
+  q: String(q ?? '').trim(),
+  status: String(status ?? '').trim(),
+  frameworkKey: normalizeFrameworkKey(frameworkKey),
+})
+
+export const buildRuntimeControlListRequest = ({
+  resourcePath,
+  page,
+  pageSize,
+  q,
+  status,
+  frameworkKey,
+  defaultPageSize,
+}) => {
+  const params = buildListParams({
+    page,
+    pageSize,
+    q,
+    status,
+    frameworkKey,
+    defaultPageSize,
+  })
+
+  return {
+    url: `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}`,
+    params: {
+      page: params.page,
+      pageSize: params.pageSize,
+      ...(params.q ? { q: params.q } : {}),
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.frameworkKey ? { frameworkKey: params.frameworkKey } : {}),
+    },
+  }
+}
+
+export const buildRuntimeControlDetailRequest = (resourcePath, entityId) => ({
+  url: `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`,
+})
+
+export const buildRuntimeControlMutationRequest = ({ resourcePath, entityId, method, body, stepUpToken }) => ({
+  url: entityId
+    ? `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`
+    : `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}`,
+  method,
+  body,
+  ...(stepUpToken ? { headers: withStepUpHeader(stepUpToken) } : {}),
 })
 
 const normalizePositiveInteger = (value, fallback) => {
@@ -263,7 +329,28 @@ const findWorkflowPolicyById = (policyId) =>
 export const runtimeControlApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     listFrameworkPackages: build.query({
-      queryFn: ({ page = 1, pageSize = FRAMEWORK_PACKAGE_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {}) => {
+      queryFn: async (
+        { page = 1, pageSize = FRAMEWORK_PACKAGE_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'framework-packages',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              defaultPageSize: FRAMEWORK_PACKAGE_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, FRAMEWORK_PACKAGE_PAGE_SIZE)
         const rows = getFrameworkPackageRows({ q, status, frameworkKey })
@@ -291,11 +378,27 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     createFrameworkPackage: build.mutation({
-      queryFn: (payload = {}) => {
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          const { stepUpToken, ...body } = payload
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'framework-packages',
+              method: 'POST',
+              body,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+
         const duplicatePackage = runtimeControlState.frameworkPackages.find(
           (pkg) =>
-            normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(payload.frameworkKey)
-            && String(pkg.version ?? '').trim() === String(payload.version ?? '').trim(),
+            normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(runtimePayload.frameworkKey)
+            && String(pkg.version ?? '').trim() === String(runtimePayload.version ?? '').trim(),
         )
 
         if (duplicatePackage) {
@@ -308,11 +411,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const createdPackage = {
           id: generateRuntimeId(
             'pkg',
-            `${normalizeFrameworkKey(payload.frameworkKey)}-${payload.version}`,
+            `${normalizeFrameworkKey(runtimePayload.frameworkKey)}-${runtimePayload.version}`,
           ),
           ...cloneFrameworkPackage({
-            ...payload,
-            isDefault: payload.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
+            ...runtimePayload,
+            isDefault: runtimePayload.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
             ...buildAuditFields(),
           }),
         }
@@ -328,7 +431,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     getFrameworkPackage: build.query({
-      queryFn: (packageId) => {
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', packageId),
+            api,
+            extraOptions,
+          )
+        }
+
         const pkg = findFrameworkPackageById(packageId)
         if (!pkg) {
           return buildNotFoundError('Framework package was not found.')
@@ -342,7 +453,23 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateFrameworkPackage: build.mutation({
-      queryFn: ({ packageId, ...payload }) => {
+      queryFn: async ({ packageId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'framework-packages',
+              entityId: packageId,
+              method: 'PATCH',
+              body: payload,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload
+
         const existingPackage = findFrameworkPackageById(packageId)
         if (!existingPackage) {
           return buildNotFoundError('Framework package was not found.')
@@ -351,8 +478,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const duplicatePackage = runtimeControlState.frameworkPackages.find(
           (pkg) =>
             pkg.id !== packageId
-            && normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(payload.frameworkKey ?? existingPackage.frameworkKey)
-            && String(pkg.version ?? '').trim() === String(payload.version ?? existingPackage.version).trim(),
+            && normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(runtimePayload.frameworkKey ?? existingPackage.frameworkKey)
+            && String(pkg.version ?? '').trim() === String(runtimePayload.version ?? existingPackage.version).trim(),
         )
 
         if (duplicatePackage) {
@@ -366,10 +493,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const nextPackage = cloneFrameworkPackage({
           ...existingPackage,
-          ...payload,
+          ...runtimePayload,
           isDefault: payload.status
             ? nextStatus === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
-            : Boolean(payload.isDefault ?? existingPackage.isDefault),
+            : Boolean(runtimePayload.isDefault ?? existingPackage.isDefault),
           ...buildAuditFields(),
         })
 
@@ -389,7 +516,19 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     activateFrameworkPackage: build.mutation({
-      queryFn: ({ packageId }) => {
+      queryFn: async ({ packageId, stepUpToken }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/activate`,
+              method: 'POST',
+              ...(stepUpToken ? { headers: withStepUpHeader(stepUpToken) } : {}),
+            },
+            api,
+            extraOptions,
+          )
+        }
+
         const existingPackage = findFrameworkPackageById(packageId)
         if (!existingPackage) {
           return buildNotFoundError('Framework package was not found.')
@@ -451,7 +590,28 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     listRuntimeAgents: build.query({
-      queryFn: ({ page = 1, pageSize = RUNTIME_AGENT_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {}) => {
+      queryFn: async (
+        { page = 1, pageSize = RUNTIME_AGENT_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'agents',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              defaultPageSize: RUNTIME_AGENT_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, RUNTIME_AGENT_PAGE_SIZE)
         const rows = getRuntimeAgentRows({ q, status, frameworkKey })
@@ -479,7 +639,19 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     createRuntimeAgent: build.mutation({
-      queryFn: (payload = {}) => {
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const duplicateAgent = runtimeControlState.agents.find(
           (agent) => String(agent.key ?? '').trim() === String(payload.key ?? '').trim(),
         )
@@ -510,7 +682,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     getRuntimeAgent: build.query({
-      queryFn: (agentId) => {
+      queryFn: async (agentId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('agents', agentId),
+            api,
+            extraOptions,
+          )
+        }
+
         const agent = findRuntimeAgentById(agentId)
         if (!agent) {
           return buildNotFoundError('Agent was not found.')
@@ -522,7 +702,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateRuntimeAgent: build.mutation({
-      queryFn: ({ agentId, ...payload }) => {
+      queryFn: async ({ agentId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: agentId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const existingAgent = findRuntimeAgentById(agentId)
         if (!existingAgent) {
           return buildNotFoundError('Agent was not found.')
@@ -563,7 +756,28 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     listRuntimeSkills: build.query({
-      queryFn: ({ page = 1, pageSize = RUNTIME_SKILL_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {}) => {
+      queryFn: async (
+        { page = 1, pageSize = RUNTIME_SKILL_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'skills',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              defaultPageSize: RUNTIME_SKILL_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, RUNTIME_SKILL_PAGE_SIZE)
         const rows = getRuntimeSkillRows({ q, status, frameworkKey })
@@ -591,7 +805,19 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     createRuntimeSkill: build.mutation({
-      queryFn: (payload = {}) => {
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skills',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const duplicateSkill = runtimeControlState.skills.find(
           (skill) => String(skill.key ?? '').trim() === String(payload.key ?? '').trim(),
         )
@@ -622,7 +848,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     getRuntimeSkill: build.query({
-      queryFn: (skillId) => {
+      queryFn: async (skillId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('skills', skillId),
+            api,
+            extraOptions,
+          )
+        }
+
         const skill = findRuntimeSkillById(skillId)
         if (!skill) {
           return buildNotFoundError('Skill was not found.')
@@ -634,7 +868,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateRuntimeSkill: build.mutation({
-      queryFn: ({ skillId, ...payload }) => {
+      queryFn: async ({ skillId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skills',
+              entityId: skillId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const existingSkill = findRuntimeSkillById(skillId)
         if (!existingSkill) {
           return buildNotFoundError('Skill was not found.')
@@ -675,7 +922,28 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     listWorkflowPolicies: build.query({
-      queryFn: ({ page = 1, pageSize = WORKFLOW_POLICY_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {}) => {
+      queryFn: async (
+        { page = 1, pageSize = WORKFLOW_POLICY_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'workflow-policies',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              defaultPageSize: WORKFLOW_POLICY_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, WORKFLOW_POLICY_PAGE_SIZE)
         const rows = getWorkflowPolicyRows({ q, status, frameworkKey })
@@ -703,9 +971,25 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     createWorkflowPolicy: build.mutation({
-      queryFn: (payload = {}) => {
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          const { stepUpToken, ...body } = payload
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'workflow-policies',
+              method: 'POST',
+              body,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
-          (policy) => String(policy.key ?? '').trim() === String(payload.key ?? '').trim(),
+          (policy) => String(policy.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
         )
 
         if (duplicatePolicy) {
@@ -716,9 +1000,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const createdPolicy = {
-          id: generateRuntimeId('policy', payload.key),
+          id: generateRuntimeId('policy', runtimePayload.key),
           ...cloneWorkflowPolicy({
-            ...payload,
+            ...runtimePayload,
             ...buildAuditFields(),
           }),
         }
@@ -734,7 +1018,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     getWorkflowPolicy: build.query({
-      queryFn: (policyId) => {
+      queryFn: async (policyId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('workflow-policies', policyId),
+            api,
+            extraOptions,
+          )
+        }
+
         const policy = findWorkflowPolicyById(policyId)
         if (!policy) {
           return buildNotFoundError('Workflow policy was not found.')
@@ -748,7 +1040,23 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateWorkflowPolicy: build.mutation({
-      queryFn: ({ policyId, ...payload }) => {
+      queryFn: async ({ policyId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'workflow-policies',
+              entityId: policyId,
+              method: 'PATCH',
+              body: payload,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload
+
         const existingPolicy = findWorkflowPolicyById(policyId)
         if (!existingPolicy) {
           return buildNotFoundError('Workflow policy was not found.')
@@ -757,7 +1065,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) =>
             policy.id !== policyId
-            && String(policy.key ?? '').trim() === String(payload.key ?? existingPolicy.key).trim(),
+            && String(policy.key ?? '').trim() === String(runtimePayload.key ?? existingPolicy.key).trim(),
         )
 
         if (duplicatePolicy) {
@@ -769,7 +1077,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const nextPolicy = cloneWorkflowPolicy({
           ...existingPolicy,
-          ...payload,
+          ...runtimePayload,
           ...buildAuditFields(),
         })
 

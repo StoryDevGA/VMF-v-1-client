@@ -76,10 +76,10 @@ const VMF_LICENCE_MESSAGE =
   'This customer licence does not include VMF. Contact your Super Admin to update entitlements.'
 
 const VMF_LIFECYCLE_NOTE =
-  'Use the Actions menu to edit VMFs or schedule a soft-delete. Active VMFs must be disabled before deletion.'
+  'Use the Actions menu to view details, edit VMFs, or schedule a soft-delete. Active VMFs must be disabled before deletion.'
 
 const VMF_READ_ONLY_NOTE =
-  "This workspace is read-only for your current access level. Standard users and linked tenant members can review published VMFs only; customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
+  "This workspace is read-only for your current access level. Use the Actions menu to view details; standard users and linked tenant members can review published VMFs only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
@@ -93,6 +93,66 @@ const getOperationalStatusVariant = (status) => {
   if (status === 'ACTIVE') return 'success'
   if (status === 'DISABLED') return 'warning'
   return 'neutral'
+}
+
+const getRuntimeStateVariant = (value, fallback = 'neutral') => {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return fallback
+
+  if (['COMPLETE', 'COMPLETED', 'READY', 'VALIDATED', 'BOUND', 'PACKAGE_BOUND'].includes(normalized)) {
+    return 'success'
+  }
+
+  if (['IN_PROGRESS', 'PROCESSING', 'PENDING', 'NOT_RUN', 'NOT_TRACKED', 'UNLOCKED', 'UNBOUND'].includes(normalized)) {
+    return 'info'
+  }
+
+  if (['NOT_REQUIRED', 'PACKAGE_INFERRED_FROM_VERSION', 'LEGACY_POLICY_ONLY'].includes(normalized)) {
+    return 'warning'
+  }
+
+  if (['FAILED', 'ERROR', 'LOCKED'].includes(normalized)) {
+    return 'danger'
+  }
+
+  return fallback
+}
+
+const formatBooleanLabel = (value) => {
+  if (value === true) return 'Yes'
+  if (value === false) return 'No'
+  return '--'
+}
+
+const getFrameworkPackageLabel = (vmf) => {
+  const frameworkPackage = vmf?.frameworkPackage
+
+  if (typeof frameworkPackage === 'string') {
+    const trimmed = frameworkPackage.trim()
+    if (trimmed) return trimmed
+  } else if (frameworkPackage && typeof frameworkPackage === 'object') {
+    const candidates = [
+      frameworkPackage.name,
+      frameworkPackage.label,
+      frameworkPackage.key,
+      frameworkPackage.code,
+      frameworkPackage.id,
+    ]
+
+    for (const candidate of candidates) {
+      const trimmed = String(candidate ?? '').trim()
+      if (trimmed) return trimmed
+    }
+  }
+
+  const packageId = String(vmf?.frameworkPackageId ?? '').trim()
+  return packageId || '--'
+}
+
+const getFrameworkPackageDetail = (vmf, key) => {
+  const frameworkPackage = vmf?.frameworkPackage
+  if (!frameworkPackage || typeof frameworkPackage !== 'object') return ''
+  return String(frameworkPackage?.[key] ?? '').trim()
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
@@ -235,6 +295,15 @@ function VmfRowActionsMenu({ row, actions, onAction }) {
   )
 }
 
+function VmfDetailField({ label, children }) {
+  return (
+    <div className="maintain-vmfs__detail-item">
+      <dt className="maintain-vmfs__detail-label">{label}</dt>
+      <dd className="maintain-vmfs__detail-value">{children}</dd>
+    </div>
+  )
+}
+
 function MaintainVmfsBoundaryState({ message, onBack }) {
   return (
     <section className="maintain-vmfs container" aria-label="VMF workspace">
@@ -299,6 +368,9 @@ function MaintainVmfs() {
     lifecycleStatus: 'DRAFT',
   })
   const [editErrors, setEditErrors] = useState({})
+
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsTarget, setDetailsTarget] = useState(null)
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const previousContextKeyRef = useRef(`${customerId ?? ''}::${tenantId ?? ''}`)
@@ -432,9 +504,19 @@ function MaintainVmfs() {
   )
 
   const showRowActionsColumn = useMemo(
-    () => canUpdateVmfs && rows.length > 0,
-    [canUpdateVmfs, rows.length],
+    () => rows.length > 0,
+    [rows.length],
   )
+
+  const openDetailsDialog = useCallback((vmf) => {
+    setDetailsTarget(vmf)
+    setDetailsOpen(true)
+  }, [])
+
+  const closeDetailsDialog = useCallback(() => {
+    setDetailsOpen(false)
+    setDetailsTarget(null)
+  }, [])
 
   const openCreateDialog = useCallback(() => {
     if (!canCreateVmfs) return
@@ -484,42 +566,52 @@ function MaintainVmfs() {
     setPage(1)
     closeCreateDialog()
     closeEditDialog()
+    closeDetailsDialog()
     setDeleteTarget(null)
-  }, [closeCreateDialog, closeEditDialog, customerId, tenantId])
+  }, [closeCreateDialog, closeDetailsDialog, closeEditDialog, customerId, tenantId])
 
   useEffect(() => {
     if (canMutateVmfs) return
 
     closeCreateDialog()
     closeEditDialog()
+    closeDetailsDialog()
     setDeleteTarget(null)
-  }, [canMutateVmfs, closeCreateDialog, closeEditDialog])
+  }, [canMutateVmfs, closeCreateDialog, closeDetailsDialog, closeEditDialog])
 
   const rowActions = useMemo(
     () =>
       showRowActionsColumn
         ? [
           {
-            label: 'Edit',
-            disabled: isMutationLoading,
+            label: 'View details',
           },
-          {
-            label: 'Delete',
-            disabled: (row) =>
-              isMutationLoading || String(row?.status ?? '').trim().toUpperCase() === 'ACTIVE',
-          },
+          ...(canUpdateVmfs
+            ? [
+                {
+                  label: 'Edit',
+                  disabled: isMutationLoading,
+                },
+                {
+                  label: 'Delete',
+                  disabled: (row) =>
+                    isMutationLoading || String(row?.status ?? '').trim().toUpperCase() === 'ACTIVE',
+                },
+              ]
+            : []),
         ]
         : [],
-    [isMutationLoading, showRowActionsColumn],
+    [canUpdateVmfs, isMutationLoading, showRowActionsColumn],
   )
 
   const handleRowAction = useCallback(
     (label, row) => {
+      if (label === 'View details') openDetailsDialog(row)
       if (!canManageVmfRow(row)) return
       if (label === 'Edit') openEditDialog(row)
       if (label === 'Delete') setDeleteTarget(row)
     },
-    [canManageVmfRow, openEditDialog],
+    [canManageVmfRow, openDetailsDialog, openEditDialog],
   )
 
   const columns = useMemo(
@@ -561,8 +653,75 @@ function MaintainVmfs() {
       },
       {
         key: 'frameworkVersion',
-        label: 'Framework',
+        label: 'Framework Version',
         render: (value) => String(value ?? '').trim() || '--',
+      },
+      {
+        key: 'frameworkPackage',
+        label: 'Framework Package',
+        render: (_value, row) => getFrameworkPackageLabel(row),
+      },
+      {
+        key: 'completionState',
+        label: 'Completion',
+        render: (value) => {
+          const completion = String(value ?? '').trim().toUpperCase() || 'NOT_TRACKED'
+          return (
+            <Badge size="sm" variant={getRuntimeStateVariant(completion)} pill>
+              {completion}
+            </Badge>
+          )
+        },
+      },
+      {
+        key: 'validationStatus',
+        label: 'Validation',
+        render: (value) => {
+          const validation = String(value ?? '').trim().toUpperCase() || 'NOT_RUN'
+          return (
+            <Badge size="sm" variant={getRuntimeStateVariant(validation)} pill>
+              {validation}
+            </Badge>
+          )
+        },
+      },
+      {
+        key: 'lockStatus',
+        label: 'Lock',
+        render: (value) => {
+          const lockStatus = String(value ?? '').trim().toUpperCase() || 'UNLOCKED'
+          const variant = lockStatus === 'LOCKED' ? 'warning' : getRuntimeStateVariant(lockStatus)
+          return (
+            <Badge size="sm" variant={variant} pill>
+              {lockStatus}
+            </Badge>
+          )
+        },
+      },
+      {
+        key: 'snapshotStatus',
+        label: 'Snapshot',
+        render: (value) => {
+          const snapshotStatus = String(value ?? '').trim().toUpperCase() || 'UNBOUND'
+          return (
+            <Badge size="sm" variant={getRuntimeStateVariant(snapshotStatus)} pill>
+              {snapshotStatus}
+            </Badge>
+          )
+        },
+      },
+      {
+        key: 'migrationAvailable',
+        label: 'Migration',
+        render: (value) => (
+          <Badge
+            size="sm"
+            variant={value === true ? 'success' : value === false ? 'neutral' : 'info'}
+            pill
+          >
+            {formatBooleanLabel(value)}
+          </Badge>
+        ),
       },
       {
         key: 'updatedAt',
@@ -577,15 +736,14 @@ function MaintainVmfs() {
             label: 'Actions',
             align: 'center',
             width: '168px',
-            render: (_value, row) =>
-              canManageVmfRow(row)
-                ? <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
-                : null,
+            render: (_value, row) => (
+              <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
+            ),
           },
         ]
         : []),
     ],
-    [canManageVmfRow, handleRowAction, rowActions, showRowActionsColumn],
+    [handleRowAction, rowActions, showRowActionsColumn],
   )
   const handleCreateSubmit = useCallback(
     async (event) => {
@@ -1122,6 +1280,119 @@ function MaintainVmfs() {
               </Button>
             </div>
           </div>
+        </Dialog.Body>
+      </Dialog>
+
+      <Dialog
+        open={detailsOpen}
+        onClose={closeDetailsDialog}
+        size="lg"
+        aria-label={detailsTarget?.name ? `${detailsTarget.name} details` : 'VMF details'}
+      >
+        <Dialog.Header>
+          <h2 className="maintain-vmfs__dialog-title">
+            {detailsTarget?.name ? `${detailsTarget.name} Details` : 'VMF Details'}
+          </h2>
+        </Dialog.Header>
+        <Dialog.Body className="maintain-vmfs__dialog-body">
+          <p className="maintain-vmfs__dialog-text">
+            Read-only VMF metadata returned by the backend. Runtime-control fields are displayed
+            here but are not sent back on normal edits.
+          </p>
+          <dl className="maintain-vmfs__details-grid">
+            <VmfDetailField label="Name">
+              {String(detailsTarget?.name ?? '--')}
+            </VmfDetailField>
+            <VmfDetailField label="Description">
+              {String(detailsTarget?.description ?? '--')}
+            </VmfDetailField>
+            <VmfDetailField label="Operational Status">
+              <Status
+                size="sm"
+                showIcon
+                variant={getOperationalStatusVariant(String(detailsTarget?.status ?? '').trim().toUpperCase() || 'UNKNOWN')}
+              >
+                {String(detailsTarget?.status ?? 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN'}
+              </Status>
+            </VmfDetailField>
+            <VmfDetailField label="Lifecycle Status">
+              <Badge
+                size="sm"
+                variant={getLifecycleVariant(String(detailsTarget?.lifecycleStatus ?? '').trim().toUpperCase() || 'DRAFT')}
+                pill
+              >
+                {String(detailsTarget?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase() || 'DRAFT'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Framework Version">
+              {String(detailsTarget?.frameworkVersion ?? '--').trim() || '--'}
+            </VmfDetailField>
+            <VmfDetailField label="Framework Package">
+              {getFrameworkPackageLabel(detailsTarget)}
+            </VmfDetailField>
+            <VmfDetailField label="Framework Package Id">
+              {String(detailsTarget?.frameworkPackageId ?? '--').trim() || '--'}
+            </VmfDetailField>
+            <VmfDetailField label="Framework Package Status">
+              <Badge
+                size="sm"
+                variant={getRuntimeStateVariant(getFrameworkPackageDetail(detailsTarget, 'status') || '')}
+                pill
+              >
+                {getFrameworkPackageDetail(detailsTarget, 'status') || '--'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Framework Package Version">
+              {getFrameworkPackageDetail(detailsTarget, 'version')
+                || getFrameworkPackageDetail(detailsTarget, 'frameworkVersion')
+                || '--'}
+            </VmfDetailField>
+            <VmfDetailField label="Completion State">
+              <Badge
+                size="sm"
+                variant={getRuntimeStateVariant(detailsTarget?.completionState ?? 'NOT_TRACKED')}
+                pill
+              >
+                {String(detailsTarget?.completionState ?? 'NOT_TRACKED').trim().toUpperCase() || 'NOT_TRACKED'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Validation Status">
+              <Badge
+                size="sm"
+                variant={getRuntimeStateVariant(detailsTarget?.validationStatus ?? 'NOT_RUN')}
+                pill
+              >
+                {String(detailsTarget?.validationStatus ?? 'NOT_RUN').trim().toUpperCase() || 'NOT_RUN'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Lock Status">
+              <Badge
+                size="sm"
+                variant={String(detailsTarget?.lockStatus ?? '').trim().toUpperCase() === 'LOCKED' ? 'warning' : getRuntimeStateVariant(detailsTarget?.lockStatus ?? 'UNLOCKED')}
+                pill
+              >
+                {String(detailsTarget?.lockStatus ?? 'UNLOCKED').trim().toUpperCase() || 'UNLOCKED'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Snapshot Status">
+              <Badge
+                size="sm"
+                variant={getRuntimeStateVariant(detailsTarget?.snapshotStatus ?? 'UNBOUND')}
+                pill
+              >
+                {String(detailsTarget?.snapshotStatus ?? 'UNBOUND').trim().toUpperCase() || 'UNBOUND'}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Migration Available">
+              <Badge
+                size="sm"
+                variant={detailsTarget?.migrationAvailable === true ? 'success' : detailsTarget?.migrationAvailable === false ? 'neutral' : 'info'}
+                pill
+              >
+                {formatBooleanLabel(detailsTarget?.migrationAvailable)}
+              </Badge>
+            </VmfDetailField>
+          </dl>
         </Dialog.Body>
       </Dialog>
 

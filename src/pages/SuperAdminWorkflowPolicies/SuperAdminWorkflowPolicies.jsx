@@ -1,3 +1,5 @@
+import { Card } from '../../components/Card'
+import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import {
   CreateWorkflowPolicyDialog,
   EditWorkflowPolicyDialog,
@@ -21,6 +23,26 @@ function SuperAdminWorkflowPolicies() {
           dependencies that gate Runtime Control execution paths.
         </p>
       </header>
+
+      <Card variant="elevated" className="super-admin-workflow-policies__step-up-card">
+        <Card.Body className="super-admin-workflow-policies__step-up-body">
+          <div className="super-admin-workflow-policies__step-up-copy">
+            <h2 className="super-admin-workflow-policies__step-up-title">
+              Step-up verification
+            </h2>
+            <p className="super-admin-workflow-policies__step-up-description">
+              Verify identity once to unlock create, update, and status actions.
+            </p>
+          </div>
+          <StepUpAuthForm
+            passwordLabel="Current Super Admin Password"
+            passwordHelperText="Enter your current Super Admin password to verify protected Runtime Control actions."
+            submitLabel="Verify Runtime Control Access"
+            onStepUpComplete={mgmt.setStepUpToken}
+            onCancel={() => mgmt.setStepUpToken('')}
+          />
+        </Card.Body>
+      </Card>
 
       <WorkflowPolicyListView
         search={mgmt.search}

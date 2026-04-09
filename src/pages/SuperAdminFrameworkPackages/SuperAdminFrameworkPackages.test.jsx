@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminFrameworkPackages from './SuperAdminFrameworkPackages'
@@ -7,12 +7,27 @@ import {
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
 
+vi.mock('../../components/StepUpAuthForm', () => ({
+  StepUpAuthForm: ({ onStepUpComplete }) => (
+    <button
+      type="button"
+      onClick={() => onStepUpComplete('mock-step-up-token', 900)}
+    >
+      Verify Runtime Control Access
+    </button>
+  ),
+}))
+
 function renderPage() {
   return renderRuntimeControlPage({
     route: '/super-admin/runtime-control/framework-packages',
     path: '/super-admin/runtime-control/framework-packages',
     element: <SuperAdminFrameworkPackages />,
   })
+}
+
+async function verifyRuntimeControlAccess(user) {
+  await user.click(screen.getByRole('button', { name: /verify runtime control access/i }))
 }
 
 describe('SuperAdminFrameworkPackages page', () => {
@@ -41,6 +56,8 @@ describe('SuperAdminFrameworkPackages page', () => {
   it('creates a framework package from the modal dialog and shows it in the catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
+
+    await verifyRuntimeControlAccess(user)
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     await user.clear(
@@ -114,6 +131,8 @@ describe('SuperAdminFrameworkPackages page', () => {
     const user = userEvent.setup()
     renderPage()
 
+    await verifyRuntimeControlAccess(user)
+
     await user.selectOptions(
       await screen.findByLabelText(/actions for vmf 2.3.1/i),
       'Edit',
@@ -134,6 +153,8 @@ describe('SuperAdminFrameworkPackages page', () => {
   it('activates a validated package and updates the default status in the catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
+
+    await verifyRuntimeControlAccess(user)
 
     await user.selectOptions(
       await screen.findByLabelText(/actions for vmf 2.3.0/i),

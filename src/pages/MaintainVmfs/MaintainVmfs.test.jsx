@@ -308,7 +308,8 @@ describe('MaintainVmfs', () => {
     })
   })
 
-  it('renders a read-only VMF workspace for standard viewers', () => {
+  it('renders a read-only VMF workspace with a details action for standard viewers', async () => {
+    const user = userEvent.setup()
     useAuthorization.mockReturnValue({
       hasFeatureEntitlement: () => true,
       hasCustomerPermission: () => false,
@@ -327,6 +328,13 @@ describe('MaintainVmfs', () => {
             status: 'ACTIVE',
             lifecycleStatus: 'PUBLISHED',
             frameworkVersion: '2.2',
+            frameworkPackageId: 'pkg-vmf-2-2',
+            frameworkPackage: { id: 'pkg-vmf-2-2', name: 'VMF Package 2.2' },
+            completionState: 'NOT_TRACKED',
+            validationStatus: 'NOT_RUN',
+            lockStatus: 'UNLOCKED',
+            snapshotStatus: 'PACKAGE_INFERRED_FROM_VERSION',
+            migrationAvailable: false,
             updatedAt: '2026-03-24T21:08:00.000Z',
           },
         ],
@@ -352,7 +360,10 @@ describe('MaintainVmfs', () => {
       screen.getByText(/linked tenant members can review published vmfs only/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Viewer VMF')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: /actions for viewer vmf/i })).not.toBeInTheDocument()
+    const actions = screen.getByRole('combobox', { name: /actions for viewer vmf/i })
+    expect(within(actions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
     expect(
       screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
     ).toHaveValue('PUBLISHED')
@@ -360,6 +371,13 @@ describe('MaintainVmfs', () => {
       screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
     ).toBeDisabled()
     expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
+
+    await user.selectOptions(actions, 'View details')
+
+    const dialog = screen.getByRole('dialog', { name: /viewer vmf details/i })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText('VMF Package 2.2')).toBeInTheDocument()
+    expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
   })
 
   it('denies the VMF workspace when VMF_CREATE and VMF_UPDATE exist without VMF_VIEW', () => {
@@ -414,6 +432,7 @@ describe('MaintainVmfs', () => {
     expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
 
     const actions = screen.getByRole('combobox', { name: /actions for editable vmf/i })
+    expect(within(actions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
     expect(within(actions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
     expect(within(actions).getByRole('option', { name: /delete/i })).toBeInTheDocument()
 
@@ -423,7 +442,7 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('heading', { name: /edit vmf/i })).toBeInTheDocument()
   })
 
-  it('hides row actions when VMF_UPDATE is not granted', () => {
+  it('shows only the details action when VMF_UPDATE is not granted', () => {
     useAuthorization.mockReturnValue({
       hasFeatureEntitlement: () => true,
       hasCustomerPermission: () => false,
@@ -452,7 +471,10 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.queryByRole('combobox', { name: /actions for read only vmf/i })).not.toBeInTheDocument()
+    const actions = screen.getByRole('combobox', { name: /actions for read only vmf/i })
+    expect(within(actions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
   })
 
   it('renders compact row-action menus with only the allowed actions per row state', () => {
@@ -487,13 +509,15 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByText(/use the actions menu to edit vmfs or schedule a soft-delete/i)).toBeInTheDocument()
+    expect(screen.getByText(/use the actions menu to view details, edit vmfs, or schedule a soft-delete/i)).toBeInTheDocument()
 
     const activeActions = screen.getByRole('combobox', { name: /actions for active vmf/i })
+    expect(within(activeActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
     expect(within(activeActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
     expect(within(activeActions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
 
     const archivedActions = screen.getByRole('combobox', { name: /actions for archived vmf/i })
+    expect(within(archivedActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
     expect(within(archivedActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
     expect(within(archivedActions).getByRole('option', { name: /delete/i })).toBeInTheDocument()
   })

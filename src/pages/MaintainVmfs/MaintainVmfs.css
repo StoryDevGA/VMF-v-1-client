@@ -136,6 +136,34 @@
   gap: var(--spacing-md);
 }
 
+.maintain-vmfs__details-grid {
+  display: grid;
+  gap: var(--spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.maintain-vmfs__detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.maintain-vmfs__detail-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maintain-vmfs__detail-value {
+  margin: 0;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
 .maintain-vmfs__dialog-text {
   margin: 0;
   color: var(--color-text-secondary);
@@ -197,5 +225,9 @@
 
   .maintain-vmfs__form-actions .btn {
     width: 100%;
+  }
+
+  .maintain-vmfs__details-grid {
+    grid-template-columns: 1fr;
   }
 }

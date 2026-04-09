@@ -26,6 +26,7 @@ export function useWorkflowPolicyManagement() {
   const [statusFilter, setStatusFilter] = useState('')
   const [frameworkFilter, setFrameworkFilter] = useState('')
   const [page, setPage] = useState(1)
+  const [stepUpToken, setStepUpToken] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -89,8 +90,17 @@ export function useWorkflowPolicyManagement() {
         return
       }
 
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before creating a workflow policy.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
-        await createWorkflowPolicy(payload).unwrap()
+        await createWorkflowPolicy({ ...payload, stepUpToken }).unwrap()
         closeCreateDialog()
         setPage(1)
         addToast({
@@ -114,7 +124,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm, createWorkflowPolicy],
+    [addToast, closeCreateDialog, createForm, createWorkflowPolicy, stepUpToken],
   )
 
   const openEditDialog = useCallback((policy) => {
@@ -144,10 +154,20 @@ export function useWorkflowPolicyManagement() {
         return
       }
 
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before updating a workflow policy.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
         await updateWorkflowPolicy({
           policyId: editPolicyId,
           ...payload,
+          stepUpToken,
         }).unwrap()
 
         addToast({
@@ -172,7 +192,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeEditDialog, editForm, editPolicyId, updateWorkflowPolicy],
+    [addToast, closeEditDialog, editForm, editPolicyId, stepUpToken, updateWorkflowPolicy],
   )
 
   const setWorkflowPolicyStatus = useCallback(
@@ -181,10 +201,20 @@ export function useWorkflowPolicyManagement() {
         return
       }
 
+      if (!stepUpToken) {
+        addToast({
+          title: 'Step-up verification required',
+          description: 'Verify identity before changing workflow policy status.',
+          variant: 'warning',
+        })
+        return
+      }
+
       try {
         await updateWorkflowPolicy({
           policyId: policy.id,
           status: nextStatus,
+          stepUpToken,
         }).unwrap()
 
         addToast({
@@ -204,7 +234,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, updateWorkflowPolicy],
+    [addToast, stepUpToken, updateWorkflowPolicy],
   )
 
   return {
@@ -216,6 +246,8 @@ export function useWorkflowPolicyManagement() {
     setFrameworkFilter,
     page,
     setPage,
+    stepUpToken,
+    setStepUpToken,
     rows,
     currentPage,
     totalPages,

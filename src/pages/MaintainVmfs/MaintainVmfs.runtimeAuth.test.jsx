@@ -192,7 +192,10 @@ describe('MaintainVmfs runtime-auth UAT', () => {
 
     expect(screen.getByText(/review vmf lifecycle/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: /actions for northwind/i })).not.toBeInTheDocument()
+    const readOnlyActions = screen.getByRole('combobox', { name: /actions for northwind/i })
+    expect(within(readOnlyActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
+    expect(within(readOnlyActions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
+    expect(within(readOnlyActions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
 
     await act(async () => {
       store.dispatch(
@@ -239,7 +242,9 @@ describe('MaintainVmfs runtime-auth UAT', () => {
     await waitFor(() => {
       expect(screen.getByText(/manage vmf lifecycle/i)).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('combobox', { name: /actions for northwind/i })).toBeInTheDocument()
+      const refreshedActions = screen.getByRole('combobox', { name: /actions for northwind/i })
+      expect(within(refreshedActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
+      expect(within(refreshedActions).getByRole('option', { name: /edit/i })).toBeInTheDocument()
     })
 
     await user.selectOptions(screen.getByRole('combobox', { name: /actions for northwind/i }), 'Edit')
