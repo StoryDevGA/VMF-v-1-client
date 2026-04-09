@@ -12,7 +12,6 @@ import { TableDateTime } from '../../components/TableDateTime'
 import {
   formatRuntimeAgentStatus,
   getRuntimeAgentStatusVariant,
-  RUNTIME_AGENT_FRAMEWORK_OPTIONS,
   RUNTIME_AGENTS_HELP_TEXT,
   RUNTIME_AGENT_STATUSES,
   RUNTIME_AGENT_STATUS_OPTIONS,
@@ -85,6 +84,7 @@ export function RuntimeAgentListView({
   setStatusFilter,
   frameworkFilter,
   setFrameworkFilter,
+  frameworkOptions,
   setPage,
   rows,
   currentPage,
@@ -92,6 +92,7 @@ export function RuntimeAgentListView({
   isListLoading,
   isListFetching,
   listAppError,
+  onBackClick,
   openCreateDialog,
   openEditDialog,
   setAgentStatus,
@@ -164,14 +165,17 @@ export function RuntimeAgentListView({
 
   return (
     <Fieldset className="super-admin-agents__fieldset">
-      <Fieldset.Legend className="sr-only">Runtime agent catalogue</Fieldset.Legend>
-      <Card variant="elevated" className="super-admin-agents__card">
-        <Card.Body className="super-admin-agents__card-body super-admin-agents__card-body--compact">
-          <div className="super-admin-agents__catalogue-actions">
-            <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
-              Create
-            </Button>
-          </div>
+        <Fieldset.Legend className="sr-only">Runtime agent catalogue</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-agents__card">
+          <Card.Body className="super-admin-agents__card-body super-admin-agents__card-body--compact">
+            <div className="super-admin-agents__catalogue-actions">
+              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+                Back
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+                Create
+              </Button>
+            </div>
 
           <div className="super-admin-agents__toolbar">
             <Input
@@ -202,7 +206,7 @@ export function RuntimeAgentListView({
               label="Framework"
               size="sm"
               value={frameworkFilter}
-              options={RUNTIME_AGENT_FRAMEWORK_OPTIONS}
+              options={frameworkOptions}
               onChange={(event) => {
                 setFrameworkFilter(event.target.value)
                 setPage(1)

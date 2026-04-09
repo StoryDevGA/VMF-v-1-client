@@ -294,6 +294,7 @@ export const baseApi = createApi({
     'SystemVersioningPolicy',
     'AuditLog',
     'RuntimeFrameworkPackage',
+    'RuntimeFrameworkRegistry',
     'RuntimeAgent',
     'RuntimeSkill',
     'RuntimeWorkflowPolicy',

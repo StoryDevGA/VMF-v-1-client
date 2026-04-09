@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { CreateFrameworkPackageDialog, EditFrameworkPackageDialog } from './FrameworkPackageDialogs.jsx'
@@ -6,7 +8,11 @@ import { useFrameworkPackageManagement } from './useFrameworkPackageManagement.j
 import './SuperAdminFrameworkPackages.css'
 
 function SuperAdminFrameworkPackages() {
+  const navigate = useNavigate()
   const mgmt = useFrameworkPackageManagement()
+  const handleBackClick = useCallback(() => {
+    navigate('/super-admin/runtime-control')
+  }, [navigate])
 
   return (
     <section
@@ -48,6 +54,7 @@ function SuperAdminFrameworkPackages() {
         setStatusFilter={mgmt.setStatusFilter}
         frameworkFilter={mgmt.frameworkFilter}
         setFrameworkFilter={mgmt.setFrameworkFilter}
+        frameworkOptions={mgmt.frameworkOptions}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
         currentPage={mgmt.currentPage}
@@ -55,6 +62,7 @@ function SuperAdminFrameworkPackages() {
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
+        onBackClick={handleBackClick}
         openCreateDialog={mgmt.openCreateDialog}
         openEditDialog={mgmt.openEditDialog}
         activatePackage={mgmt.activatePackage}
@@ -68,6 +76,8 @@ function SuperAdminFrameworkPackages() {
         createErrors={mgmt.createErrors}
         setCreateErrors={mgmt.setCreateErrors}
         onSubmit={mgmt.handleCreateSubmit}
+        frameworkOptions={mgmt.frameworkOptions}
+        frameworkNameLookup={mgmt.frameworkNameLookup}
       />
 
       <EditFrameworkPackageDialog
@@ -77,6 +87,8 @@ function SuperAdminFrameworkPackages() {
         setEditForm={mgmt.setEditForm}
         editErrors={mgmt.editErrors}
         onSubmit={mgmt.handleEditSubmit}
+        frameworkOptions={mgmt.frameworkOptions}
+        frameworkNameLookup={mgmt.frameworkNameLookup}
       />
     </section>
   )

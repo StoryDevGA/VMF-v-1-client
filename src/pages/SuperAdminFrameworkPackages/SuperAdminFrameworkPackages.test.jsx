@@ -42,6 +42,7 @@ describe('SuperAdminFrameworkPackages page', () => {
     expect(screen.getByRole('heading', { name: /framework packages/i })).toBeInTheDocument()
     expect(screen.getByText(/validated packages can be activated/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /framework packages/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 

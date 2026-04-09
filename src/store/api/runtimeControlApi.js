@@ -6,6 +6,11 @@ import {
   INITIAL_FRAMEWORK_PACKAGES,
 } from '../../pages/SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 import {
+  cloneFrameworkRegistryEntry,
+  FRAMEWORK_REGISTRY_PAGE_SIZE,
+  INITIAL_FRAMEWORK_REGISTRIES,
+} from '../../pages/SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
+import {
   cloneRuntimeAgent,
   INITIAL_RUNTIME_AGENTS,
   RUNTIME_AGENT_PAGE_SIZE,
@@ -22,6 +27,7 @@ import {
 } from '../../pages/SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
+const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIST' }
 const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
 const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
@@ -45,6 +51,8 @@ const buildListParams = ({
   q,
   status,
   frameworkKey,
+  type,
+  structureType,
   defaultPageSize,
 }) => ({
   page: normalizePositiveInteger(page, 1),
@@ -52,6 +60,8 @@ const buildListParams = ({
   q: String(q ?? '').trim(),
   status: String(status ?? '').trim(),
   frameworkKey: normalizeFrameworkKey(frameworkKey),
+  type: String(type ?? '').trim().toLowerCase(),
+  structureType: String(structureType ?? '').trim().toLowerCase(),
 })
 
 export const buildRuntimeControlListRequest = ({
@@ -61,6 +71,8 @@ export const buildRuntimeControlListRequest = ({
   q,
   status,
   frameworkKey,
+  type,
+  structureType,
   defaultPageSize,
 }) => {
   const params = buildListParams({
@@ -69,6 +81,8 @@ export const buildRuntimeControlListRequest = ({
     q,
     status,
     frameworkKey,
+    type,
+    structureType,
     defaultPageSize,
   })
 
@@ -80,6 +94,8 @@ export const buildRuntimeControlListRequest = ({
       ...(params.q ? { q: params.q } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.frameworkKey ? { frameworkKey: params.frameworkKey } : {}),
+      ...(params.type ? { type: params.type } : {}),
+      ...(params.structureType ? { structureType: params.structureType } : {}),
     },
   }
 }
@@ -172,6 +188,7 @@ const buildAuditFields = (timestamp = new Date().toISOString()) => ({
 })
 
 const buildInitialRuntimeControlState = () => ({
+  frameworkRegistries: INITIAL_FRAMEWORK_REGISTRIES.map((entry) => cloneFrameworkRegistryEntry(entry)),
   frameworkPackages: INITIAL_FRAMEWORK_PACKAGES.map((pkg) => cloneFrameworkPackage(pkg)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
@@ -213,6 +230,39 @@ const getFrameworkPackageRows = ({
       return matchesStatus && matchesFramework && queryMatches
     })
     .map((pkg) => cloneFrameworkPackage(pkg))
+}
+
+const getFrameworkRegistryRows = ({
+  q = '',
+  status = '',
+  type = '',
+  structureType = '',
+}) => {
+  const normalizedSearch = normalizeSearch(q)
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  const normalizedType = String(type ?? '').trim().toLowerCase()
+  const normalizedStructureType = String(structureType ?? '').trim().toLowerCase()
+
+  return runtimeControlState.frameworkRegistries
+    .filter((entry) => {
+      const matchesStatus = normalizedStatus ? entry.status === normalizedStatus : true
+      const matchesType = normalizedType ? String(entry.type ?? '').trim().toLowerCase() === normalizedType : true
+      const matchesStructureType = normalizedStructureType
+        ? String(entry.structureType ?? '').trim().toLowerCase() === normalizedStructureType
+        : true
+      const queryMatches = matchesSearch(normalizedSearch, [
+        entry.frameworkKey,
+        entry.name,
+        entry.type,
+        entry.structureType,
+        entry.supportedWorkflowKeys,
+        JSON.stringify(entry.defaultBehaviorProfile ?? {}),
+        entry.status,
+      ])
+
+      return matchesStatus && matchesType && matchesStructureType && queryMatches
+    })
+    .map((entry) => cloneFrameworkRegistryEntry(entry))
 }
 
 const getRuntimeAgentRows = ({
@@ -316,6 +366,9 @@ const generateRuntimeId = (prefix, suffix = '') => {
 
 const findFrameworkPackageById = (packageId) =>
   runtimeControlState.frameworkPackages.find((pkg) => pkg.id === packageId)
+
+const findFrameworkRegistryById = (registryId) =>
+  runtimeControlState.frameworkRegistries.find((entry) => entry.id === registryId)
 
 const findRuntimeAgentById = (agentId) =>
   runtimeControlState.agents.find((agent) => agent.id === agentId)
@@ -586,6 +639,183 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { packageId }) => [
         FRAMEWORK_PACKAGE_LIST_TAG,
         { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    listFrameworkRegistries: build.query({
+      queryFn: async (
+        { page = 1, pageSize = FRAMEWORK_REGISTRY_PAGE_SIZE, q = '', status = '', type = '', structureType = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'framework-registry',
+              page,
+              pageSize,
+              q,
+              status,
+              type,
+              structureType,
+              defaultPageSize: FRAMEWORK_REGISTRY_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const normalizedPage = normalizePositiveInteger(page, 1)
+        const normalizedPageSize = normalizePositiveInteger(pageSize, FRAMEWORK_REGISTRY_PAGE_SIZE)
+        const rows = getFrameworkRegistryRows({ q, status, type, structureType })
+
+        return {
+          data: buildListResponse({
+            rows,
+            page: normalizedPage,
+            pageSize: normalizedPageSize,
+            filters: {
+              q: String(q ?? '').trim(),
+              status: String(status ?? '').trim(),
+              type: String(type ?? '').trim().toLowerCase(),
+              structureType: String(structureType ?? '').trim().toLowerCase(),
+            },
+          }),
+        }
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: 'RuntimeFrameworkRegistry', id })),
+              FRAMEWORK_REGISTRY_LIST_TAG,
+            ]
+          : [FRAMEWORK_REGISTRY_LIST_TAG],
+    }),
+
+    createFrameworkRegistry: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          const { stepUpToken, ...body } = payload
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'framework-registry',
+              method: 'POST',
+              body,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+        const duplicateEntry = runtimeControlState.frameworkRegistries.find(
+          (entry) =>
+            String(entry.frameworkKey ?? '').trim().toUpperCase()
+            === String(runtimePayload.frameworkKey ?? '').trim().toUpperCase(),
+        )
+
+        if (duplicateEntry) {
+          return buildConflictError('Framework key must be unique.', {
+            field: 'frameworkKey',
+            reason: 'FRAMEWORK_REGISTRY_KEY_CONFLICT',
+          })
+        }
+
+        const createdEntry = cloneFrameworkRegistryEntry({
+          id: generateRuntimeId('framework', runtimePayload.frameworkKey),
+          ...runtimePayload,
+          frameworkKey: String(runtimePayload.frameworkKey ?? '').trim().toUpperCase(),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          frameworkRegistries: [createdEntry, ...runtimeControlState.frameworkRegistries],
+        }
+
+        return { data: buildEntityResponse(cloneFrameworkRegistryEntry(createdEntry)) }
+      },
+      invalidatesTags: [FRAMEWORK_REGISTRY_LIST_TAG],
+    }),
+
+    getFrameworkRegistry: build.query({
+      queryFn: async (registryId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-registry', registryId),
+            api,
+            extraOptions,
+          )
+        }
+
+        const entry = findFrameworkRegistryById(registryId)
+        if (!entry) {
+          return buildNotFoundError('Framework registry entry was not found.')
+        }
+
+        return { data: buildEntityResponse(cloneFrameworkRegistryEntry(entry)) }
+      },
+      providesTags: (_result, _error, registryId) => [
+        { type: 'RuntimeFrameworkRegistry', id: registryId },
+      ],
+    }),
+
+    updateFrameworkRegistry: build.mutation({
+      queryFn: async ({ registryId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'framework-registry',
+              entityId: registryId,
+              method: 'PATCH',
+              body: payload,
+              stepUpToken,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingEntry = findFrameworkRegistryById(registryId)
+        if (!existingEntry) {
+          return buildNotFoundError('Framework registry entry was not found.')
+        }
+
+        const duplicateEntry = runtimeControlState.frameworkRegistries.find(
+          (entry) =>
+            entry.id !== registryId
+            && String(entry.frameworkKey ?? '').trim().toUpperCase()
+              === String(payload.frameworkKey ?? existingEntry.frameworkKey).trim().toUpperCase(),
+        )
+
+        if (duplicateEntry) {
+          return buildConflictError('Framework key must be unique.', {
+            field: 'frameworkKey',
+            reason: 'FRAMEWORK_REGISTRY_KEY_CONFLICT',
+          })
+        }
+
+        const nextEntry = cloneFrameworkRegistryEntry({
+          ...existingEntry,
+          ...payload,
+          frameworkKey: String(payload.frameworkKey ?? existingEntry.frameworkKey).trim().toUpperCase(),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          frameworkRegistries: runtimeControlState.frameworkRegistries.map((entry) =>
+            entry.id === registryId ? nextEntry : entry,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneFrameworkRegistryEntry(nextEntry)) }
+      },
+      invalidatesTags: (_result, _error, { registryId }) => [
+        FRAMEWORK_REGISTRY_LIST_TAG,
+        { type: 'RuntimeFrameworkRegistry', id: registryId },
       ],
     }),
 
@@ -1100,6 +1330,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useListFrameworkRegistriesQuery,
+  useCreateFrameworkRegistryMutation,
+  useGetFrameworkRegistryQuery,
+  useUpdateFrameworkRegistryMutation,
   useListFrameworkPackagesQuery,
   useCreateFrameworkPackageMutation,
   useGetFrameworkPackageQuery,

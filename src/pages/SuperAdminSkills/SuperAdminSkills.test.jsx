@@ -27,6 +27,7 @@ describe('SuperAdminSkills page', () => {
     expect(screen.getByRole('heading', { name: /^skills$/i })).toBeInTheDocument()
     expect(screen.getByText(/active skills remain selectable/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /^skills$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 

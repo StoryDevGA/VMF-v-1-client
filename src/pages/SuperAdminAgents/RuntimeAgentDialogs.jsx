@@ -57,7 +57,7 @@ function RuntimeAgentFormFields({ prefix, form, setForm, errors }) {
         <Textarea
           id={`${prefix}-framework-keys`}
           label="Supported Framework Keys"
-          helperText="Use commas or new lines. Supported values in this phase are VMF and RLD."
+          helperText="Use commas or new lines. Supported values come from the Framework Registry."
           value={form.supportedFrameworkKeys}
           onChange={(event) =>
             setForm((current) => ({ ...current, supportedFrameworkKeys: event.target.value }))

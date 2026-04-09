@@ -417,6 +417,10 @@ describe('Navigation', () => {
       'href',
       '/super-admin/system-versioning',
     )
+    expect(screen.getByRole('link', { name: /framework registry/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/framework-registry',
+    )
     expect(screen.getByRole('link', { name: /framework packages/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/framework-packages',

@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import {
@@ -9,7 +11,11 @@ import { useWorkflowPolicyManagement } from './useWorkflowPolicyManagement.js'
 import './SuperAdminWorkflowPolicies.css'
 
 function SuperAdminWorkflowPolicies() {
+  const navigate = useNavigate()
   const mgmt = useWorkflowPolicyManagement()
+  const handleBackClick = useCallback(() => {
+    navigate('/super-admin/runtime-control')
+  }, [navigate])
 
   return (
     <section
@@ -51,6 +57,7 @@ function SuperAdminWorkflowPolicies() {
         setStatusFilter={mgmt.setStatusFilter}
         frameworkFilter={mgmt.frameworkFilter}
         setFrameworkFilter={mgmt.setFrameworkFilter}
+        frameworkOptions={mgmt.frameworkOptions}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
         currentPage={mgmt.currentPage}
@@ -58,6 +65,7 @@ function SuperAdminWorkflowPolicies() {
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
+        onBackClick={handleBackClick}
         openCreateDialog={mgmt.openCreateDialog}
         openEditDialog={mgmt.openEditDialog}
         setWorkflowPolicyStatus={mgmt.setWorkflowPolicyStatus}

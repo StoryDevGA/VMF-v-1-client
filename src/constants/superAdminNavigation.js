@@ -40,10 +40,11 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkPackages', 'agents', 'skills', 'workflowPolicies']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'frameworkPackages', 'agents', 'skills', 'workflowPolicies']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
+  'frameworkRegistry',
   'frameworkPackages',
   'agents',
   'skills',
@@ -180,6 +181,16 @@ export const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       legacyNav: 'Runtime Control',
       phase1aNav: 'Runtime Control',
       guidance: 'runtime control',
+    }),
+  }),
+  frameworkRegistry: Object.freeze({
+    key: 'framework-registry',
+    to: '/super-admin/runtime-control/framework-registry',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Framework Registry',
+      legacyNav: 'Framework Registry',
+      phase1aNav: 'Framework Registry',
     }),
   }),
   frameworkPackages: Object.freeze({
@@ -356,7 +367,7 @@ function buildRuntimeControlDashboardGroup() {
     description: runtimeControlEnabled
       ? hasPlannedModuleRouteKeys
         ? 'Launch the Runtime Control dashboard, keep System Versioning stable, and stage the first control-plane modules.'
-        : 'Launch the Runtime Control dashboard, keep System Versioning stable, and manage the first control-plane modules.'
+        : 'Launch the Runtime Control dashboard, keep System Versioning stable, and manage the live control-plane modules.'
       : 'Control platform runtime configuration through the current versioning bridge and the next runtime-control modules.',
     status: runtimeControlEnabled
       ? {
@@ -378,9 +389,9 @@ function buildRuntimeControlDashboardGroup() {
       : 'Planned next',
     helperCopy: runtimeControlEnabled
       ? hasPlannedModuleRouteKeys
-        ? 'Framework Packages, Agents, and Skills are now live from the Runtime Control dashboard. Workflow Policies stay staged until their dedicated FE section lands.'
-        : 'All first-wave Runtime Control catalogue surfaces are now live.'
-      : 'Framework Packages, Agents, Skills, and Workflow Policies stay queued until the Runtime Control route group is enabled.',
+        ? 'Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies are now live from the Runtime Control dashboard.'
+        : 'All Runtime Control catalogue surfaces are now live.'
+      : 'Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies stay queued until the Runtime Control route group is enabled.',
   }
 }
 

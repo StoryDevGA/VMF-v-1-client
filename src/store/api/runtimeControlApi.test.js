@@ -4,19 +4,23 @@ import {
   buildRuntimeControlDetailRequest,
   buildRuntimeControlListRequest,
   buildRuntimeControlMutationRequest,
+  useCreateFrameworkRegistryMutation,
   useActivateFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
   useCreateRuntimeAgentMutation,
   useCreateRuntimeSkillMutation,
   useCreateWorkflowPolicyMutation,
+  useGetFrameworkRegistryQuery,
   useGetFrameworkPackageQuery,
   useGetRuntimeAgentQuery,
   useGetRuntimeSkillQuery,
   useGetWorkflowPolicyQuery,
+  useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useListRuntimeAgentsQuery,
   useListRuntimeSkillsQuery,
   useListWorkflowPoliciesQuery,
+  useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
   useUpdateRuntimeAgentMutation,
   useUpdateRuntimeSkillMutation,
@@ -29,6 +33,10 @@ describe('runtimeControlApi', () => {
   })
 
   it('exposes Runtime Control endpoints', () => {
+    expect(runtimeControlApi.endpoints).toHaveProperty('listFrameworkRegistries')
+    expect(runtimeControlApi.endpoints).toHaveProperty('createFrameworkRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkRegistry')
     expect(runtimeControlApi.endpoints).toHaveProperty('listFrameworkPackages')
     expect(runtimeControlApi.endpoints).toHaveProperty('createFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackage')
@@ -49,6 +57,8 @@ describe('runtimeControlApi', () => {
   })
 
   it('exports query hooks', () => {
+    expect(typeof useListFrameworkRegistriesQuery).toBe('function')
+    expect(typeof useGetFrameworkRegistryQuery).toBe('function')
     expect(typeof useListFrameworkPackagesQuery).toBe('function')
     expect(typeof useGetFrameworkPackageQuery).toBe('function')
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
@@ -60,6 +70,8 @@ describe('runtimeControlApi', () => {
   })
 
   it('exports mutation hooks', () => {
+    expect(typeof useCreateFrameworkRegistryMutation).toBe('function')
+    expect(typeof useUpdateFrameworkRegistryMutation).toBe('function')
     expect(typeof useCreateFrameworkPackageMutation).toBe('function')
     expect(typeof useUpdateFrameworkPackageMutation).toBe('function')
     expect(typeof useActivateFrameworkPackageMutation).toBe('function')
@@ -72,6 +84,10 @@ describe('runtimeControlApi', () => {
   })
 
   it('registers query and mutation initiators for each Runtime Control resource', () => {
+    expect(typeof runtimeControlApi.endpoints.listFrameworkRegistries.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.createFrameworkRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getFrameworkRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.updateFrameworkRegistry.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listFrameworkPackages.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackage.initiate).toBe('function')
@@ -146,6 +162,52 @@ describe('runtimeControlApi', () => {
       url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
       method: 'POST',
       body: null,
+      headers: { 'X-Step-Up-Token': 'step-up-token' },
+    })
+  })
+
+  it('builds live framework registry requests with type filters and step-up headers for protected mutations', () => {
+    expect(
+      buildRuntimeControlListRequest({
+        resourcePath: 'framework-registry',
+        page: 3,
+        pageSize: 25,
+        q: 'vmf',
+        status: 'ACTIVE',
+        type: 'structured',
+        structureType: 'section_based',
+        defaultPageSize: 4,
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-registry',
+      params: {
+        page: 3,
+        pageSize: 25,
+        q: 'vmf',
+        status: 'ACTIVE',
+        type: 'structured',
+        structureType: 'section_based',
+      },
+    })
+
+    expect(
+      buildRuntimeControlDetailRequest('framework-registry', 'framework-vmf'),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-registry/framework-vmf',
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'framework-registry',
+        entityId: 'framework-vmf',
+        method: 'PATCH',
+        body: { name: 'Value Messaging Framework' },
+        stepUpToken: 'step-up-token',
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-registry/framework-vmf',
+      method: 'PATCH',
+      body: { name: 'Value Messaging Framework' },
       headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
   })

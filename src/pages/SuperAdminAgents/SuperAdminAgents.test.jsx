@@ -27,6 +27,7 @@ describe('SuperAdminAgents page', () => {
     expect(screen.getByRole('heading', { name: /^agents$/i })).toBeInTheDocument()
     expect(screen.getByText(/active agents remain selectable/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /^agents$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 

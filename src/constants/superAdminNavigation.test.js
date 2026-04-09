@@ -51,6 +51,7 @@ describe('superAdminNavigation', () => {
     expect(entries[1].links.map((link) => link.label)).toEqual([
       'Runtime Control',
       'System Versioning',
+      'Framework Registry',
       'Framework Packages',
       'Agents',
       'Skills',
@@ -97,6 +98,7 @@ describe('superAdminNavigation', () => {
     expect(groups[1].activeLinks.map((link) => link.label)).toEqual([
       'Runtime Control',
       'System Versioning',
+      'Framework Registry',
       'Framework Packages',
       'Agents',
       'Skills',

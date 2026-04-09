@@ -3,10 +3,17 @@ import { useToaster } from '../../components/Toaster'
 import {
   useActivateFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
+  useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useUpdateFrameworkPackageMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
+import {
+  buildFrameworkRegistryAllowedKeys,
+  buildFrameworkRegistryNameLookup,
+  buildFrameworkRegistryOptions,
+} from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
   FRAMEWORK_PACKAGE_PAGE_SIZE,
   INITIAL_FRAMEWORK_PACKAGE_FORM,
@@ -14,9 +21,22 @@ import {
   validateFrameworkPackageForm,
 } from './superAdminFrameworkPackages.constants.js'
 
-const getFieldErrorMap = (appError) => {
-  const field = String(appError?.details?.field ?? '').trim()
-  return field ? { [field]: appError.message } : {}
+const buildDefaultFrameworkPackageForm = (registryRows) => {
+  const [firstRegistry] = registryRows
+
+  if (!firstRegistry) {
+    return {
+      ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+      frameworkKey: '',
+      frameworkName: '',
+    }
+  }
+
+  return {
+    ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+    frameworkKey: String(firstRegistry.frameworkKey ?? '').trim(),
+    frameworkName: String(firstRegistry.name ?? '').trim(),
+  }
 }
 
 export function useFrameworkPackageManagement() {
@@ -29,9 +49,7 @@ export function useFrameworkPackageManagement() {
   const [stepUpToken, setStepUpToken] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    ...INITIAL_FRAMEWORK_PACKAGE_FORM,
-  })
+  const [createForm, setCreateForm] = useState(buildDefaultFrameworkPackageForm([]))
   const [createErrors, setCreateErrors] = useState({})
 
   const [editOpen, setEditOpen] = useState(false)
@@ -54,6 +72,12 @@ export function useFrameworkPackageManagement() {
     frameworkKey: frameworkFilter || undefined,
   })
 
+  const { data: registryResponse } = useListFrameworkRegistriesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+
   const [createFrameworkPackage] = useCreateFrameworkPackageMutation()
   const [updateFrameworkPackage] = useUpdateFrameworkPackageMutation()
   const [activateFrameworkPackage] = useActivateFrameworkPackageMutation()
@@ -63,29 +87,34 @@ export function useFrameworkPackageManagement() {
   const totalPages = Number(meta.totalPages) || 1
   const currentPage = Number(meta.page) || page
   const listAppError = listError ? normalizeError(listError) : null
+  const registryRows = registryResponse?.data ?? []
+  const frameworkOptions = buildFrameworkRegistryOptions(registryRows)
+  const frameworkNameLookup = buildFrameworkRegistryNameLookup(registryRows)
+  const supportedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
 
   const openCreateDialog = useCallback(() => {
     setCreateErrors({})
-    setCreateForm({
-      ...INITIAL_FRAMEWORK_PACKAGE_FORM,
-    })
+    setCreateForm(buildDefaultFrameworkPackageForm(registryRows))
     setCreateOpen(true)
-  }, [])
+  }, [registryRows])
 
   const closeCreateDialog = useCallback(() => {
     setCreateOpen(false)
-    setCreateForm({
-      ...INITIAL_FRAMEWORK_PACKAGE_FORM,
-    })
+    setCreateForm(buildDefaultFrameworkPackageForm(registryRows))
     setCreateErrors({})
-  }, [])
+  }, [registryRows])
 
   const handleCreateSubmit = useCallback(
     async (event) => {
       event.preventDefault()
       setCreateErrors({})
 
-      const { errors, payload } = validateFrameworkPackageForm(createForm)
+      const { errors, payload } = validateFrameworkPackageForm(
+        createForm,
+        rows,
+        '',
+        supportedFrameworkKeys,
+      )
       if (Object.keys(errors).length > 0) {
         setCreateErrors(errors)
         return
@@ -111,7 +140,16 @@ export function useFrameworkPackageManagement() {
         })
       } catch (err) {
         const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
+        const fieldErrors = getRuntimeControlFieldErrorMap(appError, [
+          'frameworkKey',
+          'frameworkName',
+          'key',
+          'name',
+          'version',
+          'description',
+          'status',
+          'compatibleWorkflowKeys',
+        ])
 
         if (Object.keys(fieldErrors).length > 0) {
           setCreateErrors(fieldErrors)
@@ -125,7 +163,7 @@ export function useFrameworkPackageManagement() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm, createFrameworkPackage, stepUpToken],
+    [addToast, closeCreateDialog, createForm, createFrameworkPackage, rows, stepUpToken, supportedFrameworkKeys],
   )
 
   const openEditDialog = useCallback((pkg) => {
@@ -149,7 +187,12 @@ export function useFrameworkPackageManagement() {
       if (!editPackageId) return
 
       setEditErrors({})
-      const { errors, payload } = validateFrameworkPackageForm(editForm)
+      const { errors, payload } = validateFrameworkPackageForm(
+        editForm,
+        rows,
+        editPackageId,
+        supportedFrameworkKeys,
+      )
       if (Object.keys(errors).length > 0) {
         setEditErrors(errors)
         return
@@ -179,7 +222,16 @@ export function useFrameworkPackageManagement() {
         closeEditDialog()
       } catch (err) {
         const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
+        const fieldErrors = getRuntimeControlFieldErrorMap(appError, [
+          'frameworkKey',
+          'frameworkName',
+          'key',
+          'name',
+          'version',
+          'description',
+          'status',
+          'compatibleWorkflowKeys',
+        ])
 
         if (Object.keys(fieldErrors).length > 0) {
           setEditErrors(fieldErrors)
@@ -193,7 +245,7 @@ export function useFrameworkPackageManagement() {
         })
       }
     },
-    [addToast, closeEditDialog, editForm, editPackageId, stepUpToken, updateFrameworkPackage],
+    [addToast, closeEditDialog, editForm, editPackageId, rows, stepUpToken, supportedFrameworkKeys, updateFrameworkPackage],
   )
 
   const activatePackage = useCallback(
@@ -243,6 +295,8 @@ export function useFrameworkPackageManagement() {
     isListLoading,
     isListFetching,
     listAppError,
+    frameworkOptions,
+    frameworkNameLookup,
     createOpen,
     createForm,
     setCreateForm,

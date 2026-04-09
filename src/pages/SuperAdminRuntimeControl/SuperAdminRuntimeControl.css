@@ -4,6 +4,14 @@
   padding-block: var(--spacing-xl);
 }
 
+.super-admin-runtime-control__page-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
 .super-admin-runtime-control__hero,
 .super-admin-runtime-control__bridge-card,
 .super-admin-runtime-control__module-card {

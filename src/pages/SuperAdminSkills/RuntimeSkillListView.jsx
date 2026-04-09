@@ -12,7 +12,6 @@ import { TableDateTime } from '../../components/TableDateTime'
 import {
   formatRuntimeSkillStatus,
   getRuntimeSkillStatusVariant,
-  RUNTIME_SKILL_FRAMEWORK_OPTIONS,
   RUNTIME_SKILLS_HELP_TEXT,
   RUNTIME_SKILL_STATUSES,
   RUNTIME_SKILL_STATUS_OPTIONS,
@@ -80,6 +79,7 @@ export function RuntimeSkillListView({
   setStatusFilter,
   frameworkFilter,
   setFrameworkFilter,
+  frameworkOptions,
   setPage,
   rows,
   currentPage,
@@ -87,6 +87,7 @@ export function RuntimeSkillListView({
   isListLoading,
   isListFetching,
   listAppError,
+  onBackClick,
   openCreateDialog,
   openEditDialog,
   setSkillStatus,
@@ -153,14 +154,17 @@ export function RuntimeSkillListView({
 
   return (
     <Fieldset className="super-admin-skills__fieldset">
-      <Fieldset.Legend className="sr-only">Runtime skill catalogue</Fieldset.Legend>
-      <Card variant="elevated" className="super-admin-skills__card">
-        <Card.Body className="super-admin-skills__card-body super-admin-skills__card-body--compact">
-          <div className="super-admin-skills__catalogue-actions">
-            <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
-              Create
-            </Button>
-          </div>
+        <Fieldset.Legend className="sr-only">Runtime skill catalogue</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-skills__card">
+          <Card.Body className="super-admin-skills__card-body super-admin-skills__card-body--compact">
+            <div className="super-admin-skills__catalogue-actions">
+              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+                Back
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+                Create
+              </Button>
+            </div>
 
           <div className="super-admin-skills__toolbar">
             <Input
@@ -191,7 +195,7 @@ export function RuntimeSkillListView({
               label="Framework"
               size="sm"
               value={frameworkFilter}
-              options={RUNTIME_SKILL_FRAMEWORK_OPTIONS}
+              options={frameworkOptions}
               onChange={(event) => {
                 setFrameworkFilter(event.target.value)
                 setPage(1)

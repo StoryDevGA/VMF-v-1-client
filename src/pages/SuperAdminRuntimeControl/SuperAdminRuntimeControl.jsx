@@ -2,14 +2,18 @@
  * Runtime Control dashboard for SUPER_ADMIN users.
  */
 
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   MdExtension,
   MdInventory2,
+  MdKey,
   MdRule,
   MdSmartToy,
   MdTune,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
+import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Link } from '../../components/Link'
 import { Status } from '../../components/Status'
@@ -24,6 +28,12 @@ const SYSTEM_VERSIONING_ROUTE = getSuperAdminRoute('systemVersioning')
 const ENABLED_MODULE_ROUTE_KEYS = new Set(getEnabledRuntimeControlModuleRouteKeys())
 
 const RUNTIME_CONTROL_MODULES = Object.freeze([
+  {
+    routeKey: 'frameworkRegistry',
+    description: 'Anchor canonical framework identity, compatibility boundaries, and registry-backed key lookups.',
+    taskKey: 'FE-11',
+    Icon: MdKey,
+  },
   {
     routeKey: 'frameworkPackages',
     description: 'Define framework identity, version, status, defaults, and compatibility guardrails.',
@@ -55,13 +65,23 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
 }))
 
 function SuperAdminRuntimeControl() {
+  const navigate = useNavigate()
   const { user } = useAuthorization()
+  const handleBackClick = useCallback(() => {
+    navigate('/super-admin')
+  }, [navigate])
 
   return (
     <section
       className="super-admin-runtime-control container"
       aria-label="Runtime Control dashboard"
     >
+      <div className="super-admin-runtime-control__page-actions">
+        <Button type="button" variant="outline" size="sm" onClick={handleBackClick}>
+          Back
+        </Button>
+      </div>
+
       <Card variant="elevated" className="super-admin-runtime-control__hero">
         <Card.Body className="super-admin-runtime-control__hero-body">
           <div className="super-admin-runtime-control__hero-copy">
@@ -102,8 +122,8 @@ function SuperAdminRuntimeControl() {
               Current delivery state
             </h2>
             <p className="super-admin-runtime-control__hero-note-copy">
-              Framework Packages, Agents, Skills, and Workflow Policies are now live as
-              the first Runtime Control catalogue pages while the legacy System
+              Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies are
+              now live as the Runtime Control catalogue pages while the legacy System
               Versioning route stays available.
             </p>
           </div>
@@ -161,8 +181,8 @@ function SuperAdminRuntimeControl() {
               Phase 1B catalogue surfaces
             </h2>
             <p className="super-admin-runtime-control__section-copy">
-              The first four Runtime Control catalogue pages are now live as the Phase 1B
-              surface set. System Versioning remains available as the legacy bridge route.
+              The Runtime Control catalogue pages are now live as the Phase 1B surface set.
+              System Versioning remains available as the legacy bridge route.
             </p>
           </div>
 

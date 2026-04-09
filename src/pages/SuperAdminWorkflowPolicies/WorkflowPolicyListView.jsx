@@ -13,7 +13,6 @@ import {
   formatWorkflowPolicyStatus,
   getWorkflowPolicyStatusVariant,
   WORKFLOW_POLICIES_HELP_TEXT,
-  WORKFLOW_POLICY_FRAMEWORK_OPTIONS,
   WORKFLOW_POLICY_STATUSES,
   WORKFLOW_POLICY_STATUS_OPTIONS,
 } from './superAdminWorkflowPolicies.constants.js'
@@ -101,6 +100,7 @@ export function WorkflowPolicyListView({
   setStatusFilter,
   frameworkFilter,
   setFrameworkFilter,
+  frameworkOptions,
   setPage,
   rows,
   currentPage,
@@ -108,6 +108,7 @@ export function WorkflowPolicyListView({
   isListLoading,
   isListFetching,
   listAppError,
+  onBackClick,
   openCreateDialog,
   openEditDialog,
   setWorkflowPolicyStatus,
@@ -188,14 +189,17 @@ export function WorkflowPolicyListView({
 
   return (
     <Fieldset className="super-admin-workflow-policies__fieldset">
-      <Fieldset.Legend className="sr-only">Workflow policy catalogue</Fieldset.Legend>
-      <Card variant="elevated" className="super-admin-workflow-policies__card">
-        <Card.Body className="super-admin-workflow-policies__card-body super-admin-workflow-policies__card-body--compact">
-          <div className="super-admin-workflow-policies__catalogue-actions">
-            <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
-              Create
-            </Button>
-          </div>
+        <Fieldset.Legend className="sr-only">Workflow policy catalogue</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-workflow-policies__card">
+          <Card.Body className="super-admin-workflow-policies__card-body super-admin-workflow-policies__card-body--compact">
+            <div className="super-admin-workflow-policies__catalogue-actions">
+              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+                Back
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+                Create
+              </Button>
+            </div>
 
           <div className="super-admin-workflow-policies__toolbar">
             <Input
@@ -226,7 +230,7 @@ export function WorkflowPolicyListView({
               label="Framework"
               size="sm"
               value={frameworkFilter}
-              options={WORKFLOW_POLICY_FRAMEWORK_OPTIONS}
+              options={frameworkOptions}
               onChange={(event) => {
                 setFrameworkFilter(event.target.value)
                 setPage(1)

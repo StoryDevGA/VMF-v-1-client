@@ -1,10 +1,16 @@
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CreateRuntimeAgentDialog, EditRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
 import { RuntimeAgentListView } from './RuntimeAgentListView.jsx'
 import { useRuntimeAgentManagement } from './useRuntimeAgentManagement.js'
 import './SuperAdminAgents.css'
 
 function SuperAdminAgents() {
+  const navigate = useNavigate()
   const mgmt = useRuntimeAgentManagement()
+  const handleBackClick = useCallback(() => {
+    navigate('/super-admin/runtime-control')
+  }, [navigate])
 
   return (
     <section className="super-admin-agents container" aria-label="Super admin runtime agents">
@@ -23,6 +29,7 @@ function SuperAdminAgents() {
         setStatusFilter={mgmt.setStatusFilter}
         frameworkFilter={mgmt.frameworkFilter}
         setFrameworkFilter={mgmt.setFrameworkFilter}
+        frameworkOptions={mgmt.frameworkOptions}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
         currentPage={mgmt.currentPage}
@@ -30,6 +37,7 @@ function SuperAdminAgents() {
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
+        onBackClick={handleBackClick}
         openCreateDialog={mgmt.openCreateDialog}
         openEditDialog={mgmt.openEditDialog}
         setAgentStatus={mgmt.setAgentStatus}

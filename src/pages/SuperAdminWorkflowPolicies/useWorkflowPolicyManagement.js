@@ -2,10 +2,16 @@ import { useCallback, useState } from 'react'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateWorkflowPolicyMutation,
+  useListFrameworkRegistriesQuery,
   useListWorkflowPoliciesQuery,
   useUpdateWorkflowPolicyMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
+import {
+  buildFrameworkRegistryAllowedKeys,
+  buildFrameworkRegistryOptions,
+} from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
   INITIAL_WORKFLOW_POLICY_FORM,
   mapWorkflowPolicyToForm,
@@ -14,10 +20,12 @@ import {
   WORKFLOW_POLICY_STATUSES,
 } from './superAdminWorkflowPolicies.constants.js'
 
-const getFieldErrorMap = (appError) => {
-  const field = String(appError?.details?.field ?? '').trim()
-  return field ? { [field]: appError.message } : {}
-}
+const buildDefaultWorkflowPolicyForm = (registryRows) => ({
+  ...INITIAL_WORKFLOW_POLICY_FORM,
+  frameworkKeys: registryRows[0]?.frameworkKey
+    ? String(registryRows[0].frameworkKey).trim()
+    : '',
+})
 
 export function useWorkflowPolicyManagement() {
   const { addToast } = useToaster()
@@ -29,9 +37,7 @@ export function useWorkflowPolicyManagement() {
   const [stepUpToken, setStepUpToken] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    ...INITIAL_WORKFLOW_POLICY_FORM,
-  })
+  const [createForm, setCreateForm] = useState(buildDefaultWorkflowPolicyForm([]))
   const [createErrors, setCreateErrors] = useState({})
 
   const [editOpen, setEditOpen] = useState(false)
@@ -54,6 +60,12 @@ export function useWorkflowPolicyManagement() {
     frameworkKey: frameworkFilter || undefined,
   })
 
+  const { data: registryResponse } = useListFrameworkRegistriesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+
   const [createWorkflowPolicy] = useCreateWorkflowPolicyMutation()
   const [updateWorkflowPolicy] = useUpdateWorkflowPolicyMutation()
 
@@ -62,29 +74,29 @@ export function useWorkflowPolicyManagement() {
   const totalPages = Number(meta.totalPages) || 1
   const currentPage = Number(meta.page) || page
   const listAppError = listError ? normalizeError(listError) : null
+  const registryRows = registryResponse?.data ?? []
+  const frameworkOptions = buildFrameworkRegistryOptions(registryRows)
+  const allowedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
+  const supportedFrameworkKeys = allowedFrameworkKeys
 
   const openCreateDialog = useCallback(() => {
     setCreateErrors({})
-    setCreateForm({
-      ...INITIAL_WORKFLOW_POLICY_FORM,
-    })
+    setCreateForm(buildDefaultWorkflowPolicyForm(registryRows))
     setCreateOpen(true)
-  }, [])
+  }, [registryRows])
 
   const closeCreateDialog = useCallback(() => {
     setCreateOpen(false)
-    setCreateForm({
-      ...INITIAL_WORKFLOW_POLICY_FORM,
-    })
+    setCreateForm(buildDefaultWorkflowPolicyForm(registryRows))
     setCreateErrors({})
-  }, [])
+  }, [registryRows])
 
   const handleCreateSubmit = useCallback(
     async (event) => {
       event.preventDefault()
       setCreateErrors({})
 
-      const { errors, payload } = validateWorkflowPolicyForm(createForm)
+      const { errors, payload } = validateWorkflowPolicyForm(createForm, rows, '', supportedFrameworkKeys)
       if (Object.keys(errors).length > 0) {
         setCreateErrors(errors)
         return
@@ -110,7 +122,14 @@ export function useWorkflowPolicyManagement() {
         })
       } catch (err) {
         const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
+        const fieldErrors = getRuntimeControlFieldErrorMap(appError, [
+          'key',
+          'name',
+          'description',
+          'frameworkKeys',
+          'status',
+          'steps',
+        ])
 
         if (Object.keys(fieldErrors).length > 0) {
           setCreateErrors(fieldErrors)
@@ -124,7 +143,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm, createWorkflowPolicy, stepUpToken],
+    [addToast, closeCreateDialog, createForm, createWorkflowPolicy, rows, stepUpToken, supportedFrameworkKeys],
   )
 
   const openEditDialog = useCallback((policy) => {
@@ -148,7 +167,12 @@ export function useWorkflowPolicyManagement() {
       if (!editPolicyId) return
 
       setEditErrors({})
-      const { errors, payload } = validateWorkflowPolicyForm(editForm)
+      const { errors, payload } = validateWorkflowPolicyForm(
+        editForm,
+        rows,
+        editPolicyId,
+        supportedFrameworkKeys,
+      )
       if (Object.keys(errors).length > 0) {
         setEditErrors(errors)
         return
@@ -178,7 +202,14 @@ export function useWorkflowPolicyManagement() {
         closeEditDialog()
       } catch (err) {
         const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
+        const fieldErrors = getRuntimeControlFieldErrorMap(appError, [
+          'key',
+          'name',
+          'description',
+          'frameworkKeys',
+          'status',
+          'steps',
+        ])
 
         if (Object.keys(fieldErrors).length > 0) {
           setEditErrors(fieldErrors)
@@ -192,7 +223,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeEditDialog, editForm, editPolicyId, stepUpToken, updateWorkflowPolicy],
+    [addToast, closeEditDialog, editForm, editPolicyId, rows, stepUpToken, supportedFrameworkKeys, updateWorkflowPolicy],
   )
 
   const setWorkflowPolicyStatus = useCallback(
@@ -254,6 +285,7 @@ export function useWorkflowPolicyManagement() {
     isListLoading,
     isListFetching,
     listAppError,
+    frameworkOptions,
     createOpen,
     createForm,
     setCreateForm,

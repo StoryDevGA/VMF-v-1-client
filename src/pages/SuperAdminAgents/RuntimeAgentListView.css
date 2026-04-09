@@ -15,6 +15,9 @@
 .super-admin-agents__catalogue-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
   margin-bottom: var(--spacing-xs);
 }
 

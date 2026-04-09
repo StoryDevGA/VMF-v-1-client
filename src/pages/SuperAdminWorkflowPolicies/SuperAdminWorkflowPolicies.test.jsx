@@ -42,6 +42,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
     expect(screen.getByRole('heading', { name: /workflow policies/i })).toBeInTheDocument()
     expect(screen.getByText(/active workflow policies bind ordered steps/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /workflow policies/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 

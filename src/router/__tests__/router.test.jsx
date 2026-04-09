@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -411,6 +412,34 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render the Framework Registry page at /super-admin/runtime-control/framework-registry for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/framework-registry'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-framework-registry-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^framework registry$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render the Agents page at /super-admin/runtime-control/agents for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/runtime-control/agents'],
@@ -596,6 +625,7 @@ describe('Router', () => {
         'index',
         'dashboard',
         'runtime-control',
+        'runtime-control/framework-registry',
         'runtime-control/framework-packages',
         'runtime-control/agents',
         'runtime-control/skills',
@@ -628,6 +658,7 @@ describe('Router', () => {
     })
 
     it('should show grouped admin navigation for super admins', async () => {
+      const user = userEvent.setup()
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/dashboard'],
       })
@@ -651,7 +682,10 @@ describe('Router', () => {
       expect(screen.getByRole('button', { name: /customer governance/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /runtime control/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /runtime observability/i })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /super admin account menu/i }))
       expect(screen.getByRole('link', { name: /^help$/i })).toHaveAttribute('href', '/help')
+      expect(screen.getByRole('button', { name: /^sign out$/i })).toBeInTheDocument()
     })
 
     it('should not render context controls in the global header', async () => {

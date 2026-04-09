@@ -5,7 +5,6 @@ import { Select } from '../../components/Select'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import {
-  FRAMEWORK_OPTIONS,
   FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS,
   FRAMEWORK_PACKAGE_STATUSES,
   INITIAL_FRAMEWORK_PACKAGE_FORM,
@@ -18,8 +17,10 @@ function FrameworkPackageFormFields({
   setForm,
   errors,
   statusLocked = false,
+  frameworkOptions,
+  frameworkNameLookup,
 }) {
-  const frameworkOptions = FRAMEWORK_OPTIONS.filter((option) => option.value)
+  const frameworkSelectOptions = frameworkOptions.filter((option) => option.value)
   const statusOptions = statusLocked
     ? [{ value: FRAMEWORK_PACKAGE_STATUSES.ACTIVE, label: 'Active' }]
     : FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS
@@ -31,17 +32,14 @@ function FrameworkPackageFormFields({
           id={`${prefix}-framework-key`}
           label="Framework Key"
           value={form.frameworkKey}
-          options={frameworkOptions}
+          options={frameworkSelectOptions}
           onChange={(event) => {
             const nextKey = event.target.value
-            const nextName = frameworkOptions.find((option) => option.value === nextKey)?.label ?? ''
+            const nextName = frameworkNameLookup[nextKey] ?? ''
             setForm((current) => ({
               ...current,
               frameworkKey: nextKey,
-              frameworkName:
-                nextName === 'VMF'
-                  ? 'Value Management Framework'
-                  : 'Revenue Lifecycle Design',
+              frameworkName: nextName,
             }))
           }}
           error={errors.frameworkKey}
@@ -204,6 +202,8 @@ export function CreateFrameworkPackageDialog({
   createErrors,
   setCreateErrors,
   onSubmit,
+  frameworkOptions,
+  frameworkNameLookup,
 }) {
   return (
     <Dialog open={open} onClose={onClose} size="lg">
@@ -224,6 +224,8 @@ export function CreateFrameworkPackageDialog({
             form={createForm}
             setForm={setCreateForm}
             errors={createErrors}
+            frameworkOptions={frameworkOptions}
+            frameworkNameLookup={frameworkNameLookup}
           />
         </form>
       </Dialog.Body>
@@ -257,6 +259,8 @@ export function EditFrameworkPackageDialog({
   setEditForm,
   editErrors,
   onSubmit,
+  frameworkOptions,
+  frameworkNameLookup,
 }) {
   const statusLocked = editForm.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
 
@@ -273,6 +277,8 @@ export function EditFrameworkPackageDialog({
           form={editForm}
           setForm={setEditForm}
           errors={editErrors}
+          frameworkOptions={frameworkOptions}
+          frameworkNameLookup={frameworkNameLookup}
           statusLocked={statusLocked}
         />
       </Dialog.Body>

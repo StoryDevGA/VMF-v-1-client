@@ -53,11 +53,11 @@ function RuntimeSkillFormFields({ prefix, form, setForm, errors }) {
         fullWidth
       />
 
-      <Textarea
-        id={`${prefix}-framework-keys`}
-        label="Supported Framework Keys"
-        helperText="Use commas or new lines. Supported values in this phase are VMF and RLD."
-        value={form.supportedFrameworkKeys}
+        <Textarea
+          id={`${prefix}-framework-keys`}
+          label="Supported Framework Keys"
+          helperText="Use commas or new lines. Supported values come from the Framework Registry."
+          value={form.supportedFrameworkKeys}
         onChange={(event) =>
           setForm((current) => ({ ...current, supportedFrameworkKeys: event.target.value }))
         }

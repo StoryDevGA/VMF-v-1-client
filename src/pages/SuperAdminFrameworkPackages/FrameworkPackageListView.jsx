@@ -11,7 +11,6 @@ import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import {
   formatFrameworkPackageStatus,
-  FRAMEWORK_OPTIONS,
   FRAMEWORK_PACKAGES_HELP_TEXT,
   FRAMEWORK_PACKAGE_STATUSES,
   FRAMEWORK_PACKAGE_STATUS_OPTIONS,
@@ -94,6 +93,7 @@ export function FrameworkPackageListView({
   setStatusFilter,
   frameworkFilter,
   setFrameworkFilter,
+  frameworkOptions,
   setPage,
   rows,
   currentPage,
@@ -101,6 +101,7 @@ export function FrameworkPackageListView({
   isListLoading,
   isListFetching,
   listAppError,
+  onBackClick,
   openCreateDialog,
   openEditDialog,
   activatePackage,
@@ -192,14 +193,17 @@ export function FrameworkPackageListView({
 
   return (
     <Fieldset className="super-admin-framework-packages__fieldset">
-      <Fieldset.Legend className="sr-only">Framework package catalogue</Fieldset.Legend>
-      <Card variant="elevated" className="super-admin-framework-packages__card">
-        <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-packages__card-body--compact">
-          <div className="super-admin-framework-packages__catalogue-actions">
-            <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
-              Create
-            </Button>
-          </div>
+        <Fieldset.Legend className="sr-only">Framework package catalogue</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-framework-packages__card">
+          <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-packages__card-body--compact">
+            <div className="super-admin-framework-packages__catalogue-actions">
+              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+                Back
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+                Create
+              </Button>
+            </div>
 
           <div className="super-admin-framework-packages__toolbar">
             <Input
@@ -230,7 +234,7 @@ export function FrameworkPackageListView({
               label="Framework"
               size="sm"
               value={frameworkFilter}
-              options={FRAMEWORK_OPTIONS}
+              options={frameworkOptions}
               onChange={(event) => {
                 setFrameworkFilter(event.target.value)
                 setPage(1)

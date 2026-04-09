@@ -125,7 +125,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
 ])
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
-const SUPPORTED_FRAMEWORK_KEYS = new Set(['VMF', 'RLD'])
+export const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
 
 export function cloneWorkflowPolicy(policy) {
   return {
@@ -193,7 +193,12 @@ export function mapWorkflowPolicyToForm(policy) {
   }
 }
 
-export function validateWorkflowPolicyForm(formState, existingPolicies = [], selectedPolicyId = '') {
+export function validateWorkflowPolicyForm(
+  formState,
+  existingPolicies = [],
+  selectedPolicyId = '',
+  supportedFrameworkKeys = DEFAULT_SUPPORTED_FRAMEWORK_KEYS,
+) {
   const errors = {}
   const key = normalizePolicyKey(formState.key)
   const name = String(formState.name ?? '').trim()
@@ -223,7 +228,8 @@ export function validateWorkflowPolicyForm(formState, existingPolicies = [], sel
     errors.frameworkKeys = 'At least one framework key is required.'
   }
 
-  const invalidFrameworkKey = frameworkKeys.find((value) => !SUPPORTED_FRAMEWORK_KEYS.has(value))
+  const supportedFrameworkKeySet = new Set(supportedFrameworkKeys)
+  const invalidFrameworkKey = frameworkKeys.find((value) => !supportedFrameworkKeySet.has(value))
   if (invalidFrameworkKey) {
     errors.frameworkKeys = `Unsupported framework key "${invalidFrameworkKey}".`
   }

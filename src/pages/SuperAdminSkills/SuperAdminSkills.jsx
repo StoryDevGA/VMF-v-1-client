@@ -1,10 +1,16 @@
+import { useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CreateRuntimeSkillDialog, EditRuntimeSkillDialog } from './RuntimeSkillDialogs.jsx'
 import { RuntimeSkillListView } from './RuntimeSkillListView.jsx'
 import { useRuntimeSkillManagement } from './useRuntimeSkillManagement.js'
 import './SuperAdminSkills.css'
 
 function SuperAdminSkills() {
+  const navigate = useNavigate()
   const mgmt = useRuntimeSkillManagement()
+  const handleBackClick = useCallback(() => {
+    navigate('/super-admin/runtime-control')
+  }, [navigate])
 
   return (
     <section className="super-admin-skills container" aria-label="Super admin runtime skills">
@@ -23,6 +29,7 @@ function SuperAdminSkills() {
         setStatusFilter={mgmt.setStatusFilter}
         frameworkFilter={mgmt.frameworkFilter}
         setFrameworkFilter={mgmt.setFrameworkFilter}
+        frameworkOptions={mgmt.frameworkOptions}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
         currentPage={mgmt.currentPage}
@@ -30,6 +37,7 @@ function SuperAdminSkills() {
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
+        onBackClick={handleBackClick}
         openCreateDialog={mgmt.openCreateDialog}
         openEditDialog={mgmt.openEditDialog}
         setSkillStatus={mgmt.setSkillStatus}

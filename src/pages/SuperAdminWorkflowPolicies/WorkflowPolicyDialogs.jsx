@@ -57,7 +57,7 @@ function WorkflowPolicyFormFields({ prefix, form, setForm, errors }) {
         <Textarea
           id={`${prefix}-framework-keys`}
           label="Framework Keys"
-          helperText="Use commas or new lines. Supported values in this phase are VMF and RLD."
+          helperText="Use commas or new lines. Supported values come from the Framework Registry."
           value={form.frameworkKeys}
           onChange={(event) =>
             setForm((current) => ({ ...current, frameworkKeys: event.target.value }))

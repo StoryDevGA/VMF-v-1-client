@@ -190,6 +190,7 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const FRAMEWORK_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
+const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
 
 export function cloneFrameworkPackage(pkg) {
   return {
@@ -269,7 +270,12 @@ export function mapFrameworkPackageToForm(pkg) {
   }
 }
 
-export function validateFrameworkPackageForm(formState, existingPackages = [], selectedPackageId = '') {
+export function validateFrameworkPackageForm(
+  formState,
+  existingPackages = [],
+  selectedPackageId = '',
+  supportedFrameworkKeys = DEFAULT_SUPPORTED_FRAMEWORK_KEYS,
+) {
   const errors = {}
   const frameworkKey = normalizeFrameworkKey(formState.frameworkKey)
   const frameworkName = String(formState.frameworkName ?? '').trim()
@@ -284,6 +290,8 @@ export function validateFrameworkPackageForm(formState, existingPackages = [], s
 
   if (!FRAMEWORK_KEY_PATTERN.test(frameworkKey)) {
     errors.frameworkKey = 'Framework key is required and must use uppercase letters, numbers, or underscores.'
+  } else if (!new Set(supportedFrameworkKeys).has(frameworkKey)) {
+    errors.frameworkKey = 'Selected framework key is not available in the Framework Registry.'
   }
 
   if (!frameworkName) {

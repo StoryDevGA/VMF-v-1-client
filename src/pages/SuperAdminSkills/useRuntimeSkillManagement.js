@@ -2,10 +2,12 @@ import { useCallback, useState } from 'react'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateRuntimeSkillMutation,
+  useListFrameworkRegistriesQuery,
   useListRuntimeSkillsQuery,
   useUpdateRuntimeSkillMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { buildFrameworkRegistryOptions } from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
   INITIAL_RUNTIME_SKILL_FORM,
   mapRuntimeSkillToForm,
@@ -53,6 +55,12 @@ export function useRuntimeSkillManagement() {
     frameworkKey: frameworkFilter || undefined,
   })
 
+  const { data: registryResponse } = useListFrameworkRegistriesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+
   const [createRuntimeSkill] = useCreateRuntimeSkillMutation()
   const [updateRuntimeSkill] = useUpdateRuntimeSkillMutation()
 
@@ -61,6 +69,8 @@ export function useRuntimeSkillManagement() {
   const totalPages = Number(meta.totalPages) || 1
   const currentPage = Number(meta.page) || page
   const listAppError = listError ? normalizeError(listError) : null
+  const registryRows = registryResponse?.data ?? []
+  const frameworkOptions = buildFrameworkRegistryOptions(registryRows)
 
   const openCreateDialog = useCallback(() => {
     setCreateErrors({})
@@ -222,6 +232,7 @@ export function useRuntimeSkillManagement() {
     isListLoading,
     isListFetching,
     listAppError,
+    frameworkOptions,
     createOpen,
     createForm,
     setCreateForm,
