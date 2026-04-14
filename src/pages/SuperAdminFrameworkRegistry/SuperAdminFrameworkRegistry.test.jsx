@@ -7,27 +7,12 @@ import {
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
 
-vi.mock('../../components/StepUpAuthForm', () => ({
-  StepUpAuthForm: ({ onStepUpComplete }) => (
-    <button
-      type="button"
-      onClick={() => onStepUpComplete('mock-step-up-token', 900)}
-    >
-      Verify Runtime Control Access
-    </button>
-  ),
-}))
-
 function renderPage() {
   return renderRuntimeControlPage({
     route: '/super-admin/runtime-control/framework-registry',
     path: '/super-admin/runtime-control/framework-registry',
     element: <SuperAdminFrameworkRegistry />,
   })
-}
-
-async function verifyRuntimeControlAccess(user) {
-  await user.click(screen.getByRole('button', { name: /verify runtime control access/i }))
 }
 
 describe('SuperAdminFrameworkRegistry page', () => {
@@ -60,8 +45,6 @@ describe('SuperAdminFrameworkRegistry page', () => {
   it('creates a framework registry entry from the modal dialog', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await verifyRuntimeControlAccess(user)
 
     await user.click(screen.getByRole('button', { name: /create framework key/i }))
     const createDialog = screen.getByRole('dialog')
@@ -105,8 +88,6 @@ describe('SuperAdminFrameworkRegistry page', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await verifyRuntimeControlAccess(user)
-
     await user.selectOptions(
       await screen.findByLabelText(/actions for vmf/i),
       'View details',
@@ -141,8 +122,6 @@ describe('SuperAdminFrameworkRegistry page', () => {
   it('surfaces framework key conflicts inline during edit', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await verifyRuntimeControlAccess(user)
 
     await user.selectOptions(
       await screen.findByLabelText(/actions for qmf/i),

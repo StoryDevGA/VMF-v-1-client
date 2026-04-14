@@ -50,6 +50,7 @@ function SuperAdminAgents() {
         setCreateForm={mgmt.setCreateForm}
         createErrors={mgmt.createErrors}
         setCreateErrors={mgmt.setCreateErrors}
+        frameworkOptions={mgmt.activeFrameworkOptions}
         onSubmit={mgmt.handleCreateSubmit}
       />
 
@@ -59,6 +60,7 @@ function SuperAdminAgents() {
         editForm={mgmt.editForm}
         setEditForm={mgmt.setEditForm}
         editErrors={mgmt.editErrors}
+        frameworkOptions={mgmt.activeFrameworkOptions}
         onSubmit={mgmt.handleEditSubmit}
       />
     </section>

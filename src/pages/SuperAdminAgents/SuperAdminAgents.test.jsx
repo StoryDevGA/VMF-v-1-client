@@ -71,6 +71,32 @@ describe('SuperAdminAgents page', () => {
     })
   })
 
+  it('only offers active frameworks in the agent dialog selector', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /remove vmf/i }))
+    await user.click(screen.getByRole('button', { name: /remove rld/i }))
+
+    const frameworkSelect = screen.getByLabelText(/^add framework$/i, {
+      selector: 'select#runtime-agent-create-framework-select',
+    })
+
+    expect(within(frameworkSelect).getByRole('option', { name: 'VMF - Value Messaging Framework' })).toBeInTheDocument()
+    expect(within(frameworkSelect).getByRole('option', { name: 'RLD - Revenue Lifecycle Design' })).toBeInTheDocument()
+    expect(
+      within(frameworkSelect).queryByRole('option', { name: 'CMF - Customer Messaging Framework' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(frameworkSelect).queryByRole('option', { name: 'QMF - Quality Messaging Framework' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(frameworkSelect).queryByRole('option', { name: 'OPS - Operations Messaging Framework' }),
+    ).not.toBeInTheDocument()
+    expect(frameworkSelect).not.toBeDisabled()
+  })
+
   it('supports search filters and pagination for the agents catalogue', async () => {
     const user = userEvent.setup()
     renderPage()

@@ -40,11 +40,6 @@ const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
 
 const isRuntimeControlMockMode = () => globalThis.__RUNTIME_CONTROL_API_MOCK__ === true
 
-const withStepUpHeader = (stepUpToken) =>
-  stepUpToken
-    ? { 'X-Step-Up-Token': stepUpToken }
-    : undefined
-
 const buildListParams = ({
   page,
   pageSize,
@@ -104,13 +99,12 @@ export const buildRuntimeControlDetailRequest = (resourcePath, entityId) => ({
   url: `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`,
 })
 
-export const buildRuntimeControlMutationRequest = ({ resourcePath, entityId, method, body, stepUpToken }) => ({
+export const buildRuntimeControlMutationRequest = ({ resourcePath, entityId, method, body }) => ({
   url: entityId
     ? `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`
     : `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}`,
   method,
   body,
-  ...(stepUpToken ? { headers: withStepUpHeader(stepUpToken) } : {}),
 })
 
 const normalizePositiveInteger = (value, fallback) => {
@@ -315,6 +309,9 @@ const getRuntimeSkillRows = ({
         skill.description,
         skill.status,
         skill.supportedFrameworkKeys,
+        skill.category,
+        skill.type,
+        skill.executionMode,
       ])
 
       return matchesStatus && matchesFramework && queryMatches
@@ -433,20 +430,18 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     createFrameworkPackage: build.mutation({
       queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
-          const { stepUpToken, ...body } = payload
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'framework-packages',
               method: 'POST',
-              body,
-              stepUpToken,
+              body: payload,
             }),
             api,
             extraOptions,
           )
         }
 
-        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+        const runtimePayload = payload
 
         const duplicatePackage = runtimeControlState.frameworkPackages.find(
           (pkg) =>
@@ -506,7 +501,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateFrameworkPackage: build.mutation({
-      queryFn: async ({ packageId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+      queryFn: async ({ packageId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
@@ -514,7 +509,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               entityId: packageId,
               method: 'PATCH',
               body: payload,
-              stepUpToken,
             }),
             api,
             extraOptions,
@@ -569,13 +563,12 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     activateFrameworkPackage: build.mutation({
-      queryFn: async ({ packageId, stepUpToken }, api, extraOptions, baseQuery) => {
+      queryFn: async ({ packageId }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             {
               url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/activate`,
               method: 'POST',
-              ...(stepUpToken ? { headers: withStepUpHeader(stepUpToken) } : {}),
             },
             api,
             extraOptions,
@@ -696,20 +689,18 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     createFrameworkRegistry: build.mutation({
       queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
-          const { stepUpToken, ...body } = payload
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'framework-registry',
               method: 'POST',
-              body,
-              stepUpToken,
+              body: payload,
             }),
             api,
             extraOptions,
           )
         }
 
-        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+        const runtimePayload = payload
         const duplicateEntry = runtimeControlState.frameworkRegistries.find(
           (entry) =>
             String(entry.frameworkKey ?? '').trim().toUpperCase()
@@ -763,7 +754,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateFrameworkRegistry: build.mutation({
-      queryFn: async ({ registryId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+      queryFn: async ({ registryId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
@@ -771,7 +762,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               entityId: registryId,
               method: 'PATCH',
               body: payload,
-              stepUpToken,
             }),
             api,
             extraOptions,
@@ -1048,8 +1038,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           )
         }
 
+        const runtimePayload = payload
+
         const duplicateSkill = runtimeControlState.skills.find(
-          (skill) => String(skill.key ?? '').trim() === String(payload.key ?? '').trim(),
+          (skill) => String(skill.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
         )
 
         if (duplicateSkill) {
@@ -1060,9 +1052,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const createdSkill = {
-          id: generateRuntimeId('skill', payload.key),
+          id: generateRuntimeId('skill', runtimePayload.key),
           ...cloneRuntimeSkill({
-            ...payload,
+            ...runtimePayload,
+            dependencySummary: { agentIds: [], workflowPolicyIds: [] },
             ...buildAuditFields(),
           }),
         }
@@ -1203,20 +1196,18 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     createWorkflowPolicy: build.mutation({
       queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
-          const { stepUpToken, ...body } = payload
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'workflow-policies',
               method: 'POST',
-              body,
-              stepUpToken,
+              body: payload,
             }),
             api,
             extraOptions,
           )
         }
 
-        const { stepUpToken: _stepUpToken, ...runtimePayload } = payload
+        const runtimePayload = payload
 
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) => String(policy.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
@@ -1270,7 +1261,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateWorkflowPolicy: build.mutation({
-      queryFn: async ({ policyId, stepUpToken, ...payload }, api, extraOptions, baseQuery) => {
+      queryFn: async ({ policyId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
@@ -1278,7 +1269,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               entityId: policyId,
               method: 'PATCH',
               body: payload,
-              stepUpToken,
             }),
             api,
             extraOptions,

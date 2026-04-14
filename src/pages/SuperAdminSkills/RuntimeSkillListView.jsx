@@ -21,9 +21,15 @@ import './RuntimeSkillListView.css'
 function RuntimeSkillRowActionsMenu({ row, onAction }) {
   const actionOptions = [
     { value: 'Edit', label: 'Edit' },
-    ...(row.status === RUNTIME_SKILL_STATUSES.ACTIVE
+    ...(row.status !== RUNTIME_SKILL_STATUSES.ACTIVE
+      ? [{ value: 'Set Active', label: 'Set Active' }]
+      : []),
+    ...(row.status !== RUNTIME_SKILL_STATUSES.INACTIVE
       ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
-      : [{ value: 'Set Active', label: 'Set Active' }]),
+      : []),
+    ...(row.status !== RUNTIME_SKILL_STATUSES.DEPRECATED
+      ? [{ value: 'Set Deprecated', label: 'Set Deprecated' }]
+      : []),
   ]
 
   return (
@@ -88,14 +94,14 @@ export function RuntimeSkillListView({
   isListFetching,
   listAppError,
   onBackClick,
-  openCreateDialog,
-  openEditDialog,
+  onCreateClick,
+  onEditClick,
   setSkillStatus,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
-        openEditDialog(row)
+        onEditClick(row)
       }
 
       if (label === 'Set Active') {
@@ -105,8 +111,12 @@ export function RuntimeSkillListView({
       if (label === 'Set Inactive') {
         setSkillStatus(row, RUNTIME_SKILL_STATUSES.INACTIVE)
       }
+
+      if (label === 'Set Deprecated') {
+        setSkillStatus(row, RUNTIME_SKILL_STATUSES.DEPRECATED)
+      }
     },
-    [openEditDialog, setSkillStatus],
+    [onEditClick, setSkillStatus],
   )
 
   const columns = useMemo(
@@ -161,7 +171,7 @@ export function RuntimeSkillListView({
               <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
                 Back
               </Button>
-              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+              <Button type="button" variant="primary" size="sm" onClick={onCreateClick}>
                 Create
               </Button>
             </div>

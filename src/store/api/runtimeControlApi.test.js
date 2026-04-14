@@ -141,13 +141,11 @@ describe('runtimeControlApi', () => {
         entityId: 'pkg-live-2',
         method: 'PATCH',
         body: { version: '3.1.1' },
-        stepUpToken: 'step-up-token',
       }),
     ).toEqual({
       url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
       method: 'PATCH',
       body: { version: '3.1.1' },
-      headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
 
     expect(
@@ -156,17 +154,15 @@ describe('runtimeControlApi', () => {
         entityId: 'pkg-live-2',
         method: 'POST',
         body: null,
-        stepUpToken: 'step-up-token',
       }),
     ).toEqual({
       url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
       method: 'POST',
       body: null,
-      headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
   })
 
-  it('builds live framework registry requests with type filters and step-up headers for protected mutations', () => {
+  it('builds live framework registry requests with type filters and mutation requests', () => {
     expect(
       buildRuntimeControlListRequest({
         resourcePath: 'framework-registry',
@@ -202,17 +198,15 @@ describe('runtimeControlApi', () => {
         entityId: 'framework-vmf',
         method: 'PATCH',
         body: { name: 'Value Messaging Framework' },
-        stepUpToken: 'step-up-token',
       }),
     ).toEqual({
       url: '/super-admin/runtime-control/framework-registry/framework-vmf',
       method: 'PATCH',
       body: { name: 'Value Messaging Framework' },
-      headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
   })
 
-  it('builds live workflow policy requests with step-up headers for protected mutations', () => {
+  it('builds live workflow policy requests with mutation requests', () => {
     expect(
       buildRuntimeControlListRequest({
         resourcePath: 'workflow-policies',
@@ -236,13 +230,11 @@ describe('runtimeControlApi', () => {
         resourcePath: 'workflow-policies',
         method: 'POST',
         body: { key: 'vmf-review' },
-        stepUpToken: 'step-up-token',
       }),
     ).toEqual({
       url: '/super-admin/runtime-control/workflow-policies',
       method: 'POST',
       body: { key: 'vmf-review' },
-      headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
 
     expect(
@@ -251,13 +243,11 @@ describe('runtimeControlApi', () => {
         entityId: 'policy-live-1',
         method: 'PATCH',
         body: { name: 'VMF Release Policy' },
-        stepUpToken: 'step-up-token',
       }),
     ).toEqual({
       url: '/super-admin/runtime-control/workflow-policies/policy-live-1',
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
-      headers: { 'X-Step-Up-Token': 'step-up-token' },
     })
   })
 })

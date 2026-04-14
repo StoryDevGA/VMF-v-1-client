@@ -1,0 +1,232 @@
+.super-admin-skill-editor {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-skill-editor__fieldset {
+  min-width: 0;
+}
+
+.super-admin-skill-editor__card,
+.super-admin-skill-editor__loading-card,
+.super-admin-skill-editor__error-card {
+  height: 100%;
+  overflow: hidden;
+}
+
+.super-admin-skill-editor__form,
+.super-admin-skill-editor__card-body,
+.super-admin-skill-editor__intro,
+.super-admin-skill-editor__section,
+.super-admin-skill-editor__section-header,
+.super-admin-skill-editor__stack,
+.super-admin-skill-editor__dependency-grid,
+.super-admin-skill-editor__dependency-group {
+  display: grid;
+}
+
+.super-admin-skill-editor__form,
+.super-admin-skill-editor__card-body,
+.super-admin-skill-editor__section,
+.super-admin-skill-editor__dependency-grid {
+  gap: var(--spacing-md);
+}
+
+.super-admin-skill-editor__intro,
+.super-admin-skill-editor__section-header,
+.super-admin-skill-editor__dependency-group {
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-skill-editor__form-title,
+.super-admin-skill-editor__section-title,
+.super-admin-skill-editor__section-copy,
+.super-admin-skill-editor__helper,
+.super-admin-skill-editor__dependency-label {
+  margin: 0;
+}
+
+.super-admin-skill-editor__form-title {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-skill-editor__section {
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.super-admin-skill-editor__section-copy,
+.super-admin-skill-editor__helper {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-skill-editor__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-skill-editor__row--narrow {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
+}
+
+.super-admin-skill-editor__stack {
+  gap: var(--spacing-sm);
+}
+
+.super-admin-skill-editor__framework-picker,
+.super-admin-skill-editor__framework-list,
+.super-admin-skill-editor__framework-copy {
+  display: grid;
+}
+
+.super-admin-skill-editor__framework-picker,
+.super-admin-skill-editor__framework-list {
+  gap: var(--spacing-sm);
+}
+
+.super-admin-skill-editor__framework-copy {
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.super-admin-skill-editor__framework-picker-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-skill-editor__framework-add-button {
+  align-self: end;
+  min-height: 56px;
+}
+
+.super-admin-skill-editor__framework-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-sm);
+  align-items: center;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.super-admin-skill-editor__framework-label,
+.super-admin-skill-editor__framework-key,
+.super-admin-skill-editor__field-error {
+  margin: 0;
+}
+
+.super-admin-skill-editor__framework-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-primary);
+}
+
+.super-admin-skill-editor__framework-key {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-skill-editor__field-error {
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
+.super-admin-skill-editor__section-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+}
+
+.super-admin-skill-editor__select-field {
+  position: relative;
+  gap: 0;
+  min-width: 0;
+}
+
+.super-admin-skill-editor__select-field .select-label {
+  position: absolute;
+  top: 0;
+  left: var(--spacing-sm);
+  z-index: 1;
+  padding: 0 var(--spacing-2xs);
+  transform: translateY(-50%);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  color: var(--color-primary);
+  background: var(--color-background);
+  pointer-events: none;
+}
+
+.super-admin-skill-editor__select-field .select {
+  min-height: 56px;
+  font-size: var(--font-size-base);
+}
+
+.super-admin-skill-editor__select-field.select-container--error .select-label {
+  color: var(--color-danger);
+}
+
+.super-admin-skill-editor__code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.super-admin-skill-editor__dependency-label {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-skill-editor__dependency-list {
+  margin: 0;
+  padding-inline-start: var(--spacing-md);
+  list-style: disc;
+}
+
+.super-admin-skill-editor__dependency-item {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.super-admin-skill-editor__loading-card,
+.super-admin-skill-editor__error-card {
+  min-height: 220px;
+}
+
+.super-admin-skill-editor__loading-body,
+.super-admin-skill-editor__error-body {
+  display: grid;
+  gap: var(--spacing-sm);
+  place-items: center;
+  text-align: center;
+  min-height: 220px;
+}
+
+@media (max-width: 767px) {
+  .super-admin-skill-editor__framework-picker-controls,
+  .super-admin-skill-editor__framework-item {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-skill-editor__framework-add-button,
+  .super-admin-skill-editor__top-actions .btn,
+  .super-admin-skill-editor__footer-actions .btn {
+    width: 100%;
+  }
+}

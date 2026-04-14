@@ -1,15 +1,118 @@
+import { useMemo, useState } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Textarea } from '../../components/Textarea'
 import {
+  formatKeyList,
   INITIAL_RUNTIME_AGENT_FORM,
+  parseFrameworkKeyList,
   RUNTIME_AGENT_FORM_STATUS_OPTIONS,
 } from './superAdminAgents.constants.js'
 import './RuntimeAgentDialogs.css'
 
-function RuntimeAgentFormFields({ prefix, form, setForm, errors }) {
+function RuntimeAgentFrameworkField({ prefix, form, setForm, errors, frameworkOptions = [] }) {
+  const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
+  const selectedFrameworkKeys = useMemo(
+    () => parseFrameworkKeyList(form.supportedFrameworkKeys),
+    [form.supportedFrameworkKeys],
+  )
+  const frameworkLabelLookup = useMemo(
+    () => Object.fromEntries(frameworkOptions.map((option) => [option.value, option.label])),
+    [frameworkOptions],
+  )
+  const availableFrameworkOptions = useMemo(() => {
+    const selectedFrameworkKeySet = new Set(selectedFrameworkKeys)
+
+    return frameworkOptions.filter(
+      (option) => option.value && !selectedFrameworkKeySet.has(option.value),
+    )
+  }, [frameworkOptions, selectedFrameworkKeys])
+
+  const handleAddFramework = () => {
+    if (!pendingFrameworkKey) return
+
+    setForm((current) => ({
+      ...current,
+      supportedFrameworkKeys: formatKeyList([...selectedFrameworkKeys, pendingFrameworkKey]),
+    }))
+    setPendingFrameworkKey('')
+  }
+
+  const handleRemoveFramework = (frameworkKey) => {
+    setForm((current) => ({
+      ...current,
+      supportedFrameworkKeys: formatKeyList(
+        parseFrameworkKeyList(current.supportedFrameworkKeys).filter((value) => value !== frameworkKey),
+      ),
+    }))
+  }
+
+  return (
+    <div className="super-admin-agents__framework-picker">
+      <div className="super-admin-agents__framework-picker-controls">
+        <Select
+          id={`${prefix}-framework-select`}
+          label="Add Framework"
+          value={pendingFrameworkKey}
+          options={availableFrameworkOptions}
+          onChange={(event) => setPendingFrameworkKey(event.target.value)}
+          placeholder={availableFrameworkOptions.length > 0 ? 'Select a framework' : 'No frameworks available'}
+          disabled={availableFrameworkOptions.length === 0}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="super-admin-agents__framework-add-button"
+          onClick={handleAddFramework}
+          disabled={!pendingFrameworkKey}
+        >
+          Add Framework
+        </Button>
+      </div>
+
+      <p className="super-admin-agents__framework-helper">
+        Choose frameworks from the active Framework Registry entries only.
+      </p>
+
+      {selectedFrameworkKeys.length > 0 ? (
+        <div className="super-admin-agents__framework-list">
+          {selectedFrameworkKeys.map((frameworkKey) => (
+            <div key={frameworkKey} className="super-admin-agents__framework-item">
+              <div className="super-admin-agents__framework-copy">
+                <p className="super-admin-agents__framework-label">
+                  {frameworkLabelLookup[frameworkKey] ?? frameworkKey}
+                </p>
+                <p className="super-admin-agents__framework-key">{frameworkKey}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRemoveFramework(frameworkKey)}
+                aria-label={`Remove ${frameworkKey}`}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="super-admin-agents__framework-helper">No frameworks selected yet.</p>
+      )}
+
+      {errors.supportedFrameworkKeys ? (
+        <p className="super-admin-agents__framework-error" role="alert">
+          {errors.supportedFrameworkKeys}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function RuntimeAgentFormFields({ prefix, form, setForm, errors, frameworkOptions }) {
   return (
     <div className="super-admin-agents__dialog-body">
       <div className="super-admin-agents__row">
@@ -53,33 +156,26 @@ function RuntimeAgentFormFields({ prefix, form, setForm, errors }) {
         fullWidth
       />
 
-      <div className="super-admin-agents__row">
-        <Textarea
-          id={`${prefix}-framework-keys`}
-          label="Supported Framework Keys"
-          helperText="Use commas or new lines. Supported values come from the Framework Registry."
-          value={form.supportedFrameworkKeys}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, supportedFrameworkKeys: event.target.value }))
-          }
-          error={errors.supportedFrameworkKeys}
-          rows={4}
-          fullWidth
-        />
+      <RuntimeAgentFrameworkField
+        prefix={prefix}
+        form={form}
+        setForm={setForm}
+        errors={errors}
+        frameworkOptions={frameworkOptions}
+      />
 
-        <Textarea
-          id={`${prefix}-skill-ids`}
-          label="Default Skill IDs"
-          helperText="Use commas or new lines."
-          value={form.defaultSkillIds}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, defaultSkillIds: event.target.value }))
-          }
-          error={errors.defaultSkillIds}
-          rows={4}
-          fullWidth
-        />
-      </div>
+      <Textarea
+        id={`${prefix}-skill-ids`}
+        label="Default Skill IDs"
+        helperText="Use commas or new lines."
+        value={form.defaultSkillIds}
+        onChange={(event) =>
+          setForm((current) => ({ ...current, defaultSkillIds: event.target.value }))
+        }
+        error={errors.defaultSkillIds}
+        rows={4}
+        fullWidth
+      />
     </div>
   )
 }
@@ -91,6 +187,7 @@ export function CreateRuntimeAgentDialog({
   setCreateForm,
   createErrors,
   setCreateErrors,
+  frameworkOptions,
   onSubmit,
 }) {
   return (
@@ -105,6 +202,7 @@ export function CreateRuntimeAgentDialog({
             form={createForm}
             setForm={setCreateForm}
             errors={createErrors}
+            frameworkOptions={frameworkOptions}
           />
         </form>
       </Dialog.Body>
@@ -137,6 +235,7 @@ export function EditRuntimeAgentDialog({
   editForm,
   setEditForm,
   editErrors,
+  frameworkOptions,
   onSubmit,
 }) {
   return (
@@ -150,6 +249,7 @@ export function EditRuntimeAgentDialog({
           form={editForm}
           setForm={setEditForm}
           errors={editErrors}
+          frameworkOptions={frameworkOptions}
         />
       </Dialog.Body>
       <Dialog.Footer>

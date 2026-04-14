@@ -49,6 +49,9 @@ const SuperAdminAgents = lazy(
 const SuperAdminSkills = lazy(
   () => import('../pages/SuperAdminSkills'),
 )
+const SuperAdminSkillEditor = lazy(
+  () => import('../pages/SuperAdminSkillEditor'),
+)
 const SuperAdminWorkflowPolicies = lazy(
   () => import('../pages/SuperAdminWorkflowPolicies'),
 )
@@ -288,6 +291,14 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/skills',
                   element: <SuperAdminSkills />,
+                },
+                {
+                  path: 'runtime-control/skills/new',
+                  element: <SuperAdminSkillEditor />,
+                },
+                {
+                  path: 'runtime-control/skills/:skillId',
+                  element: <SuperAdminSkillEditor />,
                 },
                 {
                   path: 'runtime-control/workflow-policies',

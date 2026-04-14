@@ -29,15 +29,23 @@ export function createRuntimeControlTestStore() {
   })
 }
 
-export function renderRuntimeControlPage({ route, path, element }) {
+export function renderRuntimeControlPage({ route, path, element, routes, initialEntries }) {
   const store = createRuntimeControlTestStore()
+  const resolvedRoutes = routes ?? [{ path, element }]
+  const resolvedEntries = initialEntries ?? [route]
 
   return render(
     <Provider store={store}>
-      <MemoryRouter initialEntries={[route]}>
+      <MemoryRouter initialEntries={resolvedEntries}>
         <ToasterProvider>
           <Routes>
-            <Route path={path} element={element} />
+            {resolvedRoutes.map((routeConfig) => (
+              <Route
+                key={routeConfig.path}
+                path={routeConfig.path}
+                element={routeConfig.element}
+              />
+            ))}
           </Routes>
         </ToasterProvider>
       </MemoryRouter>

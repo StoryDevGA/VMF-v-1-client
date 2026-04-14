@@ -1,7 +1,5 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card } from '../../components/Card'
-import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { CreateFrameworkPackageDialog, EditFrameworkPackageDialog } from './FrameworkPackageDialogs.jsx'
 import { FrameworkPackageListView } from './FrameworkPackageListView.jsx'
 import { useFrameworkPackageManagement } from './useFrameworkPackageManagement.js'
@@ -26,26 +24,6 @@ function SuperAdminFrameworkPackages() {
           default package used by Runtime Control.
         </p>
       </header>
-
-      <Card variant="elevated" className="super-admin-framework-packages__step-up-card">
-        <Card.Body className="super-admin-framework-packages__step-up-body">
-          <div className="super-admin-framework-packages__step-up-copy">
-            <h2 className="super-admin-framework-packages__step-up-title">
-              Step-up verification
-            </h2>
-            <p className="super-admin-framework-packages__step-up-description">
-              Verify identity once to unlock create, update, and activate actions.
-            </p>
-          </div>
-          <StepUpAuthForm
-            passwordLabel="Current Super Admin Password"
-            passwordHelperText="Enter your current Super Admin password to verify protected Runtime Control actions."
-            submitLabel="Verify Runtime Control Access"
-            onStepUpComplete={mgmt.setStepUpToken}
-            onCancel={() => mgmt.setStepUpToken('')}
-          />
-        </Card.Body>
-      </Card>
 
       <FrameworkPackageListView
         search={mgmt.search}

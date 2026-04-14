@@ -7,7 +7,10 @@ import {
   useUpdateRuntimeAgentMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
-import { buildFrameworkRegistryOptions } from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
+import {
+  buildFrameworkRegistryOptions,
+  FRAMEWORK_REGISTRY_STATUSES,
+} from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
   INITIAL_RUNTIME_AGENT_FORM,
   mapRuntimeAgentToForm,
@@ -71,6 +74,12 @@ export function useRuntimeAgentManagement() {
   const listAppError = listError ? normalizeError(listError) : null
   const registryRows = registryResponse?.data ?? []
   const frameworkOptions = buildFrameworkRegistryOptions(registryRows)
+  const activeFrameworkOptions = buildFrameworkRegistryOptions(
+    registryRows.filter(
+      (entry) => String(entry.status ?? '').trim().toUpperCase() === FRAMEWORK_REGISTRY_STATUSES.ACTIVE,
+    ),
+    { includeAll: false },
+  )
 
   const openCreateDialog = useCallback(() => {
     setCreateErrors({})
@@ -233,6 +242,7 @@ export function useRuntimeAgentManagement() {
     isListFetching,
     listAppError,
     frameworkOptions,
+    activeFrameworkOptions,
     createOpen,
     createForm,
     setCreateForm,

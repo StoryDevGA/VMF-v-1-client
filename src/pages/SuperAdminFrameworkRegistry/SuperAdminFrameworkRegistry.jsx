@@ -9,12 +9,16 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
-import { useGetFrameworkRegistryQuery, useCreateFrameworkRegistryMutation, useListFrameworkRegistriesQuery, useUpdateFrameworkRegistryMutation } from '../../store/api/runtimeControlApi.js'
+import {
+  useCreateFrameworkRegistryMutation,
+  useGetFrameworkRegistryQuery,
+  useListFrameworkRegistriesQuery,
+  useUpdateFrameworkRegistryMutation,
+} from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
 import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import {
@@ -573,7 +577,6 @@ function useFrameworkRegistryManagement() {
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [page, setPage] = useState(1)
-  const [stepUpToken, setStepUpToken] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -654,17 +657,8 @@ function useFrameworkRegistryManagement() {
         return
       }
 
-      if (!stepUpToken) {
-        addToast({
-          title: 'Step-up verification required',
-          description: 'Verify identity before creating a framework key.',
-          variant: 'warning',
-        })
-        return
-      }
-
       try {
-        await createFrameworkRegistry({ ...payload, stepUpToken }).unwrap()
+        await createFrameworkRegistry(payload).unwrap()
         closeCreateDialog()
         setPage(1)
         addToast({
@@ -704,7 +698,7 @@ function useFrameworkRegistryManagement() {
         })
       }
     },
-    [addToast, allRegistryRows, closeCreateDialog, createForm, createFrameworkRegistry, stepUpToken],
+    [addToast, allRegistryRows, closeCreateDialog, createForm, createFrameworkRegistry],
   )
 
   const openEditDialog = useCallback((registry) => {
@@ -738,20 +732,10 @@ function useFrameworkRegistryManagement() {
         return
       }
 
-      if (!stepUpToken) {
-        addToast({
-          title: 'Step-up verification required',
-          description: 'Verify identity before updating a framework key.',
-          variant: 'warning',
-        })
-        return
-      }
-
       try {
         await updateFrameworkRegistry({
           registryId: editRegistryId,
           ...payload,
-          stepUpToken,
         }).unwrap()
 
         addToast({
@@ -792,7 +776,7 @@ function useFrameworkRegistryManagement() {
         })
       }
     },
-    [addToast, allRegistryRows, closeEditDialog, editForm, editRegistryId, stepUpToken, updateFrameworkRegistry],
+    [addToast, allRegistryRows, closeEditDialog, editForm, editRegistryId, updateFrameworkRegistry],
   )
 
   const openDetailDialog = useCallback((registry) => {
@@ -816,8 +800,6 @@ function useFrameworkRegistryManagement() {
     setTypeFilter,
     page,
     setPage,
-    stepUpToken,
-    setStepUpToken,
     rows,
     currentPage,
     totalPages,
@@ -866,27 +848,6 @@ function SuperAdminFrameworkRegistry() {
           Runtime Control catalogue surfaces.
         </p>
       </header>
-
-      <Card variant="elevated" className="super-admin-framework-registry__step-up-card">
-        <Card.Body className="super-admin-framework-registry__step-up-body">
-          <div className="super-admin-framework-registry__step-up-copy">
-            <h2 className="super-admin-framework-registry__step-up-title">
-              Step-up verification
-            </h2>
-            <p className="super-admin-framework-registry__step-up-description">
-              Verify identity once to unlock create and update actions for canonical framework
-              entries.
-            </p>
-          </div>
-          <StepUpAuthForm
-            passwordLabel="Current Super Admin Password"
-            passwordHelperText="Enter your current Super Admin password to verify protected Runtime Control actions."
-            submitLabel="Verify Runtime Control Access"
-            onStepUpComplete={mgmt.setStepUpToken}
-            onCancel={() => mgmt.setStepUpToken('')}
-          />
-        </Card.Body>
-      </Card>
 
       <FrameworkRegistryListView
         search={mgmt.search}

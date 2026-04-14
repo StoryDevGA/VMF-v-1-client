@@ -17,26 +17,3 @@
 .super-admin-workflow-policies__subtitle {
   color: var(--color-text-secondary);
 }
-
-.super-admin-workflow-policies__step-up-card {
-  border-left: 4px solid var(--color-accent-500);
-}
-
-.super-admin-workflow-policies__step-up-body {
-  display: grid;
-  gap: var(--spacing-md);
-}
-
-.super-admin-workflow-policies__step-up-copy {
-  display: grid;
-  gap: var(--spacing-2xs);
-}
-
-.super-admin-workflow-policies__step-up-title,
-.super-admin-workflow-policies__step-up-description {
-  margin: 0;
-}
-
-.super-admin-workflow-policies__step-up-description {
-  color: var(--color-text-secondary);
-}

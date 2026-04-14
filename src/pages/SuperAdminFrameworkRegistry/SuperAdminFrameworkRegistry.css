@@ -18,31 +18,14 @@
   color: var(--color-text-secondary);
 }
 
-.super-admin-framework-registry__step-up-card {
-  border-left: 4px solid var(--color-accent-500);
-}
-
-.super-admin-framework-registry__step-up-body,
 .super-admin-framework-registry__detail,
 .super-admin-framework-registry__dialog-body {
   display: grid;
   gap: var(--spacing-md);
 }
-
-.super-admin-framework-registry__step-up-copy {
-  display: grid;
-  gap: var(--spacing-2xs);
-}
-
-.super-admin-framework-registry__step-up-title,
-.super-admin-framework-registry__step-up-description,
 .super-admin-framework-registry__detail-name,
 .super-admin-framework-registry__detail-key {
   margin: 0;
-}
-
-.super-admin-framework-registry__step-up-description {
-  color: var(--color-text-secondary);
 }
 
 .super-admin-framework-registry__fieldset {

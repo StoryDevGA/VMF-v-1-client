@@ -1,15 +1,118 @@
+import { useMemo, useState } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Textarea } from '../../components/Textarea'
 import {
+  formatKeyList,
   INITIAL_RUNTIME_SKILL_FORM,
+  parseFrameworkKeyList,
   RUNTIME_SKILL_FORM_STATUS_OPTIONS,
 } from './superAdminSkills.constants.js'
 import './RuntimeSkillDialogs.css'
 
-function RuntimeSkillFormFields({ prefix, form, setForm, errors }) {
+function RuntimeSkillFrameworkField({ prefix, form, setForm, errors, frameworkOptions = [] }) {
+  const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
+  const selectedFrameworkKeys = useMemo(
+    () => parseFrameworkKeyList(form.supportedFrameworkKeys),
+    [form.supportedFrameworkKeys],
+  )
+  const frameworkLabelLookup = useMemo(
+    () => Object.fromEntries(frameworkOptions.map((option) => [option.value, option.label])),
+    [frameworkOptions],
+  )
+  const availableFrameworkOptions = useMemo(() => {
+    const selectedFrameworkKeySet = new Set(selectedFrameworkKeys)
+
+    return frameworkOptions.filter(
+      (option) => option.value && !selectedFrameworkKeySet.has(option.value),
+    )
+  }, [frameworkOptions, selectedFrameworkKeys])
+
+  const handleAddFramework = () => {
+    if (!pendingFrameworkKey) return
+
+    setForm((current) => ({
+      ...current,
+      supportedFrameworkKeys: formatKeyList([...selectedFrameworkKeys, pendingFrameworkKey]),
+    }))
+    setPendingFrameworkKey('')
+  }
+
+  const handleRemoveFramework = (frameworkKey) => {
+    setForm((current) => ({
+      ...current,
+      supportedFrameworkKeys: formatKeyList(
+        parseFrameworkKeyList(current.supportedFrameworkKeys).filter((value) => value !== frameworkKey),
+      ),
+    }))
+  }
+
+  return (
+    <div className="super-admin-skills__framework-picker">
+      <div className="super-admin-skills__framework-picker-controls">
+        <Select
+          id={`${prefix}-framework-select`}
+          label="Add Framework"
+          value={pendingFrameworkKey}
+          options={availableFrameworkOptions}
+          onChange={(event) => setPendingFrameworkKey(event.target.value)}
+          placeholder={availableFrameworkOptions.length > 0 ? 'Select a framework' : 'No frameworks available'}
+          disabled={availableFrameworkOptions.length === 0}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="super-admin-skills__framework-add-button"
+          onClick={handleAddFramework}
+          disabled={!pendingFrameworkKey}
+        >
+          Add Framework
+        </Button>
+      </div>
+
+      <p className="super-admin-skills__framework-helper">
+        Choose frameworks from the active Framework Registry entries only.
+      </p>
+
+      {selectedFrameworkKeys.length > 0 ? (
+        <div className="super-admin-skills__framework-list">
+          {selectedFrameworkKeys.map((frameworkKey) => (
+            <div key={frameworkKey} className="super-admin-skills__framework-item">
+              <div className="super-admin-skills__framework-copy">
+                <p className="super-admin-skills__framework-label">
+                  {frameworkLabelLookup[frameworkKey] ?? frameworkKey}
+                </p>
+                <p className="super-admin-skills__framework-key">{frameworkKey}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRemoveFramework(frameworkKey)}
+                aria-label={`Remove ${frameworkKey}`}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="super-admin-skills__framework-helper">No frameworks selected yet.</p>
+      )}
+
+      {errors.supportedFrameworkKeys ? (
+        <p className="super-admin-skills__framework-error" role="alert">
+          {errors.supportedFrameworkKeys}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function RuntimeSkillFormFields({ prefix, form, setForm, errors, frameworkOptions }) {
   return (
     <div className="super-admin-skills__dialog-body">
       <div className="super-admin-skills__row">
@@ -53,17 +156,12 @@ function RuntimeSkillFormFields({ prefix, form, setForm, errors }) {
         fullWidth
       />
 
-        <Textarea
-          id={`${prefix}-framework-keys`}
-          label="Supported Framework Keys"
-          helperText="Use commas or new lines. Supported values come from the Framework Registry."
-          value={form.supportedFrameworkKeys}
-        onChange={(event) =>
-          setForm((current) => ({ ...current, supportedFrameworkKeys: event.target.value }))
-        }
-        error={errors.supportedFrameworkKeys}
-        rows={4}
-        fullWidth
+      <RuntimeSkillFrameworkField
+        prefix={prefix}
+        form={form}
+        setForm={setForm}
+        errors={errors}
+        frameworkOptions={frameworkOptions}
       />
     </div>
   )
@@ -76,6 +174,7 @@ export function CreateRuntimeSkillDialog({
   setCreateForm,
   createErrors,
   setCreateErrors,
+  frameworkOptions,
   onSubmit,
 }) {
   return (
@@ -90,6 +189,7 @@ export function CreateRuntimeSkillDialog({
             form={createForm}
             setForm={setCreateForm}
             errors={createErrors}
+            frameworkOptions={frameworkOptions}
           />
         </form>
       </Dialog.Body>
@@ -122,6 +222,7 @@ export function EditRuntimeSkillDialog({
   editForm,
   setEditForm,
   editErrors,
+  frameworkOptions,
   onSubmit,
 }) {
   return (
@@ -135,6 +236,7 @@ export function EditRuntimeSkillDialog({
           form={editForm}
           setForm={setEditForm}
           errors={editErrors}
+          frameworkOptions={frameworkOptions}
         />
       </Dialog.Body>
       <Dialog.Footer>

@@ -7,27 +7,12 @@ import {
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
 
-vi.mock('../../components/StepUpAuthForm', () => ({
-  StepUpAuthForm: ({ onStepUpComplete }) => (
-    <button
-      type="button"
-      onClick={() => onStepUpComplete('mock-step-up-token', 900)}
-    >
-      Verify Runtime Control Access
-    </button>
-  ),
-}))
-
 function renderPage() {
   return renderRuntimeControlPage({
     route: '/super-admin/runtime-control/workflow-policies',
     path: '/super-admin/runtime-control/workflow-policies',
     element: <SuperAdminWorkflowPolicies />,
   })
-}
-
-async function verifyRuntimeControlAccess(user) {
-  await user.click(screen.getByRole('button', { name: /verify runtime control access/i }))
 }
 
 describe('SuperAdminWorkflowPolicies page', () => {
@@ -57,8 +42,6 @@ describe('SuperAdminWorkflowPolicies page', () => {
   it('creates a workflow policy from the modal dialog and shows it in the catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await verifyRuntimeControlAccess(user)
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     await user.type(
@@ -139,8 +122,6 @@ describe('SuperAdminWorkflowPolicies page', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await verifyRuntimeControlAccess(user)
-
     await user.selectOptions(
       await screen.findByLabelText(/actions for vmf publish policy/i),
       'Edit',
@@ -161,8 +142,6 @@ describe('SuperAdminWorkflowPolicies page', () => {
   it('updates a workflow policy status from the row action menu', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await verifyRuntimeControlAccess(user)
 
     await user.selectOptions(
       await screen.findByLabelText(/actions for vmf publish policy/i),

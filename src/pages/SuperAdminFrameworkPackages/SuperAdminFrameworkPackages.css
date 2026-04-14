@@ -17,26 +17,3 @@
 .super-admin-framework-packages__subtitle {
   color: var(--color-text-secondary);
 }
-
-.super-admin-framework-packages__step-up-card {
-  border-left: 4px solid var(--color-accent-500);
-}
-
-.super-admin-framework-packages__step-up-body {
-  display: grid;
-  gap: var(--spacing-md);
-}
-
-.super-admin-framework-packages__step-up-copy {
-  display: grid;
-  gap: var(--spacing-2xs);
-}
-
-.super-admin-framework-packages__step-up-title,
-.super-admin-framework-packages__step-up-description {
-  margin: 0;
-}
-
-.super-admin-framework-packages__step-up-description {
-  color: var(--color-text-secondary);
-}

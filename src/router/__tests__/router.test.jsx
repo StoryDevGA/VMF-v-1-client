@@ -39,6 +39,10 @@ vi.mock('../../pages/SuperAdminSkills', () => ({
   default: () => <h1>Skills</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminSkillEditor', () => ({
+  default: () => <h1>Skill Editor</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminWorkflowPolicies', () => ({
   default: () => <h1>Workflow Policies</h1>,
 }))
@@ -496,6 +500,62 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render the Skill Editor create page at /super-admin/runtime-control/skills/new for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/skills/new'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-skill-editor-create-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^skill editor$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Skill Editor detail page at /super-admin/runtime-control/skills/:skillId for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/skills/skill-snapshot'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-skill-editor-detail-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /^skill editor$/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render the Workflow Policies page at /super-admin/runtime-control/workflow-policies for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/runtime-control/workflow-policies'],
@@ -629,6 +689,8 @@ describe('Router', () => {
         'runtime-control/framework-packages',
         'runtime-control/agents',
         'runtime-control/skills',
+        'runtime-control/skills/new',
+        'runtime-control/skills/:skillId',
         'runtime-control/workflow-policies',
         'invitations',
         'license-levels',
