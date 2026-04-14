@@ -97,6 +97,60 @@ describe('SuperAdminAgents page', () => {
     expect(frameworkSelect).not.toBeDisabled()
   })
 
+  it('blocks create when contracts contain invalid JSON', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.type(
+      screen.getByLabelText(/^agent key$/i, {
+        selector: 'input#runtime-agent-create-key',
+      }),
+      'bad-json',
+    )
+    await user.type(
+      screen.getByLabelText(/^agent name$/i, {
+        selector: 'input#runtime-agent-create-name',
+      }),
+      'Bad JSON',
+    )
+
+    fireEvent.change(
+      screen.getByLabelText(/input contract \(json\)/i, {
+        selector: 'textarea#runtime-agent-create-input-contract',
+      }),
+      { target: { value: '{' } },
+    )
+
+    await user.click(screen.getByRole('button', { name: /create agent/i }))
+
+    expect(await screen.findByText(/invalid json\./i)).toBeInTheDocument()
+    expect(screen.queryByText('Bad JSON')).not.toBeInTheDocument()
+  })
+
+  it('shows a field-level error when the agent key is duplicated', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.type(
+      screen.getByLabelText(/^agent key$/i, {
+        selector: 'input#runtime-agent-create-key',
+      }),
+      'validator',
+    )
+    await user.type(
+      screen.getByLabelText(/^agent name$/i, {
+        selector: 'input#runtime-agent-create-name',
+      }),
+      'Duplicate Validator',
+    )
+
+    await user.click(screen.getByRole('button', { name: /create agent/i }))
+
+    expect(await screen.findByText(/agent key must be unique\./i)).toBeInTheDocument()
+  })
+
   it('supports search filters and pagination for the agents catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -161,5 +215,60 @@ describe('SuperAdminAgents page', () => {
       expect(validatorRow).not.toBeNull()
       expect(within(validatorRow).getByText(/inactive/i)).toBeInTheDocument()
     })
+  })
+
+  it('blocks re-activating a deprecated agent from the row action menu', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Deprecate')
+
+    await waitFor(() => {
+      const validatorRow = screen.getByText('Validator').closest('tr')
+      expect(validatorRow).not.toBeNull()
+      expect(within(validatorRow).getByText(/deprecated/i)).toBeInTheDocument()
+    })
+
+    await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Set Active')
+
+    expect(await screen.findByText(/failed to update agent status/i)).toBeInTheDocument()
+
+    const validatorRow = screen.getByText('Validator').closest('tr')
+    expect(validatorRow).not.toBeNull()
+    expect(within(validatorRow).getByText(/deprecated/i)).toBeInTheDocument()
+  })
+
+  it('validates an agent from the row action menu and shows a toast', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Validate')
+
+    expect(await screen.findByText(/agent validated/i)).toBeInTheDocument()
+  })
+
+  it('tests an agent from the row action menu and shows a toast', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Test')
+
+    expect(await screen.findByRole('button', { name: /run test/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /run test/i }))
+
+    expect(await screen.findByText(/agent test completed/i)).toBeInTheDocument()
+
+    const testDialogHeading = screen.getByText(/^test agent$/i)
+    const testDialog = testDialogHeading.closest('dialog')
+    expect(testDialog).not.toBeNull()
+
+    await user.click(within(testDialog).getByRole('button', { name: /show compiled prompt preview/i }))
+
+    await waitFor(() => {
+      expect(testDialog.querySelector('#runtime-agent-test-compiled-preview')).not.toBeNull()
+    })
+
+    expect(within(testDialog).getByDisplayValue(/base system prompt/i)).toBeInTheDocument()
   })
 })

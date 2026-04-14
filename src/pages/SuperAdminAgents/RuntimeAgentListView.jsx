@@ -21,6 +21,11 @@ import './RuntimeAgentListView.css'
 function RuntimeAgentRowActionsMenu({ row, onAction }) {
   const actionOptions = [
     { value: 'Edit', label: 'Edit' },
+    { value: 'Validate', label: 'Validate' },
+    { value: 'Test', label: 'Test' },
+    ...(row.status === RUNTIME_AGENT_STATUSES.DEPRECATED
+      ? []
+      : [{ value: 'Deprecate', label: 'Deprecate' }]),
     ...(row.status === RUNTIME_AGENT_STATUSES.ACTIVE
       ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
       : [{ value: 'Set Active', label: 'Set Active' }]),
@@ -96,11 +101,21 @@ export function RuntimeAgentListView({
   openCreateDialog,
   openEditDialog,
   setAgentStatus,
+  validateAgent,
+  openTestDialog,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
         openEditDialog(row)
+      }
+
+      if (label === 'Validate') {
+        validateAgent(row)
+      }
+
+      if (label === 'Test') {
+        openTestDialog(row)
       }
 
       if (label === 'Set Active') {
@@ -110,8 +125,12 @@ export function RuntimeAgentListView({
       if (label === 'Set Inactive') {
         setAgentStatus(row, RUNTIME_AGENT_STATUSES.INACTIVE)
       }
+
+      if (label === 'Deprecate') {
+        setAgentStatus(row, RUNTIME_AGENT_STATUSES.DEPRECATED)
+      }
     },
-    [openEditDialog, setAgentStatus],
+    [openEditDialog, openTestDialog, setAgentStatus, validateAgent],
   )
 
   const columns = useMemo(

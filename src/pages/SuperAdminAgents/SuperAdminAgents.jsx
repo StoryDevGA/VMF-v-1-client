@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CreateRuntimeAgentDialog, EditRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
+import { CreateRuntimeAgentDialog, EditRuntimeAgentDialog, TestRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
 import { RuntimeAgentListView } from './RuntimeAgentListView.jsx'
 import { useRuntimeAgentManagement } from './useRuntimeAgentManagement.js'
 import './SuperAdminAgents.css'
@@ -41,6 +41,8 @@ function SuperAdminAgents() {
         openCreateDialog={mgmt.openCreateDialog}
         openEditDialog={mgmt.openEditDialog}
         setAgentStatus={mgmt.setAgentStatus}
+        validateAgent={mgmt.validateAgent}
+        openTestDialog={mgmt.openTestDialog}
       />
 
       <CreateRuntimeAgentDialog
@@ -62,6 +64,18 @@ function SuperAdminAgents() {
         editErrors={mgmt.editErrors}
         frameworkOptions={mgmt.activeFrameworkOptions}
         onSubmit={mgmt.handleEditSubmit}
+      />
+
+      <TestRuntimeAgentDialog
+        open={mgmt.testOpen}
+        onClose={mgmt.closeTestDialog}
+        agent={mgmt.testAgent}
+        testForm={mgmt.testForm}
+        setTestForm={mgmt.setTestForm}
+        testErrors={mgmt.testErrors}
+        testResult={mgmt.testResult}
+        frameworkOptions={mgmt.activeFrameworkOptions}
+        onSubmit={mgmt.handleTestSubmit}
       />
     </section>
   )

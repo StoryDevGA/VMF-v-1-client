@@ -151,12 +151,42 @@ const buildEntityResponse = (entity) => ({
   meta: {},
 })
 
+const compilePromptPreview = (promptConfig = {}) => {
+  const blocks = [
+    { label: 'Base System Prompt', value: String(promptConfig.baseSystemPrompt ?? '').trim() },
+    { label: 'Role Prompt', value: String(promptConfig.rolePrompt ?? '').trim() },
+    { label: 'Developer Instructions', value: String(promptConfig.developerInstructions ?? '').trim() },
+    { label: 'Output Contract Prompt', value: String(promptConfig.outputContractPrompt ?? '').trim() },
+    { label: 'Forbidden Actions Prompt', value: String(promptConfig.forbiddenActionsPrompt ?? '').trim() },
+    { label: 'Handoff Prompt', value: String(promptConfig.handoffPrompt ?? '').trim() },
+  ].filter((block) => block.value)
+
+  if (blocks.length === 0) return ''
+
+  return blocks
+    .map((block) => `## ${block.label}\n\n${block.value}`)
+    .join('\n\n')
+}
+
 const buildConflictError = (message, details = {}) => ({
   error: {
     status: 409,
     data: {
       error: {
         code: 'CONFLICT',
+        message,
+        details,
+      },
+    },
+  },
+})
+
+const buildValidationFailedError = (message, details = {}) => ({
+  error: {
+    status: 422,
+    data: {
+      error: {
+        code: 'VALIDATION_FAILED',
         message,
         details,
       },
@@ -369,6 +399,52 @@ const findFrameworkRegistryById = (registryId) =>
 
 const findRuntimeAgentById = (agentId) =>
   runtimeControlState.agents.find((agent) => agent.id === agentId)
+
+const getActiveFrameworkRegistryKeys = () =>
+  new Set(
+    runtimeControlState.frameworkRegistries
+      .filter((entry) => String(entry.status ?? '').trim().toUpperCase() === 'ACTIVE')
+      .map((entry) => normalizeFrameworkKey(entry.frameworkKey))
+      .filter(Boolean),
+  )
+
+const validateMockRuntimeAgent = (agent) => {
+  const errors = {}
+  const warnings = []
+  const activeFrameworkKeys = getActiveFrameworkRegistryKeys()
+  const supportedFrameworkKeys = Array.isArray(agent?.supportedFrameworkKeys)
+    ? agent.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value)).filter(Boolean)
+    : []
+
+  if (!String(agent?.key ?? '').trim()) {
+    errors.key = 'Agent key is required.'
+  }
+
+  if (!String(agent?.name ?? '').trim()) {
+    errors.name = 'Agent name is required.'
+  }
+
+  if (supportedFrameworkKeys.length === 0) {
+    errors.supportedFrameworkKeys = 'At least one supported framework key is required.'
+  } else {
+    const invalidFrameworkKey = supportedFrameworkKeys.find(
+      (frameworkKey) => !activeFrameworkKeys.has(frameworkKey),
+    )
+
+    if (invalidFrameworkKey) {
+      errors.supportedFrameworkKeys = `Inactive framework key "${invalidFrameworkKey}".`
+    }
+  }
+
+  if (String(agent?.status ?? '').trim().toUpperCase() === 'DEPRECATED') {
+    warnings.push('Agent is deprecated and should not be selected as a default for new policies.')
+  }
+
+  return {
+    errors,
+    warnings,
+  }
+}
 
 const findRuntimeSkillById = (skillId) =>
   runtimeControlState.skills.find((skill) => skill.id === skillId)
@@ -975,6 +1051,230 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    validateRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/validate`,
+              method: 'POST',
+              body: {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const agent = findRuntimeAgentById(agentId)
+        if (!agent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const { errors, warnings } = validateMockRuntimeAgent(agent)
+        if (Object.keys(errors).length > 0) {
+          return buildValidationFailedError('Agent validation failed.', errors)
+        }
+
+        return {
+          data: buildEntityResponse({
+            valid: true,
+            warnings,
+          }),
+        }
+      },
+    }),
+
+    testRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId, ...payload } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/test`,
+              method: 'POST',
+              body: payload ?? {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const agent = findRuntimeAgentById(agentId)
+        if (!agent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const { errors, warnings } = validateMockRuntimeAgent(agent)
+        const normalizedFrameworkKey = normalizeFrameworkKey(payload?.frameworkKey)
+        const normalizedWorkflowKey = String(payload?.workflowKey ?? '').trim().toLowerCase()
+        const supportedFrameworkKeys = Array.isArray(agent.supportedFrameworkKeys)
+          ? agent.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value))
+          : []
+        const supportedWorkflowKeys = Array.isArray(agent.supportedWorkflows)
+          ? agent.supportedWorkflows
+          : []
+
+        if (normalizedFrameworkKey && !supportedFrameworkKeys.includes(normalizedFrameworkKey)) {
+          errors.frameworkKey = `Agent does not support framework key "${normalizedFrameworkKey}".`
+        }
+
+        if (normalizedWorkflowKey && !supportedWorkflowKeys.includes(normalizedWorkflowKey)) {
+          errors.workflowKey = `Agent does not support workflow key "${normalizedWorkflowKey}".`
+        }
+
+        if (Object.keys(errors).length > 0) {
+          return buildValidationFailedError('Agent test failed.', errors)
+        }
+
+        const compiledPromptPreview = compilePromptPreview(agent.promptConfig ?? {})
+
+        return {
+          data: buildEntityResponse({
+            ok: true,
+            warnings,
+            promptHash: 'mock-prompt-hash',
+            compiledPromptPreview,
+          }),
+        }
+      },
+    }),
+
+    activateRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/activate`,
+              method: 'POST',
+              body: {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingAgent = findRuntimeAgentById(agentId)
+        if (!existingAgent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        if (String(existingAgent.status ?? '').trim().toUpperCase() === 'DEPRECATED') {
+          return buildConflictError('Deprecated agents cannot be activated.', {
+            field: 'status',
+            reason: 'RUNTIME_AGENT_DEPRECATED',
+          })
+        }
+
+        const { errors } = validateMockRuntimeAgent(existingAgent)
+        if (Object.keys(errors).length > 0) {
+          return buildValidationFailedError('Agent must pass validation before activation.', errors)
+        }
+
+        const nextAgent = cloneRuntimeAgent({
+          ...existingAgent,
+          status: 'ACTIVE',
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          agents: runtimeControlState.agents.map((agent) =>
+            agent.id === agentId ? nextAgent : agent,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimeAgent(nextAgent)) }
+      },
+      invalidatesTags: (_result, _error, { agentId }) => [
+        AGENT_LIST_TAG,
+        { type: 'RuntimeAgent', id: agentId },
+      ],
+    }),
+
+    disableRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/disable`,
+              method: 'POST',
+              body: {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingAgent = findRuntimeAgentById(agentId)
+        if (!existingAgent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const nextAgent = cloneRuntimeAgent({
+          ...existingAgent,
+          status: 'INACTIVE',
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          agents: runtimeControlState.agents.map((agent) =>
+            agent.id === agentId ? nextAgent : agent,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimeAgent(nextAgent)) }
+      },
+      invalidatesTags: (_result, _error, { agentId }) => [
+        AGENT_LIST_TAG,
+        { type: 'RuntimeAgent', id: agentId },
+      ],
+    }),
+
+    deprecateRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/deprecate`,
+              method: 'POST',
+              body: {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingAgent = findRuntimeAgentById(agentId)
+        if (!existingAgent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const nextAgent = cloneRuntimeAgent({
+          ...existingAgent,
+          status: 'DEPRECATED',
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          agents: runtimeControlState.agents.map((agent) =>
+            agent.id === agentId ? nextAgent : agent,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimeAgent(nextAgent)) }
+      },
+      invalidatesTags: (_result, _error, { agentId }) => [
+        AGENT_LIST_TAG,
+        { type: 'RuntimeAgent', id: agentId },
+      ],
+    }),
+
     listRuntimeSkills: build.query({
       queryFn: async (
         { page = 1, pageSize = RUNTIME_SKILL_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
@@ -1333,6 +1633,11 @@ export const {
   useCreateRuntimeAgentMutation,
   useGetRuntimeAgentQuery,
   useUpdateRuntimeAgentMutation,
+  useValidateRuntimeAgentMutation,
+  useTestRuntimeAgentMutation,
+  useActivateRuntimeAgentMutation,
+  useDisableRuntimeAgentMutation,
+  useDeprecateRuntimeAgentMutation,
   useListRuntimeSkillsQuery,
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
