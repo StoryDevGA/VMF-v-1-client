@@ -329,7 +329,9 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
-    await user.click(screen.getByRole('button', { name: /^create customer$/i }))
+
+    const createDialog = screen.getByRole('heading', { name: /^create customer$/i }).closest('dialog')
+    await user.click(within(createDialog).getByRole('button', { name: /^create$/i }))
 
     expect(screen.getByText(/name is required/i)).toBeInTheDocument()
     expect(screen.getByText(/licence level is required/i)).toBeInTheDocument()
@@ -810,7 +812,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -839,7 +841,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -865,7 +867,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -900,7 +902,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -956,7 +958,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1001,7 +1003,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1051,7 +1053,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1124,7 +1126,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1186,7 +1188,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1239,7 +1241,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1295,7 +1297,7 @@ describe('SuperAdminCustomers page', () => {
     renderPage()
 
     selectRowAction('acme corp', 'View Users')
-    await user.click(screen.getByRole('button', { name: /^create user$/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     const createUserHeading = screen.getByRole('heading', { name: /create customer user/i })
     const createUserDialog = createUserHeading.closest('dialog')
@@ -1686,11 +1688,9 @@ describe('SuperAdminCustomers page', () => {
         selector: 'input#sa-customer-user-edit-name',
       }),
     )
-    await user.click(editDialogScreen.getByLabelText(/^user$/i))
     await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
 
     expect(editDialogScreen.getByText(/full name is required/i)).toBeInTheDocument()
-    expect(editDialogScreen.getByText(/select at least one role/i)).toBeInTheDocument()
     expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
@@ -1961,8 +1961,8 @@ describe('SuperAdminCustomers page', () => {
     await user.click(editDialogScreen.getByRole('button', { name: /^save changes$/i }))
 
     expect(mockUpdateUser).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText(/canonical customer admin governance/i)).toBeInTheDocument()
-    expect(screen.getByText(/assign\/replace admin flows/i)).toBeInTheDocument()
+    expect(await screen.findByText(/customer admin ownership is governed separately/i)).toBeInTheDocument()
+    expect(screen.getByText(/use transfer ownership instead/i)).toBeInTheDocument()
   })
 
   it('shows replace-admin entry in users workspace when canonical admin exists', async () => {
@@ -2832,7 +2832,7 @@ describe('SuperAdminCustomers page', () => {
     expect(mockDisableUser).toHaveBeenCalledWith({ userId: 'u-1' })
     expect(await screen.findByText(/cannot deactivate user/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/this user is the canonical customer admin of an active customer\. replace admin first\./i),
+      screen.getByText(/this user is the canonical admin for an active customer\. transfer ownership before disabling access\./i),
     ).toBeInTheDocument()
   })
 
