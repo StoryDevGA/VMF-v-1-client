@@ -7,6 +7,7 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Textarea } from '../../components/Textarea'
+import { TabView } from '../../components/TabView'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateRuntimeSkillMutation,
@@ -231,123 +232,137 @@ function SkillEditorForm({
             />
           </SkillEditorSection>
 
-          <SkillEditorSection
-            title="Framework Compatibility"
-            copy="Keep framework support aligned to the Framework Registry source of truth."
+          <TabView
+            variant="pills"
+            className="super-admin-skill-editor__tabs"
+            aria-label="Skill editor configuration sections"
           >
-            <FrameworkCompatibilityField
-              frameworkOptions={frameworkOptions}
-              value={form.supportedFrameworkKeys}
-              error={errors.supportedFrameworkKeys}
-              onChange={(supportedFrameworkKeys) =>
-                setForm((current) => ({
-                  ...current,
-                  supportedFrameworkKeys,
-                }))
-              }
-            />
-          </SkillEditorSection>
+            <TabView.Tab label="Framework Compatibility">
+              <SkillEditorSection
+                title="Framework Compatibility"
+                copy="Keep framework support aligned to the Framework Registry source of truth."
+              >
+                <FrameworkCompatibilityField
+                  frameworkOptions={frameworkOptions}
+                  value={form.supportedFrameworkKeys}
+                  error={errors.supportedFrameworkKeys}
+                  onChange={(supportedFrameworkKeys) =>
+                    setForm((current) => ({
+                      ...current,
+                      supportedFrameworkKeys,
+                    }))
+                  }
+                />
+              </SkillEditorSection>
+            </TabView.Tab>
 
-          <SkillEditorSection
-            title="Skill Classification"
-            copy="Classify the skill by category, type, and execution mode to support governance and runtime resolution."
-          >
-            <div className="super-admin-skill-editor__row">
-              <Select
-                id="runtime-skill-editor-category"
-                label="Category"
-                className="super-admin-skill-editor__select-field"
-                value={form.category}
-                options={RUNTIME_SKILL_CATEGORY_OPTIONS}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, category: event.target.value }))
-                }
-              />
-              <Select
-                id="runtime-skill-editor-type"
-                label="Type"
-                className="super-admin-skill-editor__select-field"
-                value={form.type}
-                options={RUNTIME_SKILL_TYPE_OPTIONS}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, type: event.target.value }))
-                }
-              />
-              <Select
-                id="runtime-skill-editor-execution-mode"
-                label="Execution Mode"
-                className="super-admin-skill-editor__select-field"
-                value={form.executionMode}
-                options={RUNTIME_SKILL_EXECUTION_MODE_OPTIONS}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, executionMode: event.target.value }))
-                }
-                error={errors.executionMode}
-              />
-            </div>
-          </SkillEditorSection>
+            <TabView.Tab label="Skill Classification">
+              <SkillEditorSection
+                title="Skill Classification"
+                copy="Classify the skill by category, type, and execution mode to support governance and runtime resolution."
+              >
+                <div className="super-admin-skill-editor__row">
+                  <Select
+                    id="runtime-skill-editor-category"
+                    label="Category"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.category}
+                    options={RUNTIME_SKILL_CATEGORY_OPTIONS}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, category: event.target.value }))
+                    }
+                  />
+                  <Select
+                    id="runtime-skill-editor-type"
+                    label="Type"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.type}
+                    options={RUNTIME_SKILL_TYPE_OPTIONS}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, type: event.target.value }))
+                    }
+                  />
+                  <Select
+                    id="runtime-skill-editor-execution-mode"
+                    label="Execution Mode"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.executionMode}
+                    options={RUNTIME_SKILL_EXECUTION_MODE_OPTIONS}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, executionMode: event.target.value }))
+                    }
+                    error={errors.executionMode}
+                  />
+                </div>
+              </SkillEditorSection>
+            </TabView.Tab>
 
-          <SkillEditorSection
-            title="Input / Output Contract"
-            copy="Define the expected input and output shapes for this skill."
-          >
-            <div className="super-admin-skill-editor__stack">
-              <Textarea
-                id="runtime-skill-editor-input-contract"
-                label="Input Contract"
-                helperText="Optional. Enter a valid JSON object defining the expected input shape."
-                value={form.inputContract}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, inputContract: event.target.value }))
-                }
-                error={errors.inputContract}
-                rows={6}
-                fullWidth
-              />
-              <Textarea
-                id="runtime-skill-editor-output-contract"
-                label="Output Contract"
-                helperText="Optional. Enter a valid JSON object defining the expected output shape."
-                value={form.outputContract}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, outputContract: event.target.value }))
-                }
-                error={errors.outputContract}
-                rows={6}
-                fullWidth
-              />
-            </div>
-          </SkillEditorSection>
+            <TabView.Tab label="Input / Output Contract">
+              <SkillEditorSection
+                title="Input / Output Contract"
+                copy="Define the expected input and output shapes for this skill."
+              >
+                <div className="super-admin-skill-editor__stack">
+                  <Textarea
+                    id="runtime-skill-editor-input-contract"
+                    label="Input Contract"
+                    helperText="Optional. Enter a valid JSON object defining the expected input shape."
+                    value={form.inputContract}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, inputContract: event.target.value }))
+                    }
+                    error={errors.inputContract}
+                    rows={6}
+                    fullWidth
+                  />
+                  <Textarea
+                    id="runtime-skill-editor-output-contract"
+                    label="Output Contract"
+                    helperText="Optional. Enter a valid JSON object defining the expected output shape."
+                    value={form.outputContract}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, outputContract: event.target.value }))
+                    }
+                    error={errors.outputContract}
+                    rows={6}
+                    fullWidth
+                  />
+                </div>
+              </SkillEditorSection>
+            </TabView.Tab>
 
-          <SkillEditorSection
-            title="Optional Configuration"
-            copy="Configure runtime execution behavior for this skill."
-          >
-            <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
-              <Input
-                id="runtime-skill-editor-timeout"
-                label="Timeout (ms)"
-                type="number"
-                value={form.timeoutMs}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, timeoutMs: event.target.value }))
-                }
-                error={errors.timeoutMs}
-                fullWidth
-              />
-              <Select
-                id="runtime-skill-editor-retry-policy"
-                label="Retry Policy"
-                className="super-admin-skill-editor__select-field"
-                value={form.retryPolicy}
-                options={RUNTIME_SKILL_RETRY_POLICY_OPTIONS}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, retryPolicy: event.target.value }))
-                }
-                error={errors.retryPolicy}
-              />
-            </div>
-          </SkillEditorSection>
+            <TabView.Tab label="Optional Configuration">
+              <SkillEditorSection
+                title="Optional Configuration"
+                copy="Configure runtime execution behavior for this skill."
+              >
+                <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
+                  <Input
+                    id="runtime-skill-editor-timeout"
+                    label="Timeout (ms)"
+                    type="number"
+                    value={form.timeoutMs}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, timeoutMs: event.target.value }))
+                    }
+                    error={errors.timeoutMs}
+                    fullWidth
+                  />
+                  <Select
+                    id="runtime-skill-editor-retry-policy"
+                    label="Retry Policy"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.retryPolicy}
+                    options={RUNTIME_SKILL_RETRY_POLICY_OPTIONS}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, retryPolicy: event.target.value }))
+                    }
+                    error={errors.retryPolicy}
+                  />
+                </div>
+              </SkillEditorSection>
+            </TabView.Tab>
+          </TabView>
 
           {isEditMode ? (
             <SkillEditorSection

@@ -38,8 +38,11 @@ describe('SuperAdminSkillEditor page', () => {
     renderSkillEditor('/super-admin/runtime-control/skills/new')
 
     expect(screen.getByRole('heading', { name: /^create skill$/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /input \/ output contract/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /optional configuration/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^skill classification$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^framework compatibility$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^input \/ output contract$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^optional configuration$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^framework compatibility$/i })).toBeInTheDocument()
 
     await user.clear(
       screen.getByLabelText(/^skill key$/i, {
@@ -74,6 +77,7 @@ describe('SuperAdminSkillEditor page', () => {
       }),
       'Captures alignment checks for runtime control approvals.',
     )
+    await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
     await user.click(screen.getByRole('button', { name: /remove rld/i }))
     await user.click(screen.getByRole('button', { name: /remove vmf/i }))
     await user.selectOptions(
@@ -104,6 +108,12 @@ describe('SuperAdminSkillEditor page', () => {
       'RULE_ENGINE',
     )
 
+    await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
+    expect(screen.getByRole('heading', { name: /input \/ output contract/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^optional configuration$/i }))
+    expect(screen.getByRole('heading', { name: /optional configuration/i })).toBeInTheDocument()
+
     const timeoutInput = screen.getByLabelText(/^timeout/i, {
       selector: 'input#runtime-skill-editor-timeout',
     })
@@ -130,6 +140,7 @@ describe('SuperAdminSkillEditor page', () => {
     const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/new')
 
+    await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
     await user.click(screen.getByRole('button', { name: /remove vmf/i }))
     await user.click(screen.getByRole('button', { name: /remove rld/i }))
 
@@ -197,6 +208,7 @@ describe('SuperAdminSkillEditor page', () => {
       'Test Skill',
     )
 
+    await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
     const inputContractTextarea = screen.getByLabelText(/^input contract$/i, {
       selector: 'textarea#runtime-skill-editor-input-contract',
     })
