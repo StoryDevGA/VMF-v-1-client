@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CreateRuntimeAgentDialog, EditRuntimeAgentDialog, TestRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
+import { TestRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
 import { RuntimeAgentListView } from './RuntimeAgentListView.jsx'
 import { useRuntimeAgentManagement } from './useRuntimeAgentManagement.js'
 import './SuperAdminAgents.css'
@@ -11,6 +11,16 @@ function SuperAdminAgents() {
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
   }, [navigate])
+  const handleCreateClick = useCallback(() => {
+    navigate('/super-admin/runtime-control/agents/new')
+  }, [navigate])
+  const handleEditClick = useCallback(
+    (agent) => {
+      if (!agent?.id) return
+      navigate(`/super-admin/runtime-control/agents/${agent.id}`)
+    },
+    [navigate],
+  )
 
   return (
     <section className="super-admin-agents container" aria-label="Super admin runtime agents">
@@ -38,32 +48,11 @@ function SuperAdminAgents() {
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
-        openCreateDialog={mgmt.openCreateDialog}
-        openEditDialog={mgmt.openEditDialog}
+        onCreateClick={handleCreateClick}
+        onEditClick={handleEditClick}
         setAgentStatus={mgmt.setAgentStatus}
         validateAgent={mgmt.validateAgent}
         openTestDialog={mgmt.openTestDialog}
-      />
-
-      <CreateRuntimeAgentDialog
-        open={mgmt.createOpen}
-        onClose={mgmt.closeCreateDialog}
-        createForm={mgmt.createForm}
-        setCreateForm={mgmt.setCreateForm}
-        createErrors={mgmt.createErrors}
-        setCreateErrors={mgmt.setCreateErrors}
-        frameworkOptions={mgmt.activeFrameworkOptions}
-        onSubmit={mgmt.handleCreateSubmit}
-      />
-
-      <EditRuntimeAgentDialog
-        open={mgmt.editOpen}
-        onClose={mgmt.closeEditDialog}
-        editForm={mgmt.editForm}
-        setEditForm={mgmt.setEditForm}
-        editErrors={mgmt.editErrors}
-        frameworkOptions={mgmt.activeFrameworkOptions}
-        onSubmit={mgmt.handleEditSubmit}
       />
 
       <TestRuntimeAgentDialog

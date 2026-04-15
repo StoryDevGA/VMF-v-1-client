@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useToaster } from '../../components/Toaster'
 import {
-  useCreateRuntimeAgentMutation,
   useDisableRuntimeAgentMutation,
   useActivateRuntimeAgentMutation,
   useDeprecateRuntimeAgentMutation,
@@ -17,17 +16,9 @@ import {
   FRAMEWORK_REGISTRY_STATUSES,
 } from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
-  INITIAL_RUNTIME_AGENT_FORM,
-  mapRuntimeAgentToForm,
   RUNTIME_AGENT_PAGE_SIZE,
   RUNTIME_AGENT_STATUSES,
-  validateRuntimeAgentForm,
 } from './superAdminAgents.constants.js'
-
-const getFieldErrorMap = (appError) => {
-  const field = String(appError?.details?.field ?? '').trim()
-  return field ? { [field]: appError.message } : {}
-}
 
 const parseJsonObject = (value) => {
   const raw = String(value ?? '').trim()
@@ -55,24 +46,10 @@ export function useRuntimeAgentManagement() {
   const [frameworkFilter, setFrameworkFilter] = useState('')
   const [page, setPage] = useState(1)
 
-  const [createOpen, setCreateOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    ...INITIAL_RUNTIME_AGENT_FORM,
-  })
-  const [createErrors, setCreateErrors] = useState({})
-
-  const [editOpen, setEditOpen] = useState(false)
-  const [editAgentId, setEditAgentId] = useState('')
-  const [editForm, setEditForm] = useState({
-    ...INITIAL_RUNTIME_AGENT_FORM,
-  })
-  const [editErrors, setEditErrors] = useState({})
-
   const [testOpen, setTestOpen] = useState(false)
   const [testAgent, setTestAgent] = useState(null)
   const [testForm, setTestForm] = useState({
     frameworkKey: '',
-    workflowKey: '',
     inputJson: '{}',
     contextJson: '{}',
   })
@@ -98,7 +75,6 @@ export function useRuntimeAgentManagement() {
     q: '',
   })
 
-  const [createRuntimeAgent] = useCreateRuntimeAgentMutation()
   const [updateRuntimeAgent] = useUpdateRuntimeAgentMutation()
   const [activateRuntimeAgent] = useActivateRuntimeAgentMutation()
   const [disableRuntimeAgent] = useDisableRuntimeAgentMutation()
@@ -119,94 +95,15 @@ export function useRuntimeAgentManagement() {
     ),
     { includeAll: false },
   )
-  const activeFrameworkKeys = activeFrameworkOptions.map((option) => option.value)
-
-  const openCreateDialog = useCallback(() => {
-    setCreateErrors({})
-    setCreateForm({
-      ...INITIAL_RUNTIME_AGENT_FORM,
-    })
-    setCreateOpen(true)
-  }, [])
-
-  const closeCreateDialog = useCallback(() => {
-    setCreateOpen(false)
-    setCreateForm({
-      ...INITIAL_RUNTIME_AGENT_FORM,
-    })
-    setCreateErrors({})
-  }, [])
-
-  const handleCreateSubmit = useCallback(
-    async (event) => {
-      event.preventDefault()
-      setCreateErrors({})
-
-      const { errors, payload } = validateRuntimeAgentForm(
-        createForm,
-        rows,
-        '',
-        activeFrameworkKeys,
-      )
-      if (Object.keys(errors).length > 0) {
-        setCreateErrors(errors)
-        return
-      }
-
-      try {
-        await createRuntimeAgent(payload).unwrap()
-        closeCreateDialog()
-        setPage(1)
-        addToast({
-          title: 'Agent created',
-          description: `${payload.name} is now available in the Runtime Control catalogue.`,
-          variant: 'success',
-        })
-      } catch (err) {
-        const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
-
-        if (Object.keys(fieldErrors).length > 0) {
-          setCreateErrors(fieldErrors)
-          return
-        }
-
-        addToast({
-          title: 'Failed to create agent',
-          description: appError.message,
-          variant: 'error',
-        })
-      }
-    },
-    [activeFrameworkKeys, addToast, closeCreateDialog, createForm, createRuntimeAgent, rows],
-  )
-
-  const openEditDialog = useCallback((agent) => {
-    setEditAgentId(agent.id)
-    setEditErrors({})
-    setEditForm(mapRuntimeAgentToForm(agent))
-    setEditOpen(true)
-  }, [])
-
-  const closeEditDialog = useCallback(() => {
-    setEditOpen(false)
-    setEditAgentId('')
-    setEditForm({
-      ...INITIAL_RUNTIME_AGENT_FORM,
-    })
-    setEditErrors({})
-  }, [])
 
   const openTestDialog = useCallback((agent) => {
     const frameworks = Array.isArray(agent?.supportedFrameworkKeys) ? agent.supportedFrameworkKeys : []
-    const workflows = Array.isArray(agent?.supportedWorkflows) ? agent.supportedWorkflows : []
 
     setTestErrors({})
     setTestAgent(agent ?? null)
     setTestResult(null)
     setTestForm({
       frameworkKey: frameworks[0] ?? '',
-      workflowKey: workflows[0] ?? '',
       inputJson: '{}',
       contextJson: '{}',
     })
@@ -219,59 +116,11 @@ export function useRuntimeAgentManagement() {
     setTestResult(null)
     setTestForm({
       frameworkKey: '',
-      workflowKey: '',
       inputJson: '{}',
       contextJson: '{}',
     })
     setTestErrors({})
   }, [])
-
-  const handleEditSubmit = useCallback(
-    async () => {
-      if (!editAgentId) return
-
-      setEditErrors({})
-      const { errors, payload } = validateRuntimeAgentForm(
-        editForm,
-        rows,
-        editAgentId,
-        activeFrameworkKeys,
-      )
-      if (Object.keys(errors).length > 0) {
-        setEditErrors(errors)
-        return
-      }
-
-      try {
-        await updateRuntimeAgent({
-          agentId: editAgentId,
-          ...payload,
-        }).unwrap()
-
-        addToast({
-          title: 'Agent updated',
-          description: 'Changes were saved successfully.',
-          variant: 'success',
-        })
-        closeEditDialog()
-      } catch (err) {
-        const appError = normalizeError(err)
-        const fieldErrors = getFieldErrorMap(appError)
-
-        if (Object.keys(fieldErrors).length > 0) {
-          setEditErrors(fieldErrors)
-          return
-        }
-
-        addToast({
-          title: 'Failed to update agent',
-          description: appError.message,
-          variant: 'error',
-        })
-      }
-    },
-    [activeFrameworkKeys, addToast, closeEditDialog, editAgentId, editForm, rows, updateRuntimeAgent],
-  )
 
   const setAgentStatus = useCallback(
     async (agent, nextStatus) => {
@@ -366,9 +215,6 @@ export function useRuntimeAgentManagement() {
           ...(String(testForm.frameworkKey ?? '').trim()
             ? { frameworkKey: String(testForm.frameworkKey ?? '').trim() }
             : {}),
-          ...(String(testForm.workflowKey ?? '').trim()
-            ? { workflowKey: String(testForm.workflowKey ?? '').trim() }
-            : {}),
           input: input.value ?? {},
           context: context.value ?? {},
         }
@@ -405,7 +251,7 @@ export function useRuntimeAgentManagement() {
         })
       }
     },
-    [addToast, testAgent, testForm.contextJson, testForm.frameworkKey, testForm.inputJson, testForm.workflowKey, testRuntimeAgent],
+    [addToast, testAgent, testForm.contextJson, testForm.frameworkKey, testForm.inputJson, testRuntimeAgent],
   )
 
   return {
@@ -425,21 +271,6 @@ export function useRuntimeAgentManagement() {
     listAppError,
     frameworkOptions,
     activeFrameworkOptions,
-    createOpen,
-    createForm,
-    setCreateForm,
-    createErrors,
-    setCreateErrors,
-    openCreateDialog,
-    closeCreateDialog,
-    handleCreateSubmit,
-    editOpen,
-    editForm,
-    setEditForm,
-    editErrors,
-    openEditDialog,
-    closeEditDialog,
-    handleEditSubmit,
     setAgentStatus,
     validateAgent,
     testOpen,

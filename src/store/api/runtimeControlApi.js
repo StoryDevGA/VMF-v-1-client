@@ -997,6 +997,76 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, agentId) => [{ type: 'RuntimeAgent', id: agentId }],
     }),
 
+    getRuntimeAgentDependencies: build.query({
+      queryFn: async (agentId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('agents', `${agentId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const agent = findRuntimeAgentById(agentId)
+        if (!agent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const workflowPolicies = (runtimeControlState.workflowPolicies || []).filter((policy) =>
+          Array.isArray(policy.requiredAgentIds) && policy.requiredAgentIds.includes(agentId),
+        )
+        const frameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
+          Array.isArray(pkg.defaultAgentIds) && pkg.defaultAgentIds.includes(agentId),
+        )
+
+        const activeWorkflowPolicies = workflowPolicies.filter((policy) => policy.status === 'ACTIVE')
+        const activeFrameworkPackages = frameworkPackages.filter((pkg) => pkg.status === 'ACTIVE')
+
+        const warnings = []
+        const blocks = []
+
+        if (activeWorkflowPolicies.length > 0) {
+          warnings.push(`This Agent is used by ${activeWorkflowPolicies.length} ACTIVE workflow policies.`)
+        }
+
+        if (activeFrameworkPackages.length > 0) {
+          warnings.push(`This Agent is used by ${activeFrameworkPackages.length} ACTIVE framework packages.`)
+        }
+
+        if (warnings.length > 0) {
+          blocks.push('Deactivation is blocked while this agent is referenced by ACTIVE runtime-control resources.')
+        }
+
+        return {
+          data: buildEntityResponse({
+            agentId,
+            workflowPolicies: workflowPolicies.map((policy) => ({
+              id: policy.id,
+              key: policy.key,
+              name: policy.name,
+              status: policy.status,
+            })),
+            frameworkPackages: frameworkPackages.map((pkg) => ({
+              id: pkg.id,
+              frameworkKey: pkg.frameworkKey,
+              frameworkName: pkg.frameworkName,
+              version: pkg.version,
+              status: pkg.status,
+            })),
+            summary: {
+              workflowPolicies: workflowPolicies.length,
+              frameworkPackages: frameworkPackages.length,
+              activeWorkflowPolicies: activeWorkflowPolicies.length,
+              activeFrameworkPackages: activeFrameworkPackages.length,
+            },
+            warnings,
+            blocks,
+          }),
+        }
+      },
+      providesTags: (_result, _error, agentId) => [{ type: 'RuntimeAgentDependencies', id: agentId }],
+    }),
+
     updateRuntimeAgent: build.mutation({
       queryFn: async ({ agentId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -1107,20 +1177,12 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const { errors, warnings } = validateMockRuntimeAgent(agent)
         const normalizedFrameworkKey = normalizeFrameworkKey(payload?.frameworkKey)
-        const normalizedWorkflowKey = String(payload?.workflowKey ?? '').trim().toLowerCase()
         const supportedFrameworkKeys = Array.isArray(agent.supportedFrameworkKeys)
           ? agent.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value))
-          : []
-        const supportedWorkflowKeys = Array.isArray(agent.supportedWorkflows)
-          ? agent.supportedWorkflows
           : []
 
         if (normalizedFrameworkKey && !supportedFrameworkKeys.includes(normalizedFrameworkKey)) {
           errors.frameworkKey = `Agent does not support framework key "${normalizedFrameworkKey}".`
-        }
-
-        if (normalizedWorkflowKey && !supportedWorkflowKeys.includes(normalizedWorkflowKey)) {
-          errors.workflowKey = `Agent does not support workflow key "${normalizedWorkflowKey}".`
         }
 
         if (Object.keys(errors).length > 0) {
@@ -1632,6 +1694,7 @@ export const {
   useListRuntimeAgentsQuery,
   useCreateRuntimeAgentMutation,
   useGetRuntimeAgentQuery,
+  useGetRuntimeAgentDependenciesQuery,
   useUpdateRuntimeAgentMutation,
   useValidateRuntimeAgentMutation,
   useTestRuntimeAgentMutation,

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminAgents from './SuperAdminAgents'
+import SuperAdminAgentEditor from '../SuperAdminAgentEditor'
 import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
@@ -11,7 +12,20 @@ function renderPage() {
   return renderRuntimeControlPage({
     route: '/super-admin/runtime-control/agents',
     path: '/super-admin/runtime-control/agents',
-    element: <SuperAdminAgents />,
+    routes: [
+      {
+        path: '/super-admin/runtime-control/agents',
+        element: <SuperAdminAgents />,
+      },
+      {
+        path: '/super-admin/runtime-control/agents/new',
+        element: <SuperAdminAgentEditor />,
+      },
+      {
+        path: '/super-admin/runtime-control/agents/:agentId',
+        element: <SuperAdminAgentEditor />,
+      },
+    ],
   })
 }
 
@@ -20,7 +34,7 @@ describe('SuperAdminAgents page', () => {
     setupRuntimeControlTestEnvironment()
   })
 
-  it('renders the catalogue-first agents page and opens the create dialog', async () => {
+  it('renders the catalogue-first agents page and routes create actions to the dedicated editor page', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -31,44 +45,15 @@ describe('SuperAdminAgents page', () => {
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
-    expect(screen.getByRole('button', { name: /create agent/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /^create agent$/i })).toBeInTheDocument()
     expect(
       screen.getByLabelText(/^agent key$/i, {
         selector: 'input#runtime-agent-create-key',
       }),
     ).toBeInTheDocument()
-  })
-
-  it('creates an agent from the modal dialog and shows it in the catalogue', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
-    await user.type(
-      screen.getByLabelText(/^agent key$/i, {
-        selector: 'input#runtime-agent-create-key',
-      }),
-      'planner',
-    )
-    await user.type(
-      screen.getByLabelText(/^agent name$/i, {
-        selector: 'input#runtime-agent-create-name',
-      }),
-      'Planner',
-    )
-    fireEvent.change(
-      screen.getByLabelText(/default skill ids/i, {
-        selector: 'textarea#runtime-agent-create-skill-ids',
-      }),
-      { target: { value: 'skill-snapshot,\nskill-summary' } },
-    )
-
-    await user.click(screen.getByRole('button', { name: /create agent/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Planner')).toBeInTheDocument()
-      expect(screen.getByText('planner')).toBeInTheDocument()
-    })
+    expect(screen.getByRole('tab', { name: /framework compatibility/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /skill composition/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /contracts/i })).toBeInTheDocument()
   })
 
   it('only offers active frameworks in the agent dialog selector', async () => {
@@ -76,6 +61,7 @@ describe('SuperAdminAgents page', () => {
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
     await user.click(screen.getByRole('button', { name: /remove vmf/i }))
     await user.click(screen.getByRole('button', { name: /remove rld/i }))
 
@@ -95,60 +81,6 @@ describe('SuperAdminAgents page', () => {
       within(frameworkSelect).queryByRole('option', { name: 'OPS - Operations Messaging Framework' }),
     ).not.toBeInTheDocument()
     expect(frameworkSelect).not.toBeDisabled()
-  })
-
-  it('blocks create when contracts contain invalid JSON', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
-    await user.type(
-      screen.getByLabelText(/^agent key$/i, {
-        selector: 'input#runtime-agent-create-key',
-      }),
-      'bad-json',
-    )
-    await user.type(
-      screen.getByLabelText(/^agent name$/i, {
-        selector: 'input#runtime-agent-create-name',
-      }),
-      'Bad JSON',
-    )
-
-    fireEvent.change(
-      screen.getByLabelText(/input contract \(json\)/i, {
-        selector: 'textarea#runtime-agent-create-input-contract',
-      }),
-      { target: { value: '{' } },
-    )
-
-    await user.click(screen.getByRole('button', { name: /create agent/i }))
-
-    expect(await screen.findByText(/invalid json\./i)).toBeInTheDocument()
-    expect(screen.queryByText('Bad JSON')).not.toBeInTheDocument()
-  })
-
-  it('shows a field-level error when the agent key is duplicated', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
-    await user.type(
-      screen.getByLabelText(/^agent key$/i, {
-        selector: 'input#runtime-agent-create-key',
-      }),
-      'validator',
-    )
-    await user.type(
-      screen.getByLabelText(/^agent name$/i, {
-        selector: 'input#runtime-agent-create-name',
-      }),
-      'Duplicate Validator',
-    )
-
-    await user.click(screen.getByRole('button', { name: /create agent/i }))
-
-    expect(await screen.findByText(/agent key must be unique\./i)).toBeInTheDocument()
   })
 
   it('supports search filters and pagination for the agents catalogue', async () => {
@@ -186,22 +118,19 @@ describe('SuperAdminAgents page', () => {
     })
   })
 
-  it('opens the edit flow from row actions and saves changes', async () => {
+  it('routes edit flow from row actions to the dedicated editor page', async () => {
     const user = userEvent.setup()
     renderPage()
 
     await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Edit')
 
-    const editNameInput = screen.getByLabelText(/^agent name$/i, {
-      selector: 'input#runtime-agent-edit-name',
-    })
-    await user.clear(editNameInput)
-    await user.type(editNameInput, 'Validation Guard')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Validation Guard')).toBeInTheDocument()
-    })
+    expect(await screen.findByRole('heading', { name: /^agent editor$/i })).toBeInTheDocument()
+    expect(
+      await screen.findByLabelText(/^agent key$/i, {
+        selector: 'input#runtime-agent-edit-key',
+      }),
+    ).toHaveValue('validator')
+    expect(screen.getByRole('tab', { name: /prompt & instruction design/i })).toBeInTheDocument()
   })
 
   it('updates an agent status from the row action menu', async () => {

@@ -1,0 +1,89 @@
+.super-admin-agent-editor {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-agent-editor__fieldset {
+  min-width: 0;
+}
+
+.super-admin-agent-editor__card,
+.super-admin-agent-editor__loading-card,
+.super-admin-agent-editor__error-card {
+  height: 100%;
+  overflow: hidden;
+}
+
+.super-admin-agent-editor__form,
+.super-admin-agent-editor__card-body,
+.super-admin-agent-editor__intro {
+  display: grid;
+}
+
+.super-admin-agent-editor__form,
+.super-admin-agent-editor__card-body {
+  gap: var(--spacing-md);
+}
+
+.super-admin-agent-editor__intro {
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-agent-editor__form-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agent-editor__select-field {
+  position: relative;
+  gap: 0;
+  min-width: 0;
+}
+
+.super-admin-agent-editor__select-field .select-label {
+  position: absolute;
+  top: 0;
+  left: var(--spacing-sm);
+  z-index: 1;
+  padding: 0 var(--spacing-2xs);
+  transform: translateY(-50%);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  color: var(--color-primary);
+  background: var(--color-background);
+  pointer-events: none;
+}
+
+.super-admin-agent-editor__select-field .select {
+  min-height: 56px;
+  font-size: var(--font-size-base);
+}
+
+.super-admin-agent-editor__select-field.select-container--error .select-label {
+  color: var(--color-danger);
+}
+
+.super-admin-agent-editor__loading-card,
+.super-admin-agent-editor__error-card {
+  min-height: 220px;
+}
+
+.super-admin-agent-editor__loading-body,
+.super-admin-agent-editor__error-body {
+  display: grid;
+  gap: var(--spacing-sm);
+  place-items: center;
+  text-align: center;
+  min-height: 220px;
+}
+
+@media (max-width: 767px) {
+  .super-admin-agent-editor__top-actions .btn,
+  .super-admin-agent-editor__footer-actions .btn {
+    width: 100%;
+  }
+}

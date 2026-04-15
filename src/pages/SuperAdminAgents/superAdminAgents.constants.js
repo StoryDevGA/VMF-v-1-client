@@ -40,15 +40,6 @@ export const RUNTIME_AGENT_TYPE_OPTIONS = Object.freeze([
   { value: RUNTIME_AGENT_TYPES.SPINE, label: 'Spine' },
 ])
 
-export const RUNTIME_AGENT_WORKFLOW_OPTIONS = Object.freeze([
-  { value: 'fresh_build', label: 'Fresh Build' },
-  { value: 'existing_context_update', label: 'Existing Context Update' },
-  { value: 'prior_vmf_migration', label: 'Prior VMF Migration' },
-  { value: 'existing_vmf_interrogation', label: 'Interrogation & Evolution' },
-  { value: 'validate_only', label: 'Validate Only' },
-  { value: 'artifact_derivation', label: 'Artifact Derivation' },
-])
-
 export const RUNTIME_AGENT_FRAMEWORK_OPTIONS = Object.freeze([
   { value: '', label: 'All frameworks' },
   { value: 'RLD', label: 'RLD' },
@@ -66,11 +57,11 @@ export const INITIAL_RUNTIME_AGENT_FORM = Object.freeze({
   description: '',
   status: RUNTIME_AGENT_STATUSES.ACTIVE,
   agentType: RUNTIME_AGENT_TYPES.EXECUTION,
-  supportedWorkflows: [],
   supportedFrameworkKeys: 'VMF\nRLD',
   defaultSkillIds: '',
   primarySkillIds: '',
   optionalSkillIds: '',
+  executionPlan: [],
   promptBaseSystem: '',
   promptRole: '',
   developerInstructions: '',
@@ -92,11 +83,13 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Runs baseline validation rules for compatible frameworks before policy transitions.',
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+    ]),
     promptConfig: Object.freeze({
       baseSystemPrompt: 'You are a governed StorylineOS runtime agent.',
       rolePrompt: 'Validate runtime control agent configuration.',
@@ -114,11 +107,13 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Produces cross-framework runtime summaries for downstream review surfaces.',
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.ARTEFACT,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     defaultSkillIds: Object.freeze(['skill-summary']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-summary', description: '' }),
+    ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
     outputContract: Object.freeze({}),
@@ -133,11 +128,13 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Checks governance guardrails before approval transitions on VMF runtime bundles.',
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['VMF']),
     defaultSkillIds: Object.freeze(['skill-review']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-review', description: '' }),
+    ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
     outputContract: Object.freeze({}),
@@ -152,11 +149,13 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Evaluates RLD readiness milestones before activation or publish steps.',
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['RLD']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+    ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
     outputContract: Object.freeze({}),
@@ -171,11 +170,14 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Builds report-ready output packages when a compatible framework requests a published artifact.',
     status: RUNTIME_AGENT_STATUSES.INACTIVE,
     agentType: RUNTIME_AGENT_TYPES.ARTEFACT,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     defaultSkillIds: Object.freeze(['skill-summary', 'skill-report']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-summary', description: '' }),
+      Object.freeze({ skillId: 'skill-report', description: '' }),
+    ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
     outputContract: Object.freeze({}),
@@ -190,11 +192,13 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     description: 'Synchronises baseline runtime state during staged rollout validation.',
     status: RUNTIME_AGENT_STATUSES.INACTIVE,
     agentType: RUNTIME_AGENT_TYPES.EXECUTION,
-    supportedWorkflows: Object.freeze([]),
     supportedFrameworkKeys: Object.freeze(['VMF']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
+    executionPlan: Object.freeze([
+      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+    ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
     outputContract: Object.freeze({}),
@@ -214,22 +218,16 @@ export function normalizeEnumToken(value) {
     .toUpperCase()
 }
 
-export function normalizeWorkflowKey(value) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^["'`]+|["'`]+$/g, '')
-    .toLowerCase()
-    .replace(/-/g, '_')
-}
-
 export function cloneRuntimeAgent(agent) {
   return {
     ...agent,
     supportedFrameworkKeys: [...(agent.supportedFrameworkKeys ?? [])],
     defaultSkillIds: [...(agent.defaultSkillIds ?? [])],
-    supportedWorkflows: [...(agent.supportedWorkflows ?? [])],
     primarySkillIds: [...(agent.primarySkillIds ?? [])],
     optionalSkillIds: [...(agent.optionalSkillIds ?? [])],
+    executionPlan: Array.isArray(agent.executionPlan)
+      ? agent.executionPlan.map((step) => ({ ...step }))
+      : [],
     promptConfig: { ...(agent.promptConfig ?? {}) },
     inputContract: { ...(agent.inputContract ?? {}) },
     outputContract: { ...(agent.outputContract ?? {}) },
@@ -290,6 +288,12 @@ export function formatKeyList(items) {
 export function mapRuntimeAgentToForm(agent) {
   const promptConfig = agent.promptConfig ?? {}
   const policies = agent.policies ?? {}
+  const executionPlan = Array.isArray(agent.executionPlan)
+    ? agent.executionPlan.map((step) => ({
+        skillId: normalizeAgentKey(step?.skillId),
+        description: String(step?.description ?? ''),
+      }))
+    : []
 
   return {
     key: agent.key ?? '',
@@ -297,11 +301,11 @@ export function mapRuntimeAgentToForm(agent) {
     description: agent.description ?? '',
     status: agent.status ?? RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: agent.agentType ?? RUNTIME_AGENT_TYPES.EXECUTION,
-    supportedWorkflows: Array.isArray(agent.supportedWorkflows) ? agent.supportedWorkflows : [],
     supportedFrameworkKeys: formatKeyList(agent.supportedFrameworkKeys),
     defaultSkillIds: formatKeyList(agent.defaultSkillIds),
     primarySkillIds: formatKeyList(agent.primarySkillIds),
     optionalSkillIds: formatKeyList(agent.optionalSkillIds),
+    executionPlan,
     promptBaseSystem: String(promptConfig.baseSystemPrompt ?? ''),
     promptRole: String(promptConfig.rolePrompt ?? ''),
     developerInstructions: String(promptConfig.developerInstructions ?? ''),
@@ -345,6 +349,7 @@ export function validateRuntimeAgentForm(
   existingAgents = [],
   selectedAgentId = '',
   availableFrameworkKeys = [],
+  availableSkills = [],
 ) {
   const errors = {}
   const key = normalizeAgentKey(formState.key)
@@ -352,15 +357,16 @@ export function validateRuntimeAgentForm(
   const description = String(formState.description ?? '').trim()
   const status = String(formState.status ?? '').trim() || RUNTIME_AGENT_STATUSES.ACTIVE
   const agentType = normalizeEnumToken(formState.agentType) || RUNTIME_AGENT_TYPES.EXECUTION
-  const supportedWorkflows = [...new Set(
-    (Array.isArray(formState.supportedWorkflows) ? formState.supportedWorkflows : [])
-      .map(normalizeWorkflowKey)
-      .filter(Boolean),
-  )]
   const supportedFrameworkKeys = parseFrameworkKeyList(formState.supportedFrameworkKeys)
   const defaultSkillIds = parseKeyList(formState.defaultSkillIds)
   const primarySkillIds = parseKeyList(formState.primarySkillIds)
   const optionalSkillIds = parseKeyList(formState.optionalSkillIds)
+  const assignedSkillIds = [...new Set([...defaultSkillIds, ...primarySkillIds, ...optionalSkillIds])]
+  const executionPlanStepsRaw = Array.isArray(formState.executionPlan) ? formState.executionPlan : []
+  const executionPlan = executionPlanStepsRaw.map((step) => ({
+    skillId: normalizeAgentKey(step?.skillId),
+    description: String(step?.description ?? '').trim(),
+  }))
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
     errors.key = 'Agent key is required and must use letters, numbers, or hyphens.'
@@ -398,19 +404,9 @@ export function validateRuntimeAgentForm(
     }
   }
 
-  const invalidSkillId = defaultSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
+  const invalidSkillId = assignedSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
   if (invalidSkillId) {
     errors.defaultSkillIds = `Invalid skill id "${invalidSkillId}". Use letters, numbers, or hyphens.`
-  }
-
-  const invalidPrimarySkillId = primarySkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
-  if (invalidPrimarySkillId) {
-    errors.primarySkillIds = `Invalid skill id "${invalidPrimarySkillId}". Use letters, numbers, or hyphens.`
-  }
-
-  const invalidOptionalSkillId = optionalSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
-  if (invalidOptionalSkillId) {
-    errors.optionalSkillIds = `Invalid skill id "${invalidOptionalSkillId}". Use letters, numbers, or hyphens.`
   }
 
   const inputContract = parseJsonObject(formState.inputContractJson)
@@ -462,6 +458,110 @@ export function validateRuntimeAgentForm(
       : {}),
   }
 
+  if (executionPlan.length === 0) {
+    errors.executionPlan = 'Execution plan must contain at least one step.'
+  } else {
+    const stepSkillIds = executionPlan.map((step) => step.skillId).filter(Boolean)
+    const invalidStepSkillId = stepSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
+    if (invalidStepSkillId) {
+      errors.executionPlan = `Invalid skill id "${invalidStepSkillId}" in execution plan.`
+    }
+
+    const stepSkillIdSet = new Set()
+    const duplicateStepSkillId = stepSkillIds.find((value) => {
+      if (stepSkillIdSet.has(value)) return true
+      stepSkillIdSet.add(value)
+      return false
+    })
+    if (!errors.executionPlan && duplicateStepSkillId) {
+      errors.executionPlan = `Duplicate skill "${duplicateStepSkillId}" is not allowed in the execution plan.`
+    }
+
+    const unassignedStepSkillId = stepSkillIds.find((value) => !assignedSkillIds.includes(value))
+    if (!errors.executionPlan && unassignedStepSkillId) {
+      errors.executionPlan = `Skill "${unassignedStepSkillId}" must be assigned before it can be used in the execution plan.`
+    }
+  }
+
+  const availableSkillRows = Array.isArray(availableSkills) ? availableSkills : []
+  if (availableSkillRows.length > 0 && assignedSkillIds.length > 0 && !errors.defaultSkillIds) {
+    const skillLookup = new Map(
+      availableSkillRows
+        .map((skill) => [normalizeAgentKey(skill?.id), skill])
+        .filter(([id]) => id),
+    )
+    const supportedFrameworkKeySet = new Set(supportedFrameworkKeys)
+
+    const unknownSkillId = assignedSkillIds.find((skillId) => !skillLookup.has(skillId))
+    if (unknownSkillId) {
+      errors.defaultSkillIds = `Unknown skill id "${unknownSkillId}". Select a skill from the governed registry.`
+    }
+
+    if (!errors.defaultSkillIds && supportedFrameworkKeySet.size > 0) {
+      const incompatibleSkillId = assignedSkillIds.find((skillId) => {
+        const skill = skillLookup.get(skillId)
+        const skillFrameworkKeys = Array.isArray(skill?.supportedFrameworkKeys)
+          ? skill.supportedFrameworkKeys.map(normalizeFrameworkKey).filter(Boolean)
+          : []
+        return !skillFrameworkKeys.some((frameworkKey) => supportedFrameworkKeySet.has(frameworkKey))
+      })
+
+      if (incompatibleSkillId) {
+        errors.defaultSkillIds = `Skill "${incompatibleSkillId}" is not compatible with the selected frameworks.`
+      }
+    }
+
+    if (!errors.defaultSkillIds && status === RUNTIME_AGENT_STATUSES.ACTIVE) {
+      const inactiveSkillId = assignedSkillIds.find((skillId) => {
+        const skill = skillLookup.get(skillId)
+        return String(skill?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+      })
+
+      if (inactiveSkillId) {
+        errors.defaultSkillIds = `Skill "${inactiveSkillId}" is not ACTIVE and cannot be assigned to an ACTIVE agent.`
+      }
+    }
+  }
+
+  if (availableSkillRows.length > 0 && executionPlan.length > 0 && !errors.executionPlan) {
+    const skillLookup = new Map(
+      availableSkillRows
+        .map((skill) => [normalizeAgentKey(skill?.id), skill])
+        .filter(([id]) => id),
+    )
+    const supportedFrameworkKeySet = new Set(supportedFrameworkKeys)
+    const stepSkillIds = executionPlan.map((step) => step.skillId).filter(Boolean)
+
+    const unknownStepSkillId = stepSkillIds.find((skillId) => !skillLookup.has(skillId))
+    if (unknownStepSkillId) {
+      errors.executionPlan = `Unknown skill id "${unknownStepSkillId}" in execution plan.`
+    }
+
+    if (!errors.executionPlan && status === RUNTIME_AGENT_STATUSES.ACTIVE) {
+      const inactiveStepSkillId = stepSkillIds.find((skillId) => {
+        const skill = skillLookup.get(skillId)
+        return String(skill?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+      })
+      if (inactiveStepSkillId) {
+        errors.executionPlan = `Skill "${inactiveStepSkillId}" is not ACTIVE and cannot be used in the execution plan.`
+      }
+    }
+
+    if (!errors.executionPlan && supportedFrameworkKeySet.size > 0) {
+      const incompatibleStepSkillId = stepSkillIds.find((skillId) => {
+        const skill = skillLookup.get(skillId)
+        const skillFrameworkKeys = Array.isArray(skill?.supportedFrameworkKeys)
+          ? skill.supportedFrameworkKeys.map(normalizeFrameworkKey).filter(Boolean)
+          : []
+        return !skillFrameworkKeys.some((frameworkKey) => supportedFrameworkKeySet.has(frameworkKey))
+      })
+
+      if (incompatibleStepSkillId) {
+        errors.executionPlan = `Skill "${incompatibleStepSkillId}" is not compatible with the selected frameworks.`
+      }
+    }
+  }
+
   return {
     errors,
     payload: {
@@ -470,11 +570,11 @@ export function validateRuntimeAgentForm(
       description,
       status,
       agentType,
-      supportedWorkflows,
       supportedFrameworkKeys,
       defaultSkillIds,
       primarySkillIds,
       optionalSkillIds,
+      executionPlan,
       promptConfig,
       inputContract: inputContract.value ?? {},
       outputContract: outputContract.value ?? {},

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useToaster } from '../../components/Toaster'
 import {
   useActivateFrameworkPackageMutation,
@@ -41,10 +42,15 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
 
 export function useFrameworkPackageManagement() {
   const { addToast } = useToaster()
+  const [searchParams] = useSearchParams()
 
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [frameworkFilter, setFrameworkFilter] = useState('')
+  const initialSearch = String(searchParams.get('q') ?? '')
+  const initialStatus = String(searchParams.get('status') ?? '')
+  const initialFramework = String(searchParams.get('frameworkKey') ?? '')
+
+  const [search, setSearch] = useState(initialSearch)
+  const [statusFilter, setStatusFilter] = useState(initialStatus)
+  const [frameworkFilter, setFrameworkFilter] = useState(initialFramework)
   const [page, setPage] = useState(1)
 
   const [createOpen, setCreateOpen] = useState(false)

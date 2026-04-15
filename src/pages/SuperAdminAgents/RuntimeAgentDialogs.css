@@ -4,6 +4,63 @@
   gap: var(--spacing-md);
 }
 
+.super-admin-agents__tabs {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-agents__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-agents__tab-error-count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+}
+
+.super-admin-agents__section,
+.super-admin-agents__section-header {
+  display: grid;
+}
+
+.super-admin-agents__section {
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.super-admin-agents__overview {
+  padding-top: 0;
+  border-top: 0;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.super-admin-agents__section-header {
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-agents__section-title,
+.super-admin-agents__section-copy {
+  margin: 0;
+}
+
+.super-admin-agents__section-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-primary);
+}
+
+.super-admin-agents__section-copy {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text-secondary);
+}
+
 .super-admin-agents__row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -84,6 +141,10 @@
   color: var(--color-danger);
 }
 
+.super-admin-agents__table-wrap {
+  margin-top: 0;
+}
+
 .super-admin-agents__workflow-picker,
 .super-admin-agents__prompt-section {
   display: grid;
@@ -110,6 +171,54 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--spacing-sm);
+}
+
+.super-admin-agents__skill-picker-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-agents__skill-add-button {
+  align-self: end;
+  min-height: 56px;
+}
+
+.super-admin-agents__execution-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.super-admin-agents__skill-composition,
+.super-admin-agents__skill-selector,
+.super-admin-agents__skill-assigned {
+  display: grid;
+}
+
+.super-admin-agents__skill-composition {
+  gap: var(--spacing-md);
+}
+
+.super-admin-agents__skill-selector,
+.super-admin-agents__skill-assigned {
+  gap: var(--spacing-sm);
+}
+
+.super-admin-agents__skill-name {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-agents__skill-key {
+  display: block;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .super-admin-agents__test-result {
@@ -142,6 +251,62 @@
 
 .super-admin-agents__test-preview {
   margin-top: var(--spacing-sm);
+}
+
+.super-admin-agents__dependency-grid {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-agents__dependency-block {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.super-admin-agents__dependency-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-agents__code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agents__dependency-list {
+  margin: 0;
+  padding-left: var(--spacing-md);
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-agents__dependency-item {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agents__dependency-link {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.super-admin-agents__dependency-link:hover {
+  text-decoration: underline;
+}
+
+.super-admin-agents__dependency-blocked {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
 }
 
 @media (max-width: 767px) {

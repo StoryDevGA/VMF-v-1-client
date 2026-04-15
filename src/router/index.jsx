@@ -46,6 +46,9 @@ const SuperAdminFrameworkPackages = lazy(
 const SuperAdminAgents = lazy(
   () => import('../pages/SuperAdminAgents'),
 )
+const SuperAdminAgentEditor = lazy(
+  () => import('../pages/SuperAdminAgentEditor'),
+)
 const SuperAdminSkills = lazy(
   () => import('../pages/SuperAdminSkills'),
 )
@@ -287,6 +290,14 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/agents',
                   element: <SuperAdminAgents />,
+                },
+                {
+                  path: 'runtime-control/agents/new',
+                  element: <SuperAdminAgentEditor />,
+                },
+                {
+                  path: 'runtime-control/agents/:agentId',
+                  element: <SuperAdminAgentEditor />,
                 },
                 {
                   path: 'runtime-control/skills',

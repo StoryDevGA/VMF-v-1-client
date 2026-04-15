@@ -98,8 +98,8 @@ export function RuntimeAgentListView({
   isListFetching,
   listAppError,
   onBackClick,
-  openCreateDialog,
-  openEditDialog,
+  onCreateClick,
+  onEditClick,
   setAgentStatus,
   validateAgent,
   openTestDialog,
@@ -107,7 +107,7 @@ export function RuntimeAgentListView({
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
-        openEditDialog(row)
+        onEditClick(row)
       }
 
       if (label === 'Validate') {
@@ -130,7 +130,7 @@ export function RuntimeAgentListView({
         setAgentStatus(row, RUNTIME_AGENT_STATUSES.DEPRECATED)
       }
     },
-    [openEditDialog, openTestDialog, setAgentStatus, validateAgent],
+    [onEditClick, openTestDialog, setAgentStatus, validateAgent],
   )
 
   const columns = useMemo(
@@ -191,7 +191,7 @@ export function RuntimeAgentListView({
               <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
                 Back
               </Button>
-              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+              <Button type="button" variant="primary" size="sm" onClick={onCreateClick}>
                 Create
               </Button>
             </div>

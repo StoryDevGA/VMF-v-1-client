@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateWorkflowPolicyMutation,
@@ -29,10 +30,16 @@ const buildDefaultWorkflowPolicyForm = (registryRows) => ({
 
 export function useWorkflowPolicyManagement() {
   const { addToast } = useToaster()
+  const [searchParams] = useSearchParams()
 
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [frameworkFilter, setFrameworkFilter] = useState('')
+  const initialSearch = String(searchParams.get('q') ?? '')
+  const initialStatus = String(searchParams.get('status') ?? '')
+  // List filtering uses a single `frameworkKey` value; the policy form uses a newline-separated `frameworkKeys` string.
+  const initialFramework = String(searchParams.get('frameworkKey') ?? '').trim()
+
+  const [search, setSearch] = useState(initialSearch)
+  const [statusFilter, setStatusFilter] = useState(initialStatus)
+  const [frameworkFilter, setFrameworkFilter] = useState(initialFramework)
   const [page, setPage] = useState(1)
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -76,7 +83,6 @@ export function useWorkflowPolicyManagement() {
   const registryRows = registryResponse?.data ?? []
   const frameworkOptions = buildFrameworkRegistryOptions(registryRows)
   const allowedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
-  const supportedFrameworkKeys = allowedFrameworkKeys
 
   const openCreateDialog = useCallback(() => {
     setCreateErrors({})
@@ -95,7 +101,7 @@ export function useWorkflowPolicyManagement() {
       event.preventDefault()
       setCreateErrors({})
 
-      const { errors, payload } = validateWorkflowPolicyForm(createForm, rows, '', supportedFrameworkKeys)
+      const { errors, payload } = validateWorkflowPolicyForm(createForm, rows, '', allowedFrameworkKeys)
       if (Object.keys(errors).length > 0) {
         setCreateErrors(errors)
         return
@@ -133,7 +139,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm, createWorkflowPolicy, rows, supportedFrameworkKeys],
+    [addToast, closeCreateDialog, createForm, createWorkflowPolicy, rows, allowedFrameworkKeys],
   )
 
   const openEditDialog = useCallback((policy) => {
@@ -161,7 +167,7 @@ export function useWorkflowPolicyManagement() {
         editForm,
         rows,
         editPolicyId,
-        supportedFrameworkKeys,
+        allowedFrameworkKeys,
       )
       if (Object.keys(errors).length > 0) {
         setEditErrors(errors)
@@ -203,7 +209,7 @@ export function useWorkflowPolicyManagement() {
         })
       }
     },
-    [addToast, closeEditDialog, editForm, editPolicyId, rows, supportedFrameworkKeys, updateWorkflowPolicy],
+    [addToast, closeEditDialog, editForm, editPolicyId, rows, allowedFrameworkKeys, updateWorkflowPolicy],
   )
 
   const setWorkflowPolicyStatus = useCallback(
