@@ -14,6 +14,20 @@
   width: 100%;
 }
 
+.tabview--md {
+  --tabview-tab-font-size: var(--font-size-base);
+  --tabview-tab-padding-block: var(--spacing-sm);
+  --tabview-tab-padding-inline: var(--spacing-md);
+  --tabview-tab-min-height: 44px;
+}
+
+.tabview--sm {
+  --tabview-tab-font-size: var(--font-size-sm);
+  --tabview-tab-padding-block: var(--spacing-2xs);
+  --tabview-tab-padding-inline: var(--spacing-sm);
+  --tabview-tab-min-height: 40px;
+}
+
 /* Horizontal orientation (default) */
 .tabview--horizontal {
   flex-direction: column;
@@ -80,14 +94,15 @@
 
   /* Typography */
   font-family: var(--font-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--tabview-tab-font-size, var(--font-size-base));
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   text-align: center;
 
   /* Layout */
-  padding: var(--spacing-sm) var(--spacing-md);
-  min-height: 44px; /* Touch-friendly minimum */
+  padding: var(--tabview-tab-padding-block, var(--spacing-sm))
+    var(--tabview-tab-padding-inline, var(--spacing-md));
+  min-height: var(--tabview-tab-min-height, 44px); /* Touch-friendly minimum */
   position: relative;
 
   /* Transitions */
@@ -303,12 +318,26 @@
     min-height: 48px; /* Larger touch target on mobile */
     font-size: var(--font-size-sm);
   }
+
+  .tabview--sm .tabview__tab {
+    min-height: 44px;
+    padding: var(--spacing-2xs) var(--spacing-sm);
+  }
+
+  .tabview--sm .tabview__tablist {
+    gap: var(--spacing-3xs);
+  }
 }
 
 /* Tablet and up: Better spacing */
 @media (min-width: 768px) {
   .tabview__tab {
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--tabview-tab-padding-block, var(--spacing-sm))
+      var(--tabview-tab-padding-inline, var(--spacing-lg));
+  }
+
+  .tabview--sm .tabview__tab {
+    padding: var(--spacing-2xs) var(--spacing-sm);
   }
 }
 

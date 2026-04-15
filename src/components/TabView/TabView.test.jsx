@@ -415,6 +415,30 @@ describe('TabView Component', () => {
     })
   })
 
+  describe('Sizes', () => {
+    it('should apply medium size by default', () => {
+      render(
+        <TabView>
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+        </TabView>
+      )
+
+      const tabview = screen.getByRole('tablist').parentElement
+      expect(tabview).toHaveClass('tabview--md')
+    })
+
+    it('should apply small size', () => {
+      render(
+        <TabView size="sm">
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+        </TabView>
+      )
+
+      const tabview = screen.getByRole('tablist').parentElement
+      expect(tabview).toHaveClass('tabview--sm')
+    })
+  })
+
   describe('Orientation', () => {
     it('should apply horizontal orientation by default', () => {
       render(

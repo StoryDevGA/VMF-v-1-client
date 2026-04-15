@@ -46,6 +46,7 @@ export function TabView({
   activeTab: controlledActiveTab,
   variant = 'default',
   orientation = 'horizontal',
+  size = 'md',
   onTabChange,
   className = '',
   ...props
@@ -136,6 +137,7 @@ export function TabView({
     'tabview',
     `tabview--${variant}`,
     `tabview--${orientation}`,
+    `tabview--${size}`,
     className
   ]
     .filter(Boolean)

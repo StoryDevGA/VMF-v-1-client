@@ -234,6 +234,7 @@ function SkillEditorForm({
 
           <TabView
             variant="pills"
+            size="sm"
             className="super-admin-skill-editor__tabs"
             aria-label="Skill editor configuration sections"
           >
@@ -362,55 +363,57 @@ function SkillEditorForm({
                 </div>
               </SkillEditorSection>
             </TabView.Tab>
-          </TabView>
 
-          {isEditMode ? (
-            <SkillEditorSection
-              title="Dependency Visibility"
-              copy="Runtime resources that currently reference this skill."
-            >
-              <div className="super-admin-skill-editor__dependency-grid">
-                <div className="super-admin-skill-editor__dependency-group">
-                  <p className="super-admin-skill-editor__dependency-label">Skill ID</p>
-                  <p className="super-admin-skill-editor__helper">
-                    Skill ID: <span className="super-admin-skill-editor__code">{loadedSkill?.id ?? '--'}</span>
-                  </p>
-                </div>
-                <div className="super-admin-skill-editor__dependency-group">
-                  <p className="super-admin-skill-editor__dependency-label">Referencing Agents</p>
-                  {loadedSkill?.dependencySummary?.agentIds?.length > 0 ? (
-                    <ul className="super-admin-skill-editor__dependency-list">
-                      {loadedSkill.dependencySummary.agentIds.map((agentId) => (
-                        <li key={agentId} className="super-admin-skill-editor__dependency-item">
-                          {agentId}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="super-admin-skill-editor__helper">No agents reference this skill.</p>
-                  )}
-                </div>
-                <div className="super-admin-skill-editor__dependency-group">
-                  <p className="super-admin-skill-editor__dependency-label">
-                    Referencing Workflow Policies
-                  </p>
-                  {loadedSkill?.dependencySummary?.workflowPolicyIds?.length > 0 ? (
-                    <ul className="super-admin-skill-editor__dependency-list">
-                      {loadedSkill.dependencySummary.workflowPolicyIds.map((policyId) => (
-                        <li key={policyId} className="super-admin-skill-editor__dependency-item">
-                          {policyId}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="super-admin-skill-editor__helper">
-                      No workflow policies reference this skill.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </SkillEditorSection>
-          ) : null}
+            {isEditMode ? (
+              <TabView.Tab label="Dependency Visibility">
+                <SkillEditorSection
+                  title="Dependency Visibility"
+                  copy="Runtime resources that currently reference this skill."
+                >
+                  <div className="super-admin-skill-editor__dependency-grid">
+                    <div className="super-admin-skill-editor__dependency-group">
+                      <p className="super-admin-skill-editor__dependency-label">Skill ID</p>
+                      <p className="super-admin-skill-editor__helper">
+                        Skill ID: <span className="super-admin-skill-editor__code">{loadedSkill?.id ?? '--'}</span>
+                      </p>
+                    </div>
+                    <div className="super-admin-skill-editor__dependency-group">
+                      <p className="super-admin-skill-editor__dependency-label">Referencing Agents</p>
+                      {loadedSkill?.dependencySummary?.agentIds?.length > 0 ? (
+                        <ul className="super-admin-skill-editor__dependency-list">
+                          {loadedSkill.dependencySummary.agentIds.map((agentId) => (
+                            <li key={agentId} className="super-admin-skill-editor__dependency-item">
+                              {agentId}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="super-admin-skill-editor__helper">No agents reference this skill.</p>
+                      )}
+                    </div>
+                    <div className="super-admin-skill-editor__dependency-group">
+                      <p className="super-admin-skill-editor__dependency-label">
+                        Referencing Workflow Policies
+                      </p>
+                      {loadedSkill?.dependencySummary?.workflowPolicyIds?.length > 0 ? (
+                        <ul className="super-admin-skill-editor__dependency-list">
+                          {loadedSkill.dependencySummary.workflowPolicyIds.map((policyId) => (
+                            <li key={policyId} className="super-admin-skill-editor__dependency-item">
+                              {policyId}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="super-admin-skill-editor__helper">
+                          No workflow policies reference this skill.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </SkillEditorSection>
+              </TabView.Tab>
+            ) : null}
+          </TabView>
 
           <div className="super-admin-skills__catalogue-actions super-admin-skill-editor__footer-actions">
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>

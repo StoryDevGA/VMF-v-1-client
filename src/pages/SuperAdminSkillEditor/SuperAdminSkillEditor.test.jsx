@@ -42,6 +42,8 @@ describe('SuperAdminSkillEditor page', () => {
     expect(screen.getByRole('tab', { name: /^framework compatibility$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^input \/ output contract$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^optional configuration$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /^dependency visibility$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('tablist').parentElement).toHaveClass('tabview--sm')
     expect(screen.getByRole('heading', { name: /^framework compatibility$/i })).toBeInTheDocument()
 
     await user.clear(
@@ -221,9 +223,12 @@ describe('SuperAdminSkillEditor page', () => {
   })
 
   it('renders dependency visibility section in edit mode', async () => {
+    const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/skill-snapshot')
 
-    expect(await screen.findByRole('heading', { name: /dependency visibility/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /^dependency visibility$/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /^dependency visibility$/i }))
+    expect(screen.getByRole('heading', { name: /dependency visibility/i })).toBeInTheDocument()
     expect(screen.getByText(/skill id:/i)).toBeInTheDocument()
     expect(screen.getByText('skill-snapshot')).toBeInTheDocument()
     expect(screen.getByText(/referencing agents/i)).toBeInTheDocument()
