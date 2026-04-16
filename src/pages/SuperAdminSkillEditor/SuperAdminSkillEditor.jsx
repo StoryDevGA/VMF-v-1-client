@@ -304,6 +304,39 @@ function SkillEditorForm({
                 copy="Define the expected input and output shapes for this skill."
               >
                 <div className="super-admin-skill-editor__stack">
+                  <Select
+                    id="runtime-skill-editor-output-binding-mode"
+                    label="Output Binding Mode"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.outputBindingMode}
+                    options={[
+                      { value: 'NONE', label: 'None' },
+                      { value: 'PRIMARY', label: 'Primary Output Key' },
+                      { value: 'BINDINGS', label: 'Output Bindings' },
+                    ]}
+                    helperText="Choose one mode to enable its field. This prevents agents from binding ambiguous outputs."
+                    onChange={(event) => {
+                      const mode = event.target.value
+
+                      setForm((current) => {
+                        if (mode === 'PRIMARY') {
+                          return { ...current, outputBindingMode: mode, outputBindings: '' }
+                        }
+
+                        if (mode === 'BINDINGS') {
+                          return { ...current, outputBindingMode: mode, primaryOutputKey: '' }
+                        }
+
+                        return {
+                          ...current,
+                          outputBindingMode: 'NONE',
+                          primaryOutputKey: '',
+                          outputBindings: '',
+                        }
+                      })
+                    }}
+                    placeholder="Select an output binding mode"
+                  />
                   <Textarea
                     id="runtime-skill-editor-input-contract"
                     label="Input Contract"
@@ -328,6 +361,31 @@ function SkillEditorForm({
                     rows={6}
                     fullWidth
                   />
+                  <Input
+                    id="runtime-skill-editor-primary-output-key"
+                    label="Primary Output Key"
+                    helperText="Optional. Define the canonical output key an agent execution plan should bind to (use instead of Output Bindings)."
+                    value={form.primaryOutputKey}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, primaryOutputKey: event.target.value }))
+                    }
+                    error={errors.primaryOutputKey}
+                    disabled={form.outputBindingMode !== 'PRIMARY'}
+                    fullWidth
+                  />
+                  <Textarea
+                    id="runtime-skill-editor-output-bindings"
+                    label="Output Bindings"
+                    helperText="Optional. Provide bindable output keys (one per line). Leave empty when using Primary Output Key."
+                    value={form.outputBindings}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, outputBindings: event.target.value }))
+                    }
+                    error={errors.outputBindings}
+                    disabled={form.outputBindingMode !== 'BINDINGS'}
+                    rows={4}
+                    fullWidth
+                  />
                 </div>
               </SkillEditorSection>
             </TabView.Tab>
@@ -337,28 +395,82 @@ function SkillEditorForm({
                 title="Optional Configuration"
                 copy="Configure runtime execution behavior for this skill."
               >
-                <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
-                  <Input
-                    id="runtime-skill-editor-timeout"
-                    label="Timeout (ms)"
-                    type="number"
-                    value={form.timeoutMs}
+                <div className="super-admin-skill-editor__stack">
+                  <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
+                    <Input
+                      id="runtime-skill-editor-timeout"
+                      label="Timeout (ms)"
+                      type="number"
+                      value={form.timeoutMs}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, timeoutMs: event.target.value }))
+                      }
+                      error={errors.timeoutMs}
+                      fullWidth
+                    />
+                    <Select
+                      id="runtime-skill-editor-retry-policy"
+                      label="Retry Policy"
+                      className="super-admin-skill-editor__select-field"
+                      value={form.retryPolicy}
+                      options={RUNTIME_SKILL_RETRY_POLICY_OPTIONS}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, retryPolicy: event.target.value }))
+                      }
+                      error={errors.retryPolicy}
+                    />
+                  </div>
+
+                  {String(form.executionMode ?? '').toUpperCase() !== 'SYSTEM' ? (
+                    <Textarea
+                      id="runtime-skill-editor-execution-config"
+                      label="Execution Config (JSON)"
+                      helperText="Optional. Mode-specific execution configuration for rule engine or agent-assisted skills."
+                      value={form.executionConfig}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, executionConfig: event.target.value }))
+                      }
+                      error={errors.executionConfig}
+                      rows={5}
+                      fullWidth
+                    />
+                  ) : null}
+
+                  <Textarea
+                    id="runtime-skill-editor-allowed-read-paths"
+                    label="Allowed Read Paths"
+                    helperText="Optional. One path per line."
+                    value={form.allowedReadPaths}
                     onChange={(event) =>
-                      setForm((current) => ({ ...current, timeoutMs: event.target.value }))
+                      setForm((current) => ({ ...current, allowedReadPaths: event.target.value }))
                     }
-                    error={errors.timeoutMs}
+                    error={errors.allowedReadPaths}
+                    rows={4}
                     fullWidth
                   />
-                  <Select
-                    id="runtime-skill-editor-retry-policy"
-                    label="Retry Policy"
-                    className="super-admin-skill-editor__select-field"
-                    value={form.retryPolicy}
-                    options={RUNTIME_SKILL_RETRY_POLICY_OPTIONS}
+                  <Textarea
+                    id="runtime-skill-editor-allowed-write-paths"
+                    label="Allowed Write Paths"
+                    helperText="Optional. One path per line."
+                    value={form.allowedWritePaths}
                     onChange={(event) =>
-                      setForm((current) => ({ ...current, retryPolicy: event.target.value }))
+                      setForm((current) => ({ ...current, allowedWritePaths: event.target.value }))
                     }
-                    error={errors.retryPolicy}
+                    error={errors.allowedWritePaths}
+                    rows={4}
+                    fullWidth
+                  />
+                  <Textarea
+                    id="runtime-skill-editor-forbidden-write-paths"
+                    label="Forbidden Write Paths"
+                    helperText="Optional. One path per line. Must not overlap with allowed write paths."
+                    value={form.forbiddenWritePaths}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, forbiddenWritePaths: event.target.value }))
+                    }
+                    error={errors.forbiddenWritePaths}
+                    rows={4}
+                    fullWidth
                   />
                 </div>
               </SkillEditorSection>

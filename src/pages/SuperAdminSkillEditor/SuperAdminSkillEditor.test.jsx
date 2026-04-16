@@ -222,6 +222,79 @@ describe('SuperAdminSkillEditor page', () => {
     })
   })
 
+  it('enforces a single output binding mode by disabling the non-selected field', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.type(
+      screen.getByLabelText(/^skill key$/i, {
+        selector: 'input#runtime-skill-editor-key',
+      }),
+      'check-required-vmf-sections',
+    )
+    await user.type(
+      screen.getByLabelText(/^skill name$/i, {
+        selector: 'input#runtime-skill-editor-name',
+      }),
+      'Check Required VMF Sections',
+    )
+
+    await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
+
+    expect(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+    ).toHaveValue('PRIMARY')
+
+    await user.selectOptions(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+      'PRIMARY',
+    )
+
+    expect(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+    ).toHaveValue('PRIMARY')
+
+    const primaryOutputInput = screen.getByLabelText(/^primary output key$/i, {
+      selector: 'input#runtime-skill-editor-primary-output-key',
+    })
+
+    const outputBindingsTextarea = screen.getByLabelText(/^output bindings$/i, {
+      selector: 'textarea#runtime-skill-editor-output-bindings',
+    })
+
+    await user.type(
+      primaryOutputInput,
+      'validationResult',
+    )
+
+    expect(outputBindingsTextarea).toBeDisabled()
+
+    await user.selectOptions(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+      'BINDINGS',
+    )
+
+    expect(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+    ).toHaveValue('BINDINGS')
+
+    expect(primaryOutputInput).toBeDisabled()
+    expect(primaryOutputInput).toHaveValue('')
+
+    await user.type(outputBindingsTextarea, 'validationResult\nmissingSections')
+    expect(outputBindingsTextarea).not.toBeDisabled()
+  })
+
   it('renders dependency visibility section in edit mode', async () => {
     const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/skill-snapshot')

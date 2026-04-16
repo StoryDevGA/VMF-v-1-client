@@ -69,8 +69,15 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   executionMode: 'SYSTEM',
   inputContract: '',
   outputContract: '',
+  outputBindingMode: 'PRIMARY',
+  primaryOutputKey: '',
+  outputBindings: '',
   timeoutMs: '5000',
   retryPolicy: 'NONE',
+  allowedReadPaths: '',
+  allowedWritePaths: '',
+  forbiddenWritePaths: '',
+  executionConfig: '',
 })
 
 export const INITIAL_RUNTIME_SKILLS = Object.freeze([
@@ -179,9 +186,9 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
 ])
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
-const SUPPORTED_FRAMEWORK_KEYS = new Set(['VMF', 'RLD'])
 const VALID_EXECUTION_MODES = new Set(['SYSTEM', 'RULE_ENGINE', 'AGENT'])
 const VALID_RETRY_POLICIES = new Set(['NONE', 'RETRY_ONCE', 'RETRY_WITH_BACKOFF'])
+const OUTPUT_BINDING_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 export function cloneRuntimeSkill(skill) {
   return {
@@ -190,6 +197,12 @@ export function cloneRuntimeSkill(skill) {
     inputContract: { ...(skill.inputContract ?? {}) },
     outputContract: { ...(skill.outputContract ?? {}) },
     runtimeConfig: { ...(skill.runtimeConfig ?? {}) },
+    primaryOutputKey: String(skill.primaryOutputKey ?? ''),
+    outputBindings: [...(skill.outputBindings ?? [])],
+    allowedReadPaths: [...(skill.allowedReadPaths ?? [])],
+    allowedWritePaths: [...(skill.allowedWritePaths ?? [])],
+    forbiddenWritePaths: [...(skill.forbiddenWritePaths ?? [])],
+    executionConfig: { ...(skill.executionConfig ?? {}) },
     dependencySummary: skill.dependencySummary
       ? {
           agentIds: [...(skill.dependencySummary.agentIds ?? [])],
@@ -241,6 +254,15 @@ export function formatKeyList(items) {
   return Array.isArray(items) ? items.join('\n') : ''
 }
 
+export function parseStringList(value) {
+  return [...new Set(
+    String(value ?? '')
+      .split(/[\n,]+/)
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean),
+  )]
+}
+
 export function formatJsonField(value) {
   if (!value || typeof value !== 'object') return ''
   if (Object.keys(value).length === 0) return ''
@@ -262,6 +284,12 @@ export function parseJsonField(text) {
 }
 
 export function mapRuntimeSkillToForm(skill) {
+  const primaryOutputKey = String(skill.primaryOutputKey ?? '')
+  const outputBindingsList = Array.isArray(skill.outputBindings) ? skill.outputBindings : []
+  const outputBindingMode = primaryOutputKey.trim()
+    ? 'PRIMARY'
+    : (outputBindingsList.length > 0 ? 'BINDINGS' : 'NONE')
+
   return {
     key: skill.key ?? '',
     name: skill.name ?? '',
@@ -273,8 +301,15 @@ export function mapRuntimeSkillToForm(skill) {
     executionMode: String(skill.executionMode ?? 'SYSTEM').toUpperCase(),
     inputContract: formatJsonField(skill.inputContract),
     outputContract: formatJsonField(skill.outputContract),
+    outputBindingMode,
+    primaryOutputKey,
+    outputBindings: formatKeyList(outputBindingsList),
     timeoutMs: String(skill.runtimeConfig?.timeoutMs ?? 5000),
     retryPolicy: String(skill.runtimeConfig?.retryPolicy ?? 'NONE'),
+    allowedReadPaths: formatKeyList(skill.allowedReadPaths),
+    allowedWritePaths: formatKeyList(skill.allowedWritePaths),
+    forbiddenWritePaths: formatKeyList(skill.forbiddenWritePaths),
+    executionConfig: formatJsonField(skill.executionConfig),
   }
 }
 
@@ -289,6 +324,11 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   const type = String(formState.type ?? 'DETERMINISTIC').trim().toUpperCase()
   const executionMode = String(formState.executionMode ?? 'SYSTEM').trim().toUpperCase()
   const retryPolicy = String(formState.retryPolicy ?? 'NONE').trim().toUpperCase()
+  const primaryOutputKey = String(formState.primaryOutputKey ?? '').trim()
+  const outputBindings = parseStringList(formState.outputBindings)
+  const allowedReadPaths = parseStringList(formState.allowedReadPaths)
+  const allowedWritePaths = parseStringList(formState.allowedWritePaths)
+  const forbiddenWritePaths = parseStringList(formState.forbiddenWritePaths)
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
     errors.key = 'Skill key is required and must use letters, numbers, or hyphens.'
@@ -308,11 +348,9 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
     errors.supportedFrameworkKeys = 'At least one supported framework key is required.'
   }
 
-  const invalidFrameworkKey = supportedFrameworkKeys.find(
-    (value) => !SUPPORTED_FRAMEWORK_KEYS.has(value),
-  )
+  const invalidFrameworkKey = supportedFrameworkKeys.find((value) => !value || !/^[A-Z][A-Z0-9_]*$/.test(value))
   if (invalidFrameworkKey) {
-    errors.supportedFrameworkKeys = `Unsupported framework key "${invalidFrameworkKey}".`
+    errors.supportedFrameworkKeys = `Framework key "${invalidFrameworkKey}" must use uppercase letters, numbers, or underscores.`
   }
 
   const duplicateKey = existingSkills.find(
@@ -334,6 +372,54 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   const outputContractResult = parseJsonField(formState.outputContract)
   if (outputContractResult.error) {
     errors.outputContract = outputContractResult.error
+  }
+
+  if (primaryOutputKey && !OUTPUT_BINDING_PATTERN.test(primaryOutputKey)) {
+    errors.primaryOutputKey = 'Primary output key must start with a letter and only use letters, numbers, or underscores.'
+  }
+
+  const invalidOutputBinding = outputBindings.find((item) => !OUTPUT_BINDING_PATTERN.test(item))
+  if (invalidOutputBinding) {
+    errors.outputBindings = 'Output bindings must start with a letter and only use letters, numbers, or underscores.'
+  }
+
+  if (primaryOutputKey && outputBindings.length > 0) {
+    errors.primaryOutputKey = 'Provide either a primary output key or output bindings, not both.'
+    errors.outputBindings = 'Provide either a primary output key or output bindings, not both.'
+  }
+
+  const invalidReadPath = allowedReadPaths.find((item) => /\s/.test(item))
+  if (invalidReadPath) {
+    errors.allowedReadPaths = 'Allowed read paths must not contain whitespace.'
+  }
+
+  const invalidWritePath = allowedWritePaths.find((item) => /\s/.test(item))
+  if (invalidWritePath) {
+    errors.allowedWritePaths = 'Allowed write paths must not contain whitespace.'
+  }
+
+  const invalidForbiddenPath = forbiddenWritePaths.find((item) => /\s/.test(item))
+  if (invalidForbiddenPath) {
+    errors.forbiddenWritePaths = 'Forbidden write paths must not contain whitespace.'
+  }
+
+  const allowedWriteSet = new Set(allowedWritePaths)
+  const forbiddenOverlap = forbiddenWritePaths.find((item) => allowedWriteSet.has(item))
+  if (forbiddenOverlap) {
+    errors.forbiddenWritePaths = 'Forbidden write paths must not overlap with allowed write paths.'
+  }
+
+  const executionConfigResult = parseJsonField(formState.executionConfig)
+  if (executionConfigResult.error) {
+    errors.executionConfig = executionConfigResult.error
+  }
+
+  if (
+    executionMode === 'SYSTEM'
+    && executionConfigResult.value
+    && Object.keys(executionConfigResult.value).length > 0
+  ) {
+    errors.executionConfig = 'Execution config is only supported for rule engine or agent-assisted skills.'
   }
 
   const timeoutMs = Number.parseInt(String(formState.timeoutMs ?? ''), 10)
@@ -358,10 +444,16 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
       executionMode,
       inputContract: inputContractResult.error ? {} : inputContractResult.value,
       outputContract: outputContractResult.error ? {} : outputContractResult.value,
+      primaryOutputKey,
+      outputBindings,
       runtimeConfig: {
         timeoutMs: Number.isNaN(timeoutMs) ? 5000 : timeoutMs,
         retryPolicy,
       },
+      allowedReadPaths,
+      allowedWritePaths,
+      forbiddenWritePaths,
+      executionConfig: executionConfigResult.error ? {} : executionConfigResult.value,
     },
   }
 }
