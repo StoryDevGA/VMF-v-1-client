@@ -184,6 +184,17 @@ const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const VALID_EXECUTION_MODES = new Set(['SYSTEM', 'RULE_ENGINE', 'AGENT'])
 const VALID_RETRY_POLICIES = new Set(['NONE', 'RETRY_ONCE', 'RETRY_WITH_BACKOFF'])
 const OUTPUT_BINDING_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
+const REFERENCE_ASSET_PURPOSES = new Set([
+  'AUTHORING_HELP',
+  'RUNTIME_REFERENCE',
+  'EXAMPLE_INPUT',
+  'EXAMPLE_OUTPUT',
+  'TEMPLATE',
+  'POLICY_GUIDANCE',
+  'TEST_ASSET',
+])
+const REFERENCE_ASSET_USAGE_MODES = new Set(['OPTIONAL', 'REQUIRED', 'TEST_ONLY'])
+const REFERENCE_ASSET_STATUSES = new Set(['ACTIVE', 'INACTIVE'])
 
 export function cloneRuntimeSkill(skill) {
   return {
@@ -309,7 +320,29 @@ export function mapRuntimeSkillToForm(skill) {
     allowedWritePaths: formatKeyList(skill.allowedWritePaths),
     forbiddenWritePaths: formatKeyList(skill.forbiddenWritePaths),
     executionConfig: formatJsonField(skill.executionConfig),
-    referenceAssets: Array.isArray(skill.referenceAssets) ? skill.referenceAssets.map((asset) => ({ ...asset })) : [],
+    referenceAssets: Array.isArray(skill.referenceAssets)
+      ? skill.referenceAssets.map((asset) => {
+          const purpose = String(asset?.purpose ?? '').trim().toUpperCase()
+          const usageModeRaw = String(asset?.usageMode ?? '').trim().toUpperCase()
+          const usageMode = usageModeRaw === 'TESTING' ? 'TEST_ONLY' : usageModeRaw
+
+          return {
+            ...asset,
+            purpose,
+            usageMode,
+            status: String(asset?.status ?? '').trim().toUpperCase(),
+            isRuntimeAccessible: typeof asset?.isRuntimeAccessible === 'boolean'
+              ? asset.isRuntimeAccessible
+              : purpose === 'RUNTIME_REFERENCE',
+            isAdminOnly: typeof asset?.isAdminOnly === 'boolean'
+              ? asset.isAdminOnly
+              : purpose === 'AUTHORING_HELP',
+            isTestOnly: typeof asset?.isTestOnly === 'boolean'
+              ? asset.isTestOnly
+              : purpose === 'TEST_ASSET' || usageMode === 'TEST_ONLY',
+          }
+        })
+      : [],
   }
 }
 
@@ -423,23 +456,91 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
     errors.executionConfig = 'Execution config is only supported for rule engine or agent-assisted skills.'
   }
 
-  const referenceAssetErrors = []
+  const normalizedReferenceAssets = []
   for (const asset of referenceAssets) {
-    if (!asset || typeof asset !== 'object') continue
-    const name = String(asset.name ?? '').trim()
-    const purpose = String(asset.purpose ?? '').trim().toUpperCase()
+    if (!asset || typeof asset !== 'object' || Array.isArray(asset)) {
+      continue
+    }
 
+    const assetId = String(asset.assetId ?? '').trim().toLowerCase()
+    const name = String(asset.name ?? '').trim()
+    const assetType = String(asset.assetType ?? 'OTHER').trim().toUpperCase()
+    const mimeType = String(asset.mimeType ?? '').trim()
+    const purpose = String(asset.purpose ?? '').trim().toUpperCase()
+    const usageModeRaw = String(asset.usageMode ?? 'OPTIONAL').trim().toUpperCase()
+    const usageMode = usageModeRaw === 'TESTING' ? 'TEST_ONLY' : usageModeRaw
+    const status = String(asset.status ?? 'ACTIVE').trim().toUpperCase()
+    const description = String(asset.description ?? '').trim()
+    const storageKey = String(asset.storageKey ?? '').trim()
+    const isRuntimeAccessible = typeof asset.isRuntimeAccessible === 'boolean'
+      ? asset.isRuntimeAccessible
+      : purpose === 'RUNTIME_REFERENCE'
+    const isAdminOnly = typeof asset.isAdminOnly === 'boolean'
+      ? asset.isAdminOnly
+      : purpose === 'AUTHORING_HELP'
+    const isTestOnly = typeof asset.isTestOnly === 'boolean'
+      ? asset.isTestOnly
+      : purpose === 'TEST_ASSET' || usageMode === 'TEST_ONLY'
+
+    if (!assetId) {
+      errors.referenceAssets = 'Each reference asset must have an asset id.'
+      break
+    }
     if (!name) {
-      referenceAssetErrors.push('Each reference asset must have a name.')
+      errors.referenceAssets = 'Each reference asset must have a name.'
       break
     }
     if (!purpose) {
-      referenceAssetErrors.push('Each reference asset must have a purpose.')
+      errors.referenceAssets = 'Each reference asset must have a purpose.'
       break
     }
-  }
-  if (referenceAssetErrors.length > 0) {
-    errors.referenceAssets = referenceAssetErrors[0]
+    if (!REFERENCE_ASSET_PURPOSES.has(purpose)) {
+      errors.referenceAssets = `Reference asset purpose "${purpose}" is not supported.`
+      break
+    }
+    if (!REFERENCE_ASSET_USAGE_MODES.has(usageMode)) {
+      errors.referenceAssets = `Reference asset usage mode "${usageMode}" is not supported.`
+      break
+    }
+    if (!REFERENCE_ASSET_STATUSES.has(status)) {
+      errors.referenceAssets = `Reference asset status "${status}" is not supported.`
+      break
+    }
+    if (isRuntimeAccessible && isAdminOnly) {
+      errors.referenceAssets = 'Reference assets cannot be both runtime-accessible and admin-only.'
+      break
+    }
+    if (isRuntimeAccessible && isTestOnly) {
+      errors.referenceAssets = 'Reference assets cannot be both runtime-accessible and test-only.'
+      break
+    }
+    if (usageMode === 'TEST_ONLY' && !isTestOnly) {
+      errors.referenceAssets = 'Test-only usage mode requires the asset to be marked as test-only.'
+      break
+    }
+    if (purpose === 'TEST_ASSET' && !isTestOnly) {
+      errors.referenceAssets = 'Test asset purpose requires the asset to be marked as test-only.'
+      break
+    }
+    if ((usageMode === 'REQUIRED' || isRuntimeAccessible) && !storageKey) {
+      errors.referenceAssets = 'Required or runtime-accessible reference assets must include a storage key or URL.'
+      break
+    }
+
+    normalizedReferenceAssets.push({
+      assetId,
+      name,
+      assetType,
+      mimeType,
+      purpose,
+      usageMode,
+      status,
+      description,
+      storageKey,
+      isRuntimeAccessible,
+      isAdminOnly,
+      isTestOnly,
+    })
   }
 
   const timeoutMs = Number.parseInt(String(formState.timeoutMs ?? ''), 10)
@@ -474,7 +575,7 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
       allowedWritePaths,
       forbiddenWritePaths,
       executionConfig: executionConfigResult.error ? {} : executionConfigResult.value,
-      referenceAssets,
+      referenceAssets: normalizedReferenceAssets,
     },
   }
 }

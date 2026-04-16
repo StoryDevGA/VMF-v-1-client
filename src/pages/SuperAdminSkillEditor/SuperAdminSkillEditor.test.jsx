@@ -333,4 +333,48 @@ describe('SuperAdminSkillEditor page', () => {
     expect(screen.getByText(/referencing workflow policies/i)).toBeInTheDocument()
     expect(screen.getByText(/no workflow policies reference this skill/i)).toBeInTheDocument()
   })
+
+  it('manages reference assets on the Reference Assets tab', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.click(screen.getByRole('tab', { name: /^reference assets$/i }))
+
+    expect(screen.getByText(/no reference assets attached yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^add reference asset$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^add reference asset$/i }))
+
+    expect(screen.getByLabelText(/^asset name$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^type$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^purpose$/i)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/^asset name$/i), 'User Guide')
+    await user.selectOptions(screen.getByLabelText(/^purpose$/i), 'AUTHORING_HELP')
+
+    await user.click(screen.getByRole('button', { name: /^add asset$/i }))
+
+    expect(screen.getByText('User Guide')).toBeInTheDocument()
+    expect(screen.getByText(/authoring_help/i)).toBeInTheDocument()
+  })
+
+  it('prevents invalid reference asset flag combinations', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.click(screen.getByRole('tab', { name: /^reference assets$/i }))
+    await user.click(screen.getByRole('button', { name: /^add reference asset$/i }))
+
+    const runtimeCheckbox = screen.getByLabelText(/^runtime accessible$/i)
+    const adminCheckbox = screen.getByLabelText(/^admin only$/i)
+
+    await user.type(screen.getByLabelText(/^asset name$/i), 'Test Asset')
+
+    // Enable runtime accessible
+    await user.click(runtimeCheckbox)
+    expect(runtimeCheckbox).toBeChecked()
+
+    // Admin only should be disabled when runtime accessible is enabled
+    expect(adminCheckbox).toBeDisabled()
+  })
 })

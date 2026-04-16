@@ -6,6 +6,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
+import { Tickbox } from '../../components/Tickbox'
 import { Textarea } from '../../components/Textarea'
 import { TabView } from '../../components/TabView'
 import { useToaster } from '../../components/Toaster'
@@ -618,9 +619,26 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
     purpose: 'AUTHORING_HELP',
     usageMode: 'OPTIONAL',
     status: 'ACTIVE',
+    isRuntimeAccessible: false,
+    isAdminOnly: true,
+    isTestOnly: false,
     description: '',
     storageKey: '',
   }))
+
+  const normalizeDraftFlags = (nextDraft) => {
+    const isRuntimeAccessible = Boolean(nextDraft.isRuntimeAccessible)
+    const isAdminOnly = Boolean(nextDraft.isAdminOnly)
+    const isTestOnly = Boolean(nextDraft.isTestOnly)
+
+    if (isRuntimeAccessible) {
+      return { ...nextDraft, isAdminOnly: false, isTestOnly: false }
+    }
+    if (isAdminOnly && isTestOnly) {
+      return { ...nextDraft, isTestOnly: false }
+    }
+    return { ...nextDraft, isRuntimeAccessible, isAdminOnly, isTestOnly }
+  }
 
   const handleAdd = () => {
     if (!String(draft.name).trim()) {
@@ -636,6 +654,9 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
       purpose: 'AUTHORING_HELP',
       usageMode: 'OPTIONAL',
       status: 'ACTIVE',
+      isRuntimeAccessible: false,
+      isAdminOnly: true,
+      isTestOnly: false,
       description: '',
       storageKey: '',
     })
@@ -653,7 +674,7 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
       </p>
 
       {rows.length > 0 ? (
-        <div className="super-admin-skill-editor__stack" role="table" aria-label="Reference assets">
+        <div className="super-admin-skill-editor__stack" role="list" aria-label="Reference assets">
           {rows.map((row) => (
             <Card key={row.assetId} variant="outlined">
               <Card.Body className="super-admin-skill-editor__stack">
@@ -678,6 +699,13 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
                   <Input id={`${row.assetId}-type`} label="Type" value={row.assetType ?? 'OTHER'} disabled fullWidth />
                   <Input id={`${row.assetId}-purpose`} label="Purpose" value={row.purpose ?? ''} disabled fullWidth />
                   <Input id={`${row.assetId}-usage`} label="Usage Mode" value={row.usageMode ?? ''} disabled fullWidth />
+                  <Input
+                    id={`${row.assetId}-runtime`}
+                    label="Runtime"
+                    value={row.isRuntimeAccessible ? 'Yes' : 'No'}
+                    disabled
+                    fullWidth
+                  />
                   <Input id={`${row.assetId}-status`} label="Status" value={row.status ?? ''} disabled fullWidth />
                 </div>
                 {row.storageKey ? (
@@ -733,9 +761,28 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
                 options={[
                   { value: 'AUTHORING_HELP', label: 'Authoring / Help' },
                   { value: 'RUNTIME_REFERENCE', label: 'Runtime Reference' },
+                  { value: 'EXAMPLE_INPUT', label: 'Example Input' },
+                  { value: 'EXAMPLE_OUTPUT', label: 'Example Output' },
+                  { value: 'TEMPLATE', label: 'Template' },
+                  { value: 'POLICY_GUIDANCE', label: 'Policy Guidance' },
                   { value: 'TEST_ASSET', label: 'Test Asset' },
                 ]}
-                onChange={(event) => setDraft((current) => ({ ...current, purpose: event.target.value }))}
+                onChange={(event) => {
+                  const nextPurpose = event.target.value
+                  setDraft((current) => {
+                    const next = { ...current, purpose: nextPurpose }
+                    if (nextPurpose === 'RUNTIME_REFERENCE') {
+                      return normalizeDraftFlags({ ...next, isRuntimeAccessible: true })
+                    }
+                    if (nextPurpose === 'TEST_ASSET') {
+                      return normalizeDraftFlags({ ...next, isRuntimeAccessible: false, isAdminOnly: false, isTestOnly: true })
+                    }
+                    if (nextPurpose === 'AUTHORING_HELP') {
+                      return normalizeDraftFlags({ ...next, isRuntimeAccessible: false, isAdminOnly: true, isTestOnly: false })
+                    }
+                    return normalizeDraftFlags(next)
+                  })
+                }}
               />
               <Select
                 id="runtime-skill-editor-asset-usage-mode"
@@ -745,9 +792,16 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
                 options={[
                   { value: 'OPTIONAL', label: 'Optional' },
                   { value: 'REQUIRED', label: 'Required' },
-                  { value: 'TESTING', label: 'Testing' },
+                  { value: 'TEST_ONLY', label: 'Test only' },
                 ]}
-                onChange={(event) => setDraft((current) => ({ ...current, usageMode: event.target.value }))}
+                onChange={(event) => {
+                  const nextUsageMode = event.target.value
+                  setDraft((current) => normalizeDraftFlags({
+                    ...current,
+                    usageMode: nextUsageMode,
+                    ...(nextUsageMode === 'TEST_ONLY' ? { isRuntimeAccessible: false, isAdminOnly: false, isTestOnly: true } : {}),
+                  }))
+                }}
               />
               <Select
                 id="runtime-skill-editor-asset-status"
@@ -759,6 +813,34 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
                   { value: 'INACTIVE', label: 'Inactive' },
                 ]}
                 onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}
+              />
+            </div>
+            <div className="super-admin-skill-editor__row">
+              <Tickbox
+                id="runtime-skill-editor-asset-runtime-accessible"
+                label="Runtime accessible"
+                checked={draft.isRuntimeAccessible}
+                onChange={(event) =>
+                  setDraft((current) => normalizeDraftFlags({ ...current, isRuntimeAccessible: event.target.checked }))
+                }
+              />
+              <Tickbox
+                id="runtime-skill-editor-asset-admin-only"
+                label="Admin only"
+                checked={draft.isAdminOnly}
+                disabled={draft.isRuntimeAccessible}
+                onChange={(event) =>
+                  setDraft((current) => normalizeDraftFlags({ ...current, isAdminOnly: event.target.checked }))
+                }
+              />
+              <Tickbox
+                id="runtime-skill-editor-asset-test-only"
+                label="Test only"
+                checked={draft.isTestOnly}
+                disabled={draft.isRuntimeAccessible}
+                onChange={(event) =>
+                  setDraft((current) => normalizeDraftFlags({ ...current, isTestOnly: event.target.checked }))
+                }
               />
             </div>
             <Input
