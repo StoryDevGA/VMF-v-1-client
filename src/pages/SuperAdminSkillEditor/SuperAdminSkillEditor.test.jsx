@@ -44,6 +44,8 @@ describe('SuperAdminSkillEditor page', () => {
     expect(screen.getByRole('tab', { name: /^optional configuration$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^reference assets$/i })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^dependency visibility$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /review missing fields/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create skill/i })).not.toBeInTheDocument()
     expect(screen.getByRole('tablist').parentElement).toHaveClass('tabview--sm')
     expect(screen.getByRole('heading', { name: /^framework compatibility$/i })).toBeInTheDocument()
 
@@ -140,6 +142,7 @@ describe('SuperAdminSkillEditor page', () => {
       'RETRY_ONCE',
     )
 
+    expect(screen.getByRole('button', { name: /create skill/i })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /create skill/i }))
 
     await waitFor(() => {
@@ -226,7 +229,8 @@ describe('SuperAdminSkillEditor page', () => {
       selector: 'textarea#runtime-skill-editor-input-contract',
     })
     await user.type(inputContractTextarea, '{{invalid json')
-    await user.click(screen.getByRole('button', { name: /create skill/i }))
+    expect(screen.queryByRole('button', { name: /create skill/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /review missing fields/i }))
 
     await waitFor(() => {
       expect(screen.getByRole('alert', { name: '' })).toHaveTextContent('Invalid JSON.')

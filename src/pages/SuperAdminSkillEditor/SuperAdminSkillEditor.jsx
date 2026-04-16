@@ -14,6 +14,7 @@ import {
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
   useListFrameworkRegistriesQuery,
+  useListRuntimeSkillsQuery,
   useUpdateRuntimeSkillMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -36,6 +37,15 @@ import {
 import '../SuperAdminSkills/SuperAdminSkills.css'
 import '../SuperAdminSkills/RuntimeSkillListView.css'
 import './SuperAdminSkillEditor.css'
+
+const shallowEqualObject = (left, right) => {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => left[key] === right[key])
+}
 
 function SkillEditorSection({ title, copy, children, className = '' }) {
   const sectionClassName = ['super-admin-skill-editor__section', className].filter(Boolean).join(' ')
@@ -155,13 +165,48 @@ function SkillEditorForm({
   form,
   setForm,
   errors,
+  validationHints = {},
   frameworkOptions,
   onBack,
   onCancel,
   onSubmit,
+  onReviewMissingFields,
   isSaving,
+  isCreateReady,
+  activeTab,
+  onTabChange,
   loadedSkill,
 }) {
+  const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
+  const tabErrorCounts = useMemo(() => ({
+    framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
+    classification: hintErrors.executionMode ? 1 : 0,
+    contracts: [
+      'inputContract',
+      'outputContract',
+      'primaryOutputKey',
+      'outputBindings',
+      'allowedReadPaths',
+      'allowedWritePaths',
+      'forbiddenWritePaths',
+      'executionConfig',
+    ].filter((key) => hintErrors[key]).length,
+    optionalConfiguration: [hintErrors.timeoutMs, hintErrors.retryPolicy].filter(Boolean).length,
+    referenceAssets: hintErrors.referenceAssets ? 1 : 0,
+    dependencies: 0,
+  }), [hintErrors])
+
+  const renderTabLabel = (label, count = 0) => (
+    <span className="super-admin-skills__tab-label">
+      <span>{label}</span>
+      {count > 0 ? (
+        <span className="super-admin-skills__tab-error-count" aria-hidden="true">
+          ({count})
+        </span>
+      ) : null}
+    </span>
+  )
+
   return (
     <Card variant="elevated" className="super-admin-skills__card super-admin-skill-editor__card">
       <form className="super-admin-skill-editor__form" onSubmit={onSubmit} noValidate>
@@ -238,8 +283,10 @@ function SkillEditorForm({
             size="sm"
             className="super-admin-skill-editor__tabs"
             aria-label="Skill editor configuration sections"
+            activeTab={activeTab}
+            onTabChange={onTabChange}
           >
-            <TabView.Tab label="Framework Compatibility">
+            <TabView.Tab label={renderTabLabel('Framework Compatibility', tabErrorCounts.framework)}>
               <SkillEditorSection
                 title="Framework Compatibility"
                 copy="Keep framework support aligned to the Framework Registry source of truth."
@@ -258,7 +305,7 @@ function SkillEditorForm({
               </SkillEditorSection>
             </TabView.Tab>
 
-            <TabView.Tab label="Skill Classification">
+            <TabView.Tab label={renderTabLabel('Skill Classification', tabErrorCounts.classification)}>
               <SkillEditorSection
                 title="Skill Classification"
                 copy="Classify the skill by category, type, and execution mode to support governance and runtime resolution."
@@ -299,7 +346,7 @@ function SkillEditorForm({
               </SkillEditorSection>
             </TabView.Tab>
 
-            <TabView.Tab label="Input / Output Contract">
+            <TabView.Tab label={renderTabLabel('Input / Output Contract', tabErrorCounts.contracts)}>
               <SkillEditorSection
                 title="Input / Output Contract"
                 copy="Define contracts, governed bindings, access boundaries, and mode-specific execution config."
@@ -475,7 +522,7 @@ function SkillEditorForm({
               </SkillEditorSection>
             </TabView.Tab>
 
-            <TabView.Tab label="Optional Configuration">
+            <TabView.Tab label={renderTabLabel('Optional Configuration', tabErrorCounts.optionalConfiguration)}>
               <SkillEditorSection
                 title="Optional Configuration"
                 copy="Configure operational settings such as timeout and retry policy."
@@ -509,7 +556,7 @@ function SkillEditorForm({
               </SkillEditorSection>
             </TabView.Tab>
 
-            <TabView.Tab label="Reference Assets">
+            <TabView.Tab label={renderTabLabel('Reference Assets', tabErrorCounts.referenceAssets)}>
               <SkillEditorSection
                 title="Reference Assets"
                 copy="Attach governed help documents, runtime references, and test artifacts to this skill."
@@ -525,7 +572,7 @@ function SkillEditorForm({
             </TabView.Tab>
 
             {isEditMode ? (
-              <TabView.Tab label="Dependency Visibility">
+              <TabView.Tab label={renderTabLabel('Dependency Visibility', tabErrorCounts.dependencies)}>
                 <SkillEditorSection
                   title="Dependency Visibility"
                   copy="Runtime resources that currently reference this skill."
@@ -579,9 +626,19 @@ function SkillEditorForm({
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={isSaving}>
-              {isEditMode ? 'Save Changes' : 'Create Skill'}
-            </Button>
+            {isEditMode ? (
+              <Button type="submit" variant="primary" size="sm" loading={isSaving}>
+                Save Changes
+              </Button>
+            ) : isCreateReady ? (
+              <Button type="submit" variant="primary" size="sm" loading={isSaving}>
+                Create Skill
+              </Button>
+            ) : (
+              <Button type="button" variant="primary" size="sm" onClick={onReviewMissingFields}>
+                Review missing fields
+              </Button>
+            )}
           </div>
         </Card.Body>
       </form>
@@ -728,8 +785,8 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
         </p>
       ) : null}
 
-      {isAdding ? (
-        <Card variant="outlined">
+        {isAdding ? (
+          <Card variant="outlined">
           <Card.Body className="super-admin-skill-editor__stack">
             <Input
               id="runtime-skill-editor-asset-name"
@@ -869,7 +926,13 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
           </Card.Body>
         </Card>
       ) : (
-        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(true)}>
+        <Button
+          id="runtime-skill-editor-add-reference-asset"
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setIsAdding(true)}
+        >
           Add Reference Asset
         </Button>
       )}
@@ -904,6 +967,9 @@ function SuperAdminSkillEditor() {
     ...INITIAL_RUNTIME_SKILL_FORM,
   })
   const [errors, setErrors] = useState({})
+  const [errorsSource, setErrorsSource] = useState(null)
+  const [activeEditorTab, setActiveEditorTab] = useState(0)
+  const [showValidationHints, setShowValidationHints] = useState(false)
 
   const {
     data: skillResponse,
@@ -914,6 +980,11 @@ function SuperAdminSkillEditor() {
   })
 
   const { data: registryResponse } = useListFrameworkRegistriesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+  const { data: skillsResponse } = useListRuntimeSkillsQuery({
     page: 1,
     pageSize: 100,
     q: '',
@@ -935,6 +1006,33 @@ function SuperAdminSkillEditor() {
     () => buildFrameworkRegistryOptions(activeFrameworkRegistryRows, { includeAll: false }),
     [activeFrameworkRegistryRows],
   )
+  const existingSkills = useMemo(() => {
+    const direct = skillsResponse?.data
+
+    if (Array.isArray(direct)) {
+      return direct
+    }
+
+    if (direct && typeof direct === 'object' && Array.isArray(direct.data)) {
+      return direct.data
+    }
+
+    if (Array.isArray(skillsResponse)) {
+      return skillsResponse
+    }
+
+    return []
+  }, [skillsResponse])
+  const liveValidation = useMemo(
+    () => validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : ''),
+    [existingSkills, form, isEditMode, skillId],
+  )
+  const isCreateDisabled = useMemo(() => {
+    if (isEditMode) return false
+    if (isCreating) return true
+    return Object.keys(liveValidation.errors || {}).length > 0
+  }, [isCreating, isEditMode, liveValidation.errors])
+  const isCreateReady = !isEditMode && !isCreateDisabled
 
   useEffect(() => {
     if (!isEditMode) {
@@ -942,26 +1040,114 @@ function SuperAdminSkillEditor() {
         ...INITIAL_RUNTIME_SKILL_FORM,
       })
       setErrors({})
+      setErrorsSource(null)
+      setActiveEditorTab(0)
+      setShowValidationHints(false)
       return
     }
 
     if (loadedSkill) {
       setForm(mapRuntimeSkillToForm(loadedSkill))
       setErrors({})
+      setErrorsSource(null)
+      setActiveEditorTab(0)
+      setShowValidationHints(false)
     }
   }, [isEditMode, loadedSkill])
+
+  useEffect(() => {
+    if (isEditMode) return
+
+    const liveErrors = liveValidation?.errors && typeof liveValidation.errors === 'object'
+      ? liveValidation.errors
+      : {}
+
+    if (errorsSource === 'client' && showValidationHints) {
+      if (!shallowEqualObject(errors, liveErrors)) {
+        setErrors(liveErrors)
+      }
+
+      if (Object.keys(liveErrors).length === 0) {
+        setErrors({})
+        setErrorsSource(null)
+        setShowValidationHints(false)
+      }
+    }
+  }, [errors, errorsSource, isEditMode, liveValidation, showValidationHints])
 
   const handleBackToSkills = () => {
     navigate('/super-admin/runtime-control/skills')
   }
 
+  const handleReviewMissingFields = () => {
+    const { errors: nextErrors } = validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : '')
+
+    setErrors(nextErrors)
+    setErrorsSource('client')
+    setShowValidationHints(true)
+
+    if (!isEditMode) {
+      const jumpTargets = [
+        { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: 'runtime-skill-editor-framework-select' },
+        { tabIndex: 1, fieldKey: 'executionMode', focusId: 'runtime-skill-editor-execution-mode' },
+        { tabIndex: 2, fieldKey: 'inputContract', focusId: 'runtime-skill-editor-input-contract' },
+        { tabIndex: 2, fieldKey: 'outputContract', focusId: 'runtime-skill-editor-output-contract' },
+        { tabIndex: 2, fieldKey: 'primaryOutputKey', focusId: 'runtime-skill-editor-primary-output-key' },
+        { tabIndex: 2, fieldKey: 'outputBindings', focusId: 'runtime-skill-editor-output-bindings' },
+        { tabIndex: 2, fieldKey: 'allowedReadPaths', focusId: 'runtime-skill-editor-allowed-read-paths' },
+        { tabIndex: 2, fieldKey: 'allowedWritePaths', focusId: 'runtime-skill-editor-allowed-write-paths' },
+        { tabIndex: 2, fieldKey: 'forbiddenWritePaths', focusId: 'runtime-skill-editor-forbidden-write-paths' },
+        { tabIndex: 2, fieldKey: 'executionConfig', focusId: 'runtime-skill-editor-execution-config' },
+        { tabIndex: 3, fieldKey: 'timeoutMs', focusId: 'runtime-skill-editor-timeout' },
+        { tabIndex: 3, fieldKey: 'retryPolicy', focusId: 'runtime-skill-editor-retry-policy' },
+        { tabIndex: 4, fieldKey: 'referenceAssets', focusId: 'runtime-skill-editor-add-reference-asset' },
+      ]
+
+      const firstTabError = jumpTargets.find((target) => nextErrors?.[target.fieldKey])
+      if (firstTabError) {
+        setActiveEditorTab(firstTabError.tabIndex)
+        requestAnimationFrame(() => {
+          const el = document.getElementById(firstTabError.focusId)
+          if (el && typeof el.focus === 'function') {
+            if (typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            }
+            el.focus()
+          }
+        })
+      }
+    }
+
+    if (Object.keys(nextErrors).length === 0) {
+      addToast({
+        title: 'All checks passed',
+        description: 'This skill is ready to be created.',
+        variant: 'success',
+      })
+      return
+    }
+
+    addToast({
+      title: 'Missing required fields',
+      description: 'Review the highlighted fields across the editor tabs.',
+      variant: 'warning',
+    })
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setErrors({})
+    setErrorsSource(null)
 
-    const { errors: nextErrors, payload } = validateRuntimeSkillForm(form)
+    const { errors: nextErrors, payload } = validateRuntimeSkillForm(
+      form,
+      existingSkills,
+      isEditMode ? skillId : '',
+    )
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
+      setErrorsSource('client')
+      setShowValidationHints(true)
       return
     }
 
@@ -996,6 +1182,8 @@ function SuperAdminSkillEditor() {
 
       if (field) {
         setErrors({ [field]: appError.message })
+        setErrorsSource('server')
+        setShowValidationHints(true)
         return
       }
 
@@ -1032,11 +1220,16 @@ function SuperAdminSkillEditor() {
             form={form}
             setForm={setForm}
             errors={errors}
+            validationHints={showValidationHints ? liveValidation.errors : {}}
             frameworkOptions={frameworkOptions}
             onBack={handleBackToSkills}
             onCancel={handleBackToSkills}
             onSubmit={handleSubmit}
+            onReviewMissingFields={handleReviewMissingFields}
             isSaving={isCreating || isUpdating}
+            isCreateReady={isCreateReady}
+            activeTab={activeEditorTab}
+            onTabChange={setActiveEditorTab}
             loadedSkill={loadedSkill}
           />
         ) : null}
