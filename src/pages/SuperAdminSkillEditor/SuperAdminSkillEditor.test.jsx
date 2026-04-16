@@ -112,6 +112,16 @@ describe('SuperAdminSkillEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
     expect(screen.getByRole('heading', { name: /input \/ output contract/i })).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/^execution config/i, {
+        selector: 'textarea#runtime-skill-editor-execution-config',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/^allowed read paths$/i, {
+        selector: 'textarea#runtime-skill-editor-allowed-read-paths',
+      }),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /^optional configuration$/i }))
     expect(screen.getByRole('heading', { name: /optional configuration/i })).toBeInTheDocument()
@@ -293,6 +303,19 @@ describe('SuperAdminSkillEditor page', () => {
 
     await user.type(outputBindingsTextarea, 'validationResult\nmissingSections')
     expect(outputBindingsTextarea).not.toBeDisabled()
+  })
+
+  it('hides execution config for SYSTEM skills on the Input / Output Contract tab', async () => {
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await userEvent.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
+
+    expect(
+      screen.queryByLabelText(/^execution config/i, {
+        selector: 'textarea#runtime-skill-editor-execution-config',
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/execution config is only available/i)).toBeInTheDocument()
   })
 
   it('renders dependency visibility section in edit mode', async () => {

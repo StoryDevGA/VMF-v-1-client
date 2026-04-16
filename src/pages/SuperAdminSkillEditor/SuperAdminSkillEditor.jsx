@@ -301,91 +301,175 @@ function SkillEditorForm({
             <TabView.Tab label="Input / Output Contract">
               <SkillEditorSection
                 title="Input / Output Contract"
-                copy="Define the expected input and output shapes for this skill."
+                copy="Define contracts, governed bindings, access boundaries, and mode-specific execution config."
               >
                 <div className="super-admin-skill-editor__stack">
-                  <Select
-                    id="runtime-skill-editor-output-binding-mode"
-                    label="Output Binding Mode"
-                    className="super-admin-skill-editor__select-field"
-                    value={form.outputBindingMode}
-                    options={[
-                      { value: 'NONE', label: 'None' },
-                      { value: 'PRIMARY', label: 'Primary Output Key' },
-                      { value: 'BINDINGS', label: 'Output Bindings' },
-                    ]}
-                    helperText="Choose one mode to enable its field. This prevents agents from binding ambiguous outputs."
-                    onChange={(event) => {
-                      const mode = event.target.value
+                  <div className="super-admin-skill-editor__subsection">
+                    <h3 className="super-admin-skill-editor__subsection-title">Contracts</h3>
+                    <p className="super-admin-skill-editor__subsection-copy">
+                      Define the expected input and output structures for this skill. JSON Schema-style objects are supported.
+                    </p>
+                    <Textarea
+                      id="runtime-skill-editor-input-contract"
+                      label="Input Contract"
+                      helperText="Optional. Enter a valid JSON object defining the expected input shape."
+                      value={form.inputContract}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, inputContract: event.target.value }))
+                      }
+                      error={errors.inputContract}
+                      rows={6}
+                      fullWidth
+                    />
+                    <Textarea
+                      id="runtime-skill-editor-output-contract"
+                      label="Output Contract"
+                      helperText="Optional. Enter a valid JSON object defining the expected output shape."
+                      value={form.outputContract}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, outputContract: event.target.value }))
+                      }
+                      error={errors.outputContract}
+                      rows={6}
+                      fullWidth
+                    />
+                    <p className="super-admin-skill-editor__subsection-note">
+                      Outputs defined here can be exposed to agents through controlled output bindings.
+                    </p>
+                  </div>
 
-                      setForm((current) => {
-                        if (mode === 'PRIMARY') {
-                          return { ...current, outputBindingMode: mode, outputBindings: '' }
-                        }
+                  <div className="super-admin-skill-editor__subsection">
+                    <h3 className="super-admin-skill-editor__subsection-title">Bindings</h3>
+                    <p className="super-admin-skill-editor__subsection-copy">
+                      Codify how agent execution plans can bind outputs from this skill.
+                    </p>
+                    <Select
+                      id="runtime-skill-editor-output-binding-mode"
+                      label="Output Binding Mode"
+                      className="super-admin-skill-editor__select-field"
+                      value={form.outputBindingMode}
+                      options={[
+                        { value: 'NONE', label: 'None' },
+                        { value: 'PRIMARY', label: 'Primary Output Key' },
+                        { value: 'BINDINGS', label: 'Output Bindings' },
+                      ]}
+                      helperText="Choose one mode to enable its field. This prevents agents from binding ambiguous outputs."
+                      onChange={(event) => {
+                        const mode = event.target.value
 
-                        if (mode === 'BINDINGS') {
-                          return { ...current, outputBindingMode: mode, primaryOutputKey: '' }
-                        }
+                        setForm((current) => {
+                          if (mode === 'PRIMARY') {
+                            return { ...current, outputBindingMode: mode, outputBindings: '' }
+                          }
 
-                        return {
-                          ...current,
-                          outputBindingMode: 'NONE',
-                          primaryOutputKey: '',
-                          outputBindings: '',
+                          if (mode === 'BINDINGS') {
+                            return { ...current, outputBindingMode: mode, primaryOutputKey: '' }
+                          }
+
+                          return {
+                            ...current,
+                            outputBindingMode: 'NONE',
+                            primaryOutputKey: '',
+                            outputBindings: '',
+                          }
+                        })
+                      }}
+                      placeholder="Select an output binding mode"
+                    />
+                    <Input
+                      id="runtime-skill-editor-primary-output-key"
+                      label="Primary Output Key"
+                      helperText="Optional. Define the canonical output key an agent execution plan should bind to (use instead of Output Bindings)."
+                      value={form.primaryOutputKey}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, primaryOutputKey: event.target.value }))
+                      }
+                      error={errors.primaryOutputKey}
+                      disabled={form.outputBindingMode !== 'PRIMARY'}
+                      fullWidth
+                    />
+                    <Textarea
+                      id="runtime-skill-editor-output-bindings"
+                      label="Output Bindings"
+                      helperText="Optional. Provide bindable output keys (one per line). Leave empty when using Primary Output Key."
+                      value={form.outputBindings}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, outputBindings: event.target.value }))
+                      }
+                      error={errors.outputBindings}
+                      disabled={form.outputBindingMode !== 'BINDINGS'}
+                      rows={4}
+                      fullWidth
+                    />
+                  </div>
+
+                  <div className="super-admin-skill-editor__subsection">
+                    <h3 className="super-admin-skill-editor__subsection-title">Access Boundaries</h3>
+                    <p className="super-admin-skill-editor__subsection-copy">
+                      Set controlled read/write boundaries for this skill. These boundaries support governed execution and validation.
+                    </p>
+                    <Textarea
+                      id="runtime-skill-editor-allowed-read-paths"
+                      label="Allowed Read Paths"
+                      helperText="Optional. One path per line."
+                      value={form.allowedReadPaths}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, allowedReadPaths: event.target.value }))
+                      }
+                      error={errors.allowedReadPaths}
+                      rows={4}
+                      fullWidth
+                    />
+                    <Textarea
+                      id="runtime-skill-editor-allowed-write-paths"
+                      label="Allowed Write Paths"
+                      helperText="Optional. One path per line."
+                      value={form.allowedWritePaths}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, allowedWritePaths: event.target.value }))
+                      }
+                      error={errors.allowedWritePaths}
+                      rows={4}
+                      fullWidth
+                    />
+                    <Textarea
+                      id="runtime-skill-editor-forbidden-write-paths"
+                      label="Forbidden Write Paths"
+                      helperText="Optional. One path per line. Must not overlap with allowed write paths."
+                      value={form.forbiddenWritePaths}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, forbiddenWritePaths: event.target.value }))
+                      }
+                      error={errors.forbiddenWritePaths}
+                      rows={4}
+                      fullWidth
+                    />
+                  </div>
+
+                  <div className="super-admin-skill-editor__subsection">
+                    <h3 className="super-admin-skill-editor__subsection-title">Execution Config</h3>
+                    <p className="super-admin-skill-editor__subsection-copy">
+                      Optional mode-specific configuration used by rule engine or agent-assisted skills. Keep operational settings such as timeout and retry policy in Optional Configuration.
+                    </p>
+                    {String(form.executionMode ?? '').toUpperCase() !== 'SYSTEM' ? (
+                      <Textarea
+                        id="runtime-skill-editor-execution-config"
+                        label="Execution Config (JSON)"
+                        helperText="Optional. Mode-specific execution configuration for rule engine or agent-assisted skills."
+                        value={form.executionConfig}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, executionConfig: event.target.value }))
                         }
-                      })
-                    }}
-                    placeholder="Select an output binding mode"
-                  />
-                  <Textarea
-                    id="runtime-skill-editor-input-contract"
-                    label="Input Contract"
-                    helperText="Optional. Enter a valid JSON object defining the expected input shape."
-                    value={form.inputContract}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, inputContract: event.target.value }))
-                    }
-                    error={errors.inputContract}
-                    rows={6}
-                    fullWidth
-                  />
-                  <Textarea
-                    id="runtime-skill-editor-output-contract"
-                    label="Output Contract"
-                    helperText="Optional. Enter a valid JSON object defining the expected output shape."
-                    value={form.outputContract}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, outputContract: event.target.value }))
-                    }
-                    error={errors.outputContract}
-                    rows={6}
-                    fullWidth
-                  />
-                  <Input
-                    id="runtime-skill-editor-primary-output-key"
-                    label="Primary Output Key"
-                    helperText="Optional. Define the canonical output key an agent execution plan should bind to (use instead of Output Bindings)."
-                    value={form.primaryOutputKey}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, primaryOutputKey: event.target.value }))
-                    }
-                    error={errors.primaryOutputKey}
-                    disabled={form.outputBindingMode !== 'PRIMARY'}
-                    fullWidth
-                  />
-                  <Textarea
-                    id="runtime-skill-editor-output-bindings"
-                    label="Output Bindings"
-                    helperText="Optional. Provide bindable output keys (one per line). Leave empty when using Primary Output Key."
-                    value={form.outputBindings}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, outputBindings: event.target.value }))
-                    }
-                    error={errors.outputBindings}
-                    disabled={form.outputBindingMode !== 'BINDINGS'}
-                    rows={4}
-                    fullWidth
-                  />
+                        error={errors.executionConfig}
+                        rows={5}
+                        fullWidth
+                      />
+                    ) : (
+                      <p className="super-admin-skill-editor__subsection-note">
+                        Execution config is only available for rule engine or agent-assisted skills.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </SkillEditorSection>
             </TabView.Tab>
@@ -393,7 +477,7 @@ function SkillEditorForm({
             <TabView.Tab label="Optional Configuration">
               <SkillEditorSection
                 title="Optional Configuration"
-                copy="Configure runtime execution behavior for this skill."
+                copy="Configure operational settings such as timeout and retry policy."
               >
                 <div className="super-admin-skill-editor__stack">
                   <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
@@ -420,58 +504,6 @@ function SkillEditorForm({
                       error={errors.retryPolicy}
                     />
                   </div>
-
-                  {String(form.executionMode ?? '').toUpperCase() !== 'SYSTEM' ? (
-                    <Textarea
-                      id="runtime-skill-editor-execution-config"
-                      label="Execution Config (JSON)"
-                      helperText="Optional. Mode-specific execution configuration for rule engine or agent-assisted skills."
-                      value={form.executionConfig}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, executionConfig: event.target.value }))
-                      }
-                      error={errors.executionConfig}
-                      rows={5}
-                      fullWidth
-                    />
-                  ) : null}
-
-                  <Textarea
-                    id="runtime-skill-editor-allowed-read-paths"
-                    label="Allowed Read Paths"
-                    helperText="Optional. One path per line."
-                    value={form.allowedReadPaths}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, allowedReadPaths: event.target.value }))
-                    }
-                    error={errors.allowedReadPaths}
-                    rows={4}
-                    fullWidth
-                  />
-                  <Textarea
-                    id="runtime-skill-editor-allowed-write-paths"
-                    label="Allowed Write Paths"
-                    helperText="Optional. One path per line."
-                    value={form.allowedWritePaths}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, allowedWritePaths: event.target.value }))
-                    }
-                    error={errors.allowedWritePaths}
-                    rows={4}
-                    fullWidth
-                  />
-                  <Textarea
-                    id="runtime-skill-editor-forbidden-write-paths"
-                    label="Forbidden Write Paths"
-                    helperText="Optional. One path per line. Must not overlap with allowed write paths."
-                    value={form.forbiddenWritePaths}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, forbiddenWritePaths: event.target.value }))
-                    }
-                    error={errors.forbiddenWritePaths}
-                    rows={4}
-                    fullWidth
-                  />
                 </div>
               </SkillEditorSection>
             </TabView.Tab>
