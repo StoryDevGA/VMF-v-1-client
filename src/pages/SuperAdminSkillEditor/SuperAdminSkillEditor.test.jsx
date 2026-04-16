@@ -42,6 +42,7 @@ describe('SuperAdminSkillEditor page', () => {
     expect(screen.getByRole('tab', { name: /^framework compatibility$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^input \/ output contract$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^optional configuration$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^reference assets$/i })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^dependency visibility$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('tablist').parentElement).toHaveClass('tabview--sm')
     expect(screen.getByRole('heading', { name: /^framework compatibility$/i })).toBeInTheDocument()

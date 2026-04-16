@@ -20,12 +20,6 @@ export const RUNTIME_SKILL_FORM_STATUS_OPTIONS = Object.freeze([
   { value: RUNTIME_SKILL_STATUSES.DEPRECATED, label: 'Deprecated' },
 ])
 
-export const RUNTIME_SKILL_FRAMEWORK_OPTIONS = Object.freeze([
-  { value: '', label: 'All frameworks' },
-  { value: 'RLD', label: 'RLD' },
-  { value: 'VMF', label: 'VMF' },
-])
-
 export const RUNTIME_SKILL_CATEGORY_OPTIONS = Object.freeze([
   { value: 'GENERAL', label: 'General' },
   { value: 'SNAPSHOT', label: 'Snapshot' },
@@ -78,6 +72,7 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   allowedWritePaths: '',
   forbiddenWritePaths: '',
   executionConfig: '',
+  referenceAssets: Object.freeze([]),
 })
 
 export const INITIAL_RUNTIME_SKILLS = Object.freeze([
@@ -203,15 +198,19 @@ export function cloneRuntimeSkill(skill) {
     allowedWritePaths: [...(skill.allowedWritePaths ?? [])],
     forbiddenWritePaths: [...(skill.forbiddenWritePaths ?? [])],
     executionConfig: { ...(skill.executionConfig ?? {}) },
+    referenceAssets: Array.isArray(skill.referenceAssets) ? skill.referenceAssets.map((asset) => ({ ...asset })) : [],
     dependencySummary: skill.dependencySummary
       ? {
           agentIds: [...(skill.dependencySummary.agentIds ?? [])],
           workflowPolicyIds: [...(skill.dependencySummary.workflowPolicyIds ?? [])],
         }
       : { agentIds: [], workflowPolicyIds: [] },
-    updatedBy: {
-      ...skill.updatedBy,
-    },
+    createdBy: skill.createdBy
+      ? { ...skill.createdBy }
+      : undefined,
+    updatedBy: skill.updatedBy
+      ? { ...skill.updatedBy }
+      : undefined,
   }
 }
 
@@ -310,6 +309,7 @@ export function mapRuntimeSkillToForm(skill) {
     allowedWritePaths: formatKeyList(skill.allowedWritePaths),
     forbiddenWritePaths: formatKeyList(skill.forbiddenWritePaths),
     executionConfig: formatJsonField(skill.executionConfig),
+    referenceAssets: Array.isArray(skill.referenceAssets) ? skill.referenceAssets.map((asset) => ({ ...asset })) : [],
   }
 }
 
@@ -329,6 +329,7 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   const allowedReadPaths = parseStringList(formState.allowedReadPaths)
   const allowedWritePaths = parseStringList(formState.allowedWritePaths)
   const forbiddenWritePaths = parseStringList(formState.forbiddenWritePaths)
+  const referenceAssets = Array.isArray(formState.referenceAssets) ? formState.referenceAssets : []
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
     errors.key = 'Skill key is required and must use letters, numbers, or hyphens.'
@@ -422,6 +423,25 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
     errors.executionConfig = 'Execution config is only supported for rule engine or agent-assisted skills.'
   }
 
+  const referenceAssetErrors = []
+  for (const asset of referenceAssets) {
+    if (!asset || typeof asset !== 'object') continue
+    const name = String(asset.name ?? '').trim()
+    const purpose = String(asset.purpose ?? '').trim().toUpperCase()
+
+    if (!name) {
+      referenceAssetErrors.push('Each reference asset must have a name.')
+      break
+    }
+    if (!purpose) {
+      referenceAssetErrors.push('Each reference asset must have a purpose.')
+      break
+    }
+  }
+  if (referenceAssetErrors.length > 0) {
+    errors.referenceAssets = referenceAssetErrors[0]
+  }
+
   const timeoutMs = Number.parseInt(String(formState.timeoutMs ?? ''), 10)
   if (Number.isNaN(timeoutMs) || timeoutMs < 0) {
     errors.timeoutMs = 'Timeout must be a non-negative integer.'
@@ -454,6 +474,7 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
       allowedWritePaths,
       forbiddenWritePaths,
       executionConfig: executionConfigResult.error ? {} : executionConfigResult.value,
+      referenceAssets,
     },
   }
 }

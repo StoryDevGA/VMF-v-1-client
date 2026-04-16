@@ -82,7 +82,7 @@ function FrameworkCompatibilityField({
   }
 
   const handleRemoveFramework = (frameworkKey) => {
-    onChange(formatKeyList(selectedFrameworkKeys.filter((value) => value !== frameworkKey)))
+    onChange(formatKeyList(selectedFrameworkKeys.filter((fk) => fk !== frameworkKey)))
   }
 
   return (
@@ -508,6 +508,21 @@ function SkillEditorForm({
               </SkillEditorSection>
             </TabView.Tab>
 
+            <TabView.Tab label="Reference Assets">
+              <SkillEditorSection
+                title="Reference Assets"
+                copy="Attach governed help documents, runtime references, and test artifacts to this skill."
+              >
+                <ReferenceAssetsEditor
+                  assets={form.referenceAssets}
+                  error={errors.referenceAssets}
+                  onChange={(referenceAssets) =>
+                    setForm((current) => ({ ...current, referenceAssets }))
+                  }
+                />
+              </SkillEditorSection>
+            </TabView.Tab>
+
             {isEditMode ? (
               <TabView.Tab label="Dependency Visibility">
                 <SkillEditorSection
@@ -581,6 +596,202 @@ function SkillEditorLoadingState() {
         <p className="super-admin-skills__muted">Loading skill details...</p>
       </Card.Body>
     </Card>
+  )
+}
+
+function buildReferenceAssetId() {
+  const randomId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  return `asset-${String(randomId).replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 16)}`
+}
+
+function ReferenceAssetsEditor({ assets, error, onChange }) {
+  const rows = Array.isArray(assets) ? assets : []
+  const [isAdding, setIsAdding] = useState(false)
+  const [draft, setDraft] = useState(() => ({
+    assetId: buildReferenceAssetId(),
+    name: '',
+    assetType: 'PDF',
+    mimeType: 'application/pdf',
+    purpose: 'AUTHORING_HELP',
+    usageMode: 'OPTIONAL',
+    status: 'ACTIVE',
+    description: '',
+    storageKey: '',
+  }))
+
+  const handleAdd = () => {
+    if (!String(draft.name).trim()) {
+      return
+    }
+
+    onChange([{ ...draft }, ...rows])
+    setDraft({
+      assetId: buildReferenceAssetId(),
+      name: '',
+      assetType: 'PDF',
+      mimeType: 'application/pdf',
+      purpose: 'AUTHORING_HELP',
+      usageMode: 'OPTIONAL',
+      status: 'ACTIVE',
+      description: '',
+      storageKey: '',
+    })
+    setIsAdding(false)
+  }
+
+  const handleRemove = (assetId) => {
+    onChange(rows.filter((row) => row.assetId !== assetId))
+  }
+
+  return (
+    <div className="super-admin-skill-editor__stack">
+      <p className="super-admin-skill-editor__helper">
+        Upload support is deferred; this field set stores governed metadata and a storage key/URL reference.
+      </p>
+
+      {rows.length > 0 ? (
+        <div className="super-admin-skill-editor__stack" role="table" aria-label="Reference assets">
+          {rows.map((row) => (
+            <Card key={row.assetId} variant="outlined">
+              <Card.Body className="super-admin-skill-editor__stack">
+                <div className="super-admin-skill-editor__row">
+                  <div>
+                    <p className="super-admin-skill-editor__dependency-label">{row.name}</p>
+                    <p className="super-admin-skill-editor__helper">
+                      <span className="super-admin-skill-editor__code">{row.assetId}</span>
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemove(row.assetId)}
+                    aria-label={`Remove ${row.name}`}
+                  >
+                    Remove
+                  </Button>
+                </div>
+                <div className="super-admin-skill-editor__row">
+                  <Input id={`${row.assetId}-type`} label="Type" value={row.assetType ?? 'OTHER'} disabled fullWidth />
+                  <Input id={`${row.assetId}-purpose`} label="Purpose" value={row.purpose ?? ''} disabled fullWidth />
+                  <Input id={`${row.assetId}-usage`} label="Usage Mode" value={row.usageMode ?? ''} disabled fullWidth />
+                  <Input id={`${row.assetId}-status`} label="Status" value={row.status ?? ''} disabled fullWidth />
+                </div>
+                {row.storageKey ? (
+                  <p className="super-admin-skill-editor__helper">
+                    Storage: <span className="super-admin-skill-editor__code">{row.storageKey}</span>
+                  </p>
+                ) : null}
+                {row.description ? <p className="super-admin-skill-editor__helper">{row.description}</p> : null}
+              </Card.Body>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <p className="super-admin-skill-editor__helper">No reference assets attached yet.</p>
+      )}
+
+      {error ? (
+        <p className="super-admin-skill-editor__field-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {isAdding ? (
+        <Card variant="outlined">
+          <Card.Body className="super-admin-skill-editor__stack">
+            <Input
+              id="runtime-skill-editor-asset-name"
+              label="Asset Name"
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              fullWidth
+            />
+            <div className="super-admin-skill-editor__row">
+              <Select
+                id="runtime-skill-editor-asset-type"
+                label="Type"
+                className="super-admin-skill-editor__select-field"
+                value={draft.assetType}
+                options={[
+                  { value: 'PDF', label: 'PDF' },
+                  { value: 'JSON', label: 'JSON' },
+                  { value: 'DOCX', label: 'DOCX' },
+                  { value: 'TEXT', label: 'Text' },
+                  { value: 'OTHER', label: 'Other' },
+                ]}
+                onChange={(event) => setDraft((current) => ({ ...current, assetType: event.target.value }))}
+              />
+              <Select
+                id="runtime-skill-editor-asset-purpose"
+                label="Purpose"
+                className="super-admin-skill-editor__select-field"
+                value={draft.purpose}
+                options={[
+                  { value: 'AUTHORING_HELP', label: 'Authoring / Help' },
+                  { value: 'RUNTIME_REFERENCE', label: 'Runtime Reference' },
+                  { value: 'TEST_ASSET', label: 'Test Asset' },
+                ]}
+                onChange={(event) => setDraft((current) => ({ ...current, purpose: event.target.value }))}
+              />
+              <Select
+                id="runtime-skill-editor-asset-usage-mode"
+                label="Usage Mode"
+                className="super-admin-skill-editor__select-field"
+                value={draft.usageMode}
+                options={[
+                  { value: 'OPTIONAL', label: 'Optional' },
+                  { value: 'REQUIRED', label: 'Required' },
+                  { value: 'TESTING', label: 'Testing' },
+                ]}
+                onChange={(event) => setDraft((current) => ({ ...current, usageMode: event.target.value }))}
+              />
+              <Select
+                id="runtime-skill-editor-asset-status"
+                label="Status"
+                className="super-admin-skill-editor__select-field"
+                value={draft.status}
+                options={[
+                  { value: 'ACTIVE', label: 'Active' },
+                  { value: 'INACTIVE', label: 'Inactive' },
+                ]}
+                onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}
+              />
+            </div>
+            <Input
+              id="runtime-skill-editor-asset-storage-key"
+              label="Storage Key / URL"
+              value={draft.storageKey}
+              onChange={(event) => setDraft((current) => ({ ...current, storageKey: event.target.value }))}
+              fullWidth
+            />
+            <Textarea
+              id="runtime-skill-editor-asset-description"
+              label="Description"
+              value={draft.description}
+              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+              rows={3}
+              fullWidth
+            />
+            <div className="super-admin-skill-editor__row super-admin-skill-editor__row--narrow">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(false)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={handleAdd} disabled={!String(draft.name).trim()}>
+                Add Asset
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+      ) : (
+        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(true)}>
+          Add Reference Asset
+        </Button>
+      )}
+    </div>
   )
 }
 
