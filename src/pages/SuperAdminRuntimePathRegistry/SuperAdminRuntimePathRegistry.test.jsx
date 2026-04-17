@@ -40,5 +40,8 @@ describe('SuperAdminRuntimePathRegistry', () => {
     expect(screen.getByText(/review the governed runtime path registry/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
     expect(screen.queryByText(/^XXX$/)).not.toBeInTheDocument()
+
+    expect(screen.getByRole('columnheader', { name: /flags/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /schema/i })).toBeInTheDocument()
   })
 })

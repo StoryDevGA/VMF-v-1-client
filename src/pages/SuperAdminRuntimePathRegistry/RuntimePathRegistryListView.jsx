@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Accordion } from '../../components/Accordion'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
@@ -19,6 +20,14 @@ import {
 } from './superAdminRuntimePathRegistry.constants.js'
 import './RuntimePathRegistryListView.css'
 
+function normalizeAccordionId(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+}
+
 function renderPathSummary(_value, row) {
   return (
     <div className="super-admin-runtime-path-registry__path-summary">
@@ -28,38 +37,145 @@ function renderPathSummary(_value, row) {
   )
 }
 
-function renderTokenList(value) {
-  const items = Array.isArray(value) ? value : []
-
-  if (items.length === 0) {
-    return '--'
-  }
+function renderFlagBadges(_value, row) {
+  const isProtected = Boolean(row?.isProtected)
+  const isSystem = row?.isSystem !== undefined ? Boolean(row.isSystem) : true
 
   return (
-    <div className="super-admin-runtime-path-registry__token-list">
-      {items.slice(0, 2).map((item) => (
-        <Badge key={item} variant="info" size="sm" pill outline>
-          {item}
+    <div className="super-admin-runtime-path-registry__flag-list">
+      {isProtected ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Protected
         </Badge>
-      ))}
-      {items.length > 2 ? (
+      ) : (
         <Badge variant="neutral" size="sm" pill outline>
-          +{items.length - 2}
+          Standard
         </Badge>
-      ) : null}
+      )}
+      {isSystem ? (
+        <Badge variant="info" size="sm" pill outline>
+          System
+        </Badge>
+      ) : (
+        <Badge variant="neutral" size="sm" pill outline>
+          Extension
+        </Badge>
+      )}
     </div>
   )
 }
 
-function renderProtectedState(value) {
-  return value ? (
-    <Badge variant="warning" size="sm" pill outline>
-      Protected
-    </Badge>
-  ) : (
-    <Badge variant="neutral" size="sm" pill outline>
-      Standard
-    </Badge>
+function SchemaAccordionCell({ row }) {
+  const category = row?.category ? String(row.category) : null
+  const dataType = row?.dataType ? String(row.dataType) : null
+  const sourceType = row?.sourceType ? String(row.sourceType) : null
+
+  if (!category && !dataType && !sourceType) return <span>--</span>
+
+  const baseId = `schema-${normalizeAccordionId(row?.id ?? row?.pathKey ?? row?.label ?? 'runtime-path')}`
+  const categoryItemId = `${baseId}-category`
+  const sourceTypeItemId = `${baseId}-source-type`
+  const dataTypeItemId = `${baseId}-data-type`
+
+  return (
+    <Accordion
+      variant="default"
+      rounded={false}
+      className="super-admin-runtime-path-registry__schema-accordion"
+    >
+      {category ? (
+        <Accordion.Item id={categoryItemId}>
+          <Accordion.Header
+            itemId={categoryItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-header"
+            aria-label={`Category for ${row.label ?? row.pathKey ?? 'runtime path'}`}
+          >
+            Category
+          </Accordion.Header>
+          <Accordion.Content
+            itemId={categoryItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-content"
+          >
+            <code className="super-admin-runtime-path-registry__schema-value">{category}</code>
+          </Accordion.Content>
+        </Accordion.Item>
+      ) : null}
+
+      {sourceType ? (
+        <Accordion.Item id={sourceTypeItemId}>
+          <Accordion.Header
+            itemId={sourceTypeItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-header"
+            aria-label={`Source type for ${row.label ?? row.pathKey ?? 'runtime path'}`}
+          >
+            Source type
+          </Accordion.Header>
+          <Accordion.Content
+            itemId={sourceTypeItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-content"
+          >
+            <code className="super-admin-runtime-path-registry__schema-value">{sourceType}</code>
+          </Accordion.Content>
+        </Accordion.Item>
+      ) : null}
+
+      {dataType ? (
+        <Accordion.Item id={dataTypeItemId}>
+          <Accordion.Header
+            itemId={dataTypeItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-header"
+            aria-label={`Data type for ${row.label ?? row.pathKey ?? 'runtime path'}`}
+          >
+            Data type
+          </Accordion.Header>
+          <Accordion.Content
+            itemId={dataTypeItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-content"
+          >
+            <code className="super-admin-runtime-path-registry__schema-value">{dataType}</code>
+          </Accordion.Content>
+        </Accordion.Item>
+      ) : null}
+    </Accordion>
+  )
+}
+
+function renderCodeTokens(items) {
+  const list = Array.isArray(items) ? items : []
+  if (list.length === 0) return '--'
+
+  return (
+    <div className="super-admin-runtime-path-registry__code-tokens">
+      {list.map((item) => (
+        <code key={item} className="super-admin-runtime-path-registry__code-token">
+          {String(item)}
+        </code>
+      ))}
+    </div>
+  )
+}
+
+function renderCompatibilitySummary(_value, row) {
+  const frameworkKeys = Array.isArray(row?.frameworkKeys) ? row.frameworkKeys : []
+  const allowedOperations = Array.isArray(row?.allowedOperations) ? row.allowedOperations : []
+
+  if (frameworkKeys.length === 0 && allowedOperations.length === 0) return '--'
+
+  return (
+    <div className="super-admin-runtime-path-registry__compat-summary" aria-label="Compatibility">
+      {frameworkKeys.length > 0 ? (
+        <div className="super-admin-runtime-path-registry__meta-item">
+          <span className="super-admin-runtime-path-registry__meta-label">Frameworks</span>
+          {renderCodeTokens(frameworkKeys)}
+        </div>
+      ) : null}
+      {allowedOperations.length > 0 ? (
+        <div className="super-admin-runtime-path-registry__meta-item">
+          <span className="super-admin-runtime-path-registry__meta-label">Operations</span>
+          {renderCodeTokens(allowedOperations)}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -87,14 +203,14 @@ export function RuntimePathRegistryListView({
         key: 'pathKey',
         label: 'Runtime Path',
         mobileLabel: 'Runtime Path',
-        width: '22%',
+        width: '26%',
         render: renderPathSummary,
       },
       {
         key: 'status',
         label: 'Status',
         mobileLabel: 'Status',
-        width: '10%',
+        width: '8%',
         render: (value) => (
           <Status size="sm" showIcon variant={getRuntimePathRegistryStatusVariant(value)}>
             {formatRuntimePathRegistryStatus(value)}
@@ -102,40 +218,34 @@ export function RuntimePathRegistryListView({
         ),
       },
       {
-        key: 'isProtected',
-        label: 'Protection',
-        mobileLabel: 'Protection',
-        width: '11%',
-        render: renderProtectedState,
+        key: 'flags',
+        label: 'Flags',
+        mobileLabel: 'Flags',
+        width: '10%',
+        render: renderFlagBadges,
       },
       {
-        key: 'frameworkKeys',
-        label: 'Frameworks',
-        mobileLabel: 'Frameworks',
-        width: '13%',
-        render: renderTokenList,
-      },
-      {
-        key: 'allowedOperations',
-        label: 'Operations',
-        mobileLabel: 'Operations',
-        width: '13%',
-        render: renderTokenList,
+        key: 'compatibility',
+        label: 'Compatibility',
+        mobileLabel: 'Compatibility',
+        width: '18%',
+        render: renderCompatibilitySummary,
       },
       {
         key: 'scope',
         label: 'Scope',
         mobileLabel: 'Scope',
-        width: '11%',
+        width: '10%',
         render: (value) => (
           <span className="super-admin-runtime-path-registry__scope-cell">{value}</span>
         ),
       },
       {
-        key: 'category',
-        label: 'Category',
-        mobileLabel: 'Category',
-        width: '10%',
+        key: 'schema',
+        label: 'Schema',
+        mobileLabel: 'Schema',
+        width: '18%',
+        render: (_value, row) => <SchemaAccordionCell row={row} />,
       },
       {
         key: 'updatedAt',
