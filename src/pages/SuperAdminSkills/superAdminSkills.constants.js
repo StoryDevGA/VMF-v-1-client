@@ -57,13 +57,13 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   name: '',
   description: '',
   status: RUNTIME_SKILL_STATUSES.ACTIVE,
-  supportedFrameworkKeys: 'VMF\nRLD',
+  supportedFrameworkKeys: '',
   category: 'GENERAL',
   type: 'DETERMINISTIC',
   executionMode: 'SYSTEM',
   inputContract: '',
   outputContract: '',
-  outputBindingMode: 'PRIMARY',
+  outputBindingMode: 'NONE',
   primaryOutputKey: '',
   outputBindings: '',
   timeoutMs: '5000',
@@ -357,8 +357,11 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   const type = String(formState.type ?? 'DETERMINISTIC').trim().toUpperCase()
   const executionMode = String(formState.executionMode ?? 'SYSTEM').trim().toUpperCase()
   const retryPolicy = String(formState.retryPolicy ?? 'NONE').trim().toUpperCase()
-  const primaryOutputKey = String(formState.primaryOutputKey ?? '').trim()
-  const outputBindings = parseStringList(formState.outputBindings)
+  const outputBindingMode = String(formState.outputBindingMode ?? 'NONE').trim().toUpperCase()
+  const rawPrimaryOutputKey = String(formState.primaryOutputKey ?? '').trim()
+  const rawOutputBindings = parseStringList(formState.outputBindings)
+  let primaryOutputKey = rawPrimaryOutputKey
+  let outputBindings = rawOutputBindings
   const allowedReadPaths = parseStringList(formState.allowedReadPaths)
   const allowedWritePaths = parseStringList(formState.allowedWritePaths)
   const forbiddenWritePaths = parseStringList(formState.forbiddenWritePaths)
@@ -408,6 +411,23 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
     errors.outputContract = outputContractResult.error
   }
 
+  if (outputBindingMode === 'NONE') {
+    primaryOutputKey = ''
+    outputBindings = []
+  } else if (outputBindingMode === 'PRIMARY') {
+    outputBindings = []
+    if (!primaryOutputKey) {
+      errors.primaryOutputKey = 'Primary output key is required when using Primary Output Key binding mode.'
+    }
+  } else if (outputBindingMode === 'BINDINGS') {
+    primaryOutputKey = ''
+    if (outputBindings.length === 0) {
+      errors.outputBindings = 'At least one output binding is required when using Output Bindings mode.'
+    }
+  } else {
+    errors.outputBindingMode = 'Output binding mode must be None, Primary Output Key, or Output Bindings.'
+  }
+
   if (primaryOutputKey && !OUTPUT_BINDING_PATTERN.test(primaryOutputKey)) {
     errors.primaryOutputKey = 'Primary output key must start with a letter and only use letters, numbers, or underscores.'
   }
@@ -420,6 +440,24 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   if (primaryOutputKey && outputBindings.length > 0) {
     errors.primaryOutputKey = 'Provide either a primary output key or output bindings, not both.'
     errors.outputBindings = 'Provide either a primary output key or output bindings, not both.'
+  }
+
+  if (!outputContractResult.error && outputContractResult.value) {
+    const properties = outputContractResult.value.properties
+
+    if (properties != null && (typeof properties !== 'object' || Array.isArray(properties))) {
+      errors.outputContract = 'Output contract properties must be a JSON object.'
+    } else if (outputBindingMode === 'PRIMARY') {
+      const propertyKeys = properties && typeof properties === 'object'
+        ? Object.keys(properties).filter(Boolean)
+        : []
+
+      if (propertyKeys.length === 0) {
+        errors.primaryOutputKey = 'Define output contract properties to select a primary output key.'
+      } else if (primaryOutputKey && !propertyKeys.includes(primaryOutputKey)) {
+        errors.primaryOutputKey = 'Primary output key must be one of the Output Contract properties.'
+      }
+    }
   }
 
   const invalidReadPath = allowedReadPaths.find((item) => /\s/.test(item))

@@ -260,7 +260,7 @@ describe('SuperAdminSkillEditor page', () => {
       screen.getByLabelText(/^output binding mode$/i, {
         selector: 'select#runtime-skill-editor-output-binding-mode',
       }),
-    ).toHaveValue('PRIMARY')
+    ).toHaveValue('NONE')
 
     await user.selectOptions(
       screen.getByLabelText(/^output binding mode$/i, {
@@ -275,18 +275,33 @@ describe('SuperAdminSkillEditor page', () => {
       }),
     ).toHaveValue('PRIMARY')
 
-    const primaryOutputInput = screen.getByLabelText(/^primary output key$/i, {
-      selector: 'input#runtime-skill-editor-primary-output-key',
+    await user.clear(
+      screen.getByLabelText(/^output contract$/i, {
+        selector: 'textarea#runtime-skill-editor-output-contract',
+      }),
+    )
+    await user.type(
+      screen.getByLabelText(/^output contract$/i, {
+        selector: 'textarea#runtime-skill-editor-output-contract',
+      }),
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          isValid: { type: 'boolean' },
+          missingSections: { type: 'array' },
+        },
+      }, null, 2),
+    )
+
+    const primaryOutputSelect = screen.getByLabelText(/^primary output key$/i, {
+      selector: 'select#runtime-skill-editor-primary-output-key',
     })
 
     const outputBindingsTextarea = screen.getByLabelText(/^output bindings$/i, {
       selector: 'textarea#runtime-skill-editor-output-bindings',
     })
 
-    await user.type(
-      primaryOutputInput,
-      'validationResult',
-    )
+    await user.selectOptions(primaryOutputSelect, 'isValid')
 
     expect(outputBindingsTextarea).toBeDisabled()
 
@@ -303,11 +318,122 @@ describe('SuperAdminSkillEditor page', () => {
       }),
     ).toHaveValue('BINDINGS')
 
-    expect(primaryOutputInput).toBeDisabled()
-    expect(primaryOutputInput).toHaveValue('')
+    expect(primaryOutputSelect).toBeDisabled()
+    expect(primaryOutputSelect).toHaveValue('')
 
     await user.type(outputBindingsTextarea, 'validationResult\nmissingSections')
     expect(outputBindingsTextarea).not.toBeDisabled()
+  })
+
+  it('derives primary output key options from the Output Contract properties', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.type(
+      screen.getByLabelText(/^skill key$/i, {
+        selector: 'input#runtime-skill-editor-key',
+      }),
+      'check-required-vmf-sections',
+    )
+    await user.type(
+      screen.getByLabelText(/^skill name$/i, {
+        selector: 'input#runtime-skill-editor-name',
+      }),
+      'Check Required VMF Sections',
+    )
+
+    await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
+    await user.type(
+      screen.getByLabelText(/^output contract$/i, {
+        selector: 'textarea#runtime-skill-editor-output-contract',
+      }),
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          isValid: { type: 'boolean' },
+          missingSections: { type: 'array' },
+        },
+      }, null, 2),
+    )
+
+    await user.selectOptions(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+      'PRIMARY',
+    )
+
+    expect(screen.getByRole('option', { name: /isValid/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /missingSections/i })).toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByLabelText(/^primary output key$/i, {
+        selector: 'select#runtime-skill-editor-primary-output-key',
+      }),
+      'missingSections',
+    )
+
+    expect(
+      screen.getByLabelText(/^primary output key$/i, {
+        selector: 'select#runtime-skill-editor-primary-output-key',
+      }),
+    ).toHaveValue('missingSections')
+  })
+
+  it('clears the primary output key when the Output Contract schema changes', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.type(
+      screen.getByLabelText(/^skill key$/i, {
+        selector: 'input#runtime-skill-editor-key',
+      }),
+      'check-required-vmf-sections',
+    )
+    await user.type(
+      screen.getByLabelText(/^skill name$/i, {
+        selector: 'input#runtime-skill-editor-name',
+      }),
+      'Check Required VMF Sections',
+    )
+
+    await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
+    const outputContract = screen.getByLabelText(/^output contract$/i, {
+      selector: 'textarea#runtime-skill-editor-output-contract',
+    })
+
+    await user.type(outputContract, JSON.stringify({
+      type: 'object',
+      properties: {
+        isValid: { type: 'boolean' },
+        missingSections: { type: 'array' },
+      },
+    }, null, 2))
+
+    await user.selectOptions(
+      screen.getByLabelText(/^output binding mode$/i, {
+        selector: 'select#runtime-skill-editor-output-binding-mode',
+      }),
+      'PRIMARY',
+    )
+
+    const primaryOutputSelect = screen.getByLabelText(/^primary output key$/i, {
+      selector: 'select#runtime-skill-editor-primary-output-key',
+    })
+    await user.selectOptions(primaryOutputSelect, 'isValid')
+    expect(primaryOutputSelect).toHaveValue('isValid')
+
+    await user.clear(outputContract)
+    await user.type(outputContract, JSON.stringify({
+      type: 'object',
+      properties: {
+        missingSections: { type: 'array' },
+      },
+    }, null, 2))
+
+    await waitFor(() => {
+      expect(primaryOutputSelect).toHaveValue('')
+    })
   })
 
   it('hides execution config for SYSTEM skills on the Input / Output Contract tab', async () => {

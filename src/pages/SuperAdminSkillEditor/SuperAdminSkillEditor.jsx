@@ -26,6 +26,7 @@ import {
   INITIAL_RUNTIME_SKILL_FORM,
   formatKeyList,
   mapRuntimeSkillToForm,
+  parseJsonField,
   parseFrameworkKeyList,
   RUNTIME_SKILL_CATEGORY_OPTIONS,
   RUNTIME_SKILL_EXECUTION_MODE_OPTIONS,
@@ -196,13 +197,98 @@ function SkillEditorForm({
     dependencies: 0,
   }), [hintErrors])
 
+  const [primaryOutputKeyNotice, setPrimaryOutputKeyNotice] = useState('')
+  const outputContractSchema = useMemo(() => parseJsonField(form.outputContract), [form.outputContract])
+  const outputContractPropertyMeta = useMemo(() => {
+    if (outputContractSchema.error || !outputContractSchema.value) {
+      return { options: [], typeLookup: {}, keys: [] }
+    }
+
+    const properties = outputContractSchema.value.properties
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+      return { options: [], typeLookup: {}, keys: [] }
+    }
+
+    const keys = Object.keys(properties).filter(Boolean).sort((left, right) => left.localeCompare(right))
+    const typeLookup = Object.fromEntries(keys.map((key) => {
+      const value = properties[key]
+      const type = value && typeof value === 'object' && !Array.isArray(value)
+        ? String(value.type ?? '').trim()
+        : ''
+      return [key, type]
+    }))
+
+    return {
+      keys,
+      typeLookup,
+      options: keys.map((key) => {
+        const suffix = typeLookup[key] ? ` (${typeLookup[key]})` : ''
+        return { value: key, label: `${key}${suffix}` }
+      }),
+    }
+  }, [outputContractSchema])
+  const executionModeSummaryLabel = useMemo(() => {
+    const match = RUNTIME_SKILL_EXECUTION_MODE_OPTIONS.find((option) => option.value === form.executionMode)
+    return match ? match.label : String(form.executionMode ?? '').trim()
+  }, [form.executionMode])
+  const primaryOutputKeyHelperText = useMemo(() => {
+    if (primaryOutputKeyNotice) return primaryOutputKeyNotice
+    if (form.outputBindingMode !== 'PRIMARY') {
+      return 'Disabled unless Output Binding Mode is set to Primary Output Key.'
+    }
+    if (outputContractSchema.error) {
+      return 'Fix the Output Contract JSON to populate primary key options.'
+    }
+    if (outputContractPropertyMeta.keys.length === 0) {
+      return 'Add top-level output properties to the Output Contract to populate options.'
+    }
+    const selectedType = outputContractPropertyMeta.typeLookup?.[form.primaryOutputKey]
+    return selectedType
+      ? `Selected output type: ${selectedType}.`
+      : 'Select the canonical output field downstream execution should bind to.'
+  }, [
+    form.outputBindingMode,
+    form.primaryOutputKey,
+    outputContractPropertyMeta.keys.length,
+    outputContractPropertyMeta.typeLookup,
+    outputContractSchema.error,
+    primaryOutputKeyNotice,
+  ])
+
+  useEffect(() => {
+    if (form.outputBindingMode !== 'PRIMARY') {
+      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      return
+    }
+
+    if (outputContractPropertyMeta.keys.length === 0) return
+    if (!form.primaryOutputKey) return
+
+    if (outputContractPropertyMeta.keys.includes(form.primaryOutputKey)) {
+      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      return
+    }
+
+    setForm((current) => ({ ...current, primaryOutputKey: '' }))
+    setPrimaryOutputKeyNotice('Selection cleared because it no longer exists in the Output Contract properties.')
+  }, [
+    form.outputBindingMode,
+    form.primaryOutputKey,
+    outputContractPropertyMeta.keys,
+    primaryOutputKeyNotice,
+    setForm,
+  ])
+
   const renderTabLabel = (label, count = 0) => (
     <span className="super-admin-skills__tab-label">
       <span>{label}</span>
       {count > 0 ? (
-        <span className="super-admin-skills__tab-error-count" aria-hidden="true">
-          ({count})
-        </span>
+        <>
+          <span className="super-admin-skills__tab-error-count" aria-hidden="true">
+            ({count})
+          </span>
+          <span className="sr-only"> ({count} validation errors)</span>
+        </>
       ) : null}
     </span>
   )
@@ -391,6 +477,9 @@ function SkillEditorForm({
                     <p className="super-admin-skill-editor__subsection-copy">
                       Codify how agent execution plans can bind outputs from this skill.
                     </p>
+                    <p className="super-admin-skill-editor__subsection-note">
+                      Execution mode: {executionModeSummaryLabel}
+                    </p>
                     <Select
                       id="runtime-skill-editor-output-binding-mode"
                       label="Output Binding Mode"
@@ -424,17 +513,26 @@ function SkillEditorForm({
                       }}
                       placeholder="Select an output binding mode"
                     />
-                    <Input
+                    <Select
                       id="runtime-skill-editor-primary-output-key"
                       label="Primary Output Key"
-                      helperText="Optional. Define the canonical output key an agent execution plan should bind to (use instead of Output Bindings)."
+                      helperText={primaryOutputKeyHelperText}
                       value={form.primaryOutputKey}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, primaryOutputKey: event.target.value }))
                       }
+                      options={outputContractPropertyMeta.options}
                       error={errors.primaryOutputKey}
-                      disabled={form.outputBindingMode !== 'PRIMARY'}
-                      fullWidth
+                      disabled={
+                        form.outputBindingMode !== 'PRIMARY'
+                        || outputContractSchema.error
+                        || outputContractPropertyMeta.options.length === 0
+                      }
+                      placeholder={
+                        outputContractPropertyMeta.options.length > 0
+                          ? 'Select a primary output key'
+                          : 'Add output properties to Output Contract'
+                      }
                     />
                     <Textarea
                       id="runtime-skill-editor-output-bindings"
@@ -657,12 +755,27 @@ function SkillEditorLoadingState() {
   )
 }
 
+function getMimeTypeForAssetType(assetType) {
+  switch (String(assetType || '').toUpperCase()) {
+    case 'PDF':
+      return 'application/pdf'
+    case 'JSON':
+      return 'application/json'
+    case 'DOCX':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    case 'TEXT':
+      return 'text/plain'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
 function buildReferenceAssetId() {
   const randomId = typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
-  return `asset-${String(randomId).replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 16)}`
+  return `asset-${String(randomId).replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 24)}`
 }
 
 function ReferenceAssetsEditor({ assets, error, onChange }) {
@@ -672,7 +785,7 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
     assetId: buildReferenceAssetId(),
     name: '',
     assetType: 'PDF',
-    mimeType: 'application/pdf',
+    mimeType: getMimeTypeForAssetType('PDF'),
     purpose: 'AUTHORING_HELP',
     usageMode: 'OPTIONAL',
     status: 'ACTIVE',
@@ -707,7 +820,7 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
       assetId: buildReferenceAssetId(),
       name: '',
       assetType: 'PDF',
-      mimeType: 'application/pdf',
+      mimeType: getMimeTypeForAssetType('PDF'),
       purpose: 'AUTHORING_HELP',
       usageMode: 'OPTIONAL',
       status: 'ACTIVE',
@@ -808,7 +921,14 @@ function ReferenceAssetsEditor({ assets, error, onChange }) {
                   { value: 'TEXT', label: 'Text' },
                   { value: 'OTHER', label: 'Other' },
                 ]}
-                onChange={(event) => setDraft((current) => ({ ...current, assetType: event.target.value }))}
+                onChange={(event) => {
+                  const nextAssetType = event.target.value
+                  setDraft((current) => ({
+                    ...current,
+                    assetType: nextAssetType,
+                    mimeType: getMimeTypeForAssetType(nextAssetType),
+                  }))
+                }}
               />
               <Select
                 id="runtime-skill-editor-asset-purpose"
@@ -1063,9 +1183,7 @@ function SuperAdminSkillEditor() {
       : {}
 
     if (errorsSource === 'client' && showValidationHints) {
-      if (!shallowEqualObject(errors, liveErrors)) {
-        setErrors(liveErrors)
-      }
+      setErrors((current) => (shallowEqualObject(current, liveErrors) ? current : liveErrors))
 
       if (Object.keys(liveErrors).length === 0) {
         setErrors({})
@@ -1073,7 +1191,7 @@ function SuperAdminSkillEditor() {
         setShowValidationHints(false)
       }
     }
-  }, [errors, errorsSource, isEditMode, liveValidation, showValidationHints])
+  }, [errorsSource, isEditMode, liveValidation.errors, showValidationHints])
 
   const handleBackToSkills = () => {
     navigate('/super-admin/runtime-control/skills')
@@ -1210,11 +1328,11 @@ function SuperAdminSkillEditor() {
 
       <Fieldset className="super-admin-skills__fieldset super-admin-skill-editor__fieldset">
         <Fieldset.Legend className="sr-only">Runtime skill editor</Fieldset.Legend>
-        {isEditMode && isSkillLoading ? <SkillEditorLoadingState /> : null}
+        {isEditMode && (isSkillLoading || (!skillAppError && !loadedSkill)) ? <SkillEditorLoadingState /> : null}
         {isEditMode && skillAppError ? (
           <SkillEditorErrorState message={skillAppError.message} onBack={handleBackToSkills} />
         ) : null}
-        {!isSkillLoading && !skillAppError ? (
+        {!isSkillLoading && !skillAppError && (!isEditMode || loadedSkill) ? (
           <SkillEditorForm
             isEditMode={isEditMode}
             form={form}
