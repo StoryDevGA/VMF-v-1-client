@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminSkills from '../SuperAdminSkills'
 import SuperAdminSkillEditor from './SuperAdminSkillEditor'
@@ -83,8 +83,6 @@ describe('SuperAdminSkillEditor page', () => {
       'Captures alignment checks for runtime control approvals.',
     )
     await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
-    await user.click(screen.getByRole('button', { name: /remove rld/i }))
-    await user.click(screen.getByRole('button', { name: /remove vmf/i }))
     await user.selectOptions(
       screen.getByLabelText(/^add framework$/i, {
         selector: 'select#runtime-skill-editor-framework-select',
@@ -122,7 +120,7 @@ describe('SuperAdminSkillEditor page', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByLabelText(/^allowed read paths$/i, {
-        selector: 'textarea#runtime-skill-editor-allowed-read-paths',
+        selector: 'input#runtime-skill-editor-allowed-read-paths',
       }),
     ).toBeInTheDocument()
 
@@ -157,8 +155,6 @@ describe('SuperAdminSkillEditor page', () => {
     renderSkillEditor('/super-admin/runtime-control/skills/new')
 
     await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
-    await user.click(screen.getByRole('button', { name: /remove vmf/i }))
-    await user.click(screen.getByRole('button', { name: /remove rld/i }))
 
     const frameworkSelect = screen.getByLabelText(/^add framework$/i, {
       selector: 'select#runtime-skill-editor-framework-select',
@@ -224,6 +220,15 @@ describe('SuperAdminSkillEditor page', () => {
       'Test Skill',
     )
 
+    await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
+    await user.selectOptions(
+      screen.getByLabelText(/^add framework$/i, {
+        selector: 'select#runtime-skill-editor-framework-select',
+      }),
+      'VMF',
+    )
+    await user.click(screen.getByRole('button', { name: /^add framework$/i }))
+
     await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
     const inputContractTextarea = screen.getByLabelText(/^input contract$/i, {
       selector: 'textarea#runtime-skill-editor-input-contract',
@@ -275,23 +280,21 @@ describe('SuperAdminSkillEditor page', () => {
       }),
     ).toHaveValue('PRIMARY')
 
-    await user.clear(
-      screen.getByLabelText(/^output contract$/i, {
-        selector: 'textarea#runtime-skill-editor-output-contract',
-      }),
-    )
-    await user.type(
-      screen.getByLabelText(/^output contract$/i, {
-        selector: 'textarea#runtime-skill-editor-output-contract',
-      }),
-      JSON.stringify({
-        type: 'object',
-        properties: {
-          isValid: { type: 'boolean' },
-          missingSections: { type: 'array' },
-        },
-      }, null, 2),
-    )
+    const outputContractTextarea = screen.getByLabelText(/^output contract$/i, {
+      selector: 'textarea#runtime-skill-editor-output-contract',
+    })
+    await user.clear(outputContractTextarea)
+    fireEvent.change(outputContractTextarea, {
+      target: {
+        value: JSON.stringify({
+          type: 'object',
+          properties: {
+            isValid: { type: 'boolean' },
+            missingSections: { type: 'array' },
+          },
+        }, null, 2),
+      },
+    })
 
     const primaryOutputSelect = screen.getByLabelText(/^primary output key$/i, {
       selector: 'select#runtime-skill-editor-primary-output-key',
@@ -343,17 +346,21 @@ describe('SuperAdminSkillEditor page', () => {
     )
 
     await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
-    await user.type(
+    fireEvent.change(
       screen.getByLabelText(/^output contract$/i, {
         selector: 'textarea#runtime-skill-editor-output-contract',
       }),
-      JSON.stringify({
-        type: 'object',
-        properties: {
-          isValid: { type: 'boolean' },
-          missingSections: { type: 'array' },
+      {
+        target: {
+          value: JSON.stringify({
+            type: 'object',
+            properties: {
+              isValid: { type: 'boolean' },
+              missingSections: { type: 'array' },
+            },
+          }, null, 2),
         },
-      }, null, 2),
+      },
     )
 
     await user.selectOptions(
@@ -402,13 +409,17 @@ describe('SuperAdminSkillEditor page', () => {
       selector: 'textarea#runtime-skill-editor-output-contract',
     })
 
-    await user.type(outputContract, JSON.stringify({
-      type: 'object',
-      properties: {
-        isValid: { type: 'boolean' },
-        missingSections: { type: 'array' },
+    fireEvent.change(outputContract, {
+      target: {
+        value: JSON.stringify({
+          type: 'object',
+          properties: {
+            isValid: { type: 'boolean' },
+            missingSections: { type: 'array' },
+          },
+        }, null, 2),
       },
-    }, null, 2))
+    })
 
     await user.selectOptions(
       screen.getByLabelText(/^output binding mode$/i, {
@@ -424,12 +435,16 @@ describe('SuperAdminSkillEditor page', () => {
     expect(primaryOutputSelect).toHaveValue('isValid')
 
     await user.clear(outputContract)
-    await user.type(outputContract, JSON.stringify({
-      type: 'object',
-      properties: {
-        missingSections: { type: 'array' },
+    fireEvent.change(outputContract, {
+      target: {
+        value: JSON.stringify({
+          type: 'object',
+          properties: {
+            missingSections: { type: 'array' },
+          },
+        }, null, 2),
       },
-    }, null, 2))
+    })
 
     await waitFor(() => {
       expect(primaryOutputSelect).toHaveValue('')
@@ -476,7 +491,11 @@ describe('SuperAdminSkillEditor page', () => {
     await user.click(screen.getByRole('button', { name: /^add reference asset$/i }))
 
     expect(screen.getByLabelText(/^asset name$/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^type$/i)).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/^type$/i, {
+        selector: 'select#runtime-skill-editor-asset-type',
+      }),
+    ).toBeInTheDocument()
     expect(screen.getByLabelText(/^purpose$/i)).toBeInTheDocument()
 
     await user.type(screen.getByLabelText(/^asset name$/i), 'User Guide')
@@ -485,7 +504,7 @@ describe('SuperAdminSkillEditor page', () => {
     await user.click(screen.getByRole('button', { name: /^add asset$/i }))
 
     expect(screen.getByText('User Guide')).toBeInTheDocument()
-    expect(screen.getByText(/authoring_help/i)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('AUTHORING_HELP')).toBeInTheDocument()
   })
 
   it('prevents invalid reference asset flag combinations', async () => {

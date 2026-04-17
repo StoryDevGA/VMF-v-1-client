@@ -53,6 +53,12 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
     Icon: MdExtension,
   },
   {
+    routeKey: 'runtimePaths',
+    description: 'Govern runtime state access by maintaining the canonical Runtime Path Registry used by skills and agents.',
+    taskKey: 'FE-12',
+    Icon: MdTune,
+  },
+  {
     routeKey: 'workflowPolicies',
     description: 'Define policy sequencing, workflow gating, and compatibility rules across runtime resources.',
     taskKey: 'FE-08',

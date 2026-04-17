@@ -1,0 +1,19 @@
+.super-admin-runtime-path-registry {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-runtime-path-registry__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-runtime-path-registry__title,
+.super-admin-runtime-path-registry__subtitle {
+  margin: 0;
+}
+
+.super-admin-runtime-path-registry__subtitle {
+  color: var(--color-text-secondary);
+}

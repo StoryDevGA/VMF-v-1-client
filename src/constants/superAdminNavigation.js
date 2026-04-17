@@ -40,7 +40,7 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'frameworkPackages', 'agents', 'skills', 'workflowPolicies']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'frameworkPackages', 'agents', 'skills', 'runtimePaths', 'workflowPolicies']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
@@ -48,6 +48,7 @@ const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'frameworkPackages',
   'agents',
   'skills',
+  'runtimePaths',
   'workflowPolicies',
 ])
 
@@ -223,6 +224,16 @@ export const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       phase1aNav: 'Skills',
     }),
   }),
+  runtimePaths: Object.freeze({
+    key: 'runtime-paths',
+    to: '/super-admin/runtime-control/runtime-paths',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Runtime Paths',
+      legacyNav: 'Runtime Paths',
+      phase1aNav: 'Runtime Paths',
+    }),
+  }),
   workflowPolicies: Object.freeze({
     key: 'workflow-policies',
     to: '/super-admin/runtime-control/workflow-policies',
@@ -389,9 +400,9 @@ function buildRuntimeControlDashboardGroup() {
       : 'Planned next',
     helperCopy: runtimeControlEnabled
       ? hasPlannedModuleRouteKeys
-        ? 'Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies are now live from the Runtime Control dashboard.'
+        ? 'Framework Registry, Framework Packages, Agents, Skills, Runtime Paths, and Workflow Policies are now live from the Runtime Control dashboard.'
         : 'All Runtime Control catalogue surfaces are now live.'
-      : 'Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies stay queued until the Runtime Control route group is enabled.',
+      : 'Framework Registry, Framework Packages, Agents, Skills, Runtime Paths, and Workflow Policies stay queued until the Runtime Control route group is enabled.',
   }
 }
 

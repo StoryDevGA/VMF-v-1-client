@@ -47,6 +47,10 @@ vi.mock('../../pages/SuperAdminWorkflowPolicies', () => ({
   default: () => <h1>Workflow Policies</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminRuntimePathRegistry', () => ({
+  default: () => <h1>Runtime Paths</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminDeniedAccessLogs', () => ({
   default: () => <h1>Denied Access Logs</h1>,
 }))
@@ -584,6 +588,34 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render the Runtime Paths page at /super-admin/runtime-control/runtime-paths for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/runtime-paths'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-runtime-paths-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /runtime paths/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render super-admin denied access logs page at /super-admin/denied-access-logs for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/denied-access-logs'],
@@ -688,9 +720,12 @@ describe('Router', () => {
         'runtime-control/framework-registry',
         'runtime-control/framework-packages',
         'runtime-control/agents',
+        'runtime-control/agents/new',
+        'runtime-control/agents/:agentId',
         'runtime-control/skills',
         'runtime-control/skills/new',
         'runtime-control/skills/:skillId',
+        'runtime-control/runtime-paths',
         'runtime-control/workflow-policies',
         'invitations',
         'license-levels',

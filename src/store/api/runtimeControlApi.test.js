@@ -18,6 +18,7 @@ import {
   useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useListRuntimeAgentsQuery,
+  useListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
   useListWorkflowPoliciesQuery,
   useUpdateFrameworkRegistryMutation,
@@ -46,6 +47,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeAgent')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeAgent')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimeAgent')
+    expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimePaths')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeSkills')
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeSkill')
@@ -63,6 +65,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useGetFrameworkPackageQuery).toBe('function')
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
     expect(typeof useGetRuntimeAgentQuery).toBe('function')
+    expect(typeof useListRuntimePathsQuery).toBe('function')
     expect(typeof useListRuntimeSkillsQuery).toBe('function')
     expect(typeof useGetRuntimeSkillQuery).toBe('function')
     expect(typeof useListWorkflowPoliciesQuery).toBe('function')
@@ -97,6 +100,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.createRuntimeAgent.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeAgent.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateRuntimeAgent.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.listRuntimePaths.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimeSkills.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeSkill.initiate).toBe('function')

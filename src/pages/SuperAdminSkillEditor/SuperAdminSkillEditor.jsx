@@ -10,6 +10,7 @@ import { Tickbox } from '../../components/Tickbox'
 import { Textarea } from '../../components/Textarea'
 import { TabView } from '../../components/TabView'
 import { useToaster } from '../../components/Toaster'
+import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import {
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
@@ -28,6 +29,7 @@ import {
   mapRuntimeSkillToForm,
   parseJsonField,
   parseFrameworkKeyList,
+  parseStringList,
   RUNTIME_SKILL_CATEGORY_OPTIONS,
   RUNTIME_SKILL_EXECUTION_MODE_OPTIONS,
   RUNTIME_SKILL_FORM_STATUS_OPTIONS,
@@ -178,6 +180,10 @@ function SkillEditorForm({
   onTabChange,
   loadedSkill,
 }) {
+  const selectedFrameworkKeys = useMemo(
+    () => parseFrameworkKeyList(form.supportedFrameworkKeys),
+    [form.supportedFrameworkKeys],
+  )
   const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
@@ -554,41 +560,42 @@ function SkillEditorForm({
                     <p className="super-admin-skill-editor__subsection-copy">
                       Set controlled read/write boundaries for this skill. These boundaries support governed execution and validation.
                     </p>
-                    <Textarea
+                    <RuntimePathSearchSelect
                       id="runtime-skill-editor-allowed-read-paths"
                       label="Allowed Read Paths"
-                      helperText="Optional. One path per line."
-                      value={form.allowedReadPaths}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, allowedReadPaths: event.target.value }))
+                      helperText="Optional. Select approved runtime paths (READ) from the Runtime Path Registry."
+                      frameworkKeys={selectedFrameworkKeys}
+                      operation="READ"
+                      selectedKeys={parseStringList(form.allowedReadPaths)}
+                      onChange={(nextKeys) =>
+                        setForm((current) => ({ ...current, allowedReadPaths: formatKeyList(nextKeys) }))
                       }
                       error={errors.allowedReadPaths}
-                      rows={4}
-                      fullWidth
                     />
-                    <Textarea
+                    <RuntimePathSearchSelect
                       id="runtime-skill-editor-allowed-write-paths"
                       label="Allowed Write Paths"
-                      helperText="Optional. One path per line."
-                      value={form.allowedWritePaths}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, allowedWritePaths: event.target.value }))
+                      helperText="Optional. Select approved runtime paths (WRITE) from the Runtime Path Registry."
+                      frameworkKeys={selectedFrameworkKeys}
+                      operation="WRITE"
+                      selectedKeys={parseStringList(form.allowedWritePaths)}
+                      onChange={(nextKeys) =>
+                        setForm((current) => ({ ...current, allowedWritePaths: formatKeyList(nextKeys) }))
                       }
                       error={errors.allowedWritePaths}
-                      rows={4}
-                      fullWidth
                     />
-                    <Textarea
+                    <RuntimePathSearchSelect
                       id="runtime-skill-editor-forbidden-write-paths"
                       label="Forbidden Write Paths"
-                      helperText="Optional. One path per line. Must not overlap with allowed write paths."
-                      value={form.forbiddenWritePaths}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, forbiddenWritePaths: event.target.value }))
+                      helperText="Optional. Select protected runtime paths that this skill must never write. Must not overlap with allowed write paths."
+                      frameworkKeys={selectedFrameworkKeys}
+                      operation={null}
+                      isProtectedOnly
+                      selectedKeys={parseStringList(form.forbiddenWritePaths)}
+                      onChange={(nextKeys) =>
+                        setForm((current) => ({ ...current, forbiddenWritePaths: formatKeyList(nextKeys) }))
                       }
                       error={errors.forbiddenWritePaths}
-                      rows={4}
-                      fullWidth
                     />
                   </div>
 

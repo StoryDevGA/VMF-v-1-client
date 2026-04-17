@@ -25,12 +25,18 @@ import {
   INITIAL_WORKFLOW_POLICIES,
   WORKFLOW_POLICY_PAGE_SIZE,
 } from '../../pages/SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
+import {
+  cloneRuntimePathRegistryEntry,
+  INITIAL_RUNTIME_PATH_REGISTRY,
+  RUNTIME_PATH_REGISTRY_PAGE_SIZE,
+} from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
 const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIST' }
 const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
 const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
+const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
@@ -46,6 +52,11 @@ const buildListParams = ({
   q,
   status,
   frameworkKey,
+  frameworkKeys,
+  scope,
+  operation,
+  category,
+  isProtected,
   type,
   structureType,
   defaultPageSize,
@@ -55,6 +66,11 @@ const buildListParams = ({
   q: String(q ?? '').trim(),
   status: String(status ?? '').trim(),
   frameworkKey: normalizeFrameworkKey(frameworkKey),
+  frameworkKeys: String(frameworkKeys ?? '').trim(),
+  scope: String(scope ?? '').trim(),
+  operation: String(operation ?? '').trim(),
+  category: String(category ?? '').trim(),
+  isProtected: String(isProtected ?? '').trim().toLowerCase(),
   type: String(type ?? '').trim().toLowerCase(),
   structureType: String(structureType ?? '').trim().toLowerCase(),
 })
@@ -66,6 +82,11 @@ export const buildRuntimeControlListRequest = ({
   q,
   status,
   frameworkKey,
+  frameworkKeys,
+  scope,
+  operation,
+  category,
+  isProtected,
   type,
   structureType,
   defaultPageSize,
@@ -76,6 +97,11 @@ export const buildRuntimeControlListRequest = ({
     q,
     status,
     frameworkKey,
+    frameworkKeys,
+    scope,
+    operation,
+    category,
+    isProtected,
     type,
     structureType,
     defaultPageSize,
@@ -89,6 +115,11 @@ export const buildRuntimeControlListRequest = ({
       ...(params.q ? { q: params.q } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.frameworkKey ? { frameworkKey: params.frameworkKey } : {}),
+      ...(params.frameworkKeys ? { frameworkKeys: params.frameworkKeys } : {}),
+      ...(params.scope ? { scope: params.scope } : {}),
+      ...(params.operation ? { operation: params.operation } : {}),
+      ...(params.category ? { category: params.category } : {}),
+      ...(params.isProtected ? { isProtected: params.isProtected } : {}),
       ...(params.type ? { type: params.type } : {}),
       ...(params.structureType ? { structureType: params.structureType } : {}),
     },
@@ -214,6 +245,7 @@ const buildAuditFields = (timestamp = new Date().toISOString()) => ({
 const buildInitialRuntimeControlState = () => ({
   frameworkRegistries: INITIAL_FRAMEWORK_REGISTRIES.map((entry) => cloneFrameworkRegistryEntry(entry)),
   frameworkPackages: INITIAL_FRAMEWORK_PACKAGES.map((pkg) => cloneFrameworkPackage(pkg)),
+  runtimePaths: INITIAL_RUNTIME_PATH_REGISTRY.map((entry) => cloneRuntimePathRegistryEntry(entry)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
@@ -316,6 +348,68 @@ const getRuntimeAgentRows = ({
       return matchesStatus && matchesFramework && queryMatches
     })
     .map((agent) => cloneRuntimeAgent(agent))
+}
+
+const parseCsvKeys = (value) =>
+  String(value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const getRuntimePathRows = ({
+  q = '',
+  status = '',
+  frameworkKey = '',
+  frameworkKeys = '',
+  scope = '',
+  operation = '',
+  category = '',
+  isProtected = '',
+} = {}) => {
+  const normalizedSearch = normalizeSearch(q)
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  const normalizedFrameworkKey = normalizeFrameworkKey(frameworkKey)
+  const normalizedFrameworkKeys = [
+    ...(normalizedFrameworkKey ? [normalizedFrameworkKey] : []),
+    ...parseCsvKeys(frameworkKeys).map(normalizeFrameworkKey),
+  ].filter(Boolean)
+  const uniqueFrameworkKeys = [...new Set(normalizedFrameworkKeys)]
+  const normalizedScope = String(scope ?? '').trim().toUpperCase()
+  const normalizedOperation = String(operation ?? '').trim().toUpperCase()
+  const normalizedCategory = String(category ?? '').trim().toUpperCase()
+  const normalizedIsProtected = String(isProtected ?? '').trim().toLowerCase()
+
+  return runtimeControlState.runtimePaths
+    .filter((row) => {
+      const matchesStatus = normalizedStatus ? row.status === normalizedStatus : true
+      const matchesFramework = uniqueFrameworkKeys.length > 0
+        ? uniqueFrameworkKeys.some((key) => (row.frameworkKeys ?? []).includes(key))
+        : true
+      const matchesScope = normalizedScope ? String(row.scope ?? '').toUpperCase() === normalizedScope : true
+      const matchesOperation = normalizedOperation
+        ? (row.allowedOperations ?? []).includes(normalizedOperation)
+        : true
+      const matchesCategory = normalizedCategory ? String(row.category ?? '').toUpperCase() === normalizedCategory : true
+      const matchesProtected = normalizedIsProtected === 'true'
+        ? Boolean(row.isProtected)
+        : normalizedIsProtected === 'false'
+          ? !row.isProtected
+          : true
+      const queryMatches = matchesSearch(normalizedSearch, [
+        row.pathKey,
+        row.label,
+        row.description,
+        row.status,
+        row.frameworkKeys,
+        row.scope,
+        row.allowedOperations,
+        row.category,
+        row.dataType,
+      ])
+
+      return matchesStatus && matchesFramework && matchesScope && matchesOperation && matchesCategory && matchesProtected && queryMatches
+    })
+    .map((entry) => cloneRuntimePathRegistryEntry(entry))
 }
 
 const getRuntimeSkillRows = ({
@@ -1337,6 +1431,76 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    listRuntimePaths: build.query({
+      queryFn: async (
+        {
+          page = 1,
+          pageSize = RUNTIME_PATH_REGISTRY_PAGE_SIZE,
+          q = '',
+          status = '',
+          frameworkKey = '',
+          frameworkKeys = '',
+          scope = '',
+          operation = '',
+          category = '',
+          isProtected = '',
+        } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'runtime-paths',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              frameworkKeys,
+              scope,
+              operation,
+              category,
+              isProtected,
+              defaultPageSize: RUNTIME_PATH_REGISTRY_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const normalizedPage = normalizePositiveInteger(page, 1)
+        const normalizedPageSize = normalizePositiveInteger(pageSize, RUNTIME_PATH_REGISTRY_PAGE_SIZE)
+        const rows = getRuntimePathRows({ q, status, frameworkKey, frameworkKeys, scope, operation, category, isProtected })
+
+        return {
+          data: buildListResponse({
+            rows,
+            page: normalizedPage,
+            pageSize: normalizedPageSize,
+            filters: {
+              q: String(q ?? '').trim(),
+              status: String(status ?? '').trim(),
+              frameworkKey: normalizeFrameworkKey(frameworkKey),
+              frameworkKeys: String(frameworkKeys ?? '').trim(),
+              scope: String(scope ?? '').trim(),
+              operation: String(operation ?? '').trim(),
+              category: String(category ?? '').trim(),
+              isProtected: String(isProtected ?? '').trim(),
+            },
+          }),
+        }
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: 'RuntimePath', id })),
+              RUNTIME_PATH_LIST_TAG,
+            ]
+          : [RUNTIME_PATH_LIST_TAG],
+    }),
+
     listRuntimeSkills: build.query({
       queryFn: async (
         { page = 1, pageSize = RUNTIME_SKILL_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
@@ -1701,6 +1865,8 @@ export const {
   useActivateRuntimeAgentMutation,
   useDisableRuntimeAgentMutation,
   useDeprecateRuntimeAgentMutation,
+  useListRuntimePathsQuery,
+  useLazyListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,

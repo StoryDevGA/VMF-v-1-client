@@ -55,6 +55,7 @@ describe('superAdminNavigation', () => {
       'Framework Packages',
       'Agents',
       'Skills',
+      'Runtime Paths',
       'Workflow Policies',
     ])
     expect(entries[2].links.map((link) => link.label)).toEqual([
@@ -102,6 +103,7 @@ describe('superAdminNavigation', () => {
       'Framework Packages',
       'Agents',
       'Skills',
+      'Runtime Paths',
       'Workflow Policies',
     ])
     expect(groups[1].upcomingLinks.map((link) => link.label)).toEqual([])
