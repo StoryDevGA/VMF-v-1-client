@@ -6,8 +6,9 @@
  */
 
 .edit-users {
-  padding-top: var(--spacing-xl, 2rem);
-  padding-bottom: var(--spacing-xl, 2rem);
+  display: grid;
+  gap: var(--spacing-lg, 1.5rem);
+  padding-block: var(--spacing-xl, 2rem);
 }
 
 .edit-users__fieldset {
@@ -43,7 +44,7 @@
 .edit-users__header {
   display: grid;
   gap: var(--spacing-2xs, 0.25rem);
-  margin-bottom: var(--spacing-lg, 1.5rem);
+  margin-bottom: 0;
 }
 
 .edit-users__title,
@@ -633,7 +634,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm, 0.5rem);
-  margin-top: var(--spacing-md, 1rem);
 }
 
 .edit-users__pagination-controls {

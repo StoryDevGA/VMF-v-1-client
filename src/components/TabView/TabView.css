@@ -18,14 +18,14 @@
   --tabview-tab-font-size: var(--font-size-base);
   --tabview-tab-padding-block: var(--spacing-sm);
   --tabview-tab-padding-inline: var(--spacing-md);
-  --tabview-tab-min-height: 44px;
+  --tabview-tab-min-height: calc(var(--spacing-md) * 2.75);
 }
 
 .tabview--sm {
   --tabview-tab-font-size: var(--font-size-sm);
   --tabview-tab-padding-block: var(--spacing-2xs);
   --tabview-tab-padding-inline: var(--spacing-sm);
-  --tabview-tab-min-height: 40px;
+  --tabview-tab-min-height: calc(var(--spacing-md) * 2.5);
 }
 
 /* Horizontal orientation (default) */
@@ -51,7 +51,7 @@
 
 .tabview--horizontal .tabview__tablist {
   flex-direction: row;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: var(--border-width-medium) solid var(--color-border);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -60,13 +60,13 @@
 
 .tabview--vertical .tabview__tablist {
   flex-direction: column;
-  border-right: 2px solid var(--color-border);
-  min-width: 200px;
+  border-right: var(--border-width-medium) solid var(--color-border);
+  min-width: calc(var(--spacing-md) * 12.5);
 }
 
 /* Hide scrollbar for webkit browsers */
 .tabview--horizontal .tabview__tablist::-webkit-scrollbar {
-  height: 4px;
+  height: var(--spacing-xs);
 }
 
 .tabview--horizontal .tabview__tablist::-webkit-scrollbar-track {
@@ -98,11 +98,12 @@
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   text-align: center;
+  line-height: var(--line-height-snug);
 
   /* Layout */
   padding: var(--tabview-tab-padding-block, var(--spacing-sm))
     var(--tabview-tab-padding-inline, var(--spacing-md));
-  min-height: var(--tabview-tab-min-height, 44px); /* Touch-friendly minimum */
+  min-height: var(--tabview-tab-min-height, calc(var(--spacing-md) * 2.75)); /* Touch-friendly minimum */
   position: relative;
 
   /* Transitions */
@@ -118,8 +119,8 @@
 }
 
 .tabview__tab:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: calc(var(--border-width-medium) * -1);
   z-index: 1;
 }
 
@@ -133,10 +134,10 @@
 .tabview--horizontal .tabview__tab--active::after {
   content: '';
   position: absolute;
-  bottom: -2px;
+  bottom: calc(var(--border-width-medium) * -1);
   left: 0;
   right: 0;
-  height: 2px;
+  height: var(--border-width-medium);
   background-color: var(--color-action-primary);
   border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
 }
@@ -147,8 +148,8 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  right: -2px;
-  width: 2px;
+  right: calc(var(--border-width-medium) * -1);
+  width: var(--border-width-medium);
   background-color: var(--color-action-primary);
   border-radius: var(--border-radius-sm) 0 0 var(--border-radius-sm);
 }
@@ -224,7 +225,7 @@
 
 .tabview__content {
   flex: 1;
-  min-height: 200px;
+  min-height: calc(var(--spacing-md) * 12.5);
 }
 
 .tabview__panel {
@@ -234,8 +235,8 @@
 }
 
 .tabview__panel:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: var(--border-width-medium);
 }
 
 .tabview__panel--active {
@@ -260,7 +261,7 @@
 @keyframes tabview-fadein {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(calc(var(--spacing-xs) * -1));
   }
   to {
     opacity: 1;
@@ -281,18 +282,18 @@
   .tabview--vertical .tabview__tablist {
     flex-direction: row;
     border-right: none;
-    border-bottom: 2px solid var(--color-border);
+    border-bottom: var(--border-width-medium) solid var(--color-border);
     min-width: auto;
     overflow-x: auto;
   }
 
   .tabview--vertical .tabview__tab--active::after {
     top: auto;
-    bottom: -2px;
+    bottom: calc(var(--border-width-medium) * -1);
     left: 0;
     right: 0;
     width: auto;
-    height: 2px;
+    height: var(--border-width-medium);
     border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
   }
 
@@ -315,12 +316,12 @@
   }
 
   .tabview__tab {
-    min-height: 48px; /* Larger touch target on mobile */
+    min-height: calc(var(--spacing-md) * 3); /* Larger touch target on mobile */
     font-size: var(--font-size-sm);
   }
 
   .tabview--sm .tabview__tab {
-    min-height: 44px;
+    min-height: calc(var(--spacing-md) * 2.75);
     padding: var(--spacing-2xs) var(--spacing-sm);
   }
 
@@ -359,11 +360,11 @@
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   .tabview__tab--active {
-    outline: 2px solid currentColor;
-    outline-offset: -2px;
+    outline: var(--border-width-medium) solid currentColor;
+    outline-offset: calc(var(--border-width-medium) * -1);
   }
 
   .tabview--pills .tabview__tab--active {
-    outline-offset: 2px;
+    outline-offset: var(--border-width-medium);
   }
 }

@@ -85,7 +85,7 @@
 }
 
 .super-admin-framework-registry__framework-name {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold, 600);
 }
 
 .super-admin-framework-registry__framework-key {

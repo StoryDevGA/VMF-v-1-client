@@ -434,7 +434,7 @@ function SkillEditorForm({
                 title="Skill Classification"
                 copy="Classify the skill by governed role, category, type, and execution mode to support governance and runtime resolution."
               >
-                <div className="super-admin-skill-editor__row">
+                <div className="super-admin-skill-editor__row super-admin-skill-editor__row--classification">
                   <Select
                     id="runtime-skill-editor-category"
                     label="Category"
@@ -468,8 +468,6 @@ function SkillEditorForm({
                     }
                     error={errors.executionMode}
                   />
-                </div>
-                <div className="super-admin-skill-editor__row">
                   <Select
                     id="runtime-skill-editor-skill-role"
                     label="Skill Role"

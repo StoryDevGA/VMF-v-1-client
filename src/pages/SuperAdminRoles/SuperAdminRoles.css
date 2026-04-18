@@ -1,6 +1,7 @@
 .super-admin-roles {
   display: grid;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
 }
 
 .super-admin-roles__header {

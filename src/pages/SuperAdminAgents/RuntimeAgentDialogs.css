@@ -129,6 +129,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .super-admin-agents__framework-helper {
@@ -328,6 +329,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .super-admin-agents__test-result {
@@ -387,6 +389,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .super-admin-agents__dependency-list {
@@ -399,6 +402,7 @@
 .super-admin-agents__dependency-item {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .super-admin-agents__dependency-link {
@@ -419,9 +423,20 @@
 }
 
 @media (max-width: 767px) {
+  .super-admin-agents__row,
+  .super-admin-agents__workflow-grid,
+  .super-admin-agents__skill-picker-controls,
   .super-admin-agents__framework-picker-controls,
   .super-admin-agents__framework-item {
     grid-template-columns: 1fr;
+  }
+
+  .super-admin-agents__tabs .tabview__panel {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-agents__tabs .tabview__tab {
+    min-width: max-content;
   }
 
   .super-admin-agents__execution-summary {
@@ -436,6 +451,7 @@
     flex-direction: column;
   }
 
+  .super-admin-agents__skill-add-button,
   .super-admin-agents__framework-add-button {
     width: 100%;
   }

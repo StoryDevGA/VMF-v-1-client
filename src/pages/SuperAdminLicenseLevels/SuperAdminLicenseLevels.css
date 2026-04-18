@@ -1,11 +1,12 @@
 .super-admin-license-levels {
   display: grid;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
 }
 
 .super-admin-license-levels__header {
   display: grid;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-xs);
 }
 
 .super-admin-license-levels__title,
@@ -56,7 +57,6 @@
 .super-admin-license-levels__catalogue-actions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: var(--spacing-xs);
 }
 
 .super-admin-license-levels__toolbar {
@@ -64,7 +64,6 @@
   grid-template-columns: 1fr minmax(180px, 220px);
   align-items: end;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
 }
 
 .super-admin-license-levels__table-wrap {
@@ -72,7 +71,7 @@
 }
 
 .super-admin-license-levels__table-note {
-  margin: 0 0 var(--spacing-xs);
+  margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
@@ -87,7 +86,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
 }
 
 .super-admin-license-levels__pagination-controls {

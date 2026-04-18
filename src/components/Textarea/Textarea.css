@@ -8,7 +8,7 @@
 .textarea-container {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--spacing-2xs);
   font-family: var(--font-primary);
   min-width: 0; /* Prevent flex item overflow */
 }
@@ -31,15 +31,17 @@
 /* Textarea base styles */
 .textarea {
   width: 100%;
-  padding: 1rem 0.75rem;
+  padding: var(--spacing-md) var(--spacing-sm);
   font-family: inherit;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
   color: var(--color-text-primary);
   background-color: var(--color-background);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  border-radius: var(--border-radius-sm);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
   outline: none;
   min-height: 100px;
   box-sizing: border-box;
@@ -60,7 +62,7 @@
 .textarea::placeholder {
   color: var(--color-text-tertiary);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .textarea:focus::placeholder {
@@ -87,20 +89,25 @@
 /* Label */
 .textarea-label {
   position: absolute;
-  top: 1rem;
-  left: 0.75rem;
+  top: var(--spacing-md);
+  left: var(--spacing-sm);
   color: var(--color-text-secondary);
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   pointer-events: none;
-  transition: all 0.2s ease;
+  transition:
+    top var(--transition-fast),
+    left var(--transition-fast),
+    font-size var(--transition-fast),
+    color var(--transition-fast),
+    background-color var(--transition-fast);
   background-color: transparent;
-  padding: 0 0.25rem;
+  padding: 0 var(--spacing-2xs);
 }
 
 .textarea-label--floating {
-  top: -0.5rem;
-  left: 0.5rem;
-  font-size: 0.75rem;
+  top: calc(var(--spacing-sm) * -1);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-border-focus);
   background-color: var(--color-background);
 }
@@ -124,16 +131,16 @@
 }
 
 .textarea-error {
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--color-error);
-  margin-top: 0.25rem;
+  margin-top: var(--spacing-2xs);
 }
 
 /* Helper text */
 .textarea-helper {
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin-top: 0.25rem;
+  margin-top: var(--spacing-2xs);
   /* Intentional non-token tweak: aligns helper spacing with compact form layouts. */
   margin-bottom: 0.35rem;
 }
@@ -150,14 +157,14 @@
 }
 
 .textarea-container--outlined .textarea {
-  border: 2px solid var(--color-border);
+  border: var(--border-width-medium) solid var(--color-border);
   background-color: transparent;
 }
 
 .textarea-container--filled .textarea {
   border: none;
-  border-bottom: 2px solid var(--color-border);
-  border-radius: 4px 4px 0 0;
+  border-bottom: var(--border-width-medium) solid var(--color-border);
+  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
   background-color: var(--color-background-tertiary);
 }
 
@@ -168,55 +175,55 @@
 
 /* Sizes */
 .textarea-container--sm .textarea {
-  padding: 0.5rem;
-  font-size: 0.875rem;
+  padding: var(--spacing-xs);
+  font-size: var(--font-size-sm);
   min-height: 80px;
 }
 
 .textarea-container--sm .textarea-label {
-  top: 0.5rem;
-  left: 0.5rem;
-  font-size: 0.875rem;
+  top: var(--spacing-sm);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-sm);
 }
 
 .textarea-container--sm .textarea-label--floating {
-  top: -0.5rem;
-  left: 0.5rem;
-  font-size: 0.65rem;
+  top: calc(var(--spacing-sm) * -1);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-xs);
 }
 
 .textarea-container--md .textarea {
-  padding: 0.75rem;
-  font-size: 1rem;
+  padding: var(--spacing-sm);
+  font-size: var(--font-size-base);
   min-height: 100px;
 }
 
 .textarea-container--md .textarea-label {
-  top: 0.75rem;
-  left: 0.75rem;
-  font-size: 1rem;
+  top: var(--spacing-sm);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-base);
 }
 
 .textarea-container--md .textarea-label--floating {
-  top: -0.5rem;
-  left: 0.5rem;
-  font-size: 0.75rem;
+  top: calc(var(--spacing-sm) * -1);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-xs);
 }
 
 .textarea-container--lg .textarea {
-  padding: 1rem;
-  font-size: 1.125rem;
+  padding: var(--spacing-md);
+  font-size: var(--font-size-lg);
   min-height: 120px;
 }
 
 .textarea-container--lg .textarea-label {
-  top: 1rem;
-  left: 1rem;
-  font-size: 1.125rem;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  font-size: var(--font-size-lg);
 }
 
 .textarea-container--lg .textarea-label--floating {
-  top: -0.6rem;
-  left: 0.75rem;
-  font-size: 0.875rem;
+  top: calc(var(--spacing-sm) * -1.2);
+  left: var(--spacing-sm);
+  font-size: var(--font-size-sm);
 }

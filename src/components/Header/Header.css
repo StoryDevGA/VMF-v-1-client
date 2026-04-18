@@ -12,7 +12,7 @@
 .header {
   /* Background and borders */
   background-color: transparent;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  border-bottom: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 30%, transparent);
 
   /* Sticky positioning */
   position: sticky;
@@ -33,7 +33,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 64px;
+  min-height: calc(var(--spacing-md) * 4);
   padding-top: var(--spacing-sm);
   padding-bottom: var(--spacing-sm);
 }
@@ -63,15 +63,15 @@
 
 .header__logo-link:focus-visible {
   outline: 2px solid var(--color-border-focus);
-  outline-offset: 4px;
-  border-radius: 4px;
+  outline-offset: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
 }
 
 .header__logo-text {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  line-height: 1;
+  line-height: var(--line-height-tight);
 }
 
 .header__logo-custom {
@@ -134,8 +134,8 @@
   /* Layout */
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: calc(var(--spacing-md) * 2.75);
+  height: calc(var(--spacing-md) * 2.75);
 
   /* Appearance - Rounded border */
   border-radius: 50%;
@@ -183,7 +183,7 @@
 /* Mobile adjustments */
 @media (max-width: 767px) {
   .header__container {
-    min-height: 56px;
+    min-height: calc(var(--spacing-md) * 3.5);
   }
 
   .header__logo-text {

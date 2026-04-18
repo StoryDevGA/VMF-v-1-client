@@ -184,27 +184,6 @@ function SuperAdminSkillRoleEditor() {
     }
   }, [addToast, createSkillRole, form, isEditMode, roleId, updateSkillRole])
 
-  if (isEditMode && isRoleLoading) {
-    return <SkillRoleEditorLoadingState isEditMode />
-  }
-
-  if (isEditMode && roleAppError) {
-    return (
-      <Card variant="elevated" className="super-admin-skill-role-registry__card">
-        <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
-          <p className="super-admin-skill-role-editor__error" role="alert">
-            {roleAppError.message}
-          </p>
-          <div className="super-admin-skill-role-editor__top-actions">
-            <Button variant="outline" size="sm" onClick={handleBack}>
-              Back
-            </Button>
-          </div>
-        </Card.Body>
-      </Card>
-    )
-  }
-
   const canSave = Object.keys(liveErrors).length === 0 && !isSaving
   const roleKeyIsRequired = !isEditMode
   const statusIsRequired = true
@@ -220,97 +199,116 @@ function SuperAdminSkillRoleEditor() {
 
       <Fieldset className="super-admin-skill-role-registry__fieldset">
         <Fieldset.Legend className="sr-only">Skill role editor</Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-skill-role-registry__card">
-          <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
-            <div className="super-admin-skill-role-editor__top-actions">
-              <Button type="button" variant="outline" size="sm" onClick={handleBack}>
-                Back
-              </Button>
-            </div>
+        {isEditMode && isRoleLoading ? <SkillRoleEditorLoadingState isEditMode /> : null}
 
-            <form onSubmit={handleSubmit} aria-label="Skill role form">
-              <div className="super-admin-skill-role-editor__row">
+        {isEditMode && roleAppError ? (
+          <Card variant="elevated" className="super-admin-skill-role-registry__card">
+            <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
+              <p className="super-admin-skill-role-editor__error" role="alert">
+                {roleAppError.message}
+              </p>
+              <div className="super-admin-skill-role-editor__top-actions">
+                <Button variant="outline" size="sm" onClick={handleBack}>
+                  Back
+                </Button>
+              </div>
+            </Card.Body>
+          </Card>
+        ) : null}
+
+        {!isEditMode || (!isRoleLoading && !roleAppError) ? (
+          <Card variant="elevated" className="super-admin-skill-role-registry__card">
+            <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
+              <div className="super-admin-skill-role-editor__top-actions">
+                <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+                  Back
+                </Button>
+              </div>
+
+              <form onSubmit={handleSubmit} aria-label="Skill role form">
+                <div className="super-admin-skill-role-editor__row">
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-role-key">
+                      Role Key{roleKeyIsRequired ? <span className="input-label__required"> *</span> : null}
+                    </label>
+                    <Input
+                      id="skill-role-editor-role-key"
+                      value={form.roleKey}
+                      onChange={(event) => setForm((current) => ({ ...current, roleKey: event.target.value }))}
+                      error={errors.roleKey}
+                      helperText={isEditMode ? 'Role key is immutable after creation.' : 'Uppercase token, e.g. VALIDATOR.'}
+                      disabled={isEditMode}
+                      required={roleKeyIsRequired}
+                      fullWidth
+                    />
+                  </div>
+
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-status">
+                      Status{statusIsRequired ? <span className="input-label__required"> *</span> : null}
+                    </label>
+                    <Select
+                      id="skill-role-editor-status"
+                      value={form.status}
+                      onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                      options={[
+                        { value: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE, label: 'ACTIVE' },
+                        { value: SKILL_ROLE_REGISTRY_STATUSES.INACTIVE, label: 'INACTIVE' },
+                        { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
+                      ]}
+                      error={errors.status}
+                      required={statusIsRequired}
+                    />
+                  </div>
+                </div>
+
                 <div className="super-admin-skill-role-editor__field">
-                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-role-key">
-                    Role Key{roleKeyIsRequired ? <span className="input-label__required"> *</span> : null}
+                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-label">
+                    Label<span className="input-label__required"> *</span>
                   </label>
                   <Input
-                    id="skill-role-editor-role-key"
-                    value={form.roleKey}
-                    onChange={(event) => setForm((current) => ({ ...current, roleKey: event.target.value }))}
-                    error={errors.roleKey}
-                    helperText={isEditMode ? 'Role key is immutable after creation.' : 'Uppercase token, e.g. VALIDATOR.'}
-                    disabled={isEditMode}
-                    required={roleKeyIsRequired}
+                    id="skill-role-editor-label"
+                    value={form.label}
+                    onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
+                    error={errors.label}
+                    required
                     fullWidth
                   />
                 </div>
 
                 <div className="super-admin-skill-role-editor__field">
-                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-status">
-                    Status{statusIsRequired ? <span className="input-label__required"> *</span> : null}
+                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-description">
+                    Description<span className="input-label__required"> *</span>
                   </label>
-                  <Select
-                    id="skill-role-editor-status"
-                    value={form.status}
-                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-                    options={[
-                      { value: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE, label: 'ACTIVE' },
-                      { value: SKILL_ROLE_REGISTRY_STATUSES.INACTIVE, label: 'INACTIVE' },
-                      { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
-                    ]}
-                    error={errors.status}
-                    required={statusIsRequired}
+                  <Textarea
+                    id="skill-role-editor-description"
+                    value={form.description}
+                    onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                    error={errors.description}
+                    required
+                    rows={4}
+                    fullWidth
                   />
                 </div>
-              </div>
 
-              <div className="super-admin-skill-role-editor__field">
-                <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-label">
-                  Label<span className="input-label__required"> *</span>
-                </label>
-                <Input
-                  id="skill-role-editor-label"
-                  value={form.label}
-                  onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
-                  error={errors.label}
-                  required
-                  fullWidth
-                />
-              </div>
+                {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
+                  <p className="super-admin-skill-role-editor__error" role="alert">
+                    Review the highlighted fields and try again.
+                  </p>
+                ) : null}
 
-              <div className="super-admin-skill-role-editor__field">
-                <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-description">
-                  Description<span className="input-label__required"> *</span>
-                </label>
-                <Textarea
-                  id="skill-role-editor-description"
-                  value={form.description}
-                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  error={errors.description}
-                  required
-                  rows={4}
-                  fullWidth
-                />
-              </div>
-
-              {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
-                <p className="super-admin-skill-role-editor__error" role="alert">
-                  Review the highlighted fields and try again.
-                </p>
-              ) : null}
-
-              <div className="super-admin-skill-role-editor__footer-actions">
-                <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={!canSave}>
-                  {isEditMode ? 'Save Changes' : 'Create Role'}
-                </Button>
-              </div>
-            </form>
-          </Card.Body>
-        </Card>
+                <div className="super-admin-skill-role-editor__footer-actions">
+                  <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={!canSave}>
+                    {isEditMode ? 'Save Changes' : 'Create Role'}
+                  </Button>
+                </div>
+              </form>
+            </Card.Body>
+          </Card>
+        ) : null}
       </Fieldset>
     </section>
   )

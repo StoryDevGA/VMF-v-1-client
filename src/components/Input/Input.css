@@ -46,7 +46,11 @@
   border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
   border-radius: var(--border-radius-sm);
 
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 /* Very light placeholder text */
@@ -81,7 +85,7 @@
 .input--file::-webkit-file-upload-button {
   margin-right: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
-  min-height: 44px;
+  min-height: calc(var(--spacing-md) * 2.75);
   font-family: var(--font-primary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -181,8 +185,8 @@
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
-  width: 20px;
-  height: 20px;
+  width: calc(var(--spacing-md) + var(--spacing-xs));
+  height: calc(var(--spacing-md) + var(--spacing-xs));
   pointer-events: none;
 }
 
@@ -218,7 +222,7 @@
 }
 
 .input__action:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: var(--border-width-medium) solid var(--color-primary);
   outline-offset: 2px;
 }
 
@@ -253,7 +257,13 @@
   background-color: var(--color-background);
   pointer-events: none;
 
-  transition: all var(--transition-normal);
+  transition:
+    top var(--transition-base),
+    left var(--transition-base),
+    transform var(--transition-base),
+    color var(--transition-base),
+    background-color var(--transition-base),
+    font-size var(--transition-base);
   transform-origin: left center;
 }
 
@@ -307,7 +317,7 @@
 
 /* Outlined variant */
 .input-container--outlined .input {
-  border: 2px solid var(--color-border);
+  border: var(--border-width-medium) solid var(--color-border);
 }
 
 .input-container--outlined .input:focus {
@@ -411,11 +421,11 @@
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   .input {
-    border: 2px solid var(--color-border);
+    border: var(--border-width-medium) solid var(--color-border);
   }
 
   .input:focus {
-    outline: 2px solid var(--color-primary);
+    outline: var(--border-width-medium) solid var(--color-primary);
     outline-offset: 2px;
   }
 }

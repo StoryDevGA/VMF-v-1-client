@@ -82,6 +82,10 @@
 }
 
 @media (max-width: 767px) {
+  .super-admin-agent-editor__card-body.super-admin-agents__card-body--compact {
+    padding: var(--spacing-sm);
+  }
+
   .super-admin-agent-editor__top-actions .btn,
   .super-admin-agent-editor__footer-actions .btn {
     width: 100%;

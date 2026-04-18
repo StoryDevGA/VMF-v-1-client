@@ -29,7 +29,7 @@
   border-radius: var(--border-radius-pill);
 
   /* Layout */
-  min-height: 44px; /* Touch-friendly minimum */
+  min-height: calc(var(--spacing-md) * 2.75); /* Touch-friendly minimum */
   padding: var(--spacing-xs) var(--spacing-sm);
 
   /* Interaction */
@@ -48,8 +48,8 @@
 
 /* Focus state - accessibility */
 .btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: var(--spacing-2xs);
 }
 
 /* Active state - visual feedback */
@@ -151,38 +151,38 @@
    =========================== */
 
 .btn--sm {
-  min-height: 36px;
+  min-height: calc(var(--spacing-md) * 2.25);
   padding: var(--spacing-2xs) var(--spacing-xs);
   font-size: var(--font-size-sm);
 }
 
 .btn--md {
-  min-height: 44px;
+  min-height: calc(var(--spacing-md) * 2.75);
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-base);
 }
 
 .btn--lg {
-  min-height: 52px;
+  min-height: calc(var(--spacing-md) * 3.25);
   padding: var(--spacing-sm) var(--spacing-md);
   font-size: var(--font-size-lg);
 }
 
 /* Icon-only buttons */
 .btn--icon-only {
-  min-width: 44px;
+  min-width: calc(var(--spacing-md) * 2.75);
   padding: var(--spacing-2xs);
   justify-content: center;
   gap: 0;
 }
 
 .btn--icon-only.btn--sm {
-  min-width: 36px;
+  min-width: calc(var(--spacing-md) * 2.25);
   padding: var(--spacing-3xs);
 }
 
 .btn--icon-only.btn--lg {
-  min-width: 52px;
+  min-width: calc(var(--spacing-md) * 3.25);
   padding: var(--spacing-xs);
 }
 
@@ -197,29 +197,29 @@
 .btn--double-outline {
   /* Create double outline effect using box-shadow */
   box-shadow:
-    0 0 0 2px var(--color-background),
-    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
-  border-width: 1px;
+    0 0 0 var(--border-width-medium) var(--color-background),
+    0 0 0 calc(var(--border-width-medium) + var(--border-width-thin)) color-mix(in srgb, currentColor 30%, transparent);
+  border-width: var(--border-width-thin);
 }
 
 /* Adjust on hover to maintain double outline */
 .btn--double-outline:hover:not(:disabled) {
   box-shadow:
-    0 0 0 2px var(--color-background),
-    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
+    0 0 0 var(--border-width-medium) var(--color-background),
+    0 0 0 calc(var(--border-width-medium) + var(--border-width-thin)) color-mix(in srgb, currentColor 30%, transparent);
 }
 
 /* Maintain double outline on focus */
 .btn--double-outline:focus-visible {
-  outline-offset: 4px; /* Account for double border */
+  outline-offset: var(--spacing-xs); /* Account for double border */
   box-shadow:
-    0 0 0 2px var(--color-background),
-    0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
+    0 0 0 var(--border-width-medium) var(--color-background),
+    0 0 0 calc(var(--border-width-medium) + var(--border-width-thin)) color-mix(in srgb, currentColor 30%, transparent);
 }
 
 /* Combine with outline variant for best effect */
 .btn--outline.btn--double-outline {
-  border-width: 1px;
+  border-width: var(--border-width-thin);
 }
 
 /* Adjust spacing for double outline on larger buttons */
@@ -273,9 +273,9 @@
 }
 
 .btn__spinner-circle {
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
+  width: var(--spacing-md);
+  height: var(--spacing-md);
+  border: var(--border-width-medium) solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
   animation: btn-spin 0.6s linear infinite;
@@ -311,15 +311,15 @@
 /* Increase touch target on mobile */
 @media (max-width: 767px) {
   .btn {
-    min-height: 48px; /* Larger touch target on mobile */
+    min-height: calc(var(--spacing-md) * 3); /* Larger touch target on mobile */
   }
 
   .btn--sm {
-    min-height: 40px;
+    min-height: calc(var(--spacing-md) * 2.5);
   }
 
   .btn--lg {
-    min-height: 56px;
+    min-height: calc(var(--spacing-md) * 3.5);
   }
 }
 
@@ -352,7 +352,7 @@
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   .btn {
-    border-width: 1px;
+    border-width: var(--border-width-thin);
     /* Increase opacity for better visibility in high contrast mode */
     border-color: color-mix(in srgb, currentColor 50%, transparent);
   }

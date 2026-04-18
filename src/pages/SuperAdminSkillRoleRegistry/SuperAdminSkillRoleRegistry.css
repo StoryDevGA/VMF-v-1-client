@@ -1,5 +1,12 @@
+.super-admin-skill-role-registry {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
 .super-admin-skill-role-registry__header {
-  margin-bottom: var(--spacing-md);
+  display: grid;
+  gap: var(--spacing-xs);
 }
 
 .super-admin-skill-role-registry__title {
@@ -7,7 +14,6 @@
 }
 
 .super-admin-skill-role-registry__subtitle {
-  margin: var(--spacing-xs) 0 0;
+  margin: 0;
   color: var(--color-text-secondary);
 }
-

@@ -39,7 +39,7 @@
 .link:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--border-radius-xs);
 }
 
 /* Disabled state */
@@ -142,7 +142,7 @@
 
 .link__external-icon {
   display: inline-block;
-  margin-left: 0.25em;
+  margin-left: var(--spacing-2xs);
   font-size: 0.875em;
   vertical-align: super;
   line-height: 1;

@@ -54,7 +54,7 @@
 /* Outlined - Emphasized border */
 .card--outlined {
   background-color: transparent;
-  border: 2px solid var(--color-border);
+  border: var(--border-width-medium) solid var(--color-border);
 }
 
 /* Elevated - Shadow effect */
@@ -89,7 +89,7 @@
 
 /* Hoverable cards */
 .card--hoverable:hover {
-  transform: translateY(-4px);
+  transform: translateY(calc(var(--spacing-xs) * -1));
   box-shadow: var(--shadow-lg);
   border-color: var(--color-border);
 }
@@ -101,7 +101,7 @@
 }
 
 .card--clickable:hover {
-  transform: translateY(-2px);
+  transform: translateY(calc(var(--spacing-2xs) * -1));
   box-shadow: var(--shadow-md);
   border-color: var(--color-primary-500);
 }
@@ -112,7 +112,7 @@
 }
 
 .card--clickable:focus-visible {
-  outline: 2px solid var(--color-border-focus);
+  outline: var(--border-width-medium) solid var(--color-border-focus);
   outline-offset: 2px;
 }
 

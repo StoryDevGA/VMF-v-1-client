@@ -18,7 +18,6 @@
   justify-content: flex-end;
   gap: var(--spacing-xs);
   flex-wrap: wrap;
-  margin-bottom: var(--spacing-xs);
 }
 
 .super-admin-runtime-path-registry__toolbar {
@@ -26,7 +25,6 @@
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
 }
 
 .super-admin-runtime-path-registry__error {
@@ -80,7 +78,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  line-height: 1.1;
+  line-height: var(--line-height-tight);
 }
 
 .super-admin-runtime-path-registry__schema-accordion-header:hover {
@@ -93,7 +91,7 @@
 
 .super-admin-runtime-path-registry__schema-accordion-content .accordion__content-inner {
   padding: var(--spacing-2xs) 0 0;
-  line-height: 1.2;
+  line-height: var(--line-height-tight);
 }
 
 .super-admin-runtime-path-registry__path-summary {
@@ -115,7 +113,7 @@
 .super-admin-runtime-path-registry__scope-cell {
   display: inline-block;
   font-size: var(--font-size-sm);
-  line-height: 1.2;
+  line-height: var(--line-height-tight);
   white-space: nowrap;
 }
 
@@ -139,7 +137,7 @@
   font-size: var(--font-size-sm);
   font-family: var(--font-mono);
   white-space: nowrap;
-  line-height: 1.1;
+  line-height: var(--line-height-tight);
 }
 
 .super-admin-runtime-path-registry__meta-label {
@@ -166,7 +164,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  line-height: 1.2;
+  line-height: var(--line-height-tight);
   white-space: nowrap;
 }
 

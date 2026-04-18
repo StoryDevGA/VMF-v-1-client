@@ -20,7 +20,7 @@
   /* Appearance */
   background-color: var(--color-primary-800);
   color: var(--color-primary-200);
-  border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 30%, transparent);
   overflow: hidden;
 
   /* Typography */
@@ -139,7 +139,7 @@
   width: 25%;
   height: 25%;
   border-radius: 50%;
-  border: 2px solid var(--color-surface);
+  border: var(--border-width-medium) solid var(--color-surface);
   box-shadow: var(--shadow-sm);
 }
 
@@ -164,31 +164,31 @@
 .avatar--xs .avatar__status {
   width: 8px;
   height: 8px;
-  border-width: 1px;
+  border-width: var(--border-width-thin);
 }
 
 .avatar--sm .avatar__status {
   width: 10px;
   height: 10px;
-  border-width: 1px;
+  border-width: var(--border-width-thin);
 }
 
 .avatar--md .avatar__status {
   width: 12px;
   height: 12px;
-  border-width: 2px;
+  border-width: var(--border-width-medium);
 }
 
 .avatar--lg .avatar__status {
   width: 16px;
   height: 16px;
-  border-width: 2px;
+  border-width: var(--border-width-medium);
 }
 
 .avatar--xl .avatar__status {
   width: 20px;
   height: 20px;
-  border-width: 3px;
+  border-width: calc(var(--border-width-medium) + var(--border-width-thin));
 }
 
 /* ===========================
@@ -209,11 +209,11 @@
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   .avatar {
-    border-width: 2px;
+    border-width: var(--border-width-medium);
   }
 
   .avatar__status {
-    border-width: 3px;
+    border-width: calc(var(--border-width-medium) + var(--border-width-thin));
   }
 }
 
@@ -223,8 +223,8 @@
 
 /* Focus state for interactive avatars */
 .avatar:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: var(--spacing-2xs);
 }
 
 /* Clickable avatar (when used as button) */

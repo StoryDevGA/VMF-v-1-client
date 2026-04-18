@@ -39,7 +39,6 @@
   justify-content: flex-end;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
-  margin-top: var(--spacing-md);
 }
 
 .super-admin-skill-role-editor__error {

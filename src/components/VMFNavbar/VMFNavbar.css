@@ -28,7 +28,9 @@
   color: var(--color-text-secondary);
   text-decoration: none;
   border-radius: var(--border-radius-sm);
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
   font-weight: var(--font-weight-medium);
 }
 
@@ -76,7 +78,8 @@
   }
 
   .vmf-navbar__link {
-    /* padding: var(--spacing-3xs) var(--spacing-xs); */
-    font-size: 0.7rem;
+    padding: var(--spacing-2xs) var(--spacing-xs);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-tight);
   }
 }

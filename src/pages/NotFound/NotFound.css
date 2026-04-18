@@ -7,6 +7,7 @@
   align-items: center;
   justify-content: center;
   min-height: 60vh;
+  padding-block: var(--spacing-xl);
 }
 
 .not-found__content {
@@ -20,7 +21,7 @@
 }
 
 .not-found__icon-wrapper {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
   animation: not-found-fade-in 0.5s ease-out;
 }
 
@@ -41,14 +42,14 @@
 }
 
 .not-found__message {
-  margin: 0 0 var(--spacing-lg) 0;
+  margin: 0 0 var(--spacing-md) 0;
   font-family: var(--font-primary);
   font-size: var(--font-size-base);
   color: var(--color-text-secondary);
 }
 
 .not-found__path {
-  margin: 0 0 var(--spacing-2xl) 0;
+  margin: 0 0 var(--spacing-xl) 0;
   padding: var(--spacing-xs) var(--spacing-sm);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);

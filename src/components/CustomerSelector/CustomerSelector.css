@@ -90,7 +90,7 @@
   font-weight: var(--font-weight-medium);
   font-family: inherit;
   cursor: pointer;
-  line-height: 1.4;
+  line-height: var(--line-height-snug);
   transition: background-color var(--transition-fast);
 }
 

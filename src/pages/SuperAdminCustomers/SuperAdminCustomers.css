@@ -1,6 +1,7 @@
 .super-admin-customer-admin {
   display: grid;
   gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
 }
 
 .super-admin-customer-admin__header {
@@ -23,7 +24,7 @@
 
 .super-admin-customers {
   display: grid;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
 }
 
 .super-admin-customers__header {
@@ -168,7 +169,6 @@
 .super-admin-customers__catalogue-actions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: var(--spacing-xs);
 }
 
 .super-admin-customers__users-actions {
@@ -183,7 +183,6 @@
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
 }
 
 .super-admin-customers__form-actions {
@@ -211,13 +210,13 @@
 }
 
 .super-admin-customers__table-note {
-  margin: 0 0 var(--spacing-xs);
+  margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
 .super-admin-customers__users-note {
-  margin: 0 0 var(--spacing-xs);
+  margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
@@ -258,7 +257,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
 }
 
 .super-admin-customers__pagination-controls {

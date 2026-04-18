@@ -57,6 +57,7 @@
      Matched to StorylineOS spec:
      Headings 1.1 · Sub-headings 1.5 · Body 1.6 */
   --line-height-tight: 1.1;
+  --line-height-snug: 1.4;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.6;
 
@@ -92,12 +93,45 @@
   --color-primary-900: #2a2e2e;
 
   /* Semantic Colors */
-  --color-success: #10b981;
+  --color-success: #0fe293;
+  --color-success-hover: #0cb274;
+  --color-success-active: #0cb274;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-error-hover: #dc2626;
   --color-error-active: #b91c1c;
   --color-info: #a8b0b0;
+
+  /* Compatibility aliases for legacy component/page tokens.
+     These keep older surfaces aligned with the canonical SLOS system. */
+  --color-background-primary: var(--color-background);
+  --color-surface-secondary: var(--color-surface-elevated);
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-surface-variant: var(--color-background-tertiary);
+  --color-text-muted: var(--color-text-secondary);
+  --color-text-disabled: var(--color-text-tertiary);
+  --color-focus-ring: var(--color-border-focus);
+  --color-link-hover: var(--color-primary-200);
+  --color-secondary: var(--color-text-secondary);
+  --color-danger-700: var(--color-error-active);
+  --color-error-400: #f87171;
+  --color-error-600: var(--color-error-hover);
+  --color-error-bg: color-mix(in srgb, var(--color-error) 14%, white);
+  --color-error-text: color-mix(in srgb, var(--color-error) 70%, black);
+  --color-success-bg: color-mix(in srgb, var(--color-success) 16%, white);
+  --color-success-text: color-mix(in srgb, var(--color-success) 70%, black);
+  --color-warning-bg: color-mix(in srgb, var(--color-warning) 16%, white);
+  --color-warning-background: var(--color-warning-bg);
+  --color-warning-border: color-mix(in srgb, var(--color-warning) 35%, white);
+  --color-warning-text: color-mix(in srgb, var(--color-warning) 70%, black);
+  --font-family-mono: var(--font-mono);
+  --font-size-md: var(--font-size-base);
+  --border-radius-xs: 0.125rem;
+  --radius-sm: var(--border-radius-sm);
+  --radius-md: var(--border-radius-md);
+  --transition-normal: var(--transition-base);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --spacing-3xs: 0.125rem;
 
   /* ===========================
      BORDERS
@@ -154,11 +188,11 @@
   --slos-bg: #000000;          /* default black; override per embed */
   --slos-bg-fallback: #000000; /* fallback when not embedded */
   --slos-text: #d6dcdc;
-  --slos-btn-bg: #d6dcdc;
+  --slos-btn-bg: #0fe293;
   --slos-btn-text: #000000;
-  --slos-btn-hover-bg: transparent;
-  --slos-btn-hover-border: #d6dcdc;
-  --slos-btn-hover-text: #d6dcdc;
+  --slos-btn-hover-bg: #0cb274;
+  --slos-btn-hover-border: #0cb274;
+  --slos-btn-hover-text: #000000;
 
   /* ===========================
      SPACING GUIDELINES (reference)

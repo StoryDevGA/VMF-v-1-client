@@ -140,8 +140,8 @@
 }
 
 .stepper__indicator--completed:hover {
-  background-color: color-mix(in srgb, var(--color-success) 90%, black);
-  border-color: color-mix(in srgb, var(--color-success) 90%, black);
+  background-color: var(--color-success-hover);
+  border-color: var(--color-success-hover);
 }
 
 /* Disabled (non-clickable) indicators */

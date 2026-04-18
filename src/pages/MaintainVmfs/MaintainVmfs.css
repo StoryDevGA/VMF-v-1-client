@@ -1,12 +1,11 @@
 .maintain-vmfs {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
 }
 
 .maintain-vmfs__header {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--spacing-xs);
 }
 

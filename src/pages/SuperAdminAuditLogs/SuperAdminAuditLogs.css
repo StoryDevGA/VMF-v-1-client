@@ -1,6 +1,7 @@
 .super-admin-audit-logs {
   display: grid;
   gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
 }
 
 .super-admin-audit-logs__header {
