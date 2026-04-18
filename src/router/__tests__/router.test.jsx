@@ -71,7 +71,7 @@ vi.mock('../../pages/Dashboard', () => ({
   default: () => <h1>Dashboard</h1>,
 }))
 
-import { router } from '../index'
+import { router, LoadingFallback } from '../index'
 
 const ROUTE_TEST_TIMEOUT = 15000
 
@@ -870,17 +870,11 @@ describe('Router', () => {
   })
 
   describe('Lazy Loading', () => {
-    it('should show loading state while page loads', () => {
-      const testRouter = createMemoryRouter(router.routes, {
-        initialEntries: ['/'],
-      })
+    it('should render the shared spinner fallback UI', () => {
+      render(<LoadingFallback />)
 
-      renderWithProviders(<RouterProvider router={testRouter} />)
-
-      // Loading indicator should appear briefly
-      // Note: This might be too fast to catch in tests,
-      // but the mechanism is tested by the routes working
-      expect(testRouter).toBeTruthy()
+      expect(screen.getByRole('status')).toBeInTheDocument()
+      expect(screen.getAllByText(/loading\.\.\./i)).toHaveLength(2)
     })
   })
 })

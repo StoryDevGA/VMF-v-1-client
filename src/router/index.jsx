@@ -109,7 +109,7 @@ const NotFound = lazy(() => import('../pages/NotFound'))
  * Loading Fallback Component
  * Shown while lazy-loaded routes are loading
  */
-function LoadingFallback() {
+export function LoadingFallback() {
   return (
     <div className="loading-fallback">
       <Spinner size="lg" />
