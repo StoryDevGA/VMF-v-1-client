@@ -464,6 +464,7 @@ const getRuntimeSkillRows = ({
         skill.description,
         skill.status,
         skill.supportedFrameworkKeys,
+        skill.skillRoleKey,
         skill.category,
         skill.type,
         skill.executionMode,
@@ -576,6 +577,36 @@ const findRuntimeSkillById = (skillId) =>
 
 const findSkillRoleById = (roleId) =>
   runtimeControlState.skillRoles.find((role) => role.id === roleId)
+
+const findSkillRoleByRoleKey = (roleKey) => {
+  const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
+  if (!normalizedRoleKey) return null
+
+  return runtimeControlState.skillRoles.find(
+    (role) => String(role.roleKey ?? '').trim().toUpperCase() === normalizedRoleKey,
+  ) ?? null
+}
+
+const validateMockRuntimeSkillRoleKey = (skillRoleKey, { currentSkillRoleKey = '' } = {}) => {
+  const normalizedSkillRoleKey = String(skillRoleKey ?? '').trim().toUpperCase()
+  const normalizedCurrentSkillRoleKey = String(currentSkillRoleKey ?? '').trim().toUpperCase()
+
+  if (!normalizedSkillRoleKey) {
+    return 'Skill role is required.'
+  }
+
+  const skillRole = findSkillRoleByRoleKey(normalizedSkillRoleKey)
+  if (!skillRole) {
+    return `Skill role "${normalizedSkillRoleKey}" was not found.`
+  }
+
+  const roleStatus = String(skillRole.status ?? '').trim().toUpperCase()
+  if (roleStatus !== SKILL_ROLE_REGISTRY_STATUSES.ACTIVE && normalizedSkillRoleKey !== normalizedCurrentSkillRoleKey) {
+    return `Skill role "${normalizedSkillRoleKey}" must be ACTIVE.`
+  }
+
+  return ''
+}
 
 const findWorkflowPolicyById = (policyId) =>
   runtimeControlState.workflowPolicies.find((policy) => policy.id === policyId)
@@ -1780,6 +1811,13 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const skillRoleError = validateMockRuntimeSkillRoleKey(runtimePayload.skillRoleKey)
+        if (skillRoleError) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            skillRoleKey: skillRoleError,
+          })
+        }
+
         const createdSkill = {
           id: generateRuntimeId('skill', runtimePayload.key),
           ...cloneRuntimeSkill({
@@ -1849,6 +1887,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildConflictError('Skill key must be unique.', {
             field: 'key',
             reason: 'RUNTIME_SKILL_KEY_CONFLICT',
+          })
+        }
+
+        const effectiveSkillRoleKey = payload.skillRoleKey ?? existingSkill.skillRoleKey ?? ''
+        const skillRoleError = validateMockRuntimeSkillRoleKey(effectiveSkillRoleKey, {
+          currentSkillRoleKey: existingSkill.skillRoleKey ?? '',
+        })
+        if (skillRoleError) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            skillRoleKey: skillRoleError,
           })
         }
 

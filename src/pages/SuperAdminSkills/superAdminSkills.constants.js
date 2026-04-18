@@ -58,6 +58,7 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   description: '',
   status: RUNTIME_SKILL_STATUSES.ACTIVE,
   supportedFrameworkKeys: '',
+  skillRoleKey: '',
   category: 'GENERAL',
   type: 'DETERMINISTIC',
   executionMode: 'SYSTEM',
@@ -83,6 +84,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Captures runtime state at workflow checkpoints for later validation and audit.',
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    skillRoleKey: 'READER',
     category: 'SNAPSHOT',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
@@ -100,6 +102,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Generates concise runtime summaries for review and handoff surfaces.',
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    skillRoleKey: 'RENDERER',
     category: 'GENERAL',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
@@ -117,6 +120,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Supports governance review checkpoints before activation and publish actions.',
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF']),
+    skillRoleKey: 'VALIDATOR',
     category: 'VALIDATION',
     type: 'DETERMINISTIC',
     executionMode: 'RULE_ENGINE',
@@ -134,6 +138,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Builds revenue lifecycle mapping outputs for RLD workflows and evidence packs.',
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['RLD']),
+    skillRoleKey: 'TRANSFORMER',
     category: 'LIFECYCLE',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
@@ -151,6 +156,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Produces report-ready narrative sections when a package enables published output.',
     status: RUNTIME_SKILL_STATUSES.INACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    skillRoleKey: 'RENDERER',
     category: 'GENERAL',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
@@ -168,6 +174,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     description: 'Supports RLD go-to-market planning outputs during staged rollout validation.',
     status: RUNTIME_SKILL_STATUSES.INACTIVE,
     supportedFrameworkKeys: Object.freeze(['RLD']),
+    skillRoleKey: 'ANALYZER',
     category: 'ACTION_RESOLUTION',
     type: 'HYBRID',
     executionMode: 'AGENT',
@@ -205,6 +212,7 @@ export function cloneRuntimeSkill(skill) {
   return {
     ...skill,
     supportedFrameworkKeys: [...(skill.supportedFrameworkKeys ?? [])],
+    skillRoleKey: String(skill.skillRoleKey ?? '').trim().toUpperCase(),
     inputContract: { ...(skill.inputContract ?? {}) },
     outputContract: { ...(skill.outputContract ?? {}) },
     runtimeConfig: { ...(skill.runtimeConfig ?? {}) },
@@ -324,6 +332,7 @@ export function mapRuntimeSkillToForm(skill) {
     description: skill.description ?? '',
     status: skill.status ?? RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: formatKeyList(skill.supportedFrameworkKeys),
+    skillRoleKey: String(skill.skillRoleKey ?? '').trim().toUpperCase(),
     category: String(skill.category ?? 'GENERAL').toUpperCase(),
     type: String(skill.type ?? 'DETERMINISTIC').toUpperCase(),
     executionMode: String(skill.executionMode ?? 'SYSTEM').toUpperCase(),
@@ -364,13 +373,21 @@ export function mapRuntimeSkillToForm(skill) {
   }
 }
 
-export function validateRuntimeSkillForm(formState, existingSkills = [], selectedSkillId = '') {
+export function validateRuntimeSkillForm(
+  formState,
+  existingSkills = [],
+  selectedSkillId = '',
+  skillRoles = [],
+  existingSkillRoleKey = '',
+) {
   const errors = {}
   const key = normalizeSkillKey(formState.key)
   const name = String(formState.name ?? '').trim()
   const description = String(formState.description ?? '').trim()
   const status = String(formState.status ?? '').trim() || RUNTIME_SKILL_STATUSES.ACTIVE
   const supportedFrameworkKeys = parseFrameworkKeyList(formState.supportedFrameworkKeys)
+  const skillRoleKey = String(formState.skillRoleKey ?? '').trim().toUpperCase()
+  const baselineSkillRoleKey = String(existingSkillRoleKey ?? '').trim().toUpperCase()
   const category = String(formState.category ?? 'GENERAL').trim().toUpperCase()
   const type = String(formState.type ?? 'DETERMINISTIC').trim().toUpperCase()
   const executionMode = String(formState.executionMode ?? 'SYSTEM').trim().toUpperCase()
@@ -401,6 +418,26 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
 
   if (supportedFrameworkKeys.length === 0) {
     errors.supportedFrameworkKeys = 'At least one supported framework key is required.'
+  }
+
+  const isActiveSkill = status === RUNTIME_SKILL_STATUSES.ACTIVE
+  if (isActiveSkill && !skillRoleKey) {
+    errors.skillRoleKey = 'Skill role is required.'
+  } else if (skillRoleKey && !/^[A-Z][A-Z0-9_]*$/.test(skillRoleKey)) {
+    errors.skillRoleKey = 'Skill role key must use uppercase letters, numbers, or underscores.'
+  } else if (Array.isArray(skillRoles) && skillRoles.length > 0) {
+    const selectedSkillRole = skillRoles.find(
+      (role) => String(role?.roleKey ?? '').trim().toUpperCase() === skillRoleKey,
+    )
+
+    if (!selectedSkillRole) {
+      errors.skillRoleKey = `Skill role "${skillRoleKey}" was not found.`
+    } else {
+      const roleStatus = String(selectedSkillRole.status ?? '').trim().toUpperCase()
+      if (roleStatus !== 'ACTIVE' && skillRoleKey !== baselineSkillRoleKey) {
+        errors.skillRoleKey = `Skill role "${skillRoleKey}" must be ACTIVE.`
+      }
+    }
   }
 
   const invalidFrameworkKey = supportedFrameworkKeys.find((value) => !value || !/^[A-Z][A-Z0-9_]*$/.test(value))
@@ -625,6 +662,7 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
       description,
       status,
       supportedFrameworkKeys,
+      skillRoleKey,
       category,
       type,
       executionMode,

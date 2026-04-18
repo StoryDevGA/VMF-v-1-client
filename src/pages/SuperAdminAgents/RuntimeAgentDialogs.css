@@ -192,6 +192,115 @@
   flex-wrap: wrap;
 }
 
+.super-admin-agents__execution-skill-cell,
+.super-admin-agents__execution-meta,
+.super-admin-agents__execution-summary,
+.super-admin-agents__execution-summary-item,
+.super-admin-agents__execution-banner,
+.super-admin-agents__dependency-notice {
+  display: grid;
+}
+
+.super-admin-agents__execution-skill-cell,
+.super-admin-agents__execution-meta,
+.super-admin-agents__execution-banner,
+.super-admin-agents__dependency-notice {
+  gap: var(--spacing-xs);
+}
+
+.super-admin-agents__execution-meta {
+  grid-template-columns: repeat(auto-fit, minmax(0, max-content));
+  align-items: center;
+}
+
+.super-admin-agents__execution-summary {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.super-admin-agents__execution-summary-item {
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.super-admin-agents__execution-summary-item--wide {
+  grid-column: span 2;
+}
+
+.super-admin-agents__execution-summary-label,
+.super-admin-agents__execution-summary-value,
+.super-admin-agents__execution-banner-title,
+.super-admin-agents__execution-banner-copy,
+.super-admin-agents__dependency-notice-title,
+.super-admin-agents__dependency-notice-copy {
+  margin: 0;
+}
+
+.super-admin-agents__execution-summary-label,
+.super-admin-agents__dependency-notice-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-agents__execution-summary-value,
+.super-admin-agents__dependency-notice-copy {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agents__execution-banner,
+.super-admin-agents__dependency-notice {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.super-admin-agents__execution-banner--success {
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border-subtle));
+}
+
+.super-admin-agents__execution-banner--danger,
+.super-admin-agents__dependency-notice {
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 28%, var(--color-border-subtle));
+}
+
+.super-admin-agents__execution-banner-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.super-admin-agents__execution-banner-copy {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agents__execution-banner-list {
+  margin: 0;
+  padding-left: var(--spacing-md);
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-agents__execution-banner-item {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-agents__dependency-notice-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
 .super-admin-agents__skill-composition,
 .super-admin-agents__skill-selector,
 .super-admin-agents__skill-assigned {
@@ -313,6 +422,18 @@
   .super-admin-agents__framework-picker-controls,
   .super-admin-agents__framework-item {
     grid-template-columns: 1fr;
+  }
+
+  .super-admin-agents__execution-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-agents__execution-summary-item--wide {
+    grid-column: auto;
+  }
+
+  .super-admin-agents__dependency-notice-header {
+    flex-direction: column;
   }
 
   .super-admin-agents__framework-add-button {

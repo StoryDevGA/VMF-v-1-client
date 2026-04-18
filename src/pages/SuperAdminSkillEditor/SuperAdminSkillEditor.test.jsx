@@ -110,6 +110,12 @@ describe('SuperAdminSkillEditor page', () => {
       }),
       'RULE_ENGINE',
     )
+    await user.selectOptions(
+      screen.getByLabelText(/^skill role$/i, {
+        selector: 'select#runtime-skill-editor-skill-role',
+      }),
+      'VALIDATOR',
+    )
 
     await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
     expect(screen.getByRole('heading', { name: /input \/ output contract/i })).toBeInTheDocument()
@@ -174,6 +180,22 @@ describe('SuperAdminSkillEditor page', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('offers governed skill role options in the classification tab', async () => {
+    const user = userEvent.setup()
+    renderSkillEditor('/super-admin/runtime-control/skills/new')
+
+    await user.click(screen.getByRole('tab', { name: /^skill classification$/i }))
+
+    const skillRoleSelect = screen.getByLabelText(/^skill role$/i, {
+      selector: 'select#runtime-skill-editor-skill-role',
+    })
+
+    expect(skillRoleSelect).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /reader \(reader\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /validator \(validator\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /renderer \(renderer\)/i })).toBeInTheDocument()
+  })
+
   it('updates an existing runtime skill from the dedicated edit page flow', async () => {
     const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/skill-snapshot')
@@ -189,6 +211,11 @@ describe('SuperAdminSkillEditor page', () => {
       selector: 'select#runtime-skill-editor-execution-mode',
     })
     expect(executionModeSelect).toHaveValue('SYSTEM')
+    expect(
+      screen.getByLabelText(/^skill role$/i, {
+        selector: 'select#runtime-skill-editor-skill-role',
+      }),
+    ).toHaveValue('READER')
 
     const nameInput = await screen.findByLabelText(/^skill name$/i, {
       selector: 'input#runtime-skill-editor-name',
@@ -228,6 +255,13 @@ describe('SuperAdminSkillEditor page', () => {
       'VMF',
     )
     await user.click(screen.getByRole('button', { name: /^add framework$/i }))
+    await user.click(screen.getByRole('tab', { name: /^skill classification$/i }))
+    await user.selectOptions(
+      screen.getByLabelText(/^skill role$/i, {
+        selector: 'select#runtime-skill-editor-skill-role',
+      }),
+      'VALIDATOR',
+    )
 
     await user.click(screen.getByRole('tab', { name: /^input \/ output contract$/i }))
     const inputContractTextarea = screen.getByLabelText(/^input contract$/i, {

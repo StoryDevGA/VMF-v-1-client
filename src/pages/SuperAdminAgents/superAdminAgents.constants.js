@@ -210,6 +210,7 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const ENUM_TOKEN_PATTERN = /^[A-Z][A-Z0-9_]*$/
+const EXECUTION_TARGET_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 export function normalizeEnumToken(value) {
   return String(value ?? '')
@@ -292,6 +293,7 @@ export function mapRuntimeAgentToForm(agent) {
     ? agent.executionPlan.map((step) => ({
         skillId: normalizeAgentKey(step?.skillId),
         description: String(step?.description ?? ''),
+        writesTo: String(step?.writesTo ?? ''),
       }))
     : []
 
@@ -366,6 +368,7 @@ export function validateRuntimeAgentForm(
   const executionPlan = executionPlanStepsRaw.map((step) => ({
     skillId: normalizeAgentKey(step?.skillId),
     description: String(step?.description ?? '').trim(),
+    writesTo: String(step?.writesTo ?? '').trim(),
   }))
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
@@ -481,6 +484,14 @@ export function validateRuntimeAgentForm(
     if (!errors.executionPlan && unassignedStepSkillId) {
       errors.executionPlan = `Skill "${unassignedStepSkillId}" must be assigned before it can be used in the execution plan.`
     }
+
+    const invalidWritesToTarget = executionPlan.find(
+      (step) => step.writesTo && !EXECUTION_TARGET_PATTERN.test(step.writesTo),
+    )
+    if (!errors.executionPlan && invalidWritesToTarget) {
+      errors.executionPlan =
+        `Execution step writes-to target "${invalidWritesToTarget.writesTo}" is invalid.`
+    }
   }
 
   const availableSkillRows = Array.isArray(availableSkills) ? availableSkills : []
@@ -537,14 +548,12 @@ export function validateRuntimeAgentForm(
       errors.executionPlan = `Unknown skill id "${unknownStepSkillId}" in execution plan.`
     }
 
-    if (!errors.executionPlan && status === RUNTIME_AGENT_STATUSES.ACTIVE) {
-      const inactiveStepSkillId = stepSkillIds.find((skillId) => {
-        const skill = skillLookup.get(skillId)
-        return String(skill?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
-      })
-      if (inactiveStepSkillId) {
-        errors.executionPlan = `Skill "${inactiveStepSkillId}" is not ACTIVE and cannot be used in the execution plan.`
-      }
+    const inactiveStepSkillId = stepSkillIds.find((skillId) => {
+      const skill = skillLookup.get(skillId)
+      return String(skill?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+    })
+    if (!errors.executionPlan && inactiveStepSkillId) {
+      errors.executionPlan = `Skill "${inactiveStepSkillId}" is not ACTIVE and cannot be used in the execution plan.`
     }
 
     if (!errors.executionPlan && supportedFrameworkKeySet.size > 0) {

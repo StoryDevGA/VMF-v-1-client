@@ -15,6 +15,7 @@ import {
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
   useListFrameworkRegistriesQuery,
+  useListSkillRolesQuery,
   useListRuntimeSkillsQuery,
   useUpdateRuntimeSkillMutation,
 } from '../../store/api/runtimeControlApi.js'
@@ -50,6 +51,8 @@ const shallowEqualObject = (left, right) => {
   if (leftKeys.length !== rightKeys.length) return false
   return leftKeys.every((key) => left[key] === right[key])
 }
+
+const normalizeSkillRoleKey = (value) => String(value ?? '').trim().toUpperCase()
 
 function SkillEditorSection({ title, copy, children, className = '' }) {
   const sectionClassName = ['super-admin-skill-editor__section', className].filter(Boolean).join(' ')
@@ -171,6 +174,8 @@ function SkillEditorForm({
   errors,
   validationHints = {},
   frameworkOptions,
+  skillRoleOptions,
+  isSkillRolesLoading,
   onBack,
   onCancel,
   onSubmit,
@@ -188,7 +193,7 @@ function SkillEditorForm({
   const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
-    classification: ['category', 'type', 'executionMode'].filter((key) => hintErrors[key]).length,
+    classification: ['skillRoleKey', 'category', 'type', 'executionMode'].filter((key) => hintErrors[key]).length,
     contracts: [
       'inputContract',
       'outputContract',
@@ -427,7 +432,7 @@ function SkillEditorForm({
             <TabView.Tab label={renderTabLabel('Skill Classification', tabErrorCounts.classification)}>
               <SkillEditorSection
                 title="Skill Classification"
-                copy="Classify the skill by category, type, and execution mode to support governance and runtime resolution."
+                copy="Classify the skill by governed role, category, type, and execution mode to support governance and runtime resolution."
               >
                 <div className="super-admin-skill-editor__row">
                   <Select
@@ -462,6 +467,28 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, executionMode: event.target.value }))
                     }
                     error={errors.executionMode}
+                  />
+                </div>
+                <div className="super-admin-skill-editor__row">
+                  <Select
+                    id="runtime-skill-editor-skill-role"
+                    label="Skill Role"
+                    className="super-admin-skill-editor__select-field"
+                    value={form.skillRoleKey}
+                    options={skillRoleOptions}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, skillRoleKey: event.target.value }))
+                    }
+                    error={errors.skillRoleKey}
+                    helperText="Select the governed role definition this skill fulfills."
+                    placeholder={
+                      isSkillRolesLoading
+                        ? 'Loading skill roles...'
+                        : skillRoleOptions.length > 0
+                          ? 'Select a skill role'
+                          : 'No skill roles available'
+                    }
+                    disabled={isSkillRolesLoading || skillRoleOptions.length === 0}
                   />
                 </div>
               </SkillEditorSection>
@@ -1162,6 +1189,12 @@ function SuperAdminSkillEditor() {
     pageSize: 100,
     q: '',
   })
+  const { data: skillRolesResponse, isLoading: isSkillRolesLoading } = useListSkillRolesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+    status: '',
+  })
 
   const [createRuntimeSkill, { isLoading: isCreating }] = useCreateRuntimeSkillMutation()
   const [updateRuntimeSkill, { isLoading: isUpdating }] = useUpdateRuntimeSkillMutation()
@@ -1196,9 +1229,67 @@ function SuperAdminSkillEditor() {
 
     return []
   }, [skillsResponse])
+  const skillRoleRows = useMemo(() => {
+    const direct = skillRolesResponse?.data
+
+    if (Array.isArray(direct)) {
+      return direct
+    }
+
+    if (direct && typeof direct === 'object' && Array.isArray(direct.data)) {
+      return direct.data
+    }
+
+    if (Array.isArray(skillRolesResponse)) {
+      return skillRolesResponse
+    }
+
+    return []
+  }, [skillRolesResponse])
+  const skillRoleOptions = useMemo(() => {
+    const normalizedCurrentSkillRoleKey = normalizeSkillRoleKey(form.skillRoleKey)
+    const optionMap = new Map()
+
+    skillRoleRows
+      .filter((role) => normalizeSkillRoleKey(role?.status) === 'ACTIVE')
+      .forEach((role) => {
+        const roleKey = normalizeSkillRoleKey(role?.roleKey)
+        if (!roleKey) return
+        optionMap.set(roleKey, {
+          value: roleKey,
+          label: role?.label ? `${role.label} (${roleKey})` : roleKey,
+        })
+      })
+
+    if (normalizedCurrentSkillRoleKey && !optionMap.has(normalizedCurrentSkillRoleKey)) {
+      const currentRole = skillRoleRows.find(
+        (role) => normalizeSkillRoleKey(role?.roleKey) === normalizedCurrentSkillRoleKey,
+      )
+      const currentStatus = normalizeSkillRoleKey(currentRole?.status)
+      const statusSuffix =
+        currentStatus && currentStatus !== 'ACTIVE'
+          ? ` — ${currentStatus.toLowerCase()} current value`
+          : ''
+
+      optionMap.set(normalizedCurrentSkillRoleKey, {
+        value: normalizedCurrentSkillRoleKey,
+        label: currentRole?.label
+          ? `${currentRole.label} (${normalizedCurrentSkillRoleKey})${statusSuffix}`
+          : `${normalizedCurrentSkillRoleKey}${statusSuffix}`,
+      })
+    }
+
+    return [...optionMap.values()].sort((left, right) => left.label.localeCompare(right.label))
+  }, [form.skillRoleKey, skillRoleRows])
   const liveValidation = useMemo(
-    () => validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : ''),
-    [existingSkills, form, isEditMode, skillId],
+    () => validateRuntimeSkillForm(
+      form,
+      existingSkills,
+      isEditMode ? skillId : '',
+      skillRoleRows,
+      loadedSkill?.skillRoleKey ?? '',
+    ),
+    [existingSkills, form, isEditMode, loadedSkill?.skillRoleKey, skillId, skillRoleRows],
   )
   const isCreateDisabled = useMemo(() => {
     if (isEditMode) return false
@@ -1260,6 +1351,7 @@ function SuperAdminSkillEditor() {
     const jumpTargets = [
       { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: 'runtime-skill-editor-framework-select' },
       { tabIndex: 1, fieldKey: 'category', focusId: 'runtime-skill-editor-category' },
+      { tabIndex: 1, fieldKey: 'skillRoleKey', focusId: 'runtime-skill-editor-skill-role' },
       { tabIndex: 1, fieldKey: 'type', focusId: 'runtime-skill-editor-type' },
       { tabIndex: 1, fieldKey: 'executionMode', focusId: 'runtime-skill-editor-execution-mode' },
       { tabIndex: 2, fieldKey: 'inputContract', focusId: 'runtime-skill-editor-input-contract' },
@@ -1308,7 +1400,13 @@ function SuperAdminSkillEditor() {
   }
 
   const handleReviewMissingFields = () => {
-    const { errors: nextErrors } = validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : '')
+    const { errors: nextErrors } = validateRuntimeSkillForm(
+      form,
+      existingSkills,
+      isEditMode ? skillId : '',
+      skillRoleRows,
+      loadedSkill?.skillRoleKey ?? '',
+    )
     revealValidationErrors(nextErrors)
   }
 
@@ -1321,6 +1419,8 @@ function SuperAdminSkillEditor() {
       form,
       existingSkills,
       isEditMode ? skillId : '',
+      skillRoleRows,
+      loadedSkill?.skillRoleKey ?? '',
     )
     if (Object.keys(nextErrors).length > 0) {
       revealValidationErrors(nextErrors, { showSuccessToast: false })
@@ -1398,6 +1498,8 @@ function SuperAdminSkillEditor() {
             errors={errors}
             validationHints={showValidationHints ? liveValidation.errors : {}}
             frameworkOptions={frameworkOptions}
+            skillRoleOptions={skillRoleOptions}
+            isSkillRolesLoading={isSkillRolesLoading}
             onBack={handleBackToSkills}
             onCancel={handleBackToSkills}
             onSubmit={handleSubmit}

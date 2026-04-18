@@ -118,6 +118,16 @@ describe('SuperAdminAgentEditor page', () => {
       'skill-summary',
     )
     await user.click(screen.getByRole('button', { name: /^add step$/i }))
+    await user.type(
+      screen.getByLabelText(/^writes to target for step 1$/i, {
+        selector: 'input#runtime-agent-create-execution-step-1-writes-to',
+      }),
+      'vmfSnapshot',
+    )
+
+    expect(screen.getByText(/^estimated flow$/i)).toBeInTheDocument()
+    expect(screen.getByText(/snapshot -> summary/i)).toBeInTheDocument()
+    expect(screen.getByText(/all current execution steps are valid\./i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /^runtime configuration$/i }))
     await user.clear(
@@ -215,6 +225,22 @@ describe('SuperAdminAgentEditor page', () => {
     await user.click(screen.getByRole('tab', { name: /^dependencies$/i }))
     expect(screen.getByRole('heading', { name: /^dependencies$/i })).toBeInTheDocument()
     expect(screen.getByText(/referenced by workflow policies/i)).toBeInTheDocument()
+  })
+
+  it('surfaces dependency warnings before the dependencies tab is opened', async () => {
+    renderPage('/super-admin/runtime-control/agents/agent-validator')
+
+    expect(
+      await screen.findByText(/^dependency warnings$/i, {
+        selector: '.super-admin-agents__dependency-notice-title',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/this agent is referenced by/i, {
+        selector: '.super-admin-agents__dependency-notice-copy',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open dependencies tab/i })).toBeInTheDocument()
   })
 
   it('shows validation error for invalid JSON in contract fields', async () => {
