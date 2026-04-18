@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminSkills from '../SuperAdminSkills'
@@ -296,7 +296,7 @@ describe('SuperAdminSkillEditor page', () => {
       },
     })
 
-    const primaryOutputSelect = screen.getByLabelText(/^primary output key$/i, {
+    const primaryOutputSelect = screen.getByLabelText(/^primary output selection$/i, {
       selector: 'select#runtime-skill-editor-primary-output-key',
     })
 
@@ -328,7 +328,7 @@ describe('SuperAdminSkillEditor page', () => {
     expect(outputBindingsTextarea).not.toBeDisabled()
   })
 
-  it('derives primary output key options from the Output Contract properties', async () => {
+  it('derives primary output selection options from the Output Contract properties', async () => {
     const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/new')
 
@@ -370,24 +370,25 @@ describe('SuperAdminSkillEditor page', () => {
       'PRIMARY',
     )
 
+    expect(screen.getByRole('option', { name: /^\$root \(object\)$/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /isValid/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /missingSections/i })).toBeInTheDocument()
 
     await user.selectOptions(
-      screen.getByLabelText(/^primary output key$/i, {
+      screen.getByLabelText(/^primary output selection$/i, {
         selector: 'select#runtime-skill-editor-primary-output-key',
       }),
       'missingSections',
     )
 
     expect(
-      screen.getByLabelText(/^primary output key$/i, {
+      screen.getByLabelText(/^primary output selection$/i, {
         selector: 'select#runtime-skill-editor-primary-output-key',
       }),
     ).toHaveValue('missingSections')
   })
 
-  it('clears the primary output key when the Output Contract schema changes', async () => {
+  it('clears the primary output selection when the Output Contract schema changes', async () => {
     const user = userEvent.setup()
     renderSkillEditor('/super-admin/runtime-control/skills/new')
 
@@ -428,7 +429,7 @@ describe('SuperAdminSkillEditor page', () => {
       'PRIMARY',
     )
 
-    const primaryOutputSelect = screen.getByLabelText(/^primary output key$/i, {
+    const primaryOutputSelect = screen.getByLabelText(/^primary output selection$/i, {
       selector: 'select#runtime-skill-editor-primary-output-key',
     })
     await user.selectOptions(primaryOutputSelect, 'isValid')

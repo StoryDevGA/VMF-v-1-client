@@ -35,6 +35,7 @@ import {
   RUNTIME_SKILL_FORM_STATUS_OPTIONS,
   RUNTIME_SKILL_RETRY_POLICY_OPTIONS,
   RUNTIME_SKILL_TYPE_OPTIONS,
+  isContractStructured,
   validateRuntimeSkillForm,
 } from '../SuperAdminSkills/superAdminSkills.constants.js'
 import '../SuperAdminSkills/SuperAdminSkills.css'
@@ -187,7 +188,7 @@ function SkillEditorForm({
   const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
-    classification: hintErrors.executionMode ? 1 : 0,
+    classification: ['category', 'type', 'executionMode'].filter((key) => hintErrors[key]).length,
     contracts: [
       'inputContract',
       'outputContract',
@@ -204,15 +205,25 @@ function SkillEditorForm({
   }), [hintErrors])
 
   const [primaryOutputKeyNotice, setPrimaryOutputKeyNotice] = useState('')
+  const inputContractSchema = useMemo(() => parseJsonField(form.inputContract), [form.inputContract])
   const outputContractSchema = useMemo(() => parseJsonField(form.outputContract), [form.outputContract])
+  const inputContractStatus = useMemo(() => {
+    if (inputContractSchema.error || !inputContractSchema.value) return { isStructured: false }
+    return { isStructured: isContractStructured(inputContractSchema.value) }
+  }, [inputContractSchema])
+  const outputContractStatus = useMemo(() => {
+    if (outputContractSchema.error || !outputContractSchema.value) return { isStructured: false }
+    return { isStructured: isContractStructured(outputContractSchema.value) }
+  }, [outputContractSchema])
   const outputContractPropertyMeta = useMemo(() => {
     if (outputContractSchema.error || !outputContractSchema.value) {
-      return { options: [], typeLookup: {}, keys: [] }
+      return { options: [], typeLookup: {}, keys: [], isStructured: false }
     }
 
+    const rootOption = { value: '$root', label: '$root (object)' }
     const properties = outputContractSchema.value.properties
     if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
-      return { options: [], typeLookup: {}, keys: [] }
+      return { options: [rootOption], typeLookup: {}, keys: [], isStructured: false }
     }
 
     const keys = Object.keys(properties).filter(Boolean).sort((left, right) => left.localeCompare(right))
@@ -224,15 +235,18 @@ function SkillEditorForm({
       return [key, type]
     }))
 
+    const keyOptions = keys.map((key) => {
+      const suffix = typeLookup[key] ? ` (${typeLookup[key]})` : ''
+      return { value: key, label: `${key}${suffix}` }
+    })
+
     return {
-      keys,
-      typeLookup,
-      options: keys.map((key) => {
-        const suffix = typeLookup[key] ? ` (${typeLookup[key]})` : ''
-        return { value: key, label: `${key}${suffix}` }
-      }),
+      keys: outputContractStatus.isStructured ? keys : [],
+      typeLookup: outputContractStatus.isStructured ? typeLookup : {},
+      isStructured: outputContractStatus.isStructured,
+      options: [rootOption, ...(outputContractStatus.isStructured ? keyOptions : [])],
     }
-  }, [outputContractSchema])
+  }, [outputContractSchema, outputContractStatus.isStructured])
   const executionModeSummaryLabel = useMemo(() => {
     const match = RUNTIME_SKILL_EXECUTION_MODE_OPTIONS.find((option) => option.value === form.executionMode)
     return match ? match.label : String(form.executionMode ?? '').trim()
@@ -240,18 +254,21 @@ function SkillEditorForm({
   const primaryOutputKeyHelperText = useMemo(() => {
     if (primaryOutputKeyNotice) return primaryOutputKeyNotice
     if (form.outputBindingMode !== 'PRIMARY') {
-      return 'Disabled unless Output Binding Mode is set to Primary Output Key.'
+      return 'Disabled unless Output Binding Mode is set to Primary Output.'
     }
     if (outputContractSchema.error) {
-      return 'Fix the Output Contract JSON to populate primary key options.'
+      return 'Fix the Output Contract JSON to populate primary output options.'
+    }
+    if (form.primaryOutputKey === '$root') {
+      return 'Selected output: $root (object).'
     }
     if (outputContractPropertyMeta.keys.length === 0) {
-      return 'Add top-level output properties to the Output Contract to populate options.'
+      return 'Select $root to bind the full output object, or define output properties for field-level binding.'
     }
     const selectedType = outputContractPropertyMeta.typeLookup?.[form.primaryOutputKey]
     return selectedType
       ? `Selected output type: ${selectedType}.`
-      : 'Select the canonical output field downstream execution should bind to.'
+      : 'Select the canonical output value downstream execution should bind to.'
   }, [
     form.outputBindingMode,
     form.primaryOutputKey,
@@ -267,8 +284,18 @@ function SkillEditorForm({
       return
     }
 
-    if (outputContractPropertyMeta.keys.length === 0) return
     if (!form.primaryOutputKey) return
+
+    if (form.primaryOutputKey === '$root') {
+      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      return
+    }
+
+    if (outputContractPropertyMeta.keys.length === 0) {
+      setForm((current) => ({ ...current, primaryOutputKey: '' }))
+      setPrimaryOutputKeyNotice('Selection cleared because the Output Contract does not define selectable properties. Use $root or add properties.')
+      return
+    }
 
     if (outputContractPropertyMeta.keys.includes(form.primaryOutputKey)) {
       if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
@@ -276,7 +303,7 @@ function SkillEditorForm({
     }
 
     setForm((current) => ({ ...current, primaryOutputKey: '' }))
-    setPrimaryOutputKeyNotice('Selection cleared because it no longer exists in the Output Contract properties.')
+    setPrimaryOutputKeyNotice('Selection cleared because it no longer exists in the Output Contract properties. Use $root or update the Output Contract.')
   }, [
     form.outputBindingMode,
     form.primaryOutputKey,
@@ -412,6 +439,7 @@ function SkillEditorForm({
                     onChange={(event) =>
                       setForm((current) => ({ ...current, category: event.target.value }))
                     }
+                    error={errors.category}
                   />
                   <Select
                     id="runtime-skill-editor-type"
@@ -422,6 +450,7 @@ function SkillEditorForm({
                     onChange={(event) =>
                       setForm((current) => ({ ...current, type: event.target.value }))
                     }
+                    error={errors.type}
                   />
                   <Select
                     id="runtime-skill-editor-execution-mode"
@@ -452,7 +481,14 @@ function SkillEditorForm({
                     <Textarea
                       id="runtime-skill-editor-input-contract"
                       label="Input Contract"
-                      helperText="Optional. Enter a valid JSON object defining the expected input shape."
+                      helperText={(
+                        <span className="super-admin-skill-editor__contract-helper">
+                          <span className={`super-admin-skill-editor__contract-pill ${inputContractStatus.isStructured ? 'super-admin-skill-editor__contract-pill--structured' : 'super-admin-skill-editor__contract-pill--unstructured'}`}>
+                            {inputContractStatus.isStructured ? 'Structured Contract' : 'Unstructured Contract'}
+                          </span>
+                          <span>Optional. Enter a valid JSON object defining the expected input shape.</span>
+                        </span>
+                      )}
                       value={form.inputContract}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, inputContract: event.target.value }))
@@ -464,7 +500,17 @@ function SkillEditorForm({
                     <Textarea
                       id="runtime-skill-editor-output-contract"
                       label="Output Contract"
-                      helperText="Optional. Enter a valid JSON object defining the expected output shape."
+                      helperText={(
+                        <span className="super-admin-skill-editor__contract-helper">
+                          <span className={`super-admin-skill-editor__contract-pill ${outputContractStatus.isStructured ? 'super-admin-skill-editor__contract-pill--structured' : 'super-admin-skill-editor__contract-pill--unstructured'}`}>
+                            {outputContractStatus.isStructured ? 'Structured Contract' : 'Unstructured Contract'}
+                          </span>
+                          <span>Optional. Enter a valid JSON object defining the expected output shape.</span>
+                          {!outputContractStatus.isStructured ? (
+                            <span className="super-admin-skill-editor__contract-hint">Some orchestration features will be limited.</span>
+                          ) : null}
+                        </span>
+                      )}
                       value={form.outputContract}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, outputContract: event.target.value }))
@@ -493,7 +539,7 @@ function SkillEditorForm({
                       value={form.outputBindingMode}
                       options={[
                         { value: 'NONE', label: 'None' },
-                        { value: 'PRIMARY', label: 'Primary Output Key' },
+                        { value: 'PRIMARY', label: 'Primary Output Selection' },
                         { value: 'BINDINGS', label: 'Output Bindings' },
                       ]}
                       helperText="Choose one mode to enable its field. This prevents agents from binding ambiguous outputs."
@@ -521,7 +567,7 @@ function SkillEditorForm({
                     />
                     <Select
                       id="runtime-skill-editor-primary-output-key"
-                      label="Primary Output Key"
+                      label="Primary Output Selection"
                       helperText={primaryOutputKeyHelperText}
                       value={form.primaryOutputKey}
                       onChange={(event) =>
@@ -536,14 +582,14 @@ function SkillEditorForm({
                       }
                       placeholder={
                         outputContractPropertyMeta.options.length > 0
-                          ? 'Select a primary output key'
-                          : 'Add output properties to Output Contract'
+                          ? 'Select a primary output'
+                          : 'Fix Output Contract JSON'
                       }
                     />
                     <Textarea
                       id="runtime-skill-editor-output-bindings"
                       label="Output Bindings"
-                      helperText="Optional. Provide bindable output keys (one per line). Leave empty when using Primary Output Key."
+                      helperText="Optional. Provide bindable output keys (one per line). Leave empty when using Primary Output Selection."
                       value={form.outputBindings}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, outputBindings: event.target.value }))
@@ -1204,51 +1250,53 @@ function SuperAdminSkillEditor() {
     navigate('/super-admin/runtime-control/skills')
   }
 
-  const handleReviewMissingFields = () => {
-    const { errors: nextErrors } = validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : '')
+  const revealValidationErrors = (nextErrors, { showSuccessToast = true } = {}) => {
+    const errorsObject = nextErrors && typeof nextErrors === 'object' ? nextErrors : {}
 
-    setErrors(nextErrors)
+    setErrors(errorsObject)
     setErrorsSource('client')
     setShowValidationHints(true)
 
-    if (!isEditMode) {
-      const jumpTargets = [
-        { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: 'runtime-skill-editor-framework-select' },
-        { tabIndex: 1, fieldKey: 'executionMode', focusId: 'runtime-skill-editor-execution-mode' },
-        { tabIndex: 2, fieldKey: 'inputContract', focusId: 'runtime-skill-editor-input-contract' },
-        { tabIndex: 2, fieldKey: 'outputContract', focusId: 'runtime-skill-editor-output-contract' },
-        { tabIndex: 2, fieldKey: 'primaryOutputKey', focusId: 'runtime-skill-editor-primary-output-key' },
-        { tabIndex: 2, fieldKey: 'outputBindings', focusId: 'runtime-skill-editor-output-bindings' },
-        { tabIndex: 2, fieldKey: 'allowedReadPaths', focusId: 'runtime-skill-editor-allowed-read-paths' },
-        { tabIndex: 2, fieldKey: 'allowedWritePaths', focusId: 'runtime-skill-editor-allowed-write-paths' },
-        { tabIndex: 2, fieldKey: 'forbiddenWritePaths', focusId: 'runtime-skill-editor-forbidden-write-paths' },
-        { tabIndex: 2, fieldKey: 'executionConfig', focusId: 'runtime-skill-editor-execution-config' },
-        { tabIndex: 3, fieldKey: 'timeoutMs', focusId: 'runtime-skill-editor-timeout' },
-        { tabIndex: 3, fieldKey: 'retryPolicy', focusId: 'runtime-skill-editor-retry-policy' },
-        { tabIndex: 4, fieldKey: 'referenceAssets', focusId: 'runtime-skill-editor-add-reference-asset' },
-      ]
+    const jumpTargets = [
+      { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: 'runtime-skill-editor-framework-select' },
+      { tabIndex: 1, fieldKey: 'category', focusId: 'runtime-skill-editor-category' },
+      { tabIndex: 1, fieldKey: 'type', focusId: 'runtime-skill-editor-type' },
+      { tabIndex: 1, fieldKey: 'executionMode', focusId: 'runtime-skill-editor-execution-mode' },
+      { tabIndex: 2, fieldKey: 'inputContract', focusId: 'runtime-skill-editor-input-contract' },
+      { tabIndex: 2, fieldKey: 'outputContract', focusId: 'runtime-skill-editor-output-contract' },
+      { tabIndex: 2, fieldKey: 'primaryOutputKey', focusId: 'runtime-skill-editor-primary-output-key' },
+      { tabIndex: 2, fieldKey: 'outputBindings', focusId: 'runtime-skill-editor-output-bindings' },
+      { tabIndex: 2, fieldKey: 'allowedReadPaths', focusId: 'runtime-skill-editor-allowed-read-paths' },
+      { tabIndex: 2, fieldKey: 'allowedWritePaths', focusId: 'runtime-skill-editor-allowed-write-paths' },
+      { tabIndex: 2, fieldKey: 'forbiddenWritePaths', focusId: 'runtime-skill-editor-forbidden-write-paths' },
+      { tabIndex: 2, fieldKey: 'executionConfig', focusId: 'runtime-skill-editor-execution-config' },
+      { tabIndex: 3, fieldKey: 'timeoutMs', focusId: 'runtime-skill-editor-timeout' },
+      { tabIndex: 3, fieldKey: 'retryPolicy', focusId: 'runtime-skill-editor-retry-policy' },
+      { tabIndex: 4, fieldKey: 'referenceAssets', focusId: 'runtime-skill-editor-add-reference-asset' },
+    ]
 
-      const firstTabError = jumpTargets.find((target) => nextErrors?.[target.fieldKey])
-      if (firstTabError) {
-        setActiveEditorTab(firstTabError.tabIndex)
-        requestAnimationFrame(() => {
-          const el = document.getElementById(firstTabError.focusId)
-          if (el && typeof el.focus === 'function') {
-            if (typeof el.scrollIntoView === 'function') {
-              el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-            }
-            el.focus()
+    const firstTabError = jumpTargets.find((target) => errorsObject?.[target.fieldKey])
+    if (firstTabError) {
+      setActiveEditorTab(firstTabError.tabIndex)
+      requestAnimationFrame(() => {
+        const el = document.getElementById(firstTabError.focusId)
+        if (el && typeof el.focus === 'function') {
+          if (typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' })
           }
-        })
-      }
+          el.focus()
+        }
+      })
     }
 
-    if (Object.keys(nextErrors).length === 0) {
-      addToast({
-        title: 'All checks passed',
-        description: 'This skill is ready to be created.',
-        variant: 'success',
-      })
+    if (Object.keys(errorsObject).length === 0) {
+      if (showSuccessToast) {
+        addToast({
+          title: 'All checks passed',
+          description: isEditMode ? 'This skill is ready to be saved.' : 'This skill is ready to be created.',
+          variant: 'success',
+        })
+      }
       return
     }
 
@@ -1257,6 +1305,11 @@ function SuperAdminSkillEditor() {
       description: 'Review the highlighted fields across the editor tabs.',
       variant: 'warning',
     })
+  }
+
+  const handleReviewMissingFields = () => {
+    const { errors: nextErrors } = validateRuntimeSkillForm(form, existingSkills, isEditMode ? skillId : '')
+    revealValidationErrors(nextErrors)
   }
 
   const handleSubmit = async (event) => {
@@ -1270,9 +1323,7 @@ function SuperAdminSkillEditor() {
       isEditMode ? skillId : '',
     )
     if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors)
-      setErrorsSource('client')
-      setShowValidationHints(true)
+      revealValidationErrors(nextErrors, { showSuccessToast: false })
       return
     }
 

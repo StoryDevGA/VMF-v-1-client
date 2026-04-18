@@ -184,6 +184,11 @@ const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const VALID_EXECUTION_MODES = new Set(['SYSTEM', 'RULE_ENGINE', 'AGENT'])
 const VALID_RETRY_POLICIES = new Set(['NONE', 'RETRY_ONCE', 'RETRY_WITH_BACKOFF'])
 const OUTPUT_BINDING_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
+const PRIMARY_OUTPUT_SELECTION_PATTERN = /^(\$root|[a-zA-Z][a-zA-Z0-9_]*)$/
+const TYPE_COMPATIBILITY_HARD_INVALID = Object.freeze({
+  SYSTEM: new Set(['AGENT_ASSISTED']),
+  RULE_ENGINE: new Set(['AGENT_ASSISTED']),
+})
 const REFERENCE_ASSET_PURPOSES = new Set([
   'AUTHORING_HELP',
   'RUNTIME_REFERENCE',
@@ -291,6 +296,19 @@ export function parseJsonField(text) {
   } catch {
     return { value: null, error: 'Invalid JSON.' }
   }
+}
+
+export function isContractStructured(contract) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return false
+
+  const schemaType = typeof contract.type === 'string' ? String(contract.type).trim().toLowerCase() : ''
+  if (schemaType && schemaType !== 'object') return false
+
+  const properties = contract.properties
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return false
+
+  const propertyKeys = Object.keys(properties).filter(Boolean)
+  return propertyKeys.length > 0
 }
 
 export function mapRuntimeSkillToForm(skill) {
@@ -401,6 +419,11 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
     errors.executionMode = 'Execution mode must be System, Rule Engine, or Agent-assisted.'
   }
 
+  const hardInvalidTypes = TYPE_COMPATIBILITY_HARD_INVALID[executionMode]
+  if (hardInvalidTypes && hardInvalidTypes.has(type)) {
+    errors.type = 'Skill type "AGENT_ASSISTED" is only compatible with AGENT execution mode.'
+  }
+
   const inputContractResult = parseJsonField(formState.inputContract)
   if (inputContractResult.error) {
     errors.inputContract = inputContractResult.error
@@ -417,7 +440,7 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   } else if (outputBindingMode === 'PRIMARY') {
     outputBindings = []
     if (!primaryOutputKey) {
-      errors.primaryOutputKey = 'Primary output key is required when using Primary Output Key binding mode.'
+      errors.primaryOutputKey = 'Primary output selection is required when using Primary Output mode.'
     }
   } else if (outputBindingMode === 'BINDINGS') {
     primaryOutputKey = ''
@@ -425,11 +448,11 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
       errors.outputBindings = 'At least one output binding is required when using Output Bindings mode.'
     }
   } else {
-    errors.outputBindingMode = 'Output binding mode must be None, Primary Output Key, or Output Bindings.'
+    errors.outputBindingMode = 'Output binding mode must be None, Primary Output Selection, or Output Bindings.'
   }
 
-  if (primaryOutputKey && !OUTPUT_BINDING_PATTERN.test(primaryOutputKey)) {
-    errors.primaryOutputKey = 'Primary output key must start with a letter and only use letters, numbers, or underscores.'
+  if (primaryOutputKey && !PRIMARY_OUTPUT_SELECTION_PATTERN.test(primaryOutputKey)) {
+    errors.primaryOutputKey = 'Primary output selection must be $root or start with a letter and only use letters, numbers, or underscores.'
   }
 
   const invalidOutputBinding = outputBindings.find((item) => !OUTPUT_BINDING_PATTERN.test(item))
@@ -443,19 +466,23 @@ export function validateRuntimeSkillForm(formState, existingSkills = [], selecte
   }
 
   if (!outputContractResult.error && outputContractResult.value) {
-    const properties = outputContractResult.value.properties
+    const contractValue = outputContractResult.value
+    const properties = contractValue.properties
 
     if (properties != null && (typeof properties !== 'object' || Array.isArray(properties))) {
       errors.outputContract = 'Output contract properties must be a JSON object.'
-    } else if (outputBindingMode === 'PRIMARY') {
-      const propertyKeys = properties && typeof properties === 'object'
+    } else if (outputBindingMode === 'PRIMARY' && primaryOutputKey !== '$root') {
+      const propertyKeys = properties && typeof properties === 'object' && !Array.isArray(properties)
         ? Object.keys(properties).filter(Boolean)
         : []
+      const isStructured = isContractStructured(contractValue)
 
       if (propertyKeys.length === 0) {
-        errors.primaryOutputKey = 'Define output contract properties to select a primary output key.'
+        errors.primaryOutputKey = 'Select $root to bind the full output object, or define output contract properties for field-level binding.'
+      } else if (!isStructured) {
+        errors.primaryOutputKey = 'Unstructured output contracts only support $root selection.'
       } else if (primaryOutputKey && !propertyKeys.includes(primaryOutputKey)) {
-        errors.primaryOutputKey = 'Primary output key must be one of the Output Contract properties.'
+        errors.primaryOutputKey = 'Primary output selection must be $root or one of the Output Contract properties.'
       }
     }
   }

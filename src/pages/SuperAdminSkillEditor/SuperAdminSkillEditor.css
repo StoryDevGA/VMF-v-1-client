@@ -187,6 +187,46 @@
   color: var(--color-text-primary);
 }
 
+.super-admin-skill-editor__contract-helper {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-skill-editor__contract-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-xs);
+  margin-inline-end: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.super-admin-skill-editor__contract-pill + span {
+  margin-inline-start: var(--spacing-sm);
+}
+
+.super-admin-skill-editor__contract-pill--structured {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.super-admin-skill-editor__contract-pill--unstructured {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.super-admin-skill-editor__contract-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
 .super-admin-skill-editor__dependency-label {
   font-weight: 600;
   font-size: var(--font-size-sm);

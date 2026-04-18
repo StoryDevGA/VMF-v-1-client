@@ -134,6 +134,8 @@
   font-size: 0.875rem;
   color: var(--color-text-secondary);
   margin-top: 0.25rem;
+  /* Intentional non-token tweak: aligns helper spacing with compact form layouts. */
+  margin-bottom: 0.35rem;
 }
 
 /* Disabled state */
