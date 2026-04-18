@@ -1,0 +1,319 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Button } from '../../components/Button'
+import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
+import { Input } from '../../components/Input'
+import { Select } from '../../components/Select'
+import { Spinner } from '../../components/Spinner'
+import { Textarea } from '../../components/Textarea'
+import { useToaster } from '../../components/Toaster'
+import {
+  useCreateSkillRoleMutation,
+  useGetSkillRoleQuery,
+  useUpdateSkillRoleMutation,
+} from '../../store/api/runtimeControlApi.js'
+import { normalizeError } from '../../utils/errors.js'
+import {
+  SKILL_ROLE_REGISTRY_STATUSES,
+} from '../SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
+import '../SuperAdminSkillRoleRegistry/SkillRoleRegistryListView.css'
+import './SuperAdminSkillRoleEditor.css'
+
+const ROLE_KEY_REGEX = /^[A-Z][A-Z0-9_]*$/
+
+const INITIAL_SKILL_ROLE_FORM = Object.freeze({
+  roleKey: '',
+  label: '',
+  description: '',
+  status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+  isSystem: false,
+})
+
+const shallowEqualObject = (left, right) => {
+  if (left === right) return true
+  if (!left || !right) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => left[key] === right[key])
+}
+
+const validateSkillRoleForm = (form) => {
+  const errors = {}
+
+  const roleKey = String(form.roleKey ?? '').trim()
+  if (!roleKey) {
+    errors.roleKey = 'Role key is required.'
+  } else if (!ROLE_KEY_REGEX.test(roleKey.toUpperCase())) {
+    errors.roleKey = 'Role key must use uppercase letters, numbers, or underscores.'
+  }
+
+  if (!String(form.label ?? '').trim()) {
+    errors.label = 'Label is required.'
+  }
+
+  if (!String(form.description ?? '').trim()) {
+    errors.description = 'Description is required.'
+  }
+
+  if (!String(form.status ?? '').trim()) {
+    errors.status = 'Status is required.'
+  }
+
+  return errors
+}
+
+function SkillRoleEditorLoadingState({ isEditMode }) {
+  return (
+    <Card variant="elevated" className="super-admin-skill-role-registry__card">
+      <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
+        <Spinner size="lg" />
+        <p className="super-admin-skill-role-editor__helper">
+          {isEditMode ? 'Loading skill role details...' : 'Preparing editor...'}
+        </p>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function SuperAdminSkillRoleEditor() {
+  const navigate = useNavigate()
+  const { roleId = '' } = useParams()
+  const { addToast } = useToaster()
+  const isEditMode = Boolean(roleId)
+
+  const [form, setForm] = useState(INITIAL_SKILL_ROLE_FORM)
+  const [errors, setErrors] = useState({})
+  const [errorsSource, setErrorsSource] = useState(null) // 'client' | 'server' | null
+
+  const {
+    data: roleResponse,
+    isLoading: isRoleLoading,
+    error: roleError,
+  } = useGetSkillRoleQuery(roleId, { skip: !isEditMode })
+
+  const loadedRole = roleResponse?.data ?? null
+  const roleAppError = roleError ? normalizeError(roleError) : null
+
+  const [createSkillRole, { isLoading: isCreating }] = useCreateSkillRoleMutation()
+  const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
+
+  const liveErrors = useMemo(() => validateSkillRoleForm(form), [form])
+  const isSaving = isCreating || isUpdating
+
+  useEffect(() => {
+    if (!isEditMode) return
+    if (!loadedRole) return
+
+    setForm((current) => {
+      const next = {
+        roleKey: loadedRole.roleKey ?? '',
+        label: loadedRole.label ?? '',
+        description: loadedRole.description ?? '',
+        status: loadedRole.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+        isSystem: Boolean(loadedRole.isSystem),
+      }
+
+      return shallowEqualObject(current, next) ? current : next
+    })
+  }, [isEditMode, loadedRole])
+
+  const handleBack = useCallback(() => {
+    navigate('/super-admin/runtime-control/skill-roles')
+  }, [navigate])
+
+  const handleSubmit = useCallback(async (event) => {
+    event.preventDefault()
+
+    const clientErrors = validateSkillRoleForm(form)
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors)
+      setErrorsSource('client')
+      return
+    }
+
+    try {
+      if (isEditMode) {
+        const res = await updateSkillRole({
+          roleId,
+          label: form.label.trim(),
+          description: form.description.trim(),
+          status: String(form.status || '').trim(),
+        }).unwrap()
+
+        addToast({
+          variant: 'success',
+          title: 'Saved',
+          description: `Updated ${res?.data?.roleKey ?? 'skill role'}.`,
+        })
+      } else {
+        const res = await createSkillRole({
+          roleKey: form.roleKey.trim().toUpperCase(),
+          label: form.label.trim(),
+          description: form.description.trim(),
+          status: String(form.status || '').trim(),
+        }).unwrap()
+
+        addToast({
+          variant: 'success',
+          title: 'Role created',
+          description: `${res?.data?.roleKey ?? 'Skill role'} is now available in the Skill Role Registry.`,
+        })
+
+        setForm(INITIAL_SKILL_ROLE_FORM)
+        requestAnimationFrame(() => {
+          const el = document.getElementById('skill-role-editor-role-key')
+          if (el && typeof el.focus === 'function') {
+            el.focus()
+          }
+        })
+      }
+
+      setErrors({})
+      setErrorsSource(null)
+    } catch (err) {
+      const appErr = normalizeError(err)
+      const details = appErr?.details
+      if (details && typeof details === 'object') {
+        setErrors(details)
+        setErrorsSource('server')
+      } else {
+        addToast({ variant: 'error', title: 'Save failed', description: appErr.message })
+      }
+    }
+  }, [addToast, createSkillRole, form, isEditMode, roleId, updateSkillRole])
+
+  if (isEditMode && isRoleLoading) {
+    return <SkillRoleEditorLoadingState isEditMode />
+  }
+
+  if (isEditMode && roleAppError) {
+    return (
+      <Card variant="elevated" className="super-admin-skill-role-registry__card">
+        <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
+          <p className="super-admin-skill-role-editor__error" role="alert">
+            {roleAppError.message}
+          </p>
+          <div className="super-admin-skill-role-editor__top-actions">
+            <Button variant="outline" size="sm" onClick={handleBack}>
+              Back
+            </Button>
+          </div>
+        </Card.Body>
+      </Card>
+    )
+  }
+
+  const canSave = Object.keys(liveErrors).length === 0 && !isSaving
+  const roleKeyIsRequired = !isEditMode
+  const statusIsRequired = true
+
+  return (
+    <section className="super-admin-skill-role-registry container" aria-label="Skill role editor">
+      <header className="super-admin-skill-role-registry__header">
+        <h1 className="super-admin-skill-role-registry__title">{isEditMode ? 'Edit Skill Role' : 'Create Skill Role'}</h1>
+        <p className="super-admin-skill-role-registry__subtitle">
+          Skill Roles classify execution responsibility and are referenced by Skills.
+        </p>
+      </header>
+
+      <Fieldset className="super-admin-skill-role-registry__fieldset">
+        <Fieldset.Legend className="sr-only">Skill role editor</Fieldset.Legend>
+        <Card variant="elevated" className="super-admin-skill-role-registry__card">
+          <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
+            <div className="super-admin-skill-role-editor__top-actions">
+              <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+                Back
+              </Button>
+            </div>
+
+            <form onSubmit={handleSubmit} aria-label="Skill role form">
+              <div className="super-admin-skill-role-editor__row">
+                <div className="super-admin-skill-role-editor__field">
+                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-role-key">
+                    Role Key{roleKeyIsRequired ? <span className="input-label__required"> *</span> : null}
+                  </label>
+                  <Input
+                    id="skill-role-editor-role-key"
+                    value={form.roleKey}
+                    onChange={(event) => setForm((current) => ({ ...current, roleKey: event.target.value }))}
+                    error={errors.roleKey}
+                    helperText={isEditMode ? 'Role key is immutable after creation.' : 'Uppercase token, e.g. VALIDATOR.'}
+                    disabled={isEditMode}
+                    required={roleKeyIsRequired}
+                    fullWidth
+                  />
+                </div>
+
+                <div className="super-admin-skill-role-editor__field">
+                  <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-status">
+                    Status{statusIsRequired ? <span className="input-label__required"> *</span> : null}
+                  </label>
+                  <Select
+                    id="skill-role-editor-status"
+                    value={form.status}
+                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                    options={[
+                      { value: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE, label: 'ACTIVE' },
+                      { value: SKILL_ROLE_REGISTRY_STATUSES.INACTIVE, label: 'INACTIVE' },
+                      { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
+                    ]}
+                    error={errors.status}
+                    required={statusIsRequired}
+                  />
+                </div>
+              </div>
+
+              <div className="super-admin-skill-role-editor__field">
+                <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-label">
+                  Label<span className="input-label__required"> *</span>
+                </label>
+                <Input
+                  id="skill-role-editor-label"
+                  value={form.label}
+                  onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
+                  error={errors.label}
+                  required
+                  fullWidth
+                />
+              </div>
+
+              <div className="super-admin-skill-role-editor__field">
+                <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-description">
+                  Description<span className="input-label__required"> *</span>
+                </label>
+                <Textarea
+                  id="skill-role-editor-description"
+                  value={form.description}
+                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                  error={errors.description}
+                  required
+                  rows={4}
+                  fullWidth
+                />
+              </div>
+
+              {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
+                <p className="super-admin-skill-role-editor__error" role="alert">
+                  Review the highlighted fields and try again.
+                </p>
+              ) : null}
+
+              <div className="super-admin-skill-role-editor__footer-actions">
+                <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={!canSave}>
+                  {isEditMode ? 'Save Changes' : 'Create Role'}
+                </Button>
+              </div>
+            </form>
+          </Card.Body>
+        </Card>
+      </Fieldset>
+    </section>
+  )
+}
+
+export default SuperAdminSkillRoleEditor

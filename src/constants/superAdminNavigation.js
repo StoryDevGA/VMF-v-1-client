@@ -40,16 +40,17 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'frameworkPackages', 'agents', 'skills', 'runtimePaths', 'workflowPolicies']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'agents', 'workflowPolicies', 'frameworkPackages']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'frameworkRegistry',
-  'frameworkPackages',
-  'agents',
-  'skills',
   'runtimePaths',
+  'skillRoles',
+  'skills',
+  'agents',
   'workflowPolicies',
+  'frameworkPackages',
 ])
 
 const SUPER_ADMIN_DASHBOARD_GROUP_CATALOG = Object.freeze({
@@ -234,6 +235,16 @@ export const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       phase1aNav: 'Runtime Paths',
     }),
   }),
+  skillRoles: Object.freeze({
+    key: 'skill-roles',
+    to: '/super-admin/runtime-control/skill-roles',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Skill Roles',
+      legacyNav: 'Skill Roles',
+      phase1aNav: 'Skill Roles',
+    }),
+  }),
   workflowPolicies: Object.freeze({
     key: 'workflow-policies',
     to: '/super-admin/runtime-control/workflow-policies',
@@ -323,8 +334,6 @@ export function getLegacySuperAdminNavigationEntries() {
 export function getPhase1aSuperAdminNavigationEntries({ includePhase1bRoutes = false } = {}) {
   const runtimeControlLinks = getSuperAdminRoutes(
     [
-      ...(isSuperAdminRuntimeControlEnabled() ? ['runtimeControl'] : []),
-      ...PHASE_1A_GROUP_ROUTE_KEYS['runtime-control'],
       ...getEnabledRuntimeControlModuleRouteKeys(),
     ],
     {
@@ -400,9 +409,9 @@ function buildRuntimeControlDashboardGroup() {
       : 'Planned next',
     helperCopy: runtimeControlEnabled
       ? hasPlannedModuleRouteKeys
-        ? 'Framework Registry, Framework Packages, Agents, Skills, Runtime Paths, and Workflow Policies are now live from the Runtime Control dashboard.'
+        ? 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, and Framework Packages are now live from the Runtime Control dashboard.'
         : 'All Runtime Control catalogue surfaces are now live.'
-      : 'Framework Registry, Framework Packages, Agents, Skills, Runtime Paths, and Workflow Policies stay queued until the Runtime Control route group is enabled.',
+      : 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, and Framework Packages stay queued until the Runtime Control route group is enabled.',
   }
 }
 

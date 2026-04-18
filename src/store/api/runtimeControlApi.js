@@ -30,6 +30,13 @@ import {
   INITIAL_RUNTIME_PATH_REGISTRY,
   RUNTIME_PATH_REGISTRY_PAGE_SIZE,
 } from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
+import {
+  buildSkillRoleRegistryStableId,
+  cloneSkillRoleRegistryEntry,
+  INITIAL_SKILL_ROLE_REGISTRY,
+  SKILL_ROLE_REGISTRY_PAGE_SIZE,
+  SKILL_ROLE_REGISTRY_STATUSES,
+} from '../../pages/SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
 const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIST' }
@@ -37,6 +44,7 @@ const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
 const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
 const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
+const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
@@ -246,6 +254,7 @@ const buildInitialRuntimeControlState = () => ({
   frameworkRegistries: INITIAL_FRAMEWORK_REGISTRIES.map((entry) => cloneFrameworkRegistryEntry(entry)),
   frameworkPackages: INITIAL_FRAMEWORK_PACKAGES.map((pkg) => cloneFrameworkPackage(pkg)),
   runtimePaths: INITIAL_RUNTIME_PATH_REGISTRY.map((entry) => cloneRuntimePathRegistryEntry(entry)),
+  skillRoles: INITIAL_SKILL_ROLE_REGISTRY.map((entry) => cloneSkillRoleRegistryEntry(entry)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
@@ -412,6 +421,28 @@ const getRuntimePathRows = ({
     .map((entry) => cloneRuntimePathRegistryEntry(entry))
 }
 
+const getSkillRoleRows = ({
+  q = '',
+  status = '',
+} = {}) => {
+  const normalizedSearch = normalizeSearch(q)
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+
+  return runtimeControlState.skillRoles
+    .filter((role) => {
+      const matchesStatus = normalizedStatus ? role.status === normalizedStatus : true
+      const queryMatches = matchesSearch(normalizedSearch, [
+        role.roleKey,
+        role.label,
+        role.description,
+        role.status,
+      ])
+
+      return matchesStatus && queryMatches
+    })
+    .map((role) => cloneSkillRoleRegistryEntry(role))
+}
+
 const getRuntimeSkillRows = ({
   q = '',
   status = '',
@@ -542,6 +573,9 @@ const validateMockRuntimeAgent = (agent) => {
 
 const findRuntimeSkillById = (skillId) =>
   runtimeControlState.skills.find((skill) => skill.id === skillId)
+
+const findSkillRoleById = (roleId) =>
+  runtimeControlState.skillRoles.find((role) => role.id === roleId)
 
 const findWorkflowPolicyById = (policyId) =>
   runtimeControlState.workflowPolicies.find((policy) => policy.id === policyId)
@@ -1431,6 +1465,175 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    listSkillRoles: build.query({
+      queryFn: async (
+        { page = 1, pageSize = SKILL_ROLE_REGISTRY_PAGE_SIZE, q = '', status = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'skill-roles',
+              page,
+              pageSize,
+              q,
+              status,
+              defaultPageSize: SKILL_ROLE_REGISTRY_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const normalizedPage = normalizePositiveInteger(page, 1)
+        const normalizedPageSize = normalizePositiveInteger(pageSize, SKILL_ROLE_REGISTRY_PAGE_SIZE)
+        const rows = getSkillRoleRows({ q, status })
+
+        return {
+          data: buildListResponse({
+            rows,
+            page: normalizedPage,
+            pageSize: normalizedPageSize,
+            filters: {
+              q: String(q ?? '').trim(),
+              status: String(status ?? '').trim(),
+            },
+          }),
+        }
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: 'SkillRole', id })),
+              SKILL_ROLE_LIST_TAG,
+            ]
+          : [SKILL_ROLE_LIST_TAG],
+    }),
+
+    createSkillRole: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skill-roles',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload
+        const roleKey = String(runtimePayload.roleKey ?? '').trim().toUpperCase()
+
+        const duplicate = runtimeControlState.skillRoles.find(
+          (role) => String(role.roleKey ?? '').trim().toUpperCase() === roleKey,
+        )
+
+        if (duplicate) {
+          return buildConflictError('Role key must be unique.', {
+            roleKey: 'Role key must be unique.',
+          })
+        }
+
+        const createdRole = cloneSkillRoleRegistryEntry({
+          id: buildSkillRoleRegistryStableId(roleKey),
+          roleKey,
+          label: String(runtimePayload.label ?? '').trim(),
+          description: String(runtimePayload.description ?? '').trim(),
+          status: String(runtimePayload.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE).trim().toUpperCase(),
+          isSystem: false,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          skillRoles: [createdRole, ...runtimeControlState.skillRoles],
+        }
+
+        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(createdRole)) }
+      },
+      invalidatesTags: [SKILL_ROLE_LIST_TAG],
+    }),
+
+    getSkillRole: build.query({
+      queryFn: async (roleId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('skill-roles', roleId),
+            api,
+            extraOptions,
+          )
+        }
+
+        const role = findSkillRoleById(roleId)
+        if (!role) {
+          return buildNotFoundError('Skill role was not found.')
+        }
+
+        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(role)) }
+      },
+      providesTags: (_result, _error, roleId) => [
+        { type: 'SkillRole', id: roleId },
+      ],
+    }),
+
+    updateSkillRole: build.mutation({
+      queryFn: async ({ roleId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skill-roles',
+              entityId: roleId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload
+        const existingRole = findSkillRoleById(roleId)
+        if (!existingRole) {
+          return buildNotFoundError('Skill role was not found.')
+        }
+
+        if (runtimePayload.roleKey !== undefined) {
+          const nextRoleKey = String(runtimePayload.roleKey ?? '').trim().toUpperCase()
+          if (nextRoleKey && nextRoleKey !== String(existingRole.roleKey ?? '').trim().toUpperCase()) {
+            return buildValidationFailedError('Validation failed.', {
+              roleKey: 'Role key is immutable and cannot be changed after creation.',
+            })
+          }
+        }
+
+        const nextRole = cloneSkillRoleRegistryEntry({
+          ...existingRole,
+          ...(runtimePayload.label !== undefined ? { label: String(runtimePayload.label ?? '').trim() } : {}),
+          ...(runtimePayload.description !== undefined ? { description: String(runtimePayload.description ?? '').trim() } : {}),
+          ...(runtimePayload.status !== undefined ? { status: String(runtimePayload.status ?? '').trim().toUpperCase() } : {}),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          skillRoles: runtimeControlState.skillRoles.map((role) =>
+            role.id === roleId ? nextRole : role,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(nextRole)) }
+      },
+      invalidatesTags: (_result, _error, { roleId }) => [
+        SKILL_ROLE_LIST_TAG,
+        { type: 'SkillRole', id: roleId },
+      ],
+    }),
+
     listRuntimePaths: build.query({
       queryFn: async (
         {
@@ -1865,6 +2068,10 @@ export const {
   useActivateRuntimeAgentMutation,
   useDisableRuntimeAgentMutation,
   useDeprecateRuntimeAgentMutation,
+  useListSkillRolesQuery,
+  useCreateSkillRoleMutation,
+  useGetSkillRoleQuery,
+  useUpdateSkillRoleMutation,
   useListRuntimePathsQuery,
   useLazyListRuntimePathsQuery,
   useListRuntimeSkillsQuery,

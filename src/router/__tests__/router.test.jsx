@@ -616,6 +616,62 @@ describe('Router', () => {
       ).toBeInTheDocument()
     }, ROUTE_TEST_TIMEOUT)
 
+    it('should render the Skill Roles page at /super-admin/runtime-control/skill-roles for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/skill-roles'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-skill-roles-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /skill roles/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the Skill Role create page at /super-admin/runtime-control/skill-roles/new for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/skill-roles/new'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-skill-roles-new-1',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: /create skill role/i },
+          { timeout: 10000 },
+        ),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
     it('should render super-admin denied access logs page at /super-admin/denied-access-logs for super admins', async () => {
       const testRouter = createMemoryRouter(router.routes, {
         initialEntries: ['/super-admin/denied-access-logs'],
@@ -718,15 +774,18 @@ describe('Router', () => {
         'dashboard',
         'runtime-control',
         'runtime-control/framework-registry',
-        'runtime-control/framework-packages',
-        'runtime-control/agents',
-        'runtime-control/agents/new',
-        'runtime-control/agents/:agentId',
+        'runtime-control/runtime-paths',
+        'runtime-control/skill-roles',
+        'runtime-control/skill-roles/new',
+        'runtime-control/skill-roles/:roleId',
         'runtime-control/skills',
         'runtime-control/skills/new',
         'runtime-control/skills/:skillId',
-        'runtime-control/runtime-paths',
+        'runtime-control/agents',
+        'runtime-control/agents/new',
+        'runtime-control/agents/:agentId',
         'runtime-control/workflow-policies',
+        'runtime-control/framework-packages',
         'invitations',
         'license-levels',
         'roles',

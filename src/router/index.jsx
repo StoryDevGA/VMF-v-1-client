@@ -61,6 +61,12 @@ const SuperAdminWorkflowPolicies = lazy(
 const SuperAdminRuntimePathRegistry = lazy(
   () => import('../pages/SuperAdminRuntimePathRegistry'),
 )
+const SuperAdminSkillRoleRegistry = lazy(
+  () => import('../pages/SuperAdminSkillRoleRegistry'),
+)
+const SuperAdminSkillRoleEditor = lazy(
+  () => import('../pages/SuperAdminSkillRoleEditor'),
+)
 const SuperAdminLicenseLevels = lazy(
   () => import('../pages/SuperAdminLicenseLevels'),
 )
@@ -278,18 +284,42 @@ export const router = createBrowserRouter([
           },
           ...(isSuperAdminRuntimeControlEnabled()
             ? [
-              {
-                path: 'runtime-control',
-                element: <SuperAdminRuntimeControl />,
-              },
-              {
-                path: 'runtime-control/framework-registry',
-                element: <SuperAdminFrameworkRegistry />,
-              },
-              {
-                path: 'runtime-control/framework-packages',
-                element: <SuperAdminFrameworkPackages />,
-              },
+                {
+                  path: 'runtime-control',
+                  element: <SuperAdminRuntimeControl />,
+                },
+                {
+                  path: 'runtime-control/framework-registry',
+                  element: <SuperAdminFrameworkRegistry />,
+                },
+                {
+                  path: 'runtime-control/runtime-paths',
+                  element: <SuperAdminRuntimePathRegistry />,
+                },
+                {
+                  path: 'runtime-control/skill-roles',
+                  element: <SuperAdminSkillRoleRegistry />,
+                },
+                {
+                  path: 'runtime-control/skill-roles/new',
+                  element: <SuperAdminSkillRoleEditor />,
+                },
+                {
+                  path: 'runtime-control/skill-roles/:roleId',
+                  element: <SuperAdminSkillRoleEditor />,
+                },
+                {
+                  path: 'runtime-control/skills',
+                  element: <SuperAdminSkills />,
+                },
+                {
+                  path: 'runtime-control/skills/new',
+                  element: <SuperAdminSkillEditor />,
+                },
+                {
+                  path: 'runtime-control/skills/:skillId',
+                  element: <SuperAdminSkillEditor />,
+                },
                 {
                   path: 'runtime-control/agents',
                   element: <SuperAdminAgents />,
@@ -303,24 +333,12 @@ export const router = createBrowserRouter([
                   element: <SuperAdminAgentEditor />,
                 },
                 {
-                  path: 'runtime-control/skills',
-                  element: <SuperAdminSkills />,
-                },
-                {
-                  path: 'runtime-control/skills/new',
-                  element: <SuperAdminSkillEditor />,
-                },
-              {
-                path: 'runtime-control/skills/:skillId',
-                element: <SuperAdminSkillEditor />,
-              },
-              {
-                path: 'runtime-control/runtime-paths',
-                element: <SuperAdminRuntimePathRegistry />,
-              },
-                {
                   path: 'runtime-control/workflow-policies',
                   element: <SuperAdminWorkflowPolicies />,
+                },
+                {
+                  path: 'runtime-control/framework-packages',
+                  element: <SuperAdminFrameworkPackages />,
                 },
               ]
             : []),

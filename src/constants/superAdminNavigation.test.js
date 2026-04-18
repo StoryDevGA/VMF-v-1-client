@@ -49,14 +49,13 @@ describe('superAdminNavigation', () => {
       'Roles and Permissions',
     ])
     expect(entries[1].links.map((link) => link.label)).toEqual([
-      'Runtime Control',
-      'System Versioning',
       'Framework Registry',
-      'Framework Packages',
-      'Agents',
-      'Skills',
       'Runtime Paths',
+      'Skill Roles',
+      'Skills',
+      'Agents',
       'Workflow Policies',
+      'Framework Packages',
     ])
     expect(entries[2].links.map((link) => link.label)).toEqual([
       'Monitoring',
@@ -100,11 +99,12 @@ describe('superAdminNavigation', () => {
       'Runtime Control',
       'System Versioning',
       'Framework Registry',
-      'Framework Packages',
-      'Agents',
-      'Skills',
       'Runtime Paths',
+      'Skill Roles',
+      'Skills',
+      'Agents',
       'Workflow Policies',
+      'Framework Packages',
     ])
     expect(groups[1].upcomingLinks.map((link) => link.label)).toEqual([])
   })
