@@ -24,6 +24,19 @@ import {
 } from '../SuperAdminSkills/superAdminSkills.constants.js'
 import './RuntimeAgentDialogs.css'
 
+const EXECUTION_TARGET_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
+
+// Tab indices for RuntimeAgentEditor dialog
+const AGENT_TAB_INDICES = Object.freeze({
+  FRAMEWORK: 0,
+  SKILLS: 1,
+  EXECUTION: 2,
+  PROMPTS: 3,
+  CONTRACTS: 4,
+  RUNTIME: 5,
+  DEPENDENCIES: 6,
+})
+
 function RuntimeAgentFrameworkField({ prefix, form, setForm, errors, frameworkOptions = [] }) {
   const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
   const selectedFrameworkKeys = useMemo(
@@ -140,6 +153,89 @@ function compilePromptPreview(form) {
   return blocks
     .map((block) => `## ${block.label}\n\n${block.value}`)
     .join('\n\n')
+}
+
+function formatRuntimeSkillExecutionMode(value) {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return ''
+
+  return normalized.replace(/_/g, ' ')
+}
+
+function getExecutionPlanSkillOptionLabel(skill, fallbackSkillId) {
+  const frameworks = Array.isArray(skill?.supportedFrameworkKeys) ? skill.supportedFrameworkKeys : []
+  const frameworkLabel = frameworks.length > 0 ? ` [${frameworks.join(', ')}]` : ''
+  const executionMode = formatRuntimeSkillExecutionMode(skill?.executionMode)
+  const executionModeLabel = executionMode ? ` [${executionMode}]` : ''
+  const status = String(skill?.status ?? '').trim().toUpperCase()
+  const statusLabel = status ? ` [${status}]` : ''
+
+  return `${skill?.name ?? fallbackSkillId} (${skill?.key ?? fallbackSkillId})${frameworkLabel}${executionModeLabel}${statusLabel}`
+}
+
+function buildExecutionPlanDiagnostics({
+  executionPlan = [],
+  assignedSkillIds = [],
+  skillLookup = {},
+  supportedFrameworkKeySet = new Set(),
+}) {
+  const diagnostics = []
+  const seenSkillIds = new Set()
+  const assignedSkillIdSet = new Set(assignedSkillIds)
+
+  if (executionPlan.length === 0) {
+    diagnostics.push('Add at least one execution step.')
+    return diagnostics
+  }
+
+  executionPlan.forEach((step, index) => {
+    const stepNumber = index + 1
+    const skillId = normalizeAgentKey(step?.skillId)
+    const writesTo = String(step?.writesTo ?? '').trim()
+
+    if (!skillId) {
+      diagnostics.push(`Step ${stepNumber} is missing a governed skill selection.`)
+      return
+    }
+
+    if (seenSkillIds.has(skillId)) {
+      diagnostics.push(`Step ${stepNumber} duplicates skill "${skillId}".`)
+    } else {
+      seenSkillIds.add(skillId)
+    }
+
+    if (!assignedSkillIdSet.has(skillId)) {
+      diagnostics.push(`Step ${stepNumber} uses unassigned skill "${skillId}".`)
+    }
+
+    if (writesTo && !EXECUTION_TARGET_PATTERN.test(writesTo)) {
+      diagnostics.push(`Step ${stepNumber} has invalid Writes To target "${writesTo}".`)
+    }
+
+    const skill = skillLookup[skillId]
+    if (!skill) {
+      diagnostics.push(`Step ${stepNumber} uses unknown skill "${skillId}".`)
+      return
+    }
+
+    const skillStatus = String(skill?.status ?? '').trim().toUpperCase()
+    if (skillStatus !== RUNTIME_SKILL_STATUSES.ACTIVE) {
+      diagnostics.push(`Step ${stepNumber} uses ${skillStatus || 'non-active'} skill "${skillId}".`)
+    }
+
+    if (supportedFrameworkKeySet.size > 0) {
+      const skillFrameworkKeys = Array.isArray(skill?.supportedFrameworkKeys)
+        ? skill.supportedFrameworkKeys.map((frameworkKey) => String(frameworkKey ?? '').trim().toUpperCase()).filter(Boolean)
+        : []
+      const isCompatible = skillFrameworkKeys.some((frameworkKey) => supportedFrameworkKeySet.has(frameworkKey))
+
+      if (!isCompatible) {
+        diagnostics.push(`Step ${stepNumber} uses framework-incompatible skill "${skillId}".`)
+      }
+    }
+  })
+
+  return [...new Set(diagnostics)]
 }
 
 function RuntimeAgentSection({ title, copy, children, className = '' }) {
@@ -578,14 +674,45 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       .filter((skillId) => !planSkillIdSet.has(skillId))
       .map((skillId) => {
         const skill = skillLookup[skillId]
-        const frameworks = Array.isArray(skill?.supportedFrameworkKeys) ? skill.supportedFrameworkKeys : []
-        const frameworkLabel = frameworks.length > 0 ? ` [${frameworks.join(', ')}]` : ''
         return {
           value: skillId,
-          label: `${skill?.name ?? skillId} (${skill?.key ?? skillId})${frameworkLabel}`,
+          label: getExecutionPlanSkillOptionLabel(skill, skillId),
         }
       })
   }, [eligibleAssignedSkillIds, planSkillIdSet, skillLookup])
+
+  const executionPlanDiagnostics = useMemo(
+    () =>
+      buildExecutionPlanDiagnostics({
+        executionPlan,
+        assignedSkillIds,
+        skillLookup,
+        supportedFrameworkKeySet,
+      }),
+    [assignedSkillIds, executionPlan, skillLookup, supportedFrameworkKeySet],
+  )
+
+  const executionSummary = useMemo(() => {
+    const frameworkList = supportedFrameworkKeys.length > 0 ? supportedFrameworkKeys.join(', ') : 'None selected'
+    const orderedSteps = executionPlan
+      .map((step) => {
+        const skillId = normalizeAgentKey(step?.skillId)
+        const skill = skillId ? skillLookup[skillId] : null
+        return skill?.name ?? skillId
+      })
+      .filter(Boolean)
+    const writesToTargets = executionPlan
+      .map((step) => String(step?.writesTo ?? '').trim())
+      .filter(Boolean)
+
+    return {
+      frameworks: frameworkList,
+      assignedSkillsUsed: normalizedPlanSkillIds.length,
+      estimatedFlow: orderedSteps.length > 0 ? orderedSteps.join(' -> ') : 'No steps configured yet',
+      writesToTargets: writesToTargets.length > 0 ? writesToTargets.join(', ') : 'No explicit outputs mapped',
+      isValid: executionPlanDiagnostics.length === 0,
+    }
+  }, [executionPlan, executionPlanDiagnostics.length, normalizedPlanSkillIds.length, skillLookup, supportedFrameworkKeys])
 
   const handleAddStep = () => {
     const normalized = normalizeAgentKey(pendingStepSkillId)
@@ -595,7 +722,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       ...current,
       executionPlan: [
         ...(Array.isArray(current.executionPlan) ? current.executionPlan : []),
-        { skillId: normalized, description: '' },
+        { skillId: normalized, description: '', writesTo: '' },
       ],
     }))
     setPendingStepSkillId('')
@@ -659,13 +786,11 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
           const optionPool = new Map(
             eligibleAssignedSkillIds.map((skillId) => {
               const skill = skillLookup[skillId]
-              const frameworks = Array.isArray(skill?.supportedFrameworkKeys) ? skill.supportedFrameworkKeys : []
-              const frameworkLabel = frameworks.length > 0 ? ` [${frameworks.join(', ')}]` : ''
               return [
                 skillId,
                 {
                   value: skillId,
-                  label: `${skill?.name ?? skillId} (${skill?.key ?? skillId})${frameworkLabel}`,
+                  label: getExecutionPlanSkillOptionLabel(skill, skillId),
                 },
               ]
             }),
@@ -674,35 +799,62 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
           if (normalized && !optionPool.has(normalized)) {
             optionPool.set(normalized, {
               value: normalized,
-              label: currentSkill ? `${currentSkill.name} (${currentSkill.key})` : normalized,
+              label: currentSkill ? getExecutionPlanSkillOptionLabel(currentSkill, normalized) : normalized,
             })
           }
 
           const options = [...optionPool.values()]
+          const skillFrameworks = Array.isArray(currentSkill?.supportedFrameworkKeys)
+            ? currentSkill.supportedFrameworkKeys
+            : []
+          const executionMode = formatRuntimeSkillExecutionMode(currentSkill?.executionMode)
+          const skillStatus = String(currentSkill?.status ?? '').trim().toUpperCase()
 
           return (
-            <Select
-              id={`${prefix}-execution-step-${row.stepNumber}-skill`}
-              size="sm"
-              value={normalized || ''}
-              options={options}
-              placeholder={supportedFrameworkKeySet.size === 0 ? 'Select a framework first' : 'Select a skill'}
-              disabled={supportedFrameworkKeySet.size === 0 || options.length === 0}
-              onChange={(event) =>
-                handleUpdateStep(row.stepNumber - 1, {
-                  skillId: normalizeAgentKey(event.target.value),
-                  description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
-                })
-              }
-              aria-label={`Execution plan skill for step ${row.stepNumber}`}
-            />
+            <div className="super-admin-agents__execution-skill-cell">
+              <Select
+                id={`${prefix}-execution-step-${row.stepNumber}-skill`}
+                size="sm"
+                value={normalized || ''}
+                options={options}
+                placeholder={supportedFrameworkKeySet.size === 0 ? 'Select a framework first' : 'Select a skill'}
+                disabled={supportedFrameworkKeySet.size === 0 || options.length === 0}
+                onChange={(event) =>
+                  handleUpdateStep(row.stepNumber - 1, {
+                    skillId: normalizeAgentKey(event.target.value),
+                    description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
+                    writesTo: String(executionPlan[row.stepNumber - 1]?.writesTo ?? ''),
+                  })
+                }
+                aria-label={`Execution plan skill for step ${row.stepNumber}`}
+              />
+              {currentSkill ? (
+                <div className="super-admin-agents__execution-meta">
+                  {skillFrameworks.length > 0 ? (
+                    <Badge variant="primary" size="sm" outline>
+                      {skillFrameworks.join(', ')}
+                    </Badge>
+                  ) : null}
+                  {executionMode ? (
+                    <Badge variant="info" size="sm" outline>
+                      {executionMode}
+                    </Badge>
+                  ) : null}
+                  {skillStatus ? (
+                    <Badge variant={getRuntimeSkillStatusVariant(skillStatus)} size="sm" outline>
+                      {formatRuntimeSkillStatus(skillStatus)}
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           )
         },
       },
       {
         key: 'description',
-        label: 'Description',
-        mobileLabel: 'Description',
+        label: 'Execution Purpose',
+        mobileLabel: 'Execution Purpose',
         render: (value, row) => (
           <Input
             id={`${prefix}-execution-step-${row.stepNumber}-description`}
@@ -713,9 +865,32 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
               handleUpdateStep(row.stepNumber - 1, {
                 skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
                 description: event.target.value,
+                writesTo: String(executionPlan[row.stepNumber - 1]?.writesTo ?? ''),
               })
             }
-            aria-label={`Execution plan description for step ${row.stepNumber}`}
+            aria-label={`Execution purpose for step ${row.stepNumber}`}
+            fullWidth
+          />
+        ),
+      },
+      {
+        key: 'writesTo',
+        label: 'Writes To',
+        mobileLabel: 'Writes To',
+        render: (value, row) => (
+          <Input
+            id={`${prefix}-execution-step-${row.stepNumber}-writes-to`}
+            size="sm"
+            value={String(value ?? '')}
+            placeholder="Optional context key"
+            onChange={(event) =>
+              handleUpdateStep(row.stepNumber - 1, {
+                skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
+                description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
+                writesTo: event.target.value,
+              })
+            }
+            aria-label={`Writes to target for step ${row.stepNumber}`}
             fullWidth
           />
         ),
@@ -779,6 +954,57 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       title="Execution Plan"
       copy="Define how the agent orchestrates skills. Steps are sequential and must be unique in V1."
     >
+      <div className="super-admin-agents__execution-summary" aria-label="Execution plan summary">
+        <div className="super-admin-agents__execution-summary-item">
+          <p className="super-admin-agents__execution-summary-label">Frameworks</p>
+          <p className="super-admin-agents__execution-summary-value">{executionSummary.frameworks}</p>
+        </div>
+        <div className="super-admin-agents__execution-summary-item">
+          <p className="super-admin-agents__execution-summary-label">Assigned Skills Used</p>
+          <p className="super-admin-agents__execution-summary-value">{executionSummary.assignedSkillsUsed}</p>
+        </div>
+        <div className="super-admin-agents__execution-summary-item">
+          <p className="super-admin-agents__execution-summary-label">Plan Validity</p>
+          <p className="super-admin-agents__execution-summary-value">
+            {executionSummary.isValid ? 'Valid' : 'Needs attention'}
+          </p>
+        </div>
+        <div className="super-admin-agents__execution-summary-item super-admin-agents__execution-summary-item--wide">
+          <p className="super-admin-agents__execution-summary-label">Estimated Flow</p>
+          <p className="super-admin-agents__execution-summary-value">{executionSummary.estimatedFlow}</p>
+        </div>
+        <div className="super-admin-agents__execution-summary-item super-admin-agents__execution-summary-item--wide">
+          <p className="super-admin-agents__execution-summary-label">Writes To Targets</p>
+          <p className="super-admin-agents__execution-summary-value">{executionSummary.writesToTargets}</p>
+        </div>
+      </div>
+
+      <div
+        className={`super-admin-agents__execution-banner ${
+          executionPlanDiagnostics.length > 0
+            ? 'super-admin-agents__execution-banner--danger'
+            : 'super-admin-agents__execution-banner--success'
+        }`}
+        role="status"
+      >
+        <p className="super-admin-agents__execution-banner-title">
+          {executionPlanDiagnostics.length > 0
+            ? `${executionPlanDiagnostics.length} execution plan issue${executionPlanDiagnostics.length === 1 ? '' : 's'} found`
+            : 'All current execution steps are valid.'}
+        </p>
+        {executionPlanDiagnostics.length > 0 ? (
+          <ul className="super-admin-agents__execution-banner-list">
+            {executionPlanDiagnostics.map((diagnostic) => (
+              <li key={diagnostic} className="super-admin-agents__execution-banner-item">{diagnostic}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="super-admin-agents__execution-banner-copy">
+            Active, assigned, framework-compatible skills are ready to run in order.
+          </p>
+        )}
+      </div>
+
       <div className="super-admin-agents__skill-picker-controls">
         <Select
           id={`${prefix}-execution-add-skill`}
@@ -1131,6 +1357,46 @@ function RuntimeAgentDependenciesSection({
   )
 }
 
+function RuntimeAgentDependencyNotice({ dependencies, onOpenDependencies }) {
+  const warnings = Array.isArray(dependencies?.warnings) ? dependencies.warnings : []
+  const blocks = Array.isArray(dependencies?.blocks) ? dependencies.blocks : []
+  const summary = dependencies?.summary ?? {}
+  const hasWarnings = warnings.length > 0 || blocks.length > 0
+
+  if (!hasWarnings) return null
+
+  const activeReferenceCount =
+    Number(summary.activeWorkflowPolicies ?? 0) + Number(summary.activeFrameworkPackages ?? 0)
+
+  return (
+    <div className="super-admin-agents__dependency-notice" role="alert">
+      <div className="super-admin-agents__dependency-notice-header">
+        <div>
+          <p className="super-admin-agents__dependency-notice-title">Dependency warnings</p>
+          <p className="super-admin-agents__dependency-notice-copy">
+            This agent is referenced by {activeReferenceCount} active runtime-control resource{activeReferenceCount === 1 ? '' : 's'}.
+          </p>
+        </div>
+        {typeof onOpenDependencies === 'function' ? (
+          <Button type="button" variant="outline" size="sm" onClick={onOpenDependencies}>
+            Open Dependencies Tab
+          </Button>
+        ) : null}
+      </div>
+      {warnings.length > 0 ? (
+        <ul className="super-admin-agents__dependency-list">
+          {warnings.map((warning) => (
+            <li key={warning} className="super-admin-agents__dependency-item">{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      {blocks.length > 0 ? (
+        <p className="super-admin-agents__dependency-blocked">{blocks[0]}</p>
+      ) : null}
+    </div>
+  )
+}
+
 export function RuntimeAgentFormFields({
   prefix,
   isEditMode = false,
@@ -1175,6 +1441,12 @@ export function RuntimeAgentFormFields({
   return (
     <div className="super-admin-agents__dialog-body">
       <RuntimeAgentOverviewSection prefix={prefix} form={form} setForm={setForm} errors={errors} />
+      {isEditMode ? (
+        <RuntimeAgentDependencyNotice
+          dependencies={dependencies}
+          onOpenDependencies={() => onTabChange?.(AGENT_TAB_INDICES.DEPENDENCIES)}
+        />
+      ) : null}
 
       <TabView
         variant="pills"
