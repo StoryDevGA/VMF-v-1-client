@@ -445,6 +445,7 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, category: event.target.value }))
                     }
                     error={errors.category}
+                    helperText="Governed business category for this skill."
                   />
                   <Select
                     id="runtime-skill-editor-type"
@@ -456,6 +457,7 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, type: event.target.value }))
                     }
                     error={errors.type}
+                    helperText="Behavior type: deterministic, agent-assisted, or hybrid."
                   />
                   <Select
                     id="runtime-skill-editor-execution-mode"
@@ -467,6 +469,7 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, executionMode: event.target.value }))
                     }
                     error={errors.executionMode}
+                    helperText="Runtime engine: System, Rule Engine, or Agent."
                   />
                   <Select
                     id="runtime-skill-editor-skill-role"
