@@ -39,6 +39,7 @@ describe('SuperAdminAgentEditor page', () => {
 
     expect(screen.getByRole('heading', { name: /^create agent$/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^overview$/i })).toBeInTheDocument()
+    expect(screen.queryByText(/vmf_state/i)).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^framework compatibility$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^skill composition$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^execution plan$/i })).toBeInTheDocument()
@@ -83,6 +84,22 @@ describe('SuperAdminAgentEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /^skill composition$/i }))
     expect(
+      screen.getByLabelText(/^required skill roles$/i, {
+        selector: 'select#runtime-agent-create-required-role-select',
+      }),
+    ).toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByLabelText(/^required skill roles$/i, {
+        selector: 'select#runtime-agent-create-required-role-select',
+      }),
+      'VALIDATOR',
+    )
+    await user.click(screen.getByRole('button', { name: /add role/i }))
+
+    expect(screen.getByText('VALIDATOR')).toBeInTheDocument()
+
+    expect(
       screen.getByLabelText(/^skill selector$/i, {
         selector: 'select#runtime-agent-create-skill-select',
       }),
@@ -118,11 +135,11 @@ describe('SuperAdminAgentEditor page', () => {
       'skill-summary',
     )
     await user.click(screen.getByRole('button', { name: /^add step$/i }))
-    await user.type(
-      screen.getByLabelText(/^writes to target for step 1$/i, {
-        selector: 'input#runtime-agent-create-execution-step-1-writes-to',
+    await user.selectOptions(
+      screen.getByLabelText(/^writes to for step 1$/i, {
+        selector: 'select#runtime-agent-create-execution-step-1-writes-to',
       }),
-      'vmfSnapshot',
+      'runtime.validationResult',
     )
 
     expect(screen.getByText(/^estimated flow$/i)).toBeInTheDocument()

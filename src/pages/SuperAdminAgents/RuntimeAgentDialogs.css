@@ -186,6 +186,18 @@
   min-height: 56px;
 }
 
+.super-admin-agents__token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-agents__token-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
 .super-admin-agents__execution-actions {
   display: flex;
   gap: var(--spacing-xs);

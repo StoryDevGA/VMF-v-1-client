@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -86,6 +88,7 @@ function SuperAdminSkillRoleEditor() {
   const [form, setForm] = useState(INITIAL_SKILL_ROLE_FORM)
   const [errors, setErrors] = useState({})
   const [errorsSource, setErrorsSource] = useState(null) // 'client' | 'server' | null
+  const [pendingDeprecationWarning, setPendingDeprecationWarning] = useState(false)
 
   const {
     data: roleResponse,
@@ -101,6 +104,7 @@ function SuperAdminSkillRoleEditor() {
 
   const liveErrors = useMemo(() => validateSkillRoleForm(form), [form])
   const isSaving = isCreating || isUpdating
+  const roleUsageCount = Number(loadedRole?.usageCount) || 0
 
   useEffect(() => {
     if (!isEditMode) return
@@ -119,17 +123,24 @@ function SuperAdminSkillRoleEditor() {
     })
   }, [isEditMode, loadedRole])
 
-  const handleBack = useCallback(() => {
-    navigate('/super-admin/runtime-control/skill-roles')
-  }, [navigate])
-
-  const handleSubmit = useCallback(async (event) => {
-    event.preventDefault()
-
+  const submitSkillRole = useCallback(async ({ bypassDeprecationWarning = false } = {}) => {
     const clientErrors = validateSkillRoleForm(form)
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors)
       setErrorsSource('client')
+      return
+    }
+
+    const nextStatus = String(form.status || '').trim().toUpperCase()
+    const currentStatus = String(loadedRole?.status || '').trim().toUpperCase()
+    const shouldWarnOnDeprecation = isEditMode
+      && nextStatus === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+      && currentStatus !== SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+      && roleUsageCount > 0
+      && !bypassDeprecationWarning
+
+    if (shouldWarnOnDeprecation) {
+      setPendingDeprecationWarning(true)
       return
     }
 
@@ -139,7 +150,7 @@ function SuperAdminSkillRoleEditor() {
           roleId,
           label: form.label.trim(),
           description: form.description.trim(),
-          status: String(form.status || '').trim(),
+          status: nextStatus,
         }).unwrap()
 
         addToast({
@@ -152,7 +163,7 @@ function SuperAdminSkillRoleEditor() {
           roleKey: form.roleKey.trim().toUpperCase(),
           label: form.label.trim(),
           description: form.description.trim(),
-          status: String(form.status || '').trim(),
+          status: nextStatus,
         }).unwrap()
 
         addToast({
@@ -170,6 +181,7 @@ function SuperAdminSkillRoleEditor() {
         })
       }
 
+      setPendingDeprecationWarning(false)
       setErrors({})
       setErrorsSource(null)
     } catch (err) {
@@ -182,7 +194,33 @@ function SuperAdminSkillRoleEditor() {
         addToast({ variant: 'error', title: 'Save failed', description: appErr.message })
       }
     }
-  }, [addToast, createSkillRole, form, isEditMode, roleId, updateSkillRole])
+  }, [
+    addToast,
+    createSkillRole,
+    form,
+    isEditMode,
+    loadedRole?.status,
+    roleId,
+    roleUsageCount,
+    updateSkillRole,
+  ])
+
+  const handleBack = useCallback(() => {
+    navigate('/super-admin/runtime-control/skill-roles')
+  }, [navigate])
+
+  const handleSubmit = useCallback(async (event) => {
+    event.preventDefault()
+    await submitSkillRole()
+  }, [submitSkillRole])
+
+  const closeDeprecationWarning = useCallback(() => {
+    setPendingDeprecationWarning(false)
+  }, [])
+
+  const confirmDeprecationWarning = useCallback(async () => {
+    await submitSkillRole({ bypassDeprecationWarning: true })
+  }, [submitSkillRole])
 
   const canSave = Object.keys(liveErrors).length === 0 && !isSaving
   const roleKeyIsRequired = !isEditMode
@@ -225,6 +263,25 @@ function SuperAdminSkillRoleEditor() {
                 </Button>
               </div>
 
+              {isEditMode ? (
+                <div className="super-admin-skill-role-editor__summary" aria-label="Skill role summary">
+                  <div className="super-admin-skill-role-editor__summary-item">
+                    <span className="super-admin-skill-role-editor__summary-label">Usage Count</span>
+                    <strong>{roleUsageCount}</strong>
+                  </div>
+                  <div className="super-admin-skill-role-editor__summary-item">
+                    <span className="super-admin-skill-role-editor__summary-label">Role Type</span>
+                    {loadedRole?.isSystem ? (
+                      <Badge variant="info" size="sm" pill>
+                        SYSTEM
+                      </Badge>
+                    ) : (
+                      <span>Custom</span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <form onSubmit={handleSubmit} aria-label="Skill role form">
                 <div className="super-admin-skill-role-editor__row">
                   <div className="super-admin-skill-role-editor__field">
@@ -257,6 +314,11 @@ function SuperAdminSkillRoleEditor() {
                         { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
                       ]}
                       error={errors.status}
+                      helperText={
+                        roleUsageCount > 0 && form.status === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+                          ? `This role is currently referenced by ${roleUsageCount} skill(s).`
+                          : undefined
+                      }
                       required={statusIsRequired}
                     />
                   </div>
@@ -310,6 +372,26 @@ function SuperAdminSkillRoleEditor() {
           </Card>
         ) : null}
       </Fieldset>
+
+      <Dialog open={pendingDeprecationWarning} onClose={closeDeprecationWarning} size="sm">
+        <Dialog.Header>
+          <h2>Deprecate skill role?</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p>
+            {loadedRole?.roleKey ?? 'This skill role'} is still referenced by {roleUsageCount} skill(s).
+            Deprecating it will not remove those existing references.
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button variant="outline" onClick={closeDeprecationWarning} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={confirmDeprecationWarning} loading={isSaving}>
+            Deprecate Role
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 }

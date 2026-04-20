@@ -14,6 +14,14 @@ export const SKILL_ROLE_REGISTRY_STATUS_OPTIONS = Object.freeze([
   ...Object.values(SKILL_ROLE_REGISTRY_STATUSES).map((value) => ({ label: value, value })),
 ])
 
+export const SKILL_ROLE_REGISTRY_SORT_OPTIONS = Object.freeze([
+  { label: 'Recently Updated', value: 'updatedAt:desc' },
+  { label: 'Label (A-Z)', value: 'label:asc' },
+  { label: 'Label (Z-A)', value: 'label:desc' },
+  { label: 'Usage Count (High-Low)', value: 'usageCount:desc' },
+  { label: 'Usage Count (Low-High)', value: 'usageCount:asc' },
+])
+
 export const formatSkillRoleRegistryStatus = (value) =>
   String(value ?? '')
     .trim()

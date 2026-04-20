@@ -13,6 +13,7 @@ import {
 import {
   cloneRuntimeAgent,
   INITIAL_RUNTIME_AGENTS,
+  normalizePathSelectionList,
   RUNTIME_AGENT_PAGE_SIZE,
 } from '../../pages/SuperAdminAgents/superAdminAgents.constants.js'
 import {
@@ -59,6 +60,8 @@ const buildListParams = ({
   pageSize,
   q,
   status,
+  sortBy,
+  sortOrder,
   frameworkKey,
   frameworkKeys,
   scope,
@@ -73,6 +76,8 @@ const buildListParams = ({
   pageSize: normalizePositiveInteger(pageSize, defaultPageSize),
   q: String(q ?? '').trim(),
   status: String(status ?? '').trim(),
+  sortBy: String(sortBy ?? '').trim(),
+  sortOrder: String(sortOrder ?? '').trim().toLowerCase(),
   frameworkKey: normalizeFrameworkKey(frameworkKey),
   frameworkKeys: String(frameworkKeys ?? '').trim(),
   scope: String(scope ?? '').trim(),
@@ -89,6 +94,8 @@ export const buildRuntimeControlListRequest = ({
   pageSize,
   q,
   status,
+  sortBy,
+  sortOrder,
   frameworkKey,
   frameworkKeys,
   scope,
@@ -104,6 +111,8 @@ export const buildRuntimeControlListRequest = ({
     pageSize,
     q,
     status,
+    sortBy,
+    sortOrder,
     frameworkKey,
     frameworkKeys,
     scope,
@@ -122,6 +131,8 @@ export const buildRuntimeControlListRequest = ({
       pageSize: params.pageSize,
       ...(params.q ? { q: params.q } : {}),
       ...(params.status ? { status: params.status } : {}),
+      ...(params.sortBy ? { sortBy: params.sortBy } : {}),
+      ...(params.sortOrder ? { sortOrder: params.sortOrder } : {}),
       ...(params.frameworkKey ? { frameworkKey: params.frameworkKey } : {}),
       ...(params.frameworkKeys ? { frameworkKeys: params.frameworkKeys } : {}),
       ...(params.scope ? { scope: params.scope } : {}),
@@ -424,11 +435,14 @@ const getRuntimePathRows = ({
 const getSkillRoleRows = ({
   q = '',
   status = '',
+  sortBy = '',
+  sortOrder = '',
 } = {}) => {
   const normalizedSearch = normalizeSearch(q)
   const normalizedStatus = String(status ?? '').trim().toUpperCase()
 
-  return runtimeControlState.skillRoles
+  const rows = runtimeControlState.skillRoles
+    .map((role) => attachSkillRoleUsageCount(role))
     .filter((role) => {
       const matchesStatus = normalizedStatus ? role.status === normalizedStatus : true
       const queryMatches = matchesSearch(normalizedSearch, [
@@ -440,7 +454,8 @@ const getSkillRoleRows = ({
 
       return matchesStatus && queryMatches
     })
-    .map((role) => cloneSkillRoleRegistryEntry(role))
+
+  return sortSkillRoleRows(rows, { sortBy, sortOrder })
 }
 
 const getRuntimeSkillRows = ({
@@ -541,6 +556,18 @@ const validateMockRuntimeAgent = (agent) => {
   const supportedFrameworkKeys = Array.isArray(agent?.supportedFrameworkKeys)
     ? agent.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value)).filter(Boolean)
     : []
+  const supportedFrameworkKeySet = new Set(supportedFrameworkKeys)
+  const requiredSkillRoleKeys = Array.isArray(agent?.requiredSkillRoleKeys)
+    ? [...new Set(agent.requiredSkillRoleKeys.map((value) => String(value ?? '').trim().toUpperCase()).filter(Boolean))]
+    : []
+  const assignedSkillIds = [...new Set([
+    ...(Array.isArray(agent?.defaultSkillIds) ? agent.defaultSkillIds : []),
+    ...(Array.isArray(agent?.primarySkillIds) ? agent.primarySkillIds : []),
+    ...(Array.isArray(agent?.optionalSkillIds) ? agent.optionalSkillIds : []),
+  ].map((value) => String(value ?? '').trim()).filter(Boolean))]
+  const skillLookup = new Map(
+    runtimeControlState.skills.map((skill) => [String(skill.id ?? '').trim(), skill]).filter(([id]) => id),
+  )
 
   if (!String(agent?.key ?? '').trim()) {
     errors.key = 'Agent key is required.'
@@ -559,6 +586,104 @@ const validateMockRuntimeAgent = (agent) => {
 
     if (invalidFrameworkKey) {
       errors.supportedFrameworkKeys = `Inactive framework key "${invalidFrameworkKey}".`
+    }
+  }
+
+  if (requiredSkillRoleKeys.length > 0) {
+    const unknownRoleKey = requiredSkillRoleKeys.find((roleKey) => !findSkillRoleByRoleKey(roleKey))
+    if (unknownRoleKey) {
+      errors.requiredSkillRoleKeys = `Required skill role "${unknownRoleKey}" was not found.`
+    }
+
+    if (!errors.requiredSkillRoleKeys) {
+      const inactiveRoleKey = requiredSkillRoleKeys.find((roleKey) => {
+        const role = findSkillRoleByRoleKey(roleKey)
+        return String(role?.status ?? '').trim().toUpperCase() !== SKILL_ROLE_REGISTRY_STATUSES.ACTIVE
+      })
+
+      if (inactiveRoleKey) {
+        errors.requiredSkillRoleKeys = `Required skill role "${inactiveRoleKey}" must be ACTIVE.`
+      }
+    }
+  }
+
+  const executionPlan = Array.isArray(agent?.executionPlan) ? agent.executionPlan : []
+  if (executionPlan.length === 0) {
+    errors.executionPlan = 'Execution plan must contain at least one step.'
+  } else {
+    const seenSkillIds = new Set()
+
+    for (let index = 0; index < executionPlan.length; index += 1) {
+      const step = executionPlan[index]
+      const stepNumber = index + 1
+      const skillId = String(step?.skillId ?? '').trim()
+      const readsFrom = normalizePathSelectionList(step?.readsFrom)
+      const writesTo = normalizePathSelectionList(step?.writesTo)
+
+      if (!skillId) {
+        errors.executionPlan = `Step ${stepNumber} is missing a skill id.`
+        break
+      }
+
+      if (seenSkillIds.has(skillId)) {
+        errors.executionPlan = `Duplicate skill "${skillId}" is not allowed in the execution plan.`
+        break
+      }
+      seenSkillIds.add(skillId)
+
+      if (!assignedSkillIds.includes(skillId)) {
+        errors.executionPlan = `Skill "${skillId}" must be assigned before it can be used in the execution plan.`
+        break
+      }
+
+      const skill = skillLookup.get(skillId)
+      if (!skill) {
+        errors.executionPlan = `Unknown skill id "${skillId}".`
+        break
+      }
+
+      if (String(skill?.status ?? '').trim().toUpperCase() !== 'ACTIVE') {
+        errors.executionPlan = `Skill "${skillId}" is not ACTIVE and cannot be used in the execution plan.`
+        break
+      }
+
+      const compatibleSkill = (Array.isArray(skill?.supportedFrameworkKeys) ? skill.supportedFrameworkKeys : [])
+        .some((frameworkKey) => supportedFrameworkKeySet.has(normalizeFrameworkKey(frameworkKey)))
+      if (supportedFrameworkKeySet.size > 0 && !compatibleSkill) {
+        errors.executionPlan = `Skill "${skillId}" is not compatible with the selected frameworks.`
+        break
+      }
+
+      const invalidReadPath = readsFrom.find((pathKey) => {
+        const runtimePath = getRuntimePathRows({
+          frameworkKeys: supportedFrameworkKeys.join(','),
+          operation: 'READ',
+          status: 'ACTIVE',
+        }).find((row) => row.pathKey === pathKey)
+        return !runtimePath
+      })
+
+      if (invalidReadPath) {
+        errors.executionPlan = `Step ${stepNumber} reads from unknown runtime path "${invalidReadPath}".`
+        break
+      }
+
+      const invalidWritePath = writesTo.find((pathKey) => {
+        const runtimePath = getRuntimePathRows({
+          frameworkKeys: supportedFrameworkKeys.join(','),
+          operation: 'WRITE',
+          status: 'ACTIVE',
+        }).find((row) => row.pathKey === pathKey)
+        return !runtimePath || Boolean(runtimePath.isProtected)
+      })
+
+      if (invalidWritePath) {
+        const runtimePath = getRuntimePathRows({ status: 'ACTIVE' }).find((row) => row.pathKey === invalidWritePath)
+        errors.executionPlan = runtimePath?.isProtected
+          ? `Step ${stepNumber} cannot write to protected runtime path "${invalidWritePath}".`
+          : `Step ${stepNumber} writes to unknown runtime path "${invalidWritePath}".`
+        break
+      }
     }
   }
 
@@ -585,6 +710,56 @@ const findSkillRoleByRoleKey = (roleKey) => {
   return runtimeControlState.skillRoles.find(
     (role) => String(role.roleKey ?? '').trim().toUpperCase() === normalizedRoleKey,
   ) ?? null
+}
+
+const countSkillsUsingRoleKey = (roleKey) => {
+  const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
+  if (!normalizedRoleKey) return 0
+
+  return runtimeControlState.skills.filter(
+    (skill) => String(skill.skillRoleKey ?? '').trim().toUpperCase() === normalizedRoleKey,
+  ).length
+}
+
+const attachSkillRoleUsageCount = (role) => cloneSkillRoleRegistryEntry({
+  ...role,
+  usageCount: countSkillsUsingRoleKey(role?.roleKey),
+})
+
+const sortSkillRoleRows = (rows, { sortBy = '', sortOrder = '' } = {}) => {
+  const normalizedSortBy = String(sortBy ?? '').trim()
+  const direction = String(sortOrder ?? '').trim().toLowerCase() === 'asc' ? 1 : -1
+  const sortedRows = [...rows]
+
+  sortedRows.sort((left, right) => {
+    if (normalizedSortBy === 'label') {
+      return direction * String(left?.label ?? '').localeCompare(String(right?.label ?? ''))
+    }
+
+    if (normalizedSortBy === 'usageCount') {
+      const usageDelta = (Number(left?.usageCount) || 0) - (Number(right?.usageCount) || 0)
+      if (usageDelta !== 0) return direction * usageDelta
+      return String(left?.label ?? '').localeCompare(String(right?.label ?? ''))
+    }
+
+    if (normalizedSortBy === 'updatedAt') {
+      const leftTime = Date.parse(left?.updatedAt ?? '') || 0
+      const rightTime = Date.parse(right?.updatedAt ?? '') || 0
+      const timeDelta = leftTime - rightTime
+      if (timeDelta !== 0) return direction * timeDelta
+      return String(left?.roleKey ?? '').localeCompare(String(right?.roleKey ?? ''))
+    }
+
+    const statusCompare = String(left?.status ?? '').localeCompare(String(right?.status ?? ''))
+    if (statusCompare !== 0) return statusCompare
+
+    const updatedCompare = (Date.parse(right?.updatedAt ?? '') || 0) - (Date.parse(left?.updatedAt ?? '') || 0)
+    if (updatedCompare !== 0) return updatedCompare
+
+    return String(left?.roleKey ?? '').localeCompare(String(right?.roleKey ?? ''))
+  })
+
+  return sortedRows
 }
 
 const validateMockRuntimeSkillRoleKey = (skillRoleKey, { currentSkillRoleKey = '' } = {}) => {
@@ -1118,6 +1293,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const validation = validateMockRuntimeAgent(payload)
+        if (Object.keys(validation.errors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validation.errors)
+        }
+
         const createdAgent = {
           id: generateRuntimeId('agent', payload.key),
           ...cloneRuntimeAgent({
@@ -1264,6 +1444,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ...payload,
           ...buildAuditFields(),
         })
+
+        const validation = validateMockRuntimeAgent(nextAgent)
+        if (Object.keys(validation.errors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validation.errors)
+        }
 
         runtimeControlState = {
           ...runtimeControlState,
@@ -1498,7 +1683,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
     listSkillRoles: build.query({
       queryFn: async (
-        { page = 1, pageSize = SKILL_ROLE_REGISTRY_PAGE_SIZE, q = '', status = '' } = {},
+        {
+          page = 1,
+          pageSize = SKILL_ROLE_REGISTRY_PAGE_SIZE,
+          q = '',
+          status = '',
+          sortBy = '',
+          sortOrder = '',
+        } = {},
         api,
         extraOptions,
         baseQuery,
@@ -1511,6 +1703,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               pageSize,
               q,
               status,
+              sortBy,
+              sortOrder,
               defaultPageSize: SKILL_ROLE_REGISTRY_PAGE_SIZE,
             }),
             api,
@@ -1520,7 +1714,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, SKILL_ROLE_REGISTRY_PAGE_SIZE)
-        const rows = getSkillRoleRows({ q, status })
+        const rows = getSkillRoleRows({ q, status, sortBy, sortOrder })
 
         return {
           data: buildListResponse({
@@ -1530,6 +1724,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
             filters: {
               q: String(q ?? '').trim(),
               status: String(status ?? '').trim(),
+              sortBy: String(sortBy ?? '').trim(),
+              sortOrder: String(sortOrder ?? '').trim().toLowerCase(),
             },
           }),
         }
@@ -1585,7 +1781,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           skillRoles: [createdRole, ...runtimeControlState.skillRoles],
         }
 
-        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(createdRole)) }
+        return { data: buildEntityResponse(attachSkillRoleUsageCount(createdRole)) }
       },
       invalidatesTags: [SKILL_ROLE_LIST_TAG],
     }),
@@ -1605,7 +1801,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Skill role was not found.')
         }
 
-        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(role)) }
+        return { data: buildEntityResponse(attachSkillRoleUsageCount(role)) }
       },
       providesTags: (_result, _error, roleId) => [
         { type: 'SkillRole', id: roleId },
@@ -1657,7 +1853,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ),
         }
 
-        return { data: buildEntityResponse(cloneSkillRoleRegistryEntry(nextRole)) }
+        return { data: buildEntityResponse(attachSkillRoleUsageCount(nextRole)) }
       },
       invalidatesTags: (_result, _error, { roleId }) => [
         SKILL_ROLE_LIST_TAG,

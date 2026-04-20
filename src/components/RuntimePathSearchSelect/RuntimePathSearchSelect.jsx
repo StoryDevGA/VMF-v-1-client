@@ -2,7 +2,6 @@
  * RuntimePathSearchSelect Component
  *
  * Searchable multi-select for choosing runtime path keys from the Runtime Path Registry.
- * Used by the Skill Editor to select governed Allowed/Forbidden read/write boundaries.
  *
  * Features:
  * - Debounced typeahead search (300ms) against the runtime-paths API
@@ -11,6 +10,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Badge } from '../Badge'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Spinner } from '../Spinner'
@@ -66,10 +66,15 @@ function RuntimePathSearchSelect({
   }, [clearCloseTimeout])
 
   const normalizedSelected = useMemo(() => normalizeKeys(selectedKeys), [selectedKeys])
-  const normalizedFrameworkKeys = useMemo(() => normalizeKeys(frameworkKeys).map((value) => value.toUpperCase()), [frameworkKeys])
-  const normalizedOperation = operation === null ? null : String(operation ?? 'READ').trim().toUpperCase()
+  const normalizedFrameworkKeys = useMemo(
+    () => normalizeKeys(frameworkKeys).map((value) => value.toUpperCase()),
+    [frameworkKeys],
+  )
+  const normalizedOperation =
+    operation === null ? null : String(operation ?? 'READ').trim().toUpperCase()
 
-  const [triggerSearch, { data: searchData, isFetching: isSearching }] = useLazyListRuntimePathsQuery()
+  const [triggerSearch, { data: searchData, isFetching: isSearching }] =
+    useLazyListRuntimePathsQuery()
   const results = Array.isArray(searchData?.data?.data)
     ? searchData.data.data
     : Array.isArray(searchData?.data)
@@ -88,7 +93,9 @@ function RuntimePathSearchSelect({
       page: 1,
       pageSize: 50,
       q: nextQuery,
-      ...(normalizedFrameworkKeys.length > 0 ? { frameworkKeys: normalizedFrameworkKeys.join(',') } : {}),
+      ...(normalizedFrameworkKeys.length > 0
+        ? { frameworkKeys: normalizedFrameworkKeys.join(',') }
+        : {}),
       ...(normalizedOperation ? { operation: normalizedOperation } : {}),
       ...(isProtectedOnly ? { isProtected: 'true' } : {}),
       status: 'ACTIVE',
@@ -105,12 +112,10 @@ function RuntimePathSearchSelect({
     return () => clearTimeout(handle)
   }, [disabled, isOpen, query, triggerRuntimeSearch])
 
-  useEffect(() => {
-    return () => {
-      if (closeTimeoutRef.current) {
-        clearTimeout(closeTimeoutRef.current)
-        closeTimeoutRef.current = null
-      }
+  useEffect(() => () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
     }
   }, [])
 
@@ -169,7 +174,9 @@ function RuntimePathSearchSelect({
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setActiveIndex((current) => Math.min(current + 1, Math.max(0, availableResults.length - 1)))
+      setActiveIndex((current) =>
+        Math.min(current + 1, Math.max(0, availableResults.length - 1)),
+      )
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
       setActiveIndex((current) => Math.max(current - 1, 0))
@@ -222,10 +229,21 @@ function RuntimePathSearchSelect({
       />
 
       {normalizedSelected.length > 0 ? (
-        <ul className="runtime-path-search-select__chips" aria-label={`${label || 'Selected runtime paths'}`}>
+        <ul
+          className="runtime-path-search-select__chips"
+          aria-label={`${label || 'Selected runtime paths'}`}
+        >
           {normalizedSelected.map((pathKey) => (
             <li key={pathKey} className="runtime-path-search-select__chip">
-              <span className="runtime-path-search-select__chip-text">{pathKey}</span>
+              <Badge
+                variant="neutral"
+                size="sm"
+                pill
+                className="runtime-path-search-select__badge"
+                title={pathKey}
+              >
+                {pathKey}
+              </Badge>
               <Button
                 type="button"
                 variant="ghost"

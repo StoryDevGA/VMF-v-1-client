@@ -12,6 +12,7 @@ import {
   useListFrameworkRegistriesQuery,
   useListRuntimeAgentsQuery,
   useListRuntimeSkillsQuery,
+  useListSkillRolesQuery,
   useUpdateRuntimeAgentMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -39,6 +40,29 @@ const shallowEqualObject = (left, right) => {
   const rightKeys = Object.keys(right)
   if (leftKeys.length !== rightKeys.length) return false
   return leftKeys.every((key) => left[key] === right[key])
+}
+
+const AGENT_ERROR_TAB_LOOKUP = Object.freeze({
+  supportedFrameworkKeys: 0,
+  requiredSkillRoleKeys: 1,
+  defaultSkillIds: 1,
+  primarySkillIds: 1,
+  optionalSkillIds: 1,
+  executionPlan: 2,
+  inputContractJson: 4,
+  outputContractJson: 4,
+  policyMaxTokenBudget: 5,
+  policyTimeoutMs: 5,
+})
+
+const toAgentServerFieldErrors = (details) => {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(details).filter(([, value]) => typeof value === 'string' && value.trim()),
+  )
 }
 
 function AgentEditorLoadingState() {
@@ -118,6 +142,11 @@ function SuperAdminAgentEditor() {
     pageSize: 100,
     q: '',
   })
+  const { data: skillRolesResponse } = useListSkillRolesQuery({
+    page: 1,
+    pageSize: 1000,
+    q: '',
+  })
 
   const [createRuntimeAgent, { isLoading: isCreating }] = useCreateRuntimeAgentMutation()
   const [updateRuntimeAgent, { isLoading: isUpdating }] = useUpdateRuntimeAgentMutation()
@@ -161,6 +190,7 @@ function SuperAdminAgentEditor() {
     return []
   }, [skillsResponse])
   const skillsAppError = skillsError ? normalizeError(skillsError) : null
+  const availableSkillRoles = skillRolesResponse?.data ?? []
 
   const liveValidation = useMemo(
     () =>
@@ -170,6 +200,7 @@ function SuperAdminAgentEditor() {
         isEditMode ? agentId : '',
         activeFrameworkKeys,
         availableSkills,
+        availableSkillRoles,
       ),
     [
       form,
@@ -178,6 +209,7 @@ function SuperAdminAgentEditor() {
       agentId,
       activeFrameworkKeys,
       availableSkills,
+      availableSkillRoles,
     ],
   )
 
@@ -244,6 +276,7 @@ function SuperAdminAgentEditor() {
       isEditMode ? agentId : '',
       activeFrameworkKeys,
       availableSkills,
+      availableSkillRoles,
     )
 
     setErrors(nextErrors)
@@ -254,6 +287,7 @@ function SuperAdminAgentEditor() {
       const prefix = 'runtime-agent-create'
       const jumpTargets = [
         { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: `${prefix}-framework-select` },
+        { tabIndex: 1, fieldKey: 'requiredSkillRoleKeys', focusId: `${prefix}-required-role-select` },
         { tabIndex: 1, fieldKey: 'defaultSkillIds', focusId: `${prefix}-skill-select` },
         { tabIndex: 2, fieldKey: 'executionPlan', focusId: `${prefix}-execution-add-skill` },
         { tabIndex: 4, fieldKey: 'inputContractJson', focusId: `${prefix}-input-contract` },
@@ -304,6 +338,7 @@ function SuperAdminAgentEditor() {
       isEditMode ? agentId : '',
       activeFrameworkKeys,
       availableSkills,
+      availableSkillRoles,
     )
 
     if (Object.keys(nextErrors).length > 0) {
@@ -341,9 +376,19 @@ function SuperAdminAgentEditor() {
     } catch (err) {
       const appError = normalizeError(err)
       const field = String(appError?.details?.field ?? '').trim()
+      const serverFieldErrors = field
+        ? { [field]: appError.message }
+        : toAgentServerFieldErrors(appError?.details)
 
-      if (field) {
-        setErrors({ [field]: appError.message })
+      if (Object.keys(serverFieldErrors).length > 0) {
+        const [firstField] = Object.keys(serverFieldErrors)
+        const errorTabIndex = AGENT_ERROR_TAB_LOOKUP[firstField]
+
+        if (Number.isInteger(errorTabIndex)) {
+          setActiveEditorTab(errorTabIndex)
+        }
+
+        setErrors(serverFieldErrors)
         setErrorsSource('server')
         setShowValidationHints(true)
         return
@@ -410,6 +455,7 @@ function SuperAdminAgentEditor() {
                   onTabChange={setActiveEditorTab}
                   frameworkOptions={frameworkOptions}
                   availableSkills={availableSkills}
+                  availableSkillRoles={availableSkillRoles}
                   isSkillsLoading={isSkillsLoading}
                   skillsError={skillsAppError?.message ?? ''}
                   dependencies={loadedDependencies}

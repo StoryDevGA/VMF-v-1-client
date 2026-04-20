@@ -1,5 +1,7 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Button } from '../../components/Button'
+import { Dialog } from '../../components/Dialog'
 import { useToaster } from '../../components/Toaster'
 import { useUpdateSkillRoleMutation } from '../../store/api/runtimeControlApi.js'
 import { SkillRoleRegistryListView } from './SkillRoleRegistryListView.jsx'
@@ -12,6 +14,7 @@ function SuperAdminSkillRoleRegistry() {
   const { addToast } = useToaster()
   const mgmt = useSkillRoleRegistryManagement()
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
+  const [pendingStatusChange, setPendingStatusChange] = useState(null)
 
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
@@ -25,7 +28,7 @@ function SuperAdminSkillRoleRegistry() {
     navigate(`/super-admin/runtime-control/skill-roles/${row.id}`)
   }, [navigate])
 
-  const setRoleStatus = useCallback(async (row, nextStatus) => {
+  const commitRoleStatus = useCallback(async (row, nextStatus) => {
     try {
       const res = await updateSkillRole({
         roleId: row.id,
@@ -42,6 +45,26 @@ function SuperAdminSkillRoleRegistry() {
       addToast({ variant: 'error', title: 'Update failed', description: appErr.message })
     }
   }, [addToast, updateSkillRole])
+
+  const setRoleStatus = useCallback(async (row, nextStatus) => {
+    if (nextStatus === 'DEPRECATED' && Number(row?.usageCount) > 0) {
+      setPendingStatusChange({ row, nextStatus })
+      return
+    }
+
+    await commitRoleStatus(row, nextStatus)
+  }, [commitRoleStatus])
+
+  const closePendingStatusChange = useCallback(() => {
+    setPendingStatusChange(null)
+  }, [])
+
+  const confirmPendingStatusChange = useCallback(async () => {
+    if (!pendingStatusChange?.row || !pendingStatusChange?.nextStatus) return
+
+    await commitRoleStatus(pendingStatusChange.row, pendingStatusChange.nextStatus)
+    setPendingStatusChange(null)
+  }, [commitRoleStatus, pendingStatusChange])
 
   return (
     <section
@@ -60,6 +83,8 @@ function SuperAdminSkillRoleRegistry() {
         setSearch={mgmt.setSearch}
         statusFilter={mgmt.statusFilter}
         setStatusFilter={mgmt.setStatusFilter}
+        sortValue={mgmt.sortValue}
+        setSortValue={mgmt.setSortValue}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
         currentPage={mgmt.currentPage}
@@ -73,6 +98,27 @@ function SuperAdminSkillRoleRegistry() {
         setRoleStatus={setRoleStatus}
         isMutating={isUpdating}
       />
+
+      <Dialog open={Boolean(pendingStatusChange)} onClose={closePendingStatusChange} size="sm">
+        <Dialog.Header>
+          <h2>Deprecate skill role?</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p>
+            {pendingStatusChange?.row?.roleKey ?? 'This skill role'} is still referenced by{' '}
+            {Number(pendingStatusChange?.row?.usageCount) || 0} skill(s). Deprecating it will not
+            remove those existing references.
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button variant="outline" onClick={closePendingStatusChange} disabled={isUpdating}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={confirmPendingStatusChange} loading={isUpdating}>
+            Deprecate Role
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 }

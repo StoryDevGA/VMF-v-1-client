@@ -4,6 +4,7 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
+import RuntimePathSelectChips from '../../components/RuntimePathSelectChips/RuntimePathSelectChips.jsx'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
@@ -12,6 +13,7 @@ import { Textarea } from '../../components/Textarea'
 import {
   formatKeyList,
   normalizeAgentKey,
+  parseEnumKeyList,
   parseFrameworkKeyList,
   parseKeyList,
   RUNTIME_AGENT_FORM_STATUS_OPTIONS,
@@ -23,8 +25,6 @@ import {
   RUNTIME_SKILL_STATUSES,
 } from '../SuperAdminSkills/superAdminSkills.constants.js'
 import './RuntimeAgentDialogs.css'
-
-const EXECUTION_TARGET_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 // Tab indices for RuntimeAgentEditor dialog
 const AGENT_TAB_INDICES = Object.freeze({
@@ -173,6 +173,14 @@ function getExecutionPlanSkillOptionLabel(skill, fallbackSkillId) {
   return `${skill?.name ?? fallbackSkillId} (${skill?.key ?? fallbackSkillId})${frameworkLabel}${executionModeLabel}${statusLabel}`
 }
 
+function normalizePathSelectionList(values) {
+  return [...new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean),
+  )]
+}
+
 function buildExecutionPlanDiagnostics({
   executionPlan = [],
   assignedSkillIds = [],
@@ -191,7 +199,6 @@ function buildExecutionPlanDiagnostics({
   executionPlan.forEach((step, index) => {
     const stepNumber = index + 1
     const skillId = normalizeAgentKey(step?.skillId)
-    const writesTo = String(step?.writesTo ?? '').trim()
 
     if (!skillId) {
       diagnostics.push(`Step ${stepNumber} is missing a governed skill selection.`)
@@ -206,10 +213,6 @@ function buildExecutionPlanDiagnostics({
 
     if (!assignedSkillIdSet.has(skillId)) {
       diagnostics.push(`Step ${stepNumber} uses unassigned skill "${skillId}".`)
-    }
-
-    if (writesTo && !EXECUTION_TARGET_PATTERN.test(writesTo)) {
-      diagnostics.push(`Step ${stepNumber} has invalid Writes To target "${writesTo}".`)
     }
 
     const skill = skillLookup[skillId]
@@ -343,11 +346,13 @@ function RuntimeAgentSkillCompositionSection({
   setForm,
   errors,
   availableSkills = [],
+  availableSkillRoles = [],
   isSkillsLoading = false,
   skillsError = '',
 }) {
   const [query, setQuery] = useState('')
   const [pendingSkillId, setPendingSkillId] = useState('')
+  const [pendingRequiredRoleKey, setPendingRequiredRoleKey] = useState('')
   const supportedFrameworkKeys = useMemo(
     () => parseFrameworkKeyList(form.supportedFrameworkKeys),
     [form.supportedFrameworkKeys],
@@ -366,6 +371,10 @@ function RuntimeAgentSkillCompositionSection({
     [form.defaultSkillIds, form.primarySkillIds, form.optionalSkillIds],
   )
   const assignedSkillIdSet = useMemo(() => new Set(assignedSkillIds), [assignedSkillIds])
+  const requiredSkillRoleKeys = useMemo(
+    () => parseEnumKeyList(form.requiredSkillRoleKeys),
+    [form.requiredSkillRoleKeys],
+  )
 
   const skillLookup = useMemo(() => {
     const entries = availableSkills
@@ -443,6 +452,18 @@ function RuntimeAgentSkillCompositionSection({
     [assignedSkillIds, skillLookup],
   )
 
+  const compatibleRequiredRoleOptions = useMemo(
+    () =>
+      availableSkillRoles
+        .filter((role) => String(role?.status ?? '').trim().toUpperCase() === 'ACTIVE')
+        .filter((role) => !requiredSkillRoleKeys.includes(String(role?.roleKey ?? '').trim().toUpperCase()))
+        .map((role) => ({
+          value: String(role.roleKey ?? '').trim().toUpperCase(),
+          label: `${role.label ?? role.roleKey} (${role.roleKey})`,
+        })),
+    [availableSkillRoles, requiredSkillRoleKeys],
+  )
+
   const handleAddSkill = (skillId) => {
     const normalizedSkillId = normalizeAgentKey(skillId)
     if (!normalizedSkillId) return
@@ -466,6 +487,32 @@ function RuntimeAgentSkillCompositionSection({
       executionPlan: Array.isArray(current.executionPlan)
         ? current.executionPlan.filter((step) => normalizeAgentKey(step?.skillId) !== normalizedSkillId)
         : [],
+    }))
+  }
+
+  const handleAddRequiredRole = (roleKey) => {
+    const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
+    if (!normalizedRoleKey) return
+
+    setForm((current) => ({
+      ...current,
+      requiredSkillRoleKeys: formatKeyList([
+        ...parseEnumKeyList(current.requiredSkillRoleKeys),
+        normalizedRoleKey,
+      ]),
+    }))
+    setPendingRequiredRoleKey('')
+  }
+
+  const handleRemoveRequiredRole = (roleKey) => {
+    const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
+    if (!normalizedRoleKey) return
+
+    setForm((current) => ({
+      ...current,
+      requiredSkillRoleKeys: formatKeyList(
+        parseEnumKeyList(current.requiredSkillRoleKeys).filter((value) => value !== normalizedRoleKey),
+      ),
     }))
   }
 
@@ -537,6 +584,60 @@ function RuntimeAgentSkillCompositionSection({
     >
       <div className="super-admin-agents__skill-composition">
         <div className="super-admin-agents__skill-selector" aria-label="Skill selector">
+          <div className="super-admin-agents__skill-picker-controls">
+            <Select
+              id={`${prefix}-required-role-select`}
+              label="Required Skill Roles"
+              className="super-admin-agent-editor__select-field"
+              value={pendingRequiredRoleKey}
+              options={compatibleRequiredRoleOptions}
+              onChange={(event) => setPendingRequiredRoleKey(event.target.value)}
+              placeholder={compatibleRequiredRoleOptions.length > 0 ? 'Select a skill role' : 'No additional roles available'}
+              disabled={compatibleRequiredRoleOptions.length === 0}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="super-admin-agents__skill-add-button"
+              onClick={() => handleAddRequiredRole(pendingRequiredRoleKey)}
+              disabled={!pendingRequiredRoleKey}
+            >
+              Add Role
+            </Button>
+          </div>
+
+          {requiredSkillRoleKeys.length > 0 ? (
+            <div className="super-admin-agents__token-list" aria-label="Required skill roles">
+              {requiredSkillRoleKeys.map((roleKey) => (
+                <div key={roleKey} className="super-admin-agents__token-item">
+                  <Badge variant="warning" size="sm" pill>
+                    {roleKey}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveRequiredRole(roleKey)}
+                    aria-label={`Remove required skill role ${roleKey}`}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="super-admin-agents__framework-helper">
+              No required skill roles selected. This is optional and complements direct skill assignment.
+            </p>
+          )}
+
+          {errors.requiredSkillRoleKeys ? (
+            <p className="super-admin-agents__framework-error" role="alert">
+              {errors.requiredSkillRoleKeys}
+            </p>
+          ) : null}
+
           <Input
             id={`${prefix}-skill-search`}
             label="Search Skills"
@@ -701,14 +802,18 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
         return skill?.name ?? skillId
       })
       .filter(Boolean)
-    const writesToTargets = executionPlan
-      .map((step) => String(step?.writesTo ?? '').trim())
-      .filter(Boolean)
+    const readsFromTargets = [...new Set(
+      executionPlan.flatMap((step) => normalizePathSelectionList(step?.readsFrom)),
+    )]
+    const writesToTargets = [...new Set(
+      executionPlan.flatMap((step) => normalizePathSelectionList(step?.writesTo)),
+    )]
 
     return {
       frameworks: frameworkList,
       assignedSkillsUsed: normalizedPlanSkillIds.length,
       estimatedFlow: orderedSteps.length > 0 ? orderedSteps.join(' -> ') : 'No steps configured yet',
+      readsFromTargets: readsFromTargets.length > 0 ? readsFromTargets.join(', ') : 'No governed reads mapped',
       writesToTargets: writesToTargets.length > 0 ? writesToTargets.join(', ') : 'No explicit outputs mapped',
       isValid: executionPlanDiagnostics.length === 0,
     }
@@ -722,7 +827,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       ...current,
       executionPlan: [
         ...(Array.isArray(current.executionPlan) ? current.executionPlan : []),
-        { skillId: normalized, description: '', writesTo: '' },
+        { skillId: normalized, description: '', readsFrom: [], writesTo: [] },
       ],
     }))
     setPendingStepSkillId('')
@@ -733,18 +838,6 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       ...current,
       executionPlan: (Array.isArray(current.executionPlan) ? current.executionPlan : []).filter((_step, i) => i !== index),
     }))
-  }
-
-  const handleMoveStep = (fromIndex, toIndex) => {
-    setForm((current) => {
-      const currentPlan = Array.isArray(current.executionPlan) ? [...current.executionPlan] : []
-      if (fromIndex < 0 || toIndex < 0) return current
-      if (fromIndex >= currentPlan.length || toIndex >= currentPlan.length) return current
-
-      const [removed] = currentPlan.splice(fromIndex, 1)
-      currentPlan.splice(toIndex, 0, removed)
-      return { ...current, executionPlan: currentPlan }
-    })
   }
 
   const handleUpdateStep = (index, nextStep) => {
@@ -823,7 +916,8 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
                   handleUpdateStep(row.stepNumber - 1, {
                     skillId: normalizeAgentKey(event.target.value),
                     description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
-                    writesTo: String(executionPlan[row.stepNumber - 1]?.writesTo ?? ''),
+                    readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
+                    writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
                   })
                 }
                 aria-label={`Execution plan skill for step ${row.stepNumber}`}
@@ -865,7 +959,8 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
               handleUpdateStep(row.stepNumber - 1, {
                 skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
                 description: event.target.value,
-                writesTo: String(executionPlan[row.stepNumber - 1]?.writesTo ?? ''),
+                readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
+                writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
               })
             }
             aria-label={`Execution purpose for step ${row.stepNumber}`}
@@ -874,24 +969,48 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
         ),
       },
       {
-        key: 'writesTo',
-        label: 'Writes To',
-        mobileLabel: 'Writes To',
-        render: (value, row) => (
-          <Input
-            id={`${prefix}-execution-step-${row.stepNumber}-writes-to`}
-            size="sm"
-            value={String(value ?? '')}
-            placeholder="Optional context key"
-            onChange={(event) =>
+        key: 'readsFrom',
+        label: 'Reads From',
+        mobileLabel: 'Reads From',
+        render: (_value, row) => (
+          <RuntimePathSelectChips
+            id={`${prefix}-execution-step-${row.stepNumber}-reads-from`}
+            frameworkKeys={supportedFrameworkKeys}
+            operation="READ"
+            selectedKeys={normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom)}
+            onChange={(nextKeys) =>
               handleUpdateStep(row.stepNumber - 1, {
                 skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
                 description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
-                writesTo: event.target.value,
+                readsFrom: nextKeys,
+                writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
               })
             }
-            aria-label={`Writes to target for step ${row.stepNumber}`}
-            fullWidth
+            placeholder="Select governed read path"
+            aria-label={`Reads From for Step ${row.stepNumber}`}
+          />
+        ),
+      },
+      {
+        key: 'writesTo',
+        label: 'Writes To',
+        mobileLabel: 'Writes To',
+        render: (_value, row) => (
+          <RuntimePathSelectChips
+            id={`${prefix}-execution-step-${row.stepNumber}-writes-to`}
+            frameworkKeys={supportedFrameworkKeys}
+            operation="WRITE"
+            selectedKeys={normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo)}
+            onChange={(nextKeys) =>
+              handleUpdateStep(row.stepNumber - 1, {
+                skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
+                description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
+                readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
+                writesTo: nextKeys,
+              })
+            }
+            placeholder="Select governed write path"
+            aria-label={`Writes To for Step ${row.stepNumber}`}
           />
         ),
       },
@@ -900,29 +1019,11 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
         label: 'Actions',
         mobileLabel: 'Actions',
         align: 'center',
-        width: '220px',
+        width: '120px',
         render: (_value, row) => {
           const index = row.stepNumber - 1
           return (
             <div className="super-admin-agents__execution-actions">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={index <= 0}
-                onClick={() => handleMoveStep(index, index - 1)}
-              >
-                Up
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={index >= rows.length - 1}
-                onClick={() => handleMoveStep(index, index + 1)}
-              >
-                Down
-              </Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -939,12 +1040,11 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
     [
       eligibleAssignedSkillIds,
       executionPlan,
-      handleMoveStep,
       handleRemoveStep,
       handleUpdateStep,
       prefix,
-      rows.length,
       skillLookup,
+      supportedFrameworkKeys,
       supportedFrameworkKeySet.size,
     ],
   )
@@ -972,6 +1072,10 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
         <div className="super-admin-agents__execution-summary-item super-admin-agents__execution-summary-item--wide">
           <p className="super-admin-agents__execution-summary-label">Estimated Flow</p>
           <p className="super-admin-agents__execution-summary-value">{executionSummary.estimatedFlow}</p>
+        </div>
+        <div className="super-admin-agents__execution-summary-item super-admin-agents__execution-summary-item--wide">
+          <p className="super-admin-agents__execution-summary-label">Reads From Targets</p>
+          <p className="super-admin-agents__execution-summary-value">{executionSummary.readsFromTargets}</p>
         </div>
         <div className="super-admin-agents__execution-summary-item super-admin-agents__execution-summary-item--wide">
           <p className="super-admin-agents__execution-summary-label">Writes To Targets</p>
@@ -1029,7 +1133,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       </div>
 
       <p className="super-admin-agents__framework-helper">
-        Only assigned, ACTIVE, framework-compatible skills can be used. In V1 each skill can appear once.
+        Only assigned, ACTIVE, framework-compatible skills can be used. In V1 each skill can appear once, and reads/writes must use governed runtime paths.
       </p>
 
       <div className="super-admin-agents__table-wrap" aria-label="Execution plan steps table">
@@ -1408,6 +1512,7 @@ export function RuntimeAgentFormFields({
   onTabChange,
   frameworkOptions,
   availableSkills = [],
+  availableSkillRoles = [],
   isSkillsLoading = false,
   skillsError = '',
   dependencies = null,
@@ -1419,7 +1524,7 @@ export function RuntimeAgentFormFields({
 
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
-    skills: hintErrors.defaultSkillIds ? 1 : 0,
+    skills: (hintErrors.requiredSkillRoleKeys ? 1 : 0) + (hintErrors.defaultSkillIds ? 1 : 0),
     execution: hintErrors.executionPlan ? 1 : 0,
     prompts: 0,
     contracts: (hintErrors.inputContractJson ? 1 : 0) + (hintErrors.outputContractJson ? 1 : 0),
@@ -1473,6 +1578,7 @@ export function RuntimeAgentFormFields({
             setForm={setForm}
             errors={errors}
             availableSkills={availableSkills}
+            availableSkillRoles={availableSkillRoles}
             isSkillsLoading={isSkillsLoading}
             skillsError={skillsError}
           />

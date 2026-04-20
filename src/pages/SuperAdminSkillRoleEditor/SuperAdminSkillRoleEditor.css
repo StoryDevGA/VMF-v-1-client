@@ -34,6 +34,27 @@
   color: var(--color-text-secondary);
 }
 
+.super-admin-skill-role-editor__summary {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-skill-role-editor__summary-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.super-admin-skill-role-editor__summary-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .super-admin-skill-role-editor__footer-actions {
   display: flex;
   justify-content: flex-end;

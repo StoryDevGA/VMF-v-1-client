@@ -58,6 +58,7 @@ export const INITIAL_RUNTIME_AGENT_FORM = Object.freeze({
   status: RUNTIME_AGENT_STATUSES.ACTIVE,
   agentType: RUNTIME_AGENT_TYPES.EXECUTION,
   supportedFrameworkKeys: 'VMF\nRLD',
+  requiredSkillRoleKeys: '',
   defaultSkillIds: '',
   primarySkillIds: '',
   optionalSkillIds: '',
@@ -84,11 +85,17 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    requiredSkillRoleKeys: Object.freeze(['VALIDATOR']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+      Object.freeze({
+        skillId: 'skill-snapshot',
+        description: '',
+        readsFrom: Object.freeze(['vmf.sections.icp']),
+        writesTo: Object.freeze(['runtime.validationResult']),
+      }),
     ]),
     promptConfig: Object.freeze({
       baseSystemPrompt: 'You are a governed StorylineOS runtime agent.',
@@ -108,11 +115,17 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.ARTEFACT,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    requiredSkillRoleKeys: Object.freeze(['RENDERER']),
     defaultSkillIds: Object.freeze(['skill-summary']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-summary', description: '' }),
+      Object.freeze({
+        skillId: 'skill-summary',
+        description: '',
+        readsFrom: Object.freeze(['runtime.validationResult']),
+        writesTo: Object.freeze(['artifacts.summary']),
+      }),
     ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
@@ -129,11 +142,17 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
     supportedFrameworkKeys: Object.freeze(['VMF']),
+    requiredSkillRoleKeys: Object.freeze(['VALIDATOR']),
     defaultSkillIds: Object.freeze(['skill-review']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-review', description: '' }),
+      Object.freeze({
+        skillId: 'skill-review',
+        description: '',
+        readsFrom: Object.freeze(['vmf.sections.icp']),
+        writesTo: Object.freeze(['runtime.validationResult']),
+      }),
     ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
@@ -150,11 +169,17 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: RUNTIME_AGENT_TYPES.VALIDATION,
     supportedFrameworkKeys: Object.freeze(['RLD']),
+    requiredSkillRoleKeys: Object.freeze(['VALIDATOR']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+      Object.freeze({
+        skillId: 'skill-snapshot',
+        description: '',
+        readsFrom: Object.freeze(['context.currentAction']),
+        writesTo: Object.freeze(['runtime.validationResult']),
+      }),
     ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
@@ -171,12 +196,23 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.INACTIVE,
     agentType: RUNTIME_AGENT_TYPES.ARTEFACT,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
+    requiredSkillRoleKeys: Object.freeze(['RENDERER']),
     defaultSkillIds: Object.freeze(['skill-summary', 'skill-report']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-summary', description: '' }),
-      Object.freeze({ skillId: 'skill-report', description: '' }),
+      Object.freeze({
+        skillId: 'skill-summary',
+        description: '',
+        readsFrom: Object.freeze(['runtime.validationResult']),
+        writesTo: Object.freeze(['artifacts.summary']),
+      }),
+      Object.freeze({
+        skillId: 'skill-report',
+        description: '',
+        readsFrom: Object.freeze(['artifacts.summary']),
+        writesTo: Object.freeze(['artifacts.validationReport']),
+      }),
     ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
@@ -193,11 +229,17 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
     status: RUNTIME_AGENT_STATUSES.INACTIVE,
     agentType: RUNTIME_AGENT_TYPES.EXECUTION,
     supportedFrameworkKeys: Object.freeze(['VMF']),
+    requiredSkillRoleKeys: Object.freeze(['TRANSFORMER']),
     defaultSkillIds: Object.freeze(['skill-snapshot']),
     primarySkillIds: Object.freeze([]),
     optionalSkillIds: Object.freeze([]),
     executionPlan: Object.freeze([
-      Object.freeze({ skillId: 'skill-snapshot', description: '' }),
+      Object.freeze({
+        skillId: 'skill-snapshot',
+        description: '',
+        readsFrom: Object.freeze(['vmf.sections.icp']),
+        writesTo: Object.freeze(['runtime.executionTrace']),
+      }),
     ]),
     promptConfig: Object.freeze({}),
     inputContract: Object.freeze({}),
@@ -210,7 +252,6 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const ENUM_TOKEN_PATTERN = /^[A-Z][A-Z0-9_]*$/
-const EXECUTION_TARGET_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 export function normalizeEnumToken(value) {
   return String(value ?? '')
@@ -223,11 +264,16 @@ export function cloneRuntimeAgent(agent) {
   return {
     ...agent,
     supportedFrameworkKeys: [...(agent.supportedFrameworkKeys ?? [])],
+    requiredSkillRoleKeys: [...(agent.requiredSkillRoleKeys ?? [])],
     defaultSkillIds: [...(agent.defaultSkillIds ?? [])],
     primarySkillIds: [...(agent.primarySkillIds ?? [])],
     optionalSkillIds: [...(agent.optionalSkillIds ?? [])],
     executionPlan: Array.isArray(agent.executionPlan)
-      ? agent.executionPlan.map((step) => ({ ...step }))
+      ? agent.executionPlan.map((step) => ({
+          ...step,
+          readsFrom: normalizePathSelectionList(step?.readsFrom),
+          writesTo: normalizePathSelectionList(step?.writesTo),
+        }))
       : [],
     promptConfig: { ...(agent.promptConfig ?? {}) },
     inputContract: { ...(agent.inputContract ?? {}) },
@@ -282,6 +328,29 @@ export function parseFrameworkKeyList(value) {
   )]
 }
 
+export function parseEnumKeyList(value) {
+  return [...new Set(
+    String(value ?? '')
+      .split(/[\n,]+/)
+      .map(normalizeEnumToken)
+      .filter(Boolean),
+  )]
+}
+
+export function normalizePathSelectionList(value) {
+  const items = Array.isArray(value)
+    ? value
+    : value === undefined || value === null || value === ''
+      ? []
+      : [value]
+
+  return [...new Set(
+    items
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean),
+  )]
+}
+
 export function formatKeyList(items) {
   return Array.isArray(items) ? items.join('\n') : ''
 }
@@ -293,7 +362,8 @@ export function mapRuntimeAgentToForm(agent) {
     ? agent.executionPlan.map((step) => ({
         skillId: normalizeAgentKey(step?.skillId),
         description: String(step?.description ?? ''),
-        writesTo: String(step?.writesTo ?? ''),
+        readsFrom: normalizePathSelectionList(step?.readsFrom),
+        writesTo: normalizePathSelectionList(step?.writesTo),
       }))
     : []
 
@@ -304,6 +374,7 @@ export function mapRuntimeAgentToForm(agent) {
     status: agent.status ?? RUNTIME_AGENT_STATUSES.ACTIVE,
     agentType: agent.agentType ?? RUNTIME_AGENT_TYPES.EXECUTION,
     supportedFrameworkKeys: formatKeyList(agent.supportedFrameworkKeys),
+    requiredSkillRoleKeys: formatKeyList(agent.requiredSkillRoleKeys),
     defaultSkillIds: formatKeyList(agent.defaultSkillIds),
     primarySkillIds: formatKeyList(agent.primarySkillIds),
     optionalSkillIds: formatKeyList(agent.optionalSkillIds),
@@ -352,6 +423,7 @@ export function validateRuntimeAgentForm(
   selectedAgentId = '',
   availableFrameworkKeys = [],
   availableSkills = [],
+  availableSkillRoles = [],
 ) {
   const errors = {}
   const key = normalizeAgentKey(formState.key)
@@ -360,6 +432,7 @@ export function validateRuntimeAgentForm(
   const status = String(formState.status ?? '').trim() || RUNTIME_AGENT_STATUSES.ACTIVE
   const agentType = normalizeEnumToken(formState.agentType) || RUNTIME_AGENT_TYPES.EXECUTION
   const supportedFrameworkKeys = parseFrameworkKeyList(formState.supportedFrameworkKeys)
+  const requiredSkillRoleKeys = parseEnumKeyList(formState.requiredSkillRoleKeys)
   const defaultSkillIds = parseKeyList(formState.defaultSkillIds)
   const primarySkillIds = parseKeyList(formState.primarySkillIds)
   const optionalSkillIds = parseKeyList(formState.optionalSkillIds)
@@ -368,7 +441,8 @@ export function validateRuntimeAgentForm(
   const executionPlan = executionPlanStepsRaw.map((step) => ({
     skillId: normalizeAgentKey(step?.skillId),
     description: String(step?.description ?? '').trim(),
-    writesTo: String(step?.writesTo ?? '').trim(),
+    readsFrom: normalizePathSelectionList(step?.readsFrom),
+    writesTo: normalizePathSelectionList(step?.writesTo),
   }))
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
@@ -389,6 +463,11 @@ export function validateRuntimeAgentForm(
     errors.agentType = 'Agent type must use letters, numbers, or underscores.'
   }
 
+  const invalidRequiredSkillRoleKey = requiredSkillRoleKeys.find((value) => !ENUM_TOKEN_PATTERN.test(value))
+  if (invalidRequiredSkillRoleKey) {
+    errors.requiredSkillRoleKeys = `Skill role key "${invalidRequiredSkillRoleKey}" is invalid.`
+  }
+
   if (supportedFrameworkKeys.length === 0) {
     errors.supportedFrameworkKeys = 'At least one supported framework key is required.'
   }
@@ -404,6 +483,30 @@ export function validateRuntimeAgentForm(
     )
     if (invalidFrameworkKey) {
       errors.supportedFrameworkKeys = `Unsupported framework key "${invalidFrameworkKey}".`
+    }
+  }
+
+  if (!errors.requiredSkillRoleKeys && Array.isArray(availableSkillRoles) && availableSkillRoles.length > 0) {
+    const skillRoleLookup = new Map(
+      availableSkillRoles
+        .map((role) => [normalizeEnumToken(role?.roleKey), role])
+        .filter(([roleKey]) => roleKey),
+    )
+
+    const unknownRoleKey = requiredSkillRoleKeys.find((roleKey) => !skillRoleLookup.has(roleKey))
+    if (unknownRoleKey) {
+      errors.requiredSkillRoleKeys = `Skill role "${unknownRoleKey}" was not found.`
+    }
+
+    if (!errors.requiredSkillRoleKeys) {
+      const inactiveRoleKey = requiredSkillRoleKeys.find((roleKey) => {
+        const role = skillRoleLookup.get(roleKey)
+        return String(role?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+      })
+
+      if (inactiveRoleKey) {
+        errors.requiredSkillRoleKeys = `Skill role "${inactiveRoleKey}" must be ACTIVE.`
+      }
     }
   }
 
@@ -485,13 +588,6 @@ export function validateRuntimeAgentForm(
       errors.executionPlan = `Skill "${unassignedStepSkillId}" must be assigned before it can be used in the execution plan.`
     }
 
-    const invalidWritesToTarget = executionPlan.find(
-      (step) => step.writesTo && !EXECUTION_TARGET_PATTERN.test(step.writesTo),
-    )
-    if (!errors.executionPlan && invalidWritesToTarget) {
-      errors.executionPlan =
-        `Execution step writes-to target "${invalidWritesToTarget.writesTo}" is invalid.`
-    }
   }
 
   const availableSkillRows = Array.isArray(availableSkills) ? availableSkills : []
@@ -580,6 +676,7 @@ export function validateRuntimeAgentForm(
       status,
       agentType,
       supportedFrameworkKeys,
+      requiredSkillRoleKeys,
       defaultSkillIds,
       primarySkillIds,
       optionalSkillIds,

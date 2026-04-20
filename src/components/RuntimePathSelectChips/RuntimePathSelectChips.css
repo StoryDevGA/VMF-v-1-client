@@ -1,0 +1,31 @@
+.runtime-path-select-chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.runtime-path-select-chips__select {
+  max-width: 100%;
+}
+
+.runtime-path-select-chips__chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: 0;
+  margin: 0;
+}
+
+.runtime-path-select-chips__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.runtime-path-select-chips__badge {
+  max-width: 100%;
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}

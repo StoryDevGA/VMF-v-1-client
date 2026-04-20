@@ -17,15 +17,13 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--border-radius-pill);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
 }
 
-.runtime-path-search-select__chip-text {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
+.runtime-path-search-select__badge {
+  max-width: 100%;
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .runtime-path-search-select__dropdown {
@@ -69,7 +67,7 @@
 }
 
 .runtime-path-search-select__option-key {
-  font-family: var(--font-mono);
+  font-family: var(--font-family-mono);
   font-size: var(--font-size-sm);
 }
 

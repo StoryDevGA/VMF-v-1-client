@@ -15,6 +15,10 @@ function renderPage(initialRoute) {
         path: '/super-admin/runtime-control/skill-roles/new',
         element: <SuperAdminSkillRoleEditor />,
       },
+      {
+        path: '/super-admin/runtime-control/skill-roles/:roleId',
+        element: <SuperAdminSkillRoleEditor />,
+      },
     ],
   })
 }
@@ -68,5 +72,23 @@ describe('SuperAdminSkillRoleEditor page', () => {
 
     rafSpy.mockRestore()
   })
-})
 
+  it('warns before deprecating an in-use skill role from the editor', async () => {
+    const user = userEvent.setup()
+
+    renderPage('/super-admin/runtime-control/skill-roles/role-validator')
+
+    expect(await screen.findByRole('heading', { name: /^edit skill role$/i })).toBeInTheDocument()
+    expect(await screen.findByText(/usage count/i)).toBeInTheDocument()
+
+    const statusSelect = await screen.findByLabelText(/^status/i, {
+      selector: 'select#skill-role-editor-status',
+    })
+
+    await user.selectOptions(statusSelect, 'DEPRECATED')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(await screen.findByRole('heading', { name: /deprecate skill role/i })).toBeInTheDocument()
+    expect(screen.getByText(/still referenced by/i)).toBeInTheDocument()
+  })
+})

@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -12,6 +13,7 @@ import {
   formatSkillRoleRegistryStatus,
   getSkillRoleRegistryStatusVariant,
   SKILL_ROLE_REGISTRY_HELP_TEXT,
+  SKILL_ROLE_REGISTRY_SORT_OPTIONS,
   SKILL_ROLE_REGISTRY_STATUS_OPTIONS,
   SKILL_ROLE_REGISTRY_STATUSES,
 } from './superAdminSkillRoleRegistry.constants.js'
@@ -54,7 +56,14 @@ function SkillRoleRowActionsMenu({ row, onAction, disabled = false }) {
 function renderRoleSummary(_value, row) {
   return (
     <div className="super-admin-skill-role-registry__role-summary">
-      <span className="super-admin-skill-role-registry__role-label">{row.label}</span>
+      <div className="super-admin-skill-role-registry__role-heading">
+        <span className="super-admin-skill-role-registry__role-label">{row.label}</span>
+        {row.isSystem ? (
+          <Badge variant="info" size="sm" pill>
+            SYSTEM
+          </Badge>
+        ) : null}
+      </div>
       <code className="super-admin-skill-role-registry__role-key">{row.roleKey}</code>
     </div>
   )
@@ -65,6 +74,8 @@ export function SkillRoleRegistryListView({
   setSearch,
   statusFilter,
   setStatusFilter,
+  sortValue,
+  setSortValue,
   setPage,
   rows,
   currentPage,
@@ -113,6 +124,14 @@ export function SkillRoleRegistryListView({
         label: 'Description',
         mobileLabel: 'Description',
         render: (value) => <span className="super-admin-skill-role-registry__description">{value || '--'}</span>,
+      },
+      {
+        key: 'usageCount',
+        label: 'Usage Count',
+        mobileLabel: 'Usage Count',
+        align: 'center',
+        width: '132px',
+        render: (value) => Number(value) || 0,
       },
       {
         key: 'status',
@@ -180,6 +199,17 @@ export function SkillRoleRegistryListView({
               options={SKILL_ROLE_REGISTRY_STATUS_OPTIONS}
               onChange={(event) => {
                 setStatusFilter(event.target.value)
+                setPage(1)
+              }}
+            />
+            <Select
+              id="skill-role-registry-sort"
+              label="Sort"
+              size="sm"
+              value={sortValue}
+              options={SKILL_ROLE_REGISTRY_SORT_OPTIONS}
+              onChange={(event) => {
+                setSortValue(event.target.value)
                 setPage(1)
               }}
             />
