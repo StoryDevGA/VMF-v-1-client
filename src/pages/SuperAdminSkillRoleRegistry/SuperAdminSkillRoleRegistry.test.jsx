@@ -6,6 +6,7 @@ import SuperAdminSkillRoleRegistry from './SuperAdminSkillRoleRegistry.jsx'
 const navigateMock = vi.fn()
 const addToastMock = vi.fn()
 const updateSkillRoleMock = vi.fn()
+const fetchSkillRoleDependenciesMock = vi.fn()
 const managementMock = {
   search: '',
   setSearch: vi.fn(),
@@ -46,6 +47,10 @@ vi.mock('../../components/Toaster', () => ({
 }))
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
+  useLazyGetSkillRoleDependenciesQuery: () => [
+    fetchSkillRoleDependenciesMock,
+    { isFetching: false, isLoading: false, error: null },
+  ],
   useUpdateSkillRoleMutation: () => [
     updateSkillRoleMock,
     { isLoading: false },
@@ -61,6 +66,16 @@ describe('SuperAdminSkillRoleRegistry', () => {
     navigateMock.mockReset()
     addToastMock.mockReset()
     updateSkillRoleMock.mockReset()
+    fetchSkillRoleDependenciesMock.mockReset()
+    fetchSkillRoleDependenciesMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          dependencies: {
+            summary: { skills: 3, agents: 1 },
+          },
+        },
+      }),
+    })
     updateSkillRoleMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
         data: {
@@ -102,7 +117,7 @@ describe('SuperAdminSkillRoleRegistry', () => {
     )
 
     expect(screen.getByRole('heading', { name: /deprecate skill role/i })).toBeInTheDocument()
-    expect(screen.getByText(/used by 3 skills/i)).toBeInTheDocument()
+    expect(screen.getByText(/currently used by 3 skills and 1 agent/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /deprecate role/i }))
 
@@ -110,6 +125,29 @@ describe('SuperAdminSkillRoleRegistry', () => {
       expect(updateSkillRoleMock).toHaveBeenCalledWith({
         roleId: 'role-validator',
         status: 'DEPRECATED',
+      })
+    })
+  })
+
+  it('warns before inactivating a skill role that is still in use', async () => {
+    const user = userEvent.setup()
+    render(<SuperAdminSkillRoleRegistry />)
+
+    await user.selectOptions(
+      screen.getByLabelText(/actions for validator/i),
+      'Set Inactive',
+    )
+
+    expect(screen.getByRole('heading', { name: /make skill role inactive/i })).toBeInTheDocument()
+    expect(screen.getByText(/currently used by 3 skills and 1 agent/i)).toBeInTheDocument()
+    expect(screen.getByText(/will block new assignments but will not remove existing references/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /mark inactive/i }))
+
+    await waitFor(() => {
+      expect(updateSkillRoleMock).toHaveBeenCalledWith({
+        roleId: 'role-validator',
+        status: 'INACTIVE',
       })
     })
   })

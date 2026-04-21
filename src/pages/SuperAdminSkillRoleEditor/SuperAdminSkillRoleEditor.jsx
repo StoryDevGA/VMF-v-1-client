@@ -13,6 +13,7 @@ import { useToaster } from '../../components/Toaster'
 import {
   useCreateSkillRoleMutation,
   useGetSkillRoleQuery,
+  useLazyGetSkillRoleDependenciesQuery,
   useUpdateSkillRoleMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -88,7 +89,7 @@ function SuperAdminSkillRoleEditor() {
   const [form, setForm] = useState(INITIAL_SKILL_ROLE_FORM)
   const [errors, setErrors] = useState({})
   const [errorsSource, setErrorsSource] = useState(null) // 'client' | 'server' | null
-  const [pendingDeprecationWarning, setPendingDeprecationWarning] = useState(false)
+  const [pendingStatusWarning, setPendingStatusWarning] = useState(null) // { nextStatus, summary } | null
 
   const {
     data: roleResponse,
@@ -101,6 +102,7 @@ function SuperAdminSkillRoleEditor() {
 
   const [createSkillRole, { isLoading: isCreating }] = useCreateSkillRoleMutation()
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
+  const [fetchSkillRoleDependencies] = useLazyGetSkillRoleDependenciesQuery()
 
   const liveErrors = useMemo(() => validateSkillRoleForm(form), [form])
   const isSaving = isCreating || isUpdating
@@ -123,7 +125,7 @@ function SuperAdminSkillRoleEditor() {
     })
   }, [isEditMode, loadedRole])
 
-  const submitSkillRole = useCallback(async ({ bypassDeprecationWarning = false } = {}) => {
+  const submitSkillRole = useCallback(async ({ bypassStatusWarning = false } = {}) => {
     const clientErrors = validateSkillRoleForm(form)
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors)
@@ -133,15 +135,33 @@ function SuperAdminSkillRoleEditor() {
 
     const nextStatus = String(form.status || '').trim().toUpperCase()
     const currentStatus = String(loadedRole?.status || '').trim().toUpperCase()
-    const shouldWarnOnDeprecation = isEditMode
-      && nextStatus === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
-      && currentStatus !== SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
-      && roleUsageCount > 0
-      && !bypassDeprecationWarning
+    const shouldCheckDependencies = isEditMode
+      && nextStatus
+      && nextStatus !== currentStatus
+      && (nextStatus === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+        || nextStatus === SKILL_ROLE_REGISTRY_STATUSES.INACTIVE)
+      && !bypassStatusWarning
 
-    if (shouldWarnOnDeprecation) {
-      setPendingDeprecationWarning(true)
-      return
+    if (shouldCheckDependencies) {
+      try {
+        const res = await fetchSkillRoleDependencies(roleId).unwrap()
+        const summary = res?.data?.dependencies?.summary && typeof res.data.dependencies.summary === 'object'
+          ? res.data.dependencies.summary
+          : {}
+        const skills = Number(summary.skills) || 0
+        const agents = Number(summary.agents) || 0
+
+        if (skills + agents > 0) {
+          setPendingStatusWarning({ nextStatus, summary: { skills, agents } })
+          return
+        }
+      } catch {
+        // If we cannot resolve dependencies, fallback to skill-only usageCount.
+        if (roleUsageCount > 0) {
+          setPendingStatusWarning({ nextStatus, summary: { skills: roleUsageCount, agents: null } })
+          return
+        }
+      }
     }
 
     try {
@@ -181,7 +201,7 @@ function SuperAdminSkillRoleEditor() {
         })
       }
 
-      setPendingDeprecationWarning(false)
+      setPendingStatusWarning(null)
       setErrors({})
       setErrorsSource(null)
     } catch (err) {
@@ -197,6 +217,7 @@ function SuperAdminSkillRoleEditor() {
   }, [
     addToast,
     createSkillRole,
+    fetchSkillRoleDependencies,
     form,
     isEditMode,
     loadedRole?.status,
@@ -214,13 +235,17 @@ function SuperAdminSkillRoleEditor() {
     await submitSkillRole()
   }, [submitSkillRole])
 
-  const closeDeprecationWarning = useCallback(() => {
-    setPendingDeprecationWarning(false)
+  const closeStatusWarning = useCallback(() => {
+    setPendingStatusWarning(null)
   }, [])
 
-  const confirmDeprecationWarning = useCallback(async () => {
-    await submitSkillRole({ bypassDeprecationWarning: true })
-  }, [submitSkillRole])
+  const confirmStatusWarning = useCallback(async () => {
+    const shouldBypass = Boolean(pendingStatusWarning)
+    setPendingStatusWarning(null)
+    if (shouldBypass) {
+      await submitSkillRole({ bypassStatusWarning: true })
+    }
+  }, [pendingStatusWarning, submitSkillRole])
 
   const canSave = Object.keys(liveErrors).length === 0 && !isSaving
   const roleKeyIsRequired = !isEditMode
@@ -315,8 +340,18 @@ function SuperAdminSkillRoleEditor() {
                       ]}
                       error={errors.status}
                       helperText={
-                        roleUsageCount > 0 && form.status === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
-                          ? `Used by ${roleUsageCount} skill${roleUsageCount === 1 ? '' : 's'}.`
+                        roleUsageCount > 0
+                        && (form.status === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+                          || form.status === SKILL_ROLE_REGISTRY_STATUSES.INACTIVE)
+                          ? (() => {
+                              const summary = pendingStatusWarning?.summary
+                              const agents = summary?.agents
+                              if (agents === null || agents === undefined) {
+                                return `Used by ${roleUsageCount} skill${roleUsageCount === 1 ? '' : 's'}.`
+                              }
+                              const skills = Number(summary?.skills) || roleUsageCount
+                              return `Used by ${skills} skill${skills === 1 ? '' : 's'} and ${agents} agent${agents === 1 ? '' : 's'}.`
+                            })()
                           : undefined
                       }
                       required={statusIsRequired}
@@ -373,23 +408,42 @@ function SuperAdminSkillRoleEditor() {
         ) : null}
       </Fieldset>
 
-      <Dialog open={pendingDeprecationWarning} onClose={closeDeprecationWarning} size="sm">
+      <Dialog open={Boolean(pendingStatusWarning)} onClose={closeStatusWarning} size="sm">
         <Dialog.Header>
-          <h2>Deprecate skill role?</h2>
+          <h2>
+            {pendingStatusWarning?.nextStatus === SKILL_ROLE_REGISTRY_STATUSES.INACTIVE
+              ? 'Make skill role inactive?'
+              : 'Deprecate skill role?'}
+          </h2>
         </Dialog.Header>
         <Dialog.Body>
-          <p>
-            {loadedRole?.roleKey ?? 'This skill role'} is used by {roleUsageCount} skill{roleUsageCount === 1 ? '' : 's'}.
-            Deprecating it will not remove those existing references.
+          <p className="super-admin-skill-role-editor__dialog-copy">
+            <Badge variant="primary" size="sm" pill outline>
+              {loadedRole?.roleKey ?? 'UNKNOWN_ROLE'}
+            </Badge>{' '}
+            is currently used by{' '}
+            {Number(pendingStatusWarning?.summary?.skills) || 0} skill{Number(pendingStatusWarning?.summary?.skills) === 1 ? '' : 's'}
+            {pendingStatusWarning?.summary?.agents === null
+              ? '.'
+              : ` and ${Number(pendingStatusWarning?.summary?.agents) || 0} agent${Number(pendingStatusWarning?.summary?.agents) === 1 ? '' : 's'}.`}
+          </p>
+          <p className="super-admin-skill-role-editor__dialog-helper">
+            Making it {pendingStatusWarning?.nextStatus ?? 'non-active'} will block new assignments but will not remove existing references.
           </p>
         </Dialog.Body>
         <Dialog.Footer>
-          <Button variant="outline" onClick={closeDeprecationWarning} disabled={isSaving}>
+          <Button variant="outline" onClick={closeStatusWarning} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={confirmDeprecationWarning} loading={isSaving}>
-            Deprecate Role
-          </Button>
+          {pendingStatusWarning?.nextStatus === SKILL_ROLE_REGISTRY_STATUSES.INACTIVE ? (
+            <Button variant="primary" onClick={confirmStatusWarning} loading={isSaving}>
+              Mark Inactive
+            </Button>
+          ) : (
+            <Button variant="danger" onClick={confirmStatusWarning} loading={isSaving}>
+              Deprecate Role
+            </Button>
+          )}
         </Dialog.Footer>
       </Dialog>
     </section>

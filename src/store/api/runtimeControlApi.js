@@ -317,6 +317,41 @@ const buildMockRuntimeAgentDependencies = (agentId) => {
   }
 }
 
+const buildMockSkillRoleDependencies = (roleKey) => {
+  const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
+  if (!normalizedRoleKey) {
+    return {
+      skillIds: [],
+      agentIds: [],
+      summary: { skills: 0, agents: 0 },
+    }
+  }
+
+  const skillIds = (runtimeControlState.skills || [])
+    .filter((skill) => String(skill?.skillRoleKey ?? '').trim().toUpperCase() === normalizedRoleKey)
+    .map((skill) => skill.id)
+    .filter(Boolean)
+
+  const agentIds = (runtimeControlState.agents || [])
+    .filter((agent) => {
+      const roleKeys = Array.isArray(agent?.requiredSkillRoleKeys) ? agent.requiredSkillRoleKeys : []
+      return roleKeys
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .includes(normalizedRoleKey)
+    })
+    .map((agent) => agent.id)
+    .filter(Boolean)
+
+  return {
+    skillIds,
+    agentIds,
+    summary: {
+      skills: skillIds.length,
+      agents: agentIds.length,
+    },
+  }
+}
+
 const getFrameworkPackageRows = ({
   q = '',
   status = '',
@@ -1902,6 +1937,37 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { roleId }) => [
         SKILL_ROLE_LIST_TAG,
         { type: 'SkillRole', id: roleId },
+        { type: 'SkillRoleDependencies', id: roleId },
+      ],
+    }),
+
+    getSkillRoleDependencies: build.query({
+      queryFn: async (roleId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('skill-roles', `${roleId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const role = findSkillRoleById(roleId)
+        if (!role) {
+          return buildNotFoundError('Skill role was not found.')
+        }
+
+        const dependencies = buildMockSkillRoleDependencies(role.roleKey)
+
+        return {
+          data: buildEntityResponse({
+            id: roleId,
+            roleKey: role.roleKey,
+            dependencies,
+          }),
+        }
+      },
+      providesTags: (_result, _error, roleId) => [
+        { type: 'SkillRoleDependencies', id: roleId },
       ],
     }),
 
@@ -2359,6 +2425,8 @@ export const {
   useListSkillRolesQuery,
   useCreateSkillRoleMutation,
   useGetSkillRoleQuery,
+  useGetSkillRoleDependenciesQuery,
+  useLazyGetSkillRoleDependenciesQuery,
   useUpdateSkillRoleMutation,
   useListRuntimePathsQuery,
   useLazyListRuntimePathsQuery,

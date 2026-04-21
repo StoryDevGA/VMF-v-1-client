@@ -10,6 +10,7 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
+import { Tooltip } from '../../components/Tooltip'
 import {
   formatKeyList,
   normalizeAgentKey,
@@ -378,6 +379,32 @@ function RuntimeAgentSkillCompositionSection({
     () => parseEnumKeyList(form.requiredSkillRoleKeys),
     [form.requiredSkillRoleKeys],
   )
+  const skillRoleLookup = useMemo(() => {
+    const entries = availableSkillRoles
+      .map((role) => {
+        const roleKey = String(role?.roleKey ?? role?.key ?? '').trim().toUpperCase()
+        if (!roleKey) return null
+        return [
+          roleKey,
+          {
+            roleKey,
+            label: String(role?.label ?? roleKey).trim(),
+            status: String(role?.status ?? '').trim().toUpperCase(),
+          },
+        ]
+      })
+      .filter(Boolean)
+
+    return Object.fromEntries(entries)
+  }, [availableSkillRoles])
+
+  const getRequiredRoleStatusVariant = (roleStatus) => {
+    const normalized = String(roleStatus ?? '').trim().toUpperCase()
+    if (!normalized || normalized === 'UNKNOWN') return 'info'
+    if (normalized === 'DEPRECATED') return 'danger'
+    if (normalized === 'INACTIVE') return 'warning'
+    return 'neutral'
+  }
 
   const skillLookup = useMemo(() => {
     const entries = availableSkills
@@ -624,10 +651,46 @@ function RuntimeAgentSkillCompositionSection({
           {requiredSkillRoleKeys.length > 0 ? (
             <div className="super-admin-agents__token-list" aria-label="Required skill roles">
               {requiredSkillRoleKeys.map((roleKey) => (
-                <div key={roleKey} className="super-admin-agents__token-item">
-                  <Badge variant="warning" size="sm" pill>
-                    {roleKey}
+                <div
+                  key={roleKey}
+                  className={[
+                    'super-admin-agents__token-item',
+                    skillRoleLookup[roleKey]?.status && skillRoleLookup[roleKey]?.status !== 'ACTIVE'
+                      ? 'super-admin-agents__token-item--non-active'
+                      : null,
+                  ].filter(Boolean).join(' ')}
+                >
+                  <Badge variant="neutral" size="sm" pill outline>
+                    {skillRoleLookup[roleKey]?.label
+                      ? `${skillRoleLookup[roleKey].label} (${roleKey})`
+                      : roleKey}
                   </Badge>
+                  {skillRoleLookup[roleKey]?.status && skillRoleLookup[roleKey]?.status !== 'ACTIVE' ? (
+                    <Badge
+                      variant={getRequiredRoleStatusVariant(skillRoleLookup[roleKey]?.status)}
+                      size="sm"
+                      pill
+                    >
+                      {skillRoleLookup[roleKey].status}
+                    </Badge>
+                  ) : null}
+                  {skillRoleLookup[roleKey]?.status && skillRoleLookup[roleKey]?.status !== 'ACTIVE' ? (
+                    <Tooltip
+                      content={"Change this role's status in Skill Roles."}
+                      position="top"
+                      align="center"
+                      className="super-admin-agents__role-status-tooltip"
+                    >
+                      <span
+                        className="super-admin-agents__role-status-info"
+                        role="img"
+                        aria-label={"Change this role's status in Skill Roles."}
+                        tabIndex={0}
+                      >
+                        i
+                      </span>
+                    </Tooltip>
+                  ) : null}
                   <Button
                     type="button"
                     variant="ghost"

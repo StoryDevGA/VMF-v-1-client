@@ -89,8 +89,9 @@ describe('SuperAdminSkillRoleEditor page', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     expect(await screen.findByRole('heading', { name: /deprecate skill role/i })).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog')).getByText(/currently used by/i)).toBeInTheDocument()
     expect(
-      within(screen.getByRole('dialog')).getByText(/deprecating it will not remove those existing references/i),
+      within(screen.getByRole('dialog')).getByText(/will block new assignments but will not remove existing references/i),
     ).toBeInTheDocument()
   })
 })

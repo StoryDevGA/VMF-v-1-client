@@ -74,6 +74,25 @@
   font-size: var(--font-size-sm);
 }
 
+.super-admin-skill-role-editor__dialog-copy {
+  margin: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-skill-role-editor__dialog-helper {
+  margin: 0;
+  margin-top: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
 @media (max-width: 767px) {
   .super-admin-skill-role-editor__card-body--compact {
     padding: var(--spacing-sm);

@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { useToaster } from '../../components/Toaster'
-import { useUpdateSkillRoleMutation } from '../../store/api/runtimeControlApi.js'
+import {
+  useLazyGetSkillRoleDependenciesQuery,
+  useUpdateSkillRoleMutation,
+} from '../../store/api/runtimeControlApi.js'
 import { SkillRoleRegistryListView } from './SkillRoleRegistryListView.jsx'
 import { useSkillRoleRegistryManagement } from './useSkillRoleRegistryManagement.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -14,6 +18,7 @@ function SuperAdminSkillRoleRegistry() {
   const { addToast } = useToaster()
   const mgmt = useSkillRoleRegistryManagement()
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
+  const [fetchSkillRoleDependencies] = useLazyGetSkillRoleDependenciesQuery()
   const [pendingStatusChange, setPendingStatusChange] = useState(null)
 
   const handleBackClick = useCallback(() => {
@@ -47,13 +52,33 @@ function SuperAdminSkillRoleRegistry() {
   }, [addToast, updateSkillRole])
 
   const setRoleStatus = useCallback(async (row, nextStatus) => {
-    if (nextStatus === 'DEPRECATED' && Number(row?.usageCount) > 0) {
-      setPendingStatusChange({ row, nextStatus })
-      return
+    const normalizedStatus = String(nextStatus ?? '').trim().toUpperCase()
+    const shouldWarn = normalizedStatus === 'DEPRECATED' || normalizedStatus === 'INACTIVE'
+
+    if (shouldWarn) {
+      try {
+        const res = await fetchSkillRoleDependencies(row.id).unwrap()
+        const summary = res?.data?.dependencies?.summary && typeof res.data.dependencies.summary === 'object'
+          ? res.data.dependencies.summary
+          : {}
+        const skills = Number(summary.skills) || 0
+        const agents = Number(summary.agents) || 0
+
+        if (skills + agents > 0) {
+          setPendingStatusChange({ row, nextStatus: normalizedStatus, summary: { skills, agents } })
+          return
+        }
+      } catch (err) {
+        const skillCount = Number(row?.usageCount) || 0
+        if (skillCount > 0) {
+          setPendingStatusChange({ row, nextStatus: normalizedStatus, summary: { skills: skillCount, agents: null } })
+          return
+        }
+      }
     }
 
     await commitRoleStatus(row, nextStatus)
-  }, [commitRoleStatus])
+  }, [commitRoleStatus, fetchSkillRoleDependencies])
 
   const closePendingStatusChange = useCallback(() => {
     setPendingStatusChange(null)
@@ -101,22 +126,40 @@ function SuperAdminSkillRoleRegistry() {
 
       <Dialog open={Boolean(pendingStatusChange)} onClose={closePendingStatusChange} size="sm">
         <Dialog.Header>
-          <h2>Deprecate skill role?</h2>
+          <h2>
+            {pendingStatusChange?.nextStatus === 'INACTIVE'
+              ? 'Make skill role inactive?'
+              : 'Deprecate skill role?'}
+          </h2>
         </Dialog.Header>
-      <Dialog.Body>
-        <p>
-          {pendingStatusChange?.row?.roleKey ?? 'This skill role'} is used by{' '}
-          {Number(pendingStatusChange?.row?.usageCount) || 0} skill{Number(pendingStatusChange?.row?.usageCount) === 1 ? '' : 's'}.
-          Deprecating it will not remove those existing references.
-        </p>
-      </Dialog.Body>
+        <Dialog.Body>
+          <p className="super-admin-skill-role-registry__dialog-copy">
+            <Badge variant="primary" size="sm" pill outline>
+              {pendingStatusChange?.row?.roleKey ?? 'UNKNOWN_ROLE'}
+            </Badge>{' '}
+            is currently used by{' '}
+            {Number(pendingStatusChange?.summary?.skills) || 0} skill{Number(pendingStatusChange?.summary?.skills) === 1 ? '' : 's'}
+            {pendingStatusChange?.summary?.agents === null
+              ? '.'
+              : ` and ${Number(pendingStatusChange?.summary?.agents) || 0} agent${Number(pendingStatusChange?.summary?.agents) === 1 ? '' : 's'}.`}
+          </p>
+          <p className="super-admin-skill-role-registry__dialog-helper">
+            Making it {pendingStatusChange?.nextStatus ?? 'non-active'} will block new assignments but will not remove existing references.
+          </p>
+        </Dialog.Body>
         <Dialog.Footer>
           <Button variant="outline" onClick={closePendingStatusChange} disabled={isUpdating}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={confirmPendingStatusChange} loading={isUpdating}>
-            Deprecate Role
-          </Button>
+          {pendingStatusChange?.nextStatus === 'INACTIVE' ? (
+            <Button variant="primary" onClick={confirmPendingStatusChange} loading={isUpdating}>
+              Mark Inactive
+            </Button>
+          ) : (
+            <Button variant="danger" onClick={confirmPendingStatusChange} loading={isUpdating}>
+              Deprecate Role
+            </Button>
+          )}
         </Dialog.Footer>
       </Dialog>
     </section>

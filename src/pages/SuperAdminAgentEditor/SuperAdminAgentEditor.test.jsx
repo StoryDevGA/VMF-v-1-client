@@ -97,7 +97,9 @@ describe('SuperAdminAgentEditor page', () => {
     )
     await user.click(screen.getByRole('button', { name: /add role/i }))
 
-    expect(screen.getByText('VALIDATOR')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /remove required skill role validator/i }),
+    ).toBeInTheDocument()
 
     expect(
       screen.getByLabelText(/^skill selector$/i, {

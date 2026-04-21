@@ -296,8 +296,12 @@ export const baseApi = createApi({
     'RuntimeFrameworkPackage',
     'RuntimeFrameworkRegistry',
     'RuntimeAgent',
+    'RuntimeAgentDependencies',
     'RuntimeSkill',
+    'RuntimePath',
     'RuntimeWorkflowPolicy',
+    'SkillRole',
+    'SkillRoleDependencies',
   ],
   endpoints: () => ({}), // feature slices inject their own
 })
