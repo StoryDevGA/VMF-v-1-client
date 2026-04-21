@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { configureStore } from '@reduxjs/toolkit'
 import {
   runtimeControlApi,
   buildRuntimeControlDetailRequest,
   buildRuntimeControlListRequest,
   buildRuntimeControlMutationRequest,
+  __resetRuntimeControlApiStateForTests,
   useCreateFrameworkRegistryMutation,
   useActivateFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
@@ -27,10 +29,20 @@ import {
   useUpdateRuntimeSkillMutation,
   useUpdateWorkflowPolicyMutation,
 } from './runtimeControlApi.js'
+import { baseApi } from './baseApi.js'
+
+const createTestStore = () =>
+  configureStore({
+    reducer: {
+      [baseApi.reducerPath]: baseApi.reducer,
+    },
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
+  })
 
 describe('runtimeControlApi', () => {
   beforeEach(() => {
     globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
+    __resetRuntimeControlApiStateForTests()
   })
 
   it('exposes Runtime Control endpoints', () => {
@@ -253,5 +265,55 @@ describe('runtimeControlApi', () => {
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
     })
+  })
+
+  it('blocks mock disable/deprecate when active dependencies exist', async () => {
+    const store = createTestStore()
+
+    const disableResult = await store.dispatch(
+      runtimeControlApi.endpoints.disableRuntimeAgent.initiate({ agentId: 'agent-validator' }),
+    )
+
+    expect(disableResult.error?.status).toBe(409)
+    expect(disableResult.error?.data?.error?.details?.reason).toBe('RUNTIME_AGENT_DEPENDENCIES_ACTIVE')
+
+    const deprecateResult = await store.dispatch(
+      runtimeControlApi.endpoints.deprecateRuntimeAgent.initiate({ agentId: 'agent-validator' }),
+    )
+
+    expect(deprecateResult.error?.status).toBe(409)
+    expect(deprecateResult.error?.data?.error?.details?.reason).toBe('RUNTIME_AGENT_DEPENDENCIES_ACTIVE')
+  })
+
+  it('allows mock disable/deprecate when only inactive dependencies exist', async () => {
+    const store = createTestStore()
+
+    const disableResult = await store.dispatch(
+      runtimeControlApi.endpoints.disableRuntimeAgent.initiate({ agentId: 'agent-summary' }),
+    )
+
+    expect(disableResult.error).toBeUndefined()
+    expect(disableResult.data?.data?.status).toBe('INACTIVE')
+
+    const deprecateResult = await store.dispatch(
+      runtimeControlApi.endpoints.deprecateRuntimeAgent.initiate({ agentId: 'agent-summary' }),
+    )
+
+    expect(deprecateResult.error).toBeUndefined()
+    expect(deprecateResult.data?.data?.status).toBe('DEPRECATED')
+  })
+
+  it('blocks mock PATCH updates that attempt lifecycle status transitions', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.updateRuntimeAgent.initiate({
+        agentId: 'agent-reporter',
+        status: 'ACTIVE',
+      }),
+    )
+
+    expect(result.error?.status).toBe(409)
+    expect(result.error?.data?.error?.details?.reason).toBe('RUNTIME_AGENT_LIFECYCLE_ACTION_REQUIRED')
   })
 })

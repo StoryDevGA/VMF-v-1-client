@@ -15,11 +15,11 @@ export const SKILL_ROLE_REGISTRY_STATUS_OPTIONS = Object.freeze([
 ])
 
 export const SKILL_ROLE_REGISTRY_SORT_OPTIONS = Object.freeze([
-  { label: 'Recently Updated', value: 'updatedAt:desc' },
+  { label: 'Updated (Newest first)', value: 'updatedAt:desc' },
   { label: 'Label (A-Z)', value: 'label:asc' },
   { label: 'Label (Z-A)', value: 'label:desc' },
-  { label: 'Usage Count (High-Low)', value: 'usageCount:desc' },
-  { label: 'Usage Count (Low-High)', value: 'usageCount:asc' },
+  { label: 'Skills Using (High-Low)', value: 'usageCount:desc' },
+  { label: 'Skills Using (Low-High)', value: 'usageCount:asc' },
 ])
 
 export const formatSkillRoleRegistryStatus = (value) =>

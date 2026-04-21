@@ -139,13 +139,19 @@ export function useRuntimeAgentManagement() {
           await updateRuntimeAgent({ agentId: agent.id, status: nextStatus }).unwrap()
         }
 
-        addToast({
-          title:
-            nextStatus === RUNTIME_AGENT_STATUSES.ACTIVE
-              ? 'Agent activated'
+        const statusToastTitle =
+          nextStatus === RUNTIME_AGENT_STATUSES.ACTIVE
+            ? 'Agent activated'
+            : nextStatus === RUNTIME_AGENT_STATUSES.INACTIVE
+              ? 'Agent set inactive'
               : nextStatus === RUNTIME_AGENT_STATUSES.DEPRECATED
                 ? 'Agent deprecated'
-              : 'Agent set inactive',
+                : nextStatus === RUNTIME_AGENT_STATUSES.DRAFT
+                  ? 'Agent set draft'
+                  : 'Agent status updated'
+
+        addToast({
+          title: statusToastTitle,
           description: `${agent.name} is now ${nextStatus.toLowerCase()}.`,
           variant: 'success',
         })

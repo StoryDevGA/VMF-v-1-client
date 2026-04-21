@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminSkillRoleEditor from './SuperAdminSkillRoleEditor.jsx'
 import {
@@ -79,7 +79,7 @@ describe('SuperAdminSkillRoleEditor page', () => {
     renderPage('/super-admin/runtime-control/skill-roles/role-validator')
 
     expect(await screen.findByRole('heading', { name: /^edit skill role$/i })).toBeInTheDocument()
-    expect(await screen.findByText(/usage count/i)).toBeInTheDocument()
+    expect(await screen.findByText(/skills using/i)).toBeInTheDocument()
 
     const statusSelect = await screen.findByLabelText(/^status/i, {
       selector: 'select#skill-role-editor-status',
@@ -89,6 +89,8 @@ describe('SuperAdminSkillRoleEditor page', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     expect(await screen.findByRole('heading', { name: /deprecate skill role/i })).toBeInTheDocument()
-    expect(screen.getByText(/still referenced by/i)).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog')).getByText(/deprecating it will not remove those existing references/i),
+    ).toBeInTheDocument()
   })
 })

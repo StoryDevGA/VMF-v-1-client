@@ -127,8 +127,8 @@ export function SkillRoleRegistryListView({
       },
       {
         key: 'usageCount',
-        label: 'Usage Count',
-        mobileLabel: 'Usage Count',
+        label: 'Skills Using',
+        mobileLabel: 'Skills Using',
         align: 'center',
         width: '132px',
         render: (value) => Number(value) || 0,

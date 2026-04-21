@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { Spinner } from '../../components/Spinner'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateRuntimeAgentMutation,
+  useActivateRuntimeAgentMutation,
+  useDisableRuntimeAgentMutation,
+  useDeprecateRuntimeAgentMutation,
   useGetRuntimeAgentQuery,
   useGetRuntimeAgentDependenciesQuery,
   useListFrameworkRegistriesQuery,
@@ -43,6 +47,7 @@ const shallowEqualObject = (left, right) => {
 }
 
 const AGENT_ERROR_TAB_LOOKUP = Object.freeze({
+  status: 0,
   supportedFrameworkKeys: 0,
   requiredSkillRoleKeys: 1,
   defaultSkillIds: 1,
@@ -106,6 +111,7 @@ function SuperAdminAgentEditor() {
   const [errorsSource, setErrorsSource] = useState(null) // 'client' | 'server' | null
   const [activeEditorTab, setActiveEditorTab] = useState(0)
   const [showValidationHints, setShowValidationHints] = useState(false)
+  const [dependencyConfirmOpen, setDependencyConfirmOpen] = useState(false)
 
   const {
     data: agentResponse,
@@ -142,7 +148,11 @@ function SuperAdminAgentEditor() {
     pageSize: 100,
     q: '',
   })
-  const { data: skillRolesResponse } = useListSkillRolesQuery({
+  const {
+    data: skillRolesResponse,
+    isLoading: isSkillRolesLoading,
+    error: skillRolesError,
+  } = useListSkillRolesQuery({
     page: 1,
     pageSize: 1000,
     q: '',
@@ -150,11 +160,22 @@ function SuperAdminAgentEditor() {
 
   const [createRuntimeAgent, { isLoading: isCreating }] = useCreateRuntimeAgentMutation()
   const [updateRuntimeAgent, { isLoading: isUpdating }] = useUpdateRuntimeAgentMutation()
+  const [activateRuntimeAgent] = useActivateRuntimeAgentMutation()
+  const [disableRuntimeAgent] = useDisableRuntimeAgentMutation()
+  const [deprecateRuntimeAgent] = useDeprecateRuntimeAgentMutation()
 
   const loadedAgent = agentResponse?.data ?? null
   const agentAppError = agentError ? normalizeError(agentError) : null
   const loadedDependencies = dependenciesResponse?.data ?? null
   const dependenciesAppError = dependenciesError ? normalizeError(dependenciesError) : null
+  const activeDependencyCount = useMemo(() => {
+    const summary = loadedDependencies?.summary && typeof loadedDependencies.summary === 'object'
+      ? loadedDependencies.summary
+      : {}
+
+    return (Number(summary.activeWorkflowPolicies) || 0) + (Number(summary.activeFrameworkPackages) || 0)
+  }, [loadedDependencies])
+  const hasActiveDependencies = isEditMode && activeDependencyCount > 0
   const activeFrameworkRegistryRows = useMemo(
     () =>
       (registryResponse?.data ?? []).filter(
@@ -190,7 +211,34 @@ function SuperAdminAgentEditor() {
     return []
   }, [skillsResponse])
   const skillsAppError = skillsError ? normalizeError(skillsError) : null
-  const availableSkillRoles = skillRolesResponse?.data ?? []
+  const availableSkillRoles = useMemo(() => {
+    const direct = skillRolesResponse?.data
+
+    if (Array.isArray(direct)) {
+      return direct
+    }
+
+    if (direct && typeof direct === 'object' && Array.isArray(direct.data)) {
+      return direct.data
+    }
+
+    if (Array.isArray(skillRolesResponse)) {
+      return skillRolesResponse
+    }
+
+    return []
+  }, [skillRolesResponse])
+  const skillRolesAppError = skillRolesError ? normalizeError(skillRolesError) : null
+  useEffect(() => {
+    const totalCount = skillRolesResponse?.meta?.totalCount ?? 0
+    const pageSize = 1000
+    if (totalCount > pageSize) {
+      console.warn(
+        `Skill role registry has ${totalCount} roles but only fetched ${pageSize}. ` +
+        'Some roles may not be selectable in this editor. See STORYLINEOS-RUNTIME-CONTROL-ALIGNMENT-SPRINT-02-SPEC.md#pagination-ceiling',
+      )
+    }
+  }, [skillRolesResponse?.meta?.totalCount])
 
   const liveValidation = useMemo(
     () =>
@@ -327,8 +375,7 @@ function SuperAdminAgentEditor() {
     })
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const submitForm = async ({ bypassDependencyConfirm } = {}) => {
     setErrors({})
     setErrorsSource(null)
 
@@ -350,10 +397,40 @@ function SuperAdminAgentEditor() {
 
     try {
       if (isEditMode) {
+        if (hasActiveDependencies && !bypassDependencyConfirm) {
+          setDependencyConfirmOpen(true)
+          return
+        }
+
+        const currentStatus = String(loadedAgent?.status ?? '').trim().toUpperCase()
+        const requestedStatus = String(payload?.status ?? '').trim().toUpperCase()
+        const lifecycleStatuses = new Set(['ACTIVE', 'INACTIVE', 'DEPRECATED'])
+        const isLifecycleStatus = requestedStatus && lifecycleStatuses.has(requestedStatus)
+        const shouldApplyLifecycleStatus = isLifecycleStatus && requestedStatus !== currentStatus
+
+        // Lifecycle status transitions are handled by dedicated endpoints. Keep PATCH focused on non-lifecycle fields.
+        const updatePayload = isLifecycleStatus
+          ? (() => {
+              const nextPayload = { ...payload }
+              delete nextPayload.status
+              return nextPayload
+            })()
+          : payload
+
         await updateRuntimeAgent({
           agentId,
-          ...payload,
+          ...updatePayload,
         }).unwrap()
+
+        if (shouldApplyLifecycleStatus) {
+          if (requestedStatus === 'ACTIVE') {
+            await activateRuntimeAgent({ agentId }).unwrap()
+          } else if (requestedStatus === 'INACTIVE') {
+            await disableRuntimeAgent({ agentId }).unwrap()
+          } else if (requestedStatus === 'DEPRECATED') {
+            await deprecateRuntimeAgent({ agentId }).unwrap()
+          }
+        }
 
         addToast({
           title: 'Agent updated',
@@ -400,6 +477,11 @@ function SuperAdminAgentEditor() {
         variant: 'error',
       })
     }
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    await submitForm({ bypassDependencyConfirm: false })
   }
 
   return (
@@ -458,6 +540,8 @@ function SuperAdminAgentEditor() {
                   availableSkillRoles={availableSkillRoles}
                   isSkillsLoading={isSkillsLoading}
                   skillsError={skillsAppError?.message ?? ''}
+                  isSkillRolesLoading={isSkillRolesLoading}
+                  skillRolesError={skillRolesAppError?.message ?? ''}
                   dependencies={loadedDependencies}
                   isDependenciesLoading={isDependenciesLoading}
                   dependenciesError={dependenciesAppError?.message ?? ''}
@@ -486,6 +570,41 @@ function SuperAdminAgentEditor() {
           </Card>
         ) : null}
       </Fieldset>
+
+      <Dialog
+        open={dependencyConfirmOpen}
+        onClose={() => setDependencyConfirmOpen(false)}
+        size="sm"
+      >
+        <Dialog.Header>
+          <h2>Save changes to a referenced agent?</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p>
+            This agent is referenced by {activeDependencyCount} ACTIVE runtime-control resource{activeDependencyCount === 1 ? '' : 's'}.
+            Saving changes may impact downstream workflow policies or framework packages.
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            variant="outline"
+            onClick={() => setDependencyConfirmOpen(false)}
+            disabled={isUpdating || isCreating}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              setDependencyConfirmOpen(false)
+              await submitForm({ bypassDependencyConfirm: true })
+            }}
+            loading={isUpdating || isCreating}
+          >
+            Save Anyway
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 }

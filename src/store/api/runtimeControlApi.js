@@ -277,6 +277,46 @@ export const __resetRuntimeControlApiStateForTests = () => {
   runtimeControlState = buildInitialRuntimeControlState()
 }
 
+const buildMockRuntimeAgentDependencies = (agentId) => {
+  const workflowPolicies = (runtimeControlState.workflowPolicies || []).filter((policy) =>
+    Array.isArray(policy.requiredAgentIds) && policy.requiredAgentIds.includes(agentId),
+  )
+  const frameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
+    Array.isArray(pkg.defaultAgentIds) && pkg.defaultAgentIds.includes(agentId),
+  )
+
+  const activeWorkflowPolicies = workflowPolicies.filter((policy) => policy.status === 'ACTIVE')
+  const activeFrameworkPackages = frameworkPackages.filter((pkg) => pkg.status === 'ACTIVE')
+
+  const warnings = []
+  const blocks = []
+
+  if (activeWorkflowPolicies.length > 0) {
+    warnings.push(`This Agent is used by ${activeWorkflowPolicies.length} ACTIVE workflow policies.`)
+  }
+
+  if (activeFrameworkPackages.length > 0) {
+    warnings.push(`This Agent is used by ${activeFrameworkPackages.length} ACTIVE framework packages.`)
+  }
+
+  if (warnings.length > 0) {
+    blocks.push('Deactivation is blocked while this agent is referenced by ACTIVE runtime-control resources.')
+  }
+
+  return {
+    workflowPolicies,
+    frameworkPackages,
+    summary: {
+      workflowPolicies: workflowPolicies.length,
+      frameworkPackages: frameworkPackages.length,
+      activeWorkflowPolicies: activeWorkflowPolicies.length,
+      activeFrameworkPackages: activeFrameworkPackages.length,
+    },
+    warnings,
+    blocks,
+  }
+}
+
 const getFrameworkPackageRows = ({
   q = '',
   status = '',
@@ -1351,55 +1391,27 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Agent was not found.')
         }
 
-        const workflowPolicies = (runtimeControlState.workflowPolicies || []).filter((policy) =>
-          Array.isArray(policy.requiredAgentIds) && policy.requiredAgentIds.includes(agentId),
-        )
-        const frameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
-          Array.isArray(pkg.defaultAgentIds) && pkg.defaultAgentIds.includes(agentId),
-        )
-
-        const activeWorkflowPolicies = workflowPolicies.filter((policy) => policy.status === 'ACTIVE')
-        const activeFrameworkPackages = frameworkPackages.filter((pkg) => pkg.status === 'ACTIVE')
-
-        const warnings = []
-        const blocks = []
-
-        if (activeWorkflowPolicies.length > 0) {
-          warnings.push(`This Agent is used by ${activeWorkflowPolicies.length} ACTIVE workflow policies.`)
-        }
-
-        if (activeFrameworkPackages.length > 0) {
-          warnings.push(`This Agent is used by ${activeFrameworkPackages.length} ACTIVE framework packages.`)
-        }
-
-        if (warnings.length > 0) {
-          blocks.push('Deactivation is blocked while this agent is referenced by ACTIVE runtime-control resources.')
-        }
+        const dependencies = buildMockRuntimeAgentDependencies(agentId)
 
         return {
           data: buildEntityResponse({
             agentId,
-            workflowPolicies: workflowPolicies.map((policy) => ({
+            workflowPolicies: dependencies.workflowPolicies.map((policy) => ({
               id: policy.id,
               key: policy.key,
               name: policy.name,
               status: policy.status,
             })),
-            frameworkPackages: frameworkPackages.map((pkg) => ({
+            frameworkPackages: dependencies.frameworkPackages.map((pkg) => ({
               id: pkg.id,
               frameworkKey: pkg.frameworkKey,
               frameworkName: pkg.frameworkName,
               version: pkg.version,
               status: pkg.status,
             })),
-            summary: {
-              workflowPolicies: workflowPolicies.length,
-              frameworkPackages: frameworkPackages.length,
-              activeWorkflowPolicies: activeWorkflowPolicies.length,
-              activeFrameworkPackages: activeFrameworkPackages.length,
-            },
-            warnings,
-            blocks,
+            summary: dependencies.summary,
+            warnings: dependencies.warnings,
+            blocks: dependencies.blocks,
           }),
         }
       },
@@ -1424,6 +1436,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const existingAgent = findRuntimeAgentById(agentId)
         if (!existingAgent) {
           return buildNotFoundError('Agent was not found.')
+        }
+
+        const requestedStatus = String(payload.status ?? '').trim().toUpperCase()
+        const currentStatus = String(existingAgent.status ?? '').trim().toUpperCase()
+        const lifecycleStatuses = new Set(['ACTIVE', 'INACTIVE', 'DEPRECATED'])
+
+        if (requestedStatus && requestedStatus !== currentStatus && lifecycleStatuses.has(requestedStatus)) {
+          return buildConflictError(
+            'Agent status must be changed using the lifecycle actions (activate, disable, deprecate).',
+            {
+              field: 'status',
+              reason: 'RUNTIME_AGENT_LIFECYCLE_ACTION_REQUIRED',
+            },
+          )
         }
 
         const duplicateAgent = runtimeControlState.agents.find(
@@ -1619,6 +1645,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Agent was not found.')
         }
 
+        const dependencies = buildMockRuntimeAgentDependencies(agentId)
+        if (dependencies.blocks.length > 0) {
+          return buildConflictError(dependencies.blocks[0], {
+            field: 'status',
+            reason: 'RUNTIME_AGENT_DEPENDENCIES_ACTIVE',
+            ...dependencies.summary,
+          })
+        }
+
         const nextAgent = cloneRuntimeAgent({
           ...existingAgent,
           status: 'INACTIVE',
@@ -1658,6 +1693,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const existingAgent = findRuntimeAgentById(agentId)
         if (!existingAgent) {
           return buildNotFoundError('Agent was not found.')
+        }
+
+        const dependencies = buildMockRuntimeAgentDependencies(agentId)
+        if (dependencies.blocks.length > 0) {
+          return buildConflictError(dependencies.blocks[0], {
+            field: 'status',
+            reason: 'RUNTIME_AGENT_DEPENDENCIES_ACTIVE',
+            ...dependencies.summary,
+          })
         }
 
         const nextAgent = cloneRuntimeAgent({

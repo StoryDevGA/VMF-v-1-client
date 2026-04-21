@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RuntimePathSelectChips from './RuntimePathSelectChips.jsx'
 
-vi.mock('../../store/api/runtimeControlApi.js', () => ({
-  useListRuntimePathsQuery: () => ({
+const { useListRuntimePathsQuery } = vi.hoisted(() => ({
+  useListRuntimePathsQuery: vi.fn(() => ({
     isFetching: false,
     data: {
       data: [
@@ -12,10 +12,18 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
         { id: 'path-b', pathKey: 'runtime.validationResult', label: 'Validation Result' },
       ],
     },
-  }),
+  })),
+}))
+
+vi.mock('../../store/api/runtimeControlApi.js', () => ({
+  useListRuntimePathsQuery,
 }))
 
 describe('RuntimePathSelectChips', () => {
+  beforeEach(() => {
+    useListRuntimePathsQuery.mockClear()
+  })
+
   it('renders and allows selecting runtime paths', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
@@ -33,5 +41,27 @@ describe('RuntimePathSelectChips', () => {
     await user.selectOptions(select, 'vmf.metadata')
 
     expect(onChange).toHaveBeenCalledWith(['vmf.metadata'])
+  })
+
+  it('filters out protected runtime paths when selecting WRITE targets', async () => {
+    const onChange = vi.fn()
+
+    render(
+      <RuntimePathSelectChips
+        id="paths"
+        operation="WRITE"
+        selectedKeys={[]}
+        onChange={onChange}
+      />,
+    )
+
+    expect(useListRuntimePathsQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'WRITE',
+        isProtected: 'false',
+        status: 'ACTIVE',
+      }),
+      expect.any(Object),
+    )
   })
 })

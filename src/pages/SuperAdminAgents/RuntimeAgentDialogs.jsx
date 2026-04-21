@@ -289,6 +289,7 @@ function RuntimeAgentOverviewSection({ prefix, form, setForm, errors }) {
           value={form.status}
           options={RUNTIME_AGENT_FORM_STATUS_OPTIONS}
           onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+          error={errors.status}
         />
 
         <Select
@@ -349,6 +350,8 @@ function RuntimeAgentSkillCompositionSection({
   availableSkillRoles = [],
   isSkillsLoading = false,
   skillsError = '',
+  isSkillRolesLoading = false,
+  skillRolesError = '',
 }) {
   const [query, setQuery] = useState('')
   const [pendingSkillId, setPendingSkillId] = useState('')
@@ -456,13 +459,24 @@ function RuntimeAgentSkillCompositionSection({
     () =>
       availableSkillRoles
         .filter((role) => String(role?.status ?? '').trim().toUpperCase() === 'ACTIVE')
-        .filter((role) => !requiredSkillRoleKeys.includes(String(role?.roleKey ?? '').trim().toUpperCase()))
+        .filter((role) => {
+          const normalizedRoleKey = String(role?.roleKey ?? role?.key ?? '').trim().toUpperCase()
+          return normalizedRoleKey && !requiredSkillRoleKeys.includes(normalizedRoleKey)
+        })
         .map((role) => ({
-          value: String(role.roleKey ?? '').trim().toUpperCase(),
-          label: `${role.label ?? role.roleKey} (${role.roleKey})`,
+          value: String(role?.roleKey ?? role?.key ?? '').trim().toUpperCase(),
+          label: `${role?.label ?? role?.roleKey ?? role?.key} (${role?.roleKey ?? role?.key})`,
         })),
     [availableSkillRoles, requiredSkillRoleKeys],
   )
+
+  const requiredRolePlaceholder = isSkillRolesLoading
+    ? 'Loading skill roles...'
+    : skillRolesError
+      ? 'Failed to load skill roles'
+      : compatibleRequiredRoleOptions.length > 0
+        ? 'Select a skill role'
+        : 'No additional roles available'
 
   const handleAddSkill = (skillId) => {
     const normalizedSkillId = normalizeAgentKey(skillId)
@@ -592,8 +606,8 @@ function RuntimeAgentSkillCompositionSection({
               value={pendingRequiredRoleKey}
               options={compatibleRequiredRoleOptions}
               onChange={(event) => setPendingRequiredRoleKey(event.target.value)}
-              placeholder={compatibleRequiredRoleOptions.length > 0 ? 'Select a skill role' : 'No additional roles available'}
-              disabled={compatibleRequiredRoleOptions.length === 0}
+              placeholder={requiredRolePlaceholder}
+              disabled={isSkillRolesLoading || !!skillRolesError || compatibleRequiredRoleOptions.length === 0}
             />
             <Button
               type="button"
@@ -635,6 +649,10 @@ function RuntimeAgentSkillCompositionSection({
           {errors.requiredSkillRoleKeys ? (
             <p className="super-admin-agents__framework-error" role="alert">
               {errors.requiredSkillRoleKeys}
+            </p>
+          ) : skillRolesError ? (
+            <p className="super-admin-agents__framework-error" role="alert">
+              {skillRolesError}
             </p>
           ) : null}
 
@@ -1515,6 +1533,8 @@ export function RuntimeAgentFormFields({
   availableSkillRoles = [],
   isSkillsLoading = false,
   skillsError = '',
+  isSkillRolesLoading = false,
+  skillRolesError = '',
   dependencies = null,
   isDependenciesLoading = false,
   dependenciesError = '',
@@ -1581,6 +1601,8 @@ export function RuntimeAgentFormFields({
             availableSkillRoles={availableSkillRoles}
             isSkillsLoading={isSkillsLoading}
             skillsError={skillsError}
+            isSkillRolesLoading={isSkillRolesLoading}
+            skillRolesError={skillRolesError}
           />
         </TabView.Tab>
 

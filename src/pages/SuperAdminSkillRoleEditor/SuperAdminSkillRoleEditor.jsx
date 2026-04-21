@@ -266,7 +266,7 @@ function SuperAdminSkillRoleEditor() {
               {isEditMode ? (
                 <div className="super-admin-skill-role-editor__summary" aria-label="Skill role summary">
                   <div className="super-admin-skill-role-editor__summary-item">
-                    <span className="super-admin-skill-role-editor__summary-label">Usage Count</span>
+                    <span className="super-admin-skill-role-editor__summary-label">Skills Using</span>
                     <strong>{roleUsageCount}</strong>
                   </div>
                   <div className="super-admin-skill-role-editor__summary-item">
@@ -316,7 +316,7 @@ function SuperAdminSkillRoleEditor() {
                       error={errors.status}
                       helperText={
                         roleUsageCount > 0 && form.status === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
-                          ? `This role is currently referenced by ${roleUsageCount} skill(s).`
+                          ? `Used by ${roleUsageCount} skill${roleUsageCount === 1 ? '' : 's'}.`
                           : undefined
                       }
                       required={statusIsRequired}
@@ -379,7 +379,7 @@ function SuperAdminSkillRoleEditor() {
         </Dialog.Header>
         <Dialog.Body>
           <p>
-            {loadedRole?.roleKey ?? 'This skill role'} is still referenced by {roleUsageCount} skill(s).
+            {loadedRole?.roleKey ?? 'This skill role'} is used by {roleUsageCount} skill{roleUsageCount === 1 ? '' : 's'}.
             Deprecating it will not remove those existing references.
           </p>
         </Dialog.Body>

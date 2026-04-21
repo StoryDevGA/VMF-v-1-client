@@ -43,8 +43,11 @@ function RuntimePathSelectChips({
         ? { frameworkKeys: normalizedFrameworkKeys.join(',') }
         : {}),
       ...(normalizedOperation ? { operation: normalizedOperation } : {}),
-      ...(isProtectedOnly ? { isProtected: 'true' } : {}),
-      ...(normalizedOperation === 'WRITE' ? { isProtected: 'false' } : {}),
+      ...(normalizedOperation === 'WRITE'
+        ? { isProtected: 'false' }
+        : isProtectedOnly
+          ? { isProtected: 'true' }
+          : {}),
       status: 'ACTIVE',
     },
     {

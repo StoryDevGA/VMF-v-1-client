@@ -86,7 +86,7 @@ describe('SuperAdminSkillRoleRegistry', () => {
 
     expect(screen.getByRole('columnheader', { name: /skill role/i })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: /description/i })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: /usage count/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /skills using/i })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: /actions/i })).toBeInTheDocument()
     expect(screen.getByText('SYSTEM')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
@@ -102,7 +102,7 @@ describe('SuperAdminSkillRoleRegistry', () => {
     )
 
     expect(screen.getByRole('heading', { name: /deprecate skill role/i })).toBeInTheDocument()
-    expect(screen.getByText(/still referenced by 3 skill\(s\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/used by 3 skills/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /deprecate role/i }))
 

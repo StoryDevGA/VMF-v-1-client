@@ -228,6 +228,9 @@ describe('SuperAdminAgentEditor page', () => {
     await user.type(nameInput, 'Validation Guard')
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
+    expect(await screen.findByRole('heading', { name: /save changes to a referenced agent\\?/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save anyway/i }))
+
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^agents$/i })).toBeInTheDocument()
     })

@@ -103,13 +103,13 @@ function SuperAdminSkillRoleRegistry() {
         <Dialog.Header>
           <h2>Deprecate skill role?</h2>
         </Dialog.Header>
-        <Dialog.Body>
-          <p>
-            {pendingStatusChange?.row?.roleKey ?? 'This skill role'} is still referenced by{' '}
-            {Number(pendingStatusChange?.row?.usageCount) || 0} skill(s). Deprecating it will not
-            remove those existing references.
-          </p>
-        </Dialog.Body>
+      <Dialog.Body>
+        <p>
+          {pendingStatusChange?.row?.roleKey ?? 'This skill role'} is used by{' '}
+          {Number(pendingStatusChange?.row?.usageCount) || 0} skill{Number(pendingStatusChange?.row?.usageCount) === 1 ? '' : 's'}.
+          Deprecating it will not remove those existing references.
+        </p>
+      </Dialog.Body>
         <Dialog.Footer>
           <Button variant="outline" onClick={closePendingStatusChange} disabled={isUpdating}>
             Cancel
