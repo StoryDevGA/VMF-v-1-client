@@ -493,10 +493,6 @@
     padding: var(--spacing-sm);
   }
 
-  .super-admin-agents__tabs .tabview__tab {
-    min-width: max-content;
-  }
-
   .super-admin-agents__execution-summary {
     grid-template-columns: 1fr;
   }

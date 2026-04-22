@@ -2228,6 +2228,7 @@ function WorkflowPolicyEditor() {
                   onTabChange={setActiveTab}
                   variant="pills"
                   size="sm"
+                  evenTabs
                   className="super-admin-workflow-policy-editor__tabs"
                   aria-label="Workflow policy editor sections"
                 >

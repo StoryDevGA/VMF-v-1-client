@@ -58,6 +58,12 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.tabview--even-tabs.tabview--horizontal .tabview__tablist {
+  /* Design-system variant: editors can opt in for evenly distributed, wrapping tabs. */
+  overflow-x: visible;
+  flex-wrap: wrap;
+}
+
 .tabview--vertical .tabview__tablist {
   flex-direction: column;
   border-right: var(--border-width-medium) solid var(--color-border);
@@ -111,6 +117,13 @@
     color var(--transition-fast),
     background-color var(--transition-fast),
     border-color var(--transition-fast);
+}
+
+.tabview--even-tabs.tabview--horizontal .tabview__tab {
+  /* Token-based min width so the row can wrap instead of shrinking infinitely. */
+  flex: 1 1 calc(var(--spacing-md) * 10);
+  min-width: calc(var(--spacing-md) * 10);
+  white-space: normal;
 }
 
 .tabview__tab:hover:not(.tabview__tab--active) {

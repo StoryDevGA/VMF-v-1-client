@@ -39,8 +39,32 @@ describe('TabView Component', () => {
         </TabView>
       )
 
-      const tabview = screen.getByRole('tablist').parentElement
+      const tabview = screen.getByRole('tablist').closest('.tabview')
       expect(tabview).toHaveClass('custom-class')
+    })
+
+    it('should support evenTabs mode', () => {
+      render(
+        <TabView evenTabs>
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+          <TabView.Tab label="Tab 2">Content 2</TabView.Tab>
+        </TabView>
+      )
+
+      const tabview = screen.getByRole('tablist').closest('.tabview')
+      expect(tabview).toHaveClass('tabview--even-tabs')
+    })
+
+    it('should forward aria-label to the tablist element', () => {
+      render(
+        <TabView aria-label="Editor sections">
+          <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
+          <TabView.Tab label="Tab 2">Content 2</TabView.Tab>
+        </TabView>
+      )
+
+      expect(screen.getByRole('tablist', { name: 'Editor sections' })).toBeInTheDocument()
+      expect(screen.getByRole('tablist').closest('.tabview')).not.toHaveAttribute('aria-label')
     })
 
     it('should have tablist role', () => {

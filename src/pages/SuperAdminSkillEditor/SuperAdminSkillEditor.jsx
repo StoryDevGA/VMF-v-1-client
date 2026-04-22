@@ -285,14 +285,18 @@ function SkillEditorForm({
 
   useEffect(() => {
     if (form.outputBindingMode !== 'PRIMARY') {
-      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      if (primaryOutputKeyNotice) {
+        setPrimaryOutputKeyNotice('')
+      }
       return
     }
 
     if (!form.primaryOutputKey) return
 
     if (form.primaryOutputKey === '$root') {
-      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      if (primaryOutputKeyNotice) {
+        setPrimaryOutputKeyNotice('')
+      }
       return
     }
 
@@ -303,7 +307,9 @@ function SkillEditorForm({
     }
 
     if (outputContractPropertyMeta.keys.includes(form.primaryOutputKey)) {
-      if (primaryOutputKeyNotice) setPrimaryOutputKeyNotice('')
+      if (primaryOutputKeyNotice) {
+        setPrimaryOutputKeyNotice('')
+      }
       return
     }
 
@@ -405,6 +411,7 @@ function SkillEditorForm({
           <TabView
             variant="pills"
             size="sm"
+            evenTabs
             className="super-admin-skill-editor__tabs"
             aria-label="Skill editor configuration sections"
             activeTab={activeTab}

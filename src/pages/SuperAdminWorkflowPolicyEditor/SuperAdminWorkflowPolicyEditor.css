@@ -159,17 +159,6 @@
   padding-top: var(--spacing-md);
 }
 
-.super-admin-workflow-policy-editor__tabs .tabview__tablist {
-  flex-wrap: wrap;
-  overflow-x: visible;
-}
-
-.super-admin-workflow-policy-editor__tabs .tabview__tab {
-  flex: 0 1 auto;
-  min-width: 0;
-  white-space: normal;
-}
-
 .super-admin-workflow-policy-editor__section-title {
   font-size: var(--font-size-lg);
   color: var(--color-text-primary);

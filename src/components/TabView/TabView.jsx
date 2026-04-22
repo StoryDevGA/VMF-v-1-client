@@ -10,6 +10,17 @@
  * - Responsive design (stacks on mobile if needed)
  * - Smooth transitions between tabs
  * - Customizable variants and orientations
+ * - Optional even-width tab distribution (evenTabs)
+ *
+ * @param {object} props
+ * @param {React.ReactNode} props.children Tab content via TabView.Tab children
+ * @param {number} [props.defaultActiveTab=0] Default active tab index (uncontrolled mode)
+ * @param {number} [props.activeTab] Active tab index (controlled mode)
+ * @param {'default'|'pills'} [props.variant='default'] Visual styling variant
+ * @param {'horizontal'|'vertical'} [props.orientation='horizontal'] Orientation for tab navigation
+ * @param {'sm'|'md'|'lg'} [props.size='md'] Tab size
+ * @param {boolean} [props.evenTabs=false] When true (horizontal only), tabs distribute evenly and wrap onto multiple rows
+ * @param {(nextIndex:number)=>void} [props.onTabChange] Callback invoked when tab changes
  *
  * @example
  * <TabView defaultActiveTab={0}>
@@ -29,9 +40,15 @@
  *   <TabView.Tab label="Tab 1">Content 1</TabView.Tab>
  *   <TabView.Tab label="Tab 2">Content 2</TabView.Tab>
  * </TabView>
+ *
+ * @example
+ * <TabView variant="pills" evenTabs aria-label="Editor sections">
+ *   <TabView.Tab label="Basic">...</TabView.Tab>
+ *   <TabView.Tab label="Execution">...</TabView.Tab>
+ * </TabView>
  */
 
-import { useEffect, useRef, useState, Children } from 'react'
+import { useRef, useState, Children } from 'react'
 import './TabView.css'
 
 const clampTabIndex = (index, tabCount) => {
@@ -47,10 +64,12 @@ export function TabView({
   variant = 'default',
   orientation = 'horizontal',
   size = 'md',
+  evenTabs = false,
   onTabChange,
   className = '',
   ...props
 }) {
+  const { ['aria-label']: ariaLabel, ...rootProps } = props
   const tabs = Children.toArray(children)
   const totalTabs = tabs.length
   const isControlled = controlledActiveTab !== undefined
@@ -58,11 +77,6 @@ export function TabView({
     clampTabIndex(defaultActiveTab, totalTabs),
   )
   const tabRefs = useRef([])
-
-  useEffect(() => {
-    if (isControlled) return
-    setInternalActiveTab((previousIndex) => clampTabIndex(previousIndex, totalTabs))
-  }, [isControlled, totalTabs])
 
   const activeTab = clampTabIndex(
     isControlled ? controlledActiveTab : internalActiveTab,
@@ -138,17 +152,19 @@ export function TabView({
     `tabview--${variant}`,
     `tabview--${orientation}`,
     `tabview--${size}`,
+    evenTabs && 'tabview--even-tabs',
     className
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <div className={tabViewClasses} {...props}>
+    <div className={tabViewClasses} {...rootProps}>
       <div
         className="tabview__tablist"
         role="tablist"
         aria-orientation={orientation}
+        aria-label={ariaLabel}
       >
         {tabs.map((tab, index) => {
           const isActive = index === activeTab

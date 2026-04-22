@@ -312,23 +312,12 @@
     padding: var(--spacing-sm);
   }
 
-  .super-admin-skill-editor__tabs .tabview__tablist {
-    flex-wrap: wrap;
-    overflow-x: visible;
-  }
-
   .super-admin-skill-editor__row,
   .super-admin-skill-editor__row--narrow,
   .super-admin-skill-editor__row--classification,
   .super-admin-skill-editor__framework-picker-controls,
   .super-admin-skill-editor__framework-item {
     grid-template-columns: 1fr;
-  }
-
-  .super-admin-skill-editor__tabs .tabview__tab {
-    flex: 1 1 calc(50% - var(--spacing-xs));
-    min-width: 0;
-    white-space: normal;
   }
 
   .super-admin-skill-editor__framework-add-button,

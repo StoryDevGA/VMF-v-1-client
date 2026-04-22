@@ -1639,6 +1639,7 @@ export function RuntimeAgentFormFields({
       <TabView
         variant="pills"
         size="sm"
+        evenTabs
         className="super-admin-agents__tabs"
         aria-label="Agent editor configuration sections"
         activeTab={activeTab}
@@ -1737,14 +1738,11 @@ export function TestRuntimeAgentDialog({
   const [showPromptPreview, setShowPromptPreview] = useState(false)
 
   useEffect(() => {
-    if (!open) {
-      setShowPromptPreview(false)
-      return
-    }
-
-    // Reset when the dialog is opened or a different agent is selected for testing.
+    // Reset the local preview state whenever the dialog opens/closes or the tested agent changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowPromptPreview(false)
   }, [open, agent?.id])
+
   const frameworkLabelLookup = useMemo(
     () => Object.fromEntries(frameworkOptions.map((option) => [option.value, option.label])),
     [frameworkOptions],
@@ -1836,14 +1834,14 @@ export function TestRuntimeAgentDialog({
 
                 {showPromptPreview ? (
                   <div className="super-admin-agents__test-preview">
-                  <Textarea
-                    id="runtime-agent-test-compiled-preview"
-                    label="Compiled Prompt (read-only)"
-                    value={String(testResult.compiledPromptPreview ?? '')}
-                    rows={10}
-                    fullWidth
-                    readOnly
-                  />
+                    <Textarea
+                      id="runtime-agent-test-compiled-preview"
+                      label="Compiled Prompt (read-only)"
+                      value={String(testResult.compiledPromptPreview ?? '')}
+                      rows={10}
+                      fullWidth
+                      readOnly
+                    />
                   </div>
                 ) : null}
               </div>
