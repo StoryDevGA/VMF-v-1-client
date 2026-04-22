@@ -109,7 +109,7 @@ describe('Header Component', () => {
       expect(screen.getByAltText('StoryLineOS Logo')).toBeInTheDocument()
     })
 
-    it('should use black logo in lite brand mode', async () => {
+    it('should keep using the same logo in lite brand mode', async () => {
       await act(async () => {
         document.documentElement.setAttribute('data-mode', 'lite')
       })
@@ -121,7 +121,7 @@ describe('Header Component', () => {
       )
 
       const logo = screen.getByAltText('StoryLineOS Logo')
-      expect(logo.getAttribute('src')).toContain('StoryLineOS%20-%20Black')
+      expect(logo.getAttribute('src')).toContain('storylineOS-Logo-CyB9Luth-green')
 
       await act(async () => {
         document.documentElement.removeAttribute('data-mode')

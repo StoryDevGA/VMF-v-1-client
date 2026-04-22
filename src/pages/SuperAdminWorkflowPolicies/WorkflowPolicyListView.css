@@ -22,7 +22,7 @@
 
 .super-admin-workflow-policies__toolbar {
   display: grid;
-  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
   gap: var(--spacing-sm);
 }

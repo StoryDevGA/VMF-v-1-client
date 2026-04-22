@@ -231,6 +231,7 @@ describe('runtimeControlApi', () => {
         q: '',
         status: '',
         frameworkKey: '',
+        type: 'ROUTING',
         defaultPageSize: 4,
       }),
     ).toEqual({
@@ -238,6 +239,7 @@ describe('runtimeControlApi', () => {
       params: {
         page: 1,
         pageSize: 20,
+        type: 'ROUTING',
       },
     })
 

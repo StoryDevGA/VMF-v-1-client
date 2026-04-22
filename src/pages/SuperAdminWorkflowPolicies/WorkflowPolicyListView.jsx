@@ -10,11 +10,14 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import {
+  formatWorkflowPolicyEnumLabel,
   formatWorkflowPolicyStatus,
+  formatWorkflowPolicyType,
   getWorkflowPolicyStatusVariant,
   WORKFLOW_POLICIES_HELP_TEXT,
   WORKFLOW_POLICY_STATUSES,
   WORKFLOW_POLICY_STATUS_OPTIONS,
+  WORKFLOW_POLICY_TYPE_OPTIONS,
 } from './superAdminWorkflowPolicies.constants.js'
 import './WorkflowPolicyListView.css'
 
@@ -54,7 +57,7 @@ function renderPolicySummary(_value, row) {
   )
 }
 
-function renderTokenList(value) {
+function renderFrameworkList(value) {
   const items = Array.isArray(value) ? value : []
 
   if (items.length === 0) {
@@ -77,18 +80,39 @@ function renderTokenList(value) {
   )
 }
 
-function renderDependencySummary(_value, row) {
+function renderType(value) {
+  if (!value) return '--'
+
+  return (
+    <Badge variant="primary" size="sm" pill outline>
+      {formatWorkflowPolicyType(value)}
+    </Badge>
+  )
+}
+
+function renderTriggerSummary(_value, row) {
+  const pieces = [row.triggerEvent, row.triggerMode]
+    .filter(Boolean)
+    .map((item) => formatWorkflowPolicyEnumLabel(item))
+
+  if (pieces.length === 0) {
+    return '--'
+  }
+
   return (
     <div className="super-admin-workflow-policies__dependency-summary">
-      <span>
-        {row.requiredAgentIds.length} agent{row.requiredAgentIds.length === 1 ? '' : 's'}
-      </span>
-      <span>
-        {row.requiredSkillIds.length} skill{row.requiredSkillIds.length === 1 ? '' : 's'}
-      </span>
-      <span>
-        {row.gatingRules.length} gate{row.gatingRules.length === 1 ? '' : 's'}
-      </span>
+      {pieces.map((piece) => (
+        <span key={piece}>{piece}</span>
+      ))}
+    </div>
+  )
+}
+
+function renderActionSummary(_value, row) {
+  return (
+    <div className="super-admin-workflow-policies__dependency-summary">
+      <span>{formatWorkflowPolicyEnumLabel(row.governedAction) || '--'}</span>
+      <span>{formatWorkflowPolicyEnumLabel(row.decisionMode) || '--'}</span>
     </div>
   )
 }
@@ -100,6 +124,8 @@ export function WorkflowPolicyListView({
   setStatusFilter,
   frameworkFilter,
   setFrameworkFilter,
+  typeFilter,
+  setTypeFilter,
   frameworkOptions,
   setPage,
   rows,
@@ -109,14 +135,14 @@ export function WorkflowPolicyListView({
   isListFetching,
   listAppError,
   onBackClick,
-  openCreateDialog,
-  openEditDialog,
+  onCreateClick,
+  onEditClick,
   setWorkflowPolicyStatus,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
-        openEditDialog(row)
+        onEditClick(row)
       }
 
       if (label === 'Set Active') {
@@ -127,7 +153,7 @@ export function WorkflowPolicyListView({
         setWorkflowPolicyStatus(row, WORKFLOW_POLICY_STATUSES.INACTIVE)
       }
     },
-    [openEditDialog, setWorkflowPolicyStatus],
+    [onEditClick, setWorkflowPolicyStatus],
   )
 
   const columns = useMemo(
@@ -137,6 +163,12 @@ export function WorkflowPolicyListView({
         label: 'Policy',
         mobileLabel: 'Policy',
         render: renderPolicySummary,
+      },
+      {
+        key: 'policyType',
+        label: 'Type',
+        mobileLabel: 'Type',
+        render: renderType,
       },
       {
         key: 'status',
@@ -152,19 +184,19 @@ export function WorkflowPolicyListView({
         key: 'frameworkKeys',
         label: 'Frameworks',
         mobileLabel: 'Frameworks',
-        render: renderTokenList,
+        render: renderFrameworkList,
       },
       {
-        key: 'orderedSteps',
-        label: 'Steps',
-        mobileLabel: 'Steps',
-        render: renderTokenList,
+        key: 'triggerSummary',
+        label: 'Trigger',
+        mobileLabel: 'Trigger',
+        render: renderTriggerSummary,
       },
       {
-        key: 'dependencies',
-        label: 'Dependencies',
-        mobileLabel: 'Dependencies',
-        render: renderDependencySummary,
+        key: 'actionSummary',
+        label: 'Action Governance',
+        mobileLabel: 'Action',
+        render: renderActionSummary,
       },
       {
         key: 'updatedAt',
@@ -189,17 +221,17 @@ export function WorkflowPolicyListView({
 
   return (
     <Fieldset className="super-admin-workflow-policies__fieldset">
-        <Fieldset.Legend className="sr-only">Workflow policy catalogue</Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-workflow-policies__card">
-          <Card.Body className="super-admin-workflow-policies__card-body super-admin-workflow-policies__card-body--compact">
-            <div className="super-admin-workflow-policies__catalogue-actions">
-              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
-                Back
-              </Button>
-              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
-                Create
-              </Button>
-            </div>
+      <Fieldset.Legend className="sr-only">Workflow policy catalogue</Fieldset.Legend>
+      <Card variant="elevated" className="super-admin-workflow-policies__card">
+        <Card.Body className="super-admin-workflow-policies__card-body super-admin-workflow-policies__card-body--compact">
+          <div className="super-admin-workflow-policies__catalogue-actions">
+            <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+              Back
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={onCreateClick}>
+              Create
+            </Button>
+          </div>
 
           <div className="super-admin-workflow-policies__toolbar">
             <Input
@@ -207,7 +239,7 @@ export function WorkflowPolicyListView({
               label="Search"
               size="sm"
               value={search}
-              placeholder="Search by key, name, framework, or step"
+              placeholder="Search by policy, trigger, or action"
               onChange={(event) => {
                 setSearch(event.target.value)
                 setPage(1)
@@ -222,6 +254,17 @@ export function WorkflowPolicyListView({
               options={WORKFLOW_POLICY_STATUS_OPTIONS}
               onChange={(event) => {
                 setStatusFilter(event.target.value)
+                setPage(1)
+              }}
+            />
+            <Select
+              id="workflow-policy-type-filter"
+              label="Policy Type"
+              size="sm"
+              value={typeFilter}
+              options={WORKFLOW_POLICY_TYPE_OPTIONS}
+              onChange={(event) => {
+                setTypeFilter(event.target.value)
                 setPage(1)
               }}
             />

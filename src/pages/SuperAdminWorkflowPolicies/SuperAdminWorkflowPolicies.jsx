@@ -1,9 +1,5 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  CreateWorkflowPolicyDialog,
-  EditWorkflowPolicyDialog,
-} from './WorkflowPolicyDialogs.jsx'
 import { WorkflowPolicyListView } from './WorkflowPolicyListView.jsx'
 import { useWorkflowPolicyManagement } from './useWorkflowPolicyManagement.js'
 import './SuperAdminWorkflowPolicies.css'
@@ -11,8 +7,18 @@ import './SuperAdminWorkflowPolicies.css'
 function SuperAdminWorkflowPolicies() {
   const navigate = useNavigate()
   const mgmt = useWorkflowPolicyManagement()
+
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
+  }, [navigate])
+
+  const handleCreateClick = useCallback(() => {
+    navigate('/super-admin/runtime-control/workflow-policies/new')
+  }, [navigate])
+
+  const handleEditClick = useCallback((policy) => {
+    if (!policy?.id) return
+    navigate(`/super-admin/runtime-control/workflow-policies/${policy.id}/edit`)
   }, [navigate])
 
   return (
@@ -23,8 +29,8 @@ function SuperAdminWorkflowPolicies() {
       <header className="super-admin-workflow-policies__header">
         <h1 className="super-admin-workflow-policies__title">Workflow Policies</h1>
         <p className="super-admin-workflow-policies__subtitle">
-          Define policy sequencing, framework compatibility, and the agent and skill
-          dependencies that gate Runtime Control execution paths.
+          Govern runtime policy scope, trigger rules, and controlled action decisions from a
+          dedicated Workflow Policy catalogue.
         </p>
       </header>
 
@@ -35,6 +41,8 @@ function SuperAdminWorkflowPolicies() {
         setStatusFilter={mgmt.setStatusFilter}
         frameworkFilter={mgmt.frameworkFilter}
         setFrameworkFilter={mgmt.setFrameworkFilter}
+        typeFilter={mgmt.typeFilter}
+        setTypeFilter={mgmt.setTypeFilter}
         frameworkOptions={mgmt.frameworkOptions}
         setPage={mgmt.setPage}
         rows={mgmt.rows}
@@ -44,28 +52,9 @@ function SuperAdminWorkflowPolicies() {
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
-        openCreateDialog={mgmt.openCreateDialog}
-        openEditDialog={mgmt.openEditDialog}
+        onCreateClick={handleCreateClick}
+        onEditClick={handleEditClick}
         setWorkflowPolicyStatus={mgmt.setWorkflowPolicyStatus}
-      />
-
-      <CreateWorkflowPolicyDialog
-        open={mgmt.createOpen}
-        onClose={mgmt.closeCreateDialog}
-        createForm={mgmt.createForm}
-        setCreateForm={mgmt.setCreateForm}
-        createErrors={mgmt.createErrors}
-        setCreateErrors={mgmt.setCreateErrors}
-        onSubmit={mgmt.handleCreateSubmit}
-      />
-
-      <EditWorkflowPolicyDialog
-        open={mgmt.editOpen}
-        onClose={mgmt.closeEditDialog}
-        editForm={mgmt.editForm}
-        setEditForm={mgmt.setEditForm}
-        editErrors={mgmt.editErrors}
-        onSubmit={mgmt.handleEditSubmit}
       />
     </section>
   )

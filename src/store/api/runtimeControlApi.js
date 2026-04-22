@@ -24,6 +24,7 @@ import {
 import {
   cloneWorkflowPolicy,
   INITIAL_WORKFLOW_POLICIES,
+  validateWorkflowPolicyForm,
   WORKFLOW_POLICY_PAGE_SIZE,
 } from '../../pages/SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 import {
@@ -44,6 +45,7 @@ const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIS
 const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
 const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
+const WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG = { type: 'RuntimeWorkflowPolicyDependencies', id: 'LIST' }
 const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
 const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
@@ -84,7 +86,7 @@ const buildListParams = ({
   operation: String(operation ?? '').trim(),
   category: String(category ?? '').trim(),
   isProtected: String(isProtected ?? '').trim().toLowerCase(),
-  type: String(type ?? '').trim().toLowerCase(),
+  type: String(type ?? '').trim(),
   structureType: String(structureType ?? '').trim().toLowerCase(),
 })
 
@@ -149,12 +151,19 @@ export const buildRuntimeControlDetailRequest = (resourcePath, entityId) => ({
   url: `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`,
 })
 
-export const buildRuntimeControlMutationRequest = ({ resourcePath, entityId, method, body }) => ({
+export const buildRuntimeControlMutationRequest = ({
+  resourcePath,
+  entityId,
+  method,
+  body,
+  headers,
+}) => ({
   url: entityId
     ? `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}/${entityId}`
     : `${RUNTIME_CONTROL_BASE_PATH}/${resourcePath}`,
   method,
   body,
+  ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
 })
 
 const normalizePositiveInteger = (value, fallback) => {
@@ -352,6 +361,352 @@ const buildMockSkillRoleDependencies = (roleKey) => {
   }
 }
 
+const buildMockWorkflowPolicyDependencies = (policy) => {
+  const normalizedPolicyKey = String(policy?.key ?? '').trim().toLowerCase()
+  const referencedFrameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
+    Array.isArray(pkg.compatibleWorkflowKeys)
+    && pkg.compatibleWorkflowKeys.map((value) => String(value ?? '').trim().toLowerCase()).includes(normalizedPolicyKey),
+  )
+  const agentIds = [
+    ...new Set([
+      String(policy?.primaryAgentId ?? '').trim(),
+      String(policy?.fallbackAgentId ?? '').trim(),
+      ...(Array.isArray(policy?.requiredAgentIds) ? policy.requiredAgentIds : []),
+    ].filter(Boolean)),
+  ]
+  const agents = (runtimeControlState.agents || []).filter((agent) => agentIds.includes(agent.id))
+  const runtimePathKeys = [
+    ...new Set([
+      ...(Array.isArray(policy?.conditions) ? policy.conditions.map((condition) => condition?.path) : []),
+      ...(Array.isArray(policy?.onPassEffects) ? policy.onPassEffects.map((effect) => effect?.targetPath) : []),
+      ...(Array.isArray(policy?.onFailEffects) ? policy.onFailEffects.map((effect) => effect?.targetPath) : []),
+    ].map((value) => String(value ?? '').trim()).filter(Boolean)),
+  ]
+  const runtimePaths = (runtimeControlState.runtimePaths || []).filter((path) => runtimePathKeys.includes(path.pathKey))
+  const frameworks = (runtimeControlState.frameworkRegistries || []).filter((entry) =>
+    (policy?.frameworkKeys || []).includes(entry.frameworkKey),
+  )
+  const collisions = (runtimeControlState.workflowPolicies || []).filter((row) =>
+    row.id !== policy.id
+    && row.priority === policy.priority
+    && String(row.triggerEvent ?? '').trim().toUpperCase() === String(policy?.triggerEvent ?? '').trim().toUpperCase()
+    && String(row.governedAction ?? '').trim().toUpperCase() === String(policy?.governedAction ?? '').trim().toUpperCase()
+    && (Array.isArray(row.frameworkKeys) ? row.frameworkKeys : []).some((frameworkKey) =>
+      (policy?.frameworkKeys || []).includes(frameworkKey),
+    ),
+  )
+
+  const warnings = []
+  const inactiveAgent = agents.find((agent) => String(agent?.status ?? '').trim().toUpperCase() !== 'ACTIVE')
+  if (inactiveAgent) {
+    warnings.push(`This policy references non-active Agent: ${inactiveAgent.key || inactiveAgent.id}.`)
+  }
+  if (collisions.length > 0) {
+    warnings.push(`Priority collision with policy: ${collisions[0].key || collisions[0].id}.`)
+  }
+  const activeFrameworkPackages = referencedFrameworkPackages.filter((pkg) => String(pkg?.status ?? '').trim().toUpperCase() === 'ACTIVE')
+  if (activeFrameworkPackages.length > 0) {
+    warnings.push(`This policy is referenced by ${activeFrameworkPackages.length} ACTIVE framework package${activeFrameworkPackages.length === 1 ? '' : 's'}.`)
+  }
+
+  return {
+    policyId: policy.id,
+    referencedBy: {
+      frameworkPackages: referencedFrameworkPackages.map((pkg) => ({
+        id: pkg.id,
+        frameworkKey: pkg.frameworkKey,
+        frameworkName: pkg.frameworkName,
+        version: pkg.version,
+        status: pkg.status,
+      })),
+      workflowPolicies: [],
+      scheduledJobs: [],
+    },
+    uses: {
+      agents: agents.map((agent) => ({
+        id: agent.id,
+        key: agent.key,
+        name: agent.name,
+        status: agent.status,
+      })),
+      frameworks: frameworks.map((entry) => ({
+        id: entry.id,
+        key: entry.frameworkKey,
+        name: entry.name,
+        status: entry.status,
+      })),
+      validationOutputs: (policy?.requiredValidationKeys || []).map((value) => ({
+        id: value,
+        key: value,
+        name: value,
+        status: 'CONFIGURED',
+      })),
+      runtimePaths: runtimePaths.map((path) => ({
+        id: path.id,
+        key: path.pathKey,
+        name: path.label,
+        status: path.status,
+        scope: path.scope,
+        isProtected: Boolean(path.isProtected),
+      })),
+    },
+    collisions: collisions.map((row) => ({
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      status: row.status,
+    })),
+    summary: {
+      frameworkPackages: referencedFrameworkPackages.length,
+      activeFrameworkPackages: activeFrameworkPackages.length,
+      agents: agents.length,
+      frameworks: frameworks.length,
+      validationOutputs: Array.isArray(policy?.requiredValidationKeys) ? policy.requiredValidationKeys.length : 0,
+      runtimePaths: runtimePaths.length,
+      priorityCollisions: collisions.length,
+    },
+    warnings,
+    blocks: [],
+  }
+}
+
+const getMockValueAtPath = (source, path) =>
+  String(path ?? '')
+    .split('.')
+    .filter(Boolean)
+    .reduce((current, segment) => {
+      if (current === null || current === undefined) return undefined
+      if (Array.isArray(current) && /^\d+$/.test(segment)) {
+        return current[Number(segment)]
+      }
+      if (typeof current !== 'object') return undefined
+      return current[segment]
+    }, source)
+
+const canMockCoerceToNumber = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return true
+  if (typeof value === 'string' && String(value).trim() !== '') {
+    return Number.isFinite(Number(value))
+  }
+  return false
+}
+
+const normalizeMockComparableScalar = (value) => {
+  if (typeof value === 'boolean' || typeof value === 'number') return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (/^(true|false)$/i.test(trimmed)) {
+      return trimmed.toLowerCase() === 'true'
+    }
+    if (canMockCoerceToNumber(trimmed)) {
+      return Number(trimmed)
+    }
+    return trimmed
+  }
+  return value
+}
+
+const mockValuesEqual = (left, right) => {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+  }
+
+  return JSON.stringify(normalizeMockComparableScalar(left)) === JSON.stringify(normalizeMockComparableScalar(right))
+}
+
+const evaluateMockWorkflowPolicyCondition = ({ operator, actualValue, expectedValue }) => {
+  const normalizedOperator = String(operator ?? '').trim().toLowerCase()
+
+  switch (normalizedOperator) {
+    case '=':
+      return mockValuesEqual(actualValue, expectedValue)
+    case '!=':
+      return !mockValuesEqual(actualValue, expectedValue)
+    case 'exists':
+      return actualValue !== undefined && actualValue !== null && String(actualValue).trim() !== ''
+    case 'not exists':
+      return actualValue === undefined || actualValue === null || String(actualValue).trim() === ''
+    case 'contains':
+      if (Array.isArray(actualValue)) {
+        return actualValue.some((entry) => mockValuesEqual(entry, expectedValue))
+      }
+      return String(actualValue ?? '').includes(String(expectedValue ?? ''))
+    case 'in': {
+      const expectedList = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
+      if (Array.isArray(actualValue)) {
+        return actualValue.some((entry) => expectedList.some((candidate) => mockValuesEqual(entry, candidate)))
+      }
+      return expectedList.some((candidate) => mockValuesEqual(actualValue, candidate))
+    }
+    case 'not in': {
+      const expectedList = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
+      if (Array.isArray(actualValue)) {
+        return actualValue.every((entry) => expectedList.every((candidate) => !mockValuesEqual(entry, candidate)))
+      }
+      return expectedList.every((candidate) => !mockValuesEqual(actualValue, candidate))
+    }
+    case '>':
+    case '<':
+    case '>=':
+    case '<=': {
+      if (!canMockCoerceToNumber(actualValue) || !canMockCoerceToNumber(expectedValue)) {
+        return false
+      }
+
+      const actualNumber = Number(actualValue)
+      const expectedNumber = Number(expectedValue)
+
+      if (normalizedOperator === '>') return actualNumber > expectedNumber
+      if (normalizedOperator === '<') return actualNumber < expectedNumber
+      if (normalizedOperator === '>=') return actualNumber >= expectedNumber
+      return actualNumber <= expectedNumber
+    }
+    default:
+      return false
+  }
+}
+
+const selectMockWorkflowPolicyTestAgent = (draft) => {
+  const candidateAgentIds = [
+    ...new Set([
+      String(draft?.primaryAgentId ?? '').trim(),
+      String(draft?.fallbackAgentId ?? '').trim(),
+      ...(Array.isArray(draft?.requiredAgentIds) ? draft.requiredAgentIds : []),
+    ].filter(Boolean)),
+  ]
+  const selectedFrameworkKeys = Array.isArray(draft?.frameworkKeys) ? draft.frameworkKeys : []
+  const activeCompatibleAgents = (runtimeControlState.agents || []).filter((agent) => {
+    if (!candidateAgentIds.includes(agent.id)) return false
+    if (String(agent?.status ?? '').trim().toUpperCase() !== 'ACTIVE') return false
+    const supportedFrameworkKeys = Array.isArray(agent?.supportedFrameworkKeys) ? agent.supportedFrameworkKeys : []
+    return selectedFrameworkKeys.every((frameworkKey) => supportedFrameworkKeys.includes(frameworkKey))
+  })
+
+  const primaryAgentId = String(draft?.primaryAgentId ?? '').trim()
+  const fallbackAgentId = String(draft?.fallbackAgentId ?? '').trim()
+  const findAgent = (agentId) => activeCompatibleAgents.find((agent) => agent.id === agentId)
+  const routingMode = String(draft?.routingMode ?? '').trim().toUpperCase()
+
+  let chosenAgent = null
+  if (routingMode === 'FIXED_AGENT') {
+    chosenAgent = findAgent(primaryAgentId) ?? findAgent(fallbackAgentId) ?? null
+  } else if (routingMode === 'FIRST_COMPATIBLE_ACTIVE_AGENT') {
+    chosenAgent = activeCompatibleAgents[0] ?? null
+  } else {
+    chosenAgent = findAgent(primaryAgentId) ?? activeCompatibleAgents[0] ?? findAgent(fallbackAgentId) ?? null
+  }
+
+  const warnings = []
+  if (!chosenAgent) {
+    warnings.push('No ACTIVE compatible Agent could be selected for this test run.')
+  } else if (fallbackAgentId && chosenAgent.id === fallbackAgentId) {
+    warnings.push(`Fallback Agent "${chosenAgent.key}" was selected for this test run.`)
+  }
+
+  return {
+    chosenAgent: chosenAgent
+      ? {
+          id: chosenAgent.id,
+          key: chosenAgent.key,
+          name: chosenAgent.name,
+          status: chosenAgent.status,
+        }
+      : null,
+    warnings,
+  }
+}
+
+const buildMockWorkflowPolicyTestResult = ({
+  draft = {},
+  frameworkState = {},
+  triggerEvent = '',
+  actorScope = '',
+}) => {
+  const resolvedTriggerEvent = String(triggerEvent || draft.triggerEvent || '').trim().toUpperCase()
+  const resolvedActorScope = String(actorScope || draft.actorScope || '').trim().toUpperCase()
+  const policyTriggerEvent = String(draft?.triggerEvent ?? '').trim().toUpperCase()
+  const policyActorScope = String(draft?.actorScope ?? '').trim().toUpperCase()
+  const conditionRows = Array.isArray(draft?.conditions) ? draft.conditions : []
+  const matchedConditions = conditionRows.map((condition) => {
+    const actualValue = getMockValueAtPath(frameworkState, condition?.path)
+    return {
+      path: String(condition?.path ?? '').trim(),
+      operator: String(condition?.operator ?? '').trim(),
+      expectedValue: condition?.value ?? '',
+      actualValue: actualValue ?? null,
+      matched: evaluateMockWorkflowPolicyCondition({
+        operator: condition?.operator,
+        actualValue,
+        expectedValue: condition?.value,
+      }),
+      logic: String(condition?.logic ?? 'AND').trim().toUpperCase(),
+    }
+  })
+
+  const conditionsMatched = matchedConditions.reduce((currentResult, conditionResult, index) => {
+    if (index === 0) return conditionResult.matched
+    if (conditionResult.logic === 'OR') {
+      return currentResult || conditionResult.matched
+    }
+    return currentResult && conditionResult.matched
+  }, matchedConditions.length === 0 ? true : false)
+
+  const triggerMatched = resolvedTriggerEvent === policyTriggerEvent
+  const actorMatched = policyActorScope === 'ANY' || resolvedActorScope === policyActorScope
+  let outcome = triggerMatched && actorMatched && conditionsMatched ? 'PASS' : 'FAIL'
+
+  const requiresRouting =
+    String(draft?.decisionMode ?? '').trim().toUpperCase() === 'REQUIRE_AGENT_EVALUATION'
+    || String(draft?.policyType ?? '').trim().toUpperCase() === 'ROUTING'
+  const routingSelection = requiresRouting
+    ? selectMockWorkflowPolicyTestAgent(draft)
+    : { chosenAgent: null, warnings: [] }
+
+  const executionTrace = [
+    `Evaluating policy "${draft.name || draft.key}" for governed action "${draft.governedAction || '--'}".`,
+    `Resolved trigger event: ${resolvedTriggerEvent || '--'}.`,
+    `Resolved actor scope: ${resolvedActorScope || '--'}.`,
+    matchedConditions.length > 0
+      ? `Evaluated ${matchedConditions.length} governed condition row${matchedConditions.length === 1 ? '' : 's'}.`
+      : 'No governed conditions are configured, so the condition phase passed automatically.',
+  ]
+
+  if (requiresRouting) {
+    if (outcome === 'PASS' && routingSelection.chosenAgent) {
+      executionTrace.push(`Selected governed Agent "${routingSelection.chosenAgent.key}" for routed execution.`)
+    } else if (outcome === 'PASS') {
+      executionTrace.push('Routing is required but no ACTIVE compatible Agent could be selected.')
+      outcome = 'FAIL'
+    } else {
+      executionTrace.push('Routing preview skipped because the policy did not reach a passing state.')
+    }
+  }
+
+  const selectedEffects = outcome === 'PASS'
+    ? (Array.isArray(draft?.onPassEffects) ? draft.onPassEffects : [])
+    : (Array.isArray(draft?.onFailEffects) ? draft.onFailEffects : [])
+
+  executionTrace.push(
+    `Selected ${selectedEffects.length} ${outcome === 'PASS' ? 'pass' : 'fail'} effect row${selectedEffects.length === 1 ? '' : 's'} for preview.`,
+  )
+
+  return {
+    ok: true,
+    outcome,
+    triggerMatched,
+    actorMatched,
+    conditionsMatched,
+    matchedConditions,
+    chosenAgent: outcome === 'PASS' ? routingSelection.chosenAgent : null,
+    stateEffectsPreview: {
+      outcome,
+      effects: selectedEffects,
+    },
+    executionTrace,
+    warnings: routingSelection.warnings,
+  }
+}
+
 const getFrameworkPackageRows = ({
   q = '',
   status = '',
@@ -388,7 +743,7 @@ const getFrameworkRegistryRows = ({
   status = '',
   type = '',
   structureType = '',
-}) => {
+} = {}) => {
   const normalizedSearch = normalizeSearch(q)
   const normalizedStatus = String(status ?? '').trim().toUpperCase()
   const normalizedType = String(type ?? '').trim().toLowerCase()
@@ -569,10 +924,12 @@ const getWorkflowPolicyRows = ({
   q = '',
   status = '',
   frameworkKey = '',
+  type = '',
 }) => {
   const normalizedSearch = normalizeSearch(q)
   const normalizedStatus = String(status ?? '').trim().toUpperCase()
   const normalizedFrameworkKey = normalizeFrameworkKey(frameworkKey)
+  const normalizedType = String(type ?? '').trim().toUpperCase()
 
   return runtimeControlState.workflowPolicies
     .filter((policy) => {
@@ -580,11 +937,24 @@ const getWorkflowPolicyRows = ({
       const matchesFramework = normalizedFrameworkKey
         ? policy.frameworkKeys.includes(normalizedFrameworkKey)
         : true
+      const matchesType = normalizedType ? String(policy.policyType ?? '').trim().toUpperCase() === normalizedType : true
       const queryMatches = matchesSearch(normalizedSearch, [
         policy.key,
         policy.name,
         policy.description,
         policy.status,
+        policy.policyType,
+        policy.triggerEvent,
+        policy.triggerMode,
+        policy.governedAction,
+        policy.decisionMode,
+        policy.routingMode,
+        policy.primaryAgentId,
+        policy.fallbackAgentId,
+        policy.requiredValidationKeys,
+        (policy.conditions ?? []).map((condition) => condition.path),
+        (policy.onPassEffects ?? []).map((effect) => [effect.type, effect.targetPath, effect.value]),
+        (policy.onFailEffects ?? []).map((effect) => [effect.type, effect.targetPath, effect.value]),
         policy.frameworkKeys,
         policy.orderedSteps,
         policy.requiredAgentIds,
@@ -592,7 +962,7 @@ const getWorkflowPolicyRows = ({
         policy.gatingRules,
       ])
 
-      return matchesStatus && matchesFramework && queryMatches
+      return matchesStatus && matchesFramework && matchesType && queryMatches
     })
     .map((policy) => cloneWorkflowPolicy(policy))
 }
@@ -2229,7 +2599,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
     listWorkflowPolicies: build.query({
       queryFn: async (
-        { page = 1, pageSize = WORKFLOW_POLICY_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
+        { page = 1, pageSize = WORKFLOW_POLICY_PAGE_SIZE, q = '', status = '', frameworkKey = '', type = '' } = {},
         api,
         extraOptions,
         baseQuery,
@@ -2243,6 +2613,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               q,
               status,
               frameworkKey,
+              type,
               defaultPageSize: WORKFLOW_POLICY_PAGE_SIZE,
             }),
             api,
@@ -2252,7 +2623,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, WORKFLOW_POLICY_PAGE_SIZE)
-        const rows = getWorkflowPolicyRows({ q, status, frameworkKey })
+        const rows = getWorkflowPolicyRows({ q, status, frameworkKey, type })
 
         return {
           data: buildListResponse({
@@ -2263,6 +2634,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               q: String(q ?? '').trim(),
               status: String(status ?? '').trim(),
               frameworkKey: normalizeFrameworkKey(frameworkKey),
+              type: String(type ?? '').trim().toUpperCase(),
             },
           }),
         }
@@ -2277,20 +2649,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     createWorkflowPolicy: build.mutation({
-      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+      queryFn: async ({ body = {} } = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'workflow-policies',
               method: 'POST',
-              body: payload,
+              body,
             }),
             api,
             extraOptions,
           )
         }
 
-        const runtimePayload = payload
+        const runtimePayload = body
 
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) => String(policy.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
@@ -2307,6 +2679,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           id: generateRuntimeId('policy', runtimePayload.key),
           ...cloneWorkflowPolicy({
             ...runtimePayload,
+            version: 1,
+            lastActivatedAt: String(runtimePayload.status ?? '').trim().toUpperCase() === 'ACTIVE'
+              ? new Date().toISOString()
+              : '',
             ...buildAuditFields(),
           }),
         }
@@ -2343,6 +2719,95 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getWorkflowPolicyDependencies: build.query({
+      queryFn: async (policyId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('workflow-policies', `${policyId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const policy = findWorkflowPolicyById(policyId)
+        if (!policy) {
+          return buildNotFoundError('Workflow policy was not found.')
+        }
+
+        return {
+          data: buildEntityResponse(buildMockWorkflowPolicyDependencies(policy)),
+        }
+      },
+      providesTags: (_result, _error, policyId) => [
+        { type: 'RuntimeWorkflowPolicyDependencies', id: policyId },
+        WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG,
+      ],
+    }),
+
+    testWorkflowPolicy: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/workflow-policies/test-console`,
+              method: 'POST',
+              body: payload,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload && typeof payload === 'object' ? payload : {}
+        const draft = runtimePayload.draft && typeof runtimePayload.draft === 'object'
+          ? runtimePayload.draft
+          : null
+
+        if (!draft) {
+          return buildValidationFailedError('Workflow policy test failed.', {
+            draft: 'Workflow policy draft payload is required for test console runs.',
+          })
+        }
+
+        const writableRuntimePathRows = getRuntimePathRows({
+          status: 'ACTIVE',
+          scope: 'FRAMEWORK_STATE',
+          operation: 'WRITE',
+          isProtected: 'false',
+          frameworkKeys: Array.isArray(draft.frameworkKeys) ? draft.frameworkKeys.join(',') : '',
+        })
+        const frameworkRegistryKeys = getFrameworkRegistryRows()
+          .map((entry) => String(entry.frameworkKey ?? '').trim().toUpperCase())
+          .filter(Boolean)
+        const { errors: validationErrors } = validateWorkflowPolicyForm(
+          draft,
+          [],
+          '',
+          frameworkRegistryKeys,
+          runtimeControlState.agents,
+          writableRuntimePathRows,
+        )
+
+        if (Object.keys(validationErrors).length > 0) {
+          return buildValidationFailedError('Workflow policy test failed.', validationErrors)
+        }
+
+        return {
+          data: buildEntityResponse(buildMockWorkflowPolicyTestResult({
+            draft,
+            frameworkState:
+              runtimePayload.frameworkState
+              && typeof runtimePayload.frameworkState === 'object'
+              && !Array.isArray(runtimePayload.frameworkState)
+                ? runtimePayload.frameworkState
+                : {},
+            triggerEvent: runtimePayload.triggerEvent,
+            actorScope: runtimePayload.actorScope,
+          })),
+        }
+      },
+    }),
+
     updateWorkflowPolicy: build.mutation({
       queryFn: async ({ policyId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -2365,6 +2830,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Workflow policy was not found.')
         }
 
+        if (
+          payload.key !== undefined
+          && String(payload.key ?? '').trim() !== String(existingPolicy.key ?? '').trim()
+        ) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            key: 'Workflow policy key is immutable after creation.',
+          })
+        }
+
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) =>
             policy.id !== policyId
@@ -2381,6 +2855,12 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const nextPolicy = cloneWorkflowPolicy({
           ...existingPolicy,
           ...runtimePayload,
+          version: Number(existingPolicy.version ?? 1) + 1,
+          lastActivatedAt:
+            String(runtimePayload.status ?? existingPolicy.status ?? '').trim().toUpperCase() === 'ACTIVE'
+            && String(existingPolicy.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+              ? new Date().toISOString()
+              : (existingPolicy.lastActivatedAt ?? ''),
           ...buildAuditFields(),
         })
 
@@ -2396,6 +2876,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { policyId }) => [
         WORKFLOW_POLICY_LIST_TAG,
         { type: 'RuntimeWorkflowPolicy', id: policyId },
+        { type: 'RuntimeWorkflowPolicyDependencies', id: policyId },
+        WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG,
       ],
     }),
   }),
@@ -2437,5 +2919,7 @@ export const {
   useListWorkflowPoliciesQuery,
   useCreateWorkflowPolicyMutation,
   useGetWorkflowPolicyQuery,
+  useGetWorkflowPolicyDependenciesQuery,
+  useTestWorkflowPolicyMutation,
   useUpdateWorkflowPolicyMutation,
 } = runtimeControlApi

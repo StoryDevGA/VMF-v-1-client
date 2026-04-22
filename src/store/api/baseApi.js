@@ -300,6 +300,7 @@ export const baseApi = createApi({
     'RuntimeSkill',
     'RuntimePath',
     'RuntimeWorkflowPolicy',
+    'RuntimeWorkflowPolicyDependencies',
     'SkillRole',
     'SkillRoleDependencies',
   ],

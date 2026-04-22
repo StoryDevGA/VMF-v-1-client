@@ -47,6 +47,10 @@ vi.mock('../../pages/SuperAdminWorkflowPolicies', () => ({
   default: () => <h1>Workflow Policies</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminWorkflowPolicyEditor', () => ({
+  default: () => <h1>Workflow Policy Editor</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminRuntimePathRegistry', () => ({
   default: () => <h1>Runtime Paths</h1>,
 }))
@@ -71,7 +75,8 @@ vi.mock('../../pages/Dashboard', () => ({
   default: () => <h1>Dashboard</h1>,
 }))
 
-import { router, LoadingFallback } from '../index'
+import { router } from '../index'
+import { LoadingFallback } from '../LoadingFallback.jsx'
 
 const ROUTE_TEST_TIMEOUT = 15000
 
@@ -785,6 +790,8 @@ describe('Router', () => {
         'runtime-control/agents/new',
         'runtime-control/agents/:agentId',
         'runtime-control/workflow-policies',
+        'runtime-control/workflow-policies/new',
+        'runtime-control/workflow-policies/:policyId/edit',
         'runtime-control/framework-packages',
         'invitations',
         'license-levels',

@@ -10,17 +10,11 @@
  *  - Admin   — super-admin protected routes     (/super-admin/*)
  */
 
-import { lazy, Suspense } from 'react'
-import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom'
-import { useSelector } from 'react-redux'
-import { Header } from '../components/Header'
-import { Footer } from '../components/Footer'
-import { Spinner } from '../components/Spinner'
-import { Logo } from '../components/Logo'
+import { lazy } from 'react'
+import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { isSuperAdminRuntimeControlEnabled } from '../constants/superAdminNavigation.js'
-import { selectCurrentUser } from '../store/slices/authSlice.js'
-import { isSuperAdmin as checkIsSuperAdmin } from '../utils/authorization.js'
+import { CustomerAppGuard, RootLayout } from './RouterLayouts.jsx'
 import './router.css'
 
 /* ------------------------------------------------------------------ */
@@ -57,6 +51,9 @@ const SuperAdminSkillEditor = lazy(
 )
 const SuperAdminWorkflowPolicies = lazy(
   () => import('../pages/SuperAdminWorkflowPolicies'),
+)
+const SuperAdminWorkflowPolicyEditor = lazy(
+  () => import('../pages/SuperAdminWorkflowPolicyEditor'),
 )
 const SuperAdminRuntimePathRegistry = lazy(
   () => import('../pages/SuperAdminRuntimePathRegistry'),
@@ -100,53 +97,6 @@ const SystemMonitoring = lazy(
 )
 const InvitationAuth = lazy(() => import('../pages/InvitationAuth'))
 const NotFound = lazy(() => import('../pages/NotFound'))
-
-/* ------------------------------------------------------------------ */
-/*  Shared layouts & fallbacks                                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Loading Fallback Component
- * Shown while lazy-loaded routes are loading
- */
-export function LoadingFallback() {
-  return (
-    <div className="loading-fallback">
-      <Spinner size="lg" />
-      <p className="loading-fallback__text">Loading...</p>
-    </div>
-  )
-}
-
-/**
- * Root Layout
- * Wraps all routes with navigation and suspense boundary
- */
-function RootLayout() {
-  return (
-    <div className="root-layout">
-      <Header logo={<Logo size="large" />} />
-      <main className="root-layout__main">
-        <Suspense fallback={<LoadingFallback />}>
-          <Outlet />
-        </Suspense>
-      </main>
-      <Footer />
-    </div>
-  )
-}
-
-/**
- * Customer App Guard
- * Blocks SUPER_ADMIN users from customer-admin route space (`/app/*`).
- */
-function CustomerAppGuard() {
-  const user = useSelector(selectCurrentUser)
-  if (checkIsSuperAdmin(user)) {
-    return <SuperAdminDashboard />
-  }
-  return <Outlet />
-}
 
 /* ------------------------------------------------------------------ */
 /*  Router definition                                                 */
@@ -197,7 +147,7 @@ export const router = createBrowserRouter([
         element: <ProtectedRoute redirectTo="/app/login" />,
         children: [
           {
-            element: <CustomerAppGuard />,
+            element: <CustomerAppGuard superAdminElement={<SuperAdminDashboard />} />,
             children: [
               {
                 path: 'dashboard',
@@ -335,6 +285,14 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/workflow-policies',
                   element: <SuperAdminWorkflowPolicies />,
+                },
+                {
+                  path: 'runtime-control/workflow-policies/new',
+                  element: <SuperAdminWorkflowPolicyEditor />,
+                },
+                {
+                  path: 'runtime-control/workflow-policies/:policyId/edit',
+                  element: <SuperAdminWorkflowPolicyEditor />,
                 },
                 {
                   path: 'runtime-control/framework-packages',
