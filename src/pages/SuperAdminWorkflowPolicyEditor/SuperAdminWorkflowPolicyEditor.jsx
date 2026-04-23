@@ -66,18 +66,18 @@ const WORKFLOW_POLICY_ERROR_TAB_LOOKUP = Object.freeze({
   actorScope: 1,
   cooldownSeconds: 1,
   conditions: 2,
-  governedAction: 3,
-  decisionMode: 3,
-  severity: 3,
-  passMessage: 3,
-  failMessage: 3,
-  routingMode: 4,
-  primaryAgentId: 4,
-  fallbackAgentId: 4,
-  timeoutMs: 4,
-  retryOverride: 4,
-  requiredValidationKeys: 5,
-  validationFreshnessMinutes: 5,
+  requiredValidationKeys: 3,
+  validationFreshnessMinutes: 3,
+  governedAction: 4,
+  decisionMode: 4,
+  severity: 4,
+  passMessage: 4,
+  failMessage: 4,
+  routingMode: 5,
+  primaryAgentId: 5,
+  fallbackAgentId: 5,
+  timeoutMs: 5,
+  retryOverride: 5,
   onPassEffects: 6,
   onFailEffects: 6,
   overrideRoles: 7,
@@ -162,18 +162,18 @@ const WORKFLOW_POLICY_VALIDATION_JUMP_TARGETS = Object.freeze([
   { tabIndex: 1, fieldKey: 'actorScope', focusId: 'workflow-policy-editor-actor-scope' },
   { tabIndex: 1, fieldKey: 'cooldownSeconds', focusId: 'workflow-policy-editor-cooldown-seconds' },
   { tabIndex: 2, fieldKey: 'conditions', focusId: 'workflow-policy-editor-add-condition' },
-  { tabIndex: 3, fieldKey: 'governedAction', focusId: 'workflow-policy-editor-governed-action' },
-  { tabIndex: 3, fieldKey: 'decisionMode', focusId: 'workflow-policy-editor-decision-mode' },
-  { tabIndex: 3, fieldKey: 'severity', focusId: 'workflow-policy-editor-severity' },
-  { tabIndex: 3, fieldKey: 'passMessage', focusId: 'workflow-policy-editor-pass-message' },
-  { tabIndex: 3, fieldKey: 'failMessage', focusId: 'workflow-policy-editor-fail-message' },
-  { tabIndex: 4, fieldKey: 'routingMode', focusId: 'workflow-policy-editor-routing-mode' },
-  { tabIndex: 4, fieldKey: 'primaryAgentId', focusId: 'workflow-policy-editor-primary-agent' },
-  { tabIndex: 4, fieldKey: 'fallbackAgentId', focusId: 'workflow-policy-editor-fallback-agent' },
-  { tabIndex: 4, fieldKey: 'timeoutMs', focusId: 'workflow-policy-editor-timeout-ms' },
-  { tabIndex: 4, fieldKey: 'retryOverride', focusId: 'workflow-policy-editor-retry-override' },
-  { tabIndex: 5, fieldKey: 'requiredValidationKeys', focusId: 'workflow-policy-editor-validation-key' },
-  { tabIndex: 5, fieldKey: 'validationFreshnessMinutes', focusId: 'workflow-policy-editor-validation-freshness' },
+  { tabIndex: 3, fieldKey: 'requiredValidationKeys', focusId: 'workflow-policy-editor-validation-key' },
+  { tabIndex: 3, fieldKey: 'validationFreshnessMinutes', focusId: 'workflow-policy-editor-validation-freshness' },
+  { tabIndex: 4, fieldKey: 'governedAction', focusId: 'workflow-policy-editor-governed-action' },
+  { tabIndex: 4, fieldKey: 'decisionMode', focusId: 'workflow-policy-editor-decision-mode' },
+  { tabIndex: 4, fieldKey: 'severity', focusId: 'workflow-policy-editor-severity' },
+  { tabIndex: 4, fieldKey: 'passMessage', focusId: 'workflow-policy-editor-pass-message' },
+  { tabIndex: 4, fieldKey: 'failMessage', focusId: 'workflow-policy-editor-fail-message' },
+  { tabIndex: 5, fieldKey: 'routingMode', focusId: 'workflow-policy-editor-routing-mode' },
+  { tabIndex: 5, fieldKey: 'primaryAgentId', focusId: 'workflow-policy-editor-primary-agent' },
+  { tabIndex: 5, fieldKey: 'fallbackAgentId', focusId: 'workflow-policy-editor-fallback-agent' },
+  { tabIndex: 5, fieldKey: 'timeoutMs', focusId: 'workflow-policy-editor-timeout-ms' },
+  { tabIndex: 5, fieldKey: 'retryOverride', focusId: 'workflow-policy-editor-retry-override' },
   { tabIndex: 6, fieldKey: 'onPassEffects', focusId: 'workflow-policy-editor-onPassEffects-add-effect' },
   { tabIndex: 6, fieldKey: 'onFailEffects', focusId: 'workflow-policy-editor-onFailEffects-add-effect' },
   { tabIndex: 7, fieldKey: 'overrideRoles', focusId: 'workflow-policy-editor-override-roles' },
@@ -2404,7 +2404,16 @@ function WorkflowPolicyEditor() {
                   </TabView.Tab>
 
                   <TabView.Tab
-                    label={renderTabLabel(WORKFLOW_POLICY_EDITOR_TABS[3].label, tabErrorCounts.actionGovernance)}
+                    label={renderTabLabel(
+                      WORKFLOW_POLICY_EDITOR_TABS[3].label,
+                      tabErrorCounts.validationRequirements,
+                    )}
+                  >
+                    {renderValidationTab()}
+                  </TabView.Tab>
+
+                  <TabView.Tab
+                    label={renderTabLabel(WORKFLOW_POLICY_EDITOR_TABS[4].label, tabErrorCounts.actionGovernance)}
                   >
                     <div className="super-admin-workflow-policy-editor__tab-panel">
                       <div className="super-admin-workflow-policy-editor__grid">
@@ -2456,17 +2465,8 @@ function WorkflowPolicyEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label={renderTabLabel(WORKFLOW_POLICY_EDITOR_TABS[4].label, tabErrorCounts.agentRouting)}>
+                  <TabView.Tab label={renderTabLabel(WORKFLOW_POLICY_EDITOR_TABS[5].label, tabErrorCounts.agentRouting)}>
                     {renderRoutingTab()}
-                  </TabView.Tab>
-
-                  <TabView.Tab
-                    label={renderTabLabel(
-                      WORKFLOW_POLICY_EDITOR_TABS[5].label,
-                      tabErrorCounts.validationRequirements,
-                    )}
-                  >
-                    {renderValidationTab()}
                   </TabView.Tab>
 
                   <TabView.Tab

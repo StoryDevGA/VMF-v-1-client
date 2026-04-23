@@ -58,6 +58,27 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     expect(screen.getByRole('tab', { name: /framework compatibility .*validation errors/i })).toBeInTheDocument()
   })
 
+  it('renders the workflow policy tabs in the authoring order from the rearrange-tabs feedback', () => {
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    const tabTexts = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim() ?? '')
+
+    expect(tabTexts).toEqual([
+      'Framework Compatibility',
+      'Scope & Trigger',
+      'FRAMEWORK_STATE Conditions',
+      'Validation Requirements',
+      'Action Governance',
+      'Agent Routing',
+      'Outcome / State Effects',
+      'Escalation & Overrides',
+      'Dependencies',
+      'Audit & Versioning',
+      'JSON / Diff',
+      'Test Console',
+    ])
+  })
+
   it('shows a clear empty-state message when the selected frameworks have no compatible governed runtime paths', async () => {
     const user = userEvent.setup()
     renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
