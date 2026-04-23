@@ -16,11 +16,12 @@
  * @param {React.ReactNode} props.children Tab content via TabView.Tab children
  * @param {number} [props.defaultActiveTab=0] Default active tab index (uncontrolled mode)
  * @param {number} [props.activeTab] Active tab index (controlled mode)
- * @param {'default'|'pills'} [props.variant='default'] Visual styling variant
+ * @param {'default'|'pills'|'boxed'} [props.variant='default'] Visual styling variant
  * @param {'horizontal'|'vertical'} [props.orientation='horizontal'] Orientation for tab navigation
- * @param {'sm'|'md'|'lg'} [props.size='md'] Tab size
+ * @param {'sm'|'md'} [props.size='md'] Tab size
  * @param {boolean} [props.evenTabs=false] When true (horizontal only), tabs distribute evenly and wrap onto multiple rows
  * @param {(nextIndex:number)=>void} [props.onTabChange] Callback invoked when tab changes
+ * @param {string} [props.aria-label] Applied to the tablist element (`role="tablist"`)
  *
  * @example
  * <TabView defaultActiveTab={0}>

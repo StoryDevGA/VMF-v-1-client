@@ -58,6 +58,19 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     expect(screen.getByRole('tab', { name: /framework compatibility .*validation errors/i })).toBeInTheDocument()
   })
 
+  it('shows a clear empty-state message when the selected frameworks have no compatible governed runtime paths', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
+    await user.click(screen.getByRole('checkbox', { name: /customer messaging framework/i }))
+    await user.click(screen.getByRole('tab', { name: /framework_state conditions/i }))
+
+    expect(
+      screen.getByText(/no active framework_state runtime paths are currently registered for cmf/i),
+    ).toBeInTheDocument()
+  })
+
   it('creates a workflow policy from the dedicated editor and returns to the catalogue', async () => {
     const user = userEvent.setup()
     renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])

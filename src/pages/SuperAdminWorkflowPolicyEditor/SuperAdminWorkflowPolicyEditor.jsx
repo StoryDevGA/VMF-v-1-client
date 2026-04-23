@@ -123,6 +123,13 @@ const TEST_CONSOLE_ACTOR_SCOPE_OPTIONS = Object.freeze([
   ...WORKFLOW_POLICY_ACTOR_SCOPE_OPTIONS,
 ])
 
+const normalizeFrameworkSelectionList = (values = []) =>
+  [...new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value ?? '').trim().toUpperCase())
+      .filter(Boolean),
+  )]
+
 const shallowEqualObject = (left, right) => {
   const leftKeys = Object.keys(left || {})
   const rightKeys = Object.keys(right || {})
@@ -495,6 +502,20 @@ function WorkflowPolicyEditor() {
   } = useGetWorkflowPolicyDependenciesQuery(policyId, {
     skip: !isEditMode,
   })
+  const runtimePathLookupFrameworkKeys = useMemo(() => {
+    const draftFrameworkKeys =
+      formDraftState.identity === formIdentity
+      && Array.isArray(formDraftState.form?.frameworkKeys)
+        ? formDraftState.form.frameworkKeys
+        : null
+
+    if (draftFrameworkKeys) {
+      return normalizeFrameworkSelectionList(draftFrameworkKeys)
+    }
+
+    return normalizeFrameworkSelectionList(policyResponse?.data?.frameworkKeys)
+  }, [formDraftState, formIdentity, policyResponse])
+  const runtimePathLookupFrameworkKeysParam = runtimePathLookupFrameworkKeys.join(',')
   const { data: registryResponse } = useListFrameworkRegistriesQuery({
     page: 1,
     pageSize: 100,
@@ -505,22 +526,29 @@ function WorkflowPolicyEditor() {
     pageSize: 100,
     q: '',
   })
-  const { data: runtimePathsResponse } = useListRuntimePathsQuery({
+  const {
+    data: runtimePathsResponse,
+    isFetching: isRuntimePathsLoading,
+    error: runtimePathsError,
+  } = useListRuntimePathsQuery({
     page: 1,
-    pageSize: 200,
+    pageSize: 100,
     q: '',
     status: 'ACTIVE',
+    ...(runtimePathLookupFrameworkKeysParam ? { frameworkKeys: runtimePathLookupFrameworkKeysParam } : {}),
     scope: 'FRAMEWORK_STATE',
     operation: 'READ',
   })
-  const { data: writeRuntimePathsResponse } = useListRuntimePathsQuery({
+  const {
+    data: writeRuntimePathsResponse,
+    isFetching: isWriteRuntimePathsLoading,
+    error: writeRuntimePathsError,
+  } = useListRuntimePathsQuery({
     page: 1,
-    pageSize: 200,
+    pageSize: 100,
     q: '',
     status: 'ACTIVE',
-    frameworkKeys: Array.isArray(formDraftState.form?.frameworkKeys)
-      ? formDraftState.form.frameworkKeys.join(',')
-      : '',
+    ...(runtimePathLookupFrameworkKeysParam ? { frameworkKeys: runtimePathLookupFrameworkKeysParam } : {}),
     scope: 'FRAMEWORK_STATE',
     operation: 'WRITE',
     isProtected: 'false',
@@ -531,6 +559,8 @@ function WorkflowPolicyEditor() {
 
   const loadedPolicy = policyResponse?.data ?? null
   const policyAppError = policyError ? normalizeError(policyError) : null
+  const runtimePathsAppError = runtimePathsError ? normalizeError(runtimePathsError) : null
+  const writeRuntimePathsAppError = writeRuntimePathsError ? normalizeError(writeRuntimePathsError) : null
   const frameworkRows = useMemo(
     () => (Array.isArray(registryResponse?.data) ? registryResponse.data : []),
     [registryResponse],
@@ -628,6 +658,48 @@ function WorkflowPolicyEditor() {
       baseOptions,
     )
   }, [form.frameworkKeys, form.onFailEffects, form.onPassEffects, writableRuntimePathRows])
+  const runtimePathAvailabilityMessage = useMemo(() => {
+    if (isRuntimePathsLoading || runtimePathsAppError || runtimePathOptions.length > 0) {
+      return ''
+    }
+
+    if (runtimePathLookupFrameworkKeys.length > 0) {
+      return `No ACTIVE FRAMEWORK_STATE runtime paths are currently registered for ${runtimePathLookupFrameworkKeys.join(', ')}.`
+    }
+
+    return 'No ACTIVE FRAMEWORK_STATE runtime paths are currently registered.'
+  }, [
+    isRuntimePathsLoading,
+    runtimePathLookupFrameworkKeys,
+    runtimePathOptions.length,
+    runtimePathsAppError,
+  ])
+  const writableRuntimePathAvailabilityMessage = useMemo(() => {
+    if (isWriteRuntimePathsLoading || writeRuntimePathsAppError || writableRuntimePathOptions.length > 0) {
+      return ''
+    }
+
+    if (runtimePathLookupFrameworkKeys.length > 0) {
+      return `No writable FRAMEWORK_STATE runtime paths are currently registered for ${runtimePathLookupFrameworkKeys.join(', ')}.`
+    }
+
+    return 'No writable FRAMEWORK_STATE runtime paths are currently registered.'
+  }, [
+    isWriteRuntimePathsLoading,
+    runtimePathLookupFrameworkKeys,
+    writableRuntimePathOptions.length,
+    writeRuntimePathsAppError,
+  ])
+  const runtimePathSelectPlaceholder = isRuntimePathsLoading
+    ? 'Loading governed paths...'
+    : runtimePathOptions.length > 0
+      ? 'Select a governed path'
+      : 'No governed paths available'
+  const writableRuntimePathSelectPlaceholder = isWriteRuntimePathsLoading
+    ? 'Loading writable paths...'
+    : writableRuntimePathOptions.length > 0
+      ? 'Select writable path'
+      : 'No writable paths available'
   const compatibleAgentOptions = useMemo(() => {
     const selectedFrameworkKeys = Array.isArray(form.frameworkKeys) ? form.frameworkKeys : []
     const compatibleAgents = runtimeAgentRows.filter((agent) => {
@@ -1090,6 +1162,15 @@ function WorkflowPolicyEditor() {
         <p className="super-admin-workflow-policy-editor__helper">
           Define governed FRAMEWORK_STATE prerequisites. Paths are restricted to active runtime-path registry entries.
         </p>
+        {runtimePathsAppError ? (
+          <p className="super-admin-workflow-policy-editor__error" role="alert">
+            {runtimePathsAppError.message}
+          </p>
+        ) : runtimePathAvailabilityMessage ? (
+          <p className="super-admin-workflow-policy-editor__helper">
+            {runtimePathAvailabilityMessage}
+          </p>
+        ) : null}
         <div className="super-admin-workflow-policy-editor__top-actions">
           <Button
             id="workflow-policy-editor-add-condition"
@@ -1116,7 +1197,7 @@ function WorkflowPolicyEditor() {
                     label="Path"
                     value={condition.path ?? ''}
                     options={runtimePathOptions}
-                    placeholder={runtimePathOptions.length > 0 ? 'Select a governed path' : 'No governed paths available'}
+                    placeholder={runtimePathSelectPlaceholder}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
@@ -1437,7 +1518,7 @@ function WorkflowPolicyEditor() {
                     label="Target Path"
                     value={effect.targetPath ?? ''}
                     options={writableRuntimePathOptions}
-                    placeholder={writableRuntimePathOptions.length > 0 ? 'Select writable path' : 'No writable paths available'}
+                    placeholder={writableRuntimePathSelectPlaceholder}
                     disabled={!needsTargetPath}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -1503,6 +1584,15 @@ function WorkflowPolicyEditor() {
         <p className="super-admin-workflow-policy-editor__helper">
           Define governed state effects after policy evaluation. All writes stay inside approved writable FRAMEWORK_STATE paths.
         </p>
+        {writeRuntimePathsAppError ? (
+          <p className="super-admin-workflow-policy-editor__error" role="alert">
+            {writeRuntimePathsAppError.message}
+          </p>
+        ) : writableRuntimePathAvailabilityMessage ? (
+          <p className="super-admin-workflow-policy-editor__helper">
+            {writableRuntimePathAvailabilityMessage}
+          </p>
+        ) : null}
         {renderEffectSection('On Pass', 'onPassEffects', form.onPassEffects)}
         {renderEffectSection('On Fail', 'onFailEffects', form.onFailEffects)}
       </div>
