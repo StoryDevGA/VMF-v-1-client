@@ -40,7 +40,7 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'agents', 'workflowPolicies', 'frameworkPackages']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
@@ -48,6 +48,7 @@ const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'runtimePaths',
   'skillRoles',
   'skills',
+  'validationRegistry',
   'agents',
   'workflowPolicies',
   'frameworkPackages',
@@ -223,6 +224,16 @@ export const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       canonical: 'Skills',
       legacyNav: 'Skills',
       phase1aNav: 'Skills',
+    }),
+  }),
+  validationRegistry: Object.freeze({
+    key: 'validation-registry',
+    to: '/super-admin/runtime-control/validation-registry',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Validation Registry',
+      legacyNav: 'Validation Registry',
+      phase1aNav: 'Validation Registry',
     }),
   }),
   runtimePaths: Object.freeze({

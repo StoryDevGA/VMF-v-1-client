@@ -1,0 +1,110 @@
+.validation-key-search-select {
+  position: relative;
+}
+
+.validation-key-search-select__chips {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-sm) 0 0;
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.validation-key-search-select__chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.validation-key-search-select__chip-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  max-width: 100%;
+}
+
+.validation-key-search-select__chip-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.validation-key-search-select__chip-key {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  opacity: 0.9;
+}
+
+.validation-key-search-select__chip-status {
+  font-size: var(--font-size-xs);
+  opacity: 0.85;
+}
+
+.validation-key-search-select__chip-remove {
+  white-space: nowrap;
+}
+
+.validation-key-search-select__chip-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-muted);
+}
+
+.validation-key-search-select__list {
+  position: absolute;
+  z-index: var(--z-index-tooltip);
+  left: 0;
+  right: 0;
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  border: var(--border-width-thin) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-md);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.validation-key-search-select__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.validation-key-search-select__option:hover,
+.validation-key-search-select__option--active {
+  background: var(--color-surface-secondary);
+}
+
+.validation-key-search-select__option-main {
+  min-width: 0;
+  display: grid;
+  gap: var(--spacing-2xs);
+}
+
+.validation-key-search-select__option-label {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.validation-key-search-select__option-key {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  word-break: break-word;
+}
+
+.validation-key-search-select__option-pill {
+  flex: 0 0 auto;
+}
+
+.validation-key-search-select__empty {
+  padding: var(--spacing-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}

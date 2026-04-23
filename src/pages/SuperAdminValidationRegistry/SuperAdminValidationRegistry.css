@@ -1,0 +1,35 @@
+.super-admin-validation-registry {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-validation-registry__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-validation-registry__title,
+.super-admin-validation-registry__subtitle {
+  margin: 0;
+}
+
+.super-admin-validation-registry__subtitle {
+  color: var(--color-text-secondary);
+}
+
+.super-admin-validation-registry__dialog-copy,
+.super-admin-validation-registry__dialog-helper {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-validation-registry__dialog-copy {
+  color: var(--color-text-primary);
+}
+
+.super-admin-validation-registry__dialog-helper {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}

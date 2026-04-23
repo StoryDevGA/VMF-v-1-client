@@ -168,13 +168,6 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     )
 
     await user.click(screen.getByRole('tab', { name: /validation requirements/i }))
-    await user.type(
-      screen.getByLabelText(/^required validation key$/i, {
-        selector: 'input#workflow-policy-editor-validation-key',
-      }),
-      'required-sections-check',
-    )
-    await user.click(screen.getByRole('button', { name: /add validation key/i }))
 
     await user.click(screen.getByRole('tab', { name: /outcome \/ state effects/i }))
     await user.click(screen.getAllByRole('button', { name: /add effect/i })[0])

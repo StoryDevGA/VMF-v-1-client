@@ -303,6 +303,8 @@ export const baseApi = createApi({
     'RuntimeWorkflowPolicyDependencies',
     'SkillRole',
     'SkillRoleDependencies',
+    'ValidationRegistry',
+    'ValidationRegistryDependencies',
   ],
   endpoints: () => ({}), // feature slices inject their own
 })

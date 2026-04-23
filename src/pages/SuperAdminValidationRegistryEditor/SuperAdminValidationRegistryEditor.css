@@ -1,0 +1,181 @@
+.super-admin-validation-registry-editor {
+  display: grid;
+  gap: var(--spacing-lg);
+  padding-block: var(--spacing-xl);
+}
+
+.super-admin-validation-registry-editor__header {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-validation-registry-editor__title,
+.super-admin-validation-registry-editor__subtitle {
+  margin: 0;
+}
+
+.super-admin-validation-registry-editor__subtitle {
+  color: var(--color-text-secondary);
+  max-width: 72ch;
+}
+
+.super-admin-validation-registry-editor__card {
+  height: 100%;
+  overflow: hidden;
+}
+
+.super-admin-validation-registry-editor__card-body {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-validation-registry-editor__card-body--compact {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.super-admin-validation-registry-editor__top-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-validation-registry-editor__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-validation-registry-editor__framework-section {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-validation-registry-editor__framework-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-validation-registry-editor__framework-add-button {
+  align-self: end;
+  min-height: 56px;
+}
+
+.super-admin-validation-registry-editor__path-stack,
+.super-admin-validation-registry-editor__defaults-section {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-validation-registry-editor__defaults-section {
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.super-admin-validation-registry-editor__field {
+  display: grid;
+  gap: var(--spacing-2xs);
+  align-content: start;
+  min-width: 0;
+}
+
+.super-admin-validation-registry-editor__field-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-validation-registry-editor__helper {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-validation-registry-editor__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-validation-registry-editor__summary {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-validation-registry-editor__summary-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.super-admin-validation-registry-editor__summary-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-validation-registry-editor__footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-validation-registry-editor__toggle-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.super-admin-validation-registry-editor__dialog-copy {
+  margin: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-validation-registry-editor__dialog-helper {
+  margin: 0;
+  margin-top: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+@media (max-width: 767px) {
+  .super-admin-validation-registry-editor__card-body--compact {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-validation-registry-editor__row {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-validation-registry-editor__framework-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-validation-registry-editor__framework-add-button {
+    width: 100%;
+  }
+
+  .super-admin-validation-registry-editor__top-actions > *,
+  .super-admin-validation-registry-editor__footer-actions > * {
+    width: 100%;
+  }
+}

@@ -49,6 +49,12 @@ const SuperAdminSkills = lazy(
 const SuperAdminSkillEditor = lazy(
   () => import('../pages/SuperAdminSkillEditor'),
 )
+const SuperAdminValidationRegistry = lazy(
+  () => import('../pages/SuperAdminValidationRegistry'),
+)
+const SuperAdminValidationRegistryEditor = lazy(
+  () => import('../pages/SuperAdminValidationRegistryEditor'),
+)
 const SuperAdminWorkflowPolicies = lazy(
   () => import('../pages/SuperAdminWorkflowPolicies'),
 )
@@ -269,6 +275,18 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/skills/:skillId',
                   element: <SuperAdminSkillEditor />,
+                },
+                {
+                  path: 'runtime-control/validation-registry',
+                  element: <SuperAdminValidationRegistry />,
+                },
+                {
+                  path: 'runtime-control/validation-registry/new',
+                  element: <SuperAdminValidationRegistryEditor />,
+                },
+                {
+                  path: 'runtime-control/validation-registry/:validationId',
+                  element: <SuperAdminValidationRegistryEditor />,
                 },
                 {
                   path: 'runtime-control/agents',

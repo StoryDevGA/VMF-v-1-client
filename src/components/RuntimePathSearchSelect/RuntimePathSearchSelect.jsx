@@ -34,6 +34,7 @@ const deriveNamespace = (pathKey) => {
 function RuntimePathSearchSelect({
   id,
   frameworkKeys = [],
+  scope = '',
   operation = 'READ',
   isProtectedOnly = false,
   selectedKeys = [],
@@ -70,6 +71,7 @@ function RuntimePathSearchSelect({
     () => normalizeKeys(frameworkKeys).map((value) => value.toUpperCase()),
     [frameworkKeys],
   )
+  const normalizedScope = String(scope ?? '').trim().toUpperCase()
   const normalizedOperation =
     operation === null ? null : String(operation ?? 'READ').trim().toUpperCase()
 
@@ -96,11 +98,12 @@ function RuntimePathSearchSelect({
       ...(normalizedFrameworkKeys.length > 0
         ? { frameworkKeys: normalizedFrameworkKeys.join(',') }
         : {}),
+      ...(normalizedScope ? { scope: normalizedScope } : {}),
       ...(normalizedOperation ? { operation: normalizedOperation } : {}),
       ...(isProtectedOnly ? { isProtected: 'true' } : {}),
       status: 'ACTIVE',
     })
-  }, [isProtectedOnly, normalizedFrameworkKeys, normalizedOperation, triggerSearch])
+  }, [isProtectedOnly, normalizedFrameworkKeys, normalizedOperation, normalizedScope, triggerSearch])
 
   useEffect(() => {
     if (!isOpen || disabled) return undefined

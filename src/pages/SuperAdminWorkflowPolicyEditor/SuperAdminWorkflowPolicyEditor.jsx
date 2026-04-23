@@ -12,6 +12,7 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import ValidationKeySearchSelect from '../../components/ValidationKeySearchSelect'
 import {
   useCreateWorkflowPolicyMutation,
   useGetWorkflowPolicyDependenciesQuery,
@@ -89,12 +90,6 @@ const WORKFLOW_POLICY_ERROR_TAB_LOOKUP = Object.freeze({
 
 const ACTIVE_FRAMEWORK_STATUS = 'ACTIVE'
 const ACTIVE_AGENT_STATUS = 'ACTIVE'
-const DEFAULT_VALIDATION_SUGGESTIONS = Object.freeze([
-  'required-sections-check',
-  'contract-schema-check',
-  'duplicate-detection',
-  'governance-completeness',
-])
 const EFFECT_TYPES_REQUIRING_TARGET_PATH = new Set([
   'SET_VALUE',
   'INCREMENT_COUNTER',
@@ -480,7 +475,6 @@ function WorkflowPolicyEditor() {
   const [errorsSource, setErrorsSource] = useState(null)
   const [showValidationHints, setShowValidationHints] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
-  const [pendingValidationKey, setPendingValidationKey] = useState('')
   const [testConsoleForm, setTestConsoleForm] = useState({
     frameworkStateText: TEST_CONSOLE_DEFAULT_STATE_TEXT,
     triggerEvent: '',
@@ -813,7 +807,6 @@ function WorkflowPolicyEditor() {
       setErrorsSource(null)
       setShowValidationHints(false)
       setActiveTab(0)
-      setPendingValidationKey('')
       setTestConsoleForm({
         frameworkStateText: TEST_CONSOLE_DEFAULT_STATE_TEXT,
         triggerEvent: '',
@@ -833,7 +826,6 @@ function WorkflowPolicyEditor() {
       setErrorsSource(null)
       setShowValidationHints(false)
       setActiveTab(0)
-      setPendingValidationKey('')
       setTestConsoleForm({
         frameworkStateText: TEST_CONSOLE_DEFAULT_STATE_TEXT,
         triggerEvent: '',
@@ -944,17 +936,6 @@ function WorkflowPolicyEditor() {
       ) : null}
     </span>
   )
-
-  const addValidationKey = () => {
-    const normalized = String(pendingValidationKey ?? '').trim().toLowerCase()
-    if (!normalized) return
-
-    setForm((current) => ({
-      ...current,
-      requiredValidationKeys: [...new Set([...(current.requiredValidationKeys ?? []), normalized])],
-    }))
-    setPendingValidationKey('')
-  }
 
   const handleRunTestConsole = async () => {
     setTestConsoleError('')
@@ -1368,48 +1349,15 @@ function WorkflowPolicyEditor() {
         <p className="super-admin-workflow-policy-editor__helper">
           Require specific validation outcomes before the governed action may proceed.
         </p>
-        <div className="super-admin-workflow-policy-editor__validation-add">
-          <Input
-            id="workflow-policy-editor-validation-key"
-            label="Required Validation Key"
-            value={pendingValidationKey}
-            onChange={(event) => setPendingValidationKey(event.target.value)}
-            helperText={`Examples: ${DEFAULT_VALIDATION_SUGGESTIONS.join(', ')}`}
-            fullWidth
-          />
-          <Button type="button" variant="outline" size="sm" onClick={addValidationKey}>
-            Add Validation Key
-          </Button>
-        </div>
-        {Array.isArray(form.requiredValidationKeys) && form.requiredValidationKeys.length > 0 ? (
-          <div className="super-admin-workflow-policy-editor__token-row">
-            {form.requiredValidationKeys.map((validationKey) => (
-              <div key={validationKey} className="super-admin-workflow-policy-editor__token-pill">
-                <Badge variant="info" size="sm" pill outline>
-                  {validationKey}
-                </Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setForm((current) => ({
-                      ...current,
-                      requiredValidationKeys: (current.requiredValidationKeys ?? []).filter((item) => item !== validationKey),
-                    }))
-                  }
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {errors.requiredValidationKeys ? (
-          <p className="super-admin-workflow-policy-editor__error" role="alert">
-            {errors.requiredValidationKeys}
-          </p>
-        ) : null}
+        <ValidationKeySearchSelect
+          id="workflow-policy-editor-validation-key"
+          label="Required Validations"
+          frameworkKeys={supportedFrameworkKeys}
+          selectedKeys={form.requiredValidationKeys}
+          onChange={(keys) => setForm((current) => ({ ...current, requiredValidationKeys: keys }))}
+          error={errors.requiredValidationKeys}
+          helperText="Search and select governed validations (ACTIVE and policy-usable)."
+        />
         <div className="super-admin-workflow-policy-editor__grid">
           <Input
             id="workflow-policy-editor-validation-freshness"

@@ -39,6 +39,13 @@ import {
   SKILL_ROLE_REGISTRY_PAGE_SIZE,
   SKILL_ROLE_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
+import {
+  buildValidationRegistryStableId,
+  cloneValidationRegistryEntry,
+  INITIAL_VALIDATION_REGISTRY,
+  VALIDATION_REGISTRY_PAGE_SIZE,
+  VALIDATION_REGISTRY_STATUSES,
+} from '../../pages/SuperAdminValidationRegistry/superAdminValidationRegistry.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
 const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIST' }
@@ -48,6 +55,7 @@ const WORKFLOW_POLICY_LIST_TAG = { type: 'RuntimeWorkflowPolicy', id: 'LIST' }
 const WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG = { type: 'RuntimeWorkflowPolicyDependencies', id: 'LIST' }
 const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
 const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
+const VALIDATION_REGISTRY_LIST_TAG = { type: 'ValidationRegistry', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
@@ -61,6 +69,7 @@ const buildListParams = ({
   page,
   pageSize,
   q,
+  keys,
   status,
   sortBy,
   sortOrder,
@@ -72,11 +81,15 @@ const buildListParams = ({
   isProtected,
   type,
   structureType,
+  severity,
+  policyUsable,
+  packageUsable,
   defaultPageSize,
 }) => ({
   page: normalizePositiveInteger(page, 1),
   pageSize: normalizePositiveInteger(pageSize, defaultPageSize),
   q: String(q ?? '').trim(),
+  keys: String(keys ?? '').trim(),
   status: String(status ?? '').trim(),
   sortBy: String(sortBy ?? '').trim(),
   sortOrder: String(sortOrder ?? '').trim().toLowerCase(),
@@ -88,6 +101,9 @@ const buildListParams = ({
   isProtected: String(isProtected ?? '').trim().toLowerCase(),
   type: String(type ?? '').trim(),
   structureType: String(structureType ?? '').trim().toLowerCase(),
+  severity: String(severity ?? '').trim(),
+  policyUsable: String(policyUsable ?? '').trim().toLowerCase(),
+  packageUsable: String(packageUsable ?? '').trim().toLowerCase(),
 })
 
 export const buildRuntimeControlListRequest = ({
@@ -95,6 +111,7 @@ export const buildRuntimeControlListRequest = ({
   page,
   pageSize,
   q,
+  keys,
   status,
   sortBy,
   sortOrder,
@@ -106,12 +123,16 @@ export const buildRuntimeControlListRequest = ({
   isProtected,
   type,
   structureType,
+  severity,
+  policyUsable,
+  packageUsable,
   defaultPageSize,
 }) => {
   const params = buildListParams({
     page,
     pageSize,
     q,
+    keys,
     status,
     sortBy,
     sortOrder,
@@ -123,6 +144,9 @@ export const buildRuntimeControlListRequest = ({
     isProtected,
     type,
     structureType,
+    severity,
+    policyUsable,
+    packageUsable,
     defaultPageSize,
   })
 
@@ -132,6 +156,7 @@ export const buildRuntimeControlListRequest = ({
       page: params.page,
       pageSize: params.pageSize,
       ...(params.q ? { q: params.q } : {}),
+      ...(params.keys ? { keys: params.keys } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.sortBy ? { sortBy: params.sortBy } : {}),
       ...(params.sortOrder ? { sortOrder: params.sortOrder } : {}),
@@ -140,9 +165,12 @@ export const buildRuntimeControlListRequest = ({
       ...(params.scope ? { scope: params.scope } : {}),
       ...(params.operation ? { operation: params.operation } : {}),
       ...(params.category ? { category: params.category } : {}),
+      ...(params.severity ? { severity: params.severity } : {}),
       ...(params.isProtected ? { isProtected: params.isProtected } : {}),
       ...(params.type ? { type: params.type } : {}),
       ...(params.structureType ? { structureType: params.structureType } : {}),
+      ...(params.policyUsable ? { policyUsable: params.policyUsable } : {}),
+      ...(params.packageUsable ? { packageUsable: params.packageUsable } : {}),
     },
   }
 }
@@ -275,6 +303,7 @@ const buildInitialRuntimeControlState = () => ({
   frameworkPackages: INITIAL_FRAMEWORK_PACKAGES.map((pkg) => cloneFrameworkPackage(pkg)),
   runtimePaths: INITIAL_RUNTIME_PATH_REGISTRY.map((entry) => cloneRuntimePathRegistryEntry(entry)),
   skillRoles: INITIAL_SKILL_ROLE_REGISTRY.map((entry) => cloneSkillRoleRegistryEntry(entry)),
+  validationRegistry: INITIAL_VALIDATION_REGISTRY.map((entry) => cloneValidationRegistryEntry(entry)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
@@ -357,6 +386,50 @@ const buildMockSkillRoleDependencies = (roleKey) => {
     summary: {
       skills: skillIds.length,
       agents: agentIds.length,
+    },
+  }
+}
+
+const buildMockValidationRegistryDependencies = (validationKey) => {
+  const normalizedKey = String(validationKey ?? '').trim().toLowerCase()
+  if (!normalizedKey) {
+    return {
+      workflowPolicies: [],
+      frameworkPackages: [],
+      summary: { workflowPolicies: 0, frameworkPackages: 0 },
+    }
+  }
+
+  const workflowPolicies = (runtimeControlState.workflowPolicies || [])
+    .filter((policy) => Array.isArray(policy.requiredValidationKeys) && policy.requiredValidationKeys.includes(normalizedKey))
+    .map((policy) => ({
+      id: policy.id,
+      key: policy.key,
+      name: policy.name,
+      status: policy.status,
+    }))
+
+  const frameworkPackages = (runtimeControlState.frameworkPackages || [])
+    .filter((pkg) => {
+      const requiredSections = pkg?.validationRules?.requiredSections
+      const publishChecks = pkg?.validationRules?.publishChecks
+      return (Array.isArray(requiredSections) && requiredSections.includes(normalizedKey))
+        || (Array.isArray(publishChecks) && publishChecks.includes(normalizedKey))
+    })
+    .map((pkg) => ({
+      id: pkg.id,
+      frameworkKey: pkg.frameworkKey,
+      frameworkName: pkg.frameworkName,
+      version: pkg.version,
+      status: pkg.status,
+    }))
+
+  return {
+    workflowPolicies,
+    frameworkPackages,
+    summary: {
+      workflowPolicies: workflowPolicies.length,
+      frameworkPackages: frameworkPackages.length,
     },
   }
 }
@@ -920,6 +993,104 @@ const getRuntimeSkillRows = ({
     .map((skill) => cloneRuntimeSkill(skill))
 }
 
+const getValidationRegistryRows = ({
+  q = '',
+  keys = '',
+  status = '',
+  frameworkKey = '',
+  frameworkKeys = '',
+  category = '',
+  severity = '',
+  policyUsable = '',
+  packageUsable = '',
+  sortBy = '',
+  sortOrder = '',
+} = {}) => {
+  const normalizedSearch = normalizeSearch(q)
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  const normalizedFrameworkKey = normalizeFrameworkKey(frameworkKey)
+  const normalizedFrameworkKeys = String(frameworkKeys ?? '').trim()
+    .split(',')
+    .map((item) => normalizeFrameworkKey(item))
+    .filter(Boolean)
+  const allFrameworkKeys = [
+    ...(normalizedFrameworkKey ? [normalizedFrameworkKey] : []),
+    ...normalizedFrameworkKeys,
+  ]
+  const uniqueFrameworkKeys = [...new Set(allFrameworkKeys)]
+  const normalizedCategory = String(category ?? '').trim().toUpperCase()
+  const normalizedSeverity = String(severity ?? '').trim().toUpperCase()
+  const normalizedPolicyUsable = String(policyUsable ?? '').trim().toLowerCase()
+  const normalizedPackageUsable = String(packageUsable ?? '').trim().toLowerCase()
+  const normalizedKeys = String(keys ?? '').trim()
+    .split(',')
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  const keysSet = normalizedKeys.length > 0 ? new Set(normalizedKeys) : null
+
+  const rows = runtimeControlState.validationRegistry
+    .filter((row) => {
+      const matchesStatus = normalizedStatus ? row.status === normalizedStatus : true
+      const matchesFrameworks = uniqueFrameworkKeys.length > 0
+        ? uniqueFrameworkKeys.every((key) => (row.supportedFrameworkKeys ?? []).includes(key))
+        : true
+      const matchesCategory = normalizedCategory ? String(row.category ?? '').trim().toUpperCase() === normalizedCategory : true
+      const matchesSeverity = normalizedSeverity ? String(row.severity ?? '').trim().toUpperCase() === normalizedSeverity : true
+      const matchesPolicyUsable = normalizedPolicyUsable === 'true'
+        ? Boolean(row.policyUsable)
+        : normalizedPolicyUsable === 'false'
+          ? !row.policyUsable
+          : true
+      const matchesPackageUsable = normalizedPackageUsable === 'true'
+        ? Boolean(row.packageUsable)
+        : normalizedPackageUsable === 'false'
+          ? !row.packageUsable
+          : true
+      const matchesKeys = keysSet ? keysSet.has(String(row.key ?? '').trim().toLowerCase()) : true
+      const queryMatches = matchesSearch(normalizedSearch, [
+        row.key,
+        row.label,
+        row.description,
+        row.status,
+        row.supportedFrameworkKeys,
+        row.category,
+        row.severity,
+        row.producerSkillId,
+        row.outputPath,
+      ])
+
+      return matchesStatus
+        && matchesFrameworks
+        && matchesCategory
+        && matchesSeverity
+        && matchesPolicyUsable
+        && matchesPackageUsable
+        && matchesKeys
+        && queryMatches
+    })
+    .map((row) => cloneValidationRegistryEntry(row))
+
+  const normalizedSortBy = String(sortBy ?? '').trim()
+  const direction = String(sortOrder ?? '').trim().toLowerCase() === 'asc' ? 1 : -1
+  const sorted = [...rows]
+  sorted.sort((left, right) => {
+    if (normalizedSortBy === 'label') {
+      return direction * String(left?.label ?? '').localeCompare(String(right?.label ?? ''))
+    }
+
+    if (normalizedSortBy === 'updatedAt') {
+      return direction * String(left?.updatedAt ?? '').localeCompare(String(right?.updatedAt ?? ''))
+    }
+
+    // Default: ACTIVE first, newest first, then key.
+    return String(left?.status ?? '').localeCompare(String(right?.status ?? ''))
+      || (-1 * String(left?.updatedAt ?? '').localeCompare(String(right?.updatedAt ?? '')))
+      || String(left?.key ?? '').localeCompare(String(right?.key ?? ''))
+  })
+
+  return sorted
+}
+
 const getWorkflowPolicyRows = ({
   q = '',
   status = '',
@@ -1144,6 +1315,9 @@ const validateMockRuntimeAgent = (agent) => {
 
 const findRuntimeSkillById = (skillId) =>
   runtimeControlState.skills.find((skill) => skill.id === skillId)
+
+const findValidationRegistryById = (validationId) =>
+  runtimeControlState.validationRegistry.find((row) => row.id === validationId)
 
 const findSkillRoleById = (roleId) =>
   runtimeControlState.skillRoles.find((role) => role.id === roleId)
@@ -2597,6 +2771,288 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    listValidationRegistry: build.query({
+      queryFn: async (
+        {
+          page = 1,
+          pageSize = VALIDATION_REGISTRY_PAGE_SIZE,
+          q = '',
+          keys = '',
+          status = '',
+          sortBy = '',
+          sortOrder = '',
+          frameworkKey = '',
+          frameworkKeys = '',
+          category = '',
+          severity = '',
+          policyUsable = '',
+          packageUsable = '',
+        } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'validation-registry',
+              page,
+              pageSize,
+              q,
+              keys,
+              status,
+              sortBy,
+              sortOrder,
+              frameworkKey,
+              frameworkKeys,
+              category,
+              severity,
+              policyUsable,
+              packageUsable,
+              defaultPageSize: VALIDATION_REGISTRY_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const normalizedPage = normalizePositiveInteger(page, 1)
+        const normalizedPageSize = normalizePositiveInteger(pageSize, VALIDATION_REGISTRY_PAGE_SIZE)
+        const rows = getValidationRegistryRows({
+          q,
+          keys,
+          status,
+          sortBy,
+          sortOrder,
+          frameworkKey,
+          frameworkKeys,
+          category,
+          severity,
+          policyUsable,
+          packageUsable,
+        })
+
+        return {
+          data: buildListResponse({
+            rows,
+            page: normalizedPage,
+            pageSize: normalizedPageSize,
+            filters: {
+              q: String(q ?? '').trim(),
+              keys: String(keys ?? '').trim(),
+              status: String(status ?? '').trim(),
+              sortBy: String(sortBy ?? '').trim(),
+              sortOrder: String(sortOrder ?? '').trim().toLowerCase(),
+              frameworkKey: normalizeFrameworkKey(frameworkKey),
+              frameworkKeys: String(frameworkKeys ?? '').trim(),
+              category: String(category ?? '').trim().toUpperCase(),
+              severity: String(severity ?? '').trim().toUpperCase(),
+              policyUsable: String(policyUsable ?? '').trim().toLowerCase(),
+              packageUsable: String(packageUsable ?? '').trim().toLowerCase(),
+            },
+          }),
+        }
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: 'ValidationRegistry', id })),
+              VALIDATION_REGISTRY_LIST_TAG,
+            ]
+          : [VALIDATION_REGISTRY_LIST_TAG],
+    }),
+
+    createValidationRegistry: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'validation-registry',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = payload
+        const key = String(runtimePayload.key ?? '').trim().toLowerCase()
+        const duplicate = runtimeControlState.validationRegistry.find(
+          (row) => String(row.key ?? '').trim().toLowerCase() === key,
+        )
+
+        if (duplicate) {
+          return buildConflictError('Validation key must be unique.', {
+            key: 'Validation key must be unique.',
+          })
+        }
+
+        const created = cloneValidationRegistryEntry({
+          id: buildValidationRegistryStableId(key),
+          key,
+          label: String(runtimePayload.label ?? '').trim(),
+          description: String(runtimePayload.description ?? '').trim(),
+          status: String(runtimePayload.status ?? VALIDATION_REGISTRY_STATUSES.ACTIVE).trim().toUpperCase(),
+          supportedFrameworkKeys: Array.isArray(runtimePayload.supportedFrameworkKeys)
+            ? runtimePayload.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value)).filter(Boolean)
+            : [],
+          category: String(runtimePayload.category ?? '').trim().toUpperCase(),
+          severity: String(runtimePayload.severity ?? '').trim().toUpperCase(),
+          producerSkillId: String(runtimePayload.producerSkillId ?? '').trim(),
+          outputPath: String(runtimePayload.outputPath ?? '').trim(),
+          passFieldPath: String(runtimePayload.passFieldPath ?? '').trim(),
+          detailsFieldPath: String(runtimePayload.detailsFieldPath ?? '').trim(),
+          policyUsable: runtimePayload.policyUsable === undefined ? true : Boolean(runtimePayload.policyUsable),
+          packageUsable: runtimePayload.packageUsable === undefined ? true : Boolean(runtimePayload.packageUsable),
+          freshnessDefaultMinutes: Number(runtimePayload.freshnessDefaultMinutes ?? 30) || 30,
+          blockingDefault: runtimePayload.blockingDefault === undefined ? true : Boolean(runtimePayload.blockingDefault),
+          warningOnlyDefault: Boolean(runtimePayload.warningOnlyDefault),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          validationRegistry: [created, ...runtimeControlState.validationRegistry],
+        }
+
+        return { data: buildEntityResponse(cloneValidationRegistryEntry(created)) }
+      },
+      invalidatesTags: [VALIDATION_REGISTRY_LIST_TAG],
+    }),
+
+    getValidationRegistry: build.query({
+      queryFn: async (validationId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('validation-registry', validationId),
+            api,
+            extraOptions,
+          )
+        }
+
+        const validation = findValidationRegistryById(validationId)
+        if (!validation) {
+          return buildNotFoundError('Validation was not found.')
+        }
+
+        return { data: buildEntityResponse(cloneValidationRegistryEntry(validation)) }
+      },
+      providesTags: (_result, _error, validationId) => [
+        { type: 'ValidationRegistry', id: validationId },
+      ],
+    }),
+
+    updateValidationRegistry: build.mutation({
+      queryFn: async ({ validationId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'validation-registry',
+              entityId: validationId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existing = findValidationRegistryById(validationId)
+        if (!existing) {
+          return buildNotFoundError('Validation was not found.')
+        }
+
+        if (payload.key !== undefined) {
+          const nextKey = String(payload.key ?? '').trim().toLowerCase()
+          const currentKey = String(existing.key ?? '').trim().toLowerCase()
+          if (nextKey && nextKey !== currentKey) {
+            return buildValidationFailedError('Validation failed.', {
+              key: 'Key is immutable and cannot be changed after creation.',
+            })
+          }
+        }
+
+        const nextBlockingDefault = payload.blockingDefault === undefined ? Boolean(existing.blockingDefault) : Boolean(payload.blockingDefault)
+        const nextWarningOnlyDefault = payload.warningOnlyDefault === undefined ? Boolean(existing.warningOnlyDefault) : Boolean(payload.warningOnlyDefault)
+        if (nextBlockingDefault && nextWarningOnlyDefault) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            warningOnlyDefault: 'Blocking Default and Warning Only Default cannot both be true.',
+          })
+        }
+
+        const next = cloneValidationRegistryEntry({
+          ...existing,
+          ...(payload.label !== undefined ? { label: String(payload.label ?? '').trim() } : {}),
+          ...(payload.description !== undefined ? { description: String(payload.description ?? '').trim() } : {}),
+          ...(payload.status !== undefined ? { status: String(payload.status ?? '').trim().toUpperCase() } : {}),
+          ...(payload.supportedFrameworkKeys !== undefined
+            ? {
+                supportedFrameworkKeys: Array.isArray(payload.supportedFrameworkKeys)
+                  ? payload.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value)).filter(Boolean)
+                  : [],
+              }
+            : {}),
+          ...(payload.category !== undefined ? { category: String(payload.category ?? '').trim().toUpperCase() } : {}),
+          ...(payload.severity !== undefined ? { severity: String(payload.severity ?? '').trim().toUpperCase() } : {}),
+          ...(payload.producerSkillId !== undefined ? { producerSkillId: String(payload.producerSkillId ?? '').trim() } : {}),
+          ...(payload.outputPath !== undefined ? { outputPath: String(payload.outputPath ?? '').trim() } : {}),
+          ...(payload.passFieldPath !== undefined ? { passFieldPath: String(payload.passFieldPath ?? '').trim() } : {}),
+          ...(payload.detailsFieldPath !== undefined ? { detailsFieldPath: String(payload.detailsFieldPath ?? '').trim() } : {}),
+          ...(payload.policyUsable !== undefined ? { policyUsable: Boolean(payload.policyUsable) } : {}),
+          ...(payload.packageUsable !== undefined ? { packageUsable: Boolean(payload.packageUsable) } : {}),
+          ...(payload.freshnessDefaultMinutes !== undefined ? { freshnessDefaultMinutes: Number(payload.freshnessDefaultMinutes ?? 0) } : {}),
+          ...(payload.blockingDefault !== undefined ? { blockingDefault: nextBlockingDefault } : {}),
+          ...(payload.warningOnlyDefault !== undefined ? { warningOnlyDefault: nextWarningOnlyDefault } : {}),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          validationRegistry: runtimeControlState.validationRegistry.map((row) =>
+            row.id === validationId ? next : row,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneValidationRegistryEntry(next)) }
+      },
+      invalidatesTags: (_result, _error, { validationId }) => [
+        VALIDATION_REGISTRY_LIST_TAG,
+        { type: 'ValidationRegistry', id: validationId },
+        { type: 'ValidationRegistryDependencies', id: validationId },
+      ],
+    }),
+
+    getValidationRegistryDependencies: build.query({
+      queryFn: async (validationId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('validation-registry', `${validationId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const validation = findValidationRegistryById(validationId)
+        if (!validation) {
+          return buildNotFoundError('Validation was not found.')
+        }
+
+        const dependencies = buildMockValidationRegistryDependencies(validation.key)
+
+        return {
+          data: buildEntityResponse({
+            id: validationId,
+            key: validation.key,
+            dependencies,
+          }),
+        }
+      },
+      providesTags: (_result, _error, validationId) => [
+        { type: 'ValidationRegistryDependencies', id: validationId },
+      ],
+    }),
+
     listWorkflowPolicies: build.query({
       queryFn: async (
         { page = 1, pageSize = WORKFLOW_POLICY_PAGE_SIZE, q = '', status = '', frameworkKey = '', type = '' } = {},
@@ -2916,6 +3372,13 @@ export const {
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
   useUpdateRuntimeSkillMutation,
+  useListValidationRegistryQuery,
+  useLazyListValidationRegistryQuery,
+  useCreateValidationRegistryMutation,
+  useGetValidationRegistryQuery,
+  useUpdateValidationRegistryMutation,
+  useGetValidationRegistryDependenciesQuery,
+  useLazyGetValidationRegistryDependenciesQuery,
   useListWorkflowPoliciesQuery,
   useCreateWorkflowPolicyMutation,
   useGetWorkflowPolicyQuery,
