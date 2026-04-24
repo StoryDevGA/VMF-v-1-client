@@ -106,7 +106,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
 
     expect(await screen.findByRole('heading', { name: /workflow policy editor/i })).toBeInTheDocument()
     expect(
-      screen.getByLabelText(/^workflow policy name$/i, {
+      await screen.findByLabelText(/^workflow policy name$/i, {
         selector: 'input#workflow-policy-editor-name',
       }),
     ).toHaveValue('VMF Publish Policy')

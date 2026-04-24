@@ -397,7 +397,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     version: 4,
     lastActivatedAt: '2026-04-07T15:10:00.000Z',
     orderedSteps: Object.freeze(['snapshot', 'review']),
-    requiredAgentIds: Object.freeze(['agent-validator', 'agent-summary']),
+    requiredAgentIds: Object.freeze(['agent-validator']),
     requiredSkillIds: Object.freeze(['skill-snapshot', 'skill-review']),
     gatingRules: Object.freeze(['framework-package-active']),
     updatedAt: '2026-04-07T15:10:00.000Z',

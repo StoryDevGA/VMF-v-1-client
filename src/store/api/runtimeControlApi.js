@@ -25,6 +25,7 @@ import {
   cloneWorkflowPolicy,
   INITIAL_WORKFLOW_POLICIES,
   validateWorkflowPolicyForm,
+  WORKFLOW_POLICY_CONDITION_OPERATORS,
   WORKFLOW_POLICY_PAGE_SIZE,
 } from '../../pages/SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 import {
@@ -558,6 +559,70 @@ const getMockValueAtPath = (source, path) =>
       return current[segment]
     }, source)
 
+const MOCK_FRAMEWORK_STATE_ROOT_PATH = 'framework_state'
+const normalizeMockRegistryId = (value) => String(value ?? '').trim()
+
+const isMockPlainObject = (value) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const mockDeepEqual = (left, right) => {
+  if (Object.is(left, right)) return true
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false
+    }
+
+    return left.every((entry, index) => mockDeepEqual(entry, right[index]))
+  }
+
+  if (isMockPlainObject(left) || isMockPlainObject(right)) {
+    if (!isMockPlainObject(left) || !isMockPlainObject(right)) {
+      return false
+    }
+
+    const leftKeys = Object.keys(left)
+    const rightKeys = Object.keys(right)
+    if (leftKeys.length !== rightKeys.length) {
+      return false
+    }
+
+    return leftKeys.every((key) =>
+      Object.prototype.hasOwnProperty.call(right, key) && mockDeepEqual(left[key], right[key]))
+  }
+
+  return false
+}
+
+const getMockFrameworkStateValueAtPath = (frameworkState, path) => {
+  const normalizedPath = String(path ?? '').trim()
+  if (!normalizedPath) return undefined
+
+  const literalValue = getMockValueAtPath(frameworkState, normalizedPath)
+  if (literalValue !== undefined) {
+    return literalValue
+  }
+
+  const canUseRootFallback =
+    frameworkState
+    && typeof frameworkState === 'object'
+    && !Array.isArray(frameworkState)
+    && !Object.prototype.hasOwnProperty.call(frameworkState, MOCK_FRAMEWORK_STATE_ROOT_PATH)
+
+  if (canUseRootFallback && normalizedPath === MOCK_FRAMEWORK_STATE_ROOT_PATH) {
+    return frameworkState
+  }
+
+  if (!canUseRootFallback || !normalizedPath.startsWith(`${MOCK_FRAMEWORK_STATE_ROOT_PATH}.`)) {
+    return undefined
+  }
+
+  return getMockValueAtPath(
+    frameworkState,
+    normalizedPath.slice(MOCK_FRAMEWORK_STATE_ROOT_PATH.length + 1),
+  )
+}
+
 const canMockCoerceToNumber = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) return true
   if (typeof value === 'string' && String(value).trim() !== '') {
@@ -583,47 +648,65 @@ const normalizeMockComparableScalar = (value) => {
 
 const mockValuesEqual = (left, right) => {
   if (Array.isArray(left) || Array.isArray(right)) {
-    return JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+    return mockDeepEqual(left, right)
   }
 
-  return JSON.stringify(normalizeMockComparableScalar(left)) === JSON.stringify(normalizeMockComparableScalar(right))
+  return mockDeepEqual(
+    normalizeMockComparableScalar(left),
+    normalizeMockComparableScalar(right),
+  )
 }
 
+const normalizeMockWorkflowPolicyOperator = (operator) => String(operator ?? '').trim().toLowerCase()
+const MOCK_WORKFLOW_POLICY_OPERATOR_VALUES = Object.freeze({
+  EQUALS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.EQUALS),
+  NOT_EQUALS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.NOT_EQUALS),
+  EXISTS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.EXISTS),
+  NOT_EXISTS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.NOT_EXISTS),
+  CONTAINS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.CONTAINS),
+  IN: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.IN),
+  NOT_IN: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.NOT_IN),
+  GREATER_THAN: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.GREATER_THAN),
+  LESS_THAN: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.LESS_THAN),
+  GREATER_THAN_OR_EQUALS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.GREATER_THAN_OR_EQUALS),
+  LESS_THAN_OR_EQUALS: normalizeMockWorkflowPolicyOperator(WORKFLOW_POLICY_CONDITION_OPERATORS.LESS_THAN_OR_EQUALS),
+})
+
 const evaluateMockWorkflowPolicyCondition = ({ operator, actualValue, expectedValue }) => {
-  const normalizedOperator = String(operator ?? '').trim().toLowerCase()
+  const normalizedOperator = normalizeMockWorkflowPolicyOperator(operator)
 
   switch (normalizedOperator) {
-    case '=':
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.EQUALS:
       return mockValuesEqual(actualValue, expectedValue)
-    case '!=':
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.NOT_EQUALS:
       return !mockValuesEqual(actualValue, expectedValue)
-    case 'exists':
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.EXISTS:
       return actualValue !== undefined && actualValue !== null && String(actualValue).trim() !== ''
-    case 'not exists':
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.NOT_EXISTS:
       return actualValue === undefined || actualValue === null || String(actualValue).trim() === ''
-    case 'contains':
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.CONTAINS:
       if (Array.isArray(actualValue)) {
         return actualValue.some((entry) => mockValuesEqual(entry, expectedValue))
       }
       return String(actualValue ?? '').includes(String(expectedValue ?? ''))
-    case 'in': {
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.IN: {
       const expectedList = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
       if (Array.isArray(actualValue)) {
         return actualValue.some((entry) => expectedList.some((candidate) => mockValuesEqual(entry, candidate)))
       }
       return expectedList.some((candidate) => mockValuesEqual(actualValue, candidate))
     }
-    case 'not in': {
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.NOT_IN: {
       const expectedList = Array.isArray(expectedValue) ? expectedValue : [expectedValue]
       if (Array.isArray(actualValue)) {
         return actualValue.every((entry) => expectedList.every((candidate) => !mockValuesEqual(entry, candidate)))
       }
       return expectedList.every((candidate) => !mockValuesEqual(actualValue, candidate))
     }
-    case '>':
-    case '<':
-    case '>=':
-    case '<=': {
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.GREATER_THAN:
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.LESS_THAN:
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.GREATER_THAN_OR_EQUALS:
+    case MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.LESS_THAN_OR_EQUALS: {
       if (!canMockCoerceToNumber(actualValue) || !canMockCoerceToNumber(expectedValue)) {
         return false
       }
@@ -631,9 +714,9 @@ const evaluateMockWorkflowPolicyCondition = ({ operator, actualValue, expectedVa
       const actualNumber = Number(actualValue)
       const expectedNumber = Number(expectedValue)
 
-      if (normalizedOperator === '>') return actualNumber > expectedNumber
-      if (normalizedOperator === '<') return actualNumber < expectedNumber
-      if (normalizedOperator === '>=') return actualNumber >= expectedNumber
+      if (normalizedOperator === MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.GREATER_THAN) return actualNumber > expectedNumber
+      if (normalizedOperator === MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.LESS_THAN) return actualNumber < expectedNumber
+      if (normalizedOperator === MOCK_WORKFLOW_POLICY_OPERATOR_VALUES.GREATER_THAN_OR_EQUALS) return actualNumber >= expectedNumber
       return actualNumber <= expectedNumber
     }
     default:
@@ -691,6 +774,110 @@ const selectMockWorkflowPolicyTestAgent = (draft) => {
   }
 }
 
+const findMockUnsupportedFrameworkKey = (supportedFrameworkKeys, selectedFrameworkKeys) => {
+  const supportedSet = new Set(
+    (Array.isArray(supportedFrameworkKeys) ? supportedFrameworkKeys : [])
+      .map(normalizeFrameworkKey)
+      .filter(Boolean),
+  )
+
+  return (Array.isArray(selectedFrameworkKeys) ? selectedFrameworkKeys : [])
+    .map(normalizeFrameworkKey)
+    .find((frameworkKey) => frameworkKey && !supportedSet.has(frameworkKey))
+}
+
+const validateMockWorkflowPolicyRegistryDependencies = ({
+  status,
+  frameworkKeys = [],
+  requiredAgentIds = [],
+  requiredSkillIds = [],
+}) => {
+  const errors = {}
+  const normalizedRequiredAgentIds = Array.isArray(requiredAgentIds)
+    ? requiredAgentIds.map(normalizeMockRegistryId).filter(Boolean)
+    : []
+  const normalizedRequiredSkillIds = Array.isArray(requiredSkillIds)
+    ? requiredSkillIds.map(normalizeMockRegistryId).filter(Boolean)
+    : []
+  const normalizedFrameworkKeys = Array.isArray(frameworkKeys)
+    ? frameworkKeys.map(normalizeFrameworkKey).filter(Boolean)
+    : []
+  const agentById = new Map(
+    (runtimeControlState.agents || [])
+      .map((agent) => [normalizeMockRegistryId(agent.id), agent])
+      .filter(([id]) => id),
+  )
+  const skillById = new Map(
+    (runtimeControlState.skills || [])
+      .map((skill) => [normalizeMockRegistryId(skill.id), skill])
+      .filter(([id]) => id),
+  )
+
+  const missingAgentIds = normalizedRequiredAgentIds.filter((agentId) => !agentById.has(agentId))
+  if (missingAgentIds.length > 0) {
+    errors.requiredAgentIds = `Unknown runtime agent ids: ${missingAgentIds.join(', ')}.`
+  }
+
+  const missingSkillIds = normalizedRequiredSkillIds.filter((skillId) => !skillById.has(skillId))
+  if (missingSkillIds.length > 0) {
+    errors.requiredSkillIds = `Unknown runtime skill ids: ${missingSkillIds.join(', ')}.`
+  }
+
+  if (!errors.requiredAgentIds) {
+    for (const agentId of normalizedRequiredAgentIds) {
+      const unsupportedFrameworkKey = findMockUnsupportedFrameworkKey(
+        agentById.get(agentId)?.supportedFrameworkKeys,
+        normalizedFrameworkKeys,
+      )
+
+      if (unsupportedFrameworkKey) {
+        errors.requiredAgentIds =
+          `Runtime agent "${agentId}" does not support framework key "${unsupportedFrameworkKey}".`
+        break
+      }
+    }
+  }
+
+  if (!errors.requiredSkillIds) {
+    for (const skillId of normalizedRequiredSkillIds) {
+      const unsupportedFrameworkKey = findMockUnsupportedFrameworkKey(
+        skillById.get(skillId)?.supportedFrameworkKeys,
+        normalizedFrameworkKeys,
+      )
+
+      if (unsupportedFrameworkKey) {
+        errors.requiredSkillIds =
+          `Runtime skill "${skillId}" does not support framework key "${unsupportedFrameworkKey}".`
+        break
+      }
+    }
+  }
+
+  const isActivePolicy = String(status ?? '').trim().toUpperCase() === 'ACTIVE'
+
+  if (
+    isActivePolicy
+    && !errors.requiredAgentIds
+    && normalizedRequiredAgentIds.length === 1
+    && String(agentById.get(normalizedRequiredAgentIds[0])?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+  ) {
+    errors.requiredAgentIds =
+      `Active workflow policies cannot depend on only inactive runtime agent "${normalizedRequiredAgentIds[0]}".`
+  }
+
+  if (
+    isActivePolicy
+    && !errors.requiredSkillIds
+    && normalizedRequiredSkillIds.length === 1
+    && String(skillById.get(normalizedRequiredSkillIds[0])?.status ?? '').trim().toUpperCase() !== 'ACTIVE'
+  ) {
+    errors.requiredSkillIds =
+      `Active workflow policies cannot depend on only inactive runtime skill "${normalizedRequiredSkillIds[0]}".`
+  }
+
+  return errors
+}
+
 const buildMockWorkflowPolicyTestResult = ({
   draft = {},
   frameworkState = {},
@@ -703,7 +890,7 @@ const buildMockWorkflowPolicyTestResult = ({
   const policyActorScope = String(draft?.actorScope ?? '').trim().toUpperCase()
   const conditionRows = Array.isArray(draft?.conditions) ? draft.conditions : []
   const matchedConditions = conditionRows.map((condition) => {
-    const actualValue = getMockValueAtPath(frameworkState, condition?.path)
+    const actualValue = getMockFrameworkStateValueAtPath(frameworkState, condition?.path)
     return {
       path: String(condition?.path ?? '').trim(),
       operator: String(condition?.operator ?? '').trim(),
@@ -3133,12 +3320,40 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const writableRuntimePathRows = getRuntimePathRows({
+          status: 'ACTIVE',
+          scope: 'FRAMEWORK_STATE',
+          operation: 'WRITE',
+          isProtected: 'false',
+          frameworkKeys: Array.isArray(runtimePayload.frameworkKeys) ? runtimePayload.frameworkKeys.join(',') : '',
+        })
+        const frameworkRegistryKeys = getFrameworkRegistryRows()
+          .map((entry) => String(entry.frameworkKey ?? '').trim().toUpperCase())
+          .filter(Boolean)
+        const { errors: validationErrors, payload: normalizedPayload } = validateWorkflowPolicyForm(
+          runtimePayload,
+          runtimeControlState.workflowPolicies,
+          '',
+          frameworkRegistryKeys,
+          runtimeControlState.agents,
+          writableRuntimePathRows,
+        )
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(runtimePayload)
+        const mockValidationErrors = {
+          ...validationErrors,
+          ...dependencyValidationErrors,
+        }
+
+        if (Object.keys(mockValidationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', mockValidationErrors)
+        }
+
         const createdPolicy = {
-          id: generateRuntimeId('policy', runtimePayload.key),
+          id: generateRuntimeId('policy', normalizedPayload.key),
           ...cloneWorkflowPolicy({
-            ...runtimePayload,
+            ...normalizedPayload,
             version: 1,
-            lastActivatedAt: String(runtimePayload.status ?? '').trim().toUpperCase() === 'ACTIVE'
+            lastActivatedAt: String(normalizedPayload.status ?? '').trim().toUpperCase() === 'ACTIVE'
               ? new Date().toISOString()
               : '',
             ...buildAuditFields(),
@@ -3245,9 +3460,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           runtimeControlState.agents,
           writableRuntimePathRows,
         )
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(draft)
+        const mockValidationErrors = {
+          ...validationErrors,
+          ...dependencyValidationErrors,
+        }
 
-        if (Object.keys(validationErrors).length > 0) {
-          return buildValidationFailedError('Workflow policy test failed.', validationErrors)
+        if (Object.keys(mockValidationErrors).length > 0) {
+          return buildValidationFailedError('Workflow policy test failed.', mockValidationErrors)
         }
 
         return {
@@ -3310,12 +3530,44 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
-        const nextPolicy = cloneWorkflowPolicy({
+        const nextDraft = {
           ...existingPolicy,
           ...runtimePayload,
+        }
+        const writableRuntimePathRows = getRuntimePathRows({
+          status: 'ACTIVE',
+          scope: 'FRAMEWORK_STATE',
+          operation: 'WRITE',
+          isProtected: 'false',
+          frameworkKeys: Array.isArray(nextDraft.frameworkKeys) ? nextDraft.frameworkKeys.join(',') : '',
+        })
+        const frameworkRegistryKeys = getFrameworkRegistryRows()
+          .map((entry) => String(entry.frameworkKey ?? '').trim().toUpperCase())
+          .filter(Boolean)
+        const { errors: validationErrors, payload: normalizedPayload } = validateWorkflowPolicyForm(
+          nextDraft,
+          runtimeControlState.workflowPolicies,
+          policyId,
+          frameworkRegistryKeys,
+          runtimeControlState.agents,
+          writableRuntimePathRows,
+        )
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(nextDraft)
+        const mockValidationErrors = {
+          ...validationErrors,
+          ...dependencyValidationErrors,
+        }
+
+        if (Object.keys(mockValidationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', mockValidationErrors)
+        }
+
+        const nextPolicy = cloneWorkflowPolicy({
+          ...existingPolicy,
+          ...normalizedPayload,
           version: Number(existingPolicy.version ?? 1) + 1,
           lastActivatedAt:
-            String(runtimePayload.status ?? existingPolicy.status ?? '').trim().toUpperCase() === 'ACTIVE'
+            String(normalizedPayload.status ?? existingPolicy.status ?? '').trim().toUpperCase() === 'ACTIVE'
             && String(existingPolicy.status ?? '').trim().toUpperCase() !== 'ACTIVE'
               ? new Date().toISOString()
               : (existingPolicy.lastActivatedAt ?? ''),

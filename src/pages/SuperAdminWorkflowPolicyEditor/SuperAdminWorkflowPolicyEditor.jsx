@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -80,6 +81,9 @@ const WORKFLOW_POLICY_ERROR_TAB_LOOKUP = Object.freeze({
   fallbackAgentId: 5,
   timeoutMs: 5,
   retryOverride: 5,
+  orderedSteps: 5,
+  requiredAgentIds: 8,
+  requiredSkillIds: 8,
   onPassEffects: 6,
   onFailEffects: 6,
   overrideRoles: 7,
@@ -103,6 +107,15 @@ const EFFECT_TYPES_REQUIRING_VALUE = new Set([
   'QUEUE_NOTIFICATION',
 ])
 const TEST_CONSOLE_DEFAULT_STATE_TEXT = `{
+  "lifecycle": {
+    "stage": "DRAFT"
+  },
+  "validation": {
+    "required_sections": {
+      "is_valid": true,
+      "missing_sections": []
+    }
+  },
   "vmf": {
     "status": "DRAFT",
     "metadata": {
@@ -117,6 +130,43 @@ const TEST_CONSOLE_TRIGGER_OPTIONS = Object.freeze([
 const TEST_CONSOLE_ACTOR_SCOPE_OPTIONS = Object.freeze([
   { value: '', label: 'Use policy actor scope' },
   ...WORKFLOW_POLICY_ACTOR_SCOPE_OPTIONS,
+])
+const WORKFLOW_POLICY_SERVER_ERROR_FIELDS = Object.freeze([
+  'key',
+  'name',
+  'description',
+  'status',
+  'policyType',
+  'priority',
+  'frameworkKeys',
+  'appliesTo',
+  'triggerEvent',
+  'triggerMode',
+  'actorScope',
+  'cooldownSeconds',
+  'conditions',
+  'governedAction',
+  'decisionMode',
+  'severity',
+  'passMessage',
+  'failMessage',
+  'routingMode',
+  'primaryAgentId',
+  'fallbackAgentId',
+  'timeoutMs',
+  'retryOverride',
+  'requiredValidationKeys',
+  'validationFreshnessMinutes',
+  'orderedSteps',
+  'requiredAgentIds',
+  'requiredSkillIds',
+  'onPassEffects',
+  'onFailEffects',
+  'overrideRoles',
+  'approvalRequired',
+  'escalateTo',
+  'escalationMessage',
+  'slaMinutes',
 ])
 
 const normalizeFrameworkSelectionList = (values = []) =>
@@ -134,6 +184,12 @@ const shallowEqualObject = (left, right) => {
 
   return leftKeys.every((key) => left?.[key] === right?.[key])
 }
+
+const getFirstFieldErrorMessage = (fieldErrors = {}, fallbackMessage = '') =>
+  Object.values(fieldErrors)
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean)
+  || String(fallbackMessage ?? '').trim()
 
 const toggleListValue = (values, value) => {
   const nextValues = Array.isArray(values) ? [...values] : []
@@ -410,7 +466,12 @@ function OverrideRoleOptionLabel({ label }) {
   )
 }
 
-function AgentSummaryCard({ title, agent }) {
+function formatTestConsoleValue(value) {
+  const serialized = JSON.stringify(value)
+  return serialized === undefined ? 'undefined' : serialized
+}
+
+function AgentSummaryCard({ title, agent, hideTitle = false }) {
   if (!agent) return null
 
   const assignedSkillCount = [
@@ -428,7 +489,9 @@ function AgentSummaryCard({ title, agent }) {
     <div className="super-admin-workflow-policy-editor__agent-summary">
       <div className="super-admin-workflow-policy-editor__agent-summary-header">
         <div>
-          <p className="super-admin-workflow-policy-editor__summary-label">{title}</p>
+          {!hideTitle ? (
+            <p className="super-admin-workflow-policy-editor__summary-label">{title}</p>
+          ) : null}
           <p className="super-admin-workflow-policy-editor__agent-summary-title">{agent.name || agent.key}</p>
         </div>
         <Status
@@ -757,6 +820,31 @@ function WorkflowPolicyEditor() {
   const primaryAgent = runtimeAgentById.get(normalizeId(form.primaryAgentId))
   const fallbackAgent = runtimeAgentById.get(normalizeId(form.fallbackAgentId))
   const chosenTestAgent = runtimeAgentById.get(normalizeId(testConsoleResult?.chosenAgent?.id))
+  const matchedTestConditions = Array.isArray(testConsoleResult?.matchedConditions)
+    ? testConsoleResult.matchedConditions
+    : []
+  const matchedTestConditionCount = matchedTestConditions.filter((condition) => condition.matched).length
+  const selectedTestEffects = Array.isArray(testConsoleResult?.stateEffectsPreview?.effects)
+    ? testConsoleResult.stateEffectsPreview.effects
+    : []
+  const executionTraceEntries = Array.isArray(testConsoleResult?.executionTrace)
+    ? testConsoleResult.executionTrace
+    : []
+  const testWarnings = Array.isArray(testConsoleResult?.warnings) ? testConsoleResult.warnings : []
+  const selectedTestAgentLabel = chosenTestAgent?.name
+    || chosenTestAgent?.key
+    || testConsoleResult?.chosenAgent?.name
+    || testConsoleResult?.chosenAgent?.key
+    || 'No Agent selected'
+  const selectedTestTriggerLabel = formatWorkflowPolicyEnumLabel(
+    testConsoleForm.triggerEvent || form.triggerEvent,
+  ) || 'No trigger'
+  const selectedTestActorScopeLabel = formatWorkflowPolicyEnumLabel(
+    testConsoleForm.actorScope || form.actorScope,
+  ) || 'No actor scope'
+  const testConditionSummary = matchedTestConditions.length > 0
+    ? `${matchedTestConditionCount} of ${matchedTestConditions.length} governed condition${matchedTestConditions.length === 1 ? '' : 's'} matched.`
+    : 'No governed conditions were configured for this policy.'
   const isSaving = isCreating || isUpdating
   const currentJsonPreview = useMemo(() => buildWorkflowPolicyJsonPreview(form), [form])
   const previousJsonPreview = useMemo(
@@ -1001,6 +1089,17 @@ function WorkflowPolicyEditor() {
       setTestConsoleResult(response?.data ?? null)
     } catch (error) {
       const appError = normalizeError(error)
+      const fieldErrors = getRuntimeControlFieldErrorMap(appError, WORKFLOW_POLICY_SERVER_ERROR_FIELDS)
+
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors)
+        setErrorsSource('server')
+        setShowValidationHints(true)
+        focusFirstErrorField(fieldErrors)
+        setTestConsoleError(getFirstFieldErrorMessage(fieldErrors, appError.message))
+        return
+      }
+
       setTestConsoleError(appError.message)
     }
   }
@@ -1049,40 +1148,7 @@ function WorkflowPolicyEditor() {
       navigate('/super-admin/runtime-control/workflow-policies')
     } catch (err) {
       const appError = normalizeError(err)
-      const fieldErrors = getRuntimeControlFieldErrorMap(appError, [
-        'key',
-        'name',
-        'description',
-        'status',
-        'policyType',
-        'priority',
-        'frameworkKeys',
-        'appliesTo',
-        'triggerEvent',
-        'triggerMode',
-        'actorScope',
-        'cooldownSeconds',
-        'conditions',
-        'governedAction',
-        'decisionMode',
-        'severity',
-        'passMessage',
-        'failMessage',
-        'routingMode',
-        'primaryAgentId',
-        'fallbackAgentId',
-        'timeoutMs',
-        'retryOverride',
-        'requiredValidationKeys',
-        'validationFreshnessMinutes',
-        'onPassEffects',
-        'onFailEffects',
-        'overrideRoles',
-        'approvalRequired',
-        'escalateTo',
-        'escalationMessage',
-        'slaMinutes',
-      ])
+      const fieldErrors = getRuntimeControlFieldErrorMap(appError, WORKFLOW_POLICY_SERVER_ERROR_FIELDS)
 
       if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors)
@@ -2048,7 +2114,7 @@ function WorkflowPolicyEditor() {
         </div>
         <Textarea
           id="workflow-policy-editor-test-framework-state"
-          label="Sample FRAMEWORK_STATE JSON"
+          label="Sample FRAMEWORK_STATE Object JSON"
           value={testConsoleForm.frameworkStateText}
           onChange={(event) =>
             setTestConsoleForm((current) => ({
@@ -2056,7 +2122,7 @@ function WorkflowPolicyEditor() {
               frameworkStateText: event.target.value,
             }))
           }
-          helperText="Provide a JSON object whose governed paths match the policy condition/effect selectors."
+          helperText='Paste the FRAMEWORK_STATE object itself. Full sample payloads that already include top-level "framework_state" are also accepted.'
           rows={12}
           fullWidth
         />
@@ -2078,16 +2144,63 @@ function WorkflowPolicyEditor() {
           </p>
         ) : null}
         {testConsoleResult ? (
-          <div className="super-admin-workflow-policy-editor__test-grid">
-            <div className="super-admin-workflow-policy-editor__test-card">
-              <p className="super-admin-workflow-policy-editor__summary-label">Outcome</p>
-              <Status
-                size="sm"
-                showIcon
-                variant={testConsoleResult.outcome === 'PASS' ? 'success' : 'warning'}
-              >
-                {testConsoleResult.outcome}
-              </Status>
+          <div className="super-admin-workflow-policy-editor__test-results">
+            <div className="super-admin-workflow-policy-editor__test-summary">
+              <div className="super-admin-workflow-policy-editor__test-summary-main">
+                <p className="super-admin-workflow-policy-editor__summary-label">Policy Test Result</p>
+                <div className="super-admin-workflow-policy-editor__test-summary-status-row">
+                  <Status
+                    size="sm"
+                    showIcon
+                    variant={testConsoleResult.outcome === 'PASS' ? 'success' : 'warning'}
+                  >
+                    {testConsoleResult.outcome}
+                  </Status>
+                  <Badge variant="info" size="sm" pill outline>
+                    {selectedTestTriggerLabel}
+                  </Badge>
+                  <Badge variant="info" size="sm" pill outline>
+                    {selectedTestActorScopeLabel}
+                  </Badge>
+                </div>
+                <h3 className="super-admin-workflow-policy-editor__test-summary-title">
+                  {testConsoleResult.outcome === 'PASS'
+                    ? 'Policy would pass this evaluation path.'
+                    : 'Policy would fail this evaluation path.'}
+                </h3>
+                <p className="super-admin-workflow-policy-editor__helper">
+                  {testConditionSummary} {selectedTestEffects.length} state effect preview
+                  {selectedTestEffects.length === 1 ? ' is' : 's are'} queued for this outcome.
+                </p>
+              </div>
+              <div className="super-admin-workflow-policy-editor__test-summary-metrics">
+                <div className="super-admin-workflow-policy-editor__test-summary-metric">
+                  <span className="super-admin-workflow-policy-editor__summary-label">Conditions checked</span>
+                  <span className="super-admin-workflow-policy-editor__test-summary-metric-value">
+                    {matchedTestConditions.length > 0
+                      ? `${matchedTestConditionCount} / ${matchedTestConditions.length}`
+                      : 'None'}
+                  </span>
+                </div>
+                <div className="super-admin-workflow-policy-editor__test-summary-metric">
+                  <span className="super-admin-workflow-policy-editor__summary-label">Effects previewed</span>
+                  <span className="super-admin-workflow-policy-editor__test-summary-metric-value">
+                    {selectedTestEffects.length}
+                  </span>
+                </div>
+                <div className="super-admin-workflow-policy-editor__test-summary-metric">
+                  <span className="super-admin-workflow-policy-editor__summary-label">Resolved Agent</span>
+                  <span className="super-admin-workflow-policy-editor__test-summary-metric-value">
+                    {selectedTestAgentLabel}
+                  </span>
+                </div>
+                <div className="super-admin-workflow-policy-editor__test-summary-metric">
+                  <span className="super-admin-workflow-policy-editor__summary-label">Warnings</span>
+                  <span className="super-admin-workflow-policy-editor__test-summary-metric-value">
+                    {testWarnings.length}
+                  </span>
+                </div>
+              </div>
               <div className="super-admin-workflow-policy-editor__token-row">
                 <Badge variant={testConsoleResult.triggerMatched ? 'success' : 'warning'} size="sm" pill outline>
                   Trigger {testConsoleResult.triggerMatched ? 'Matched' : 'Missed'}
@@ -2100,103 +2213,231 @@ function WorkflowPolicyEditor() {
                 </Badge>
               </div>
             </div>
-            <div className="super-admin-workflow-policy-editor__test-card">
-              <p className="super-admin-workflow-policy-editor__summary-label">Matched Conditions</p>
-              {Array.isArray(testConsoleResult.matchedConditions) && testConsoleResult.matchedConditions.length > 0 ? (
-                <div className="super-admin-workflow-policy-editor__diff-list">
-                  {testConsoleResult.matchedConditions.map((condition) => (
-                    <div key={`${condition.path}-${condition.operator}`} className="super-admin-workflow-policy-editor__diff-row">
-                      <Badge
-                        variant={condition.matched ? 'success' : 'warning'}
-                        size="sm"
-                        pill
-                        outline
-                      >
-                        {condition.matched ? 'MATCH' : 'MISS'}
-                      </Badge>
-                      <div className="super-admin-workflow-policy-editor__diff-copy">
-                        <p className="super-admin-workflow-policy-editor__diff-path">
-                          {condition.path} {condition.operator} {JSON.stringify(condition.expectedValue)}
-                        </p>
-                        <p className="super-admin-workflow-policy-editor__helper">
-                          Actual: {JSON.stringify(condition.actualValue)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="super-admin-workflow-policy-editor__helper">
-                  No governed conditions were configured for this policy.
-                </p>
-              )}
-            </div>
-            <div className="super-admin-workflow-policy-editor__test-card">
-              <p className="super-admin-workflow-policy-editor__summary-label">Chosen Agent</p>
-              {chosenTestAgent ? (
-                <AgentSummaryCard title="Chosen Agent" agent={chosenTestAgent} />
-              ) : testConsoleResult.chosenAgent ? (
-                <div className="super-admin-workflow-policy-editor__token-row">
-                  <Badge variant="primary" size="sm" pill outline>
-                    {testConsoleResult.chosenAgent.key}
+
+            <div className="super-admin-workflow-policy-editor__test-grid">
+              <div className="super-admin-workflow-policy-editor__test-panel">
+                <div className="super-admin-workflow-policy-editor__test-panel-header">
+                  <div className="super-admin-workflow-policy-editor__test-panel-copy">
+                    <p className="super-admin-workflow-policy-editor__summary-label">Condition Evidence</p>
+                    <h3 className="super-admin-workflow-policy-editor__test-panel-title">Matched Conditions</h3>
+                  </div>
+                  <Badge
+                    variant={testConsoleResult.conditionsMatched ? 'success' : 'warning'}
+                    size="sm"
+                    pill
+                    outline
+                  >
+                    {matchedTestConditions.length > 0
+                      ? `${matchedTestConditionCount}/${matchedTestConditions.length} matched`
+                      : 'No conditions'}
                   </Badge>
-                  <span>{testConsoleResult.chosenAgent.name || testConsoleResult.chosenAgent.key}</span>
                 </div>
-              ) : (
-                <p className="super-admin-workflow-policy-editor__helper">
-                  No Agent was selected for this test run.
-                </p>
-              )}
-            </div>
-            <div className="super-admin-workflow-policy-editor__test-card">
-              <p className="super-admin-workflow-policy-editor__summary-label">State Effects Preview</p>
-              {Array.isArray(testConsoleResult.stateEffectsPreview?.effects)
-                && testConsoleResult.stateEffectsPreview.effects.length > 0 ? (
-                <div className="super-admin-workflow-policy-editor__diff-list">
-                  {testConsoleResult.stateEffectsPreview.effects.map((effect, index) => (
-                    <div key={`${effect.type}-${effect.targetPath}-${index}`} className="super-admin-workflow-policy-editor__diff-row">
-                      <Badge variant="info" size="sm" pill outline>
-                        {formatWorkflowPolicyEnumLabel(effect.type)}
-                      </Badge>
-                      <div className="super-admin-workflow-policy-editor__diff-copy">
-                        <p className="super-admin-workflow-policy-editor__diff-path">
-                          {effect.targetPath || 'No target path'}
-                        </p>
-                        <p className="super-admin-workflow-policy-editor__helper">
-                          Value: {JSON.stringify(effect.value)}
-                        </p>
+                {matchedTestConditions.length > 0 ? (
+                  <div className="super-admin-workflow-policy-editor__diff-list">
+                    {matchedTestConditions.map((condition, index) => (
+                      <div
+                        key={`${condition.path}-${condition.operator}-${index}`}
+                        className="super-admin-workflow-policy-editor__test-evidence-row"
+                      >
+                        <div className="super-admin-workflow-policy-editor__test-evidence-header">
+                          <Badge
+                            variant={condition.matched ? 'success' : 'warning'}
+                            size="sm"
+                            pill
+                            outline
+                          >
+                            {condition.matched ? 'MATCH' : 'MISS'}
+                          </Badge>
+                          <p className="super-admin-workflow-policy-editor__test-evidence-title">
+                            {condition.path}
+                          </p>
+                        </div>
+                        <div className="super-admin-workflow-policy-editor__test-evidence-meta">
+                          <div className="super-admin-workflow-policy-editor__test-evidence-metric">
+                            <span className="super-admin-workflow-policy-editor__summary-label">Operator</span>
+                            <span className="super-admin-workflow-policy-editor__test-evidence-value">
+                              {condition.operator}
+                            </span>
+                          </div>
+                          <div className="super-admin-workflow-policy-editor__test-evidence-metric">
+                            <span className="super-admin-workflow-policy-editor__summary-label">Expected</span>
+                            <code className="super-admin-workflow-policy-editor__test-evidence-code">
+                              {formatTestConsoleValue(condition.expectedValue)}
+                            </code>
+                          </div>
+                          <div className="super-admin-workflow-policy-editor__test-evidence-metric">
+                            <span className="super-admin-workflow-policy-editor__summary-label">Actual</span>
+                            <code className="super-admin-workflow-policy-editor__test-evidence-code">
+                              {formatTestConsoleValue(condition.actualValue)}
+                            </code>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                ) : (
+                  <p className="super-admin-workflow-policy-editor__helper">
+                    No governed conditions were configured for this policy.
+                  </p>
+                )}
+              </div>
+
+              <div className="super-admin-workflow-policy-editor__test-panel">
+                <div className="super-admin-workflow-policy-editor__test-panel-header">
+                  <div className="super-admin-workflow-policy-editor__test-panel-copy">
+                    <p className="super-admin-workflow-policy-editor__summary-label">Routing Evidence</p>
+                    <h3 className="super-admin-workflow-policy-editor__test-panel-title">Chosen Agent</h3>
+                  </div>
+                  <Badge
+                    variant={selectedTestAgentLabel === 'No Agent selected' ? 'warning' : 'success'}
+                    size="sm"
+                    pill
+                    outline
+                  >
+                    {selectedTestAgentLabel === 'No Agent selected' ? 'Not routed' : 'Routed'}
+                  </Badge>
                 </div>
-              ) : (
-                <p className="super-admin-workflow-policy-editor__helper">
-                  No state effects were selected for this outcome.
-                </p>
-              )}
+                {chosenTestAgent ? (
+                  <AgentSummaryCard title="Chosen Agent" agent={chosenTestAgent} hideTitle />
+                ) : testConsoleResult.chosenAgent ? (
+                  <div className="super-admin-workflow-policy-editor__test-evidence-row">
+                    <div className="super-admin-workflow-policy-editor__test-evidence-header">
+                      <Badge variant="primary" size="sm" pill outline>
+                        {testConsoleResult.chosenAgent.key}
+                      </Badge>
+                      <p className="super-admin-workflow-policy-editor__test-evidence-title">
+                        {testConsoleResult.chosenAgent.name || testConsoleResult.chosenAgent.key}
+                      </p>
+                    </div>
+                    <p className="super-admin-workflow-policy-editor__helper">
+                      The Agent was resolved from the test result payload but was not found in the
+                      currently loaded registry results.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="super-admin-workflow-policy-editor__helper">
+                    No Agent was selected for this test run.
+                  </p>
+                )}
+              </div>
+
+              <div className="super-admin-workflow-policy-editor__test-panel">
+                <div className="super-admin-workflow-policy-editor__test-panel-header">
+                  <div className="super-admin-workflow-policy-editor__test-panel-copy">
+                    <p className="super-admin-workflow-policy-editor__summary-label">Outcome Preview</p>
+                    <h3 className="super-admin-workflow-policy-editor__test-panel-title">State Effects Preview</h3>
+                  </div>
+                  <div className="super-admin-workflow-policy-editor__token-row">
+                    <Badge variant="info" size="sm" pill outline>
+                      {selectedTestEffects.length} previewed
+                    </Badge>
+                    <Badge
+                      variant={testConsoleResult.stateEffectsPreview?.outcome === 'PASS' ? 'success' : 'warning'}
+                      size="sm"
+                      pill
+                      outline
+                    >
+                      {testConsoleResult.stateEffectsPreview?.outcome || testConsoleResult.outcome}
+                    </Badge>
+                  </div>
+                </div>
+                {selectedTestEffects.length > 0 ? (
+                  <div className="super-admin-workflow-policy-editor__diff-list">
+                    {selectedTestEffects.map((effect, index) => (
+                      <div
+                        key={`${effect.type}-${effect.targetPath}-${index}`}
+                        className="super-admin-workflow-policy-editor__test-evidence-row"
+                      >
+                        <div className="super-admin-workflow-policy-editor__test-evidence-header">
+                          <Badge variant="info" size="sm" pill outline>
+                            {formatWorkflowPolicyEnumLabel(effect.type)}
+                          </Badge>
+                          <p className="super-admin-workflow-policy-editor__test-evidence-title">
+                            {effect.targetPath || 'No target path'}
+                          </p>
+                        </div>
+                        <div className="super-admin-workflow-policy-editor__test-evidence-meta">
+                          <div className="super-admin-workflow-policy-editor__test-evidence-metric">
+                            <span className="super-admin-workflow-policy-editor__summary-label">Preview value</span>
+                            <code className="super-admin-workflow-policy-editor__test-evidence-code">
+                              {formatTestConsoleValue(effect.value)}
+                            </code>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="super-admin-workflow-policy-editor__helper">
+                    No state effects were selected for this outcome.
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="super-admin-workflow-policy-editor__test-card super-admin-workflow-policy-editor__test-card--wide">
-              <p className="super-admin-workflow-policy-editor__summary-label">Execution Trace</p>
-              <ul className="super-admin-workflow-policy-editor__dependency-list">
-                {(Array.isArray(testConsoleResult.executionTrace) ? testConsoleResult.executionTrace : []).map((entry) => (
-                  <li key={entry}>{entry}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="super-admin-workflow-policy-editor__test-card super-admin-workflow-policy-editor__test-card--wide">
-              <p className="super-admin-workflow-policy-editor__summary-label">Warnings</p>
-              {Array.isArray(testConsoleResult.warnings) && testConsoleResult.warnings.length > 0 ? (
-                <ul className="super-admin-workflow-policy-editor__dependency-list">
-                  {testConsoleResult.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="super-admin-workflow-policy-editor__helper">
-                  No warnings were returned for this test run.
-                </p>
-              )}
-            </div>
+
+            <Accordion
+              allowMultiple
+              defaultOpenItems={testWarnings.length > 0 ? ['execution-trace', 'warnings'] : ['execution-trace']}
+              className="super-admin-workflow-policy-editor__test-accordion"
+            >
+              <Accordion.Item id="execution-trace">
+                <Accordion.Header
+                  itemId="execution-trace"
+                  className="super-admin-workflow-policy-editor__test-accordion-header"
+                >
+                  <span className="super-admin-workflow-policy-editor__test-accordion-heading">
+                    <span>Execution Trace</span>
+                    <Badge variant="info" size="sm" pill outline>
+                      {executionTraceEntries.length} step{executionTraceEntries.length === 1 ? '' : 's'}
+                    </Badge>
+                  </span>
+                </Accordion.Header>
+                <Accordion.Content itemId="execution-trace">
+                  {executionTraceEntries.length > 0 ? (
+                    <ol className="super-admin-workflow-policy-editor__test-trace-list">
+                      {executionTraceEntries.map((entry, index) => (
+                        <li key={`${index}-${entry}`}>{entry}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="super-admin-workflow-policy-editor__helper">
+                      No execution trace entries were returned for this test run.
+                    </p>
+                  )}
+                </Accordion.Content>
+              </Accordion.Item>
+              <Accordion.Item id="warnings">
+                <Accordion.Header
+                  itemId="warnings"
+                  className="super-admin-workflow-policy-editor__test-accordion-header"
+                >
+                  <span className="super-admin-workflow-policy-editor__test-accordion-heading">
+                    <span>Warnings</span>
+                    <Badge
+                      variant={testWarnings.length > 0 ? 'warning' : 'success'}
+                      size="sm"
+                      pill
+                      outline
+                    >
+                      {testWarnings.length}
+                    </Badge>
+                  </span>
+                </Accordion.Header>
+                <Accordion.Content itemId="warnings">
+                  {testWarnings.length > 0 ? (
+                    <ul className="super-admin-workflow-policy-editor__test-warning-list">
+                      {testWarnings.map((warning, index) => (
+                        <li key={`${index}-${warning}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="super-admin-workflow-policy-editor__helper">
+                      No warnings were returned for this test run.
+                    </p>
+                  )}
+                </Accordion.Content>
+              </Accordion.Item>
+            </Accordion>
           </div>
         ) : null}
       </div>
@@ -2260,9 +2501,11 @@ function WorkflowPolicyEditor() {
 
               <div className="super-admin-workflow-policy-editor__intro">
                 <p className="super-admin-workflow-policy-editor__form-title">
-                  Workflow Policy Editor V1 now includes the full approved authoring surface, including escalation controls, working-copy JSON diff review, and the governed policy test console.
-               Use these tabs to author the full policy, review draft changes, and test runtime evaluation without saving.
-                </p>              
+                  Workflow Policy Editor V1 includes the full approved authoring surface,
+                  including escalation controls, working-copy JSON diff review, and the
+                  governed policy test console. Use these tabs to author the policy, review
+                  draft changes, and test runtime evaluation without saving.
+                </p>
               </div>
 
               <form

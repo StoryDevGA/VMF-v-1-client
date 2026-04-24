@@ -1,8 +1,9 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SuperAdminWorkflowPolicies from '../SuperAdminWorkflowPolicies'
 import SuperAdminWorkflowPolicyEditor from './SuperAdminWorkflowPolicyEditor'
+import * as runtimeControlApiModule from '../../store/api/runtimeControlApi.js'
 import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
@@ -77,6 +78,130 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       'JSON / Diff',
       'Test Console',
     ])
+  })
+
+  it('explains the accepted FRAMEWORK_STATE JSON shapes in the test console', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /test console/i }))
+
+    expect(
+      screen.getByText(/paste the framework_state object itself\. full sample payloads that already include top-level "framework_state" are also accepted\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/^sample framework_state object json$/i, {
+        selector: 'textarea#workflow-policy-editor-test-framework-state',
+      }).value,
+    ).toContain('"lifecycle"')
+    expect(
+      screen.getByLabelText(/^sample framework_state object json$/i, {
+        selector: 'textarea#workflow-policy-editor-test-framework-state',
+      }).value,
+    ).toContain('"required_sections"')
+  })
+
+  it('renders a summary-first workflow policy test result layout with evidence and trace detail', async () => {
+    const user = userEvent.setup()
+    const testWorkflowPolicySpy = vi
+      .spyOn(runtimeControlApiModule, 'useTestWorkflowPolicyMutation')
+      .mockReturnValue([
+        () => ({
+          unwrap: async () => ({
+            data: {
+              outcome: 'PASS',
+              triggerMatched: true,
+              actorMatched: true,
+              conditionsMatched: true,
+              matchedConditions: [
+                {
+                  path: 'framework_state.lifecycle.stage',
+                  operator: '=',
+                  expectedValue: 'DRAFT',
+                  actualValue: 'DRAFT',
+                  matched: true,
+                },
+              ],
+              chosenAgent: {
+                id: 'agent-validator',
+                key: 'validator',
+                name: 'VMF Submit Validator Agent',
+              },
+              stateEffectsPreview: {
+                outcome: 'PASS',
+                effects: [
+                  {
+                    type: 'SET_VALUE',
+                    targetPath: 'framework_state.policy.last_result',
+                    value: 'PASS',
+                  },
+                ],
+              },
+              executionTrace: [
+                'Evaluating policy "VMF Submit Validator Agent" for governed action "SUBMIT_FOR_REVIEW".',
+                'Selected governed Agent "validator" for routed execution.',
+              ],
+              warnings: ['Using fallback registry view.'],
+            },
+          }),
+        }),
+        { isLoading: false },
+      ])
+
+    renderWorkflowPolicyEditorRoutes([
+      '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
+    ])
+
+    await user.click(await screen.findByRole('tab', { name: /test console/i }))
+    await user.click(screen.getByRole('button', { name: /run policy test/i }))
+
+    expect(await screen.findByText(/policy would pass this evaluation path\./i)).toBeInTheDocument()
+    expect(screen.getByText(/condition evidence/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /execution trace/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /warnings/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/using fallback registry view\./i)).toBeInTheDocument()
+
+    testWorkflowPolicySpy.mockRestore()
+  })
+
+  it('surfaces backend field details when the test console returns a workflow policy validation error', async () => {
+    const user = userEvent.setup()
+    const testWorkflowPolicySpy = vi
+      .spyOn(runtimeControlApiModule, 'useTestWorkflowPolicyMutation')
+      .mockReturnValue([
+        () => ({
+          unwrap: async () => {
+            throw {
+              status: 422,
+              data: {
+                error: {
+                  code: 'VALIDATION_FAILED',
+                  message: 'Workflow policy test failed.',
+                  details: {
+                    conditions: 'Unknown condition runtime path "framework_state.validation.required_sections.missing_sections".',
+                  },
+                  requestId: 'mocumtpn-eiokvi',
+                },
+              },
+            }
+          },
+        }),
+        { isLoading: false },
+      ])
+
+    renderWorkflowPolicyEditorRoutes([
+      '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
+    ])
+
+    await user.click(await screen.findByRole('tab', { name: /test console/i }))
+    await user.click(screen.getByRole('button', { name: /run policy test/i }))
+
+    expect(
+      await screen.findAllByText(/unknown condition runtime path "framework_state\.validation\.required_sections\.missing_sections"/i),
+    ).toHaveLength(2)
+    expect(screen.getByRole('tab', { name: /framework state conditions/i })).toHaveAttribute('aria-selected', 'true')
+
+    testWorkflowPolicySpy.mockRestore()
   })
 
   it('shows a clear empty-state message when the selected frameworks have no compatible governed runtime paths', async () => {
@@ -261,8 +386,8 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /test console/i }))
     await user.click(screen.getByRole('button', { name: /run policy test/i }))
-    expect(await screen.findByText(/^pass$/i)).toBeInTheDocument()
-    expect(screen.getByText(/execution trace/i)).toBeInTheDocument()
+    expect(await screen.findByText(/policy would pass this evaluation path\./i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /execution trace/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 

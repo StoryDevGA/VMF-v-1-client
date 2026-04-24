@@ -17,12 +17,14 @@ import {
   useGetRuntimeAgentQuery,
   useGetRuntimeSkillQuery,
   useGetWorkflowPolicyQuery,
+  useGetWorkflowPolicyDependenciesQuery,
   useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useListRuntimeAgentsQuery,
   useListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
   useListWorkflowPoliciesQuery,
+  useTestWorkflowPolicyMutation,
   useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
   useUpdateRuntimeAgentMutation,
@@ -82,6 +84,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useGetRuntimeSkillQuery).toBe('function')
     expect(typeof useListWorkflowPoliciesQuery).toBe('function')
     expect(typeof useGetWorkflowPolicyQuery).toBe('function')
+    expect(typeof useGetWorkflowPolicyDependenciesQuery).toBe('function')
   })
 
   it('exports mutation hooks', () => {
@@ -95,6 +98,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateRuntimeSkillMutation).toBe('function')
     expect(typeof useUpdateRuntimeSkillMutation).toBe('function')
     expect(typeof useCreateWorkflowPolicyMutation).toBe('function')
+    expect(typeof useTestWorkflowPolicyMutation).toBe('function')
     expect(typeof useUpdateWorkflowPolicyMutation).toBe('function')
   })
 
@@ -120,6 +124,8 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.listWorkflowPolicies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicy.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getWorkflowPolicyDependencies.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.testWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateWorkflowPolicy.initiate).toBe('function')
   })
 
@@ -317,5 +323,380 @@ describe('runtimeControlApi', () => {
 
     expect(result.error?.status).toBe(409)
     expect(result.error?.data?.error?.details?.reason).toBe('RUNTIME_AGENT_LIFECYCLE_ACTION_REQUIRED')
+  })
+
+  it('keeps mock Workflow Policy test-console behavior aligned with live API for framework_state-prefixed paths', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.testWorkflowPolicy.initiate({
+        draft: {
+          key: 'vmf-framework-state-console',
+          name: 'VMF Framework State Console Policy',
+          description: 'Exercises the framework_state test-console fallback.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 25,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Submission allowed.',
+          failMessage: 'Submission blocked.',
+          severity: 'BLOCKING',
+          conditions: [{
+            path: 'framework_state.lifecycle.stage',
+            operator: '=',
+            value: 'DRAFT',
+            logic: 'AND',
+          }],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: [],
+          gatingRules: [],
+        },
+        frameworkState: {
+          lifecycle: {
+            stage: 'DRAFT',
+          },
+        },
+        triggerEvent: 'ON_SUBMIT',
+        actorScope: 'USER',
+      }),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.conditionsMatched).toBe(true)
+    expect(result.data?.data?.matchedConditions).toEqual([
+      expect.objectContaining({
+        path: 'framework_state.lifecycle.stage',
+        actualValue: 'DRAFT',
+        matched: true,
+      }),
+    ])
+  })
+
+  it('accepts wrapped framework_state payloads in the mock Workflow Policy test-console', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.testWorkflowPolicy.initiate({
+        draft: {
+          key: 'vmf-framework-state-console-wrapped',
+          name: 'VMF Framework State Console Wrapped Policy',
+          description: 'Exercises wrapped framework_state payloads.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 25,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Submission allowed.',
+          failMessage: 'Submission blocked.',
+          severity: 'BLOCKING',
+          conditions: [{
+            path: 'framework_state.lifecycle.stage',
+            operator: '=',
+            value: 'DRAFT',
+            logic: 'AND',
+          }],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: [],
+          gatingRules: [],
+        },
+        frameworkState: {
+          framework_state: {
+            lifecycle: {
+              stage: 'DRAFT',
+            },
+          },
+        },
+        triggerEvent: 'ON_SUBMIT',
+        actorScope: 'USER',
+      }),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.conditionsMatched).toBe(true)
+    expect(result.data?.data?.matchedConditions).toEqual([
+      expect.objectContaining({
+        path: 'framework_state.lifecycle.stage',
+        actualValue: 'DRAFT',
+        matched: true,
+      }),
+    ])
+  })
+
+  it('does not fall back to the inner object when wrapped framework_state is explicitly null', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.testWorkflowPolicy.initiate({
+        draft: {
+          key: 'vmf-framework-state-console-null',
+          name: 'VMF Framework State Console Null Policy',
+          description: 'Documents explicit null framework_state behavior.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 25,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Submission allowed.',
+          failMessage: 'Submission blocked.',
+          severity: 'BLOCKING',
+          conditions: [{
+            path: 'framework_state.lifecycle.stage',
+            operator: '=',
+            value: 'DRAFT',
+            logic: 'AND',
+          }],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: [],
+          gatingRules: [],
+        },
+        frameworkState: {
+          framework_state: null,
+          lifecycle: {
+            stage: 'DRAFT',
+          },
+        },
+        triggerEvent: 'ON_SUBMIT',
+        actorScope: 'USER',
+      }),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.conditionsMatched).toBe(false)
+    expect(result.data?.data?.matchedConditions).toEqual([
+      expect.objectContaining({
+        path: 'framework_state.lifecycle.stage',
+        actualValue: null,
+        matched: false,
+      }),
+    ])
+  })
+
+  it('keeps array equality and non-framework_state literal paths working in the mock Workflow Policy test-console', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.testWorkflowPolicy.initiate({
+        draft: {
+          key: 'vmf-framework-state-console-arrays',
+          name: 'VMF Framework State Console Array Policy',
+          description: 'Exercises array equality and literal path lookups.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 25,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Submission allowed.',
+          failMessage: 'Submission blocked.',
+          severity: 'BLOCKING',
+          conditions: [{
+            path: 'framework_state.validation.required_sections.missing_sections',
+            operator: '=',
+            value: ['summary', 'goals'],
+            logic: 'AND',
+          }, {
+            path: 'vmf.status',
+            operator: '=',
+            value: 'DRAFT',
+            logic: 'AND',
+          }],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: [],
+          gatingRules: [],
+        },
+        frameworkState: {
+          validation: {
+            required_sections: {
+              missing_sections: ['summary', 'goals'],
+            },
+          },
+          vmf: {
+            status: 'DRAFT',
+          },
+        },
+        triggerEvent: 'ON_SUBMIT',
+        actorScope: 'USER',
+      }),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.conditionsMatched).toBe(true)
+    expect(result.data?.data?.matchedConditions).toEqual([
+      expect.objectContaining({
+        path: 'framework_state.validation.required_sections.missing_sections',
+        actualValue: ['summary', 'goals'],
+        matched: true,
+      }),
+      expect.objectContaining({
+        path: 'vmf.status',
+        actualValue: 'DRAFT',
+        matched: true,
+      }),
+    ])
+  })
+
+  it('keeps mock Workflow Policy requiredSkillIds validation aligned with the API', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.createWorkflowPolicy.initiate({
+        body: {
+          key: 'vmf-required-skill-parity',
+          name: 'VMF Required Skill Parity',
+          description: 'Ensures mock validation rejects inactive required skills for active policies.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 10,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Allowed.',
+          failMessage: 'Blocked.',
+          severity: 'BLOCKING',
+          conditions: [],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: ['skill-report'],
+          gatingRules: [],
+        },
+      }),
+    )
+
+    expect(result.error?.status).toBe(422)
+    expect(result.error?.data?.error?.details?.requiredSkillIds)
+      .toBe('Active workflow policies cannot depend on only inactive runtime skill "skill-report".')
   })
 })
