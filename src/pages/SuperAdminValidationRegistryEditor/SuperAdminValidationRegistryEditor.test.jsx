@@ -65,4 +65,31 @@ describe('SuperAdminValidationRegistryEditor page', () => {
       within(screen.getByRole('dialog')).getByText(/will block new assignments but will not remove existing references/i),
     ).toBeInTheDocument()
   })
+
+  it('hydrates default-agent and result metadata for seeded validations', async () => {
+    renderPage('/super-admin/runtime-control/validation-registry/validation-required-sections-check')
+
+    expect(await screen.findByRole('heading', { name: /^edit validation$/i })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('OBJECT')).toBeInTheDocument()
+    expect(screen.getByLabelText(/requires latest run/i)).toBeChecked()
+    expect(screen.getByText(/vmf submit validator agent/i)).toBeInTheDocument()
+  })
+
+  it('shows a local warning when selected default agents are no longer framework-compatible', async () => {
+    const user = userEvent.setup()
+
+    renderPage('/super-admin/runtime-control/validation-registry/validation-required-sections-check')
+
+    expect(await screen.findByRole('heading', { name: /^edit validation$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^remove vmf$/i }))
+    await user.selectOptions(
+      screen.getByLabelText(/^add framework$/i, { selector: 'select#validation-registry-editor-framework-add' }),
+      'RLD',
+    )
+    await user.click(screen.getByRole('button', { name: /^add framework$/i }))
+
+    expect(await screen.findByText(/review required/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not support framework: rld/i)).toBeInTheDocument()
+  })
 })

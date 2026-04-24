@@ -16,13 +16,16 @@ import {
   useGetValidationRegistryQuery,
   useLazyGetValidationRegistryDependenciesQuery,
   useListFrameworkRegistriesQuery,
+  useListRuntimeAgentsQuery,
   useListRuntimeSkillsQuery,
   useUpdateValidationRegistryMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { RUNTIME_AGENT_STATUSES } from '../SuperAdminAgents/superAdminAgents.constants.js'
 import {
   VALIDATION_REGISTRY_CATEGORIES,
   VALIDATION_REGISTRY_CATEGORY_OPTIONS,
+  VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS,
   VALIDATION_REGISTRY_SEVERITY_OPTIONS,
   VALIDATION_REGISTRY_STATUS_OPTIONS,
   VALIDATION_REGISTRY_STATUSES,
@@ -39,13 +42,16 @@ const INITIAL_FORM = Object.freeze({
   status: VALIDATION_REGISTRY_STATUSES.ACTIVE,
   supportedFrameworkKeys: [],
   category: VALIDATION_REGISTRY_CATEGORIES.COMPLETENESS,
-  severity: 'BLOCKING',
+  severity: VALIDATION_REGISTRY_SEVERITIES.ERROR,
   producerSkillId: '',
+  defaultAgentIds: [],
   outputPath: '',
+  resultType: '',
   passFieldPath: '',
   detailsFieldPath: '',
   policyUsable: true,
   packageUsable: true,
+  requiresLatestRun: false,
   freshnessDefaultMinutes: 30,
   blockingDefault: true,
   warningOnlyDefault: false,
@@ -64,6 +70,36 @@ const normalizeFrameworkKeys = (values) =>
   [...new Set((Array.isArray(values) ? values : [])
     .map((value) => String(value ?? '').trim().toUpperCase())
     .filter(Boolean))]
+
+const normalizeStableIdList = (values) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean))]
+
+const areStableIdListsEqual = (left, right) => {
+  const normalizedLeft = normalizeStableIdList(left)
+  const normalizedRight = normalizeStableIdList(right)
+  if (normalizedLeft.length !== normalizedRight.length) return false
+  return normalizedLeft.every((value, index) => value === normalizedRight[index])
+}
+
+const getAgentStatusBadgeVariant = (status) => {
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  if (normalizedStatus === RUNTIME_AGENT_STATUSES.ACTIVE) return 'success'
+  if (normalizedStatus === RUNTIME_AGENT_STATUSES.INACTIVE) return 'warning'
+  if (normalizedStatus === RUNTIME_AGENT_STATUSES.DEPRECATED || normalizedStatus === 'MISSING') return 'danger'
+  if (normalizedStatus === RUNTIME_AGENT_STATUSES.DRAFT) return 'info'
+  return 'neutral'
+}
+
+const formatAgentStatus = (status) => {
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  if (!normalizedStatus) return 'Unknown'
+  if (normalizedStatus === 'MISSING') return 'Missing'
+  return normalizedStatus
+    .toLowerCase()
+    .replace(/^\w/, (character) => character.toUpperCase())
+}
 
 const formStateReducer = (state, action) => {
   if (action?.type !== 'apply') return state
@@ -158,6 +194,7 @@ function SuperAdminValidationRegistryEditor() {
 
   const [form, dispatchForm] = useReducer(formStateReducer, INITIAL_FORM)
   const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
+  const [pendingDefaultAgentId, setPendingDefaultAgentId] = useState('')
   const [errors, setErrors] = useState({})
   const [errorsSource, setErrorsSource] = useState(null) // 'client' | 'server' | null
   const [pendingStatusWarning, setPendingStatusWarning] = useState(null) // { nextStatus, summary } | null
@@ -246,6 +283,105 @@ function SuperAdminValidationRegistryEditor() {
     return [{ value: '', label: 'Select...' }, ...rows]
   }, [compatibleRuntimeSkills])
 
+  const { data: agentResponse, isFetching: isAgentFetching, error: agentError } = useListRuntimeAgentsQuery({
+    page: 1,
+    pageSize: 1000,
+    q: '',
+    status: '',
+    frameworkKey: '',
+  })
+
+  const runtimeAgentRows = useMemo(() => {
+    const data = agentResponse?.data
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data)) return data
+    return []
+  }, [agentResponse])
+
+  const agentAppError = agentError ? normalizeError(agentError) : null
+
+  const selectedDefaultAgentIds = useMemo(
+    () => normalizeStableIdList(form.defaultAgentIds),
+    [form.defaultAgentIds],
+  )
+
+  const loadedDefaultAgentIds = useMemo(
+    () => normalizeStableIdList(loadedValidation?.defaultAgentIds),
+    [loadedValidation?.defaultAgentIds],
+  )
+
+  const defaultAgentIdsChanged = useMemo(
+    () => !areStableIdListsEqual(selectedDefaultAgentIds, loadedDefaultAgentIds),
+    [loadedDefaultAgentIds, selectedDefaultAgentIds],
+  )
+
+  const availableDefaultAgentOptions = useMemo(() => {
+    const selected = new Set(selectedDefaultAgentIds)
+
+    return runtimeAgentRows
+      .filter((row) => {
+        const agentId = String(row?.id ?? '').trim()
+        if (!agentId || selected.has(agentId)) return false
+
+        const normalizedStatus = String(row?.status ?? '').trim().toUpperCase()
+        if (normalizedStatus !== RUNTIME_AGENT_STATUSES.ACTIVE) return false
+
+        if (selectedFrameworkKeys.length === 0) return true
+        const supportedFrameworkKeys = Array.isArray(row?.supportedFrameworkKeys) ? row.supportedFrameworkKeys : []
+        return selectedFrameworkKeys.every((frameworkKey) => supportedFrameworkKeys.includes(frameworkKey))
+      })
+      .map((row) => ({
+        value: String(row?.id ?? '').trim(),
+        label: row?.name ? `${row.name} (${row.key})` : (row?.key || row?.id || ''),
+      }))
+  }, [runtimeAgentRows, selectedDefaultAgentIds, selectedFrameworkKeys])
+
+  const selectedDefaultAgentSummaries = useMemo(() => {
+    const byId = new Map(
+      runtimeAgentRows
+        .map((row) => [String(row?.id ?? '').trim(), row])
+        .filter(([value]) => value),
+    )
+    const canResolveDefaultAgents = !agentAppError && !isAgentFetching
+
+    return selectedDefaultAgentIds.map((agentId) => {
+      const row = byId.get(agentId)
+      if (!row) {
+        return {
+          id: agentId,
+          label: agentId,
+          status: canResolveDefaultAgents ? 'MISSING' : '',
+          issues: canResolveDefaultAgents ? ['Agent record was not found.'] : [],
+        }
+      }
+
+      const supportedFrameworkKeys = Array.isArray(row.supportedFrameworkKeys) ? row.supportedFrameworkKeys : []
+      const missingFrameworks = selectedFrameworkKeys.filter((frameworkKey) => !supportedFrameworkKeys.includes(frameworkKey))
+      const normalizedStatus = String(row.status ?? '').trim().toUpperCase()
+      const issues = []
+
+      if (normalizedStatus !== RUNTIME_AGENT_STATUSES.ACTIVE) {
+        issues.push(`Status is ${formatAgentStatus(normalizedStatus)}.`)
+      }
+
+      if (missingFrameworks.length > 0) {
+        issues.push(`Does not support framework${missingFrameworks.length === 1 ? '' : 's'}: ${missingFrameworks.join(', ')}.`)
+      }
+
+      return {
+        id: agentId,
+        label: row.name ? `${row.name} (${row.key})` : (row.key || agentId),
+        status: normalizedStatus,
+        issues,
+      }
+    })
+  }, [agentAppError, isAgentFetching, runtimeAgentRows, selectedDefaultAgentIds, selectedFrameworkKeys])
+
+  const defaultAgentWarnings = useMemo(
+    () => selectedDefaultAgentSummaries.filter((summary) => summary.issues.length > 0),
+    [selectedDefaultAgentSummaries],
+  )
+
   const [createValidation, { isLoading: isCreating }] = useCreateValidationRegistryMutation()
   const [updateValidation, { isLoading: isUpdating }] = useUpdateValidationRegistryMutation()
   const [fetchDependencies] = useLazyGetValidationRegistryDependenciesQuery()
@@ -268,11 +404,14 @@ function SuperAdminValidationRegistryEditor() {
         category: loadedValidation.category ?? VALIDATION_REGISTRY_CATEGORIES.COMPLETENESS,
         severity: loadedValidation.severity ?? 'BLOCKING',
         producerSkillId: loadedValidation.producerSkillId ?? '',
+        defaultAgentIds: Array.isArray(loadedValidation.defaultAgentIds) ? [...loadedValidation.defaultAgentIds] : [],
         outputPath: loadedValidation.outputPath ?? '',
+        resultType: loadedValidation.resultType ?? '',
         passFieldPath: loadedValidation.passFieldPath ?? '',
         detailsFieldPath: loadedValidation.detailsFieldPath ?? '',
         policyUsable: loadedValidation.policyUsable !== undefined ? Boolean(loadedValidation.policyUsable) : true,
         packageUsable: loadedValidation.packageUsable !== undefined ? Boolean(loadedValidation.packageUsable) : true,
+        requiresLatestRun: Boolean(loadedValidation.requiresLatestRun),
         freshnessDefaultMinutes: Number(loadedValidation.freshnessDefaultMinutes ?? 30) || 30,
         blockingDefault: loadedValidation.blockingDefault !== undefined ? Boolean(loadedValidation.blockingDefault) : true,
         warningOnlyDefault: Boolean(loadedValidation.warningOnlyDefault),
@@ -321,25 +460,29 @@ function SuperAdminValidationRegistryEditor() {
       } catch {
         // If we cannot resolve dependencies, allow save to proceed.
       }
-    }
+      }
 
-    const payload = {
-      ...(isEditMode ? {} : { key: String(form.key ?? '').trim().toLowerCase() }),
-      label: String(form.label ?? '').trim(),
-      description: String(form.description ?? '').trim(),
-      status: nextStatus,
+      const normalizedResultType = String(form.resultType ?? '').trim().toUpperCase()
+      const payload = {
+        ...(isEditMode ? {} : { key: String(form.key ?? '').trim().toLowerCase() }),
+        label: String(form.label ?? '').trim(),
+        description: String(form.description ?? '').trim(),
+        status: nextStatus,
       supportedFrameworkKeys: normalizeFrameworkKeys(form.supportedFrameworkKeys),
-      category: String(form.category ?? '').trim().toUpperCase(),
-      severity: String(form.severity ?? '').trim().toUpperCase(),
-      producerSkillId: String(form.producerSkillId ?? '').trim(),
-      outputPath: String(form.outputPath ?? '').trim(),
-      passFieldPath: String(form.passFieldPath ?? '').trim(),
-      detailsFieldPath: String(form.detailsFieldPath ?? '').trim(),
-      policyUsable: Boolean(form.policyUsable),
-      packageUsable: Boolean(form.packageUsable),
-      freshnessDefaultMinutes: Number(form.freshnessDefaultMinutes ?? 0),
-      blockingDefault: Boolean(form.blockingDefault),
-      warningOnlyDefault: Boolean(form.warningOnlyDefault),
+        category: String(form.category ?? '').trim().toUpperCase(),
+        severity: String(form.severity ?? '').trim().toUpperCase(),
+        producerSkillId: String(form.producerSkillId ?? '').trim(),
+        ...(!isEditMode || defaultAgentIdsChanged ? { defaultAgentIds: selectedDefaultAgentIds } : {}),
+        outputPath: String(form.outputPath ?? '').trim(),
+        ...(normalizedResultType ? { resultType: normalizedResultType } : {}),
+        passFieldPath: String(form.passFieldPath ?? '').trim(),
+        detailsFieldPath: String(form.detailsFieldPath ?? '').trim(),
+        policyUsable: Boolean(form.policyUsable),
+        packageUsable: Boolean(form.packageUsable),
+        requiresLatestRun: Boolean(form.requiresLatestRun),
+        freshnessDefaultMinutes: Number(form.freshnessDefaultMinutes ?? 0),
+        blockingDefault: Boolean(form.blockingDefault),
+        warningOnlyDefault: Boolean(form.warningOnlyDefault),
     }
 
     try {
@@ -380,11 +523,13 @@ function SuperAdminValidationRegistryEditor() {
   }, [
     addToast,
     createValidation,
+    defaultAgentIdsChanged,
     fetchDependencies,
     form,
     isEditMode,
     loadedValidation,
     setForm,
+    selectedDefaultAgentIds,
     updateValidation,
     validationId,
   ])
@@ -622,6 +767,114 @@ function SuperAdminValidationRegistryEditor() {
               <p className="super-admin-validation-registry-editor__error" role="alert">{errors.supportedFrameworkKeys}</p>
             ) : null}
 
+            <div className="super-admin-validation-registry-editor__framework-section">
+              <p className="super-admin-validation-registry-editor__helper">
+                Default Agents
+              </p>
+              <div className="super-admin-validation-registry-editor__framework-controls">
+                <div className="super-admin-validation-registry-editor__field">
+                  <label className="super-admin-validation-registry-editor__field-label" htmlFor="validation-registry-editor-default-agent-add">
+                    Add Default Agent
+                  </label>
+                  <Select
+                    id="validation-registry-editor-default-agent-add"
+                    value={pendingDefaultAgentId}
+                    options={[
+                      { value: '', label: 'Select...' },
+                      ...availableDefaultAgentOptions,
+                    ]}
+                    onChange={(event) => setPendingDefaultAgentId(event.target.value)}
+                    placeholder={availableDefaultAgentOptions.length > 0 ? 'Select a default agent' : 'No compatible agents available'}
+                    disabled={Boolean(agentAppError) || availableDefaultAgentOptions.length === 0}
+                    helperText={
+                      agentAppError
+                        ? `Failed to load agents: ${agentAppError.message}`
+                        : isAgentFetching
+                          ? 'Loading runtime agents...'
+                          : (selectedFrameworkKeys.length > 0
+                            ? 'Only ACTIVE agents compatible with the selected frameworks are available to add.'
+                            : 'Optional. Default agents can be used by downstream validation orchestration.')
+                    }
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="super-admin-validation-registry-editor__framework-add-button"
+                  onClick={() => {
+                    const defaultAgentId = String(pendingDefaultAgentId ?? '').trim()
+                    if (!defaultAgentId) return
+                    setForm((current) => ({
+                      ...current,
+                      defaultAgentIds: normalizeStableIdList([
+                        ...(Array.isArray(current.defaultAgentIds) ? current.defaultAgentIds : []),
+                        defaultAgentId,
+                      ]),
+                    }))
+                    setPendingDefaultAgentId('')
+                  }}
+                  disabled={!pendingDefaultAgentId}
+                >
+                  Add Agent
+                </Button>
+              </div>
+              <div className="super-admin-validation-registry-editor__summary">
+                {selectedDefaultAgentSummaries.length > 0 ? selectedDefaultAgentSummaries.map((agent) => (
+                  <span key={agent.id} className="super-admin-validation-registry-editor__summary-item">
+                    <span className="super-admin-validation-registry-editor__summary-label">Default Agent</span>
+                    <Badge variant="neutral" size="sm" pill>{agent.label}</Badge>
+                    {agent.status ? (
+                      <Badge
+                        variant={getAgentStatusBadgeVariant(agent.status)}
+                        size="sm"
+                        pill
+                        outline={agent.status !== RUNTIME_AGENT_STATUSES.ACTIVE}
+                        className="super-admin-validation-registry-editor__summary-meta"
+                      >
+                        {formatAgentStatus(agent.status)}
+                      </Badge>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setForm((current) => ({
+                        ...current,
+                        defaultAgentIds: normalizeStableIdList(current.defaultAgentIds).filter((value) => value !== agent.id),
+                      }))}
+                      aria-label={`Remove ${agent.label}`}
+                    >
+                      Remove
+                    </Button>
+                  </span>
+                )) : (
+                  <p className="super-admin-validation-registry-editor__helper">
+                    No default agents selected yet. This is optional metadata.
+                  </p>
+                )}
+              </div>
+              {defaultAgentWarnings.length > 0 ? (
+                <div className="super-admin-validation-registry-editor__warning-panel" role="status" aria-live="polite">
+                  <div className="super-admin-validation-registry-editor__warning-header">
+                    <Badge variant="warning" size="sm" pill>Review Required</Badge>
+                    <p className="super-admin-validation-registry-editor__helper">
+                      Some selected default agents are unresolved, inactive, or framework-incompatible. Remove or replace them before resaving this field.
+                    </p>
+                  </div>
+                  <div className="super-admin-validation-registry-editor__warning-list">
+                    {defaultAgentWarnings.map((agent) => (
+                      <p key={agent.id} className="super-admin-validation-registry-editor__warning-item">
+                        <strong>{agent.label}</strong>: {agent.issues.join(' ')}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {errors.defaultAgentIds ? (
+              <p className="super-admin-validation-registry-editor__error" role="alert">{errors.defaultAgentIds}</p>
+            ) : null}
+
             <div className="super-admin-validation-registry-editor__path-stack">
               <RuntimePathSearchSelect
                 id="validation-registry-editor-output-path"
@@ -674,9 +927,24 @@ function SuperAdminValidationRegistryEditor() {
                   checked={Boolean(form.packageUsable)}
                   onChange={(event) => setForm((current) => ({ ...current, packageUsable: event.target.checked }))}
                 />
+                <Tickbox
+                  id="validation-registry-editor-requires-latest-run"
+                  label="Requires Latest Run"
+                  checked={Boolean(form.requiresLatestRun)}
+                  onChange={(event) => setForm((current) => ({ ...current, requiresLatestRun: event.target.checked }))}
+                />
               </div>
 
               <div className="super-admin-validation-registry-editor__row">
+                <Select
+                  id="validation-registry-editor-result-type"
+                  label="Result Type"
+                  value={form.resultType}
+                  options={VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS}
+                  onChange={(event) => setForm((current) => ({ ...current, resultType: event.target.value }))}
+                  error={errors.resultType}
+                  helperText="Optional. When set, it should match the selected Output Path data type."
+                />
                 <Input
                   id="validation-registry-editor-freshness-default"
                   label="Freshness Default Minutes"

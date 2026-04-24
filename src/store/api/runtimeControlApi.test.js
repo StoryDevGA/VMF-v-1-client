@@ -11,11 +11,14 @@ import {
   useCreateFrameworkPackageMutation,
   useCreateRuntimeAgentMutation,
   useCreateRuntimeSkillMutation,
+  useCreateValidationRegistryMutation,
   useCreateWorkflowPolicyMutation,
   useGetFrameworkRegistryQuery,
   useGetFrameworkPackageQuery,
   useGetRuntimeAgentQuery,
   useGetRuntimeSkillQuery,
+  useGetValidationRegistryDependenciesQuery,
+  useGetValidationRegistryQuery,
   useGetWorkflowPolicyQuery,
   useGetWorkflowPolicyDependenciesQuery,
   useListFrameworkRegistriesQuery,
@@ -23,12 +26,14 @@ import {
   useListRuntimeAgentsQuery,
   useListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
+  useListValidationRegistryQuery,
   useListWorkflowPoliciesQuery,
   useTestWorkflowPolicyMutation,
   useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
   useUpdateRuntimeAgentMutation,
   useUpdateRuntimeSkillMutation,
+  useUpdateValidationRegistryMutation,
   useUpdateWorkflowPolicyMutation,
 } from './runtimeControlApi.js'
 import { baseApi } from './baseApi.js'
@@ -66,6 +71,11 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimeSkill')
+    expect(runtimeControlApi.endpoints).toHaveProperty('listValidationRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('createValidationRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getValidationRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('updateValidationRegistry')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getValidationRegistryDependencies')
     expect(runtimeControlApi.endpoints).toHaveProperty('listWorkflowPolicies')
     expect(runtimeControlApi.endpoints).toHaveProperty('createWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('getWorkflowPolicy')
@@ -82,6 +92,9 @@ describe('runtimeControlApi', () => {
     expect(typeof useListRuntimePathsQuery).toBe('function')
     expect(typeof useListRuntimeSkillsQuery).toBe('function')
     expect(typeof useGetRuntimeSkillQuery).toBe('function')
+    expect(typeof useListValidationRegistryQuery).toBe('function')
+    expect(typeof useGetValidationRegistryQuery).toBe('function')
+    expect(typeof useGetValidationRegistryDependenciesQuery).toBe('function')
     expect(typeof useListWorkflowPoliciesQuery).toBe('function')
     expect(typeof useGetWorkflowPolicyQuery).toBe('function')
     expect(typeof useGetWorkflowPolicyDependenciesQuery).toBe('function')
@@ -97,6 +110,8 @@ describe('runtimeControlApi', () => {
     expect(typeof useUpdateRuntimeAgentMutation).toBe('function')
     expect(typeof useCreateRuntimeSkillMutation).toBe('function')
     expect(typeof useUpdateRuntimeSkillMutation).toBe('function')
+    expect(typeof useCreateValidationRegistryMutation).toBe('function')
+    expect(typeof useUpdateValidationRegistryMutation).toBe('function')
     expect(typeof useCreateWorkflowPolicyMutation).toBe('function')
     expect(typeof useTestWorkflowPolicyMutation).toBe('function')
     expect(typeof useUpdateWorkflowPolicyMutation).toBe('function')
@@ -121,6 +136,11 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.createRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateRuntimeSkill.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.listValidationRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.createValidationRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getValidationRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.updateValidationRegistry.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getValidationRegistryDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listWorkflowPolicies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicy.initiate).toBe('function')
@@ -323,6 +343,89 @@ describe('runtimeControlApi', () => {
 
     expect(result.error?.status).toBe(409)
     expect(result.error?.data?.error?.details?.reason).toBe('RUNTIME_AGENT_LIFECYCLE_ACTION_REQUIRED')
+  })
+
+  it('round-trips validation registry default agents and extended result fields in mock mode', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createValidationRegistry.initiate({
+        key: 'mock-default-agent-validation',
+        label: 'Mock Default Agent Validation',
+        description: 'Exercises validation registry extended metadata.',
+        status: 'ACTIVE',
+        supportedFrameworkKeys: ['VMF'],
+        category: 'QUALITY',
+        severity: 'WARNING',
+        producerSkillId: 'skill-snapshot',
+        defaultAgentIds: ['agent-vmf-submit-validator-agent'],
+        outputPath: 'framework_state.validation.required_sections',
+        resultType: 'OBJECT',
+        passFieldPath: 'framework_state.validation.required_sections.is_valid',
+        detailsFieldPath: 'framework_state.validation.required_sections.missing_sections',
+        policyUsable: true,
+        packageUsable: true,
+        requiresLatestRun: true,
+        freshnessDefaultMinutes: 45,
+        blockingDefault: false,
+        warningOnlyDefault: true,
+      }),
+    )
+
+    expect(createResult.error).toBeUndefined()
+    expect(createResult.data?.data?.defaultAgentIds).toEqual(['agent-vmf-submit-validator-agent'])
+    expect(createResult.data?.data?.resultType).toBe('OBJECT')
+    expect(createResult.data?.data?.requiresLatestRun).toBe(true)
+
+    const updateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateValidationRegistry.initiate({
+        validationId: 'validation-mock-default-agent-validation',
+        defaultAgentIds: ['agent-vmf-governance-validator-agent'],
+        requiresLatestRun: false,
+      }),
+    )
+
+    expect(updateResult.error).toBeUndefined()
+    expect(updateResult.data?.data?.defaultAgentIds).toEqual(['agent-vmf-governance-validator-agent'])
+    expect(updateResult.data?.data?.requiresLatestRun).toBe(false)
+    expect(updateResult.data?.data?.resultType).toBe('OBJECT')
+  })
+
+  it('rejects unresolved default agents when mock validation-registry default agents are edited', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.updateValidationRegistry.initiate({
+        validationId: 'validation-required-sections-check',
+        defaultAgentIds: ['agent-missing-validator'],
+      }),
+    )
+
+    expect(result.error?.status).toBe(422)
+    expect(result.error?.data?.error?.details?.defaultAgentIds).toContain('agent-missing-validator')
+    expect(result.error?.data?.error?.details?.defaultAgentIds).toContain('was not found')
+  })
+
+  it('returns validation registry dependency summaries with resolved default agents in mock mode', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.getValidationRegistryDependencies.initiate('validation-required-sections-check'),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.defaultAgents).toEqual([
+      expect.objectContaining({
+        id: 'agent-vmf-submit-validator-agent',
+        status: 'ACTIVE',
+        compatibleWithValidation: true,
+      }),
+    ])
+    expect(result.data?.data?.runtimePaths).toEqual([
+      expect.objectContaining({ pathKey: 'framework_state.validation.required_sections' }),
+      expect.objectContaining({ pathKey: 'framework_state.validation.required_sections.is_valid' }),
+      expect.objectContaining({ pathKey: 'framework_state.validation.required_sections.missing_sections' }),
+    ])
   })
 
   it('keeps mock Workflow Policy test-console behavior aligned with live API for framework_state-prefixed paths', async () => {

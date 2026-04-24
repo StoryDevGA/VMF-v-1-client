@@ -14,6 +14,7 @@ import {
   cloneRuntimeAgent,
   INITIAL_RUNTIME_AGENTS,
   normalizePathSelectionList,
+  RUNTIME_AGENT_STATUSES,
   RUNTIME_AGENT_PAGE_SIZE,
 } from '../../pages/SuperAdminAgents/superAdminAgents.constants.js'
 import {
@@ -203,6 +204,10 @@ const normalizePositiveInteger = (value, fallback) => {
 
 const normalizeSearch = (value) => String(value ?? '').trim().toLowerCase()
 const normalizeFrameworkKey = (value) => String(value ?? '').trim().toUpperCase()
+const normalizeStableIdList = (values) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean))]
 const toSearchValues = (values) =>
   values
     .flatMap((value) => (Array.isArray(value) ? value : [value]))
@@ -393,8 +398,146 @@ const buildMockSkillRoleDependencies = (roleKey) => {
   }
 }
 
-const buildMockValidationRegistryDependencies = (validationKey) => {
-  const normalizedKey = String(validationKey ?? '').trim().toLowerCase()
+const buildMockValidationDefaultAgentSummaries = (defaultAgentIds = [], frameworkKeys = []) => {
+  const normalizedFrameworkKeys = normalizeStableIdList(frameworkKeys).map((value) => normalizeFrameworkKey(value))
+
+  return normalizeStableIdList(defaultAgentIds).map((agentId) => {
+    const agent = findRuntimeAgentById(agentId)
+
+    if (!agent) {
+      return {
+        id: agentId,
+        key: agentId,
+        name: agentId,
+        status: 'MISSING',
+        supportedFrameworkKeys: [],
+        compatibleWithValidation: false,
+      }
+    }
+
+    const supportedFrameworkKeys = Array.isArray(agent.supportedFrameworkKeys)
+      ? agent.supportedFrameworkKeys.map((value) => normalizeFrameworkKey(value)).filter(Boolean)
+      : []
+
+    return {
+      id: agent.id,
+      key: agent.key,
+      name: agent.name,
+      status: agent.status,
+      supportedFrameworkKeys,
+      compatibleWithValidation: normalizedFrameworkKeys.every((frameworkKey) => supportedFrameworkKeys.includes(frameworkKey)),
+    }
+  })
+}
+
+const validateMockValidationRegistryDefaultAgents = ({ defaultAgentIds = [], supportedFrameworkKeys = [], status = '' } = {}) => {
+  const requireActive = String(status ?? '').trim().toUpperCase() === VALIDATION_REGISTRY_STATUSES.ACTIVE
+  const errors = []
+  const normalizedFrameworkKeys = normalizeStableIdList(supportedFrameworkKeys).map((value) => normalizeFrameworkKey(value))
+
+  for (const summary of buildMockValidationDefaultAgentSummaries(defaultAgentIds, supportedFrameworkKeys)) {
+    if (summary.status === 'MISSING') {
+      errors.push(`Default agent "${summary.id}" was not found.`)
+      continue
+    }
+
+    if (requireActive && String(summary.status ?? '').trim().toUpperCase() !== RUNTIME_AGENT_STATUSES.ACTIVE) {
+      errors.push(`Default agent "${summary.id}" must be ACTIVE when the validation is ACTIVE.`)
+      continue
+    }
+
+    if (!summary.compatibleWithValidation) {
+      const missingFrameworks = normalizedFrameworkKeys.filter((frameworkKey) => !(summary.supportedFrameworkKeys ?? []).includes(frameworkKey))
+      errors.push(
+        `Default agent "${summary.id}" does not support framework${missingFrameworks.length === 1 ? '' : 's'}: ${missingFrameworks.join(', ')}.`,
+      )
+    }
+  }
+
+  return errors
+}
+
+const validateMockPathDescendant = (outputPath, fieldPath, fieldLabel) => {
+  if (!fieldPath) return null
+  const prefix = `${outputPath}.`
+  if (String(fieldPath).startsWith(prefix)) return null
+  return `${fieldLabel} must be inside the selected Output Path.`
+}
+
+const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, detailsFieldPath, supportedFrameworkKeys = [] } = {}) => {
+  const errors = {}
+  const paths = [outputPath, passFieldPath, detailsFieldPath].filter(Boolean)
+  const summaries = buildMockValidationRuntimePathSummaries(paths)
+
+  for (const summary of summaries) {
+    if (summary.status === 'MISSING') {
+      if (summary.pathKey === outputPath) errors.outputPath = `Unknown runtime path "${summary.pathKey}".`
+      else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Unknown runtime path "${summary.pathKey}".`
+      else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Unknown runtime path "${summary.pathKey}".`
+      continue
+    }
+
+    if (String(summary.scope || '').toUpperCase() !== 'VALIDATION_RESULT') {
+      if (summary.pathKey === outputPath) errors.outputPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
+      else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
+      else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
+    }
+  }
+
+  const passErr = validateMockPathDescendant(outputPath, passFieldPath, 'Pass Field Path')
+  if (passErr) errors.passFieldPath = passErr
+
+  const detailsErr = validateMockPathDescendant(outputPath, detailsFieldPath, 'Details Field Path')
+  if (detailsErr) errors.detailsFieldPath = detailsErr
+
+  return errors
+}
+
+const validateMockValidationProducerSkill = ({ producerSkillId, supportedFrameworkKeys = [], status = '' } = {}) => {
+  if (!producerSkillId) return null
+
+  const skill = (runtimeControlState.runtimeSkills || []).find((s) => s.id === producerSkillId)
+  if (!skill) return 'Producer skill was not found.'
+
+  const validationIsActive = String(status ?? '').trim().toUpperCase() === VALIDATION_REGISTRY_STATUSES.ACTIVE
+  if (validationIsActive && String(skill.status || '').trim().toUpperCase() !== 'ACTIVE') {
+    return 'Producer skill must be ACTIVE when the validation is ACTIVE.'
+  }
+
+  const normalizedFrameworks = normalizeStableIdList(supportedFrameworkKeys).map((k) => normalizeFrameworkKey(k))
+  const skillFrameworks = normalizeStableIdList(skill.supportedFrameworkKeys || []).map((k) => normalizeFrameworkKey(k))
+  const missing = normalizedFrameworks.filter((fw) => !skillFrameworks.includes(fw))
+  if (missing.length > 0) {
+    return `Producer skill does not support framework${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}.`
+  }
+
+  return null
+}
+
+const buildMockValidationRuntimePathSummaries = (pathKeys = []) =>
+  normalizeStableIdList(pathKeys).map((pathKey) => {
+    const row = (runtimeControlState.runtimePaths || []).find((entry) => entry.pathKey === pathKey)
+    return row
+      ? {
+          id: row.id,
+          pathKey: row.pathKey,
+          label: row.label,
+          status: row.status,
+          scope: row.scope,
+          isProtected: Boolean(row.isProtected),
+        }
+      : {
+          id: '',
+          pathKey,
+          label: pathKey,
+          status: 'MISSING',
+          scope: '',
+          isProtected: false,
+        }
+  })
+
+const buildMockValidationRegistryDependencies = (validation) => {
+  const normalizedKey = String(validation?.key ?? '').trim().toLowerCase()
   if (!normalizedKey) {
     return {
       workflowPolicies: [],
@@ -3077,6 +3220,38 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const defaultAgentErrors = validateMockValidationRegistryDefaultAgents({
+          defaultAgentIds: runtimePayload.defaultAgentIds,
+          supportedFrameworkKeys: runtimePayload.supportedFrameworkKeys,
+          status: runtimePayload.status,
+        })
+        if (defaultAgentErrors.length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            defaultAgentIds: defaultAgentErrors.join(' '),
+          })
+        }
+
+        const producerSkillError = validateMockValidationProducerSkill({
+          producerSkillId: runtimePayload.producerSkillId,
+          supportedFrameworkKeys: runtimePayload.supportedFrameworkKeys,
+          status: runtimePayload.status,
+        })
+        if (producerSkillError) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            producerSkillId: producerSkillError,
+          })
+        }
+
+        const pathErrors = validateMockValidationRuntimePaths({
+          outputPath: String(runtimePayload.outputPath ?? '').trim(),
+          passFieldPath: String(runtimePayload.passFieldPath ?? '').trim(),
+          detailsFieldPath: String(runtimePayload.detailsFieldPath ?? '').trim(),
+          supportedFrameworkKeys: runtimePayload.supportedFrameworkKeys,
+        })
+        if (Object.keys(pathErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', pathErrors)
+        }
+
         const created = cloneValidationRegistryEntry({
           id: buildValidationRegistryStableId(key),
           key,
@@ -3089,11 +3264,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           category: String(runtimePayload.category ?? '').trim().toUpperCase(),
           severity: String(runtimePayload.severity ?? '').trim().toUpperCase(),
           producerSkillId: String(runtimePayload.producerSkillId ?? '').trim(),
+          defaultAgentIds: normalizeStableIdList(runtimePayload.defaultAgentIds),
           outputPath: String(runtimePayload.outputPath ?? '').trim(),
+          resultType: String(runtimePayload.resultType ?? '').trim().toUpperCase(),
           passFieldPath: String(runtimePayload.passFieldPath ?? '').trim(),
           detailsFieldPath: String(runtimePayload.detailsFieldPath ?? '').trim(),
           policyUsable: runtimePayload.policyUsable === undefined ? true : Boolean(runtimePayload.policyUsable),
           packageUsable: runtimePayload.packageUsable === undefined ? true : Boolean(runtimePayload.packageUsable),
+          requiresLatestRun: Boolean(runtimePayload.requiresLatestRun),
           freshnessDefaultMinutes: Number(runtimePayload.freshnessDefaultMinutes ?? 30) || 30,
           blockingDefault: runtimePayload.blockingDefault === undefined ? true : Boolean(runtimePayload.blockingDefault),
           warningOnlyDefault: Boolean(runtimePayload.warningOnlyDefault),
@@ -3170,6 +3348,51 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const nextSupportedFrameworkKeys = payload.supportedFrameworkKeys ?? existing.supportedFrameworkKeys
+        const nextStatus = payload.status ?? existing.status
+        const nextProducerSkillId = payload.producerSkillId ?? existing.producerSkillId
+        const nextOutputPath = String(payload.outputPath ?? existing.outputPath ?? '').trim()
+        const nextPassFieldPath = String(payload.passFieldPath ?? existing.passFieldPath ?? '').trim()
+        const nextDetailsFieldPath = String(payload.detailsFieldPath ?? existing.detailsFieldPath ?? '').trim()
+
+        if (payload.defaultAgentIds !== undefined || payload.supportedFrameworkKeys !== undefined || payload.status !== undefined) {
+          const defaultAgentErrors = validateMockValidationRegistryDefaultAgents({
+            defaultAgentIds: payload.defaultAgentIds ?? existing.defaultAgentIds,
+            supportedFrameworkKeys: nextSupportedFrameworkKeys,
+            status: nextStatus,
+          })
+          if (defaultAgentErrors.length > 0) {
+            return buildValidationFailedError('Please check the form for errors.', {
+              defaultAgentIds: defaultAgentErrors.join(' '),
+            })
+          }
+        }
+
+        if (payload.producerSkillId !== undefined || payload.supportedFrameworkKeys !== undefined || payload.status !== undefined) {
+          const producerSkillError = validateMockValidationProducerSkill({
+            producerSkillId: nextProducerSkillId,
+            supportedFrameworkKeys: nextSupportedFrameworkKeys,
+            status: nextStatus,
+          })
+          if (producerSkillError) {
+            return buildValidationFailedError('Please check the form for errors.', {
+              producerSkillId: producerSkillError,
+            })
+          }
+        }
+
+        if (payload.outputPath !== undefined || payload.passFieldPath !== undefined || payload.detailsFieldPath !== undefined) {
+          const pathErrors = validateMockValidationRuntimePaths({
+            outputPath: nextOutputPath,
+            passFieldPath: nextPassFieldPath,
+            detailsFieldPath: nextDetailsFieldPath,
+            supportedFrameworkKeys: nextSupportedFrameworkKeys,
+          })
+          if (Object.keys(pathErrors).length > 0) {
+            return buildValidationFailedError('Please check the form for errors.', pathErrors)
+          }
+        }
+
         const next = cloneValidationRegistryEntry({
           ...existing,
           ...(payload.label !== undefined ? { label: String(payload.label ?? '').trim() } : {}),
@@ -3185,11 +3408,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ...(payload.category !== undefined ? { category: String(payload.category ?? '').trim().toUpperCase() } : {}),
           ...(payload.severity !== undefined ? { severity: String(payload.severity ?? '').trim().toUpperCase() } : {}),
           ...(payload.producerSkillId !== undefined ? { producerSkillId: String(payload.producerSkillId ?? '').trim() } : {}),
+          ...(payload.defaultAgentIds !== undefined ? { defaultAgentIds: normalizeStableIdList(payload.defaultAgentIds) } : {}),
           ...(payload.outputPath !== undefined ? { outputPath: String(payload.outputPath ?? '').trim() } : {}),
+          ...(payload.resultType !== undefined ? { resultType: String(payload.resultType ?? '').trim().toUpperCase() } : {}),
           ...(payload.passFieldPath !== undefined ? { passFieldPath: String(payload.passFieldPath ?? '').trim() } : {}),
           ...(payload.detailsFieldPath !== undefined ? { detailsFieldPath: String(payload.detailsFieldPath ?? '').trim() } : {}),
           ...(payload.policyUsable !== undefined ? { policyUsable: Boolean(payload.policyUsable) } : {}),
           ...(payload.packageUsable !== undefined ? { packageUsable: Boolean(payload.packageUsable) } : {}),
+          ...(payload.requiresLatestRun !== undefined ? { requiresLatestRun: Boolean(payload.requiresLatestRun) } : {}),
           ...(payload.freshnessDefaultMinutes !== undefined ? { freshnessDefaultMinutes: Number(payload.freshnessDefaultMinutes ?? 0) } : {}),
           ...(payload.blockingDefault !== undefined ? { blockingDefault: nextBlockingDefault } : {}),
           ...(payload.warningOnlyDefault !== undefined ? { warningOnlyDefault: nextWarningOnlyDefault } : {}),
@@ -3227,12 +3453,32 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Validation was not found.')
         }
 
-        const dependencies = buildMockValidationRegistryDependencies(validation.key)
+        const dependencies = buildMockValidationRegistryDependencies(validation)
+        const producerSkill = findRuntimeSkillById(validation.producerSkillId)
+        const runtimePaths = buildMockValidationRuntimePathSummaries([
+          validation.outputPath,
+          validation.passFieldPath,
+          validation.detailsFieldPath,
+        ])
+        const defaultAgents = buildMockValidationDefaultAgentSummaries(
+          validation.defaultAgentIds,
+          validation.supportedFrameworkKeys,
+        )
 
         return {
           data: buildEntityResponse({
             id: validationId,
             key: validation.key,
+            producerSkill: producerSkill
+              ? {
+                  id: producerSkill.id,
+                  key: producerSkill.key,
+                  name: producerSkill.name,
+                  status: producerSkill.status,
+                }
+              : null,
+            runtimePaths,
+            defaultAgents,
             dependencies,
           }),
         }

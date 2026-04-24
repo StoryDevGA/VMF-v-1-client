@@ -113,14 +113,41 @@
   align-items: center;
   gap: var(--spacing-2xs);
   padding: var(--spacing-2xs) var(--spacing-sm);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
+  flex-wrap: wrap;
 }
 
 .super-admin-validation-registry-editor__summary-label {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.super-admin-validation-registry-editor__summary-meta {
+  align-self: center;
+}
+
+.super-admin-validation-registry-editor__warning-panel {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+
+.super-admin-validation-registry-editor__warning-header,
+.super-admin-validation-registry-editor__warning-list {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-validation-registry-editor__warning-item {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
 }
 
 .super-admin-validation-registry-editor__footer-actions {
