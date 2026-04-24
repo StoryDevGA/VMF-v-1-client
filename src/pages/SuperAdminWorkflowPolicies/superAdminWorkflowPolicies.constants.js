@@ -218,11 +218,11 @@ export const WORKFLOW_POLICY_PAGE_SIZE = 4
 export const WORKFLOW_POLICY_EDITOR_TABS = Object.freeze([
   { key: 'frameworks', label: 'Framework Compatibility' },
   { key: 'scope', label: 'Scope & Trigger' },
-  { key: 'conditions', label: 'FRAMEWORK_STATE Conditions' },
+  { key: 'conditions', label: 'Framework State Conditions' },
   { key: 'validation', label: 'Validation Requirements' },
   { key: 'action', label: 'Action Governance' },
   { key: 'routing', label: 'Agent Routing' },
-  { key: 'outcomes', label: 'Outcome / State Effects' },
+  { key: 'outcomes', label: 'Outcome & State Effects' },
   { key: 'escalation', label: 'Escalation & Overrides' },
   { key: 'dependencies', label: 'Dependencies' },
   { key: 'audit', label: 'Audit & Versioning' },

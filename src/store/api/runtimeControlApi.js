@@ -30,6 +30,7 @@ import {
 import {
   cloneRuntimePathRegistryEntry,
   INITIAL_RUNTIME_PATH_REGISTRY,
+  INITIAL_RUNTIME_PATH_REGISTRY_STAGED,
   RUNTIME_PATH_REGISTRY_PAGE_SIZE,
 } from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import {
@@ -301,7 +302,8 @@ const buildAuditFields = (timestamp = new Date().toISOString()) => ({
 const buildInitialRuntimeControlState = () => ({
   frameworkRegistries: INITIAL_FRAMEWORK_REGISTRIES.map((entry) => cloneFrameworkRegistryEntry(entry)),
   frameworkPackages: INITIAL_FRAMEWORK_PACKAGES.map((pkg) => cloneFrameworkPackage(pkg)),
-  runtimePaths: INITIAL_RUNTIME_PATH_REGISTRY.map((entry) => cloneRuntimePathRegistryEntry(entry)),
+  runtimePaths: [...INITIAL_RUNTIME_PATH_REGISTRY, ...INITIAL_RUNTIME_PATH_REGISTRY_STAGED]
+    .map((entry) => cloneRuntimePathRegistryEntry(entry)),
   skillRoles: INITIAL_SKILL_ROLE_REGISTRY.map((entry) => cloneSkillRoleRegistryEntry(entry)),
   validationRegistry: INITIAL_VALIDATION_REGISTRY.map((entry) => cloneValidationRegistryEntry(entry)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),

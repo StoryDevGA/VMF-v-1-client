@@ -12,6 +12,7 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import { RuntimePathValueControl } from '../../components/RuntimePathValueControl'
 import ValidationKeySearchSelect from '../../components/ValidationKeySearchSelect'
 import {
   useCreateWorkflowPolicyMutation,
@@ -571,6 +572,28 @@ function WorkflowPolicyEditor() {
     () => (Array.isArray(writeRuntimePathsResponse?.data) ? writeRuntimePathsResponse.data : []),
     [writeRuntimePathsResponse],
   )
+  const runtimePathByKey = useMemo(
+    () => new Map(runtimePathRows.map((row) => [String(row?.pathKey ?? '').trim(), row])),
+    [runtimePathRows],
+  )
+  const writableRuntimePathByKey = useMemo(
+    () => new Map(writableRuntimePathRows.map((row) => [String(row?.pathKey ?? '').trim(), row])),
+    [writableRuntimePathRows],
+  )
+
+  const formatRuntimePathDefaultValue = (runtimePath) => {
+    const defaultValue = runtimePath?.defaultValue
+    if (defaultValue === undefined || defaultValue === null) return ''
+    if (typeof defaultValue === 'string') return defaultValue
+    if (typeof defaultValue === 'number') return String(defaultValue)
+    if (typeof defaultValue === 'boolean') return defaultValue ? 'true' : 'false'
+
+    try {
+      return JSON.stringify(defaultValue)
+    } catch {
+      return ''
+    }
+  }
   const dependencyData = dependenciesResponse?.data ?? null
   const loadedPolicyForm = useMemo(
     () => (isEditMode && loadedPolicy ? mapWorkflowPolicyToForm(loadedPolicy) : null),
@@ -1183,7 +1206,26 @@ function WorkflowPolicyEditor() {
                       setForm((current) => ({
                         ...current,
                         conditions: current.conditions.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, path: event.target.value } : item,
+                          itemIndex === index
+                            ? (() => {
+                                const nextPath = event.target.value
+                                const runtimePath = String(nextPath ?? '').trim()
+                                  ? runtimePathByKey.get(String(nextPath ?? '').trim())
+                                  : null
+                                const normalizedOperator = String(item?.operator ?? '').trim().toLowerCase()
+                                const isExistOperator = ['exists', 'not exists'].includes(normalizedOperator)
+                                const isMultiValueOperator = ['in', 'not in'].includes(normalizedOperator)
+                                const shouldDefaultValue = !isExistOperator && !isMultiValueOperator && String(item?.value ?? '').trim() === ''
+
+                                return {
+                                  ...item,
+                                  path: nextPath,
+                                  ...(shouldDefaultValue && runtimePath
+                                    ? { value: formatRuntimePathDefaultValue(runtimePath) }
+                                    : {}),
+                                }
+                              })()
+                            : item,
                         ),
                       }))
                     }
@@ -1203,22 +1245,34 @@ function WorkflowPolicyEditor() {
                       }))
                     }
                   />
-                  <Input
-                    id={`workflow-policy-editor-condition-value-${index}`}
-                    label="Value"
-                    value={condition.value ?? ''}
-                    disabled={['exists', 'not exists'].includes(String(condition.operator ?? '').trim().toLowerCase())}
-                    helperText='Use comma-separated values for "in" and "not in".'
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        conditions: current.conditions.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, value: event.target.value } : item,
-                        ),
-                      }))
-                    }
-                    fullWidth
-                  />
+                  {/* Runtime-path-aware value rendering (V2 metadata-driven when available). */}
+                  {(() => {
+                    const normalizedOperator = String(condition.operator ?? '').trim().toLowerCase()
+                    const isExistOperator = ['exists', 'not exists'].includes(normalizedOperator)
+                    const isMultiValueOperator = ['in', 'not in'].includes(normalizedOperator)
+                    const selectedPathKey = String(condition.path ?? '').trim()
+                    const runtimePath = selectedPathKey ? runtimePathByKey.get(selectedPathKey) : null
+
+                    return (
+                      <RuntimePathValueControl
+                        id={`workflow-policy-editor-condition-value-${index}`}
+                        label="Value"
+                        runtimePath={runtimePath}
+                        value={condition.value ?? ''}
+                        disabled={isExistOperator}
+                        forceText={isMultiValueOperator}
+                        helperText={isMultiValueOperator ? 'Use comma-separated values for "in" and "not in".' : ''}
+                        onChange={(nextValue) =>
+                          setForm((current) => ({
+                            ...current,
+                            conditions: current.conditions.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, value: nextValue } : item,
+                            ),
+                          }))
+                        }
+                      />
+                    )
+                  })()}
                   <Select
                     id={`workflow-policy-editor-condition-logic-${index}`}
                     label="Logic"
@@ -1472,27 +1526,53 @@ function WorkflowPolicyEditor() {
                       setForm((current) => ({
                         ...current,
                         [fieldName]: current[fieldName].map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, targetPath: event.target.value } : item,
+                          itemIndex === index
+                            ? (() => {
+                                const nextPath = event.target.value
+                                const runtimePath = String(nextPath ?? '').trim()
+                                  ? writableRuntimePathByKey.get(String(nextPath ?? '').trim())
+                                  : null
+                                const shouldDefaultValue = needsValue && String(item?.value ?? '').trim() === ''
+
+                                return {
+                                  ...item,
+                                  targetPath: nextPath,
+                                  ...(shouldDefaultValue && runtimePath
+                                    ? { value: formatRuntimePathDefaultValue(runtimePath) }
+                                    : {}),
+                                }
+                              })()
+                            : item,
                         ),
                       }))
                     }
                   />
-                  <Input
-                    id={`workflow-policy-editor-${fieldName}-value-${index}`}
-                    label="Value"
-                    value={effect.value ?? ''}
-                    disabled={!effect.type}
-                    helperText={needsValue ? 'Examples: REVIEW_READY, governance queue id, or notification text.' : 'Optional for this effect type.'}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        [fieldName]: current[fieldName].map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, value: event.target.value } : item,
-                        ),
-                      }))
-                    }
-                    fullWidth
-                  />
+                  {(() => {
+                    const selectedPathKey = String(effect.targetPath ?? '').trim()
+                    const runtimePath = selectedPathKey ? writableRuntimePathByKey.get(selectedPathKey) : null
+                    const helper = needsValue
+                      ? 'Examples: REVIEW_READY, governance queue id, or notification text.'
+                      : 'Optional for this effect type.'
+
+                    return (
+                      <RuntimePathValueControl
+                        id={`workflow-policy-editor-${fieldName}-value-${index}`}
+                        label="Value"
+                        runtimePath={runtimePath}
+                        value={effect.value ?? ''}
+                        disabled={!effect.type}
+                        helperText={helper}
+                        onChange={(nextValue) =>
+                          setForm((current) => ({
+                            ...current,
+                            [fieldName]: current[fieldName].map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, value: nextValue } : item,
+                            ),
+                          }))
+                        }
+                      />
+                    )
+                  })()}
                 </div>
                 <div className="super-admin-workflow-policy-editor__condition-actions">
                   <Button

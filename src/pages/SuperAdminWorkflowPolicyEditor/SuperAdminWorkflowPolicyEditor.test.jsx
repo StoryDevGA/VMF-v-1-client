@@ -66,11 +66,11 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     expect(tabTexts).toEqual([
       'Framework Compatibility',
       'Scope & Trigger',
-      'FRAMEWORK_STATE Conditions',
+      'Framework State Conditions',
       'Validation Requirements',
       'Action Governance',
       'Agent Routing',
-      'Outcome / State Effects',
+      'Outcome & State Effects',
       'Escalation & Overrides',
       'Dependencies',
       'Audit & Versioning',
@@ -85,7 +85,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
     await user.click(screen.getByRole('checkbox', { name: /customer messaging framework/i }))
-    await user.click(screen.getByRole('tab', { name: /framework_state conditions/i }))
+    await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
 
     expect(
       screen.getByText(/no active framework_state runtime paths are currently registered for cmf/i),
@@ -132,7 +132,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       'REQUIRE_AGENT_EVALUATION',
     )
 
-    await user.click(screen.getByRole('tab', { name: /framework_state conditions/i }))
+    await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
     await user.click(screen.getByRole('button', { name: /add condition/i }))
     await user.selectOptions(
       screen.getByLabelText(/^path$/i, {
@@ -169,7 +169,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /validation requirements/i }))
 
-    await user.click(screen.getByRole('tab', { name: /outcome \/ state effects/i }))
+    await user.click(screen.getByRole('tab', { name: /outcome & state effects/i }))
     await user.click(screen.getAllByRole('button', { name: /add effect/i })[0])
     await user.selectOptions(
       screen.getByLabelText(/^action$/i, {
