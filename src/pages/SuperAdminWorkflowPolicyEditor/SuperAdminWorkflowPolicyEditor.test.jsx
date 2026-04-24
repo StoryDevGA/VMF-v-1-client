@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SuperAdminWorkflowPolicies from '../SuperAdminWorkflowPolicies'
@@ -215,6 +215,26 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     expect(
       screen.getByText(/no active framework_state runtime paths are currently registered for cmf/i),
     ).toBeInTheDocument()
+  })
+
+  it('lets the validation requirements selector find ACTIVE policy-usable validations for the selected frameworks', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes([
+      '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
+    ])
+
+    await user.click(await screen.findByRole('tab', { name: /validation requirements/i }))
+
+    const validationInput = screen.getByLabelText(/^required validations$/i, {
+      selector: 'input#workflow-policy-editor-validation-key',
+    })
+
+    await user.click(validationInput)
+    await user.type(validationInput, 'required')
+
+    const resultsList = await screen.findByRole('listbox', { name: /validation results/i })
+    expect(await within(resultsList).findByText(/required sections check/i)).toBeInTheDocument()
+    expect(await within(resultsList).findByText(/required-sections-check/i)).toBeInTheDocument()
   })
 
   it('creates a workflow policy from the dedicated editor and returns to the catalogue', async () => {

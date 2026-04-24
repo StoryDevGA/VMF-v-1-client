@@ -26,6 +26,7 @@ import {
   VALIDATION_REGISTRY_CATEGORIES,
   VALIDATION_REGISTRY_CATEGORY_OPTIONS,
   VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS,
+  VALIDATION_REGISTRY_SEVERITIES,
   VALIDATION_REGISTRY_SEVERITY_OPTIONS,
   VALIDATION_REGISTRY_STATUS_OPTIONS,
   VALIDATION_REGISTRY_STATUSES,
@@ -402,7 +403,7 @@ function SuperAdminValidationRegistryEditor() {
           ? [...loadedValidation.supportedFrameworkKeys]
           : [],
         category: loadedValidation.category ?? VALIDATION_REGISTRY_CATEGORIES.COMPLETENESS,
-        severity: loadedValidation.severity ?? 'BLOCKING',
+        severity: loadedValidation.severity ?? VALIDATION_REGISTRY_SEVERITIES.ERROR,
         producerSkillId: loadedValidation.producerSkillId ?? '',
         defaultAgentIds: Array.isArray(loadedValidation.defaultAgentIds) ? [...loadedValidation.defaultAgentIds] : [],
         outputPath: loadedValidation.outputPath ?? '',

@@ -1472,7 +1472,7 @@ function WorkflowPolicyEditor() {
         <ValidationKeySearchSelect
           id="workflow-policy-editor-validation-key"
           label="Required Validations"
-          frameworkKeys={supportedFrameworkKeys}
+          frameworkKeys={runtimePathLookupFrameworkKeys}
           selectedKeys={form.requiredValidationKeys}
           onChange={(keys) => setForm((current) => ({ ...current, requiredValidationKeys: keys }))}
           error={errors.requiredValidationKeys}
