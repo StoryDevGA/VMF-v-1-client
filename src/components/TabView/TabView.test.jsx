@@ -502,8 +502,8 @@ describe('TabView Component', () => {
       const secondTab = screen.getByRole('tab', { name: 'Tab 2' })
 
       expect(firstTab).toHaveAttribute('aria-selected', 'true')
-      expect(firstTab).toHaveAttribute('aria-controls', 'tabpanel-0')
-      expect(firstTab).toHaveAttribute('id', 'tab-0')
+      expect(firstTab.getAttribute('aria-controls')).toMatch(/-tabpanel-0$/)
+      expect(firstTab.getAttribute('id')).toMatch(/-tab-0$/)
       expect(firstTab).toHaveAttribute('tabIndex', '0')
 
       expect(secondTab).toHaveAttribute('aria-selected', 'false')
@@ -520,12 +520,12 @@ describe('TabView Component', () => {
 
       const tabpanels = screen.getAllByRole('tabpanel', { hidden: true })
 
-      expect(tabpanels[0]).toHaveAttribute('id', 'tabpanel-0')
-      expect(tabpanels[0]).toHaveAttribute('aria-labelledby', 'tab-0')
+      expect(tabpanels[0].getAttribute('id')).toMatch(/-tabpanel-0$/)
+      expect(tabpanels[0].getAttribute('aria-labelledby')).toMatch(/-tab-0$/)
       expect(tabpanels[0]).not.toHaveAttribute('hidden')
 
-      expect(tabpanels[1]).toHaveAttribute('id', 'tabpanel-1')
-      expect(tabpanels[1]).toHaveAttribute('aria-labelledby', 'tab-1')
+      expect(tabpanels[1].getAttribute('id')).toMatch(/-tabpanel-1$/)
+      expect(tabpanels[1].getAttribute('aria-labelledby')).toMatch(/-tab-1$/)
       expect(tabpanels[1]).toHaveAttribute('hidden')
     })
 

@@ -30,10 +30,12 @@ import {
   WORKFLOW_POLICY_PAGE_SIZE,
 } from '../../pages/SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 import {
+  buildRuntimePathRegistryStableId,
   cloneRuntimePathRegistryEntry,
   INITIAL_RUNTIME_PATH_REGISTRY,
   INITIAL_RUNTIME_PATH_REGISTRY_STAGED,
   RUNTIME_PATH_REGISTRY_PAGE_SIZE,
+  RUNTIME_PATH_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import {
   buildSkillRoleRegistryStableId,
@@ -81,6 +83,8 @@ const buildListParams = ({
   scope,
   operation,
   category,
+  dataType,
+  sourceType,
   isProtected,
   type,
   structureType,
@@ -101,6 +105,8 @@ const buildListParams = ({
   scope: String(scope ?? '').trim(),
   operation: String(operation ?? '').trim(),
   category: String(category ?? '').trim(),
+  dataType: String(dataType ?? '').trim(),
+  sourceType: String(sourceType ?? '').trim(),
   isProtected: String(isProtected ?? '').trim().toLowerCase(),
   type: String(type ?? '').trim(),
   structureType: String(structureType ?? '').trim().toLowerCase(),
@@ -123,6 +129,8 @@ export const buildRuntimeControlListRequest = ({
   scope,
   operation,
   category,
+  dataType,
+  sourceType,
   isProtected,
   type,
   structureType,
@@ -144,6 +152,8 @@ export const buildRuntimeControlListRequest = ({
     scope,
     operation,
     category,
+    dataType,
+    sourceType,
     isProtected,
     type,
     structureType,
@@ -168,6 +178,8 @@ export const buildRuntimeControlListRequest = ({
       ...(params.scope ? { scope: params.scope } : {}),
       ...(params.operation ? { operation: params.operation } : {}),
       ...(params.category ? { category: params.category } : {}),
+      ...(params.dataType ? { dataType: params.dataType } : {}),
+      ...(params.sourceType ? { sourceType: params.sourceType } : {}),
       ...(params.severity ? { severity: params.severity } : {}),
       ...(params.isProtected ? { isProtected: params.isProtected } : {}),
       ...(params.type ? { type: params.type } : {}),
@@ -464,10 +476,11 @@ const validateMockPathDescendant = (outputPath, fieldPath, fieldLabel) => {
   return `${fieldLabel} must be inside the selected Output Path.`
 }
 
-const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, detailsFieldPath, supportedFrameworkKeys = [] } = {}) => {
+const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, detailsFieldPath } = {}) => {
   const errors = {}
   const paths = [outputPath, passFieldPath, detailsFieldPath].filter(Boolean)
   const summaries = buildMockValidationRuntimePathSummaries(paths)
+  const allowedValidationPathScopes = new Set(['VALIDATION_RESULT', 'FRAMEWORK_STATE'])
 
   for (const summary of summaries) {
     if (summary.status === 'MISSING') {
@@ -477,10 +490,10 @@ const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, details
       continue
     }
 
-    if (String(summary.scope || '').toUpperCase() !== 'VALIDATION_RESULT') {
-      if (summary.pathKey === outputPath) errors.outputPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
-      else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
-      else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Runtime path "${summary.pathKey}" must be a VALIDATION_RESULT path.`
+    if (!allowedValidationPathScopes.has(String(summary.scope || '').toUpperCase())) {
+      if (summary.pathKey === outputPath) errors.outputPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
+      else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
+      else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
     }
   }
 
@@ -496,7 +509,7 @@ const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, details
 const validateMockValidationProducerSkill = ({ producerSkillId, supportedFrameworkKeys = [], status = '' } = {}) => {
   if (!producerSkillId) return null
 
-  const skill = (runtimeControlState.runtimeSkills || []).find((s) => s.id === producerSkillId)
+  const skill = (runtimeControlState.skills || []).find((s) => s.id === producerSkillId)
   if (!skill) return 'Producer skill was not found.'
 
   const validationIsActive = String(status ?? '').trim().toUpperCase() === VALIDATION_REGISTRY_STATUSES.ACTIVE
@@ -1219,6 +1232,8 @@ const getRuntimePathRows = ({
   scope = '',
   operation = '',
   category = '',
+  dataType = '',
+  sourceType = '',
   isProtected = '',
 } = {}) => {
   const normalizedSearch = normalizeSearch(q)
@@ -1232,6 +1247,8 @@ const getRuntimePathRows = ({
   const normalizedScope = String(scope ?? '').trim().toUpperCase()
   const normalizedOperation = String(operation ?? '').trim().toUpperCase()
   const normalizedCategory = String(category ?? '').trim().toUpperCase()
+  const normalizedDataType = String(dataType ?? '').trim().toUpperCase()
+  const normalizedSourceType = String(sourceType ?? '').trim().toUpperCase()
   const normalizedIsProtected = String(isProtected ?? '').trim().toLowerCase()
 
   return runtimeControlState.runtimePaths
@@ -1245,6 +1262,8 @@ const getRuntimePathRows = ({
         ? (row.allowedOperations ?? []).includes(normalizedOperation)
         : true
       const matchesCategory = normalizedCategory ? String(row.category ?? '').toUpperCase() === normalizedCategory : true
+      const matchesDataType = normalizedDataType ? String(row.dataType ?? '').toUpperCase() === normalizedDataType : true
+      const matchesSourceType = normalizedSourceType ? String(row.sourceType ?? '').toUpperCase() === normalizedSourceType : true
       const matchesProtected = normalizedIsProtected === 'true'
         ? Boolean(row.isProtected)
         : normalizedIsProtected === 'false'
@@ -1260,9 +1279,18 @@ const getRuntimePathRows = ({
         row.allowedOperations,
         row.category,
         row.dataType,
+        row.sourceType,
       ])
 
-      return matchesStatus && matchesFramework && matchesScope && matchesOperation && matchesCategory && matchesProtected && queryMatches
+      return matchesStatus
+        && matchesFramework
+        && matchesScope
+        && matchesOperation
+        && matchesCategory
+        && matchesDataType
+        && matchesSourceType
+        && matchesProtected
+        && queryMatches
     })
     .map((entry) => cloneRuntimePathRegistryEntry(entry))
 }
@@ -1489,6 +1517,16 @@ const findFrameworkRegistryById = (registryId) =>
 const findRuntimeAgentById = (agentId) =>
   runtimeControlState.agents.find((agent) => agent.id === agentId)
 
+const findRuntimePathById = (pathId) =>
+  runtimeControlState.runtimePaths.find((row) => row.id === pathId)
+
+const findRuntimePathByPathKey = (pathKey) => {
+  const normalizedPathKey = String(pathKey ?? '').trim()
+  return runtimeControlState.runtimePaths.find(
+    (row) => String(row.pathKey ?? '').trim() === normalizedPathKey,
+  )
+}
+
 const getActiveFrameworkRegistryKeys = () =>
   new Set(
     runtimeControlState.frameworkRegistries
@@ -1496,6 +1534,217 @@ const getActiveFrameworkRegistryKeys = () =>
       .map((entry) => normalizeFrameworkKey(entry.frameworkKey))
       .filter(Boolean),
   )
+
+const normalizeRuntimePathList = (values, { upper = false } = {}) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim())
+    .map((value) => (upper ? value.toUpperCase() : value))
+    .filter(Boolean))]
+
+const normalizeRuntimePathValueLabels = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+
+  return Object.entries(value).reduce((labels, [rawKey, rawValue]) => {
+    const key = String(rawKey ?? '').trim()
+    const label = String(rawValue ?? '').trim()
+    if (key && label) labels[key] = label
+    return labels
+  }, {})
+}
+
+const buildRuntimePathMockPayload = (payload = {}, existing = {}) => ({
+  ...existing,
+  ...(payload.pathKey !== undefined ? { pathKey: String(payload.pathKey ?? '').trim() } : {}),
+  ...(payload.label !== undefined ? { label: String(payload.label ?? '').trim() } : {}),
+  ...(payload.description !== undefined ? { description: String(payload.description ?? '').trim() } : {}),
+  ...(payload.status !== undefined ? { status: String(payload.status ?? '').trim().toUpperCase() } : {}),
+  ...(payload.frameworkKeys !== undefined ? { frameworkKeys: normalizeRuntimePathList(payload.frameworkKeys, { upper: true }) } : {}),
+  ...(payload.scope !== undefined ? { scope: String(payload.scope ?? '').trim().toUpperCase() } : {}),
+  ...(payload.allowedOperations !== undefined ? { allowedOperations: normalizeRuntimePathList(payload.allowedOperations, { upper: true }) } : {}),
+  ...(payload.dataType !== undefined ? { dataType: String(payload.dataType ?? '').trim().toUpperCase() } : {}),
+  ...(payload.category !== undefined ? { category: String(payload.category ?? '').trim().toUpperCase() } : {}),
+  ...(payload.sourceType !== undefined ? { sourceType: String(payload.sourceType ?? '').trim().toUpperCase() } : {}),
+  ...(payload.isProtected !== undefined ? { isProtected: Boolean(payload.isProtected) } : {}),
+  ...(payload.isSystem !== undefined ? { isSystem: Boolean(payload.isSystem) } : {}),
+  ...(payload.introducedInVersion !== undefined ? { introducedInVersion: String(payload.introducedInVersion ?? '').trim() } : {}),
+  ...(payload.deprecatedInVersion !== undefined ? { deprecatedInVersion: String(payload.deprecatedInVersion ?? '').trim() } : {}),
+  ...(payload.replacementPathKey !== undefined ? { replacementPathKey: String(payload.replacementPathKey ?? '').trim() } : {}),
+  ...(payload.notes !== undefined ? { notes: String(payload.notes ?? '').trim() } : {}),
+  ...(payload.displayOrder !== undefined && String(payload.displayOrder ?? '').trim() !== ''
+    ? { displayOrder: Number(payload.displayOrder) }
+    : payload.displayOrder !== undefined
+      ? { displayOrder: undefined }
+      : {}),
+  ...(payload.exampleValue !== undefined ? { exampleValue: payload.exampleValue } : {}),
+  ...(payload.compatibilityTags !== undefined ? { compatibilityTags: normalizeRuntimePathList(payload.compatibilityTags) } : {}),
+  ...(payload.allowedValues !== undefined ? { allowedValues: normalizeRuntimePathList(payload.allowedValues) } : {}),
+  ...(payload.allowedValueLabels !== undefined ? { allowedValueLabels: normalizeRuntimePathValueLabels(payload.allowedValueLabels) } : {}),
+  ...(payload.uiControl !== undefined ? { uiControl: String(payload.uiControl ?? '').trim().toUpperCase() } : {}),
+  ...(payload.placeholderText !== undefined ? { placeholderText: String(payload.placeholderText ?? '').trim() } : {}),
+  ...(payload.helpText !== undefined ? { helpText: String(payload.helpText ?? '').trim() } : {}),
+  ...(payload.defaultValue !== undefined ? { defaultValue: payload.defaultValue } : {}),
+  ...(payload.minValue !== undefined && String(payload.minValue ?? '').trim() !== ''
+    ? { minValue: Number(payload.minValue) }
+    : payload.minValue !== undefined
+      ? { minValue: undefined }
+      : {}),
+  ...(payload.maxValue !== undefined && String(payload.maxValue ?? '').trim() !== ''
+    ? { maxValue: Number(payload.maxValue) }
+    : payload.maxValue !== undefined
+      ? { maxValue: undefined }
+      : {}),
+  ...(payload.minLength !== undefined && String(payload.minLength ?? '').trim() !== ''
+    ? { minLength: Number(payload.minLength) }
+    : payload.minLength !== undefined
+      ? { minLength: undefined }
+      : {}),
+  ...(payload.maxLength !== undefined && String(payload.maxLength ?? '').trim() !== ''
+    ? { maxLength: Number(payload.maxLength) }
+    : payload.maxLength !== undefined
+      ? { maxLength: undefined }
+      : {}),
+  ...(payload.regexPattern !== undefined ? { regexPattern: String(payload.regexPattern ?? '').trim() } : {}),
+  ...(payload.isNullable !== undefined ? { isNullable: Boolean(payload.isNullable) } : {}),
+})
+
+const validateMockRuntimePathPayload = (payload = {}, { isEditMode = false } = {}) => {
+  const errors = {}
+
+  if (!isEditMode && !String(payload.pathKey ?? '').trim()) {
+    errors.pathKey = 'Path key is required.'
+  }
+
+  if (!String(payload.label ?? '').trim()) {
+    errors.label = 'Label is required.'
+  }
+
+  if (!String(payload.description ?? '').trim()) {
+    errors.description = 'Description is required.'
+  }
+
+  const frameworkKeys = normalizeRuntimePathList(payload.frameworkKeys, { upper: true })
+  if (frameworkKeys.length === 0) {
+    errors.frameworkKeys = 'At least one framework key is required.'
+  } else {
+    const activeFrameworkKeys = getActiveFrameworkRegistryKeys()
+    const inactiveKey = frameworkKeys.find((frameworkKey) => !activeFrameworkKeys.has(frameworkKey))
+    if (inactiveKey) {
+      errors.frameworkKeys = `Inactive framework key "${inactiveKey}".`
+    }
+  }
+
+  const allowedOperations = normalizeRuntimePathList(payload.allowedOperations, { upper: true })
+  if (allowedOperations.length === 0) {
+    errors.allowedOperations = 'At least one allowed operation is required.'
+  }
+
+  for (const field of ['status', 'scope', 'dataType', 'category', 'sourceType']) {
+    if (!String(payload[field] ?? '').trim()) {
+      errors[field] = `${field} is required.`
+    }
+  }
+
+  return errors
+}
+
+const buildMockRuntimePathDependencies = (pathKey) => {
+  const normalizedPathKey = String(pathKey ?? '').trim()
+  const skills = (runtimeControlState.skills || [])
+    .filter((skill) =>
+      [...(skill.allowedReadPaths || []), ...(skill.allowedWritePaths || []), ...(skill.forbiddenWritePaths || [])]
+        .includes(normalizedPathKey),
+    )
+    .map((skill) => ({
+      id: skill.id,
+      key: skill.key,
+      name: skill.name,
+      status: skill.status,
+    }))
+
+  const agents = (runtimeControlState.agents || [])
+    .filter((agent) => (Array.isArray(agent.executionPlan) ? agent.executionPlan : []).some((step) =>
+      [...(step.readsFrom || []), ...(step.writesTo || [])].includes(normalizedPathKey),
+    ))
+    .map((agent) => ({
+      id: agent.id,
+      key: agent.key,
+      name: agent.name,
+      status: agent.status,
+    }))
+
+  const workflowPolicies = (runtimeControlState.workflowPolicies || [])
+    .filter((policy) => [
+      ...(Array.isArray(policy.conditions) ? policy.conditions.map((condition) => condition.path) : []),
+      ...(Array.isArray(policy.onPassEffects) ? policy.onPassEffects.map((effect) => effect.targetPath) : []),
+      ...(Array.isArray(policy.onFailEffects) ? policy.onFailEffects.map((effect) => effect.targetPath) : []),
+    ].includes(normalizedPathKey))
+    .map((policy) => ({
+      id: policy.id,
+      key: policy.key,
+      name: policy.name,
+      status: policy.status,
+    }))
+
+  const validations = (runtimeControlState.validationRegistry || [])
+    .filter((validation) =>
+      [validation.outputPath, validation.passFieldPath, validation.detailsFieldPath].includes(normalizedPathKey),
+    )
+    .map((validation) => ({
+      id: validation.id,
+      key: validation.key,
+      label: validation.label,
+      status: validation.status,
+    }))
+
+  const items = [
+    ...skills.map((skill) => ({ sourceType: 'Runtime Skill', sourceId: skill.id, sourceKey: skill.key, sourceLabel: skill.name, status: skill.status })),
+    ...agents.map((agent) => ({ sourceType: 'Runtime Agent', sourceId: agent.id, sourceKey: agent.key, sourceLabel: agent.name, status: agent.status })),
+    ...workflowPolicies.map((policy) => ({ sourceType: 'Workflow Policy', sourceId: policy.id, sourceKey: policy.key, sourceLabel: policy.name, status: policy.status })),
+    ...validations.map((validation) => ({ sourceType: 'Validation Registry', sourceId: validation.id, sourceKey: validation.key, sourceLabel: validation.label, status: validation.status })),
+  ]
+  const activeItems = items.filter((item) => String(item.status ?? '').trim().toUpperCase() === 'ACTIVE')
+
+  return {
+    skillIds: skills.map((skill) => skill.id).filter(Boolean),
+    agentIds: agents.map((agent) => agent.id).filter(Boolean),
+    workflowPolicyIds: workflowPolicies.map((policy) => policy.id).filter(Boolean),
+    validationIds: validations.map((validation) => validation.id).filter(Boolean),
+    frameworkPackageIds: [],
+    skills,
+    agents,
+    workflowPolicies,
+    validations,
+    frameworkPackages: [],
+    items,
+    summary: {
+      skills: skills.length,
+      agents: agents.length,
+      workflowPolicies: workflowPolicies.length,
+      validations: validations.length,
+      frameworkPackages: 0,
+      total: items.length,
+      active: activeItems.length,
+    },
+    hasDependencies: items.length > 0,
+    hasActiveDependencies: activeItems.length > 0,
+  }
+}
+
+const buildRuntimePathDependencyConfirmationError = (dependencies) => ({
+  error: {
+    status: 409,
+    data: {
+      error: {
+        code: 'DEPENDENCY_CONFIRMATION_REQUIRED',
+        message: 'Runtime path has active dependencies. Confirm the lifecycle change to continue.',
+        details: {
+          dependencies,
+          confirmDependencies: 'Set confirmDependencies to true after reviewing dependencies.',
+        },
+      },
+    },
+  },
+})
 
 const validateMockRuntimeAgent = (agent) => {
   const errors = {}
@@ -2859,6 +3108,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           scope = '',
           operation = '',
           category = '',
+          dataType = '',
+          sourceType = '',
           isProtected = '',
         } = {},
         api,
@@ -2878,6 +3129,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               scope,
               operation,
               category,
+              dataType,
+              sourceType,
               isProtected,
               defaultPageSize: RUNTIME_PATH_REGISTRY_PAGE_SIZE,
             }),
@@ -2888,7 +3141,18 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const normalizedPage = normalizePositiveInteger(page, 1)
         const normalizedPageSize = normalizePositiveInteger(pageSize, RUNTIME_PATH_REGISTRY_PAGE_SIZE)
-        const rows = getRuntimePathRows({ q, status, frameworkKey, frameworkKeys, scope, operation, category, isProtected })
+        const rows = getRuntimePathRows({
+          q,
+          status,
+          frameworkKey,
+          frameworkKeys,
+          scope,
+          operation,
+          category,
+          dataType,
+          sourceType,
+          isProtected,
+        })
 
         return {
           data: buildListResponse({
@@ -2903,6 +3167,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               scope: String(scope ?? '').trim(),
               operation: String(operation ?? '').trim(),
               category: String(category ?? '').trim(),
+              dataType: String(dataType ?? '').trim(),
+              sourceType: String(sourceType ?? '').trim(),
               isProtected: String(isProtected ?? '').trim(),
             },
           }),
@@ -2915,6 +3181,345 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               RUNTIME_PATH_LIST_TAG,
             ]
           : [RUNTIME_PATH_LIST_TAG],
+    }),
+
+    createRuntimePath: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pathKey = String(payload.pathKey ?? '').trim()
+        if (findRuntimePathByPathKey(pathKey)) {
+          return buildConflictError('Path key must be unique.', {
+            pathKey: 'Path key must be unique.',
+          })
+        }
+
+        const nextPayload = buildRuntimePathMockPayload({
+          status: RUNTIME_PATH_REGISTRY_STATUSES.DRAFT,
+          isSystem: false,
+          ...payload,
+        })
+        const validationErrors = validateMockRuntimePathPayload(nextPayload)
+        if (Object.keys(validationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validationErrors)
+        }
+
+        const created = cloneRuntimePathRegistryEntry({
+          id: buildRuntimePathRegistryStableId(nextPayload.pathKey),
+          ...nextPayload,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: [created, ...runtimeControlState.runtimePaths],
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(created)) }
+      },
+      invalidatesTags: [RUNTIME_PATH_LIST_TAG],
+    }),
+
+    getRuntimePath: build.query({
+      queryFn: async (pathId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('runtime-paths', pathId),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePath = findRuntimePathById(pathId)
+        if (!runtimePath) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(runtimePath)) }
+      },
+      providesTags: (_result, _error, pathId) => [
+        { type: 'RuntimePath', id: pathId },
+      ],
+    }),
+
+    updateRuntimePath: build.mutation({
+      queryFn: async ({ pathId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: pathId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existing = findRuntimePathById(pathId)
+        if (!existing) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        if (
+          payload.pathKey !== undefined
+          && String(payload.pathKey ?? '').trim() !== String(existing.pathKey ?? '').trim()
+        ) {
+          return buildValidationFailedError('Validation failed.', {
+            pathKey: 'Path key is immutable and cannot be changed after creation.',
+          })
+        }
+
+        const nextPayload = buildRuntimePathMockPayload(payload, existing)
+        const validationErrors = validateMockRuntimePathPayload(nextPayload, { isEditMode: true })
+        if (Object.keys(validationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validationErrors)
+        }
+
+        const next = cloneRuntimePathRegistryEntry({
+          ...nextPayload,
+          id: existing.id,
+          pathKey: existing.pathKey,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: runtimeControlState.runtimePaths.map((row) =>
+            row.id === pathId ? next : row,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(next)) }
+      },
+      invalidatesTags: (_result, _error, { pathId }) => [
+        RUNTIME_PATH_LIST_TAG,
+        { type: 'RuntimePath', id: pathId },
+      ],
+    }),
+
+    duplicateRuntimePath: build.mutation({
+      queryFn: async ({ pathId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: `${pathId}/duplicate`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const source = findRuntimePathById(pathId)
+        if (!source) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        const pathKey = String(payload.pathKey ?? '').trim()
+        if (findRuntimePathByPathKey(pathKey)) {
+          return buildConflictError('Path key must be unique.', {
+            pathKey: 'Path key must be unique.',
+          })
+        }
+
+        const nextPayload = buildRuntimePathMockPayload({
+          ...source,
+          pathKey,
+          label: payload.label ?? source.label,
+          description: payload.description ?? source.description,
+          status: payload.status ?? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT,
+          isSystem: false,
+        })
+        const validationErrors = validateMockRuntimePathPayload(nextPayload)
+        if (Object.keys(validationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validationErrors)
+        }
+
+        const created = cloneRuntimePathRegistryEntry({
+          ...nextPayload,
+          id: buildRuntimePathRegistryStableId(nextPayload.pathKey),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: [created, ...runtimeControlState.runtimePaths],
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(created)) }
+      },
+      invalidatesTags: [RUNTIME_PATH_LIST_TAG],
+    }),
+
+    getRuntimePathDependencies: build.query({
+      queryFn: async (pathId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('runtime-paths', `${pathId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePath = findRuntimePathById(pathId)
+        if (!runtimePath) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        return {
+          data: buildEntityResponse({
+            id: pathId,
+            pathKey: runtimePath.pathKey,
+            dependencies: buildMockRuntimePathDependencies(runtimePath.pathKey),
+          }),
+        }
+      },
+      providesTags: (_result, _error, pathId) => [
+        { type: 'RuntimePath', id: pathId },
+      ],
+    }),
+
+    activateRuntimePath: build.mutation({
+      queryFn: async ({ pathId } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: `${pathId}/activate`,
+              method: 'POST',
+              body: {},
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePath = findRuntimePathById(pathId)
+        if (!runtimePath) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        const next = cloneRuntimePathRegistryEntry({
+          ...runtimePath,
+          status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: runtimeControlState.runtimePaths.map((row) =>
+            row.id === pathId ? next : row,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(next)) }
+      },
+      invalidatesTags: (_result, _error, { pathId }) => [
+        RUNTIME_PATH_LIST_TAG,
+        { type: 'RuntimePath', id: pathId },
+      ],
+    }),
+
+    disableRuntimePath: build.mutation({
+      queryFn: async ({ pathId, confirmDependencies = false } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: `${pathId}/disable`,
+              method: 'POST',
+              body: { confirmDependencies },
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePath = findRuntimePathById(pathId)
+        if (!runtimePath) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        const dependencies = buildMockRuntimePathDependencies(runtimePath.pathKey)
+        if (dependencies.hasActiveDependencies && !confirmDependencies) {
+          return buildRuntimePathDependencyConfirmationError(dependencies)
+        }
+
+        const next = cloneRuntimePathRegistryEntry({
+          ...runtimePath,
+          status: RUNTIME_PATH_REGISTRY_STATUSES.INACTIVE,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: runtimeControlState.runtimePaths.map((row) =>
+            row.id === pathId ? next : row,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(next)) }
+      },
+      invalidatesTags: (_result, _error, { pathId }) => [
+        RUNTIME_PATH_LIST_TAG,
+        { type: 'RuntimePath', id: pathId },
+      ],
+    }),
+
+    deprecateRuntimePath: build.mutation({
+      queryFn: async ({ pathId, deprecatedInVersion = '' } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: `${pathId}/deprecate`,
+              method: 'POST',
+              body: { deprecatedInVersion },
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePath = findRuntimePathById(pathId)
+        if (!runtimePath) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        const next = cloneRuntimePathRegistryEntry({
+          ...runtimePath,
+          status: RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED,
+          deprecatedInVersion: String(deprecatedInVersion ?? '').trim() || runtimePath.deprecatedInVersion,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: runtimeControlState.runtimePaths.map((row) =>
+            row.id === pathId ? next : row,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(next)) }
+      },
+      invalidatesTags: (_result, _error, { pathId }) => [
+        RUNTIME_PATH_LIST_TAG,
+        { type: 'RuntimePath', id: pathId },
+      ],
     }),
 
     listRuntimeSkills: build.query({
@@ -3868,6 +4473,15 @@ export const {
   useUpdateSkillRoleMutation,
   useListRuntimePathsQuery,
   useLazyListRuntimePathsQuery,
+  useCreateRuntimePathMutation,
+  useGetRuntimePathQuery,
+  useUpdateRuntimePathMutation,
+  useDuplicateRuntimePathMutation,
+  useGetRuntimePathDependenciesQuery,
+  useLazyGetRuntimePathDependenciesQuery,
+  useActivateRuntimePathMutation,
+  useDisableRuntimePathMutation,
+  useDeprecateRuntimePathMutation,
   useListRuntimeSkillsQuery,
   useCreateRuntimeSkillMutation,
   useGetRuntimeSkillQuery,

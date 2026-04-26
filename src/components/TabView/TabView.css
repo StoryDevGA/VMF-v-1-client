@@ -60,7 +60,7 @@
 
 .tabview--even-tabs.tabview--horizontal .tabview__tablist {
   /* Design-system variant: editors can opt in for evenly distributed, wrapping tabs. */
-  overflow-x: visible;
+  overflow: visible;
   flex-wrap: wrap;
 }
 
@@ -204,17 +204,17 @@
 }
 
 .tabview--boxed .tabview__tab {
-  border: 1px solid var(--color-border);
+  border: var(--border-width-thin) solid var(--color-border);
   border-bottom: none;
   border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
-  margin-right: -1px;
+  margin-right: calc(var(--border-width-thin) * -1);
 }
 
 .tabview--vertical.tabview--boxed .tabview__tab {
-  border: 1px solid var(--color-border);
+  border: var(--border-width-thin) solid var(--color-border);
   border-right: none;
   border-radius: var(--border-radius-md) 0 0 var(--border-radius-md);
-  margin-bottom: -1px;
+  margin-bottom: calc(var(--border-width-thin) * -1);
   margin-right: 0;
 }
 
@@ -311,12 +311,12 @@
   }
 
   .tabview--vertical.tabview--boxed .tabview__tab {
-    border: 1px solid var(--color-border);
+    border: var(--border-width-thin) solid var(--color-border);
     border-bottom: none;
-    border-right: 1px solid var(--color-border);
+    border-right: var(--border-width-thin) solid var(--color-border);
     border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
     margin-bottom: 0;
-    margin-right: -1px;
+    margin-right: calc(var(--border-width-thin) * -1);
   }
 
   .tabview--vertical.tabview--boxed .tabview__tab--active {

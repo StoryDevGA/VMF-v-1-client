@@ -1,8 +1,3 @@
-.super-admin-runtime-path-registry__fieldset,
-.super-admin-runtime-path-registry__card {
-  height: 100%;
-}
-
 .super-admin-runtime-path-registry__card-body {
   display: grid;
   gap: var(--spacing-sm);
@@ -47,7 +42,7 @@
 }
 
 .super-admin-runtime-path-registry__table {
-  min-width: 1080px;
+  min-width: 1240px;
 }
 
 @media (min-width: 768px) {
@@ -166,6 +161,10 @@
   color: var(--color-text-secondary);
   line-height: var(--line-height-tight);
   white-space: nowrap;
+}
+
+.super-admin-runtime-path-registry__row-actions {
+  min-width: 120px;
 }
 
 .super-admin-runtime-path-registry__pagination {

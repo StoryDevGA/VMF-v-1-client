@@ -64,6 +64,9 @@ const SuperAdminWorkflowPolicyEditor = lazy(
 const SuperAdminRuntimePathRegistry = lazy(
   () => import('../pages/SuperAdminRuntimePathRegistry'),
 )
+const SuperAdminRuntimePathRegistryEditor = lazy(
+  () => import('../pages/SuperAdminRuntimePathRegistryEditor'),
+)
 const SuperAdminSkillRoleRegistry = lazy(
   () => import('../pages/SuperAdminSkillRoleRegistry'),
 )
@@ -251,6 +254,14 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/runtime-paths',
                   element: <SuperAdminRuntimePathRegistry />,
+                },
+                {
+                  path: 'runtime-control/runtime-paths/new',
+                  element: <SuperAdminRuntimePathRegistryEditor />,
+                },
+                {
+                  path: 'runtime-control/runtime-paths/:pathId/edit',
+                  element: <SuperAdminRuntimePathRegistryEditor />,
                 },
                 {
                   path: 'runtime-control/skill-roles',

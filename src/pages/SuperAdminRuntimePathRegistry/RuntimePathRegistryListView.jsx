@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -179,6 +179,36 @@ function renderCompatibilitySummary(_value, row) {
   )
 }
 
+function RuntimePathRowActionsMenu({ row, onAction, disabled = false }) {
+  const status = String(row?.status ?? '').toUpperCase()
+  const actionOptions = [
+    { value: 'Edit', label: 'Edit' },
+    { value: 'Duplicate', label: 'Duplicate' },
+    ...(status !== 'ACTIVE' ? [{ value: 'Activate', label: 'Activate' }] : []),
+    ...(status !== 'INACTIVE' ? [{ value: 'Disable', label: 'Disable' }] : []),
+    ...(status !== 'DEPRECATED' ? [{ value: 'Deprecate', label: 'Deprecate' }] : []),
+  ]
+
+  return (
+    <div className="super-admin-runtime-path-registry__row-actions">
+      <Select
+        size="sm"
+        value=""
+        placeholder="Actions"
+        options={actionOptions}
+        disabled={disabled}
+        onChange={(event) => {
+          const label = event.target.value
+          if (label) {
+            onAction(label, row)
+          }
+        }}
+        aria-label={`Actions for ${row?.label ?? row?.pathKey ?? 'runtime path'}`}
+      />
+    </div>
+  )
+}
+
 export function RuntimePathRegistryListView({
   search,
   setSearch,
@@ -196,7 +226,45 @@ export function RuntimePathRegistryListView({
   isListFetching,
   listAppError,
   onBackClick,
+  onCreatePath,
+  onEditPath,
+  onDuplicatePath,
+  onActivatePath,
+  onDisablePath,
+  onDeprecatePath,
+  isActionLoading = false,
 }) {
+  const handleRowAction = useCallback(
+    (label, row) => {
+      if (label === 'Edit') {
+        onEditPath(row)
+      }
+
+      if (label === 'Duplicate') {
+        onDuplicatePath(row)
+      }
+
+      if (label === 'Activate') {
+        onActivatePath(row)
+      }
+
+      if (label === 'Disable') {
+        onDisablePath(row)
+      }
+
+      if (label === 'Deprecate') {
+        onDeprecatePath(row)
+      }
+    },
+    [
+      onActivatePath,
+      onDeprecatePath,
+      onDisablePath,
+      onDuplicatePath,
+      onEditPath,
+    ],
+  )
+
   const columns = useMemo(
     () => [
       {
@@ -254,8 +322,22 @@ export function RuntimePathRegistryListView({
         width: '10%',
         render: (value) => <TableDateTime value={value} />,
       },
+      {
+        key: 'rowActions',
+        label: 'Actions',
+        mobileLabel: 'Actions',
+        align: 'center',
+        width: '164px',
+        render: (_value, row) => (
+          <RuntimePathRowActionsMenu
+            row={row}
+            onAction={handleRowAction}
+            disabled={isActionLoading}
+          />
+        ),
+      },
     ],
-    [],
+    [handleRowAction, isActionLoading],
   )
 
   return (
@@ -266,6 +348,9 @@ export function RuntimePathRegistryListView({
           <div className="super-admin-runtime-path-registry__catalogue-actions">
             <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
               Back
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={onCreatePath}>
+              Create
             </Button>
           </div>
 

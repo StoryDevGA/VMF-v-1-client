@@ -1,0 +1,212 @@
+.super-admin-runtime-path-registry-editor__card-body {
+  display: grid;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.super-admin-runtime-path-registry-editor__form,
+.super-admin-runtime-path-registry-editor__section-header {
+  display: grid;
+}
+
+.super-admin-runtime-path-registry-editor__form {
+  gap: var(--spacing-md);
+}
+
+.super-admin-runtime-path-registry-editor__section-header {
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-runtime-path-registry-editor__top-actions,
+.super-admin-runtime-path-registry-editor__footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-runtime-path-registry-editor__loading,
+.super-admin-runtime-path-registry-editor__loading-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-runtime-path-registry-editor__loading {
+  justify-content: center;
+  padding: var(--spacing-xl);
+}
+
+.super-admin-runtime-path-registry-editor__loading p,
+.super-admin-runtime-path-registry-editor__section-title,
+.super-admin-runtime-path-registry-editor__section-copy,
+.super-admin-runtime-path-registry-editor__helper,
+.super-admin-runtime-path-registry-editor__error {
+  margin: 0;
+}
+
+.super-admin-runtime-path-registry-editor__loading p,
+.super-admin-runtime-path-registry-editor__helper,
+.super-admin-runtime-path-registry-editor__error {
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-runtime-path-registry-editor__section-copy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+
+.super-admin-runtime-path-registry-editor__section-title {
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-snug);
+}
+
+.super-admin-runtime-path-registry-editor__helper {
+  color: var(--color-text-secondary);
+}
+
+.super-admin-runtime-path-registry-editor__error {
+  color: var(--color-danger);
+}
+
+.super-admin-runtime-path-registry-editor__status-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-md);
+}
+
+.super-admin-runtime-path-registry-editor__section {
+  display: grid;
+  gap: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.super-admin-runtime-path-registry-editor__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--spacing-md) * 13.75), 1fr));
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-runtime-path-registry-editor__identity-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--spacing-md) * 13.75), 1fr));
+  gap: var(--spacing-sm);
+  align-items: start;
+}
+
+.super-admin-runtime-path-registry-editor__field {
+  display: grid;
+  gap: var(--spacing-2xs);
+  align-content: start;
+  min-width: 0;
+}
+
+.super-admin-runtime-path-registry-editor__field-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.super-admin-runtime-path-registry-editor__field .input-container,
+.super-admin-runtime-path-registry-editor__field .select-container,
+.super-admin-runtime-path-registry-editor__field .textarea-container {
+  width: 100%;
+}
+
+.super-admin-runtime-path-registry-editor__toggle-row,
+.super-admin-runtime-path-registry-editor__operation-grid {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.super-admin-runtime-path-registry-editor__framework-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-runtime-path-registry-editor__framework-add-button {
+  align-self: end;
+  min-height: calc(var(--spacing-md) * 3.5);
+}
+
+.super-admin-runtime-path-registry-editor__pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-runtime-path-registry-editor__pill-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+}
+
+.super-admin-runtime-path-registry-editor__dependency-panel {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-runtime-path-registry-editor__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.super-admin-runtime-path-registry-editor__summary-grid span {
+  display: grid;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-runtime-path-registry-editor__summary-grid strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.super-admin-runtime-path-registry-editor__tabs .tabview__panel {
+  padding-top: var(--spacing-md);
+}
+
+@media (max-width: 1023px) {
+  .super-admin-runtime-path-registry-editor__summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .super-admin-runtime-path-registry-editor__card-body {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-runtime-path-registry-editor__row,
+  .super-admin-runtime-path-registry-editor__identity-row,
+  .super-admin-runtime-path-registry-editor__framework-controls,
+  .super-admin-runtime-path-registry-editor__summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .super-admin-runtime-path-registry-editor__top-actions > *,
+  .super-admin-runtime-path-registry-editor__footer-actions > *,
+  .super-admin-runtime-path-registry-editor__framework-controls > * {
+    width: 100%;
+  }
+}

@@ -4,6 +4,11 @@
   padding-block: var(--spacing-xl);
 }
 
+.super-admin-runtime-path-registry__fieldset,
+.super-admin-runtime-path-registry__card {
+  height: 100%;
+}
+
 .super-admin-runtime-path-registry__header {
   display: grid;
   gap: var(--spacing-xs);

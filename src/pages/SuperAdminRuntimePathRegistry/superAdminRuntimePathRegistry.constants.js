@@ -1,4 +1,5 @@
 export const RUNTIME_PATH_REGISTRY_STATUSES = Object.freeze({
+  DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   DEPRECATED: 'DEPRECATED',
@@ -8,6 +9,55 @@ export const RUNTIME_PATH_REGISTRY_OPERATIONS = Object.freeze({
   READ: 'READ',
   WRITE: 'WRITE',
   BIND: 'BIND',
+})
+
+export const RUNTIME_PATH_REGISTRY_SCOPES = Object.freeze({
+  FRAMEWORK_STATE: 'FRAMEWORK_STATE',
+  RUNTIME_INPUT: 'RUNTIME_INPUT',
+  RUNTIME_OUTPUT: 'RUNTIME_OUTPUT',
+  SNAPSHOT: 'SNAPSHOT',
+  VALIDATION_RESULT: 'VALIDATION_RESULT',
+  SYSTEM_CONTEXT: 'SYSTEM_CONTEXT',
+})
+
+export const RUNTIME_PATH_REGISTRY_DATA_TYPES = Object.freeze({
+  STRING: 'STRING',
+  NUMBER: 'NUMBER',
+  BOOLEAN: 'BOOLEAN',
+  OBJECT: 'OBJECT',
+  ARRAY: 'ARRAY',
+  ENUM: 'ENUM',
+  MIXED: 'MIXED',
+})
+
+export const RUNTIME_PATH_REGISTRY_CATEGORIES = Object.freeze({
+  STATE: 'STATE',
+  SECTION: 'SECTION',
+  METADATA: 'METADATA',
+  VALIDATION: 'VALIDATION',
+  LIFECYCLE: 'LIFECYCLE',
+  OUTPUT: 'OUTPUT',
+  ARTIFACT: 'ARTIFACT',
+  INPUT: 'INPUT',
+  REFERENCE: 'REFERENCE',
+  SYSTEM: 'SYSTEM',
+})
+
+export const RUNTIME_PATH_REGISTRY_SOURCE_TYPES = Object.freeze({
+  RUNTIME_STATE: 'RUNTIME_STATE',
+  SNAPSHOT: 'SNAPSHOT',
+  REQUEST_PAYLOAD: 'REQUEST_PAYLOAD',
+  DERIVED: 'DERIVED',
+  SYSTEM_GENERATED: 'SYSTEM_GENERATED',
+})
+
+export const RUNTIME_PATH_REGISTRY_UI_CONTROLS = Object.freeze({
+  TEXT: 'TEXT',
+  TEXTAREA: 'TEXTAREA',
+  NUMBER: 'NUMBER',
+  CHECKBOX: 'CHECKBOX',
+  SELECT: 'SELECT',
+  JSON: 'JSON',
 })
 
 export const RUNTIME_PATH_REGISTRY_PAGE_SIZE = 20
@@ -51,6 +101,31 @@ export const RUNTIME_PATH_REGISTRY_OPERATION_OPTIONS = Object.freeze([
   ...Object.values(RUNTIME_PATH_REGISTRY_OPERATIONS).map((value) => ({ label: value, value })),
 ])
 
+export const RUNTIME_PATH_REGISTRY_FORM_OPERATION_OPTIONS = Object.freeze(
+  Object.values(RUNTIME_PATH_REGISTRY_OPERATIONS).map((value) => ({ label: value, value })),
+)
+
+export const RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS = Object.freeze(
+  Object.values(RUNTIME_PATH_REGISTRY_SCOPES).map((value) => ({ label: value, value })),
+)
+
+export const RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS = Object.freeze(
+  Object.values(RUNTIME_PATH_REGISTRY_DATA_TYPES).map((value) => ({ label: value, value })),
+)
+
+export const RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS = Object.freeze(
+  Object.values(RUNTIME_PATH_REGISTRY_CATEGORIES).map((value) => ({ label: value, value })),
+)
+
+export const RUNTIME_PATH_REGISTRY_SOURCE_TYPE_OPTIONS = Object.freeze(
+  Object.values(RUNTIME_PATH_REGISTRY_SOURCE_TYPES).map((value) => ({ label: value, value })),
+)
+
+export const RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS = Object.freeze([
+  { label: 'None', value: '' },
+  ...Object.values(RUNTIME_PATH_REGISTRY_UI_CONTROLS).map((value) => ({ label: value, value })),
+])
+
 export const RUNTIME_PATH_REGISTRY_PROTECTED_OPTIONS = Object.freeze([
   { label: 'All', value: '' },
   { label: 'Protected only', value: 'true' },
@@ -65,6 +140,7 @@ export const formatRuntimePathRegistryStatus = (value) =>
 export const getRuntimePathRegistryStatusVariant = (value) => {
   const normalized = formatRuntimePathRegistryStatus(value)
 
+  if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DRAFT) return 'info'
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE) return 'success'
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED) return 'warning'
   return 'neutral'
@@ -878,6 +954,30 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
   }),
   Object.freeze({
+    pathKey: 'framework_state.validation.required_sections',
+    label: 'Required Sections Validation',
+    description: 'Validation result container for required framework sections.',
+    status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
+    frameworkKeys: Object.freeze(['VMF']),
+    scope: 'FRAMEWORK_STATE',
+    allowedOperations: Object.freeze([
+      RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
+      RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
+      RUNTIME_PATH_REGISTRY_OPERATIONS.BIND,
+    ]),
+    dataType: 'OBJECT',
+    category: 'VALIDATION',
+    sourceType: 'RUNTIME_STATE',
+    isProtected: false,
+    isSystem: true,
+    introducedInVersion: '2.3.1',
+    exampleValue: { is_valid: true, missing_sections: [] },
+    uiControl: 'JSON',
+    isNullable: false,
+    updatedAt: '2026-04-23T10:00:00.000Z',
+    updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
+  }),
+  Object.freeze({
     pathKey: 'framework_state.validation.required_sections.is_valid',
     label: 'Required Sections Valid',
     description: 'Whether all required framework sections are present and valid.',
@@ -898,6 +998,31 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     exampleValue: true,
     uiControl: 'CHECKBOX',
     defaultValue: true,
+    isNullable: false,
+    updatedAt: '2026-04-23T10:00:00.000Z',
+    updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
+  }),
+  Object.freeze({
+    pathKey: 'framework_state.validation.required_sections.missing_sections',
+    label: 'Required Sections Missing Sections',
+    description: 'Framework section keys missing from the required sections validation result.',
+    status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
+    frameworkKeys: Object.freeze(['VMF']),
+    scope: 'FRAMEWORK_STATE',
+    allowedOperations: Object.freeze([
+      RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
+      RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
+      RUNTIME_PATH_REGISTRY_OPERATIONS.BIND,
+    ]),
+    dataType: 'ARRAY',
+    category: 'VALIDATION',
+    sourceType: 'RUNTIME_STATE',
+    isProtected: false,
+    isSystem: true,
+    introducedInVersion: '2.3.1',
+    exampleValue: [],
+    uiControl: 'JSON',
+    defaultValue: [],
     isNullable: false,
     updatedAt: '2026-04-23T10:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
@@ -936,5 +1061,16 @@ export const cloneRuntimePathRegistryEntry = (entry) => ({
   ...entry,
   frameworkKeys: [...(entry.frameworkKeys ?? [])],
   allowedOperations: [...(entry.allowedOperations ?? [])],
+  compatibilityTags: [...(entry.compatibilityTags ?? [])],
+  allowedValues: Array.isArray(entry.allowedValues) ? [...entry.allowedValues] : entry.allowedValues,
+  allowedValueLabels: entry.allowedValueLabels ? { ...entry.allowedValueLabels } : entry.allowedValueLabels,
+  exampleValue:
+    entry.exampleValue && typeof entry.exampleValue === 'object'
+      ? JSON.parse(JSON.stringify(entry.exampleValue))
+      : entry.exampleValue,
+  defaultValue:
+    entry.defaultValue && typeof entry.defaultValue === 'object'
+      ? JSON.parse(JSON.stringify(entry.defaultValue))
+      : entry.defaultValue,
   updatedBy: entry.updatedBy ? { ...entry.updatedBy } : null,
 })

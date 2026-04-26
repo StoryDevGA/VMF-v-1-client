@@ -10,12 +10,18 @@ import {
   useActivateFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
   useCreateRuntimeAgentMutation,
+  useCreateRuntimePathMutation,
   useCreateRuntimeSkillMutation,
   useCreateValidationRegistryMutation,
   useCreateWorkflowPolicyMutation,
+  useDeprecateRuntimePathMutation,
+  useDisableRuntimePathMutation,
+  useDuplicateRuntimePathMutation,
   useGetFrameworkRegistryQuery,
   useGetFrameworkPackageQuery,
   useGetRuntimeAgentQuery,
+  useGetRuntimePathDependenciesQuery,
+  useGetRuntimePathQuery,
   useGetRuntimeSkillQuery,
   useGetValidationRegistryDependenciesQuery,
   useGetValidationRegistryQuery,
@@ -29,9 +35,11 @@ import {
   useListValidationRegistryQuery,
   useListWorkflowPoliciesQuery,
   useTestWorkflowPolicyMutation,
+  useActivateRuntimePathMutation,
   useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
   useUpdateRuntimeAgentMutation,
+  useUpdateRuntimePathMutation,
   useUpdateRuntimeSkillMutation,
   useUpdateValidationRegistryMutation,
   useUpdateWorkflowPolicyMutation,
@@ -67,6 +75,14 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeAgent')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimeAgent')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimePaths')
+    expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('duplicateRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimePathDependencies')
+    expect(runtimeControlApi.endpoints).toHaveProperty('activateRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('disableRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('deprecateRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeSkills')
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeSkill')
@@ -90,6 +106,8 @@ describe('runtimeControlApi', () => {
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
     expect(typeof useGetRuntimeAgentQuery).toBe('function')
     expect(typeof useListRuntimePathsQuery).toBe('function')
+    expect(typeof useGetRuntimePathQuery).toBe('function')
+    expect(typeof useGetRuntimePathDependenciesQuery).toBe('function')
     expect(typeof useListRuntimeSkillsQuery).toBe('function')
     expect(typeof useGetRuntimeSkillQuery).toBe('function')
     expect(typeof useListValidationRegistryQuery).toBe('function')
@@ -108,6 +126,12 @@ describe('runtimeControlApi', () => {
     expect(typeof useActivateFrameworkPackageMutation).toBe('function')
     expect(typeof useCreateRuntimeAgentMutation).toBe('function')
     expect(typeof useUpdateRuntimeAgentMutation).toBe('function')
+    expect(typeof useCreateRuntimePathMutation).toBe('function')
+    expect(typeof useUpdateRuntimePathMutation).toBe('function')
+    expect(typeof useDuplicateRuntimePathMutation).toBe('function')
+    expect(typeof useActivateRuntimePathMutation).toBe('function')
+    expect(typeof useDisableRuntimePathMutation).toBe('function')
+    expect(typeof useDeprecateRuntimePathMutation).toBe('function')
     expect(typeof useCreateRuntimeSkillMutation).toBe('function')
     expect(typeof useUpdateRuntimeSkillMutation).toBe('function')
     expect(typeof useCreateValidationRegistryMutation).toBe('function')
@@ -132,6 +156,14 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.getRuntimeAgent.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateRuntimeAgent.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimePaths.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.createRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.updateRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.duplicateRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getRuntimePathDependencies.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.activateRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.disableRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.deprecateRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimeSkills.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeSkill.initiate).toBe('function')
@@ -293,6 +325,76 @@ describe('runtimeControlApi', () => {
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
     })
+  })
+
+  it('round-trips mock Runtime Path Registry CRUD, duplicate, dependencies, and lifecycle', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createRuntimePath.initiate({
+        pathKey: 'framework_state.custom.flag',
+        label: 'Custom Flag',
+        description: 'Custom boolean flag for runtime-control harness coverage.',
+        frameworkKeys: ['VMF'],
+        scope: 'FRAMEWORK_STATE',
+        allowedOperations: ['READ', 'WRITE'],
+        dataType: 'BOOLEAN',
+        category: 'STATE',
+        sourceType: 'RUNTIME_STATE',
+        uiControl: 'CHECKBOX',
+        isProtected: false,
+        isSystem: false,
+        defaultValue: false,
+      }),
+    )
+
+    expect(createResult.error).toBeUndefined()
+    expect(createResult.data?.data?.status).toBe('DRAFT')
+    const pathId = createResult.data?.data?.id
+
+    const getResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimePath.initiate(pathId),
+    )
+    expect(getResult.error).toBeUndefined()
+    expect(getResult.data?.data?.pathKey).toBe('framework_state.custom.flag')
+
+    const updateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateRuntimePath.initiate({
+        pathId,
+        label: 'Custom Runtime Flag',
+        helpText: 'Used by the mock Runtime Path Registry editor harness.',
+      }),
+    )
+    expect(updateResult.error).toBeUndefined()
+    expect(updateResult.data?.data?.label).toBe('Custom Runtime Flag')
+
+    const duplicateResult = await store.dispatch(
+      runtimeControlApi.endpoints.duplicateRuntimePath.initiate({
+        pathId,
+        pathKey: 'framework_state.custom.flag_copy',
+        label: 'Custom Runtime Flag Copy',
+      }),
+    )
+    expect(duplicateResult.error).toBeUndefined()
+    expect(duplicateResult.data?.data?.isSystem).toBe(false)
+
+    const dependencyResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimePathDependencies.initiate(pathId),
+    )
+    expect(dependencyResult.error).toBeUndefined()
+    expect(dependencyResult.data?.data?.dependencies?.summary?.total).toBe(0)
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateRuntimePath.initiate({ pathId }),
+    )
+    expect(activateResult.error).toBeUndefined()
+    expect(activateResult.data?.data?.status).toBe('ACTIVE')
+
+    const disableResult = await store.dispatch(
+      runtimeControlApi.endpoints.disableRuntimePath.initiate({ pathId }),
+    )
+    expect(disableResult.error).toBeUndefined()
+    expect(disableResult.data?.data?.status).toBe('INACTIVE')
   })
 
   it('blocks mock disable/deprecate when active dependencies exist', async () => {

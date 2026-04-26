@@ -49,7 +49,7 @@
  * </TabView>
  */
 
-import { useRef, useState, Children } from 'react'
+import { Children, useId, useRef, useState } from 'react'
 import './TabView.css'
 
 const clampTabIndex = (index, tabCount) => {
@@ -71,6 +71,8 @@ export function TabView({
   ...props
 }) {
   const { ['aria-label']: ariaLabel, ...rootProps } = props
+  const tabViewId = useId().replace(/[^a-zA-Z0-9_-]/g, '')
+  const idBase = `tabview-${tabViewId}`
   const tabs = Children.toArray(children)
   const totalTabs = tabs.length
   const isControlled = controlledActiveTab !== undefined
@@ -154,7 +156,7 @@ export function TabView({
     `tabview--${orientation}`,
     `tabview--${size}`,
     evenTabs && 'tabview--even-tabs',
-    className
+    className,
   ]
     .filter(Boolean)
     .join(' ')
@@ -184,8 +186,8 @@ export function TabView({
               type="button"
               className={tabClasses}
               aria-selected={isActive}
-              aria-controls={`tabpanel-${index}`}
-              id={`tab-${index}`}
+              aria-controls={`${idBase}-tabpanel-${index}`}
+              id={`${idBase}-tab-${index}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => handleTabClick(index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
@@ -203,8 +205,8 @@ export function TabView({
             <div
               key={index}
               role="tabpanel"
-              id={`tabpanel-${index}`}
-              aria-labelledby={`tab-${index}`}
+              id={`${idBase}-tabpanel-${index}`}
+              aria-labelledby={`${idBase}-tab-${index}`}
               className={`tabview__panel ${isActive ? 'tabview__panel--active' : ''}`}
               hidden={!isActive}
               tabIndex={0}
