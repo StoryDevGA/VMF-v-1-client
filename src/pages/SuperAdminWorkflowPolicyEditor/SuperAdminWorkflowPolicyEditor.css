@@ -276,6 +276,14 @@
   margin-top: var(--spacing-xs);
 }
 
+.super-admin-workflow-policy-editor__effect-no-value {
+  align-self: center;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
 .super-admin-workflow-policy-editor__agent-summary {
   display: grid;
   gap: var(--spacing-sm);

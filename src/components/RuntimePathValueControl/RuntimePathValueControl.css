@@ -18,9 +18,19 @@
   color: var(--color-text-secondary);
 }
 
+.runtime-path-value-control__boolean-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  max-width: max-content;
+}
+
+.runtime-path-value-control__boolean-option {
+  min-width: 4rem;
+}
+
 .runtime-path-value-control__error {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-error);
 }
-

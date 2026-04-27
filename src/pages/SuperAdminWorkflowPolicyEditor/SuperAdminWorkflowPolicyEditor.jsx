@@ -1606,7 +1606,20 @@ function WorkflowPolicyEditor() {
                       setForm((current) => ({
                         ...current,
                         [fieldName]: current[fieldName].map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, type: event.target.value } : item,
+                          itemIndex === index
+                            ? (() => {
+                                const nextType = String(event.target.value ?? '').trim().toUpperCase()
+                                const nextNeedsTargetPath = EFFECT_TYPES_REQUIRING_TARGET_PATH.has(nextType)
+                                const nextNeedsValue = EFFECT_TYPES_REQUIRING_VALUE.has(nextType)
+
+                                return {
+                                  ...item,
+                                  type: nextType,
+                                  targetPath: nextNeedsTargetPath ? item.targetPath : '',
+                                  value: nextNeedsValue ? item.value : '',
+                                }
+                              })()
+                            : item,
                         ),
                       }))
                     }
@@ -1643,12 +1656,9 @@ function WorkflowPolicyEditor() {
                       }))
                     }
                   />
-                  {(() => {
+                  {needsValue ? (() => {
                     const selectedPathKey = String(effect.targetPath ?? '').trim()
                     const runtimePath = selectedPathKey ? writableRuntimePathByKey.get(selectedPathKey) : null
-                    const helper = needsValue
-                      ? 'Examples: REVIEW_READY, governance queue id, or notification text.'
-                      : 'Optional for this effect type.'
 
                     return (
                       <RuntimePathValueControl
@@ -1657,7 +1667,7 @@ function WorkflowPolicyEditor() {
                         runtimePath={runtimePath}
                         value={effect.value ?? ''}
                         disabled={!effect.type}
-                        helperText={helper}
+                        helperText="Examples: REVIEW_READY, governance queue id, or notification text."
                         onChange={(nextValue) =>
                           setForm((current) => ({
                             ...current,
@@ -1668,7 +1678,11 @@ function WorkflowPolicyEditor() {
                         }
                       />
                     )
-                  })()}
+                  })() : (
+                    <p className="super-admin-workflow-policy-editor__effect-no-value">
+                      No value required for this action.
+                    </p>
+                  )}
                 </div>
                 <div className="super-admin-workflow-policy-editor__condition-actions">
                   <Button

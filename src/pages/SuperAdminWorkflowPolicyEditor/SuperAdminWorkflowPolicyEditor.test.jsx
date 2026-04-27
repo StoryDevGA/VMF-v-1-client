@@ -263,6 +263,57 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     expect(screen.getByText(/final condition/i)).toBeInTheDocument()
   })
 
+  it('hides the effect value input when the selected action does not need a value', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /outcome & state effects/i }))
+    await user.click(screen.getAllByRole('button', { name: /add effect/i })[0])
+    await user.selectOptions(
+      screen.getByLabelText(/^action$/i, {
+        selector: 'select#workflow-policy-editor-onPassEffects-type-0',
+      }),
+      'BLOCK_ACTION',
+    )
+
+    expect(
+      screen.queryByLabelText(/^value$/i, {
+        selector: '#workflow-policy-editor-onPassEffects-value-0',
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/no value required for this action/i)).toBeInTheDocument()
+  })
+
+  it('renders boolean effect values as yes-no choices from runtime path metadata', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
+    await user.click(screen.getByRole('checkbox', { name: /value messaging framework/i }))
+    await user.click(screen.getByRole('tab', { name: /outcome & state effects/i }))
+    await user.click(screen.getAllByRole('button', { name: /add effect/i })[0])
+    await user.selectOptions(
+      screen.getByLabelText(/^action$/i, {
+        selector: 'select#workflow-policy-editor-onPassEffects-type-0',
+      }),
+      'SET_VALUE',
+    )
+    await user.selectOptions(
+      screen.getByLabelText(/^target path$/i, {
+        selector: 'select#workflow-policy-editor-onPassEffects-path-0',
+      }),
+      'framework_state.lifecycle.locked',
+    )
+
+    const valueGroup = screen.getByRole('radiogroup', { name: /^value$/i })
+    const yesOption = within(valueGroup).getByRole('radio', { name: /yes/i })
+    const noOption = within(valueGroup).getByRole('radio', { name: /no/i })
+
+    expect(noOption).toHaveAttribute('aria-checked', 'true')
+    await user.click(yesOption)
+    expect(yesOption).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('lets the validation requirements selector find ACTIVE policy-usable validations for the selected frameworks', async () => {
     const user = userEvent.setup()
     renderWorkflowPolicyEditorRoutes([

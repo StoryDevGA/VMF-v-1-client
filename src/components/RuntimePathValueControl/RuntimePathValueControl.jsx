@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
+import { Button } from '../Button'
 import { Input } from '../Input'
 import { Select } from '../Select'
 import { Textarea } from '../Textarea'
-import { Tickbox } from '../Tickbox'
 import './RuntimePathValueControl.css'
 
 const normalizeToken = (value) => String(value ?? '').trim()
@@ -11,11 +11,13 @@ const normalizeUiControl = (value) => String(value ?? '').trim().toUpperCase()
 const normalizeDataType = (value) => String(value ?? '').trim().toUpperCase()
 
 const inferUiControl = (runtimePath) => {
+  const allowedValues = Array.isArray(runtimePath?.allowedValues) ? runtimePath.allowedValues : []
+  if (allowedValues.length > 0) return 'SELECT'
+
   const uiControl = normalizeUiControl(runtimePath?.uiControl)
   if (uiControl) return uiControl
 
   const dataType = normalizeDataType(runtimePath?.dataType)
-  const allowedValues = Array.isArray(runtimePath?.allowedValues) ? runtimePath.allowedValues : []
 
   if (dataType === 'BOOLEAN') return 'CHECKBOX'
   if (dataType === 'NUMBER') return 'NUMBER'
@@ -72,6 +74,14 @@ const getJsonValidationError = (runtimePath, value) => {
   } catch {
     return 'Provide valid JSON.'
   }
+}
+
+const getNumberConstraint = (value) => {
+  const normalizedValue = String(value ?? '').trim()
+  if (!normalizedValue) return undefined
+
+  const parsed = Number(normalizedValue)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function RuntimePathValueControl({
@@ -140,12 +150,17 @@ function RuntimePathValueControl({
   }
 
   if (resolvedControl === 'NUMBER') {
+    const minValue = getNumberConstraint(runtimePath?.minValue)
+    const maxValue = getNumberConstraint(runtimePath?.maxValue)
+
     return (
       <Input
         id={id}
         type="number"
         label={label}
         value={value}
+        min={minValue}
+        max={maxValue}
         disabled={disabled}
         helperText={resolvedHelperText}
         placeholder={resolvedPlaceholder}
@@ -193,18 +208,39 @@ function RuntimePathValueControl({
 
   if (resolvedControl === 'CHECKBOX') {
     const checked = normalizedValue.toLowerCase() === 'true'
+    const booleanOptions = [
+      { value: 'true', label: 'Yes' },
+      { value: 'false', label: 'No' },
+    ]
 
     return (
       <div className={`runtime-path-value-control ${className}`.trim()}>
-        <p className="runtime-path-value-control__label">{label}</p>
-        <Tickbox
-          id={id}
-          size="md"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange?.(event.target.checked ? 'true' : 'false')}
-          label={runtimePath?.label ? String(runtimePath.label) : 'Enabled'}
-        />
+        <p id={`${id}-label`} className="runtime-path-value-control__label">{label}</p>
+        <div
+          className="runtime-path-value-control__boolean-toggle"
+          role="radiogroup"
+          aria-labelledby={`${id}-label`}
+        >
+          {booleanOptions.map((option) => {
+            const selected = option.value === (checked ? 'true' : 'false')
+            return (
+              <Button
+                key={option.value}
+                id={`${id}-${option.value}`}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                variant={selected ? 'primary' : 'outline'}
+                size="md"
+                disabled={disabled}
+                className="runtime-path-value-control__boolean-option"
+                onClick={() => onChange?.(option.value)}
+              >
+                {option.label}
+              </Button>
+            )
+          })}
+        </div>
         {resolvedHelperText ? (
           <p className="runtime-path-value-control__helper">{resolvedHelperText}</p>
         ) : null}

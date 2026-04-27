@@ -71,7 +71,7 @@ describe('RuntimePathValueControl', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders checkbox control for boolean paths', async () => {
+  it('renders a yes/no toggle for boolean paths', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
 
@@ -87,11 +87,34 @@ describe('RuntimePathValueControl', () => {
       />,
     )
 
-    const checkbox = screen.getByRole('checkbox')
-    expect(checkbox).not.toBeChecked()
+    const yesOption = screen.getByRole('radio', { name: /yes/i })
+    const noOption = screen.getByRole('radio', { name: /no/i })
+    expect(yesOption).toHaveAttribute('aria-checked', 'false')
+    expect(noOption).toHaveAttribute('aria-checked', 'true')
 
-    await user.click(checkbox)
+    await user.click(yesOption)
     expect(onChange).toHaveBeenCalledWith('true')
+
+    await user.click(noOption)
+    expect(onChange).toHaveBeenCalledWith('false')
+  })
+
+  it('prefers governed options over text uiControl when allowedValues are present', () => {
+    render(
+      <RuntimePathValueControl
+        id="runtime-path-value"
+        runtimePath={{
+          pathKey: 'framework_state.lifecycle.stage',
+          dataType: 'STRING',
+          uiControl: 'TEXT',
+          allowedValues: ['DRAFT'],
+        }}
+        value=""
+      />,
+    )
+
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+    expect(screen.getByText('DRAFT')).toBeInTheDocument()
   })
 
   it('renders number input for numeric paths', async () => {
@@ -102,12 +125,17 @@ describe('RuntimePathValueControl', () => {
         runtimePath={{
           pathKey: 'framework_state.priority',
           dataType: 'NUMBER',
+          minValue: 1,
+          maxValue: 100,
         }}
         initialValue="10"
       />,
     )
 
     const input = screen.getByRole('spinbutton')
+    expect(input).toHaveAttribute('min', '1')
+    expect(input).toHaveAttribute('max', '100')
+
     await user.clear(input)
     await user.type(input, '25')
 
