@@ -96,7 +96,7 @@ describe('SuperAdminSkillEditor page', () => {
       screen.getByLabelText(/^category$/i, {
         selector: 'select#runtime-skill-editor-category',
       }),
-      'SNAPSHOT',
+      'OUTPUT',
     )
     await user.selectOptions(
       screen.getByLabelText(/^type$/i, {
@@ -205,7 +205,7 @@ describe('SuperAdminSkillEditor page', () => {
     const categorySelect = await screen.findByLabelText(/^category$/i, {
       selector: 'select#runtime-skill-editor-category',
     })
-    expect(categorySelect).toHaveValue('SNAPSHOT')
+    expect(categorySelect).toHaveValue('OUTPUT')
 
     const executionModeSelect = screen.getByLabelText(/^execution mode$/i, {
       selector: 'select#runtime-skill-editor-execution-mode',

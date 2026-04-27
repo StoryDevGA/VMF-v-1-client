@@ -21,12 +21,20 @@ export const RUNTIME_SKILL_FORM_STATUS_OPTIONS = Object.freeze([
 ])
 
 export const RUNTIME_SKILL_CATEGORY_OPTIONS = Object.freeze([
-  { value: 'GENERAL', label: 'General' },
-  { value: 'SNAPSHOT', label: 'Snapshot' },
   { value: 'VALIDATION', label: 'Validation' },
-  { value: 'STATE', label: 'State' },
+  { value: 'COMPLETENESS', label: 'Completeness' },
+  { value: 'GOVERNANCE', label: 'Governance' },
+  { value: 'QUALITY', label: 'Quality' },
+  { value: 'CONSISTENCY', label: 'Consistency' },
+  { value: 'COMPLIANCE', label: 'Compliance' },
+  { value: 'RISK', label: 'Risk' },
   { value: 'LIFECYCLE', label: 'Lifecycle' },
-  { value: 'ACTION_RESOLUTION', label: 'Action Resolution' },
+  { value: 'GENERATION', label: 'Generation' },
+  { value: 'OUTPUT', label: 'Output' },
+  { value: 'ANALYSIS', label: 'Analysis' },
+  { value: 'ORCHESTRATION', label: 'Orchestration' },
+  { value: 'INTEGRATION', label: 'Integration' },
+  { value: 'NOTIFICATION', label: 'Notification' },
 ])
 
 export const RUNTIME_SKILL_TYPE_OPTIONS = Object.freeze([
@@ -59,7 +67,7 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   status: RUNTIME_SKILL_STATUSES.ACTIVE,
   supportedFrameworkKeys: '',
   skillRoleKey: '',
-  category: 'GENERAL',
+  category: 'VALIDATION',
   type: 'DETERMINISTIC',
   executionMode: 'SYSTEM',
   inputContract: '',
@@ -85,7 +93,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     skillRoleKey: 'READER',
-    category: 'SNAPSHOT',
+    category: 'OUTPUT',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
     inputContract: Object.freeze({}),
@@ -103,7 +111,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     status: RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     skillRoleKey: 'RENDERER',
-    category: 'GENERAL',
+    category: 'ANALYSIS',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
     inputContract: Object.freeze({}),
@@ -157,7 +165,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     status: RUNTIME_SKILL_STATUSES.INACTIVE,
     supportedFrameworkKeys: Object.freeze(['VMF', 'RLD']),
     skillRoleKey: 'RENDERER',
-    category: 'GENERAL',
+    category: 'GENERATION',
     type: 'DETERMINISTIC',
     executionMode: 'SYSTEM',
     inputContract: Object.freeze({}),
@@ -175,7 +183,7 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
     status: RUNTIME_SKILL_STATUSES.INACTIVE,
     supportedFrameworkKeys: Object.freeze(['RLD']),
     skillRoleKey: 'ANALYZER',
-    category: 'ACTION_RESOLUTION',
+    category: 'ORCHESTRATION',
     type: 'HYBRID',
     executionMode: 'AGENT',
     inputContract: Object.freeze({}),
@@ -190,6 +198,14 @@ export const INITIAL_RUNTIME_SKILLS = Object.freeze([
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const VALID_EXECUTION_MODES = new Set(['SYSTEM', 'RULE_ENGINE', 'AGENT'])
 const VALID_RETRY_POLICIES = new Set(['NONE', 'RETRY_ONCE', 'RETRY_WITH_BACKOFF'])
+const VALID_RUNTIME_SKILL_CATEGORIES = new Set(RUNTIME_SKILL_CATEGORY_OPTIONS.map((option) => option.value))
+const LEGACY_RUNTIME_SKILL_CATEGORY_MAP = Object.freeze({
+  GENERAL: 'ANALYSIS',
+  SNAPSHOT: 'OUTPUT',
+  STATE: 'LIFECYCLE',
+  ACTION_RESOLUTION: 'ORCHESTRATION',
+  MAPPING: 'ANALYSIS',
+})
 const OUTPUT_BINDING_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 const PRIMARY_OUTPUT_SELECTION_PATTERN = /^(\$root|[a-zA-Z][a-zA-Z0-9_]*)$/
 const TYPE_COMPATIBILITY_HARD_INVALID = Object.freeze({
@@ -255,6 +271,12 @@ export function normalizeSkillKey(value) {
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toLowerCase()
+}
+
+export function normalizeRuntimeSkillCategory(value) {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  const migrated = LEGACY_RUNTIME_SKILL_CATEGORY_MAP[normalized] || normalized
+  return VALID_RUNTIME_SKILL_CATEGORIES.has(migrated) ? migrated : 'VALIDATION'
 }
 
 export function normalizeFrameworkKey(value) {
@@ -333,7 +355,7 @@ export function mapRuntimeSkillToForm(skill) {
     status: skill.status ?? RUNTIME_SKILL_STATUSES.ACTIVE,
     supportedFrameworkKeys: formatKeyList(skill.supportedFrameworkKeys),
     skillRoleKey: String(skill.skillRoleKey ?? '').trim().toUpperCase(),
-    category: String(skill.category ?? 'GENERAL').toUpperCase(),
+    category: normalizeRuntimeSkillCategory(skill.category),
     type: String(skill.type ?? 'DETERMINISTIC').toUpperCase(),
     executionMode: String(skill.executionMode ?? 'SYSTEM').toUpperCase(),
     inputContract: formatJsonField(skill.inputContract),
@@ -388,7 +410,7 @@ export function validateRuntimeSkillForm(
   const supportedFrameworkKeys = parseFrameworkKeyList(formState.supportedFrameworkKeys)
   const skillRoleKey = String(formState.skillRoleKey ?? '').trim().toUpperCase()
   const baselineSkillRoleKey = String(existingSkillRoleKey ?? '').trim().toUpperCase()
-  const category = String(formState.category ?? 'GENERAL').trim().toUpperCase()
+  const category = normalizeRuntimeSkillCategory(formState.category)
   const type = String(formState.type ?? 'DETERMINISTIC').trim().toUpperCase()
   const executionMode = String(formState.executionMode ?? 'SYSTEM').trim().toUpperCase()
   const retryPolicy = String(formState.retryPolicy ?? 'NONE').trim().toUpperCase()
@@ -450,6 +472,10 @@ export function validateRuntimeSkillForm(
   )
   if (duplicateKey) {
     errors.key = 'Skill key must be unique.'
+  }
+
+  if (!VALID_RUNTIME_SKILL_CATEGORIES.has(category)) {
+    errors.category = 'Skill category must be one of the controlled category values.'
   }
 
   if (!VALID_EXECUTION_MODES.has(executionMode)) {
