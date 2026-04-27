@@ -277,7 +277,6 @@ export const INITIAL_WORKFLOW_POLICY_FORM = Object.freeze({
   orderedSteps: [],
   requiredAgentIds: [],
   requiredSkillIds: [],
-  gatingRules: [],
 })
 
 export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
@@ -553,6 +552,12 @@ const EFFECT_TYPES_REQUIRING_VALUE = new Set([
   WORKFLOW_POLICY_EFFECT_TYPES.QUEUE_NOTIFICATION,
 ])
 
+const normalizeEffectType = (value) => String(value ?? '').trim().toUpperCase()
+
+const effectRequiresTargetPath = (type) => EFFECT_TYPES_REQUIRING_TARGET_PATH.has(normalizeEffectType(type))
+
+const effectRequiresValue = (type) => EFFECT_TYPES_REQUIRING_VALUE.has(normalizeEffectType(type))
+
 const normalizeAgentId = (value) =>
   String(value ?? '')
     .trim()
@@ -616,7 +621,6 @@ export function cloneWorkflowPolicy(policy) {
     orderedSteps: [...(policy.orderedSteps ?? [])],
     requiredAgentIds: [...(policy.requiredAgentIds ?? [])],
     requiredSkillIds: [...(policy.requiredSkillIds ?? [])],
-    gatingRules: [...(policy.gatingRules ?? [])],
     updatedBy: policy.updatedBy ? { ...policy.updatedBy } : null,
   }
 }
@@ -725,16 +729,16 @@ export function mapWorkflowPolicyToForm(policy) {
     validationRequireLatestRun: policy.validationRequireLatestRun ?? true,
     onPassEffects: Array.isArray(policy.onPassEffects)
       ? policy.onPassEffects.map((effect) => ({
-          type: effect?.type ?? '',
-          targetPath: effect?.targetPath ?? '',
-          value: formatConditionValue(effect?.value),
+          type: normalizeEffectType(effect?.type),
+          targetPath: effectRequiresTargetPath(effect?.type) ? effect?.targetPath ?? '' : '',
+          value: effectRequiresValue(effect?.type) ? formatConditionValue(effect?.value) : '',
         }))
       : [],
     onFailEffects: Array.isArray(policy.onFailEffects)
       ? policy.onFailEffects.map((effect) => ({
-          type: effect?.type ?? '',
-          targetPath: effect?.targetPath ?? '',
-          value: formatConditionValue(effect?.value),
+          type: normalizeEffectType(effect?.type),
+          targetPath: effectRequiresTargetPath(effect?.type) ? effect?.targetPath ?? '' : '',
+          value: effectRequiresValue(effect?.type) ? formatConditionValue(effect?.value) : '',
         }))
       : [],
     overrideAllowed: Boolean(policy.overrideAllowed),
@@ -748,7 +752,6 @@ export function mapWorkflowPolicyToForm(policy) {
     orderedSteps: Array.isArray(policy.orderedSteps) ? [...policy.orderedSteps] : [],
     requiredAgentIds: Array.isArray(policy.requiredAgentIds) ? [...policy.requiredAgentIds] : [],
     requiredSkillIds: Array.isArray(policy.requiredSkillIds) ? [...policy.requiredSkillIds] : [],
-    gatingRules: Array.isArray(policy.gatingRules) ? [...policy.gatingRules] : [],
   }
 }
 
@@ -814,7 +817,6 @@ export function validateWorkflowPolicyForm(
   const orderedSteps = Array.isArray(formState.orderedSteps) ? [...formState.orderedSteps] : []
   const requiredAgentIds = Array.isArray(formState.requiredAgentIds) ? [...formState.requiredAgentIds] : []
   const requiredSkillIds = Array.isArray(formState.requiredSkillIds) ? [...formState.requiredSkillIds] : []
-  const gatingRules = Array.isArray(formState.gatingRules) ? [...formState.gatingRules] : []
 
   if (!KEY_TOKEN_PATTERN.test(key)) {
     errors.key = 'Workflow policy key is required and must use letters, numbers, or hyphens.'
@@ -914,11 +916,14 @@ export function validateWorkflowPolicyForm(
 
   const normalizeEffects = (effects, fieldName) => {
     const normalizedEffects = effects
-      .map((effect) => ({
-        type: String(effect?.type ?? '').trim().toUpperCase(),
-        targetPath: String(effect?.targetPath ?? '').trim(),
-        value: String(effect?.value ?? '').trim(),
-      }))
+      .map((effect) => {
+        const type = normalizeEffectType(effect?.type)
+        return {
+          type,
+          targetPath: effectRequiresTargetPath(type) ? String(effect?.targetPath ?? '').trim() : '',
+          value: effectRequiresValue(type) ? String(effect?.value ?? '').trim() : '',
+        }
+      })
       .filter((effect) => effect.type || effect.targetPath || effect.value)
 
     const firstMissingType = normalizedEffects.find((effect) => !effect.type)
@@ -1093,13 +1098,13 @@ export function validateWorkflowPolicyForm(
       validationRequireLatestRun,
       onPassEffects: normalizedOnPassEffects.map((effect) => ({
         type: effect.type,
-        targetPath: effect.targetPath,
-        value: parseConditionValue(effect.value, effect.type),
+        ...(effectRequiresTargetPath(effect.type) ? { targetPath: effect.targetPath } : {}),
+        ...(effectRequiresValue(effect.type) ? { value: parseConditionValue(effect.value, effect.type) } : {}),
       })),
       onFailEffects: normalizedOnFailEffects.map((effect) => ({
         type: effect.type,
-        targetPath: effect.targetPath,
-        value: parseConditionValue(effect.value, effect.type),
+        ...(effectRequiresTargetPath(effect.type) ? { targetPath: effect.targetPath } : {}),
+        ...(effectRequiresValue(effect.type) ? { value: parseConditionValue(effect.value, effect.type) } : {}),
       })),
       overrideAllowed,
       overrideRoles,
@@ -1110,7 +1115,6 @@ export function validateWorkflowPolicyForm(
       orderedSteps,
       requiredAgentIds,
       requiredSkillIds,
-      gatingRules,
     },
   }
 }

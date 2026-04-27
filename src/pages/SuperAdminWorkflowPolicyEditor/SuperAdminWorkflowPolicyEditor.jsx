@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
@@ -107,6 +107,10 @@ const EFFECT_TYPES_REQUIRING_VALUE = new Set([
   'TRIGGER_POLICY_GROUP',
   'QUEUE_NOTIFICATION',
 ])
+const effectRequiresTargetPath = (type) =>
+  EFFECT_TYPES_REQUIRING_TARGET_PATH.has(String(type ?? '').trim().toUpperCase())
+const effectRequiresValue = (type) =>
+  EFFECT_TYPES_REQUIRING_VALUE.has(String(type ?? '').trim().toUpperCase())
 const TEST_CONSOLE_DEFAULT_STATE_TEXT = `{
   "framework_state": {
     "lifecycle": {
@@ -187,6 +191,8 @@ const shallowEqualObject = (left, right) => {
 
   return leftKeys.every((key) => left?.[key] === right?.[key])
 }
+
+const isDeepEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
 const getFirstFieldErrorMessage = (fieldErrors = {}, fallbackMessage = '') =>
   Object.values(fieldErrors)
@@ -305,18 +311,24 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   validationFreshnessMinutes: parsePreviewInteger(formState.validationFreshnessMinutes, 0),
   validationRequireLatestRun: Boolean(formState.validationRequireLatestRun),
   onPassEffects: (Array.isArray(formState.onPassEffects) ? formState.onPassEffects : [])
-    .map((effect) => ({
-      type: String(effect?.type ?? '').trim().toUpperCase(),
-      targetPath: String(effect?.targetPath ?? '').trim(),
-      value: effect?.value ?? '',
-    }))
+    .map((effect) => {
+      const type = String(effect?.type ?? '').trim().toUpperCase()
+      return {
+        type,
+        ...(effectRequiresTargetPath(type) ? { targetPath: String(effect?.targetPath ?? '').trim() } : {}),
+        ...(effectRequiresValue(type) ? { value: effect?.value ?? '' } : {}),
+      }
+    })
     .filter((effect) => effect.type || effect.targetPath || effect.value),
   onFailEffects: (Array.isArray(formState.onFailEffects) ? formState.onFailEffects : [])
-    .map((effect) => ({
-      type: String(effect?.type ?? '').trim().toUpperCase(),
-      targetPath: String(effect?.targetPath ?? '').trim(),
-      value: effect?.value ?? '',
-    }))
+    .map((effect) => {
+      const type = String(effect?.type ?? '').trim().toUpperCase()
+      return {
+        type,
+        ...(effectRequiresTargetPath(type) ? { targetPath: String(effect?.targetPath ?? '').trim() } : {}),
+        ...(effectRequiresValue(type) ? { value: effect?.value ?? '' } : {}),
+      }
+    })
     .filter((effect) => effect.type || effect.targetPath || effect.value),
   overrideAllowed: Boolean(formState.overrideAllowed),
   overrideRoles: normalizePreviewList(formState.overrideRoles, { uppercase: true }),
@@ -329,7 +341,6 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   orderedSteps: normalizePreviewList(formState.orderedSteps),
   requiredAgentIds: normalizePreviewList(formState.requiredAgentIds),
   requiredSkillIds: normalizePreviewList(formState.requiredSkillIds),
-  gatingRules: normalizePreviewList(formState.gatingRules),
 })
 
 const flattenJsonPreviewEntries = (value, prefix = '', entries = []) => {
@@ -552,6 +563,7 @@ function WorkflowPolicyEditor() {
   const [testConsoleError, setTestConsoleError] = useState('')
   const [testConsoleResult, setTestConsoleResult] = useState(null)
   const [selectedRuntimePathRows, setSelectedRuntimePathRows] = useState({})
+  const skipUnsavedPromptRef = useRef(false)
 
   const {
     data: policyResponse,
@@ -766,6 +778,10 @@ function WorkflowPolicyEditor() {
   const compatibleAgentOptions = useMemo(() => {
     const selectedFrameworkKeys = Array.isArray(form.frameworkKeys) ? form.frameworkKeys : []
     const compatibleAgents = runtimeAgentRows.filter((agent) => {
+      if (String(agent?.status ?? '').trim().toUpperCase() !== ACTIVE_AGENT_STATUS) {
+        return false
+      }
+
       const agentFrameworks = Array.isArray(agent.supportedFrameworkKeys) ? agent.supportedFrameworkKeys : []
       return selectedFrameworkKeys.length === 0
         ? true
@@ -834,9 +850,17 @@ function WorkflowPolicyEditor() {
     () => (loadedPolicyForm ? buildWorkflowPolicyJsonPreview(loadedPolicyForm) : {}),
     [loadedPolicyForm],
   )
+  const baselineJsonPreview = useMemo(
+    () => buildWorkflowPolicyJsonPreview(loadedPolicyForm ?? INITIAL_WORKFLOW_POLICY_FORM),
+    [loadedPolicyForm],
+  )
   const jsonDiffSummary = useMemo(
     () => buildWorkflowPolicyDiffSummary(currentJsonPreview, previousJsonPreview),
     [currentJsonPreview, previousJsonPreview],
+  )
+  const hasUnsavedChanges = useMemo(
+    () => !isDeepEqual(currentJsonPreview, baselineJsonPreview),
+    [baselineJsonPreview, currentJsonPreview],
   )
   const liveValidation = useMemo(
     () => validateWorkflowPolicyForm(
@@ -948,7 +972,27 @@ function WorkflowPolicyEditor() {
     }
   }, [errorsSource, isEditMode, liveValidation.errors, showValidationHints])
 
+  useEffect(() => {
+    if (!hasUnsavedChanges || isSaving) return undefined
+
+    const handleBeforeUnload = (event) => {
+      if (skipUnsavedPromptRef.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges, isSaving])
+
   const handleBack = () => {
+    if (
+      hasUnsavedChanges
+      && !window.confirm('Discard unsaved workflow policy changes?')
+    ) {
+      return
+    }
+
     navigate('/super-admin/runtime-control/workflow-policies')
   }
 
@@ -1106,28 +1150,35 @@ function WorkflowPolicyEditor() {
 
     try {
       if (isEditMode) {
-        await updateWorkflowPolicy({
+        const response = await updateWorkflowPolicy({
           policyId,
           ...payload,
         }).unwrap()
+        const nextVersion = response?.data?.version
 
         addToast({
           title: 'Workflow policy updated',
-          description: 'Workflow Policy Editor changes were saved successfully.',
+          description: nextVersion
+            ? `Saved successfully. Version ${nextVersion} created.`
+            : 'Saved successfully.',
           variant: 'success',
         })
       } else {
-        await createWorkflowPolicy({
+        const response = await createWorkflowPolicy({
           body: payload,
         }).unwrap()
+        const nextVersion = response?.data?.version
 
         addToast({
           title: 'Workflow policy created',
-          description: `${payload.name} is now available in the Workflow Policy catalogue.`,
+          description: nextVersion
+            ? `Saved successfully. Version ${nextVersion} created.`
+            : `${payload.name} is now available in the Workflow Policy catalogue.`,
           variant: 'success',
         })
       }
 
+      skipUnsavedPromptRef.current = true
       navigate('/super-admin/runtime-control/workflow-policies')
     } catch (err) {
       const appError = normalizeError(err)
@@ -2605,7 +2656,7 @@ function WorkflowPolicyEditor() {
                       value={form.description}
                       onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                       error={errors.description}
-                      rows={4}
+                      rows={3}
                       fullWidth
                     />
                   </div>

@@ -537,4 +537,29 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       expect(screen.getByText('VMF Release Gate')).toBeInTheDocument()
     })
   })
+
+  it('warns before leaving the editor with unsaved changes', async () => {
+    const user = userEvent.setup()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderWorkflowPolicyEditorRoutes([
+      '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
+    ])
+
+    const nameInput = await screen.findByLabelText(/^workflow policy name$/i, {
+      selector: 'input#workflow-policy-editor-name',
+    })
+    await user.clear(nameInput)
+    await user.type(nameInput, 'VMF Unsaved Gate')
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved workflow policy changes?')
+    expect(screen.getByRole('heading', { name: /basic information/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /workflow policies/i })).toBeInTheDocument()
+    })
+
+    confirmSpy.mockRestore()
+  })
 })
