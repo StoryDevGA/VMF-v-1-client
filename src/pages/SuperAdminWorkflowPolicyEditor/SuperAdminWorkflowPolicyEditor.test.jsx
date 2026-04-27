@@ -32,6 +32,14 @@ function renderWorkflowPolicyEditorRoutes(initialEntries) {
   })
 }
 
+async function selectRuntimePath(user, { selector, label, query, optionName }) {
+  const input = screen.getByLabelText(label, { selector })
+  await user.click(input)
+  await user.type(input, query)
+  await user.click(await screen.findByRole('option', { name: optionName }))
+  return input
+}
+
 describe('SuperAdminWorkflowPolicyEditor page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
@@ -93,12 +101,27 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       screen.getByLabelText(/^sample framework_state object json$/i, {
         selector: 'textarea#workflow-policy-editor-test-framework-state',
       }).value,
+    ).toContain('"framework_state"')
+    expect(
+      screen.getByLabelText(/^sample framework_state object json$/i, {
+        selector: 'textarea#workflow-policy-editor-test-framework-state',
+      }).value,
+    ).toContain('"customerProblem"')
+    expect(
+      screen.getByLabelText(/^sample framework_state object json$/i, {
+        selector: 'textarea#workflow-policy-editor-test-framework-state',
+      }).value,
     ).toContain('"lifecycle"')
     expect(
       screen.getByLabelText(/^sample framework_state object json$/i, {
         selector: 'textarea#workflow-policy-editor-test-framework-state',
       }).value,
     ).toContain('"required_sections"')
+    expect(
+      screen.getByLabelText(/^sample framework_state object json$/i, {
+        selector: 'textarea#workflow-policy-editor-test-framework-state',
+      }).value,
+    ).toContain('"missingSections"')
   })
 
   it('renders a summary-first workflow policy test result layout with evidence and trace detail', async () => {
@@ -226,18 +249,19 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
     await user.click(screen.getByRole('button', { name: /add condition/i }))
 
-    await user.selectOptions(
-      screen.getByLabelText(/^path$/i, {
-        selector: 'select#workflow-policy-editor-condition-path-0',
-      }),
-      'framework_state.validation.required_sections.is_valid',
-    )
+    await selectRuntimePath(user, {
+      selector: 'input#workflow-policy-editor-condition-path-0',
+      label: /^path$/i,
+      query: 'required sections',
+      optionName: /framework_state\.validation\.required_sections\.is_valid/i,
+    })
 
     expect(
       screen.getByLabelText(/^path$/i, {
-        selector: 'select#workflow-policy-editor-condition-path-0',
+        selector: 'input#workflow-policy-editor-condition-path-0',
       }),
-    ).toHaveValue('framework_state.validation.required_sections.is_valid')
+    ).toHaveValue('')
+    expect(screen.getByText('framework_state.validation.required_sections.is_valid')).toBeInTheDocument()
   })
 
   it('shows logic only between condition rows', async () => {
@@ -298,12 +322,12 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       }),
       'SET_VALUE',
     )
-    await user.selectOptions(
-      screen.getByLabelText(/^target path$/i, {
-        selector: 'select#workflow-policy-editor-onPassEffects-path-0',
-      }),
-      'framework_state.lifecycle.locked',
-    )
+    await selectRuntimePath(user, {
+      selector: 'input#workflow-policy-editor-onPassEffects-path-0',
+      label: /^target path$/i,
+      query: 'locked',
+      optionName: /framework_state\.lifecycle\.locked/i,
+    })
 
     const valueGroup = screen.getByRole('radiogroup', { name: /^value$/i })
     const yesOption = within(valueGroup).getByRole('radio', { name: /yes/i })
@@ -376,12 +400,12 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
     await user.click(screen.getByRole('button', { name: /add condition/i }))
-    await user.selectOptions(
-      screen.getByLabelText(/^path$/i, {
-        selector: 'select#workflow-policy-editor-condition-path-0',
-      }),
-      'framework_state.lifecycle.stage',
-    )
+    await selectRuntimePath(user, {
+      selector: 'input#workflow-policy-editor-condition-path-0',
+      label: /^path$/i,
+      query: 'stage',
+      optionName: /framework_state\.lifecycle\.stage/i,
+    })
     await user.selectOptions(
       screen.getByLabelText(/^operator$/i, {
         selector: 'select#workflow-policy-editor-condition-operator-0',
@@ -419,12 +443,12 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       }),
       'SET_VALUE',
     )
-    await user.selectOptions(
-      screen.getByLabelText(/^target path$/i, {
-        selector: 'select#workflow-policy-editor-onPassEffects-path-0',
-      }),
-      'vmf.metadata.lastValidatedAt',
-    )
+    await selectRuntimePath(user, {
+      selector: 'input#workflow-policy-editor-onPassEffects-path-0',
+      label: /^target path$/i,
+      query: 'last validated',
+      optionName: /vmf\.metadata\.lastValidatedAt/i,
+    })
     await user.type(
       screen.getByLabelText(/^value$/i, {
         selector: 'input#workflow-policy-editor-onPassEffects-value-0',

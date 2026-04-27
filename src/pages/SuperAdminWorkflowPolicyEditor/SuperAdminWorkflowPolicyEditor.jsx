@@ -13,6 +13,7 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import { RuntimePathValueControl } from '../../components/RuntimePathValueControl'
 import ValidationKeySearchSelect from '../../components/ValidationKeySearchSelect'
 import {
@@ -107,19 +108,21 @@ const EFFECT_TYPES_REQUIRING_VALUE = new Set([
   'QUEUE_NOTIFICATION',
 ])
 const TEST_CONSOLE_DEFAULT_STATE_TEXT = `{
-  "lifecycle": {
-    "stage": "DRAFT"
-  },
-  "validation": {
-    "required_sections": {
-      "is_valid": true,
-      "missing_sections": []
-    }
-  },
-  "vmf": {
-    "status": "DRAFT",
-    "metadata": {
-      "lastValidatedAt": null
+  "framework_state": {
+    "lifecycle": {
+      "stage": "DRAFT"
+    },
+    "sections": {
+      "customerProblem": "Current process is slow",
+      "proposedSolution": "StorylineOS rollout",
+      "valueMetrics": "30% faster proposal response",
+      "proofPoints": "Pilot team saved 8 hours per week"
+    },
+    "validation": {
+      "required_sections": {
+        "is_valid": true,
+        "missingSections": []
+      }
     }
   }
 }`
@@ -548,6 +551,7 @@ function WorkflowPolicyEditor() {
   })
   const [testConsoleError, setTestConsoleError] = useState('')
   const [testConsoleResult, setTestConsoleResult] = useState(null)
+  const [selectedRuntimePathRows, setSelectedRuntimePathRows] = useState({})
 
   const {
     data: policyResponse,
@@ -642,13 +646,38 @@ function WorkflowPolicyEditor() {
     }),
     [runtimePathsResponse],
   )
-  const writableRuntimePathRows = useMemo(
+  const baseWritableRuntimePathRows = useMemo(
     () => (Array.isArray(writeRuntimePathsResponse?.data) ? writeRuntimePathsResponse.data : []),
     [writeRuntimePathsResponse],
   )
+  const rememberSelectedRuntimePath = (runtimePath) => {
+    const pathKey = String(runtimePath?.pathKey ?? '').trim()
+    if (!pathKey) return
+    setSelectedRuntimePathRows((current) => ({ ...current, [pathKey]: runtimePath }))
+  }
+  const selectedRuntimePathList = useMemo(
+    () => Object.values(selectedRuntimePathRows).filter(Boolean),
+    [selectedRuntimePathRows],
+  )
+  const writableRuntimePathRows = useMemo(() => {
+    const byKey = new Map()
+    ;[...baseWritableRuntimePathRows, ...selectedRuntimePathList].forEach((row) => {
+      const pathKey = String(row?.pathKey ?? '').trim()
+      if (pathKey) byKey.set(pathKey, row)
+    })
+    return [...byKey.values()]
+  }, [baseWritableRuntimePathRows, selectedRuntimePathList])
+  const mergedRuntimePathRows = useMemo(() => {
+    const byKey = new Map()
+    ;[...runtimePathRows, ...selectedRuntimePathList].forEach((row) => {
+      const pathKey = String(row?.pathKey ?? '').trim()
+      if (pathKey) byKey.set(pathKey, row)
+    })
+    return [...byKey.values()]
+  }, [runtimePathRows, selectedRuntimePathList])
   const runtimePathByKey = useMemo(
-    () => new Map(runtimePathRows.map((row) => [String(row?.pathKey ?? '').trim(), row])),
-    [runtimePathRows],
+    () => new Map(mergedRuntimePathRows.map((row) => [String(row?.pathKey ?? '').trim(), row])),
+    [mergedRuntimePathRows],
   )
   const writableRuntimePathByKey = useMemo(
     () => new Map(writableRuntimePathRows.map((row) => [String(row?.pathKey ?? '').trim(), row])),
@@ -702,55 +731,8 @@ function WorkflowPolicyEditor() {
     ),
     [form.frameworkKeys, frameworkRegistryByKey],
   )
-  const runtimePathOptions = useMemo(() => {
-    const selectedFrameworkKeys = Array.isArray(form.frameworkKeys) ? form.frameworkKeys : []
-    return runtimePathRows
-      .filter((row) => {
-        if (selectedFrameworkKeys.length === 0) return true
-        const rowFrameworkKeys = Array.isArray(row.frameworkKeys) ? row.frameworkKeys : []
-        return selectedFrameworkKeys.some((frameworkKey) => rowFrameworkKeys.includes(frameworkKey))
-      })
-      .map((row) => ({
-        value: String(row.pathKey ?? ''),
-        label: row.label ? `${row.pathKey} (${row.label})` : String(row.pathKey ?? ''),
-      }))
-      .filter((option) => option.value)
-  }, [form.frameworkKeys, runtimePathRows])
-  const writableRuntimePathOptions = useMemo(() => {
-    const selectedFrameworkKeys = Array.isArray(form.frameworkKeys) ? form.frameworkKeys : []
-    const baseOptions = writableRuntimePathRows
-      .filter((row) => {
-        if (selectedFrameworkKeys.length === 0) return true
-        const rowFrameworkKeys = Array.isArray(row.frameworkKeys) ? row.frameworkKeys : []
-        return selectedFrameworkKeys.some((frameworkKey) => rowFrameworkKeys.includes(frameworkKey))
-      })
-      .map((row) => ({
-        value: String(row.pathKey ?? ''),
-        label: row.label ? `${row.pathKey} (${row.label})` : String(row.pathKey ?? ''),
-      }))
-      .filter((option) => option.value)
-
-    const maybeAddSelectedPath = (pathKey, options) => {
-      const normalizedPathKey = String(pathKey ?? '').trim()
-      if (!normalizedPathKey || options.some((option) => option.value === normalizedPathKey)) {
-        return options
-      }
-
-      return [{ value: normalizedPathKey, label: normalizedPathKey }, ...options]
-    }
-
-    const selectedEffectPaths = [
-      ...(Array.isArray(form.onPassEffects) ? form.onPassEffects.map((effect) => effect?.targetPath) : []),
-      ...(Array.isArray(form.onFailEffects) ? form.onFailEffects.map((effect) => effect?.targetPath) : []),
-    ]
-
-    return selectedEffectPaths.reduce(
-      (options, pathKey) => maybeAddSelectedPath(pathKey, options),
-      baseOptions,
-    )
-  }, [form.frameworkKeys, form.onFailEffects, form.onPassEffects, writableRuntimePathRows])
   const runtimePathAvailabilityMessage = useMemo(() => {
-    if (isRuntimePathsLoading || runtimePathsAppError || runtimePathOptions.length > 0) {
+    if (isRuntimePathsLoading || runtimePathsAppError || runtimePathRows.length > 0) {
       return ''
     }
 
@@ -762,11 +744,11 @@ function WorkflowPolicyEditor() {
   }, [
     isRuntimePathsLoading,
     runtimePathLookupFrameworkKeys,
-    runtimePathOptions.length,
+    runtimePathRows.length,
     runtimePathsAppError,
   ])
   const writableRuntimePathAvailabilityMessage = useMemo(() => {
-    if (isWriteRuntimePathsLoading || writeRuntimePathsAppError || writableRuntimePathOptions.length > 0) {
+    if (isWriteRuntimePathsLoading || writeRuntimePathsAppError || writableRuntimePathRows.length > 0) {
       return ''
     }
 
@@ -778,19 +760,9 @@ function WorkflowPolicyEditor() {
   }, [
     isWriteRuntimePathsLoading,
     runtimePathLookupFrameworkKeys,
-    writableRuntimePathOptions.length,
+    writableRuntimePathRows.length,
     writeRuntimePathsAppError,
   ])
-  const runtimePathSelectPlaceholder = isRuntimePathsLoading
-    ? 'Loading governed paths...'
-    : runtimePathOptions.length > 0
-      ? 'Select a governed path'
-      : 'No governed paths available'
-  const writableRuntimePathSelectPlaceholder = isWriteRuntimePathsLoading
-    ? 'Loading writable paths...'
-    : writableRuntimePathOptions.length > 0
-      ? 'Select writable path'
-      : 'No writable paths available'
   const compatibleAgentOptions = useMemo(() => {
     const selectedFrameworkKeys = Array.isArray(form.frameworkKeys) ? form.frameworkKeys : []
     const compatibleAgents = runtimeAgentRows.filter((agent) => {
@@ -1286,19 +1258,25 @@ function WorkflowPolicyEditor() {
               return (
               <div key={`condition-${index}`} className="super-admin-workflow-policy-editor__condition-row">
                 <div className="super-admin-workflow-policy-editor__grid super-admin-workflow-policy-editor__grid--condition">
-                  <Select
+                  <RuntimePathSearchSelect
                     id={`workflow-policy-editor-condition-path-${index}`}
                     label="Path"
-                    value={condition.path ?? ''}
-                    options={runtimePathOptions}
-                    placeholder={runtimePathSelectPlaceholder}
-                    onChange={(event) =>
+                    frameworkKeys={runtimePathLookupFrameworkKeys}
+                    operation={null}
+                    allowedOperations={['READ', 'BIND']}
+                    pathPrefix="framework_state."
+                    selectionMode="single"
+                    selectedKeys={condition.path ? [condition.path] : []}
+                    placeholder="Search governed paths"
+                    helperText="Search active framework_state.* paths that allow READ or BIND."
+                    onSelect={rememberSelectedRuntimePath}
+                    onChange={(selectedKeys) =>
                       setForm((current) => ({
                         ...current,
                         conditions: current.conditions.map((item, itemIndex) =>
                           itemIndex === index
                             ? (() => {
-                                const nextPath = event.target.value
+                                const nextPath = selectedKeys[0] ?? ''
                                 const runtimePath = String(nextPath ?? '').trim()
                                   ? runtimePathByKey.get(String(nextPath ?? '').trim())
                                   : null
@@ -1624,20 +1602,25 @@ function WorkflowPolicyEditor() {
                       }))
                     }
                   />
-                  <Select
+                  <RuntimePathSearchSelect
                     id={`workflow-policy-editor-${fieldName}-path-${index}`}
                     label="Target Path"
-                    value={effect.targetPath ?? ''}
-                    options={writableRuntimePathOptions}
-                    placeholder={writableRuntimePathSelectPlaceholder}
+                    frameworkKeys={runtimePathLookupFrameworkKeys}
+                    scope="FRAMEWORK_STATE"
+                    operation="WRITE"
+                    selectionMode="single"
+                    selectedKeys={effect.targetPath ? [effect.targetPath] : []}
+                    placeholder="Search writable paths"
+                    helperText="Search active writable FRAMEWORK_STATE paths."
                     disabled={!needsTargetPath}
-                    onChange={(event) =>
+                    onSelect={rememberSelectedRuntimePath}
+                    onChange={(selectedKeys) =>
                       setForm((current) => ({
                         ...current,
                         [fieldName]: current[fieldName].map((item, itemIndex) =>
                           itemIndex === index
                             ? (() => {
-                                const nextPath = event.target.value
+                                const nextPath = selectedKeys[0] ?? ''
                                 const runtimePath = String(nextPath ?? '').trim()
                                   ? writableRuntimePathByKey.get(String(nextPath ?? '').trim())
                                   : null

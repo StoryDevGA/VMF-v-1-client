@@ -24,6 +24,11 @@ const normalizeKeys = (values) =>
   [...new Set((Array.isArray(values) ? values : [])
     .map(normalizeKey)
     .filter(Boolean))]
+const normalizeUpperToken = (value) => String(value ?? '').trim().toUpperCase()
+const normalizeUpperTokens = (values) =>
+  [...new Set((Array.isArray(values) ? values : [values])
+    .map(normalizeUpperToken)
+    .filter(Boolean))]
 
 const deriveNamespace = (pathKey) => {
   const token = String(pathKey ?? '').trim()
@@ -36,9 +41,13 @@ function RuntimePathSearchSelect({
   frameworkKeys = [],
   scope = '',
   operation = 'READ',
+  allowedOperations = null,
+  pathPrefix = '',
   isProtectedOnly = false,
+  selectionMode = 'multiple',
   selectedKeys = [],
   onChange,
+  onSelect,
   label,
   helperText,
   placeholder = 'Search runtime paths',
@@ -72,8 +81,17 @@ function RuntimePathSearchSelect({
     [frameworkKeys],
   )
   const normalizedScope = String(scope ?? '').trim().toUpperCase()
-  const normalizedOperation =
-    operation === null ? null : String(operation ?? 'READ').trim().toUpperCase()
+  const normalizedOperations = useMemo(() => {
+    if (allowedOperations !== null && allowedOperations !== undefined) {
+      return normalizeUpperTokens(allowedOperations)
+    }
+
+    if (operation === null) return []
+    return normalizeUpperTokens(operation ?? 'READ')
+  }, [allowedOperations, operation])
+  const queryOperation = normalizedOperations.length === 1 ? normalizedOperations[0] : null
+  const normalizedPathPrefix = String(pathPrefix ?? '').trim()
+  const isSingleSelection = selectionMode === 'single'
 
   const [triggerSearch, { data: searchData, isFetching: isSearching }] =
     useLazyListRuntimePathsQuery()
@@ -86,9 +104,24 @@ function RuntimePathSearchSelect({
   const availableResults = useMemo(() => {
     const selected = new Set(normalizedSelected)
     return results
-      .filter((row) => row?.pathKey && !selected.has(String(row.pathKey)))
+      .filter((row) => {
+        const pathKey = String(row?.pathKey ?? '').trim()
+        if (!pathKey || selected.has(pathKey)) return false
+        if (normalizedPathPrefix && !pathKey.startsWith(normalizedPathPrefix)) return false
+
+        if (normalizedOperations.length > 0) {
+          const rowOperations = Array.isArray(row?.allowedOperations)
+            ? row.allowedOperations.map(normalizeUpperToken)
+            : []
+          if (!normalizedOperations.some((operationValue) => rowOperations.includes(operationValue))) {
+            return false
+          }
+        }
+
+        return true
+      })
       .slice(0, 50)
-  }, [normalizedSelected, results])
+  }, [normalizedOperations, normalizedPathPrefix, normalizedSelected, results])
 
   const triggerRuntimeSearch = useCallback(async (nextQuery) => {
     await triggerSearch({
@@ -99,11 +132,11 @@ function RuntimePathSearchSelect({
         ? { frameworkKeys: normalizedFrameworkKeys.join(',') }
         : {}),
       ...(normalizedScope ? { scope: normalizedScope } : {}),
-      ...(normalizedOperation ? { operation: normalizedOperation } : {}),
+      ...(queryOperation ? { operation: queryOperation } : {}),
       ...(isProtectedOnly ? { isProtected: 'true' } : {}),
       status: 'ACTIVE',
     })
-  }, [isProtectedOnly, normalizedFrameworkKeys, normalizedOperation, normalizedScope, triggerSearch])
+  }, [isProtectedOnly, normalizedFrameworkKeys, normalizedScope, queryOperation, triggerSearch])
 
   useEffect(() => {
     if (!isOpen || disabled) return undefined
@@ -157,8 +190,9 @@ function RuntimePathSearchSelect({
   const handleAdd = (pathKey) => {
     const normalized = normalizeKey(pathKey)
     if (!normalized) return
-    const next = normalizeKeys([...normalizedSelected, normalized])
+    const next = isSingleSelection ? [normalized] : normalizeKeys([...normalizedSelected, normalized])
     onChange?.(next)
+    onSelect?.(availableResults.find((row) => String(row?.pathKey ?? '').trim() === normalized) ?? null)
     setQuery('')
     closeDropdown()
     requestAnimationFrame(() => {
@@ -198,7 +232,7 @@ function RuntimePathSearchSelect({
   const resolvedHelperText = helperText
     ?? (!hasFrameworkFilter
       ? 'Search and select approved runtime paths (no framework filter applied).'
-      : `Search and select approved runtime paths (filtered by ${normalizedOperation || 'ANY'}).`)
+      : `Search and select approved runtime paths (filtered by ${queryOperation || 'ANY'}).`)
 
   return (
     <div ref={containerRef} className={`runtime-path-search-select ${className}`.trim()}>

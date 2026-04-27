@@ -13,8 +13,24 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
       data: {
         data: {
           data: [
-            { id: 'path-vmf-metadata', pathKey: 'vmf.metadata', label: 'VMF Metadata' },
-            { id: 'path-vmf-validation-status', pathKey: 'vmf.validation.status', label: 'VMF Validation Status' },
+            {
+              id: 'path-vmf-metadata',
+              pathKey: 'vmf.metadata',
+              label: 'VMF Metadata',
+              allowedOperations: ['READ', 'WRITE'],
+            },
+            {
+              id: 'path-vmf-validation-status',
+              pathKey: 'vmf.validation.status',
+              label: 'VMF Validation Status',
+              allowedOperations: ['READ'],
+            },
+            {
+              id: 'path-framework-state-stage',
+              pathKey: 'framework_state.lifecycle.stage',
+              label: 'Lifecycle Stage',
+              allowedOperations: ['BIND'],
+            },
           ],
           meta: {},
         },
@@ -177,5 +193,51 @@ describe('RuntimePathSearchSelect', () => {
       isProtected: 'true',
     }))
     expect(lastCall.operation).toBeUndefined()
+  })
+
+  it('supports single selection by replacing the existing selected path', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <RuntimePathSearchSelect
+        id="target-path"
+        label="Target Path"
+        frameworkKeys={['VMF']}
+        operation="READ"
+        selectionMode="single"
+        selectedKeys={['vmf.previous']}
+        onChange={onChange}
+      />,
+    )
+
+    const combo = screen.getByRole('combobox', { name: /target path/i })
+    await user.click(combo)
+    await user.type(combo, 'metadata')
+    await user.click(screen.getByRole('option', { name: /vmf\.metadata/i }))
+
+    expect(onChange).toHaveBeenCalledWith(['vmf.metadata'])
+  })
+
+  it('can filter results by path prefix and multiple allowed operations', async () => {
+    const user = userEvent.setup()
+    render(
+      <RuntimePathSearchSelect
+        id="condition-path"
+        label="Path"
+        frameworkKeys={['VMF']}
+        operation={null}
+        allowedOperations={['READ', 'BIND']}
+        pathPrefix="framework_state."
+        selectedKeys={[]}
+        onChange={vi.fn()}
+      />,
+    )
+
+    const combo = screen.getByRole('combobox', { name: /^path$/i })
+    await user.click(combo)
+    await user.type(combo, 'stage')
+
+    expect(screen.getByRole('option', { name: /framework_state\.lifecycle\.stage/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /vmf\.metadata/i })).not.toBeInTheDocument()
   })
 })
