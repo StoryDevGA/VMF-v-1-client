@@ -127,4 +127,20 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
     expect(currentRecord).toHaveTextContent('"stableId": "path-framework-state-metadata-tenant-id-1y5pv6y"')
     expect(currentRecord).toHaveTextContent('"createdAt": "2026-04-24T17:21:22.100Z"')
   })
+
+  it('validates min and max constraints before submit', async () => {
+    const user = userEvent.setup()
+    render(<SuperAdminRuntimePathRegistryEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^schema & ui$/i }))
+    await user.type(screen.getByLabelText(/^min value$/i), '10')
+    await user.type(screen.getByLabelText(/^max value$/i), '5')
+    await user.type(screen.getByLabelText(/^min length$/i), '8')
+    await user.type(screen.getByLabelText(/^max length$/i), '3')
+
+    await user.click(screen.getByRole('button', { name: /create path/i }))
+
+    expect(screen.getByText(/max value must be greater than or equal to min value/i)).toBeInTheDocument()
+    expect(screen.getByText(/max length must be greater than or equal to min length/i)).toBeInTheDocument()
+  })
 })

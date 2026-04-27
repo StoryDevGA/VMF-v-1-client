@@ -193,14 +193,6 @@ const validateForm = (form, { isEditMode = false } = {}) => {
     }
   }
 
-  if (String(form.allowedValueLabels ?? '').trim()) {
-    try {
-      parseObjectText(form.allowedValueLabels)
-    } catch {
-      errors.allowedValueLabels = 'Allowed value labels must be a JSON object.'
-    }
-  }
-
   if (form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.SELECT && parseListText(form.allowedValues).length === 0) {
     errors.uiControl = 'SELECT requires at least one allowed value.'
   }
@@ -211,6 +203,18 @@ const validateForm = (form, { isEditMode = false } = {}) => {
 
   if (form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.NUMBER && form.dataType !== RUNTIME_PATH_REGISTRY_DATA_TYPES.NUMBER) {
     errors.uiControl = 'NUMBER requires NUMBER data type.'
+  }
+
+  const minValue = parseOptionalNumber(form.minValue)
+  const maxValue = parseOptionalNumber(form.maxValue)
+  if (Number.isFinite(minValue) && Number.isFinite(maxValue) && minValue > maxValue) {
+    errors.maxValue = 'Max Value must be greater than or equal to Min Value.'
+  }
+
+  const minLength = parseOptionalNumber(form.minLength)
+  const maxLength = parseOptionalNumber(form.maxLength)
+  if (Number.isFinite(minLength) && Number.isFinite(maxLength) && minLength > maxLength) {
+    errors.maxLength = 'Max Length must be greater than or equal to Min Length.'
   }
 
   return errors
@@ -279,7 +283,20 @@ function DependencySummary({ dependencyResponse, isLoading, error }) {
       { key: 'sourceLabel', label: 'Source', mobileLabel: 'Source' },
       { key: 'field', label: 'Field', mobileLabel: 'Field', render: (value) => value || '--' },
       { key: 'usage', label: 'Usage', mobileLabel: 'Usage', render: (value) => value || '--' },
-      { key: 'status', label: 'Status', mobileLabel: 'Status', render: (value) => value || '--' },
+      {
+        key: 'status',
+        label: 'Status',
+        mobileLabel: 'Status',
+        render: (value) => {
+          const status = String(value ?? '').trim().toUpperCase()
+          if (!status) return '--'
+          return (
+            <Badge variant={status === 'ACTIVE' ? 'danger' : 'neutral'} size="sm" pill outline>
+              {status}
+            </Badge>
+          )
+        },
+      },
     ],
     [],
   )

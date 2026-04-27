@@ -401,6 +401,57 @@ describe('runtimeControlApi', () => {
     expect(disableResult.data?.data?.status).toBe('INACTIVE')
   })
 
+  it('round-trips mock Validation Registry PDF follow-up fields', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createValidationRegistry.initiate({
+        key: 'manual-run-validation',
+        label: 'Manual Run Validation',
+        description: 'Validation used to test console-ready metadata.',
+        status: 'ACTIVE',
+        supportedFrameworkKeys: ['VMF'],
+        category: 'QUALITY',
+        severity: 'WARNING',
+        producerSkillId: 'skill-snapshot',
+        defaultAgentIds: ['agent-vmf-submit-validator-agent'],
+        outputPath: 'framework_state.validation.required_sections',
+        resultType: 'OBJECT',
+        passFieldPath: 'framework_state.validation.required_sections.is_valid',
+        detailsFieldPath: 'framework_state.validation.required_sections.missing_sections',
+        policyUsable: true,
+        packageUsable: true,
+        requiresLatestRun: true,
+        freshnessDefaultMinutes: 15,
+        blockingDefault: false,
+        warningOnlyDefault: true,
+        allowManualRun: true,
+        executionMode: 'QUEUED',
+        version: 2,
+      }),
+    )
+
+    expect(createResult.error).toBeUndefined()
+    expect(createResult.data?.data?.allowManualRun).toBe(true)
+    expect(createResult.data?.data?.executionMode).toBe('QUEUED')
+    expect(createResult.data?.data?.version).toBe(2)
+
+    const validationId = createResult.data?.data?.id
+    const updateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateValidationRegistry.initiate({
+        validationId,
+        allowManualRun: false,
+        executionMode: 'ASYNC',
+        version: 3,
+      }),
+    )
+
+    expect(updateResult.error).toBeUndefined()
+    expect(updateResult.data?.data?.allowManualRun).toBe(false)
+    expect(updateResult.data?.data?.executionMode).toBe('ASYNC')
+    expect(updateResult.data?.data?.version).toBe(3)
+  })
+
   it('blocks mock disable/deprecate when active dependencies exist', async () => {
     const store = createTestStore()
 

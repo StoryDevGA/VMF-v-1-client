@@ -13,6 +13,7 @@ import { useToaster } from '../../components/Toaster'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import {
   useCreateValidationRegistryMutation,
+  useGetValidationRegistryDependenciesQuery,
   useGetValidationRegistryQuery,
   useLazyGetValidationRegistryDependenciesQuery,
   useListFrameworkRegistriesQuery,
@@ -25,6 +26,8 @@ import { RUNTIME_AGENT_STATUSES } from '../SuperAdminAgents/superAdminAgents.con
 import {
   VALIDATION_REGISTRY_CATEGORIES,
   VALIDATION_REGISTRY_CATEGORY_OPTIONS,
+  VALIDATION_REGISTRY_EXECUTION_MODES,
+  VALIDATION_REGISTRY_EXECUTION_MODE_OPTIONS,
   VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS,
   VALIDATION_REGISTRY_SEVERITIES,
   VALIDATION_REGISTRY_SEVERITY_OPTIONS,
@@ -56,6 +59,9 @@ const INITIAL_FORM = Object.freeze({
   freshnessDefaultMinutes: 30,
   blockingDefault: true,
   warningOnlyDefault: false,
+  allowManualRun: true,
+  executionMode: VALIDATION_REGISTRY_EXECUTION_MODES.SYNC,
+  version: 1,
 })
 
 const shallowEqualObject = (left, right) => {
@@ -83,6 +89,41 @@ const areStableIdListsEqual = (left, right) => {
   if (normalizedLeft.length !== normalizedRight.length) return false
   return normalizedLeft.every((value, index) => value === normalizedRight[index])
 }
+
+const buildDescendantPath = (outputPath, suffix) => {
+  const base = String(outputPath ?? '').trim()
+  const normalizedSuffix = String(suffix ?? '').trim().replace(/^\./, '')
+  return base && normalizedSuffix ? `${base}.${normalizedSuffix}` : ''
+}
+
+const formatPreviewJson = (value) => JSON.stringify(value, null, 2)
+
+const buildValidationPreview = (form, { isEditMode = false, loadedValidation = null } = {}) => ({
+  ...(isEditMode && loadedValidation?.id ? { id: loadedValidation.id } : {}),
+  ...(isEditMode && loadedValidation?.stableId ? { stableId: loadedValidation.stableId } : {}),
+  key: String(form.key ?? '').trim().toLowerCase(),
+  label: String(form.label ?? '').trim(),
+  description: String(form.description ?? '').trim(),
+  status: String(form.status ?? '').trim().toUpperCase(),
+  supportedFrameworkKeys: normalizeFrameworkKeys(form.supportedFrameworkKeys),
+  category: String(form.category ?? '').trim().toUpperCase(),
+  severity: String(form.severity ?? '').trim().toUpperCase(),
+  producerSkillId: String(form.producerSkillId ?? '').trim(),
+  defaultAgentIds: normalizeStableIdList(form.defaultAgentIds),
+  outputPath: String(form.outputPath ?? '').trim(),
+  resultType: String(form.resultType ?? '').trim().toUpperCase(),
+  passFieldPath: String(form.passFieldPath ?? '').trim(),
+  detailsFieldPath: String(form.detailsFieldPath ?? '').trim(),
+  policyUsable: Boolean(form.policyUsable),
+  packageUsable: Boolean(form.packageUsable),
+  requiresLatestRun: Boolean(form.requiresLatestRun),
+  freshnessDefaultMinutes: Number(form.freshnessDefaultMinutes ?? 0),
+  blockingDefault: Boolean(form.blockingDefault),
+  warningOnlyDefault: Boolean(form.warningOnlyDefault),
+  allowManualRun: Boolean(form.allowManualRun),
+  executionMode: String(form.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC).trim().toUpperCase(),
+  version: Number(form.version ?? 1) || 1,
+})
 
 const getAgentStatusBadgeVariant = (status) => {
   const normalizedStatus = String(status ?? '').trim().toUpperCase()
@@ -171,6 +212,11 @@ const validateForm = (form, { isEditMode } = {}) => {
     errors.freshnessDefaultMinutes = 'Freshness Default Minutes must be zero or a positive whole number.'
   }
 
+  const version = Number(form.version)
+  if (!Number.isInteger(version) || version < 1) {
+    errors.version = 'Version must be a positive whole number.'
+  }
+
   return errors
 }
 
@@ -211,6 +257,14 @@ function SuperAdminValidationRegistryEditor() {
 
   const loadedValidation = validationResponse?.data ?? null
   const validationAppError = validationError ? normalizeError(validationError) : null
+
+  const {
+    data: dependencyResponse,
+    isFetching: isDependencyFetching,
+    error: dependencyError,
+  } = useGetValidationRegistryDependenciesQuery(validationId, { skip: !isEditMode })
+  const dependencyData = dependencyResponse?.data ?? null
+  const dependencyAppError = dependencyError ? normalizeError(dependencyError) : null
 
   const { data: frameworkResponse, error: frameworkError } = useListFrameworkRegistriesQuery({
     page: 1,
@@ -416,6 +470,9 @@ function SuperAdminValidationRegistryEditor() {
         freshnessDefaultMinutes: Number(loadedValidation.freshnessDefaultMinutes ?? 30) || 30,
         blockingDefault: loadedValidation.blockingDefault !== undefined ? Boolean(loadedValidation.blockingDefault) : true,
         warningOnlyDefault: Boolean(loadedValidation.warningOnlyDefault),
+        allowManualRun: loadedValidation.allowManualRun === undefined ? true : Boolean(loadedValidation.allowManualRun),
+        executionMode: loadedValidation.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC,
+        version: Number(loadedValidation.version ?? 1) || 1,
       }
 
       return shallowEqualObject(current, next) ? current : next
@@ -484,6 +541,9 @@ function SuperAdminValidationRegistryEditor() {
         freshnessDefaultMinutes: Number(form.freshnessDefaultMinutes ?? 0),
         blockingDefault: Boolean(form.blockingDefault),
         warningOnlyDefault: Boolean(form.warningOnlyDefault),
+        allowManualRun: Boolean(form.allowManualRun),
+        executionMode: String(form.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC).trim().toUpperCase(),
+        version: Number(form.version ?? 1) || 1,
     }
 
     try {
@@ -542,6 +602,16 @@ function SuperAdminValidationRegistryEditor() {
   }, [pendingStatusWarning, submit])
 
   const resolveSingle = (values) => (Array.isArray(values) && values.length > 0 ? values[0] : '')
+
+  const previewJson = useMemo(
+    () => formatPreviewJson(buildValidationPreview(form, { isEditMode, loadedValidation })),
+    [form, isEditMode, loadedValidation],
+  )
+  const dependencySummary = dependencyData?.dependencies?.summary ?? {}
+  const dependencyWorkflowPolicies = dependencyData?.dependencies?.workflowPolicies ?? []
+  const dependencyFrameworkPackages = dependencyData?.dependencies?.frameworkPackages ?? []
+  const dependencyRuntimePaths = dependencyData?.runtimePaths ?? []
+  const dependencyDefaultAgents = dependencyData?.defaultAgents ?? []
 
   const isLoading = isEditMode ? (isValidationLoading && !loadedValidation) : false
 
@@ -914,6 +984,48 @@ function SuperAdminValidationRegistryEditor() {
               />
             </div>
 
+            {form.outputPath ? (
+              <div className="super-admin-validation-registry-editor__quick-fill" aria-label="Runtime output path quick fill">
+                <p className="super-admin-validation-registry-editor__helper">
+                  Quick-fill common output descendants from the selected Output Path.
+                </p>
+                <div className="super-admin-validation-registry-editor__quick-fill-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((current) => ({ ...current, passFieldPath: buildDescendantPath(current.outputPath, 'is_valid') }))}
+                  >
+                    Pass: .is_valid
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((current) => ({ ...current, detailsFieldPath: buildDescendantPath(current.outputPath, 'message') }))}
+                  >
+                    Details: .message
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((current) => ({ ...current, detailsFieldPath: buildDescendantPath(current.outputPath, 'missing_sections') }))}
+                  >
+                    Details: .missing_sections
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((current) => ({ ...current, detailsFieldPath: buildDescendantPath(current.outputPath, 'score') }))}
+                  >
+                    Details: .score
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="super-admin-validation-registry-editor__defaults-section">
               <div className="super-admin-validation-registry-editor__toggle-row">
                 <Tickbox
@@ -933,6 +1045,12 @@ function SuperAdminValidationRegistryEditor() {
                   label="Requires Latest Run"
                   checked={Boolean(form.requiresLatestRun)}
                   onChange={(event) => setForm((current) => ({ ...current, requiresLatestRun: event.target.checked }))}
+                />
+                <Tickbox
+                  id="validation-registry-editor-allow-manual-run"
+                  label="Allow Manual Run"
+                  checked={Boolean(form.allowManualRun)}
+                  onChange={(event) => setForm((current) => ({ ...current, allowManualRun: event.target.checked }))}
                 />
               </div>
 
@@ -958,6 +1076,27 @@ function SuperAdminValidationRegistryEditor() {
                 />
               </div>
 
+              <div className="super-admin-validation-registry-editor__row">
+                <Select
+                  id="validation-registry-editor-execution-mode"
+                  label="Execution Mode"
+                  value={form.executionMode}
+                  options={VALIDATION_REGISTRY_EXECUTION_MODE_OPTIONS}
+                  onChange={(event) => setForm((current) => ({ ...current, executionMode: event.target.value }))}
+                  helperText="SYNC runs inline; ASYNC/QUEUED are reserved for orchestration flows."
+                />
+                <Input
+                  id="validation-registry-editor-version"
+                  label="Version"
+                  type="number"
+                  value={String(form.version)}
+                  onChange={(event) => setForm((current) => ({ ...current, version: event.target.value }))}
+                  error={errors.version}
+                  helperText="Positive whole number for schema evolution."
+                  fullWidth
+                />
+              </div>
+
               <div className="super-admin-validation-registry-editor__toggle-row">
                 <Tickbox
                   id="validation-registry-editor-blocking-default"
@@ -976,6 +1115,83 @@ function SuperAdminValidationRegistryEditor() {
           {errors.warningOnlyDefault ? (
             <p className="super-admin-validation-registry-editor__error" role="alert">{errors.warningOnlyDefault}</p>
           ) : null}
+
+          <div className="super-admin-validation-registry-editor__insight-grid">
+            <section className="super-admin-validation-registry-editor__insight-card" aria-label="Validation usage">
+              <div className="super-admin-validation-registry-editor__insight-header">
+                <h2 className="super-admin-validation-registry-editor__insight-title">Usage</h2>
+                {isDependencyFetching ? <span className="super-admin-validation-registry-editor__helper">Loading...</span> : null}
+              </div>
+              {isEditMode ? (
+                dependencyAppError ? (
+                  <p className="super-admin-validation-registry-editor__error" role="alert">{dependencyAppError.message}</p>
+                ) : (
+                  <>
+                    <div className="super-admin-validation-registry-editor__usage-summary">
+                      <span><strong>{Number(dependencySummary.workflowPolicies) || 0}</strong> Workflow Policies</span>
+                      <span><strong>{Number(dependencySummary.frameworkPackages) || 0}</strong> Framework Packages</span>
+                    </div>
+                    <div className="super-admin-validation-registry-editor__usage-list">
+                      {dependencyWorkflowPolicies.map((policy) => (
+                        <p key={policy.id ?? policy.key} className="super-admin-validation-registry-editor__helper">
+                          Policy: {policy.name ?? policy.key} ({policy.status ?? 'UNKNOWN'})
+                        </p>
+                      ))}
+                      {dependencyFrameworkPackages.map((pkg) => (
+                        <p key={pkg.id ?? `${pkg.frameworkKey}-${pkg.version}`} className="super-admin-validation-registry-editor__helper">
+                          Package: {pkg.frameworkKey} {pkg.version} ({pkg.status ?? 'UNKNOWN'})
+                        </p>
+                      ))}
+                      {dependencyWorkflowPolicies.length + dependencyFrameworkPackages.length === 0 ? (
+                        <p className="super-admin-validation-registry-editor__helper">No current policy or package references.</p>
+                      ) : null}
+                    </div>
+                    <div className="super-admin-validation-registry-editor__usage-list">
+                      {dependencyRuntimePaths.map((path) => (
+                        <p key={path.pathKey} className="super-admin-validation-registry-editor__helper">
+                          Path: {path.pathKey} ({path.status ?? 'UNKNOWN'})
+                        </p>
+                      ))}
+                      {dependencyDefaultAgents.map((agent) => (
+                        <p key={agent.id} className="super-admin-validation-registry-editor__helper">
+                          Agent: {agent.name ?? agent.key} ({agent.status ?? 'UNKNOWN'})
+                        </p>
+                      ))}
+                    </div>
+                  </>
+                )
+              ) : (
+                <p className="super-admin-validation-registry-editor__helper">
+                  Usage is available after the validation has been created.
+                </p>
+              )}
+            </section>
+
+            <section className="super-admin-validation-registry-editor__insight-card" aria-label="Validation JSON preview">
+              <div className="super-admin-validation-registry-editor__insight-header">
+                <h2 className="super-admin-validation-registry-editor__insight-title">Live JSON Preview</h2>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!form.allowManualRun}
+                  onClick={() => addToast({
+                    variant: 'info',
+                    title: 'Validation Console required',
+                    description: 'Manual test runs will execute from the Validation Console follow-up.',
+                  })}
+                >
+                  Test Validation
+                </Button>
+              </div>
+              <pre className="super-admin-validation-registry-editor__json-preview" aria-label="Validation registry JSON preview">
+                {previewJson}
+              </pre>
+              <p className="super-admin-validation-registry-editor__helper">
+                Test execution is reserved for the Validation Console; this preview shows the payload shape that will be saved.
+              </p>
+            </section>
+          </div>
 
           {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
             <p className="super-admin-validation-registry-editor__helper">

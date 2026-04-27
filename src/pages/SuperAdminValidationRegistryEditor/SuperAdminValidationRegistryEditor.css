@@ -66,7 +66,10 @@
 }
 
 .super-admin-validation-registry-editor__path-stack,
-.super-admin-validation-registry-editor__defaults-section {
+.super-admin-validation-registry-editor__defaults-section,
+.super-admin-validation-registry-editor__quick-fill,
+.super-admin-validation-registry-editor__insight-card,
+.super-admin-validation-registry-editor__usage-list {
   display: grid;
   gap: var(--spacing-md);
 }
@@ -148,6 +151,84 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
+}
+
+.super-admin-validation-registry-editor__quick-fill {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.super-admin-validation-registry-editor__quick-fill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-validation-registry-editor__insight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.super-admin-validation-registry-editor__insight-card {
+  align-content: start;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-primary);
+}
+
+.super-admin-validation-registry-editor__insight-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-validation-registry-editor__insight-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-snug);
+}
+
+.super-admin-validation-registry-editor__usage-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.super-admin-validation-registry-editor__usage-summary span {
+  display: grid;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-validation-registry-editor__usage-summary strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+}
+
+.super-admin-validation-registry-editor__json-preview {
+  max-height: calc(var(--spacing-md) * 22);
+  overflow: auto;
+  margin: 0;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
 }
 
 .super-admin-validation-registry-editor__footer-actions {

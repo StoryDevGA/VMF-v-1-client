@@ -3887,6 +3887,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           freshnessDefaultMinutes: Number(runtimePayload.freshnessDefaultMinutes ?? 30) || 30,
           blockingDefault: runtimePayload.blockingDefault === undefined ? true : Boolean(runtimePayload.blockingDefault),
           warningOnlyDefault: Boolean(runtimePayload.warningOnlyDefault),
+          allowManualRun: runtimePayload.allowManualRun === undefined ? true : Boolean(runtimePayload.allowManualRun),
+          executionMode: String(runtimePayload.executionMode ?? 'SYNC').trim().toUpperCase(),
+          version: Number(runtimePayload.version ?? 1) || 1,
           ...buildAuditFields(),
         })
 
@@ -4031,6 +4034,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ...(payload.freshnessDefaultMinutes !== undefined ? { freshnessDefaultMinutes: Number(payload.freshnessDefaultMinutes ?? 0) } : {}),
           ...(payload.blockingDefault !== undefined ? { blockingDefault: nextBlockingDefault } : {}),
           ...(payload.warningOnlyDefault !== undefined ? { warningOnlyDefault: nextWarningOnlyDefault } : {}),
+          ...(payload.allowManualRun !== undefined ? { allowManualRun: Boolean(payload.allowManualRun) } : {}),
+          ...(payload.executionMode !== undefined ? { executionMode: String(payload.executionMode ?? 'SYNC').trim().toUpperCase() } : {}),
+          ...(payload.version !== undefined ? { version: Number(payload.version ?? 1) || 1 } : {}),
           ...buildAuditFields(),
         })
 

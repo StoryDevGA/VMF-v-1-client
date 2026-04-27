@@ -71,8 +71,32 @@ describe('SuperAdminValidationRegistryEditor page', () => {
 
     expect(await screen.findByRole('heading', { name: /^edit validation$/i })).toBeInTheDocument()
     expect(screen.getByDisplayValue('OBJECT')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^execution mode$/i)).toHaveDisplayValue('SYNC')
+    expect(screen.getByLabelText(/^version$/i)).toHaveValue(1)
+    expect(screen.getByLabelText(/^allow manual run$/i)).toBeChecked()
     expect(screen.getByLabelText(/requires latest run/i)).toBeChecked()
-    expect(screen.getByText(/vmf submit validator agent/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/vmf submit validator agent/i).length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: /^usage$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^live json preview$/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/validation registry json preview/i)).toHaveTextContent('"executionMode": "SYNC"')
+    expect(screen.getByRole('button', { name: /^test validation$/i })).toBeEnabled()
+  })
+
+  it('quick-fills descendant runtime output paths from the selected output path', async () => {
+    const user = userEvent.setup()
+
+    renderPage('/super-admin/runtime-control/validation-registry/validation-required-sections-check')
+
+    expect(await screen.findByRole('heading', { name: /^edit validation$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /details: \.message/i }))
+
+    expect(
+      screen.getByText('framework_state.validation.required_sections.message'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/validation registry json preview/i)).toHaveTextContent(
+      '"detailsFieldPath": "framework_state.validation.required_sections.message"',
+    )
   })
 
   it('shows a local warning when selected default agents are no longer framework-compatible', async () => {

@@ -32,6 +32,12 @@ export const VALIDATION_REGISTRY_RESULT_TYPES = Object.freeze({
   MIXED: 'MIXED',
 })
 
+export const VALIDATION_REGISTRY_EXECUTION_MODES = Object.freeze({
+  SYNC: 'SYNC',
+  ASYNC: 'ASYNC',
+  QUEUED: 'QUEUED',
+})
+
 export const VALIDATION_REGISTRY_PAGE_SIZE = 20
 
 export const VALIDATION_REGISTRY_HELP_TEXT =
@@ -56,6 +62,10 @@ export const VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS = Object.freeze([
   { value: '', label: 'Select...' },
   ...Object.values(VALIDATION_REGISTRY_RESULT_TYPES).map((value) => ({ value, label: value })),
 ])
+
+export const VALIDATION_REGISTRY_EXECUTION_MODE_OPTIONS = Object.freeze(
+  Object.values(VALIDATION_REGISTRY_EXECUTION_MODES).map((value) => ({ value, label: value })),
+)
 
 export const getValidationRegistryStatusVariant = (value) => {
   const normalized = String(value || '').trim().toUpperCase()
@@ -91,6 +101,9 @@ export const cloneValidationRegistryEntry = (entry = {}) => ({
   freshnessDefaultMinutes: Number(entry.freshnessDefaultMinutes ?? 30) || 30,
   blockingDefault: Boolean(entry.blockingDefault),
   warningOnlyDefault: Boolean(entry.warningOnlyDefault),
+  allowManualRun: entry.allowManualRun === undefined ? true : Boolean(entry.allowManualRun),
+  executionMode: String(entry.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC).trim().toUpperCase(),
+  version: Number(entry.version ?? 1) || 1,
   createdAt: entry.createdAt ?? null,
   updatedAt: entry.updatedAt ?? null,
   createdBy: entry.createdBy ?? null,
