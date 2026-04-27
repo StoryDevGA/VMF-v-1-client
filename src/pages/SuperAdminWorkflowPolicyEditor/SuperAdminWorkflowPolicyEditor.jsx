@@ -281,11 +281,13 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   failMessage: String(formState.failMessage ?? '').trim(),
   severity: String(formState.severity ?? '').trim().toUpperCase(),
   conditions: (Array.isArray(formState.conditions) ? formState.conditions : [])
-    .map((condition) => ({
+    .map((condition, index, rows) => ({
       path: String(condition?.path ?? '').trim(),
       operator: String(condition?.operator ?? '').trim(),
       value: condition?.value ?? '',
-      logic: String(condition?.logic ?? WORKFLOW_POLICY_CONDITION_LOGIC.AND).trim().toUpperCase(),
+      ...(index < rows.length - 1
+        ? { logic: String(condition?.logic ?? WORKFLOW_POLICY_CONDITION_LOGIC.AND).trim().toUpperCase() }
+        : {}),
     }))
     .filter((condition) => condition.path || condition.operator || condition.value),
   routingMode: String(formState.routingMode ?? '').trim().toUpperCase(),
@@ -594,8 +596,6 @@ function WorkflowPolicyEditor() {
     q: '',
     status: 'ACTIVE',
     ...(runtimePathLookupFrameworkKeysParam ? { frameworkKeys: runtimePathLookupFrameworkKeysParam } : {}),
-    scope: 'FRAMEWORK_STATE',
-    operation: 'READ',
   })
   const {
     data: writeRuntimePathsResponse,
@@ -628,7 +628,18 @@ function WorkflowPolicyEditor() {
     [runtimeAgentsResponse],
   )
   const runtimePathRows = useMemo(
-    () => (Array.isArray(runtimePathsResponse?.data) ? runtimePathsResponse.data : []),
+    () => (Array.isArray(runtimePathsResponse?.data) ? runtimePathsResponse.data : []).filter((row) => {
+      const pathKey = String(row?.pathKey ?? '').trim()
+      const allowedOperations = Array.isArray(row?.allowedOperations)
+        ? row.allowedOperations.map((operation) => String(operation ?? '').trim().toUpperCase())
+        : []
+
+      return pathKey.startsWith('framework_state.')
+        && (
+          allowedOperations.includes('READ')
+          || allowedOperations.includes('BIND')
+        )
+    }),
     [runtimePathsResponse],
   )
   const writableRuntimePathRows = useMemo(
@@ -744,10 +755,10 @@ function WorkflowPolicyEditor() {
     }
 
     if (runtimePathLookupFrameworkKeys.length > 0) {
-      return `No ACTIVE FRAMEWORK_STATE runtime paths are currently registered for ${runtimePathLookupFrameworkKeys.join(', ')}.`
+      return `No ACTIVE readable framework_state.* runtime paths are currently registered for ${runtimePathLookupFrameworkKeys.join(', ')}.`
     }
 
-    return 'No ACTIVE FRAMEWORK_STATE runtime paths are currently registered.'
+    return 'No ACTIVE readable framework_state.* runtime paths are currently registered.'
   }, [
     isRuntimePathsLoading,
     runtimePathLookupFrameworkKeys,
@@ -1250,7 +1261,18 @@ function WorkflowPolicyEditor() {
             onClick={() =>
               setForm((current) => ({
                 ...current,
-                conditions: [...(Array.isArray(current.conditions) ? current.conditions : []), buildConditionRow()],
+                conditions: (() => {
+                  const currentConditions = Array.isArray(current.conditions) ? current.conditions : []
+                  const nextConditions = currentConditions.map((condition, conditionIndex) =>
+                    conditionIndex === currentConditions.length - 1
+                      ? {
+                          ...condition,
+                          logic: condition.logic || WORKFLOW_POLICY_CONDITION_LOGIC.AND,
+                        }
+                      : condition,
+                  )
+                  return [...nextConditions, buildConditionRow()]
+                })(),
               }))
             }
           >
@@ -1259,7 +1281,9 @@ function WorkflowPolicyEditor() {
         </div>
         {Array.isArray(form.conditions) && form.conditions.length > 0 ? (
           <div className="super-admin-workflow-policy-editor__condition-list">
-            {form.conditions.map((condition, index) => (
+            {form.conditions.map((condition, index) => {
+              const isFinalCondition = index === form.conditions.length - 1
+              return (
               <div key={`condition-${index}`} className="super-admin-workflow-policy-editor__condition-row">
                 <div className="super-admin-workflow-policy-editor__grid super-admin-workflow-policy-editor__grid--condition">
                   <Select
@@ -1339,20 +1363,26 @@ function WorkflowPolicyEditor() {
                       />
                     )
                   })()}
-                  <Select
-                    id={`workflow-policy-editor-condition-logic-${index}`}
-                    label="Logic"
-                    value={condition.logic ?? WORKFLOW_POLICY_CONDITION_LOGIC.AND}
-                    options={WORKFLOW_POLICY_CONDITION_LOGIC_OPTIONS}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        conditions: current.conditions.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, logic: normalizeConditionLogic(event.target.value) } : item,
-                        ),
-                      }))
-                    }
-                  />
+                  {isFinalCondition ? (
+                    <div className="super-admin-workflow-policy-editor__logic-terminal" aria-live="polite">
+                      Final condition
+                    </div>
+                  ) : (
+                    <Select
+                      id={`workflow-policy-editor-condition-logic-${index}`}
+                      label="Logic"
+                      value={condition.logic ?? WORKFLOW_POLICY_CONDITION_LOGIC.AND}
+                      options={WORKFLOW_POLICY_CONDITION_LOGIC_OPTIONS}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          conditions: current.conditions.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, logic: normalizeConditionLogic(event.target.value) } : item,
+                          ),
+                        }))
+                      }
+                    />
+                  )}
                 </div>
                 <div className="super-admin-workflow-policy-editor__condition-actions">
                   <Button
@@ -1370,7 +1400,7 @@ function WorkflowPolicyEditor() {
                   </Button>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         ) : (
           <p className="super-admin-workflow-policy-editor__helper">

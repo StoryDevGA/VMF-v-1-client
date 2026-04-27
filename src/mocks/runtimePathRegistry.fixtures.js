@@ -821,7 +821,7 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     description: 'Validation result container for required framework sections.',
     status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
     frameworkKeys: Object.freeze(['VMF']),
-    scope: 'FRAMEWORK_STATE',
+    scope: 'VALIDATION_RESULT',
     allowedOperations: Object.freeze([
       RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
       RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
@@ -845,7 +845,7 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     description: 'Whether all required framework sections are present and valid.',
     status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
     frameworkKeys: Object.freeze(['VMF']),
-    scope: 'FRAMEWORK_STATE',
+    scope: 'VALIDATION_RESULT',
     allowedOperations: Object.freeze([
       RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
       RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
@@ -870,7 +870,7 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     description: 'Framework section keys missing from the required sections validation result.',
     status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
     frameworkKeys: Object.freeze(['VMF']),
-    scope: 'FRAMEWORK_STATE',
+    scope: 'VALIDATION_RESULT',
     allowedOperations: Object.freeze([
       RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
       RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
@@ -918,4 +918,3 @@ export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
   }),
 ].map(withDerivedRuntimePathRegistryId))
-

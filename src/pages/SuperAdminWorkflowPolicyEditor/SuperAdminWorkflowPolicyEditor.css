@@ -261,6 +261,15 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.super-admin-workflow-policy-editor__logic-terminal {
+  align-self: end;
+  min-height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 .super-admin-workflow-policy-editor__condition-actions {
   display: flex;
   justify-content: flex-end;

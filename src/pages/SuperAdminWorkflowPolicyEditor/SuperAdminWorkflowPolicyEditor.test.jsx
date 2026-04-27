@@ -213,8 +213,54 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
 
     expect(
-      screen.getByText(/no active framework_state runtime paths are currently registered for cmf/i),
+      screen.getByText(/no active readable framework_state\.\* runtime paths are currently registered for cmf/i),
     ).toBeInTheDocument()
+  })
+
+  it('offers validation-result framework_state paths as governed condition paths', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
+    await user.click(screen.getByRole('checkbox', { name: /value messaging framework/i }))
+    await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
+    await user.click(screen.getByRole('button', { name: /add condition/i }))
+
+    await user.selectOptions(
+      screen.getByLabelText(/^path$/i, {
+        selector: 'select#workflow-policy-editor-condition-path-0',
+      }),
+      'framework_state.validation.required_sections.is_valid',
+    )
+
+    expect(
+      screen.getByLabelText(/^path$/i, {
+        selector: 'select#workflow-policy-editor-condition-path-0',
+      }),
+    ).toHaveValue('framework_state.validation.required_sections.is_valid')
+  })
+
+  it('shows logic only between condition rows', async () => {
+    const user = userEvent.setup()
+    renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
+    await user.click(screen.getByRole('button', { name: /add condition/i }))
+
+    expect(screen.queryByLabelText(/^logic$/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/final condition/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /add condition/i }))
+
+    expect(
+      screen.getByLabelText(/^logic$/i, {
+        selector: 'select#workflow-policy-editor-condition-logic-0',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^logic$/i, {
+      selector: 'select#workflow-policy-editor-condition-logic-1',
+    })).not.toBeInTheDocument()
+    expect(screen.getByText(/final condition/i)).toBeInTheDocument()
   })
 
   it('lets the validation requirements selector find ACTIVE policy-usable validations for the selected frameworks', async () => {
@@ -283,7 +329,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       screen.getByLabelText(/^path$/i, {
         selector: 'select#workflow-policy-editor-condition-path-0',
       }),
-      'vmf.status',
+      'framework_state.lifecycle.stage',
     )
     await user.selectOptions(
       screen.getByLabelText(/^operator$/i, {
@@ -291,9 +337,9 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       }),
       '=',
     )
-    await user.type(
+    await user.selectOptions(
       screen.getByLabelText(/^value$/i, {
-        selector: 'input#workflow-policy-editor-condition-value-0',
+        selector: 'select#workflow-policy-editor-condition-value-0',
       }),
       'DRAFT',
     )

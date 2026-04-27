@@ -1072,11 +1072,13 @@ export function validateWorkflowPolicyForm(
       passMessage,
       failMessage,
       severity,
-      conditions: normalizedConditions.map((condition) => ({
+      conditions: normalizedConditions.map((condition, index) => ({
         path: condition.path,
         operator: condition.operator,
         value: parseConditionValue(condition.value, condition.operator),
-        logic: condition.logic || WORKFLOW_POLICY_CONDITION_LOGIC.AND,
+        ...(index < normalizedConditions.length - 1
+          ? { logic: condition.logic || WORKFLOW_POLICY_CONDITION_LOGIC.AND }
+          : {}),
       })),
       routingMode,
       primaryAgentId,

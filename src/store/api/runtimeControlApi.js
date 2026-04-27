@@ -1064,13 +1064,14 @@ const buildMockWorkflowPolicyTestResult = ({
         actualValue,
         expectedValue: condition?.value,
       }),
-      logic: String(condition?.logic ?? 'AND').trim().toUpperCase(),
+      ...(condition?.logic ? { logic: String(condition.logic).trim().toUpperCase() } : {}),
     }
   })
 
   const conditionsMatched = matchedConditions.reduce((currentResult, conditionResult, index) => {
     if (index === 0) return conditionResult.matched
-    if (conditionResult.logic === 'OR') {
+    const previousCondition = matchedConditions[index - 1]
+    if (previousCondition?.logic === 'OR') {
       return currentResult || conditionResult.matched
     }
     return currentResult && conditionResult.matched

@@ -903,6 +903,95 @@ describe('runtimeControlApi', () => {
     ])
   })
 
+  it('uses mock Workflow Policy condition logic as the connector to the next row', async () => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.testWorkflowPolicy.initiate({
+        draft: {
+          key: 'vmf-framework-state-console-or-connector',
+          name: 'VMF Framework State Console OR Connector Policy',
+          description: 'Exercises condition connector ordering.',
+          status: 'ACTIVE',
+          policyType: 'LIFECYCLE_GATE',
+          priority: 25,
+          frameworkKeys: ['VMF'],
+          appliesTo: 'FRAMEWORK_LIFECYCLE',
+          triggerEvent: 'ON_SUBMIT',
+          triggerMode: 'PRE_ACTION',
+          actorScope: 'USER',
+          cooldownSeconds: 0,
+          reevaluateOnRetry: false,
+          governedAction: 'SUBMIT_FOR_REVIEW',
+          decisionMode: 'REQUIRE_AGENT_EVALUATION',
+          passMessage: 'Submission allowed.',
+          failMessage: 'Submission blocked.',
+          severity: 'BLOCKING',
+          conditions: [{
+            path: 'framework_state.lifecycle.stage',
+            operator: '=',
+            value: 'APPROVED',
+            logic: 'OR',
+          }, {
+            path: 'framework_state.validation.required_sections.is_valid',
+            operator: '=',
+            value: true,
+          }],
+          routingMode: 'FIXED_AGENT',
+          primaryAgentId: 'agent-validator',
+          fallbackAgentId: '',
+          timeoutMs: 10000,
+          retryOverride: '',
+          requireSuccess: true,
+          requiredValidationKeys: [],
+          validationBlockingOnFail: true,
+          validationWarningOnly: false,
+          validationFreshnessMinutes: 30,
+          validationRequireLatestRun: true,
+          onPassEffects: [],
+          onFailEffects: [],
+          overrideAllowed: false,
+          overrideRoles: [],
+          approvalRequired: false,
+          escalateTo: '',
+          escalationMessage: '',
+          slaMinutes: 0,
+          orderedSteps: [],
+          requiredAgentIds: ['agent-validator'],
+          requiredSkillIds: [],
+          gatingRules: [],
+        },
+        frameworkState: {
+          lifecycle: {
+            stage: 'DRAFT',
+          },
+          validation: {
+            required_sections: {
+              is_valid: true,
+            },
+          },
+        },
+        triggerEvent: 'ON_SUBMIT',
+        actorScope: 'USER',
+      }),
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.data?.data?.conditionsMatched).toBe(true)
+    expect(result.data?.data?.matchedConditions).toEqual([
+      expect.objectContaining({
+        path: 'framework_state.lifecycle.stage',
+        matched: false,
+        logic: 'OR',
+      }),
+      expect.objectContaining({
+        path: 'framework_state.validation.required_sections.is_valid',
+        actualValue: true,
+        matched: true,
+      }),
+    ])
+  })
+
   it('keeps mock Workflow Policy requiredSkillIds validation aligned with the API', async () => {
     const store = createTestStore()
 
