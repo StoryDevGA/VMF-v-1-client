@@ -101,6 +101,8 @@ const formatValueText = (value) => {
   return String(value)
 }
 
+const formatRecordJson = (value) => JSON.stringify(value ?? {}, null, 2)
+
 const parseLooseValue = (value) => {
   const text = String(value ?? '').trim()
   if (!text) return undefined
@@ -370,6 +372,10 @@ function SuperAdminRuntimePathRegistryEditor() {
   const isLoading = isRuntimePathLoading || isDuplicateSourceLoading
   const isSaving = isCreating || isUpdating || isDuplicating
   const readOnlyCopiedFields = isDuplicateMode
+  const currentRuntimePathJson = useMemo(
+    () => (loadedRuntimePath ? formatRecordJson(loadedRuntimePath) : ''),
+    [loadedRuntimePath],
+  )
 
   useEffect(() => {
     if (!isEditMode || !loadedRuntimePath) return undefined
@@ -923,6 +929,20 @@ function SuperAdminRuntimePathRegistryEditor() {
                           fullWidth
                         />
                       </RuntimePathEditorField>
+                      {isEditMode && loadedRuntimePath ? (
+                        <RuntimePathEditorField id="runtime-path-editor-current-json" label="Current Record JSON">
+                          <pre
+                            id="runtime-path-editor-current-json"
+                            className="super-admin-runtime-path-registry-editor__json-preview"
+                            aria-label="Current runtime path record JSON"
+                          >
+                            {currentRuntimePathJson}
+                          </pre>
+                          <p className="super-admin-runtime-path-registry-editor__helper">
+                            Read-only persisted record from the API, including stableId, timestamps, and system metadata.
+                          </p>
+                        </RuntimePathEditorField>
+                      ) : null}
                     </div>
                   </TabView.Tab>
                 </TabView>

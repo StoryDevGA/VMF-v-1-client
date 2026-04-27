@@ -362,11 +362,15 @@ describe('runtimeControlApi', () => {
       runtimeControlApi.endpoints.updateRuntimePath.initiate({
         pathId,
         label: 'Custom Runtime Flag',
+        allowedValues: ['TRUE', 'FALSE'],
+        allowedValueLabels: { TRUE: 'True', FALSE: 'False' },
         helpText: 'Used by the mock Runtime Path Registry editor harness.',
       }),
     )
     expect(updateResult.error).toBeUndefined()
     expect(updateResult.data?.data?.label).toBe('Custom Runtime Flag')
+    expect(updateResult.data?.data?.allowedValues).toEqual(['TRUE', 'FALSE'])
+    expect(updateResult.data?.data?.allowedValueLabels).toEqual({ TRUE: 'True', FALSE: 'False' })
 
     const duplicateResult = await store.dispatch(
       runtimeControlApi.endpoints.duplicateRuntimePath.initiate({

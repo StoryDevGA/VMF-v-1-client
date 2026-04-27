@@ -14,9 +14,10 @@ const runtimePathRows = [
     frameworkKeys: ['VMF'],
     allowedOperations: ['READ'],
     scope: 'FRAMEWORK_STATE',
-    category: 'SYSTEM',
+    category: 'METADATA',
     dataType: 'STRING',
-    sourceType: 'DERIVED',
+    sourceType: 'RUNTIME_STATE',
+    uiControl: 'TEXT',
     isProtected: false,
     isSystem: false,
     updatedAt: '2026-04-26T12:00:00.000Z',
@@ -77,6 +78,7 @@ describe('SuperAdminRuntimePathRegistry', () => {
 
     expect(screen.getByRole('columnheader', { name: /flags/i })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: /schema/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /ui control for test runtime path/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/actions for test runtime path/i)).toBeInTheDocument()
   })
 

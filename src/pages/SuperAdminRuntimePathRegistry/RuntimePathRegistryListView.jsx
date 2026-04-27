@@ -69,13 +69,15 @@ function SchemaAccordionCell({ row }) {
   const category = row?.category ? String(row.category) : null
   const dataType = row?.dataType ? String(row.dataType) : null
   const sourceType = row?.sourceType ? String(row.sourceType) : null
+  const uiControl = row?.uiControl ? String(row.uiControl) : null
 
-  if (!category && !dataType && !sourceType) return <span>--</span>
+  if (!category && !dataType && !sourceType && !uiControl) return <span>--</span>
 
   const baseId = `schema-${normalizeAccordionId(row?.id ?? row?.pathKey ?? row?.label ?? 'runtime-path')}`
   const categoryItemId = `${baseId}-category`
   const sourceTypeItemId = `${baseId}-source-type`
   const dataTypeItemId = `${baseId}-data-type`
+  const uiControlItemId = `${baseId}-ui-control`
 
   return (
     <Accordion
@@ -133,6 +135,24 @@ function SchemaAccordionCell({ row }) {
             className="super-admin-runtime-path-registry__schema-accordion-content"
           >
             <code className="super-admin-runtime-path-registry__schema-value">{dataType}</code>
+          </Accordion.Content>
+        </Accordion.Item>
+      ) : null}
+
+      {uiControl ? (
+        <Accordion.Item id={uiControlItemId}>
+          <Accordion.Header
+            itemId={uiControlItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-header"
+            aria-label={`UI control for ${row.label ?? row.pathKey ?? 'runtime path'}`}
+          >
+            UI control
+          </Accordion.Header>
+          <Accordion.Content
+            itemId={uiControlItemId}
+            className="super-admin-runtime-path-registry__schema-accordion-content"
+          >
+            <code className="super-admin-runtime-path-registry__schema-value">{uiControl}</code>
           </Accordion.Content>
         </Accordion.Item>
       ) : null}

@@ -32,11 +32,13 @@ import {
 import {
   buildRuntimePathRegistryStableId,
   cloneRuntimePathRegistryEntry,
-  INITIAL_RUNTIME_PATH_REGISTRY,
-  INITIAL_RUNTIME_PATH_REGISTRY_STAGED,
   RUNTIME_PATH_REGISTRY_PAGE_SIZE,
   RUNTIME_PATH_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
+import {
+  INITIAL_RUNTIME_PATH_REGISTRY,
+  INITIAL_RUNTIME_PATH_REGISTRY_STAGED,
+} from '../../mocks/runtimePathRegistry.fixtures.js'
 import {
   buildSkillRoleRegistryStableId,
   cloneSkillRoleRegistryEntry,
@@ -68,7 +70,12 @@ const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
   name: 'Super Admin',
 })
 
-const isRuntimeControlMockMode = () => globalThis.__RUNTIME_CONTROL_API_MOCK__ === true
+const isRuntimeControlMockMode = () => {
+  const mockModeAllowed = import.meta.env.MODE === 'test'
+    || import.meta.env.VITE_RUNTIME_CONTROL_ALLOW_MOCK === 'true'
+
+  return mockModeAllowed && globalThis.__RUNTIME_CONTROL_API_MOCK__ === true
+}
 
 const buildListParams = ({
   page,
