@@ -100,6 +100,7 @@ describe('SuperAdminSkills page', () => {
       }),
     ).toHaveValue('snapshot')
     expect(screen.getByText(/skill id:/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /dependency visibility/i }))
     expect(screen.getByRole('heading', { name: /dependency visibility/i })).toBeInTheDocument()
   })
 

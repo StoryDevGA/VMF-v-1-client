@@ -1,4 +1,4 @@
-export const ENTITLEMENT_PATTERN = /^[A-Z][A-Z0-9_]*$/
+const ENTITLEMENT_PATTERN = /^[A-Z][A-Z0-9_]*$/
 
 export const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -16,10 +16,10 @@ export const INITIAL_FORM = {
   isActive: true,
 }
 
-export const normalizeEntitlementToken = (value) =>
+const normalizeEntitlementToken = (value) =>
   String(value ?? '')
     .trim()
-    .replace(/^[\[{(]+/, '')
+    .replace(/^[{([]+/, '')
     .replace(/[\]})]+$/, '')
     .replace(/^["'`]+|["'`]+$/g, '')
     .toUpperCase()

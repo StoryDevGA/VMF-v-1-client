@@ -170,16 +170,6 @@ export const selectAuthStatus = (state) => state.auth.status
 export const selectIsAuthenticated = (state) => state.auth.status === 'authenticated'
 
 /** @param {import('../index').RootState} state */
-export const selectUserMemberships = (state) => state.auth.user?.memberships ?? EMPTY_ARRAY
-
-/** @param {import('../index').RootState} state */
-export const selectUserTenantMemberships = (state) =>
-  state.auth.user?.tenantMemberships ?? EMPTY_ARRAY
-
-/** @param {import('../index').RootState} state */
-export const selectUserVmfGrants = (state) => state.auth.user?.vmfGrants ?? EMPTY_ARRAY
-
-/** @param {import('../index').RootState} state */
 export const selectResolvedPermissions = (state) => state.auth.resolvedPermissions
 
 export default authSlice.reducer

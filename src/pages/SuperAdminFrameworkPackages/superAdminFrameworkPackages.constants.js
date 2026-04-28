@@ -40,12 +40,6 @@ export const FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS = Object.freeze([
   { value: 'RETRY_WITH_BACKOFF', label: 'Retry with backoff' },
 ])
 
-export const FRAMEWORK_OPTIONS = Object.freeze([
-  { value: '', label: 'All frameworks' },
-  { value: 'RLD', label: 'RLD' },
-  { value: 'VMF', label: 'VMF' },
-])
-
 export const FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS = Object.freeze([
   { value: FRAMEWORK_PACKAGE_STATUSES.DRAFT, label: 'Draft' },
   { value: FRAMEWORK_PACKAGE_STATUSES.VALIDATED, label: 'Validated' },
@@ -319,22 +313,22 @@ export function formatFrameworkPackageStatus(status) {
     .replace(/^\w/, (character) => character.toUpperCase())
 }
 
-export function normalizeFrameworkKey(value) {
+function normalizeFrameworkKey(value) {
   return String(value ?? '').trim().toUpperCase()
 }
 
-export function normalizeVersion(value) {
+function normalizeVersion(value) {
   return String(value ?? '').trim()
 }
 
-export function normalizeKeyToken(value) {
+function normalizeKeyToken(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toLowerCase()
 }
 
-export function parseKeyList(value) {
+function parseKeyList(value) {
   return [...new Set(
     String(value ?? '')
       .split(/[\n,]+/)
@@ -343,7 +337,7 @@ export function parseKeyList(value) {
   )]
 }
 
-export function parseCustomerIdList(value) {
+function parseCustomerIdList(value) {
   return [...new Set(
     String(value ?? '')
       .split(/[\n,]+/)
@@ -352,11 +346,11 @@ export function parseCustomerIdList(value) {
   )]
 }
 
-export function formatKeyList(items) {
+function formatKeyList(items) {
   return Array.isArray(items) ? items.join('\n') : ''
 }
 
-export function formatSectionRows(sections) {
+function formatSectionRows(sections) {
   if (!Array.isArray(sections)) return ''
   return sections
     .map((section) => {
@@ -371,7 +365,7 @@ export function formatSectionRows(sections) {
     .join('\n')
 }
 
-export function parseSectionRows(value) {
+function parseSectionRows(value) {
   return String(value ?? '')
     .split(/\n+/)
     .map((row, index) => {

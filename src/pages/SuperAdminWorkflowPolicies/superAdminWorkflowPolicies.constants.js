@@ -5,7 +5,7 @@ export const WORKFLOW_POLICY_STATUSES = Object.freeze({
   DEPRECATED: 'DEPRECATED',
 })
 
-export const WORKFLOW_POLICY_TYPES = Object.freeze({
+const WORKFLOW_POLICY_TYPES = Object.freeze({
   VALIDATION: 'VALIDATION',
   LIFECYCLE_GATE: 'LIFECYCLE_GATE',
   ROUTING: 'ROUTING',
@@ -16,7 +16,7 @@ export const WORKFLOW_POLICY_TYPES = Object.freeze({
   COMPOSITE: 'COMPOSITE',
 })
 
-export const WORKFLOW_POLICY_APPLIES_TO = Object.freeze({
+const WORKFLOW_POLICY_APPLIES_TO = Object.freeze({
   FRAMEWORK_LIFECYCLE: 'FRAMEWORK_LIFECYCLE',
   WORKSPACE_ACTION: 'WORKSPACE_ACTION',
   SYSTEM_EVENT: 'SYSTEM_EVENT',
@@ -25,7 +25,7 @@ export const WORKFLOW_POLICY_APPLIES_TO = Object.freeze({
   MANUAL_INVOCATION: 'MANUAL_INVOCATION',
 })
 
-export const WORKFLOW_POLICY_TRIGGER_EVENTS = Object.freeze({
+const WORKFLOW_POLICY_TRIGGER_EVENTS = Object.freeze({
   ON_SAVE_DRAFT: 'ON_SAVE_DRAFT',
   ON_SUBMIT: 'ON_SUBMIT',
   ON_APPROVE: 'ON_APPROVE',
@@ -37,7 +37,7 @@ export const WORKFLOW_POLICY_TRIGGER_EVENTS = Object.freeze({
   MANUAL_RUN: 'MANUAL_RUN',
 })
 
-export const WORKFLOW_POLICY_TRIGGER_MODES = Object.freeze({
+const WORKFLOW_POLICY_TRIGGER_MODES = Object.freeze({
   PRE_ACTION: 'PRE_ACTION',
   POST_ACTION: 'POST_ACTION',
   CONTINUOUS: 'CONTINUOUS',
@@ -45,7 +45,7 @@ export const WORKFLOW_POLICY_TRIGGER_MODES = Object.freeze({
   RECURRING: 'RECURRING',
 })
 
-export const WORKFLOW_POLICY_ACTOR_SCOPES = Object.freeze({
+const WORKFLOW_POLICY_ACTOR_SCOPES = Object.freeze({
   ANY: 'ANY',
   USER: 'USER',
   SYSTEM: 'SYSTEM',
@@ -53,7 +53,7 @@ export const WORKFLOW_POLICY_ACTOR_SCOPES = Object.freeze({
   ADMINISTRATOR: 'ADMINISTRATOR',
 })
 
-export const WORKFLOW_POLICY_GOVERNED_ACTIONS = Object.freeze({
+const WORKFLOW_POLICY_GOVERNED_ACTIONS = Object.freeze({
   SAVE_DRAFT: 'SAVE_DRAFT',
   SUBMIT_FOR_REVIEW: 'SUBMIT_FOR_REVIEW',
   APPROVE: 'APPROVE',
@@ -66,7 +66,7 @@ export const WORKFLOW_POLICY_GOVERNED_ACTIONS = Object.freeze({
   ARCHIVE: 'ARCHIVE',
 })
 
-export const WORKFLOW_POLICY_DECISION_MODES = Object.freeze({
+const WORKFLOW_POLICY_DECISION_MODES = Object.freeze({
   ALLOW: 'ALLOW',
   DENY: 'DENY',
   WARN_ONLY: 'WARN_ONLY',
@@ -75,7 +75,7 @@ export const WORKFLOW_POLICY_DECISION_MODES = Object.freeze({
   CONDITIONAL: 'CONDITIONAL',
 })
 
-export const WORKFLOW_POLICY_SEVERITIES = Object.freeze({
+const WORKFLOW_POLICY_SEVERITIES = Object.freeze({
   INFO: 'INFO',
   WARNING: 'WARNING',
   CRITICAL: 'CRITICAL',
@@ -101,7 +101,7 @@ export const WORKFLOW_POLICY_CONDITION_LOGIC = Object.freeze({
   OR: 'OR',
 })
 
-export const WORKFLOW_POLICY_ROUTING_MODES = Object.freeze({
+const WORKFLOW_POLICY_ROUTING_MODES = Object.freeze({
   FIXED_AGENT: 'FIXED_AGENT',
   FIRST_COMPATIBLE_ACTIVE_AGENT: 'FIRST_COMPATIBLE_ACTIVE_AGENT',
   BY_FRAMEWORK: 'BY_FRAMEWORK',
@@ -109,7 +109,7 @@ export const WORKFLOW_POLICY_ROUTING_MODES = Object.freeze({
   MANUAL_SELECTION: 'MANUAL_SELECTION',
 })
 
-export const WORKFLOW_POLICY_EFFECT_TYPES = Object.freeze({
+const WORKFLOW_POLICY_EFFECT_TYPES = Object.freeze({
   SET_VALUE: 'SET_VALUE',
   APPEND_AUDIT_ENTRY: 'APPEND_AUDIT_ENTRY',
   INCREMENT_COUNTER: 'INCREMENT_COUNTER',
@@ -119,14 +119,14 @@ export const WORKFLOW_POLICY_EFFECT_TYPES = Object.freeze({
   BLOCK_ACTION: 'BLOCK_ACTION',
 })
 
-export const WORKFLOW_POLICY_OVERRIDE_ROLES = Object.freeze({
+const WORKFLOW_POLICY_OVERRIDE_ROLES = Object.freeze({
   SUPER_ADMIN: 'SUPER_ADMIN',
   FRAMEWORK_OWNER: 'FRAMEWORK_OWNER',
   GOVERNANCE_LEAD: 'GOVERNANCE_LEAD',
   OPERATIONS_ADMIN: 'OPERATIONS_ADMIN',
 })
 
-export const WORKFLOW_POLICY_ESCALATION_ROLE_KEYS = Object.freeze({
+const WORKFLOW_POLICY_ESCALATION_ROLE_KEYS = Object.freeze({
   CUSTOMER_ADMIN: 'CUSTOMER_ADMIN',
   TENANT_ADMIN: 'TENANT_ADMIN',
   FRAMEWORK_OWNER: 'FRAMEWORK_OWNER',
@@ -161,10 +161,6 @@ const toOptions = (values, { includeAllLabel = '' } = {}) => [
 
 export const WORKFLOW_POLICY_TYPE_OPTIONS = Object.freeze(
   toOptions(WORKFLOW_POLICY_TYPES, { includeAllLabel: 'All policy types' }),
-)
-
-export const WORKFLOW_POLICY_FORM_TYPE_OPTIONS = Object.freeze(
-  toOptions(WORKFLOW_POLICY_TYPES),
 )
 
 export const WORKFLOW_POLICY_APPLIES_TO_OPTIONS = Object.freeze(
@@ -543,7 +539,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
 ])
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
-export const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
+const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
 const CONDITION_OPERATORS_WITHOUT_VALUE = new Set(['exists', 'not exists'])
 const ROUTING_MODES_REQUIRING_PRIMARY_AGENT = new Set([WORKFLOW_POLICY_ROUTING_MODES.FIXED_AGENT])
 const EFFECT_TYPES_REQUIRING_TARGET_PATH = new Set([
@@ -658,7 +654,7 @@ export function formatWorkflowPolicyEnumLabel(value) {
   return toLabel(value)
 }
 
-export function formatConditionValue(value) {
+function formatConditionValue(value) {
   if (Array.isArray(value)) {
     return value.join(', ')
   }
@@ -674,31 +670,18 @@ export function formatConditionValue(value) {
   return String(value ?? '')
 }
 
-export function normalizePolicyKey(value) {
+function normalizePolicyKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toLowerCase()
 }
 
-export function normalizeFrameworkKey(value) {
+function normalizeFrameworkKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toUpperCase()
-}
-
-export function parseKeyList(value, normalize = normalizePolicyKey) {
-  return [...new Set(
-    String(value ?? '')
-      .split(/[\n,]+/)
-      .map(normalize)
-      .filter(Boolean),
-  )]
-}
-
-export function formatKeyList(items) {
-  return Array.isArray(items) ? items.join('\n') : ''
 }
 
 export function mapWorkflowPolicyToForm(policy) {

@@ -20,7 +20,7 @@ export const RUNTIME_AGENT_FORM_STATUS_OPTIONS = Object.freeze([
   { value: RUNTIME_AGENT_STATUSES.DEPRECATED, label: 'Deprecated' },
 ])
 
-export const RUNTIME_AGENT_TYPES = Object.freeze({
+const RUNTIME_AGENT_TYPES = Object.freeze({
   INTAKE: 'INTAKE',
   EXECUTION: 'EXECUTION',
   VALIDATION: 'VALIDATION',
@@ -38,12 +38,6 @@ export const RUNTIME_AGENT_TYPE_OPTIONS = Object.freeze([
   { value: RUNTIME_AGENT_TYPES.MIGRATION, label: 'Migration' },
   { value: RUNTIME_AGENT_TYPES.ARTEFACT, label: 'Artefact' },
   { value: RUNTIME_AGENT_TYPES.SPINE, label: 'Spine' },
-])
-
-export const RUNTIME_AGENT_FRAMEWORK_OPTIONS = Object.freeze([
-  { value: '', label: 'All frameworks' },
-  { value: 'RLD', label: 'RLD' },
-  { value: 'VMF', label: 'VMF' },
 ])
 
 export const RUNTIME_AGENT_PAGE_SIZE = 4
@@ -361,7 +355,7 @@ export const INITIAL_RUNTIME_AGENTS = Object.freeze([
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const ENUM_TOKEN_PATTERN = /^[A-Z][A-Z0-9_]*$/
 
-export function normalizeEnumToken(value) {
+function normalizeEnumToken(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
@@ -411,7 +405,7 @@ export function normalizeAgentKey(value) {
     .toLowerCase()
 }
 
-export function normalizeFrameworkKey(value) {
+function normalizeFrameworkKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')

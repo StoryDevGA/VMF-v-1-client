@@ -1,14 +1,14 @@
-export const SUPER_ADMIN_NAV_MODES = Object.freeze({
+const SUPER_ADMIN_NAV_MODES = Object.freeze({
   LEGACY: 'legacy',
   PHASE_1A: 'phase-1a',
 })
 
-export const SUPER_ADMIN_ROUTE_PHASES = Object.freeze({
+const SUPER_ADMIN_ROUTE_PHASES = Object.freeze({
   PHASE_1A: 'phase-1a',
   PHASE_1B: 'phase-1b',
 })
 
-export const SUPER_ADMIN_GROUP_LABELS = Object.freeze({
+const SUPER_ADMIN_GROUP_LABELS = Object.freeze({
   [SUPER_ADMIN_NAV_MODES.LEGACY]: Object.freeze({
     systemAdmin: 'System Admin',
     customerAdmin: 'Customer Admin',
@@ -83,7 +83,7 @@ const SUPER_ADMIN_DASHBOARD_GROUP_CATALOG = Object.freeze({
   }),
 })
 
-export const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
+const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
   customers: Object.freeze({
     key: 'customers',
     to: '/super-admin/customers',
@@ -311,7 +311,7 @@ export function getSuperAdminRoute(routeKey, { labelVariant = 'canonical' } = {}
   return buildRoute(routeKey, labelVariant)
 }
 
-export function getSuperAdminRoutes(routeKeys, options) {
+function getSuperAdminRoutes(routeKeys, options) {
   return routeKeys.map((routeKey) => getSuperAdminRoute(routeKey, options))
 }
 

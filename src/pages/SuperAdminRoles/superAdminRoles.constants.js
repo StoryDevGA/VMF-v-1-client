@@ -1,30 +1,10 @@
-export const ROLE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
-export const ROLE_SCOPE_VALUES = ['PLATFORM', 'CUSTOMER', 'TENANT']
-
-export const ROLE_SCOPE_OPTIONS = [
-  { value: '', label: 'All scopes' },
-  ...ROLE_SCOPE_VALUES.map((scope) => ({ value: scope, label: scope })),
-]
-
-export const ROLE_STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'true', label: 'Active' },
-  { value: 'false', label: 'Inactive' },
-]
-
-export const ROLE_SYSTEM_OPTIONS = [
-  { value: '', label: 'All roles' },
-  { value: 'true', label: 'System' },
-  { value: 'false', label: 'Custom' },
-]
+const ROLE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
+const ROLE_SCOPE_VALUES = ['PLATFORM', 'CUSTOMER', 'TENANT']
 
 export const ROLE_FORM_SCOPE_OPTIONS = ROLE_SCOPE_VALUES.map((scope) => ({
   value: scope,
   label: scope,
 }))
-
-export const SUPER_ADMIN_ROLES_HELP_TEXT =
-  'System roles are protected by backend policy. Create and maintain custom role catalogue entries for controlled future use.'
 
 export const INITIAL_ROLE_FORM = {
   key: '',
@@ -34,15 +14,11 @@ export const INITIAL_ROLE_FORM = {
   isActive: true,
 }
 
-export const normalizeRoleKey = (value) =>
+const normalizeRoleKey = (value) =>
   String(value ?? '')
     .trim()
     .replace(/\s+/g, '_')
     .toUpperCase()
-
-export const getRoleStatusVariant = (isActive) => (isActive ? 'success' : 'neutral')
-
-export const getRoleTypeVariant = (isSystem) => (isSystem ? 'info' : 'neutral')
 
 export const mapRoleValidationErrors = (appError) => {
   const nextErrors = {}

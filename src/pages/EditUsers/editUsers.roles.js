@@ -7,7 +7,7 @@
  */
 
 export const BASE_ASSIGNABLE_ROLE_KEYS = ['USER', 'TENANT_ADMIN']
-export const RESERVED_ASSIGNABLE_ROLE_KEYS = ['CUSTOMER_ADMIN', 'SUPER_ADMIN']
+const RESERVED_ASSIGNABLE_ROLE_KEYS = ['CUSTOMER_ADMIN', 'SUPER_ADMIN']
 
 const RESERVED_ROLE_SET = new Set(RESERVED_ASSIGNABLE_ROLE_KEYS)
 const BASE_ROLE_RANK = new Map(BASE_ASSIGNABLE_ROLE_KEYS.map((role, index) => [role, index]))
@@ -18,7 +18,7 @@ const SINGLE_ROLE_PRIORITY = new Map([
   ['USER', 0],
 ])
 
-export const normalizeRoleKey = (value) =>
+const normalizeRoleKey = (value) =>
   String(value ?? '')
     .trim()
     .toUpperCase()

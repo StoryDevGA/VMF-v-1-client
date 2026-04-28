@@ -270,20 +270,20 @@ export function formatRuntimeSkillStatus(status) {
     .replace(/^\w/, (character) => character.toUpperCase())
 }
 
-export function normalizeSkillKey(value) {
+function normalizeSkillKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toLowerCase()
 }
 
-export function normalizeRuntimeSkillCategory(value) {
+function normalizeRuntimeSkillCategory(value) {
   const normalized = String(value ?? '').trim().toUpperCase()
   const migrated = LEGACY_RUNTIME_SKILL_CATEGORY_MAP[normalized] || normalized
   return VALID_RUNTIME_SKILL_CATEGORIES.has(migrated) ? migrated : 'VALIDATION'
 }
 
-export function normalizeFrameworkKey(value) {
+function normalizeFrameworkKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
@@ -312,7 +312,7 @@ export function parseStringList(value) {
   )]
 }
 
-export function formatJsonField(value) {
+function formatJsonField(value) {
   if (!value || typeof value !== 'object') return ''
   if (Object.keys(value).length === 0) return ''
   return JSON.stringify(value, null, 2)

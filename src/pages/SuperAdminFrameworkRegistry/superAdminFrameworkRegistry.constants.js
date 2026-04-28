@@ -154,14 +154,14 @@ function normalizeKeyToken(value) {
     .toLowerCase()
 }
 
-export function normalizeFrameworkRegistryKey(value) {
+function normalizeFrameworkRegistryKey(value) {
   return String(value ?? '')
     .trim()
     .replace(/^["'`]+|["'`]+$/g, '')
     .toUpperCase()
 }
 
-export function parseFrameworkRegistryKeyList(value) {
+function parseFrameworkRegistryKeyList(value) {
   return [...new Set(
     String(value ?? '')
       .split(/[\n,]+/)
@@ -170,7 +170,7 @@ export function parseFrameworkRegistryKeyList(value) {
   )]
 }
 
-export function formatFrameworkRegistryKeyList(items) {
+function formatFrameworkRegistryKeyList(items) {
   return Array.isArray(items) ? items.join('\n') : ''
 }
 

@@ -231,5 +231,3 @@ export function useAuthorization() {
     hasAnyPermission,
   }
 }
-
-export default useAuthorization

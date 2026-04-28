@@ -19,15 +19,9 @@ export const getCustomerId = (customer) => customer?.id ?? customer?._id
 
 export const displayStatus = (value) => (value === 'DISABLED' ? 'INACTIVE' : value || '--')
 
-export const parsePositiveInt = (value) => Number.parseInt(String(value ?? '').trim(), 10)
+const parsePositiveInt = (value) => Number.parseInt(String(value ?? '').trim(), 10)
 
-export const getRowActionMenuId = (row) => {
-  const rawId = String(getCustomerId(row) ?? row?.name ?? 'customer').toLowerCase()
-  const safeId = rawId.replace(/[^a-z0-9_-]/g, '-')
-  return `sa-customer-row-actions-${safeId}`
-}
-
-export const getVmfPolicyForCount = (topology, vmfCount) => {
+const getVmfPolicyForCount = (topology, vmfCount) => {
   const parsedCount = parsePositiveInt(vmfCount)
   const normalizedCount = Number.isInteger(parsedCount) && parsedCount > 1 ? parsedCount : 1
 
@@ -88,7 +82,7 @@ export const getLifecycleActionVerb = (actionType) => {
   return 'Deactivate'
 }
 
-export const isValidUrl = (value) => {
+const isValidUrl = (value) => {
   if (!value) return true
   try {
     const parsed = new URL(value)

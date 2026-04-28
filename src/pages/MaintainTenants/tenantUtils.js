@@ -34,7 +34,7 @@ export const getTenantId = (tenant) => {
 export const getTenantCapacityCountLabel = (countMode) =>
   countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
 
-export const getFieldErrorMessage = (value) => {
+const getFieldErrorMessage = (value) => {
   if (typeof value === 'string' && value.trim()) return value.trim()
 
   if (Array.isArray(value)) {
@@ -58,7 +58,7 @@ export const getFieldErrorMessage = (value) => {
   return ''
 }
 
-export const normalizeTenantFieldName = (field) => {
+const normalizeTenantFieldName = (field) => {
   const compact = String(field ?? '')
     .trim()
     .toLowerCase()
