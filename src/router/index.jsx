@@ -37,6 +37,9 @@ const SuperAdminFrameworkRegistry = lazy(
 const SuperAdminFrameworkPackages = lazy(
   () => import('../pages/SuperAdminFrameworkPackages'),
 )
+const SuperAdminFrameworkPackageEditor = lazy(
+  () => import('../pages/SuperAdminFrameworkPackageEditor'),
+)
 const SuperAdminAgents = lazy(
   () => import('../pages/SuperAdminAgents'),
 )
@@ -326,6 +329,14 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/framework-packages',
                   element: <SuperAdminFrameworkPackages />,
+                },
+                {
+                  path: 'runtime-control/framework-packages/new',
+                  element: <SuperAdminFrameworkPackageEditor />,
+                },
+                {
+                  path: 'runtime-control/framework-packages/:packageId/edit',
+                  element: <SuperAdminFrameworkPackageEditor />,
                 },
               ]
             : []),

@@ -31,6 +31,10 @@ vi.mock('../../pages/SuperAdminFrameworkPackages', () => ({
   default: () => <h1>Framework Packages</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminFrameworkPackageEditor', () => ({
+  default: () => <h1>Framework Package Editor</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminAgents', () => ({
   default: () => <h1>Agents</h1>,
 }))
@@ -780,12 +784,17 @@ describe('Router', () => {
         'runtime-control',
         'runtime-control/framework-registry',
         'runtime-control/runtime-paths',
+        'runtime-control/runtime-paths/new',
+        'runtime-control/runtime-paths/:pathId/edit',
         'runtime-control/skill-roles',
         'runtime-control/skill-roles/new',
         'runtime-control/skill-roles/:roleId',
         'runtime-control/skills',
         'runtime-control/skills/new',
         'runtime-control/skills/:skillId',
+        'runtime-control/validation-registry',
+        'runtime-control/validation-registry/new',
+        'runtime-control/validation-registry/:validationId',
         'runtime-control/agents',
         'runtime-control/agents/new',
         'runtime-control/agents/:agentId',
@@ -793,6 +802,8 @@ describe('Router', () => {
         'runtime-control/workflow-policies/new',
         'runtime-control/workflow-policies/:policyId/edit',
         'runtime-control/framework-packages',
+        'runtime-control/framework-packages/new',
+        'runtime-control/framework-packages/:packageId/edit',
         'invitations',
         'license-levels',
         'roles',
@@ -880,7 +891,7 @@ describe('Router', () => {
     it('should render the shared spinner fallback UI', () => {
       render(<LoadingFallback />)
 
-      expect(screen.getByRole('status')).toBeInTheDocument()
+      expect(screen.getAllByRole('status')).toHaveLength(2)
       expect(screen.getAllByText(/loading\.\.\./i)).toHaveLength(2)
     })
   })

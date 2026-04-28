@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CreateFrameworkPackageDialog, EditFrameworkPackageDialog } from './FrameworkPackageDialogs.jsx'
 import { FrameworkPackageListView } from './FrameworkPackageListView.jsx'
 import { useFrameworkPackageManagement } from './useFrameworkPackageManagement.js'
 import './SuperAdminFrameworkPackages.css'
@@ -10,6 +9,12 @@ function SuperAdminFrameworkPackages() {
   const mgmt = useFrameworkPackageManagement()
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
+  }, [navigate])
+  const handleCreatePackage = useCallback(() => {
+    navigate('/super-admin/runtime-control/framework-packages/new')
+  }, [navigate])
+  const handleEditPackage = useCallback((pkg) => {
+    navigate(`/super-admin/runtime-control/framework-packages/${pkg.id}/edit`)
   }, [navigate])
 
   return (
@@ -41,32 +46,9 @@ function SuperAdminFrameworkPackages() {
         isListFetching={mgmt.isListFetching}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
-        openCreateDialog={mgmt.openCreateDialog}
-        openEditDialog={mgmt.openEditDialog}
+        onCreatePackage={handleCreatePackage}
+        onEditPackage={handleEditPackage}
         activatePackage={mgmt.activatePackage}
-      />
-
-      <CreateFrameworkPackageDialog
-        open={mgmt.createOpen}
-        onClose={mgmt.closeCreateDialog}
-        createForm={mgmt.createForm}
-        setCreateForm={mgmt.setCreateForm}
-        createErrors={mgmt.createErrors}
-        setCreateErrors={mgmt.setCreateErrors}
-        onSubmit={mgmt.handleCreateSubmit}
-        frameworkOptions={mgmt.frameworkOptions}
-        frameworkNameLookup={mgmt.frameworkNameLookup}
-      />
-
-      <EditFrameworkPackageDialog
-        open={mgmt.editOpen}
-        onClose={mgmt.closeEditDialog}
-        editForm={mgmt.editForm}
-        setEditForm={mgmt.setEditForm}
-        editErrors={mgmt.editErrors}
-        onSubmit={mgmt.handleEditSubmit}
-        frameworkOptions={mgmt.frameworkOptions}
-        frameworkNameLookup={mgmt.frameworkNameLookup}
       />
     </section>
   )

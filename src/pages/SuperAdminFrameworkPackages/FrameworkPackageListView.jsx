@@ -102,21 +102,21 @@ export function FrameworkPackageListView({
   isListFetching,
   listAppError,
   onBackClick,
-  openCreateDialog,
-  openEditDialog,
+  onCreatePackage,
+  onEditPackage,
   activatePackage,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
-        openEditDialog(row)
+        onEditPackage(row)
       }
 
       if (label === 'Activate') {
         activatePackage(row)
       }
     },
-    [activatePackage, openEditDialog],
+    [activatePackage, onEditPackage],
   )
 
   const columns = useMemo(
@@ -200,7 +200,7 @@ export function FrameworkPackageListView({
               <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
                 Back
               </Button>
-              <Button type="button" variant="primary" size="sm" onClick={openCreateDialog}>
+              <Button type="button" variant="primary" size="sm" onClick={onCreatePackage}>
                 Create
               </Button>
             </div>

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import SuperAdminFrameworkPackageEditor from '../SuperAdminFrameworkPackageEditor'
 import SuperAdminFrameworkPackages from './SuperAdminFrameworkPackages'
 import {
   renderRuntimeControlPage,
@@ -10,8 +11,20 @@ import {
 function renderPage() {
   return renderRuntimeControlPage({
     route: '/super-admin/runtime-control/framework-packages',
-    path: '/super-admin/runtime-control/framework-packages',
-    element: <SuperAdminFrameworkPackages />,
+    routes: [
+      {
+        path: '/super-admin/runtime-control/framework-packages',
+        element: <SuperAdminFrameworkPackages />,
+      },
+      {
+        path: '/super-admin/runtime-control/framework-packages/new',
+        element: <SuperAdminFrameworkPackageEditor />,
+      },
+      {
+        path: '/super-admin/runtime-control/framework-packages/:packageId/edit',
+        element: <SuperAdminFrameworkPackageEditor />,
+      },
+    ],
   })
 }
 
@@ -20,7 +33,7 @@ describe('SuperAdminFrameworkPackages page', () => {
     setupRuntimeControlTestEnvironment()
   })
 
-  it('renders the catalogue-first framework packages page and opens the create dialog', async () => {
+  it('renders the catalogue-first page and navigates to the package editor', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -31,41 +44,59 @@ describe('SuperAdminFrameworkPackages page', () => {
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
+    expect(await screen.findByRole('heading', { name: /create framework package/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create framework package/i })).toBeInTheDocument()
     expect(
       screen.getByLabelText(/^framework name$/i, {
-        selector: 'input#framework-package-create-framework-name',
+        selector: 'input#framework-package-editor-framework-name',
       }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^basic information$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^access$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^sections$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^runtime$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^validation$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^workflows$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^outputs$/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/default agent ids/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/required skill ids/i)).not.toBeInTheDocument()
   })
 
-  it('creates a framework package from the modal dialog and shows it in the catalogue', async () => {
+  it('creates a framework package from the editor and shows it in the catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     await user.clear(
       screen.getByLabelText(/^framework name$/i, {
-        selector: 'input#framework-package-create-framework-name',
+        selector: 'input#framework-package-editor-framework-name',
       }),
     )
     await user.type(
       screen.getByLabelText(/^framework name$/i, {
-        selector: 'input#framework-package-create-framework-name',
+        selector: 'input#framework-package-editor-framework-name',
       }),
       'Value Management Framework',
     )
     await user.type(
       screen.getByLabelText(/^version$/i, {
-        selector: 'input#framework-package-create-version',
+        selector: 'input#framework-package-editor-version',
       }),
       '2.5.0',
     )
+    await user.click(screen.getByRole('tab', { name: /^sections$/i }))
     fireEvent.change(
-      screen.getByLabelText(/compatible workflow keys/i, {
-        selector: 'textarea#framework-package-create-workflow-keys',
+      screen.getByLabelText(/section rows/i, {
+        selector: 'textarea#framework-package-editor-sections',
       }),
-      { target: { value: 'vmf-baseline,\nvmf-publish' } },
+      { target: { value: 'overview|Overview\nvalue-drivers|Value Drivers' } },
+    )
+    await user.click(screen.getByRole('tab', { name: /^outputs$/i }))
+    fireEvent.change(
+      screen.getByLabelText(/available output keys/i, {
+        selector: 'textarea#framework-package-editor-available-output-keys',
+      }),
+      { target: { value: 'board-summary\nexecutive-brief' } },
     )
 
     await user.click(screen.getByRole('button', { name: /create framework package/i }))
@@ -74,6 +105,45 @@ describe('SuperAdminFrameworkPackages page', () => {
       expect(screen.getByText('2.5.0')).toBeInTheDocument()
       expect(screen.getAllByText('Value Management Framework').length).toBeGreaterThan(0)
     })
+  })
+
+  it('requires assigned customers for selected-customer package access', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.type(
+      screen.getByLabelText(/^version$/i, {
+        selector: 'input#framework-package-editor-version',
+      }),
+      '2.6.0',
+    )
+    await user.click(screen.getByRole('tab', { name: /^access$/i }))
+    expect(
+      screen.getByLabelText(/^customer access$/i, {
+        selector: 'select#framework-package-editor-customer-access-mode',
+      }),
+    ).toBeDisabled()
+    await user.selectOptions(
+      screen.getByLabelText(/^visibility$/i, {
+        selector: 'select#framework-package-editor-visibility',
+      }),
+      'CUSTOMER_VISIBLE',
+    )
+    expect(
+      screen.getByLabelText(/^customer access$/i, {
+        selector: 'select#framework-package-editor-customer-access-mode',
+      }),
+    ).not.toBeDisabled()
+    await user.selectOptions(
+      screen.getByLabelText(/^customer access$/i, {
+        selector: 'select#framework-package-editor-customer-access-mode',
+      }),
+      'SELECTED_CUSTOMERS',
+    )
+    await user.click(screen.getByRole('button', { name: /create framework package/i }))
+
+    expect(await screen.findByText(/assigned customers are required/i)).toBeInTheDocument()
   })
 
   it('supports search filters and pagination for the framework packages catalogue', async () => {
@@ -120,8 +190,9 @@ describe('SuperAdminFrameworkPackages page', () => {
       'Edit',
     )
 
-    const editNameInput = screen.getByLabelText(/^framework name$/i, {
-      selector: 'input#framework-package-edit-framework-name',
+    expect(await screen.findByRole('heading', { name: /framework package editor/i })).toBeInTheDocument()
+    const editNameInput = await screen.findByLabelText(/^framework name$/i, {
+      selector: 'input#framework-package-editor-framework-name',
     })
     await user.clear(editNameInput)
     await user.type(editNameInput, 'VMF Control Plane')

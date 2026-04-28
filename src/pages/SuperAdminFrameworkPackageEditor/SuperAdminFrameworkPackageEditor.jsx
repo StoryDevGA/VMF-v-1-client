@@ -1,0 +1,851 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Badge } from '../../components/Badge'
+import { Button } from '../../components/Button'
+import { Card } from '../../components/Card'
+import { Fieldset } from '../../components/Fieldset'
+import { Input } from '../../components/Input'
+import { Select } from '../../components/Select'
+import { Spinner } from '../../components/Spinner'
+import { Status } from '../../components/Status'
+import { TabView } from '../../components/TabView'
+import { Textarea } from '../../components/Textarea'
+import { Tickbox } from '../../components/Tickbox'
+import { useToaster } from '../../components/Toaster'
+import {
+  useCreateFrameworkPackageMutation,
+  useGetFrameworkPackageQuery,
+  useListFrameworkPackagesQuery,
+  useListFrameworkRegistriesQuery,
+  useListValidationRegistryQuery,
+  useListWorkflowPoliciesQuery,
+  useUpdateFrameworkPackageMutation,
+} from '../../store/api/runtimeControlApi.js'
+import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
+import {
+  buildFrameworkRegistryAllowedKeys,
+  buildFrameworkRegistryNameLookup,
+  buildFrameworkRegistryOptions,
+} from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
+import {
+  FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_OPTIONS,
+  FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS,
+  FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS,
+  FRAMEWORK_PACKAGE_SCOPE_OPTIONS,
+  FRAMEWORK_PACKAGE_STATUSES,
+  FRAMEWORK_PACKAGE_TYPE_OPTIONS,
+  FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS,
+  INITIAL_FRAMEWORK_PACKAGE_FORM,
+  formatFrameworkPackageStatus,
+  getFrameworkPackageStatusVariant,
+  mapFrameworkPackageToForm,
+  validateFrameworkPackageForm,
+} from '../SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
+import '../SuperAdminFrameworkPackages/SuperAdminFrameworkPackages.css'
+import './SuperAdminFrameworkPackageEditor.css'
+
+const SERVER_ERROR_FIELDS = Object.freeze([
+  'frameworkKey',
+  'frameworkName',
+  'packageKey',
+  'packageName',
+  'version',
+  'description',
+  'status',
+  'assignedCustomerIds',
+  'sections',
+  'sectionsText',
+  'validationConfig',
+  'workflowPolicyConfig',
+  'availableOutputKeys',
+  'defaultOutputStyles',
+])
+
+const buildDefaultFrameworkPackageForm = (registryRows) => {
+  const [firstRegistry] = registryRows
+
+  if (!firstRegistry) {
+    return {
+      ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+      frameworkKey: '',
+      frameworkName: '',
+      runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
+      validationConfig: [],
+      workflowPolicyConfig: [],
+    }
+  }
+
+  return {
+    ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+    frameworkKey: String(firstRegistry.frameworkKey ?? '').trim(),
+    frameworkName: String(firstRegistry.name ?? '').trim(),
+    runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
+    validationConfig: [],
+    workflowPolicyConfig: [],
+  }
+}
+
+const updateRuntimeSetting = (setForm, key, value) => {
+  setForm((current) => ({
+    ...current,
+    runtimeSettings: {
+      ...current.runtimeSettings,
+      [key]: value,
+    },
+  }))
+}
+
+const addValidationConfig = (setForm, validationKey) => {
+  if (!validationKey) return
+  setForm((current) => ({
+    ...current,
+    validationConfig: [
+      ...(current.validationConfig ?? []),
+      { validationKey, enabled: true, notes: '' },
+    ].filter((item, index, list) =>
+      list.findIndex((candidate) => candidate.validationKey === item.validationKey) === index,
+    ),
+  }))
+}
+
+const removeValidationConfig = (setForm, validationKey) => {
+  setForm((current) => ({
+    ...current,
+    validationConfig: (current.validationConfig ?? []).filter((item) => item.validationKey !== validationKey),
+  }))
+}
+
+const addWorkflowPolicyConfig = (setForm, policyKey) => {
+  if (!policyKey) return
+  setForm((current) => ({
+    ...current,
+    workflowPolicyConfig: [
+      ...(current.workflowPolicyConfig ?? []),
+      {
+        policyKey,
+        enabled: true,
+        executionOrder: ((current.workflowPolicyConfig ?? []).length + 1) * 10,
+        stageGroup: '',
+        notes: '',
+      },
+    ].filter((item, index, list) =>
+      list.findIndex((candidate) => candidate.policyKey === item.policyKey) === index,
+    ),
+  }))
+}
+
+const removeWorkflowPolicyConfig = (setForm, policyKey) => {
+  setForm((current) => ({
+    ...current,
+    workflowPolicyConfig: (current.workflowPolicyConfig ?? []).filter((item) => item.policyKey !== policyKey),
+  }))
+}
+
+function PackageEditorLoadingState() {
+  return (
+    <Card variant="elevated" className="super-admin-framework-packages__card super-admin-framework-package-editor__loading-card">
+      <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-package-editor__loading-body">
+        <Spinner size="lg" />
+        <p className="super-admin-framework-package-editor__helper">Loading framework package...</p>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function PackageEditorErrorState({ message, onBack }) {
+  return (
+    <Card variant="elevated" className="super-admin-framework-packages__card super-admin-framework-package-editor__error-card">
+      <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-package-editor__loading-body">
+        <p className="super-admin-framework-package-editor__error" role="alert">
+          {message}
+        </p>
+        <div className="super-admin-framework-package-editor__top-actions">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            Back
+          </Button>
+        </div>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function SectionHeader({ id, title, copy }) {
+  return (
+    <div className="super-admin-framework-package-editor__section-header">
+      <h2 id={id} className="super-admin-framework-package-editor__section-title">{title}</h2>
+      <p className="super-admin-framework-package-editor__section-copy">{copy}</p>
+    </div>
+  )
+}
+
+function SuperAdminFrameworkPackageEditor() {
+  const navigate = useNavigate()
+  const { packageId = '' } = useParams()
+  const { addToast } = useToaster()
+  const isEditMode = Boolean(packageId)
+
+  const [form, setForm] = useState({
+    ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+    runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
+    validationConfig: [],
+    workflowPolicyConfig: [],
+  })
+  const [errors, setErrors] = useState({})
+  const [activeTab, setActiveTab] = useState(0)
+
+  const {
+    data: packageResponse,
+    isLoading: isPackageLoading,
+    error: packageError,
+  } = useGetFrameworkPackageQuery(packageId, {
+    skip: !isEditMode,
+  })
+
+  const { data: packageListResponse } = useListFrameworkPackagesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+
+  const { data: registryResponse } = useListFrameworkRegistriesQuery({
+    page: 1,
+    pageSize: 100,
+    q: '',
+  })
+
+  const { data: validationRegistryResponse } = useListValidationRegistryQuery({
+    page: 1,
+    pageSize: 100,
+    status: 'ACTIVE',
+    frameworkKey: form.frameworkKey || undefined,
+    packageUsable: 'true',
+  })
+
+  const { data: workflowPolicyResponse } = useListWorkflowPoliciesQuery({
+    page: 1,
+    pageSize: 100,
+    status: 'ACTIVE',
+    frameworkKey: form.frameworkKey || undefined,
+  })
+
+  const [createFrameworkPackage, { isLoading: isCreating }] = useCreateFrameworkPackageMutation()
+  const [updateFrameworkPackage, { isLoading: isUpdating }] = useUpdateFrameworkPackageMutation()
+  const isSaving = isCreating || isUpdating
+
+  const registryRows = registryResponse?.data ?? []
+  const frameworkOptions = buildFrameworkRegistryOptions(registryRows).filter((option) => option.value)
+  const frameworkNameLookup = buildFrameworkRegistryNameLookup(registryRows)
+  const supportedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
+  const existingPackages = packageListResponse?.data ?? []
+  const loadedPackage = packageResponse?.data ?? null
+  const packageAppError = packageError ? normalizeError(packageError) : null
+
+  const validationOptions = useMemo(
+    () =>
+      (validationRegistryResponse?.data ?? [])
+        .filter((row) =>
+          String(row.status ?? '').toUpperCase() === 'ACTIVE'
+          && row.packageUsable !== false
+          && (!form.frameworkKey || (row.supportedFrameworkKeys ?? []).includes(form.frameworkKey)),
+        )
+        .map((row) => ({
+          value: row.key,
+          label: `${row.label ?? row.key} (${row.key})`,
+        })),
+    [form.frameworkKey, validationRegistryResponse],
+  )
+
+  const workflowPolicyOptions = useMemo(
+    () =>
+      (workflowPolicyResponse?.data ?? [])
+        .filter((row) =>
+          String(row.status ?? '').toUpperCase() === 'ACTIVE'
+          && (!form.frameworkKey || (row.frameworkKeys ?? []).includes(form.frameworkKey)),
+        )
+        .map((row) => ({
+          value: row.key,
+          label: `${row.name ?? row.key} (${row.key})`,
+        })),
+    [form.frameworkKey, workflowPolicyResponse],
+  )
+
+  useEffect(() => {
+    if (isEditMode && loadedPackage) {
+      setForm(mapFrameworkPackageToForm(loadedPackage))
+      return
+    }
+
+    if (!isEditMode && registryRows.length > 0) {
+      setForm((current) =>
+        current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
+      )
+    }
+  }, [isEditMode, loadedPackage, registryRows])
+
+  const handleBack = () => {
+    navigate('/super-admin/runtime-control/framework-packages')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setErrors({})
+
+    const { errors: nextErrors, payload } = validateFrameworkPackageForm(
+      form,
+      existingPackages,
+      packageId,
+      supportedFrameworkKeys,
+    )
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors)
+      return
+    }
+
+    try {
+      if (isEditMode) {
+        await updateFrameworkPackage({ packageId, ...payload }).unwrap()
+        addToast({
+          title: 'Framework package updated',
+          description: 'Changes were saved successfully.',
+          variant: 'success',
+        })
+      } else {
+        await createFrameworkPackage(payload).unwrap()
+        addToast({
+          title: 'Framework package created',
+          description: `${payload.frameworkKey} ${payload.version} is now available in the catalogue.`,
+          variant: 'success',
+        })
+      }
+      handleBack()
+    } catch (err) {
+      const appError = normalizeError(err)
+      const fieldErrors = getRuntimeControlFieldErrorMap(appError, SERVER_ERROR_FIELDS)
+
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors)
+        return
+      }
+
+      addToast({
+        title: isEditMode ? 'Failed to update framework package' : 'Failed to create framework package',
+        description: appError.message,
+        variant: 'error',
+      })
+    }
+  }
+
+  const pageTitle = isEditMode ? 'Framework Package Editor' : 'Create Framework Package'
+  const canAssignCustomers =
+    form.visibility === 'CUSTOMER_VISIBLE'
+    && form.customerAccessMode === 'SELECTED_CUSTOMERS'
+
+  return (
+    <section
+      className="super-admin-framework-packages super-admin-framework-package-editor container"
+      aria-label="Framework package editor"
+    >
+      <header className="super-admin-framework-packages__header">
+        <h1 className="super-admin-framework-packages__title">{pageTitle}</h1>
+        <p className="super-admin-framework-packages__subtitle">
+          Assemble deployable framework blueprints with governed access, sections, runtime settings,
+          validations, workflow policies, and future output placeholders.
+        </p>
+      </header>
+
+      <Fieldset className="super-admin-framework-package-editor__fieldset">
+        <Fieldset.Legend className="sr-only">Framework package editor</Fieldset.Legend>
+        {isEditMode && isPackageLoading ? <PackageEditorLoadingState /> : null}
+        {isEditMode && packageAppError ? (
+          <PackageEditorErrorState message={packageAppError.message} onBack={handleBack} />
+        ) : null}
+
+        {!isPackageLoading && !packageAppError ? (
+          <Card variant="elevated" className="super-admin-framework-packages__card super-admin-framework-package-editor__card">
+            <form className="super-admin-framework-package-editor__form" onSubmit={handleSubmit} noValidate>
+              <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-packages__card-body--compact super-admin-framework-package-editor__card-body">
+                <div className="super-admin-framework-package-editor__top-actions">
+                  <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+                    Back
+                  </Button>
+                </div>
+
+                {isEditMode ? (
+                  <div className="super-admin-framework-package-editor__summary">
+                    <div className="super-admin-framework-package-editor__summary-item">
+                      <span className="super-admin-framework-package-editor__summary-label">Status</span>
+                      <Status size="sm" showIcon variant={getFrameworkPackageStatusVariant(form.status)}>
+                        {formatFrameworkPackageStatus(form.status)}
+                      </Status>
+                    </div>
+                    {loadedPackage?.isDefault ? (
+                      <div className="super-admin-framework-package-editor__summary-item">
+                        <Badge variant="success" size="sm" pill outline>
+                          Default Package
+                        </Badge>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="super-admin-framework-package-editor__intro">
+                  <p className="super-admin-framework-package-editor__form-title">
+                    {isEditMode
+                      ? 'Editor surface for an existing framework package.'
+                      : 'Editor surface for a new framework package.'}
+                  </p>
+                  <p className="super-admin-framework-packages__table-note">
+                    Keep package identity visible while configuring package-specific runtime blueprint tabs.
+                    Skills and Agents are resolved dependencies, not direct package selections.
+                  </p>
+                </div>
+
+                <section className="super-admin-framework-package-editor__basic-section" aria-labelledby="framework-package-editor-basic-information">
+                  <SectionHeader
+                    id="framework-package-editor-basic-information"
+                    title="Basic Information"
+                    copy="Define the package identity and lifecycle metadata that downstream Runtime Control resources reference."
+                  />
+                  <div className="super-admin-framework-package-editor__identity-layout">
+                    <div className="super-admin-framework-package-editor__field-group">
+                      <div className="super-admin-framework-package-editor__field-group-header">
+                        <h3 className="super-admin-framework-package-editor__field-group-title">Framework identity</h3>
+                        <p className="super-admin-framework-package-editor__field-group-copy">
+                          Bind this package to the source framework and release lifecycle.
+                        </p>
+                      </div>
+                      <div className="super-admin-framework-package-editor__field-grid">
+                        <Select
+                          id="framework-package-editor-framework-key"
+                          label="Framework Key"
+                          value={form.frameworkKey}
+                          options={frameworkOptions}
+                          onChange={(event) => {
+                            const nextKey = event.target.value
+                            setForm((current) => ({
+                              ...current,
+                              frameworkKey: nextKey,
+                              frameworkName: frameworkNameLookup[nextKey] ?? current.frameworkName,
+                            }))
+                          }}
+                          error={errors.frameworkKey}
+                        />
+                        <Input
+                          id="framework-package-editor-framework-name"
+                          label="Framework Name"
+                          value={form.frameworkName}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, frameworkName: event.target.value }))
+                          }
+                          error={errors.frameworkName}
+                          fullWidth
+                        />
+                        <Input
+                          id="framework-package-editor-version"
+                          label="Version"
+                          value={form.version}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, version: event.target.value }))
+                          }
+                          error={errors.version}
+                          helperText="Use semantic version format, for example 2.3.1."
+                          fullWidth
+                        />
+                        <Select
+                          id="framework-package-editor-status"
+                          label="Lifecycle State"
+                          value={form.status}
+                          options={isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
+                            ? [{ value: FRAMEWORK_PACKAGE_STATUSES.ACTIVE, label: 'Active' }]
+                            : FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, status: event.target.value }))
+                          }
+                          disabled={isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE}
+                        />
+                      </div>
+                    </div>
+                    <div className="super-admin-framework-package-editor__field-group">
+                      <div className="super-admin-framework-package-editor__field-group-header">
+                        <h3 className="super-admin-framework-package-editor__field-group-title">Package identity</h3>
+                        <p className="super-admin-framework-package-editor__field-group-copy">
+                          Define how this version appears in the package catalogue.
+                        </p>
+                      </div>
+                      <div className="super-admin-framework-package-editor__field-grid">
+                        <Select
+                          id="framework-package-editor-package-scope"
+                          label="Package Scope"
+                          value={form.packageScope}
+                          options={FRAMEWORK_PACKAGE_SCOPE_OPTIONS}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, packageScope: event.target.value }))
+                          }
+                        />
+                        <Select
+                          id="framework-package-editor-package-type"
+                          label="Package Type"
+                          value={form.packageType}
+                          options={FRAMEWORK_PACKAGE_TYPE_OPTIONS}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, packageType: event.target.value }))
+                          }
+                        />
+                        <Input
+                          id="framework-package-editor-package-key"
+                          label="Package Key"
+                          value={form.packageKey}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, packageKey: event.target.value }))
+                          }
+                          error={errors.packageKey}
+                          helperText="Optional. Defaults from framework and version."
+                          fullWidth
+                        />
+                        <Input
+                          id="framework-package-editor-package-name"
+                          label="Package Name"
+                          value={form.packageName}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, packageName: event.target.value }))
+                          }
+                          error={errors.packageName}
+                          fullWidth
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <Textarea
+                    id="framework-package-editor-description"
+                    label="Description"
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, description: event.target.value }))
+                    }
+                    error={errors.description}
+                    rows={3}
+                    fullWidth
+                  />
+                </section>
+
+                <TabView
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  variant="pills"
+                  size="sm"
+                  evenTabs
+                  className="super-admin-framework-package-editor__tabs"
+                  aria-label="Framework package editor sections"
+                >
+                  <TabView.Tab label="Access">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Access"
+                        copy="Control whether this package remains internal or becomes available to customer workspaces."
+                      />
+                      <div className="super-admin-framework-package-editor__grid">
+                        <Select
+                          id="framework-package-editor-visibility"
+                          label="Visibility"
+                          value={form.visibility}
+                          options={FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS}
+                          onChange={(event) =>
+                            setForm((current) => {
+                              const visibility = event.target.value
+                              if (visibility === 'INTERNAL_ONLY') {
+                                return {
+                                  ...current,
+                                  visibility,
+                                  customerAccessMode: 'ALL_CUSTOMERS',
+                                  assignedCustomerIds: '',
+                                }
+                              }
+
+                              return { ...current, visibility }
+                            })
+                          }
+                        />
+                        <Select
+                          id="framework-package-editor-customer-access-mode"
+                          label="Customer Access"
+                          value={form.customerAccessMode}
+                          options={FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_OPTIONS}
+                          onChange={(event) => {
+                            const customerAccessMode = event.target.value
+                            setForm((current) => ({
+                              ...current,
+                              customerAccessMode,
+                              assignedCustomerIds: customerAccessMode === 'ALL_CUSTOMERS'
+                                ? ''
+                                : current.assignedCustomerIds,
+                            }))
+                          }}
+                          disabled={form.visibility === 'INTERNAL_ONLY'}
+                          error={errors.customerAccessMode}
+                        />
+                      </div>
+                      <Textarea
+                        id="framework-package-editor-assigned-customers"
+                        label="Assigned Customer IDs"
+                        helperText={canAssignCustomers
+                          ? 'Required for selected-customer package access.'
+                          : 'Available only when visibility is customer visible and access is selected customers.'}
+                        value={form.assignedCustomerIds}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, assignedCustomerIds: event.target.value }))
+                        }
+                        error={errors.assignedCustomerIds}
+                        disabled={!canAssignCustomers}
+                        rows={4}
+                        fullWidth
+                      />
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label="Sections">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Sections"
+                        copy="Define the framework sections this package exposes and requires at runtime."
+                      />
+                      <Textarea
+                        id="framework-package-editor-sections"
+                        label="Section Rows"
+                        helperText="One section per line. Use section-key or section-key|Display label."
+                        value={form.sectionsText}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, sectionsText: event.target.value }))
+                        }
+                        error={errors.sectionsText}
+                        rows={8}
+                        fullWidth
+                      />
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label="Runtime">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Runtime"
+                        copy="Configure runtime behavior for package execution without storing runtime instance data."
+                      />
+                      <div className="super-admin-framework-package-editor__option-panel">
+                        <Tickbox
+                          id="framework-package-editor-runtime-preview"
+                          label="Enable preview mode"
+                          checked={Boolean(form.runtimeSettings?.enablePreviewMode)}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'enablePreviewMode', event.target.checked)
+                          }
+                        />
+                        <Tickbox
+                          id="framework-package-editor-runtime-validation"
+                          label="Enable runtime validation"
+                          checked={Boolean(form.runtimeSettings?.enableRuntimeValidation)}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'enableRuntimeValidation', event.target.checked)
+                          }
+                        />
+                        <Tickbox
+                          id="framework-package-editor-runtime-publish-validation"
+                          label="Require validation before publish"
+                          checked={Boolean(form.runtimeSettings?.requireValidationBeforePublish)}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'requireValidationBeforePublish', event.target.checked)
+                          }
+                        />
+                        <Tickbox
+                          id="framework-package-editor-runtime-manual-validation"
+                          label="Allow manual validation run"
+                          checked={Boolean(form.runtimeSettings?.allowManualValidationRun)}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'allowManualValidationRun', event.target.checked)
+                          }
+                        />
+                      </div>
+                      <div className="super-admin-framework-package-editor__grid">
+                        <Select
+                          id="framework-package-editor-retry-policy"
+                          label="Retry Policy"
+                          value={form.runtimeSettings?.retryPolicy ?? 'RETRY_ONCE'}
+                          options={FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'retryPolicy', event.target.value)
+                          }
+                        />
+                        <Input
+                          id="framework-package-editor-timeout-ms"
+                          label="Default Timeout (ms)"
+                          type="number"
+                          value={form.runtimeSettings?.defaultTimeoutMs ?? 30000}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'defaultTimeoutMs', event.target.value)
+                          }
+                          fullWidth
+                        />
+                        <Input
+                          id="framework-package-editor-max-policies"
+                          label="Max Policy Executions"
+                          type="number"
+                          value={form.runtimeSettings?.maxPolicyExecutionsPerRun ?? 10}
+                          onChange={(event) =>
+                            updateRuntimeSetting(setForm, 'maxPolicyExecutionsPerRun', event.target.value)
+                          }
+                          fullWidth
+                        />
+                      </div>
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label="Validation">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Validation"
+                        copy="Select active, package-usable validation registry entries compatible with this package framework."
+                      />
+                      <Select
+                        id="framework-package-editor-validation-picker"
+                        label="Add Validation Registry Entry"
+                        value=""
+                        options={[
+                          { value: '', label: validationOptions.length ? 'Select validation' : 'No compatible validations' },
+                          ...validationOptions.filter((option) =>
+                            !(form.validationConfig ?? []).some((item) => item.validationKey === option.value),
+                          ),
+                        ]}
+                        onChange={(event) => addValidationConfig(setForm, event.target.value)}
+                        helperText="Only ACTIVE, package-usable, framework-compatible validations are shown."
+                        error={errors.validationConfig}
+                      />
+                      <div className="super-admin-framework-package-editor__selection-list">
+                        {(form.validationConfig ?? []).map((item) => (
+                          <div className="super-admin-framework-package-editor__selection-row" key={item.validationKey}>
+                            <span>{item.validationKey}</span>
+                            <Button variant="ghost" size="sm" onClick={() => removeValidationConfig(setForm, item.validationKey)}>
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label="Workflows">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Workflows"
+                        copy="Select active Workflow Policies compatible with the package framework."
+                      />
+                      <Select
+                        id="framework-package-editor-workflow-picker"
+                        label="Add Workflow Policy"
+                        value=""
+                        options={[
+                          { value: '', label: workflowPolicyOptions.length ? 'Select workflow policy' : 'No compatible policies' },
+                          ...workflowPolicyOptions.filter((option) =>
+                            !(form.workflowPolicyConfig ?? []).some((item) => item.policyKey === option.value),
+                          ),
+                        ]}
+                        onChange={(event) => addWorkflowPolicyConfig(setForm, event.target.value)}
+                        helperText="Only ACTIVE, framework-compatible workflow policies are shown."
+                        error={errors.workflowPolicyConfig}
+                      />
+                      <div className="super-admin-framework-package-editor__selection-list">
+                        {(form.workflowPolicyConfig ?? []).map((item) => (
+                          <div className="super-admin-framework-package-editor__selection-row" key={item.policyKey}>
+                            <span>{item.policyKey}</span>
+                            <Button variant="ghost" size="sm" onClick={() => removeWorkflowPolicyConfig(setForm, item.policyKey)}>
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label="Outputs">
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Outputs"
+                        copy="Reserve package output hooks for the future Output Library without invoking generation behavior."
+                      />
+                      <div className="super-admin-framework-package-editor__grid super-admin-framework-package-editor__grid--wide">
+                        <Textarea
+                          id="framework-package-editor-available-output-keys"
+                          label="Available Output Keys"
+                          helperText="Placeholder only. No output engine behavior is invoked."
+                          value={form.availableOutputKeys}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, availableOutputKeys: event.target.value }))
+                          }
+                          rows={4}
+                          fullWidth
+                        />
+                        <Textarea
+                          id="framework-package-editor-default-output-styles"
+                          label="Default Output Styles"
+                          value={form.defaultOutputStyles}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, defaultOutputStyles: event.target.value }))
+                          }
+                          rows={4}
+                          fullWidth
+                        />
+                      </div>
+                      <Input
+                        id="framework-package-editor-artifact-retention-days"
+                        label="Artifact Retention Days"
+                        type="number"
+                        value={form.artifactRetentionDays}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, artifactRetentionDays: event.target.value }))
+                        }
+                        fullWidth
+                      />
+                      <div className="super-admin-framework-package-editor__option-panel">
+                        <Tickbox
+                          id="framework-package-editor-allow-customer-output-definitions"
+                          label="Allow customer custom output definitions"
+                          checked={Boolean(form.allowCustomerOutputDefinitions)}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, allowCustomerOutputDefinitions: event.target.checked }))
+                          }
+                        />
+                        <Tickbox
+                          id="framework-package-editor-allow-output-revision-history"
+                          label="Allow output revision history"
+                          checked={Boolean(form.allowOutputRevisionHistory)}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, allowOutputRevisionHistory: event.target.checked }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </TabView.Tab>
+                </TabView>
+
+                {Object.keys(errors).length > 0 ? (
+                  <p className="super-admin-framework-package-editor__error" role="alert">
+                    Review the highlighted package fields and try again.
+                  </p>
+                ) : null}
+
+                <div className="super-admin-framework-package-editor__footer-actions">
+                  <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="sm" loading={isSaving}>
+                    {isEditMode ? 'Save Changes' : 'Create Framework Package'}
+                  </Button>
+                </div>
+              </Card.Body>
+            </form>
+          </Card>
+        ) : null}
+      </Fieldset>
+    </section>
+  )
+}
+
+export default SuperAdminFrameworkPackageEditor
