@@ -89,7 +89,7 @@ const WORKFLOW_POLICY_ERROR_TAB_LOOKUP = Object.freeze({
   onFailEffects: 6,
   overrideRoles: 7,
   approvalRequired: 7,
-  escalateTo: 7,
+  escalationRoleKey: 7,
   escalationMessage: 7,
   slaMinutes: 7,
 })
@@ -171,7 +171,7 @@ const WORKFLOW_POLICY_SERVER_ERROR_FIELDS = Object.freeze([
   'onFailEffects',
   'overrideRoles',
   'approvalRequired',
-  'escalateTo',
+  'escalationRoleKey',
   'escalationMessage',
   'slaMinutes',
 ])
@@ -239,7 +239,7 @@ const WORKFLOW_POLICY_VALIDATION_JUMP_TARGETS = Object.freeze([
   { tabIndex: 6, fieldKey: 'onFailEffects', focusId: 'workflow-policy-editor-onFailEffects-add-effect' },
   { tabIndex: 7, fieldKey: 'overrideRoles', focusId: 'workflow-policy-editor-override-roles' },
   { tabIndex: 7, fieldKey: 'approvalRequired', focusId: 'workflow-policy-editor-approval-required' },
-  { tabIndex: 7, fieldKey: 'escalateTo', focusId: 'workflow-policy-editor-escalate-to' },
+  { tabIndex: 7, fieldKey: 'escalationRoleKey', focusId: 'workflow-policy-editor-escalation-role' },
   { tabIndex: 7, fieldKey: 'escalationMessage', focusId: 'workflow-policy-editor-escalation-message' },
   { tabIndex: 7, fieldKey: 'slaMinutes', focusId: 'workflow-policy-editor-sla-minutes' },
 ])
@@ -333,7 +333,7 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   overrideAllowed: Boolean(formState.overrideAllowed),
   overrideRoles: normalizePreviewList(formState.overrideRoles, { uppercase: true }),
   approvalRequired: Boolean(formState.approvalRequired),
-  escalateTo: String(formState.escalateTo ?? '').trim().toUpperCase(),
+  escalationRoleKey: String(formState.escalationRoleKey ?? '').trim().toUpperCase(),
   escalationMessage: String(formState.escalationMessage ?? '').trim(),
   slaMinutes: parsePreviewInteger(formState.slaMinutes, 0),
   version: parsePreviewInteger(formState.version, 1),
@@ -897,7 +897,7 @@ function WorkflowPolicyEditor() {
     validationRequirements: ['requiredValidationKeys', 'validationFreshnessMinutes']
       .filter((key) => hintErrors[key]).length,
     outcomeStateEffects: ['onPassEffects', 'onFailEffects'].filter((key) => hintErrors[key]).length,
-    escalationOverrides: ['overrideRoles', 'approvalRequired', 'escalateTo', 'escalationMessage', 'slaMinutes']
+    escalationOverrides: ['overrideRoles', 'approvalRequired', 'escalationRoleKey', 'escalationMessage', 'slaMinutes']
       .filter((key) => hintErrors[key]).length,
   }), [hintErrors])
 
@@ -1865,19 +1865,20 @@ function WorkflowPolicyEditor() {
         </div>
         <div className="super-admin-workflow-policy-editor__grid">
           <Select
-            id="workflow-policy-editor-escalate-to"
-            label="Escalate To"
-            value={form.escalateTo}
+            id="workflow-policy-editor-escalation-role"
+            label="Escalation Role"
+            value={form.escalationRoleKey}
             options={WORKFLOW_POLICY_ESCALATE_TO_OPTIONS.filter((option) => option.value)}
-            placeholder="Select escalation owner"
+            placeholder="Select escalation role"
             disabled={!form.approvalRequired}
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                escalateTo: event.target.value,
+                escalationRoleKey: event.target.value,
               }))
             }
-            error={errors.escalateTo}
+            error={errors.escalationRoleKey}
+            helperText="Customer Admin escalates organisation-wide, Tenant Admin escalates within the active tenant, and Framework Owner escalates to package owners."
           />
           <Input
             id="workflow-policy-editor-sla-minutes"

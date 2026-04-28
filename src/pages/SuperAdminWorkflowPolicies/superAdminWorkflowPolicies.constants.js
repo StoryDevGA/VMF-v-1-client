@@ -126,6 +126,12 @@ export const WORKFLOW_POLICY_OVERRIDE_ROLES = Object.freeze({
   OPERATIONS_ADMIN: 'OPERATIONS_ADMIN',
 })
 
+export const WORKFLOW_POLICY_ESCALATION_ROLE_KEYS = Object.freeze({
+  CUSTOMER_ADMIN: 'CUSTOMER_ADMIN',
+  TENANT_ADMIN: 'TENANT_ADMIN',
+  FRAMEWORK_OWNER: 'FRAMEWORK_OWNER',
+})
+
 export const WORKFLOW_POLICY_STATUS_OPTIONS = Object.freeze([
   { value: '', label: 'All statuses' },
   { value: WORKFLOW_POLICY_STATUSES.DRAFT, label: 'Draft' },
@@ -210,7 +216,7 @@ export const WORKFLOW_POLICY_OVERRIDE_ROLE_OPTIONS = Object.freeze(
 )
 
 export const WORKFLOW_POLICY_ESCALATE_TO_OPTIONS = Object.freeze(
-  toOptions(WORKFLOW_POLICY_OVERRIDE_ROLES),
+  toOptions(WORKFLOW_POLICY_ESCALATION_ROLE_KEYS),
 )
 
 export const WORKFLOW_POLICY_PAGE_SIZE = 4
@@ -269,7 +275,7 @@ export const INITIAL_WORKFLOW_POLICY_FORM = Object.freeze({
   overrideAllowed: false,
   overrideRoles: [],
   approvalRequired: false,
-  escalateTo: '',
+  escalationRoleKey: '',
   escalationMessage: '',
   slaMinutes: '0',
   version: '1',
@@ -306,7 +312,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
       WORKFLOW_POLICY_OVERRIDE_ROLES.FRAMEWORK_OWNER,
     ]),
     approvalRequired: true,
-    escalateTo: WORKFLOW_POLICY_OVERRIDE_ROLES.GOVERNANCE_LEAD,
+    escalationRoleKey: WORKFLOW_POLICY_ESCALATION_ROLE_KEYS.CUSTOMER_ADMIN,
     escalationMessage: 'Escalate blocked publish overrides to governance before release sign-off.',
     slaMinutes: 60,
     onPassEffects: Object.freeze([
@@ -357,7 +363,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
       WORKFLOW_POLICY_OVERRIDE_ROLES.SUPER_ADMIN,
     ]),
     approvalRequired: false,
-    escalateTo: '',
+    escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
     conditions: Object.freeze([
@@ -425,7 +431,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     overrideAllowed: false,
     overrideRoles: Object.freeze([]),
     approvalRequired: false,
-    escalateTo: '',
+    escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
     orderedSteps: Object.freeze(['validate', 'synthesise']),
@@ -458,7 +464,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     overrideAllowed: false,
     overrideRoles: Object.freeze([]),
     approvalRequired: false,
-    escalateTo: '',
+    escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
     orderedSteps: Object.freeze([]),
@@ -491,7 +497,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     overrideAllowed: false,
     overrideRoles: Object.freeze([]),
     approvalRequired: false,
-    escalateTo: '',
+    escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
     orderedSteps: Object.freeze(['snapshot', 'summarise']),
@@ -524,7 +530,7 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     overrideAllowed: false,
     overrideRoles: Object.freeze([]),
     approvalRequired: false,
-    escalateTo: '',
+    escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
     orderedSteps: Object.freeze([]),
@@ -557,6 +563,13 @@ const normalizeEffectType = (value) => String(value ?? '').trim().toUpperCase()
 const effectRequiresTargetPath = (type) => EFFECT_TYPES_REQUIRING_TARGET_PATH.has(normalizeEffectType(type))
 
 const effectRequiresValue = (type) => EFFECT_TYPES_REQUIRING_VALUE.has(normalizeEffectType(type))
+
+const normalizeEscalationRoleKey = (value) => {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return ''
+  if (Object.values(WORKFLOW_POLICY_ESCALATION_ROLE_KEYS).includes(normalized)) return normalized
+  return WORKFLOW_POLICY_ESCALATION_ROLE_KEYS.CUSTOMER_ADMIN
+}
 
 const normalizeAgentId = (value) =>
   String(value ?? '')
@@ -744,7 +757,7 @@ export function mapWorkflowPolicyToForm(policy) {
     overrideAllowed: Boolean(policy.overrideAllowed),
     overrideRoles: Array.isArray(policy.overrideRoles) ? [...policy.overrideRoles] : [],
     approvalRequired: Boolean(policy.approvalRequired),
-    escalateTo: policy.escalateTo ?? '',
+    escalationRoleKey: normalizeEscalationRoleKey(policy.escalationRoleKey || policy.escalateTo),
     escalationMessage: policy.escalationMessage ?? '',
     slaMinutes: String(policy.slaMinutes ?? 0),
     version: String(policy.version ?? 1),
@@ -811,7 +824,7 @@ export function validateWorkflowPolicyForm(
       .filter(Boolean),
   )]
   const approvalRequired = Boolean(formState.approvalRequired)
-  const escalateTo = String(formState.escalateTo ?? '').trim().toUpperCase()
+  const escalationRoleKey = normalizeEscalationRoleKey(formState.escalationRoleKey)
   const escalationMessage = String(formState.escalationMessage ?? '').trim()
   const slaMinutes = Number.parseInt(String(formState.slaMinutes ?? '').trim(), 10)
   const orderedSteps = Array.isArray(formState.orderedSteps) ? [...formState.orderedSteps] : []
@@ -1005,8 +1018,8 @@ export function validateWorkflowPolicyForm(
     errors.approvalRequired = 'Approval Required can only be enabled when overrides are allowed.'
   }
 
-  if (approvalRequired && !escalateTo) {
-    errors.escalateTo = 'Escalate To is required when approval is required.'
+  if (approvalRequired && !escalationRoleKey) {
+    errors.escalationRoleKey = 'Escalation Role is required when approval is required.'
   }
 
   if (escalationMessage.length > 500) {
@@ -1109,7 +1122,7 @@ export function validateWorkflowPolicyForm(
       overrideAllowed,
       overrideRoles,
       approvalRequired,
-      escalateTo,
+      escalationRoleKey,
       escalationMessage,
       slaMinutes,
       orderedSteps,
