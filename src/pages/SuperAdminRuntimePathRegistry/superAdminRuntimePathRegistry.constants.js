@@ -73,6 +73,32 @@ export const RUNTIME_PATH_REGISTRY_UI_CONTROLS = Object.freeze({
 
 export const RUNTIME_PATH_REGISTRY_PAGE_SIZE = 20
 
+export const RUNTIME_PATH_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
+  'pathKey',
+  'label',
+  'description',
+  'status',
+  'frameworkKeys',
+  'scope',
+  'allowedOperations',
+  'dataType',
+  'category',
+  'sourceType',
+  'displayOrder',
+  'allowedValues',
+  'allowedValueLabels',
+  'uiControl',
+  'defaultValue',
+  'exampleValue',
+  'minValue',
+  'maxValue',
+  'minLength',
+  'maxLength',
+  'regexPattern',
+])
+
+export const RUNTIME_PATH_REGISTRY_PATH_KEY_PATTERN = /^\S+$/
+
 const normalizeStableKeySegment = (value) =>
   String(value || '')
     .trim()
@@ -150,6 +176,89 @@ export const getRuntimePathRegistryStatusVariant = (value) => {
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE) return 'success'
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED) return 'warning'
   return 'neutral'
+}
+
+export const normalizeRuntimePathRegistryList = (values, { upper = false } = {}) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim())
+    .map((value) => (upper ? value.toUpperCase() : value))
+    .filter(Boolean))]
+
+export const parseRuntimePathRegistryListText = (value, { upper = false } = {}) =>
+  normalizeRuntimePathRegistryList(
+    String(value ?? '')
+      .split(/[\n,]+/)
+      .map((item) => item.trim()),
+    { upper },
+  )
+
+export const parseOptionalRuntimePathRegistryNumber = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text) return undefined
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : Number.NaN
+}
+
+export const validateRuntimePathRegistryForm = (form = {}, { isEditMode = false } = {}) => {
+  const errors = {}
+  const pathKey = String(form.pathKey ?? '').trim()
+
+  if (!isEditMode) {
+    if (!pathKey) errors.pathKey = 'Path key is required.'
+    else if (!RUNTIME_PATH_REGISTRY_PATH_KEY_PATTERN.test(pathKey)) errors.pathKey = 'Path key cannot contain whitespace.'
+  }
+
+  if (!String(form.label ?? '').trim()) errors.label = 'Label is required.'
+  if (!String(form.description ?? '').trim()) errors.description = 'Description is required.'
+  if (normalizeRuntimePathRegistryList(form.frameworkKeys, { upper: true }).length === 0) {
+    errors.frameworkKeys = 'Select at least one framework.'
+  }
+  if (normalizeRuntimePathRegistryList(form.allowedOperations, { upper: true }).length === 0) {
+    errors.allowedOperations = 'Select at least one operation.'
+  }
+
+  const numericFields = ['displayOrder', 'minValue', 'maxValue', 'minLength', 'maxLength']
+  for (const field of numericFields) {
+    const value = String(form[field] ?? '').trim()
+    if (value && !Number.isFinite(Number(value))) {
+      errors[field] = 'Enter a valid number.'
+    }
+  }
+
+  if (
+    form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.SELECT
+    && parseRuntimePathRegistryListText(form.allowedValues).length === 0
+  ) {
+    errors.uiControl = 'SELECT requires at least one allowed value.'
+  }
+
+  if (
+    form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.CHECKBOX
+    && form.dataType !== RUNTIME_PATH_REGISTRY_DATA_TYPES.BOOLEAN
+  ) {
+    errors.uiControl = 'CHECKBOX requires BOOLEAN data type.'
+  }
+
+  if (
+    form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.NUMBER
+    && form.dataType !== RUNTIME_PATH_REGISTRY_DATA_TYPES.NUMBER
+  ) {
+    errors.uiControl = 'NUMBER requires NUMBER data type.'
+  }
+
+  const minValue = parseOptionalRuntimePathRegistryNumber(form.minValue)
+  const maxValue = parseOptionalRuntimePathRegistryNumber(form.maxValue)
+  if (Number.isFinite(minValue) && Number.isFinite(maxValue) && minValue > maxValue) {
+    errors.maxValue = 'Max Value must be greater than or equal to Min Value.'
+  }
+
+  const minLength = parseOptionalRuntimePathRegistryNumber(form.minLength)
+  const maxLength = parseOptionalRuntimePathRegistryNumber(form.maxLength)
+  if (Number.isFinite(minLength) && Number.isFinite(maxLength) && minLength > maxLength) {
+    errors.maxLength = 'Max Length must be greater than or equal to Min Length.'
+  }
+
+  return errors
 }
 
 export const cloneRuntimePathRegistryEntry = (entry) => ({

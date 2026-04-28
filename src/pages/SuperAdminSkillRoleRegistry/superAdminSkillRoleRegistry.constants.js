@@ -14,6 +14,15 @@ export const SKILL_ROLE_REGISTRY_STATUS_OPTIONS = Object.freeze([
   ...Object.values(SKILL_ROLE_REGISTRY_STATUSES).map((value) => ({ label: value, value })),
 ])
 
+export const SKILL_ROLE_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
+  'roleKey',
+  'label',
+  'description',
+  'status',
+])
+
+export const SKILL_ROLE_REGISTRY_ROLE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
+
 export const SKILL_ROLE_REGISTRY_SORT_OPTIONS = Object.freeze([
   { label: 'Updated (Newest first)', value: 'updatedAt:desc' },
   { label: 'Label (A-Z)', value: 'label:asc' },
@@ -46,6 +55,31 @@ const normalizeStableKeySegment = (value) =>
 
 export const buildSkillRoleRegistryStableId = (roleKey) =>
   `role-${normalizeStableKeySegment(roleKey).slice(0, 160)}`
+
+export const validateSkillRoleRegistryForm = (form = {}) => {
+  const errors = {}
+
+  const roleKey = String(form.roleKey ?? '').trim()
+  if (!roleKey) {
+    errors.roleKey = 'Role key is required.'
+  } else if (!SKILL_ROLE_REGISTRY_ROLE_KEY_PATTERN.test(roleKey.toUpperCase())) {
+    errors.roleKey = 'Role key must use uppercase letters, numbers, or underscores.'
+  }
+
+  if (!String(form.label ?? '').trim()) {
+    errors.label = 'Label is required.'
+  }
+
+  if (!String(form.description ?? '').trim()) {
+    errors.description = 'Description is required.'
+  }
+
+  if (!String(form.status ?? '').trim()) {
+    errors.status = 'Status is required.'
+  }
+
+  return errors
+}
 
 export const INITIAL_SKILL_ROLE_REGISTRY = Object.freeze([
   Object.freeze({

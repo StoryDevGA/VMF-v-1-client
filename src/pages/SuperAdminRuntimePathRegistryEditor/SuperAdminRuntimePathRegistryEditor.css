@@ -201,6 +201,18 @@
   padding-top: var(--spacing-md);
 }
 
+.super-admin-runtime-path-registry-editor__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-runtime-path-registry-editor__tab-error-count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+}
+
 @media (max-width: 1023px) {
   .super-admin-runtime-path-registry-editor__summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

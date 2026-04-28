@@ -228,6 +228,18 @@
   padding-top: var(--spacing-md);
 }
 
+.super-admin-framework-package-editor__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-framework-package-editor__tab-error-count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+}
+
 .super-admin-framework-package-editor__option-panel {
   display: grid;
   gap: var(--spacing-sm);

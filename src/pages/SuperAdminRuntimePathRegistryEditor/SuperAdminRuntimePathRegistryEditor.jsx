@@ -23,10 +23,12 @@ import {
   useUpdateRuntimePathMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import {
   RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS,
   RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS,
   RUNTIME_PATH_REGISTRY_DATA_TYPES,
+  RUNTIME_PATH_REGISTRY_FORM_ERROR_FIELDS,
   RUNTIME_PATH_REGISTRY_FORM_OPERATION_OPTIONS,
   RUNTIME_PATH_REGISTRY_OPERATIONS,
   RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS,
@@ -35,10 +37,13 @@ import {
   RUNTIME_PATH_REGISTRY_SOURCE_TYPES,
   RUNTIME_PATH_REGISTRY_STATUS_OPTIONS,
   RUNTIME_PATH_REGISTRY_STATUSES,
-  RUNTIME_PATH_REGISTRY_UI_CONTROLS,
   RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS,
   formatRuntimePathRegistryStatus,
   getRuntimePathRegistryStatusVariant,
+  normalizeRuntimePathRegistryList as normalizeList,
+  parseOptionalRuntimePathRegistryNumber as parseOptionalNumber,
+  parseRuntimePathRegistryListText as parseListText,
+  validateRuntimePathRegistryForm as validateForm,
 } from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import '../SuperAdminRuntimePathRegistry/SuperAdminRuntimePathRegistry.css'
 import './SuperAdminRuntimePathRegistryEditor.css'
@@ -77,22 +82,6 @@ const INITIAL_FORM = Object.freeze({
   isNullable: false,
 })
 
-const PATH_KEY_PATTERN = /^\S+$/
-
-const normalizeList = (values, { upper = false } = {}) =>
-  [...new Set((Array.isArray(values) ? values : [])
-    .map((value) => String(value ?? '').trim())
-    .map((value) => (upper ? value.toUpperCase() : value))
-    .filter(Boolean))]
-
-const parseListText = (value, { upper = false } = {}) =>
-  normalizeList(
-    String(value ?? '')
-      .split(/[\n,]+/)
-      .map((item) => item.trim()),
-    { upper },
-  )
-
 const formatListText = (values) => (Array.isArray(values) ? values.join('\n') : '')
 
 const formatValueText = (value) => {
@@ -125,12 +114,21 @@ const parseObjectText = (value) => {
   return parsed
 }
 
-const parseOptionalNumber = (value) => {
-  const text = String(value ?? '').trim()
-  if (!text) return undefined
-  const parsed = Number(text)
-  return Number.isFinite(parsed) ? parsed : Number.NaN
-}
+const countErrorsForFields = (errors, fields) => fields.filter((field) => errors[field]).length
+
+const renderTabLabel = (label, count = 0) => (
+  <span className="super-admin-runtime-path-registry-editor__tab-label">
+    <span>{label}</span>
+    {count > 0 ? (
+      <>
+        <span className="super-admin-runtime-path-registry-editor__tab-error-count" aria-hidden="true">
+          ({count})
+        </span>
+        <span className="sr-only"> ({count} validation errors)</span>
+      </>
+    ) : null}
+  </span>
+)
 
 const mapRuntimePathToForm = (runtimePath, { duplicate = false } = {}) => ({
   ...INITIAL_FORM,
@@ -166,59 +164,6 @@ const mapRuntimePathToForm = (runtimePath, { duplicate = false } = {}) => ({
   regexPattern: runtimePath?.regexPattern ?? '',
   isNullable: Boolean(runtimePath?.isNullable),
 })
-
-const validateForm = (form, { isEditMode = false } = {}) => {
-  const errors = {}
-  const pathKey = String(form.pathKey ?? '').trim()
-
-  if (!isEditMode) {
-    if (!pathKey) errors.pathKey = 'Path key is required.'
-    else if (!PATH_KEY_PATTERN.test(pathKey)) errors.pathKey = 'Path key cannot contain whitespace.'
-  }
-
-  if (!String(form.label ?? '').trim()) errors.label = 'Label is required.'
-  if (!String(form.description ?? '').trim()) errors.description = 'Description is required.'
-  if (normalizeList(form.frameworkKeys, { upper: true }).length === 0) {
-    errors.frameworkKeys = 'Select at least one framework.'
-  }
-  if (normalizeList(form.allowedOperations, { upper: true }).length === 0) {
-    errors.allowedOperations = 'Select at least one operation.'
-  }
-
-  const numericFields = ['displayOrder', 'minValue', 'maxValue', 'minLength', 'maxLength']
-  for (const field of numericFields) {
-    const value = String(form[field] ?? '').trim()
-    if (value && !Number.isFinite(Number(value))) {
-      errors[field] = 'Enter a valid number.'
-    }
-  }
-
-  if (form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.SELECT && parseListText(form.allowedValues).length === 0) {
-    errors.uiControl = 'SELECT requires at least one allowed value.'
-  }
-
-  if (form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.CHECKBOX && form.dataType !== RUNTIME_PATH_REGISTRY_DATA_TYPES.BOOLEAN) {
-    errors.uiControl = 'CHECKBOX requires BOOLEAN data type.'
-  }
-
-  if (form.uiControl === RUNTIME_PATH_REGISTRY_UI_CONTROLS.NUMBER && form.dataType !== RUNTIME_PATH_REGISTRY_DATA_TYPES.NUMBER) {
-    errors.uiControl = 'NUMBER requires NUMBER data type.'
-  }
-
-  const minValue = parseOptionalNumber(form.minValue)
-  const maxValue = parseOptionalNumber(form.maxValue)
-  if (Number.isFinite(minValue) && Number.isFinite(maxValue) && minValue > maxValue) {
-    errors.maxValue = 'Max Value must be greater than or equal to Min Value.'
-  }
-
-  const minLength = parseOptionalNumber(form.minLength)
-  const maxLength = parseOptionalNumber(form.maxLength)
-  if (Number.isFinite(minLength) && Number.isFinite(maxLength) && minLength > maxLength) {
-    errors.maxLength = 'Max Length must be greater than or equal to Min Length.'
-  }
-
-  return errors
-}
 
 const buildPayload = (form, { includePathKey = false, includeLifecycleStatus = false } = {}) => {
   const uiControl = String(form.uiControl ?? '').trim().toUpperCase()
@@ -518,7 +463,11 @@ function SuperAdminRuntimePathRegistryEditor() {
     } catch (err) {
       const appErr = normalizeError(err)
       const details = appErr?.details
-      if (details && typeof details === 'object') {
+      const fieldErrors = getRuntimeControlFieldErrorMap(appErr, RUNTIME_PATH_REGISTRY_FORM_ERROR_FIELDS)
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors)
+        setErrorsSource('server')
+      } else if (details && typeof details === 'object') {
         setErrors(details)
         setErrorsSource('server')
       } else {
@@ -544,6 +493,26 @@ function SuperAdminRuntimePathRegistryEditor() {
       ? 'Duplicate Runtime Path'
       : 'Create Runtime Path'
   const pathError = runtimePathAppError || duplicateSourceAppError
+  const tabErrorCounts = {
+    frameworkCompatibility: countErrorsForFields(errors, ['frameworkKeys', 'allowedOperations']),
+    schemaUi: countErrorsForFields(errors, [
+      'scope',
+      'dataType',
+      'category',
+      'sourceType',
+      'displayOrder',
+      'allowedValues',
+      'allowedValueLabels',
+      'uiControl',
+      'minValue',
+      'maxValue',
+      'minLength',
+      'maxLength',
+      'regexPattern',
+    ]),
+    dependencies: 0,
+    jsonNotes: countErrorsForFields(errors, ['defaultValue', 'exampleValue', 'replacementPathKey', 'notes']),
+  }
 
   return (
     <section className="super-admin-runtime-path-registry container" aria-label="Runtime path editor">
@@ -680,7 +649,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                   className="super-admin-runtime-path-registry-editor__tabs"
                   aria-label="Runtime path editor sections"
                 >
-                  <TabView.Tab label="Framework Compatibility">
+                  <TabView.Tab label={renderTabLabel('Framework Compatibility', tabErrorCounts.frameworkCompatibility)}>
                     <div className="super-admin-runtime-path-registry-editor__section">
                       <div className="super-admin-runtime-path-registry-editor__section-header">
                         <h2 className="super-admin-runtime-path-registry-editor__section-title">Framework Compatibility</h2>
@@ -791,7 +760,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Schema & UI">
+                  <TabView.Tab label={renderTabLabel('Schema & UI', tabErrorCounts.schemaUi)}>
                     <div className="super-admin-runtime-path-registry-editor__section">
                       <div className="super-admin-runtime-path-registry-editor__section-header">
                         <h2 className="super-admin-runtime-path-registry-editor__section-title">Schema & UI</h2>
@@ -873,7 +842,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Dependencies">
+                  <TabView.Tab label={renderTabLabel('Dependencies', tabErrorCounts.dependencies)}>
                     <div className="super-admin-runtime-path-registry-editor__section">
                       <div className="super-admin-runtime-path-registry-editor__section-header">
                         <h2 className="super-admin-runtime-path-registry-editor__section-title">Dependencies</h2>
@@ -896,7 +865,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="JSON & Notes">
+                  <TabView.Tab label={renderTabLabel('JSON & Notes', tabErrorCounts.jsonNotes)}>
                     <div className="super-admin-runtime-path-registry-editor__section">
                       <div className="super-admin-runtime-path-registry-editor__section-header">
                         <h2 className="super-admin-runtime-path-registry-editor__section-title">JSON & Notes</h2>

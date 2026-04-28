@@ -22,22 +22,25 @@ import {
   useUpdateValidationRegistryMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import { RUNTIME_AGENT_STATUSES } from '../SuperAdminAgents/superAdminAgents.constants.js'
 import {
   VALIDATION_REGISTRY_CATEGORIES,
   VALIDATION_REGISTRY_CATEGORY_OPTIONS,
   VALIDATION_REGISTRY_EXECUTION_MODES,
   VALIDATION_REGISTRY_EXECUTION_MODE_OPTIONS,
+  VALIDATION_REGISTRY_FORM_ERROR_FIELDS,
   VALIDATION_REGISTRY_RESULT_TYPE_OPTIONS,
   VALIDATION_REGISTRY_SEVERITIES,
   VALIDATION_REGISTRY_SEVERITY_OPTIONS,
   VALIDATION_REGISTRY_STATUS_OPTIONS,
   VALIDATION_REGISTRY_STATUSES,
+  normalizeValidationRegistryFrameworkKeys as normalizeFrameworkKeys,
+  normalizeValidationRegistryStableIdList as normalizeStableIdList,
+  validateValidationRegistryForm as validateForm,
 } from '../SuperAdminValidationRegistry/superAdminValidationRegistry.constants.js'
 import '../SuperAdminValidationRegistry/ValidationRegistryListView.css'
 import './SuperAdminValidationRegistryEditor.css'
-
-const KEY_REGEX = /^[a-z][a-z0-9-]*$/
 
 const INITIAL_FORM = Object.freeze({
   key: '',
@@ -72,16 +75,6 @@ const shallowEqualObject = (left, right) => {
   if (leftKeys.length !== rightKeys.length) return false
   return leftKeys.every((key) => left[key] === right[key])
 }
-
-const normalizeFrameworkKeys = (values) =>
-  [...new Set((Array.isArray(values) ? values : [])
-    .map((value) => String(value ?? '').trim().toUpperCase())
-    .filter(Boolean))]
-
-const normalizeStableIdList = (values) =>
-  [...new Set((Array.isArray(values) ? values : [])
-    .map((value) => String(value ?? '').trim())
-    .filter(Boolean))]
 
 const areStableIdListsEqual = (left, right) => {
   const normalizedLeft = normalizeStableIdList(left)
@@ -146,78 +139,6 @@ const formatAgentStatus = (status) => {
 const formStateReducer = (state, action) => {
   if (action?.type !== 'apply') return state
   return typeof action.updater === 'function' ? action.updater(state) : action.updater
-}
-
-const validateForm = (form, { isEditMode } = {}) => {
-  const errors = {}
-
-  const key = String(form.key ?? '').trim().toLowerCase()
-  if (!isEditMode) {
-    if (!key) {
-      errors.key = 'Key is required.'
-    } else if (!KEY_REGEX.test(key)) {
-      errors.key = 'Key must use lowercase letters, numbers, or hyphens.'
-    }
-  }
-
-  if (!String(form.label ?? '').trim()) {
-    errors.label = 'Label is required.'
-  }
-
-  if (!String(form.description ?? '').trim()) {
-    errors.description = 'Description is required.'
-  }
-
-  const frameworks = normalizeFrameworkKeys(form.supportedFrameworkKeys)
-  if (frameworks.length === 0) {
-    errors.supportedFrameworkKeys = 'Select at least one supported framework.'
-  }
-
-  if (!String(form.category ?? '').trim()) {
-    errors.category = 'Category is required.'
-  }
-
-  if (!String(form.severity ?? '').trim()) {
-    errors.severity = 'Severity is required.'
-  }
-
-  if (!String(form.producerSkillId ?? '').trim()) {
-    errors.producerSkillId = 'Producer skill is required.'
-  }
-
-  if (!String(form.outputPath ?? '').trim()) {
-    errors.outputPath = 'Output Path is required.'
-  }
-
-  const outputPath = String(form.outputPath ?? '').trim()
-  const passFieldPath = String(form.passFieldPath ?? '').trim()
-  const detailsFieldPath = String(form.detailsFieldPath ?? '').trim()
-
-  if (outputPath && passFieldPath && !passFieldPath.startsWith(`${outputPath}.`)) {
-    errors.passFieldPath = 'Pass Field Path must be inside the selected Output Path.'
-  }
-
-  if (outputPath && detailsFieldPath && !detailsFieldPath.startsWith(`${outputPath}.`)) {
-    errors.detailsFieldPath = 'Details Field Path must be inside the selected Output Path.'
-  }
-
-  const blockingDefault = Boolean(form.blockingDefault)
-  const warningOnlyDefault = Boolean(form.warningOnlyDefault)
-  if (blockingDefault && warningOnlyDefault) {
-    errors.warningOnlyDefault = 'Blocking Default and Warning Only Default cannot both be true.'
-  }
-
-  const freshness = Number(form.freshnessDefaultMinutes)
-  if (!Number.isInteger(freshness) || freshness < 0) {
-    errors.freshnessDefaultMinutes = 'Freshness Default Minutes must be zero or a positive whole number.'
-  }
-
-  const version = Number(form.version)
-  if (!Number.isInteger(version) || version < 1) {
-    errors.version = 'Version must be a positive whole number.'
-  }
-
-  return errors
 }
 
 function ValidationRegistryEditorLoadingState({ isEditMode }) {
@@ -574,7 +495,11 @@ function SuperAdminValidationRegistryEditor() {
     } catch (err) {
       const appErr = normalizeError(err)
       const details = appErr?.details
-      if (details && typeof details === 'object') {
+      const fieldErrors = getRuntimeControlFieldErrorMap(appErr, VALIDATION_REGISTRY_FORM_ERROR_FIELDS)
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors)
+        setErrorsSource('server')
+      } else if (details && typeof details === 'object') {
         setErrors(details)
         setErrorsSource('server')
       } else {

@@ -142,5 +142,6 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
 
     expect(screen.getByText(/max value must be greater than or equal to min value/i)).toBeInTheDocument()
     expect(screen.getByText(/max length must be greater than or equal to min length/i)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /schema & ui .*2 validation errors/i })).toBeInTheDocument()
   })
 })

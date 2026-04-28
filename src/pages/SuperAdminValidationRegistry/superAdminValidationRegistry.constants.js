@@ -40,6 +40,29 @@ export const VALIDATION_REGISTRY_EXECUTION_MODES = Object.freeze({
 
 export const VALIDATION_REGISTRY_PAGE_SIZE = 20
 
+export const VALIDATION_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
+  'key',
+  'label',
+  'description',
+  'status',
+  'supportedFrameworkKeys',
+  'category',
+  'severity',
+  'producerSkillId',
+  'defaultAgentIds',
+  'outputPath',
+  'resultType',
+  'passFieldPath',
+  'detailsFieldPath',
+  'freshnessDefaultMinutes',
+  'blockingDefault',
+  'warningOnlyDefault',
+  'executionMode',
+  'version',
+])
+
+export const VALIDATION_REGISTRY_KEY_PATTERN = /^[a-z][a-z0-9-]*$/
+
 export const VALIDATION_REGISTRY_HELP_TEXT =
   'Register reusable governed validation checks used by Workflow Policies and Framework Packages.'
 
@@ -113,6 +136,88 @@ export const cloneValidationRegistryEntry = (entry = {}) => ({
 export const buildValidationRegistryStableId = (key) => {
   const normalized = String(key ?? '').trim().toLowerCase()
   return normalized ? `validation-${normalized}` : ''
+}
+
+export const normalizeValidationRegistryFrameworkKeys = (values) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim().toUpperCase())
+    .filter(Boolean))]
+
+export const normalizeValidationRegistryStableIdList = (values) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean))]
+
+export const validateValidationRegistryForm = (form = {}, { isEditMode = false } = {}) => {
+  const errors = {}
+
+  const key = String(form.key ?? '').trim().toLowerCase()
+  if (!isEditMode) {
+    if (!key) {
+      errors.key = 'Key is required.'
+    } else if (!VALIDATION_REGISTRY_KEY_PATTERN.test(key)) {
+      errors.key = 'Key must use lowercase letters, numbers, or hyphens.'
+    }
+  }
+
+  if (!String(form.label ?? '').trim()) {
+    errors.label = 'Label is required.'
+  }
+
+  if (!String(form.description ?? '').trim()) {
+    errors.description = 'Description is required.'
+  }
+
+  const frameworks = normalizeValidationRegistryFrameworkKeys(form.supportedFrameworkKeys)
+  if (frameworks.length === 0) {
+    errors.supportedFrameworkKeys = 'Select at least one supported framework.'
+  }
+
+  if (!String(form.category ?? '').trim()) {
+    errors.category = 'Category is required.'
+  }
+
+  if (!String(form.severity ?? '').trim()) {
+    errors.severity = 'Severity is required.'
+  }
+
+  if (!String(form.producerSkillId ?? '').trim()) {
+    errors.producerSkillId = 'Producer skill is required.'
+  }
+
+  if (!String(form.outputPath ?? '').trim()) {
+    errors.outputPath = 'Output Path is required.'
+  }
+
+  const outputPath = String(form.outputPath ?? '').trim()
+  const passFieldPath = String(form.passFieldPath ?? '').trim()
+  const detailsFieldPath = String(form.detailsFieldPath ?? '').trim()
+
+  if (outputPath && passFieldPath && !passFieldPath.startsWith(`${outputPath}.`)) {
+    errors.passFieldPath = 'Pass Field Path must be inside the selected Output Path.'
+  }
+
+  if (outputPath && detailsFieldPath && !detailsFieldPath.startsWith(`${outputPath}.`)) {
+    errors.detailsFieldPath = 'Details Field Path must be inside the selected Output Path.'
+  }
+
+  const blockingDefault = Boolean(form.blockingDefault)
+  const warningOnlyDefault = Boolean(form.warningOnlyDefault)
+  if (blockingDefault && warningOnlyDefault) {
+    errors.warningOnlyDefault = 'Blocking Default and Warning Only Default cannot both be true.'
+  }
+
+  const freshness = Number(form.freshnessDefaultMinutes)
+  if (!Number.isInteger(freshness) || freshness < 0) {
+    errors.freshnessDefaultMinutes = 'Freshness Default Minutes must be zero or a positive whole number.'
+  }
+
+  const version = Number(form.version)
+  if (!Number.isInteger(version) || version < 1) {
+    errors.version = 'Version must be a positive whole number.'
+  }
+
+  return errors
 }
 
 export const INITIAL_VALIDATION_REGISTRY = Object.freeze([

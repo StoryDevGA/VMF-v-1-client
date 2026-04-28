@@ -17,13 +17,14 @@ import {
   useUpdateSkillRoleMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
+import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import {
+  SKILL_ROLE_REGISTRY_FORM_ERROR_FIELDS,
   SKILL_ROLE_REGISTRY_STATUSES,
+  validateSkillRoleRegistryForm,
 } from '../SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
 import '../SuperAdminSkillRoleRegistry/SkillRoleRegistryListView.css'
 import './SuperAdminSkillRoleEditor.css'
-
-const ROLE_KEY_REGEX = /^[A-Z][A-Z0-9_]*$/
 
 const INITIAL_SKILL_ROLE_FORM = Object.freeze({
   roleKey: '',
@@ -40,31 +41,6 @@ const shallowEqualObject = (left, right) => {
   const rightKeys = Object.keys(right)
   if (leftKeys.length !== rightKeys.length) return false
   return leftKeys.every((key) => left[key] === right[key])
-}
-
-const validateSkillRoleForm = (form) => {
-  const errors = {}
-
-  const roleKey = String(form.roleKey ?? '').trim()
-  if (!roleKey) {
-    errors.roleKey = 'Role key is required.'
-  } else if (!ROLE_KEY_REGEX.test(roleKey.toUpperCase())) {
-    errors.roleKey = 'Role key must use uppercase letters, numbers, or underscores.'
-  }
-
-  if (!String(form.label ?? '').trim()) {
-    errors.label = 'Label is required.'
-  }
-
-  if (!String(form.description ?? '').trim()) {
-    errors.description = 'Description is required.'
-  }
-
-  if (!String(form.status ?? '').trim()) {
-    errors.status = 'Status is required.'
-  }
-
-  return errors
 }
 
 function SkillRoleEditorLoadingState({ isEditMode }) {
@@ -104,29 +80,33 @@ function SuperAdminSkillRoleEditor() {
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
   const [fetchSkillRoleDependencies] = useLazyGetSkillRoleDependenciesQuery()
 
-  const liveErrors = useMemo(() => validateSkillRoleForm(form), [form])
+  const liveErrors = useMemo(() => validateSkillRoleRegistryForm(form), [form])
   const isSaving = isCreating || isUpdating
   const roleUsageCount = Number(loadedRole?.usageCount) || 0
 
   useEffect(() => {
-    if (!isEditMode) return
-    if (!loadedRole) return
+    if (!isEditMode) return undefined
+    if (!loadedRole) return undefined
 
-    setForm((current) => {
-      const next = {
-        roleKey: loadedRole.roleKey ?? '',
-        label: loadedRole.label ?? '',
-        description: loadedRole.description ?? '',
-        status: loadedRole.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
-        isSystem: Boolean(loadedRole.isSystem),
-      }
+    const timeoutId = window.setTimeout(() => {
+      setForm((current) => {
+        const next = {
+          roleKey: loadedRole.roleKey ?? '',
+          label: loadedRole.label ?? '',
+          description: loadedRole.description ?? '',
+          status: loadedRole.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+          isSystem: Boolean(loadedRole.isSystem),
+        }
 
-      return shallowEqualObject(current, next) ? current : next
-    })
+        return shallowEqualObject(current, next) ? current : next
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
   }, [isEditMode, loadedRole])
 
   const submitSkillRole = useCallback(async ({ bypassStatusWarning = false } = {}) => {
-    const clientErrors = validateSkillRoleForm(form)
+    const clientErrors = validateSkillRoleRegistryForm(form)
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors)
       setErrorsSource('client')
@@ -207,7 +187,11 @@ function SuperAdminSkillRoleEditor() {
     } catch (err) {
       const appErr = normalizeError(err)
       const details = appErr?.details
-      if (details && typeof details === 'object') {
+      const fieldErrors = getRuntimeControlFieldErrorMap(appErr, SKILL_ROLE_REGISTRY_FORM_ERROR_FIELDS)
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors)
+        setErrorsSource('server')
+      } else if (details && typeof details === 'object') {
         setErrors(details)
         setErrorsSource('server')
       } else {

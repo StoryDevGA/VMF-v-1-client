@@ -53,13 +53,17 @@ const SERVER_ERROR_FIELDS = Object.freeze([
   'version',
   'description',
   'status',
+  'visibility',
+  'customerAccessMode',
   'assignedCustomerIds',
   'sections',
   'sectionsText',
+  'runtimeSettings',
   'validationConfig',
   'workflowPolicyConfig',
   'availableOutputKeys',
   'defaultOutputStyles',
+  'artifactRetentionDays',
 ])
 
 const buildDefaultFrameworkPackageForm = (registryRows) => {
@@ -141,6 +145,22 @@ const removeWorkflowPolicyConfig = (setForm, policyKey) => {
     workflowPolicyConfig: (current.workflowPolicyConfig ?? []).filter((item) => item.policyKey !== policyKey),
   }))
 }
+
+const countErrorsForFields = (errors, fields) => fields.filter((field) => errors[field]).length
+
+const renderTabLabel = (label, count = 0) => (
+  <span className="super-admin-framework-package-editor__tab-label">
+    <span>{label}</span>
+    {count > 0 ? (
+      <>
+        <span className="super-admin-framework-package-editor__tab-error-count" aria-hidden="true">
+          ({count})
+        </span>
+        <span className="sr-only"> ({count} validation errors)</span>
+      </>
+    ) : null}
+  </span>
+)
 
 function PackageEditorLoadingState() {
   return (
@@ -233,7 +253,7 @@ function SuperAdminFrameworkPackageEditor() {
   const [updateFrameworkPackage, { isLoading: isUpdating }] = useUpdateFrameworkPackageMutation()
   const isSaving = isCreating || isUpdating
 
-  const registryRows = registryResponse?.data ?? []
+  const registryRows = useMemo(() => registryResponse?.data ?? [], [registryResponse?.data])
   const frameworkOptions = buildFrameworkRegistryOptions(registryRows).filter((option) => option.value)
   const frameworkNameLookup = buildFrameworkRegistryNameLookup(registryRows)
   const supportedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
@@ -272,15 +292,24 @@ function SuperAdminFrameworkPackageEditor() {
 
   useEffect(() => {
     if (isEditMode && loadedPackage) {
-      setForm(mapFrameworkPackageToForm(loadedPackage))
-      return
+      const timeoutId = window.setTimeout(() => {
+        setForm(mapFrameworkPackageToForm(loadedPackage))
+      }, 0)
+
+      return () => window.clearTimeout(timeoutId)
     }
 
-    if (!isEditMode && registryRows.length > 0) {
-      setForm((current) =>
-        current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
-      )
+    if (!isEditMode && Array.isArray(registryRows) && registryRows.length > 0) {
+      const timeoutId = window.setTimeout(() => {
+        setForm((current) =>
+          current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
+        )
+      }, 0)
+
+      return () => window.clearTimeout(timeoutId)
     }
+
+    return undefined
   }, [isEditMode, loadedPackage, registryRows])
 
   const handleBack = () => {
@@ -340,6 +369,14 @@ function SuperAdminFrameworkPackageEditor() {
   const canAssignCustomers =
     form.visibility === 'CUSTOMER_VISIBLE'
     && form.customerAccessMode === 'SELECTED_CUSTOMERS'
+  const tabErrorCounts = {
+    access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
+    sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
+    runtime: countErrorsForFields(errors, ['runtimeSettings']),
+    validation: countErrorsForFields(errors, ['validationConfig']),
+    workflows: countErrorsForFields(errors, ['workflowPolicyConfig', 'compatibleWorkflowKeys']),
+    outputs: countErrorsForFields(errors, ['availableOutputKeys', 'defaultOutputStyles', 'artifactRetentionDays']),
+  }
 
   return (
     <section
@@ -538,7 +575,7 @@ function SuperAdminFrameworkPackageEditor() {
                   className="super-admin-framework-package-editor__tabs"
                   aria-label="Framework package editor sections"
                 >
-                  <TabView.Tab label="Access">
+                  <TabView.Tab label={renderTabLabel('Access', tabErrorCounts.access)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Access"
@@ -603,7 +640,7 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Sections">
+                  <TabView.Tab label={renderTabLabel('Sections', tabErrorCounts.sections)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Sections"
@@ -624,7 +661,7 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Runtime">
+                  <TabView.Tab label={renderTabLabel('Runtime', tabErrorCounts.runtime)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Runtime"
@@ -698,7 +735,7 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Validation">
+                  <TabView.Tab label={renderTabLabel('Validation', tabErrorCounts.validation)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Validation"
@@ -731,7 +768,7 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Workflows">
+                  <TabView.Tab label={renderTabLabel('Workflows', tabErrorCounts.workflows)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Workflows"
@@ -764,7 +801,7 @@ function SuperAdminFrameworkPackageEditor() {
                     </div>
                   </TabView.Tab>
 
-                  <TabView.Tab label="Outputs">
+                  <TabView.Tab label={renderTabLabel('Outputs', tabErrorCounts.outputs)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Outputs"
