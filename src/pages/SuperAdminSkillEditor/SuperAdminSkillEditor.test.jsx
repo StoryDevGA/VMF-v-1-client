@@ -93,17 +93,18 @@ describe('SuperAdminSkillEditor page', () => {
     expect(screen.getByText('VMF - Value Messaging Framework')).toBeInTheDocument()
 
     await user.selectOptions(
-      screen.getByLabelText(/^category$/i, {
+      screen.getByLabelText(/^business category$/i, {
         selector: 'select#runtime-skill-editor-category',
       }),
       'OUTPUT',
     )
-    await user.selectOptions(
-      screen.getByLabelText(/^type$/i, {
-        selector: 'select#runtime-skill-editor-type',
-      }),
-      'HYBRID',
-    )
+    const implementationTypeSelect = screen.getByLabelText(/^implementation type$/i, {
+      selector: 'select#runtime-skill-editor-type',
+    })
+    await user.selectOptions(implementationTypeSelect, 'HYBRID')
+    expect(implementationTypeSelect).toHaveTextContent('Rule-based')
+    expect(implementationTypeSelect).toHaveTextContent('External service')
+    expect(implementationTypeSelect).toHaveTextContent('Template-driven')
     await user.selectOptions(
       screen.getByLabelText(/^execution mode$/i, {
         selector: 'select#runtime-skill-editor-execution-mode',
@@ -111,7 +112,7 @@ describe('SuperAdminSkillEditor page', () => {
       'RULE_ENGINE',
     )
     await user.selectOptions(
-      screen.getByLabelText(/^skill role$/i, {
+      screen.getByLabelText(/^role$/i, {
         selector: 'select#runtime-skill-editor-skill-role',
       }),
       'VALIDATOR',
@@ -186,7 +187,7 @@ describe('SuperAdminSkillEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /^skill classification$/i }))
 
-    const skillRoleSelect = screen.getByLabelText(/^skill role$/i, {
+    const skillRoleSelect = screen.getByLabelText(/^role$/i, {
       selector: 'select#runtime-skill-editor-skill-role',
     })
 
@@ -202,7 +203,7 @@ describe('SuperAdminSkillEditor page', () => {
 
     expect(await screen.findByRole('heading', { name: /^skill editor$/i })).toBeInTheDocument()
 
-    const categorySelect = await screen.findByLabelText(/^category$/i, {
+    const categorySelect = await screen.findByLabelText(/^business category$/i, {
       selector: 'select#runtime-skill-editor-category',
     })
     expect(categorySelect).toHaveValue('OUTPUT')
@@ -212,7 +213,7 @@ describe('SuperAdminSkillEditor page', () => {
     })
     expect(executionModeSelect).toHaveValue('SYSTEM')
     expect(
-      screen.getByLabelText(/^skill role$/i, {
+      screen.getByLabelText(/^role$/i, {
         selector: 'select#runtime-skill-editor-skill-role',
       }),
     ).toHaveValue('READER')
@@ -257,7 +258,7 @@ describe('SuperAdminSkillEditor page', () => {
     await user.click(screen.getByRole('button', { name: /^add framework$/i }))
     await user.click(screen.getByRole('tab', { name: /^skill classification$/i }))
     await user.selectOptions(
-      screen.getByLabelText(/^skill role$/i, {
+      screen.getByLabelText(/^role$/i, {
         selector: 'select#runtime-skill-editor-skill-role',
       }),
       'VALIDATOR',

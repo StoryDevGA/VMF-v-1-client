@@ -439,12 +439,12 @@ function SkillEditorForm({
             <TabView.Tab label={renderTabLabel('Skill Classification', tabErrorCounts.classification)}>
               <SkillEditorSection
                 title="Skill Classification"
-                copy="Classify the skill by governed role, category, type, and execution mode to support governance and runtime resolution."
+                copy="Classify the skill by business category, implementation type, execution mode, and governed role so taxonomy and runtime behavior stay separate."
               >
                 <div className="super-admin-skill-editor__row super-admin-skill-editor__row--classification">
                   <Select
                     id="runtime-skill-editor-category"
-                    label="Category"
+                    label="Business Category"
                     className="super-admin-skill-editor__select-field"
                     value={form.category}
                     options={RUNTIME_SKILL_CATEGORY_OPTIONS}
@@ -452,11 +452,11 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, category: event.target.value }))
                     }
                     error={errors.category}
-                    helperText="Governed business category for this skill."
+                    helperText="Business domain/use case, such as Validation, Governance, Output, or Integration."
                   />
                   <Select
                     id="runtime-skill-editor-type"
-                    label="Type"
+                    label="Implementation Type"
                     className="super-admin-skill-editor__select-field"
                     value={form.type}
                     options={RUNTIME_SKILL_TYPE_OPTIONS}
@@ -464,7 +464,7 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, type: event.target.value }))
                     }
                     error={errors.type}
-                    helperText="Behavior type: deterministic, agent-assisted, or hybrid."
+                    helperText="Implementation pattern, not business category. Examples: deterministic, agent-assisted, rule-based, or template-driven."
                   />
                   <Select
                     id="runtime-skill-editor-execution-mode"
@@ -480,7 +480,7 @@ function SkillEditorForm({
                   />
                   <Select
                     id="runtime-skill-editor-skill-role"
-                    label="Skill Role"
+                    label="Role"
                     className="super-admin-skill-editor__select-field"
                     value={form.skillRoleKey}
                     options={skillRoleOptions}
@@ -488,7 +488,7 @@ function SkillEditorForm({
                       setForm((current) => ({ ...current, skillRoleKey: event.target.value }))
                     }
                     error={errors.skillRoleKey}
-                    helperText="Select the governed role definition this skill fulfills."
+                    helperText="Governed role this skill fulfills, such as Validator, Generator, Transformer, or Notifier."
                     placeholder={
                       isSkillRolesLoading
                         ? 'Loading skill roles...'
@@ -683,13 +683,13 @@ function SkillEditorForm({
                   <div className="super-admin-skill-editor__subsection">
                     <h3 className="super-admin-skill-editor__subsection-title">Execution Config</h3>
                     <p className="super-admin-skill-editor__subsection-copy">
-                      Optional mode-specific configuration used by rule engine or agent-assisted skills. Keep operational settings such as timeout and retry policy in Optional Configuration.
+                      Optional mode-specific configuration used by Rule Engine or Agent execution modes. Keep operational settings such as timeout and retry policy in Optional Configuration.
                     </p>
                     {String(form.executionMode ?? '').toUpperCase() !== 'SYSTEM' ? (
                       <Textarea
                         id="runtime-skill-editor-execution-config"
                         label="Execution Config (JSON)"
-                        helperText="Optional. Mode-specific execution configuration for rule engine or agent-assisted skills."
+                        helperText="Optional. Mode-specific execution configuration for Rule Engine or Agent execution modes."
                         value={form.executionConfig}
                         onChange={(event) =>
                           setForm((current) => ({ ...current, executionConfig: event.target.value }))
@@ -700,7 +700,7 @@ function SkillEditorForm({
                       />
                     ) : (
                       <p className="super-admin-skill-editor__subsection-note">
-                        Execution config is only available for rule engine or agent-assisted skills.
+                        Execution config is only available for Rule Engine or Agent execution modes.
                       </p>
                     )}
                   </div>

@@ -41,12 +41,15 @@ export const RUNTIME_SKILL_TYPE_OPTIONS = Object.freeze([
   { value: 'DETERMINISTIC', label: 'Deterministic' },
   { value: 'AGENT_ASSISTED', label: 'Agent-assisted' },
   { value: 'HYBRID', label: 'Hybrid' },
+  { value: 'RULE_BASED', label: 'Rule-based' },
+  { value: 'EXTERNAL_SERVICE', label: 'External service' },
+  { value: 'TEMPLATE_DRIVEN', label: 'Template-driven' },
 ])
 
 export const RUNTIME_SKILL_EXECUTION_MODE_OPTIONS = Object.freeze([
   { value: 'SYSTEM', label: 'System' },
   { value: 'RULE_ENGINE', label: 'Rule Engine' },
-  { value: 'AGENT', label: 'Agent-assisted' },
+  { value: 'AGENT', label: 'Agent' },
 ])
 
 export const RUNTIME_SKILL_RETRY_POLICY_OPTIONS = Object.freeze([
@@ -199,6 +202,7 @@ const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
 const VALID_EXECUTION_MODES = new Set(['SYSTEM', 'RULE_ENGINE', 'AGENT'])
 const VALID_RETRY_POLICIES = new Set(['NONE', 'RETRY_ONCE', 'RETRY_WITH_BACKOFF'])
 const VALID_RUNTIME_SKILL_CATEGORIES = new Set(RUNTIME_SKILL_CATEGORY_OPTIONS.map((option) => option.value))
+const VALID_RUNTIME_SKILL_TYPES = new Set(RUNTIME_SKILL_TYPE_OPTIONS.map((option) => option.value))
 const LEGACY_RUNTIME_SKILL_CATEGORY_MAP = Object.freeze({
   GENERAL: 'ANALYSIS',
   SNAPSHOT: 'OUTPUT',
@@ -479,12 +483,16 @@ export function validateRuntimeSkillForm(
   }
 
   if (!VALID_EXECUTION_MODES.has(executionMode)) {
-    errors.executionMode = 'Execution mode must be System, Rule Engine, or Agent-assisted.'
+    errors.executionMode = 'Execution mode must be System, Rule Engine, or Agent.'
+  }
+
+  if (!VALID_RUNTIME_SKILL_TYPES.has(type)) {
+    errors.type = 'Implementation type must be one of the controlled implementation type values.'
   }
 
   const hardInvalidTypes = TYPE_COMPATIBILITY_HARD_INVALID[executionMode]
-  if (hardInvalidTypes && hardInvalidTypes.has(type)) {
-    errors.type = 'Skill type "AGENT_ASSISTED" is only compatible with AGENT execution mode.'
+  if (!errors.type && hardInvalidTypes && hardInvalidTypes.has(type)) {
+    errors.type = 'Implementation type "AGENT_ASSISTED" is only compatible with AGENT execution mode.'
   }
 
   const inputContractResult = parseJsonField(formState.inputContract)
@@ -581,7 +589,7 @@ export function validateRuntimeSkillForm(
     && executionConfigResult.value
     && Object.keys(executionConfigResult.value).length > 0
   ) {
-    errors.executionConfig = 'Execution config is only supported for rule engine or agent-assisted skills.'
+    errors.executionConfig = 'Execution config is only supported for Rule Engine or Agent execution modes.'
   }
 
   const normalizedReferenceAssets = []
