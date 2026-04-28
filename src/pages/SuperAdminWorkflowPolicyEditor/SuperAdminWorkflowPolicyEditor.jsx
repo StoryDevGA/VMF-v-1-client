@@ -52,7 +52,7 @@ import {
   WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS,
   WORKFLOW_POLICY_TRIGGER_MODE_OPTIONS,
   WORKFLOW_POLICY_TYPE_OPTIONS,
-  WORKFLOW_POLICY_ESCALATE_TO_OPTIONS,
+  WORKFLOW_POLICY_ESCALATION_ROLE_OPTIONS,
 } from '../SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 import './SuperAdminWorkflowPolicyEditor.css'
 
@@ -1866,9 +1866,9 @@ function WorkflowPolicyEditor() {
         <div className="super-admin-workflow-policy-editor__grid">
           <Select
             id="workflow-policy-editor-escalation-role"
-            label="Escalation Role"
+            label="Escalate To Role"
             value={form.escalationRoleKey}
-            options={WORKFLOW_POLICY_ESCALATE_TO_OPTIONS.filter((option) => option.value)}
+            options={WORKFLOW_POLICY_ESCALATION_ROLE_OPTIONS.filter((option) => option.value)}
             placeholder="Select escalation role"
             disabled={!form.approvalRequired}
             onChange={(event) =>
@@ -1878,7 +1878,7 @@ function WorkflowPolicyEditor() {
               }))
             }
             error={errors.escalationRoleKey}
-            helperText="Customer Admin escalates organisation-wide, Tenant Admin escalates within the active tenant, and Framework Owner escalates to package owners."
+            helperText="MVP routing is role-based. Customer Admin escalates organisation-wide, Tenant Admin escalates within the active tenant, and Framework Owner escalates to package owners. User, group, and queue targets are reserved for a future release."
           />
           <Input
             id="workflow-policy-editor-sla-minutes"

@@ -215,7 +215,7 @@ export const WORKFLOW_POLICY_OVERRIDE_ROLE_OPTIONS = Object.freeze(
   toOptions(WORKFLOW_POLICY_OVERRIDE_ROLES),
 )
 
-export const WORKFLOW_POLICY_ESCALATE_TO_OPTIONS = Object.freeze(
+export const WORKFLOW_POLICY_ESCALATION_ROLE_OPTIONS = Object.freeze(
   toOptions(WORKFLOW_POLICY_ESCALATION_ROLE_KEYS),
 )
 
@@ -1019,7 +1019,7 @@ export function validateWorkflowPolicyForm(
   }
 
   if (approvalRequired && !escalationRoleKey) {
-    errors.escalationRoleKey = 'Escalation Role is required when approval is required.'
+    errors.escalationRoleKey = 'Escalate To Role is required when approval is required.'
   }
 
   if (escalationMessage.length > 500) {

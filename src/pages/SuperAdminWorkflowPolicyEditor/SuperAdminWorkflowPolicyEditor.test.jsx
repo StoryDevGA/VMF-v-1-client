@@ -461,7 +461,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     await user.click(screen.getByLabelText(/^approval required$/i))
     await user.click(screen.getByRole('checkbox', { name: /super admin/i }))
     await user.selectOptions(
-      screen.getByLabelText(/^escalation role$/i, {
+      screen.getByLabelText(/^escalate to role$/i, {
         selector: 'select#workflow-policy-editor-escalation-role',
       }),
       'CUSTOMER_ADMIN',
