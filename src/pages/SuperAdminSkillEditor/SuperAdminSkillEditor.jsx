@@ -284,37 +284,40 @@ function SkillEditorForm({
   ])
 
   useEffect(() => {
-    if (form.outputBindingMode !== 'PRIMARY') {
-      if (primaryOutputKeyNotice) {
-        setPrimaryOutputKeyNotice('')
+    const timeoutId = window.setTimeout(() => {
+      if (form.outputBindingMode !== 'PRIMARY') {
+        if (primaryOutputKeyNotice) {
+          setPrimaryOutputKeyNotice('')
+        }
+        return
       }
-      return
-    }
 
-    if (!form.primaryOutputKey) return
+      if (!form.primaryOutputKey) return
 
-    if (form.primaryOutputKey === '$root') {
-      if (primaryOutputKeyNotice) {
-        setPrimaryOutputKeyNotice('')
+      if (form.primaryOutputKey === '$root') {
+        if (primaryOutputKeyNotice) {
+          setPrimaryOutputKeyNotice('')
+        }
+        return
       }
-      return
-    }
 
-    if (outputContractPropertyMeta.keys.length === 0) {
+      if (outputContractPropertyMeta.keys.length === 0) {
+        setForm((current) => ({ ...current, primaryOutputKey: '' }))
+        setPrimaryOutputKeyNotice('Selection cleared because the Output Contract does not define selectable properties. Use $root or add properties.')
+        return
+      }
+
+      if (outputContractPropertyMeta.keys.includes(form.primaryOutputKey)) {
+        if (primaryOutputKeyNotice) {
+          setPrimaryOutputKeyNotice('')
+        }
+        return
+      }
+
       setForm((current) => ({ ...current, primaryOutputKey: '' }))
-      setPrimaryOutputKeyNotice('Selection cleared because the Output Contract does not define selectable properties. Use $root or add properties.')
-      return
-    }
-
-    if (outputContractPropertyMeta.keys.includes(form.primaryOutputKey)) {
-      if (primaryOutputKeyNotice) {
-        setPrimaryOutputKeyNotice('')
-      }
-      return
-    }
-
-    setForm((current) => ({ ...current, primaryOutputKey: '' }))
-    setPrimaryOutputKeyNotice('Selection cleared because it no longer exists in the Output Contract properties. Use $root or update the Output Contract.')
+      setPrimaryOutputKeyNotice('Selection cleared because it no longer exists in the Output Contract properties. Use $root or update the Output Contract.')
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [
     form.outputBindingMode,
     form.primaryOutputKey,
@@ -1307,24 +1310,27 @@ function SuperAdminSkillEditor() {
   const isCreateReady = !isEditMode && !isCreateDisabled
 
   useEffect(() => {
-    if (!isEditMode) {
-      setForm({
-        ...INITIAL_RUNTIME_SKILL_FORM,
-      })
-      setErrors({})
-      setErrorsSource(null)
-      setActiveEditorTab(0)
-      setShowValidationHints(false)
-      return
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (!isEditMode) {
+        setForm({
+          ...INITIAL_RUNTIME_SKILL_FORM,
+        })
+        setErrors({})
+        setErrorsSource(null)
+        setActiveEditorTab(0)
+        setShowValidationHints(false)
+        return
+      }
 
-    if (loadedSkill) {
-      setForm(mapRuntimeSkillToForm(loadedSkill))
-      setErrors({})
-      setErrorsSource(null)
-      setActiveEditorTab(0)
-      setShowValidationHints(false)
-    }
+      if (loadedSkill) {
+        setForm(mapRuntimeSkillToForm(loadedSkill))
+        setErrors({})
+        setErrorsSource(null)
+        setActiveEditorTab(0)
+        setShowValidationHints(false)
+      }
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [isEditMode, loadedSkill])
 
   useEffect(() => {
@@ -1334,19 +1340,26 @@ function SuperAdminSkillEditor() {
       ? liveValidation.errors
       : {}
 
-    if (errorsSource === 'client' && showValidationHints) {
-      setErrors((current) => (shallowEqualObject(current, liveErrors) ? current : liveErrors))
+    const timeoutId = window.setTimeout(() => {
+      if (errorsSource === 'client' && showValidationHints) {
+        setErrors((current) => (shallowEqualObject(current, liveErrors) ? current : liveErrors))
 
-      if (Object.keys(liveErrors).length === 0) {
-        setErrors({})
-        setErrorsSource(null)
-        setShowValidationHints(false)
+        if (Object.keys(liveErrors).length === 0) {
+          setErrors({})
+          setErrorsSource(null)
+          setShowValidationHints(false)
+        }
       }
-    }
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [errorsSource, isEditMode, liveValidation.errors, showValidationHints])
 
+  const navigateToSkills = (options) => {
+    navigate('/super-admin/runtime-control/skills', options)
+  }
+
   const handleBackToSkills = () => {
-    navigate('/super-admin/runtime-control/skills')
+    navigateToSkills()
   }
 
   const revealValidationErrors = (nextErrors, { showSuccessToast = true } = {}) => {
@@ -1459,7 +1472,7 @@ function SuperAdminSkillEditor() {
         })
       }
 
-      navigate('/super-admin/runtime-control/skills')
+      navigateToSkills({ state: { runtimeControlSaved: true } })
     } catch (err) {
       const appError = normalizeError(err)
       const field = String(appError?.details?.field ?? '').trim()

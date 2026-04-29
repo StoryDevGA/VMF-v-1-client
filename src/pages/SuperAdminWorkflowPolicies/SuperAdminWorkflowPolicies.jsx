@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { WorkflowPolicyListView } from './WorkflowPolicyListView.jsx'
 import { useWorkflowPolicyManagement } from './useWorkflowPolicyManagement.js'
 import './SuperAdminWorkflowPolicies.css'
@@ -7,6 +8,7 @@ import './SuperAdminWorkflowPolicies.css'
 function SuperAdminWorkflowPolicies() {
   const navigate = useNavigate()
   const mgmt = useWorkflowPolicyManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
 
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
@@ -50,6 +52,7 @@ function SuperAdminWorkflowPolicies() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}

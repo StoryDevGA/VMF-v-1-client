@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { TestRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
 import { RuntimeAgentListView } from './RuntimeAgentListView.jsx'
 import { useRuntimeAgentManagement } from './useRuntimeAgentManagement.js'
@@ -8,6 +9,7 @@ import './SuperAdminAgents.css'
 function SuperAdminAgents() {
   const navigate = useNavigate()
   const mgmt = useRuntimeAgentManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
   }, [navigate])
@@ -46,6 +48,7 @@ function SuperAdminAgents() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}

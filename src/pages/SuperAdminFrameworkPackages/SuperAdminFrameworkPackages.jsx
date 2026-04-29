@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { FrameworkPackageListView } from './FrameworkPackageListView.jsx'
 import { useFrameworkPackageManagement } from './useFrameworkPackageManagement.js'
 import './SuperAdminFrameworkPackages.css'
@@ -7,6 +8,7 @@ import './SuperAdminFrameworkPackages.css'
 function SuperAdminFrameworkPackages() {
   const navigate = useNavigate()
   const mgmt = useFrameworkPackageManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
   }, [navigate])
@@ -44,6 +46,7 @@ function SuperAdminFrameworkPackages() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreatePackage={handleCreatePackage}

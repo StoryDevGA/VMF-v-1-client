@@ -74,7 +74,8 @@ function SuperAdminUiContractEditor() {
     return () => window.clearTimeout(timeoutId)
   }, [isEditMode, loaded])
 
-  const handleBack = () => navigate('/super-admin/runtime-control/ui-contracts')
+  const navigateToUiContracts = (options) => navigate('/super-admin/runtime-control/ui-contracts', options)
+  const handleBack = () => navigateToUiContracts()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -96,7 +97,7 @@ function SuperAdminUiContractEditor() {
         title: isEditMode ? 'UI Contract updated' : 'UI Contract created',
         description: `${payload.uiContractKey} saved.`,
       })
-      handleBack()
+      navigateToUiContracts({ state: { runtimeControlSaved: true } })
     } catch (err) {
       const appError = normalizeError(err)
       const fieldErrors = getRuntimeControlFieldErrorMap(appError, UI_CONTRACT_FORM_ERROR_FIELDS)
@@ -131,7 +132,7 @@ function SuperAdminUiContractEditor() {
         <Card variant="elevated" className="super-admin-ui-contracts__card">
           <Card.Body className="super-admin-ui-contracts__body">
             <p className="super-admin-ui-contracts__error" role="alert">{normalizeError(error).message}</p>
-            <Button type="button" variant="outline" size="sm" onClick={handleBack}>Back</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => handleBack()}>Back</Button>
           </Card.Body>
         </Card>
       </section>
@@ -153,7 +154,7 @@ function SuperAdminUiContractEditor() {
           <form onSubmit={handleSubmit} noValidate>
             <Card.Body className="super-admin-ui-contracts__body">
               <div className="super-admin-ui-contracts__actions">
-                <Button type="button" variant="outline" size="sm" onClick={handleBack}>Back</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => handleBack()}>Back</Button>
               </div>
 
               <section className="super-admin-ui-contracts__basic">
@@ -313,7 +314,7 @@ function SuperAdminUiContractEditor() {
               ) : null}
 
               <div className="super-admin-ui-contracts__actions">
-                <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={handleBack}>Cancel</Button>
+                <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={() => handleBack()}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" loading={isSaving}>{isEditMode ? 'Save Changes' : 'Create UI Contract'}</Button>
               </div>
             </Card.Body>

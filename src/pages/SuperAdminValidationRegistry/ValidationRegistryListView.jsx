@@ -80,6 +80,7 @@ export function ValidationRegistryListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   frameworks = [],
   onBackClick,
@@ -179,6 +180,8 @@ export function ValidationRegistryListView({
       ),
     },
   ], [handleRowAction, isMutating])
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-validation-registry__fieldset">
@@ -270,10 +273,17 @@ export function ValidationRegistryListView({
               className="super-admin-validation-registry__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No validations found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-validation-registry__muted" role="status">
+                    Refreshing Validation Registry...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Validation Registry"
             />
           </HorizontalScroll>

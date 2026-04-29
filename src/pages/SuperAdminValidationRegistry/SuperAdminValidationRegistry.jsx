@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { useToaster } from '../../components/Toaster'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
   useLazyGetValidationRegistryDependenciesQuery,
   useUpdateValidationRegistryMutation,
@@ -17,6 +18,7 @@ function SuperAdminValidationRegistry() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
   const mgmt = useValidationRegistryManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const [updateValidation, { isLoading: isUpdating }] = useUpdateValidationRegistryMutation()
   const [fetchDependencies] = useLazyGetValidationRegistryDependenciesQuery()
   const [pendingStatusChange, setPendingStatusChange] = useState(null)
@@ -115,6 +117,7 @@ function SuperAdminValidationRegistry() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         frameworks={mgmt.frameworkOptions}
         onBackClick={handleBackClick}

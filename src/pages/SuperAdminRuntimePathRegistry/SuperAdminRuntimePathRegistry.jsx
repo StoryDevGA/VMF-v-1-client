@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { useToaster } from '../../components/Toaster'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
   useActivateRuntimePathMutation,
   useDeprecateRuntimePathMutation,
@@ -17,6 +18,7 @@ function SuperAdminRuntimePathRegistry() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
   const mgmt = useRuntimePathRegistryManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const [activateRuntimePath, { isLoading: isActivating }] = useActivateRuntimePathMutation()
   const [disableRuntimePath, { isLoading: isDisabling }] = useDisableRuntimePathMutation()
   const [deprecateRuntimePath, { isLoading: isDeprecating }] = useDeprecateRuntimePathMutation()
@@ -146,6 +148,7 @@ function SuperAdminRuntimePathRegistry() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreatePath={handleCreatePath}

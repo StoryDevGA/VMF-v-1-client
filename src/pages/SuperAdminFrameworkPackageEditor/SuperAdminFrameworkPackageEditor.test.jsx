@@ -230,7 +230,10 @@ describe('SuperAdminFrameworkPackageEditor', () => {
         }),
       )
     })
-    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages')
+    expect(navigateMock).toHaveBeenCalledWith(
+      '/super-admin/runtime-control/framework-packages',
+      { state: { runtimeControlSaved: true } },
+    )
   })
 
   it('shows the API error when a save fails', async () => {

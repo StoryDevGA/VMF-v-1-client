@@ -9,6 +9,40 @@ import {
 } from './superAdminUiContracts.constants.js'
 
 const navigateMock = vi.fn()
+const { listUiContractsQueryMock } = vi.hoisted(() => ({
+  listUiContractsQueryMock: vi.fn(),
+}))
+
+const defaultListResult = {
+  data: {
+    data: [
+      {
+        id: 'ui-contract-vmf-ui-contract-v1',
+        uiContractKey: 'vmf-ui-contract-v1',
+        name: 'VMF UI Contract',
+        status: 'ACTIVE',
+        frameworkKeys: ['VMF'],
+        sections: [{ sectionKey: 'customer-problem' }],
+        actions: [{ actionKey: 'SUBMIT_FOR_REVIEW' }],
+        updatedAt: '2026-04-29T08:00:00.000Z',
+      },
+      {
+        id: 'ui-contract-vmf-ui-contract-draft',
+        uiContractKey: 'vmf-ui-contract-draft',
+        name: 'Draft UI Contract',
+        status: 'DRAFT',
+        frameworkKeys: ['VMF'],
+        sections: [],
+        actions: [],
+        updatedAt: '2026-04-29T09:00:00.000Z',
+      },
+    ],
+    meta: { page: 1, totalPages: 1, total: 1 },
+  },
+  isLoading: false,
+  isFetching: false,
+  error: null,
+}
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -19,30 +53,13 @@ vi.mock('react-router-dom', async () => {
 })
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
-  useListUiContractsQuery: vi.fn(() => ({
-    data: {
-      data: [
-        {
-          id: 'ui-contract-vmf-ui-contract-v1',
-          uiContractKey: 'vmf-ui-contract-v1',
-          name: 'VMF UI Contract',
-          status: 'ACTIVE',
-          frameworkKeys: ['VMF'],
-          sections: [{ sectionKey: 'customer-problem' }],
-          actions: [{ actionKey: 'SUBMIT_FOR_REVIEW' }],
-          updatedAt: '2026-04-29T08:00:00.000Z',
-        },
-      ],
-      meta: { page: 1, totalPages: 1, total: 1 },
-    },
-    isFetching: false,
-    error: null,
-  })),
+  useListUiContractsQuery: listUiContractsQueryMock,
 }))
 
 describe('SuperAdminUiContracts page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    listUiContractsQueryMock.mockReturnValue(defaultListResult)
   })
 
   it('renders the UI Contract catalogue and navigates to create/edit flows', async () => {
@@ -56,6 +73,7 @@ describe('SuperAdminUiContracts page', () => {
     expect(screen.getByRole('heading', { name: /ui contracts/i })).toBeInTheDocument()
     expect(screen.getByText('VMF UI Contract')).toBeInTheDocument()
     expect(screen.getByText('vmf-ui-contract-v1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Status: DRAFT')).toHaveClass('status--warning')
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/new')
@@ -80,5 +98,28 @@ describe('SuperAdminUiContracts page', () => {
     expect(errors.name).toBe('Name is required.')
     expect(errors.frameworkKeys).toBe('Select at least one framework.')
     expect(errors.sections).toBe('Value must be valid JSON.')
+  })
+
+  it('shows a quiet refresh state instead of skeleton rows after returning from save', () => {
+    listUiContractsQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isFetching: true,
+      error: null,
+    })
+
+    render(
+      <MemoryRouter
+        initialEntries={[{
+          pathname: '/super-admin/runtime-control/ui-contracts',
+          state: { runtimeControlSaved: true },
+        }]}
+      >
+        <SuperAdminUiContracts />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText(/refreshing ui contracts/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no ui contracts found/i)).not.toBeInTheDocument()
   })
 })

@@ -82,6 +82,7 @@ export function SkillRoleRegistryListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   onBackClick,
   onCreateClick,
@@ -163,6 +164,8 @@ export function SkillRoleRegistryListView({
     ],
     [handleRowAction, isMutating],
   )
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-skill-role-registry__fieldset">
@@ -232,10 +235,17 @@ export function SkillRoleRegistryListView({
               className="super-admin-skill-role-registry__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No skill roles found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-skill-role-registry__muted" role="status">
+                    Refreshing Skill Roles...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Skill Roles"
             />
           </HorizontalScroll>

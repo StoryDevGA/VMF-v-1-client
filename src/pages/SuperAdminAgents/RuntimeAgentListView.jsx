@@ -96,6 +96,7 @@ export function RuntimeAgentListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   onBackClick,
   onCreateClick,
@@ -181,6 +182,8 @@ export function RuntimeAgentListView({
     ],
     [handleRowAction],
   )
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-agents__fieldset">
@@ -250,10 +253,17 @@ export function RuntimeAgentListView({
               className="super-admin-agents__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No runtime agents found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-agents__muted" role="status">
+                    Refreshing Agents...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Agents"
             />
           </HorizontalScroll>

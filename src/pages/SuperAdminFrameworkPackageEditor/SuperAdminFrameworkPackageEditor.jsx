@@ -459,8 +459,12 @@ function SuperAdminFrameworkPackageEditor() {
     return undefined
   }, [isEditMode, loadedPackage, registryRows])
 
+  const navigateToFrameworkPackages = (options) => {
+    navigate('/super-admin/runtime-control/framework-packages', options)
+  }
+
   const handleBack = () => {
-    navigate('/super-admin/runtime-control/framework-packages')
+    navigateToFrameworkPackages()
   }
 
   const executeSave = async (payload) => {
@@ -481,7 +485,7 @@ function SuperAdminFrameworkPackageEditor() {
         })
       }
 
-      handleBack()
+      navigateToFrameworkPackages({ state: { runtimeControlSaved: true } })
     } catch (err) {
       const appError = normalizeError(err)
       const fieldErrors = getRuntimeControlFieldErrorMap(appError, SERVER_ERROR_FIELDS)

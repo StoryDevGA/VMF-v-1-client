@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { RuntimeSkillListView } from './RuntimeSkillListView.jsx'
 import { useRuntimeSkillManagement } from './useRuntimeSkillManagement.js'
 import './SuperAdminSkills.css'
@@ -7,6 +8,7 @@ import './SuperAdminSkills.css'
 function SuperAdminSkills() {
   const navigate = useNavigate()
   const mgmt = useRuntimeSkillManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const handleBackClick = useCallback(() => {
     navigate('/super-admin/runtime-control')
   }, [navigate])
@@ -45,6 +47,7 @@ function SuperAdminSkills() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}

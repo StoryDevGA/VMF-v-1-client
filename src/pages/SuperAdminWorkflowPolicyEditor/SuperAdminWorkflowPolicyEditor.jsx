@@ -985,6 +985,10 @@ function WorkflowPolicyEditor() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges, isSaving])
 
+  const navigateToWorkflowPolicies = (options) => {
+    navigate('/super-admin/runtime-control/workflow-policies', options)
+  }
+
   const handleBack = () => {
     if (
       hasUnsavedChanges
@@ -993,7 +997,7 @@ function WorkflowPolicyEditor() {
       return
     }
 
-    navigate('/super-admin/runtime-control/workflow-policies')
+    navigateToWorkflowPolicies()
   }
 
   const focusFirstErrorField = (fieldErrors) => {
@@ -1179,7 +1183,7 @@ function WorkflowPolicyEditor() {
       }
 
       skipUnsavedPromptRef.current = true
-      navigate('/super-admin/runtime-control/workflow-policies')
+      navigateToWorkflowPolicies({ state: { runtimeControlSaved: true } })
     } catch (err) {
       const appError = normalizeError(err)
       const fieldErrors = getRuntimeControlFieldErrorMap(appError, WORKFLOW_POLICY_SERVER_ERROR_FIELDS)

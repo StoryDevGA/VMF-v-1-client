@@ -272,24 +272,27 @@ function SuperAdminAgentEditor() {
   const isCreateReady = !isEditMode && !isCreateDisabled
 
   useEffect(() => {
-    if (!isEditMode) {
-      setForm({
-        ...INITIAL_RUNTIME_AGENT_FORM,
-      })
-      setErrors({})
-      setErrorsSource(null)
-      setActiveEditorTab(0)
-      setShowValidationHints(false)
-      return
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (!isEditMode) {
+        setForm({
+          ...INITIAL_RUNTIME_AGENT_FORM,
+        })
+        setErrors({})
+        setErrorsSource(null)
+        setActiveEditorTab(0)
+        setShowValidationHints(false)
+        return
+      }
 
-    if (loadedAgent) {
-      setForm(mapRuntimeAgentToForm(loadedAgent))
-      setErrors({})
-      setErrorsSource(null)
-      setActiveEditorTab(0)
-      setShowValidationHints(false)
-    }
+      if (loadedAgent) {
+        setForm(mapRuntimeAgentToForm(loadedAgent))
+        setErrors({})
+        setErrorsSource(null)
+        setActiveEditorTab(0)
+        setShowValidationHints(false)
+      }
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [isEditMode, loadedAgent])
 
   useEffect(() => {
@@ -299,22 +302,29 @@ function SuperAdminAgentEditor() {
       ? liveValidation.errors
       : {}
 
-    // Keep client-side validation UI in sync as the user fixes fields.
-    if (errorsSource === 'client' && showValidationHints) {
-      if (!shallowEqualObject(errors, liveErrors)) {
-        setErrors(liveErrors)
-      }
+    const timeoutId = window.setTimeout(() => {
+      // Keep client-side validation UI in sync as the user fixes fields.
+      if (errorsSource === 'client' && showValidationHints) {
+        if (!shallowEqualObject(errors, liveErrors)) {
+          setErrors(liveErrors)
+        }
 
-      if (Object.keys(liveErrors).length === 0) {
-        setErrors({})
-        setErrorsSource(null)
-        setShowValidationHints(false)
+        if (Object.keys(liveErrors).length === 0) {
+          setErrors({})
+          setErrorsSource(null)
+          setShowValidationHints(false)
+        }
       }
-    }
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [errors, errorsSource, isEditMode, liveValidation, showValidationHints])
 
+  const navigateToAgents = (options) => {
+    navigate('/super-admin/runtime-control/agents', options)
+  }
+
   const handleBackToAgents = () => {
-    navigate('/super-admin/runtime-control/agents')
+    navigateToAgents()
   }
 
   const handleReviewMissingFields = () => {
@@ -449,7 +459,7 @@ function SuperAdminAgentEditor() {
         })
       }
 
-      navigate('/super-admin/runtime-control/agents')
+      navigateToAgents({ state: { runtimeControlSaved: true } })
     } catch (err) {
       const appError = normalizeError(err)
       const field = String(appError?.details?.field ?? '').trim()

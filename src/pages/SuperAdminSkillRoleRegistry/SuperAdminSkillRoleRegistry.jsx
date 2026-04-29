@@ -4,6 +4,7 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { useToaster } from '../../components/Toaster'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
   useLazyGetSkillRoleDependenciesQuery,
   useUpdateSkillRoleMutation,
@@ -17,6 +18,7 @@ function SuperAdminSkillRoleRegistry() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
   const mgmt = useSkillRoleRegistryManagement()
+  const showPostSaveRefresh = usePostSaveListRefreshState(mgmt.isListLoading)
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
   const [fetchSkillRoleDependencies] = useLazyGetSkillRoleDependenciesQuery()
   const [pendingStatusChange, setPendingStatusChange] = useState(null)
@@ -68,7 +70,7 @@ function SuperAdminSkillRoleRegistry() {
           setPendingStatusChange({ row, nextStatus: normalizedStatus, summary: { skills, agents } })
           return
         }
-      } catch (err) {
+      } catch {
         const skillCount = Number(row?.usageCount) || 0
         if (skillCount > 0) {
           setPendingStatusChange({ row, nextStatus: normalizedStatus, summary: { skills: skillCount, agents: null } })
@@ -116,6 +118,7 @@ function SuperAdminSkillRoleRegistry() {
         totalPages={mgmt.totalPages}
         isListLoading={mgmt.isListLoading}
         isListFetching={mgmt.isListFetching}
+        showPostSaveRefresh={showPostSaveRefresh}
         listAppError={mgmt.listAppError}
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}

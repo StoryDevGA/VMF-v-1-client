@@ -10,6 +10,7 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { useListUiContractsQuery } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
@@ -24,8 +25,8 @@ const UI_CONTRACTS_HELP_TEXT =
 
 function getStatusVariant(status) {
   if (status === UI_CONTRACT_STATUSES.ACTIVE) return 'success'
+  if (status === UI_CONTRACT_STATUSES.DRAFT) return 'warning'
   if (status === UI_CONTRACT_STATUSES.DEPRECATED) return 'warning'
-  if (status === UI_CONTRACT_STATUSES.DRAFT) return 'info'
   return 'neutral'
 }
 
@@ -109,6 +110,12 @@ function SuperAdminUiContracts() {
   const appError = error ? normalizeError(error) : null
   const totalPages = Number(meta.totalPages ?? 1)
   const currentPage = Number(meta.page ?? page)
+  const showPostSaveRefresh = usePostSaveListRefreshState(isLoading, [
+    'runtimeControlSaved',
+    'uiContractSaved',
+  ])
+  const showInitialSkeleton = isLoading && !showPostSaveRefresh
+
   const frameworkOptions = useMemo(() => {
     const frameworkKeys = [...new Set(rows.flatMap((row) => row.frameworkKeys ?? []))]
     return [
@@ -268,10 +275,17 @@ function SuperAdminUiContracts() {
               className="super-admin-ui-contracts__table"
               columns={columns}
               data={appError ? [] : rows}
-              loading={isLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No UI Contracts found."
+              emptyComponent={
+                showPostSaveRefresh ? (
+                  <p className="super-admin-ui-contracts__muted" role="status">
+                    Refreshing UI Contracts...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="UI Contracts"
             />
           </HorizontalScroll>

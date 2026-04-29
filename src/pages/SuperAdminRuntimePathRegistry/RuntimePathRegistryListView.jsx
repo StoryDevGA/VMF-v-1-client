@@ -244,6 +244,7 @@ export function RuntimePathRegistryListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   onBackClick,
   onCreatePath,
@@ -359,6 +360,8 @@ export function RuntimePathRegistryListView({
     ],
     [handleRowAction, isActionLoading],
   )
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-runtime-path-registry__fieldset">
@@ -441,10 +444,17 @@ export function RuntimePathRegistryListView({
               className="super-admin-runtime-path-registry__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No runtime paths found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-runtime-path-registry__muted" role="status">
+                    Refreshing Runtime Paths...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Runtime Paths"
             />
           </HorizontalScroll>

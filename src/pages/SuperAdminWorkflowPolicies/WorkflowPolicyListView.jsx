@@ -133,6 +133,7 @@ export function WorkflowPolicyListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   onBackClick,
   onCreateClick,
@@ -218,6 +219,8 @@ export function WorkflowPolicyListView({
     ],
     [handleRowAction],
   )
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-workflow-policies__fieldset">
@@ -298,10 +301,17 @@ export function WorkflowPolicyListView({
               className="super-admin-workflow-policies__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No workflow policies found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-workflow-policies__muted" role="status">
+                    Refreshing Workflow Policies...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Workflow Policies"
             />
           </HorizontalScroll>

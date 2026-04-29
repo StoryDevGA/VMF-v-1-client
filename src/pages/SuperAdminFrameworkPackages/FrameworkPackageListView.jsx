@@ -100,6 +100,7 @@ export function FrameworkPackageListView({
   totalPages,
   isListLoading,
   isListFetching,
+  showPostSaveRefresh = false,
   listAppError,
   onBackClick,
   onCreatePackage,
@@ -190,6 +191,8 @@ export function FrameworkPackageListView({
     ],
     [handleRowAction],
   )
+  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
+  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
 
   return (
     <Fieldset className="super-admin-framework-packages__fieldset">
@@ -261,10 +264,17 @@ export function FrameworkPackageListView({
               className="super-admin-framework-packages__table"
               columns={columns}
               data={rows}
-              loading={isListLoading}
+              loading={showInitialSkeleton}
               variant="striped"
               hoverable
               emptyMessage="No framework packages found."
+              emptyComponent={
+                showPostSaveRefreshState ? (
+                  <p className="super-admin-framework-packages__muted" role="status">
+                    Refreshing Framework Packages...
+                  </p>
+                ) : undefined
+              }
               ariaLabel="Framework packages"
             />
           </HorizontalScroll>
