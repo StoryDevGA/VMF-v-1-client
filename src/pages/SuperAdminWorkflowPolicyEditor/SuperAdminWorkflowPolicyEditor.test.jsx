@@ -232,11 +232,17 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
 
     await user.click(screen.getByRole('tab', { name: /framework compatibility/i }))
-    await user.click(screen.getByRole('checkbox', { name: /customer messaging framework/i }))
+    expect(screen.getByRole('checkbox', { name: /value messaging framework/i })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /revenue lifecycle design/i })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /customer messaging framework/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /quality messaging framework/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /operations messaging framework/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /revenue lifecycle design/i }))
     await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))
 
     expect(
-      screen.getByText(/no active readable framework_state\.\* runtime paths are currently registered for cmf/i),
+      screen.getByText(/no active readable framework_state\.\* runtime paths are currently registered for rld/i),
     ).toBeInTheDocument()
   })
 

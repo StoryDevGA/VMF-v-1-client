@@ -596,6 +596,7 @@ function WorkflowPolicyEditor() {
     page: 1,
     pageSize: 100,
     q: '',
+    status: ACTIVE_FRAMEWORK_STATUS,
   })
   const { data: runtimeAgentsResponse } = useListRuntimeAgentsQuery({
     page: 1,
@@ -636,7 +637,9 @@ function WorkflowPolicyEditor() {
   const runtimePathsAppError = runtimePathsError ? normalizeError(runtimePathsError) : null
   const writeRuntimePathsAppError = writeRuntimePathsError ? normalizeError(writeRuntimePathsError) : null
   const frameworkRows = useMemo(
-    () => (Array.isArray(registryResponse?.data) ? registryResponse.data : []),
+    () => (Array.isArray(registryResponse?.data) ? registryResponse.data : []).filter(
+      (entry) => String(entry?.status ?? '').trim().toUpperCase() === ACTIVE_FRAMEWORK_STATUS,
+    ),
     [registryResponse],
   )
   const runtimeAgentRows = useMemo(
@@ -1212,7 +1215,7 @@ function WorkflowPolicyEditor() {
         </Fieldset.Legend>
         <Fieldset.Content className="super-admin-workflow-policy-editor__section-body">
           <p className="super-admin-workflow-policy-editor__helper">
-            Choose the framework registries this policy governs. Active policies must point at active frameworks.
+            Choose the active framework registries this policy governs. Inactive or deprecated frameworks are not selectable.
           </p>
           <div
             id="workflow-policy-editor-framework-grid"
@@ -1248,7 +1251,7 @@ function WorkflowPolicyEditor() {
           {legacyFrameworkKeys.length > 0 ? (
             <div className="super-admin-workflow-policy-editor__legacy-frameworks">
               <p className="super-admin-workflow-policy-editor__helper">
-                This policy still references framework keys that are no longer in the registry:
+                This policy still references framework keys that are inactive, deprecated, or no longer in the registry:
               </p>
               <div className="super-admin-workflow-policy-editor__token-row">
                 {legacyFrameworkKeys.map((frameworkKey) => (
