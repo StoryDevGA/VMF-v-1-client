@@ -39,8 +39,44 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
       ],
     },
   }),
-  useListValidationRegistryQuery: () => ({ data: { data: [] } }),
-  useListWorkflowPoliciesQuery: () => ({ data: { data: [] } }),
+  useListValidationRegistryQuery: () => ({
+    data: {
+      data: [
+        {
+          key: 'required-sections-check',
+          label: 'Required Sections',
+          status: 'ACTIVE',
+          packageUsable: true,
+          supportedFrameworkKeys: ['VMF'],
+        },
+      ],
+    },
+  }),
+  useListWorkflowPoliciesQuery: () => ({
+    data: {
+      data: [
+        {
+          key: 'vmf-submit-gate',
+          name: 'VMF Submit Gate',
+          status: 'ACTIVE',
+          frameworkKeys: ['VMF'],
+        },
+      ],
+    },
+  }),
+  useListUiContractsQuery: () => ({
+    data: {
+      data: [
+        {
+          id: 'ui-contract-vmf-ui-contract-v1',
+          uiContractKey: 'vmf-ui-contract-v1',
+          name: 'VMF UI Contract v1',
+          status: 'ACTIVE',
+          frameworkKeys: ['VMF'],
+        },
+      ],
+    },
+  }),
   useUpdateFrameworkPackageMutation: () => [updateFrameworkPackageMock, { isLoading: false }],
 }))
 
@@ -60,7 +96,25 @@ const buildLoadedPackage = () => ({
       visibility: 'INTERNAL_ONLY',
       customerAccessMode: 'ALL_CUSTOMERS',
       assignedCustomerIds: [],
-      sections: [],
+      sections: [
+        {
+          sectionKey: 'overview',
+          label: 'Overview',
+          required: true,
+          displayOrder: 10,
+          visible: true,
+          runtimeEditable: true,
+          includeInSummary: true,
+          dataType: 'STRING',
+          maxLength: 500,
+          validationKeys: ['required-sections-check'],
+        },
+      ],
+      executionModel: {
+        mode: 'EVENT_DRIVEN',
+        stateModel: 'LIFECYCLE_BASED',
+        evaluationMode: 'POLICY_DRIVEN',
+      },
       runtimeSettings: {
         enablePreviewMode: true,
         enableRuntimeValidation: true,
@@ -73,6 +127,27 @@ const buildLoadedPackage = () => ({
       },
       validationConfig: [],
       workflowPolicyConfig: [],
+      validationBindings: [
+        {
+          validationKey: 'required-sections-check',
+          trigger: 'ON_SUBMIT',
+          blocking: true,
+          priority: 100,
+          freshnessMinutes: null,
+          enabled: true,
+          notes: '',
+        },
+      ],
+      workflowBindings: [
+        {
+          policyKey: 'vmf-submit-gate',
+          executionContext: 'ON_SUBMIT',
+          priority: 100,
+          enabled: true,
+          notes: '',
+        },
+      ],
+      uiContractKey: 'vmf-ui-contract-v1',
       availableOutputKeys: [],
       defaultOutputStyles: [],
       allowCustomerOutputDefinitions: false,
@@ -127,6 +202,31 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       expect(updateFrameworkPackageMock).toHaveBeenCalledWith(
         expect.objectContaining({
           packageId: 'pkg-live-2',
+          executionModel: expect.objectContaining({
+            mode: 'EVENT_DRIVEN',
+            stateModel: 'LIFECYCLE_BASED',
+            evaluationMode: 'POLICY_DRIVEN',
+          }),
+          sections: expect.arrayContaining([
+            expect.objectContaining({
+              sectionKey: 'overview',
+              dataType: 'STRING',
+              validationKeys: ['required-sections-check'],
+            }),
+          ]),
+          validationBindings: expect.arrayContaining([
+            expect.objectContaining({
+              validationKey: 'required-sections-check',
+              trigger: 'ON_SUBMIT',
+            }),
+          ]),
+          workflowBindings: expect.arrayContaining([
+            expect.objectContaining({
+              policyKey: 'vmf-submit-gate',
+              executionContext: 'ON_SUBMIT',
+            }),
+          ]),
+          uiContractKey: 'vmf-ui-contract-v1',
         }),
       )
     })

@@ -308,18 +308,22 @@
    RESPONSIVE ADJUSTMENTS
    =========================== */
 
-/* Increase touch target on mobile */
+/* Keep mobile buttons compact; base sizes already use tokenized touch targets. */
 @media (max-width: 767px) {
   .btn {
-    min-height: calc(var(--spacing-md) * 3); /* Larger touch target on mobile */
+    min-height: calc(var(--spacing-md) * 2.5);
+    padding: var(--spacing-2xs) var(--spacing-md);
   }
 
   .btn--sm {
-    min-height: calc(var(--spacing-md) * 2.5);
+    min-height: calc(var(--spacing-md) * 2);
+    padding: var(--spacing-2xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
   }
 
   .btn--lg {
-    min-height: calc(var(--spacing-md) * 3.5);
+    min-height: calc(var(--spacing-md) * 2.75);
+    padding: var(--spacing-xs) var(--spacing-md);
   }
 }
 

@@ -17,6 +17,7 @@ import {
   useGetFrameworkPackageQuery,
   useListFrameworkPackagesQuery,
   useListFrameworkRegistriesQuery,
+  useListUiContractsQuery,
   useListValidationRegistryQuery,
   useListWorkflowPoliciesQuery,
   useUpdateFrameworkPackageMutation,
@@ -32,12 +33,18 @@ import {
 } from '../SuperAdminFrameworkRegistry/superAdminFrameworkRegistry.constants.js'
 import {
   FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_OPTIONS,
+  FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS,
+  FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS,
   FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS,
   FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS,
   FRAMEWORK_PACKAGE_SCOPE_OPTIONS,
+  FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS,
   FRAMEWORK_PACKAGE_STATUSES,
+  FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS,
   FRAMEWORK_PACKAGE_TYPE_OPTIONS,
+  FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS,
   FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS,
+  FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS,
   INITIAL_FRAMEWORK_PACKAGE_FORM,
   formatFrameworkPackageStatus,
   getFrameworkPackageStatusVariant,
@@ -60,9 +67,13 @@ const SERVER_ERROR_FIELDS = Object.freeze([
   'assignedCustomerIds',
   'sections',
   'sectionsText',
+  'executionModel',
   'runtimeSettings',
   'validationConfig',
   'workflowPolicyConfig',
+  'validationBindings',
+  'workflowBindings',
+  'uiContractKey',
   'availableOutputKeys',
   'defaultOutputStyles',
   'artifactRetentionDays',
@@ -76,9 +87,14 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM,
       frameworkKey: '',
       frameworkName: '',
+      sections: [],
       runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
+      executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
       validationConfig: [],
       workflowPolicyConfig: [],
+      validationBindings: [],
+      workflowBindings: [],
+      uiContractKey: '',
     }
   }
 
@@ -86,11 +102,27 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
     ...INITIAL_FRAMEWORK_PACKAGE_FORM,
     frameworkKey: String(firstRegistry.frameworkKey ?? '').trim(),
     frameworkName: String(firstRegistry.name ?? '').trim(),
+    sections: [],
     runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
+    executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
     validationConfig: [],
     workflowPolicyConfig: [],
+    validationBindings: [],
+    workflowBindings: [],
+    uiContractKey: '',
   }
 }
+
+const listToText = (items) => Array.isArray(items) ? items.join('\n') : ''
+
+const textToList = (value) => [
+  ...new Set(
+    String(value ?? '')
+      .split(/[\n,]+/)
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+]
 
 const updateRuntimeSetting = (setForm, key, value) => {
   setForm((current) => ({
@@ -102,49 +134,133 @@ const updateRuntimeSetting = (setForm, key, value) => {
   }))
 }
 
-const addValidationConfig = (setForm, validationKey) => {
+const updateExecutionModel = (setForm, key, value) => {
+  setForm((current) => ({
+    ...current,
+    executionModel: {
+      ...current.executionModel,
+      [key]: value,
+    },
+  }))
+}
+
+const addSection = (setForm) => {
+  setForm((current) => {
+    const nextIndex = (current.sections ?? []).length + 1
+    const section = {
+      sectionKey: `section-${nextIndex}`,
+      label: `Section ${nextIndex}`,
+      description: '',
+      required: true,
+      displayOrder: nextIndex * 10,
+      visible: true,
+      runtimeEditable: true,
+      includeInSummary: false,
+      helpText: '',
+      placeholder: '',
+      dataType: 'STRING',
+      maxLength: '',
+      validationKeys: [],
+    }
+
+    return {
+      ...current,
+      sections: [...(current.sections ?? []), section],
+    }
+  })
+}
+
+const updateSection = (setForm, index, key, value) => {
+  setForm((current) => ({
+    ...current,
+    sections: (current.sections ?? []).map((section, sectionIndex) =>
+      sectionIndex === index ? { ...section, [key]: value } : section,
+    ),
+  }))
+}
+
+const removeSection = (setForm, index) => {
+  setForm((current) => ({
+    ...current,
+    sections: (current.sections ?? []).filter((_, sectionIndex) => sectionIndex !== index),
+  }))
+}
+
+const addValidationBinding = (setForm, validationKey) => {
   if (!validationKey) return
   setForm((current) => ({
     ...current,
-    validationConfig: [
-      ...(current.validationConfig ?? []),
-      { validationKey, enabled: true, notes: '' },
-    ].filter((item, index, list) =>
-      list.findIndex((candidate) => candidate.validationKey === item.validationKey) === index,
-    ),
-  }))
-}
-
-const removeValidationConfig = (setForm, validationKey) => {
-  setForm((current) => ({
-    ...current,
-    validationConfig: (current.validationConfig ?? []).filter((item) => item.validationKey !== validationKey),
-  }))
-}
-
-const addWorkflowPolicyConfig = (setForm, policyKey) => {
-  if (!policyKey) return
-  setForm((current) => ({
-    ...current,
-    workflowPolicyConfig: [
-      ...(current.workflowPolicyConfig ?? []),
+    validationBindings: [
+      ...(current.validationBindings ?? []),
       {
-        policyKey,
+        validationKey,
+        trigger: 'ON_SUBMIT',
+        blocking: true,
+        priority: ((current.validationBindings ?? []).length + 1) * 100,
+        freshnessMinutes: '',
         enabled: true,
-        executionOrder: ((current.workflowPolicyConfig ?? []).length + 1) * 10,
-        stageGroup: '',
         notes: '',
       },
     ].filter((item, index, list) =>
-      list.findIndex((candidate) => candidate.policyKey === item.policyKey) === index,
+      list.findIndex((candidate) =>
+        candidate.validationKey === item.validationKey
+        && candidate.trigger === item.trigger,
+      ) === index,
     ),
   }))
 }
 
-const removeWorkflowPolicyConfig = (setForm, policyKey) => {
+const updateValidationBinding = (setForm, index, key, value) => {
   setForm((current) => ({
     ...current,
-    workflowPolicyConfig: (current.workflowPolicyConfig ?? []).filter((item) => item.policyKey !== policyKey),
+    validationBindings: (current.validationBindings ?? []).map((binding, bindingIndex) =>
+      bindingIndex === index ? { ...binding, [key]: value } : binding,
+    ),
+  }))
+}
+
+const removeValidationBinding = (setForm, index) => {
+  setForm((current) => ({
+    ...current,
+    validationBindings: (current.validationBindings ?? []).filter((_, bindingIndex) => bindingIndex !== index),
+  }))
+}
+
+const addWorkflowBinding = (setForm, policyKey) => {
+  if (!policyKey) return
+  setForm((current) => ({
+    ...current,
+    workflowBindings: [
+      ...(current.workflowBindings ?? []),
+      {
+        policyKey,
+        executionContext: 'ON_SUBMIT',
+        priority: ((current.workflowBindings ?? []).length + 1) * 100,
+        enabled: true,
+        notes: '',
+      },
+    ].filter((item, index, list) =>
+      list.findIndex((candidate) =>
+        candidate.policyKey === item.policyKey
+        && candidate.executionContext === item.executionContext,
+      ) === index,
+    ),
+  }))
+}
+
+const updateWorkflowBinding = (setForm, index, key, value) => {
+  setForm((current) => ({
+    ...current,
+    workflowBindings: (current.workflowBindings ?? []).map((binding, bindingIndex) =>
+      bindingIndex === index ? { ...binding, [key]: value } : binding,
+    ),
+  }))
+}
+
+const removeWorkflowBinding = (setForm, index) => {
+  setForm((current) => ({
+    ...current,
+    workflowBindings: (current.workflowBindings ?? []).filter((_, bindingIndex) => bindingIndex !== index),
   }))
 }
 
@@ -209,9 +325,14 @@ function SuperAdminFrameworkPackageEditor() {
 
   const [form, setForm] = useState({
     ...INITIAL_FRAMEWORK_PACKAGE_FORM,
+    sections: [],
+    executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
     runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
     validationConfig: [],
     workflowPolicyConfig: [],
+    validationBindings: [],
+    workflowBindings: [],
+    uiContractKey: '',
   })
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState(0)
@@ -249,6 +370,14 @@ function SuperAdminFrameworkPackageEditor() {
     pageSize: 100,
     status: 'ACTIVE',
     frameworkKey: form.frameworkKey || undefined,
+  })
+
+  const { data: uiContractResponse } = useListUiContractsQuery({
+    page: 1,
+    pageSize: 100,
+    status: 'ACTIVE',
+    frameworkKey: form.frameworkKey || undefined,
+    version: form.version || undefined,
   })
 
   const [createFrameworkPackage, { isLoading: isCreating }] = useCreateFrameworkPackageMutation()
@@ -290,6 +419,22 @@ function SuperAdminFrameworkPackageEditor() {
           label: `${row.name ?? row.key} (${row.key})`,
         })),
     [form.frameworkKey, workflowPolicyResponse],
+  )
+
+  const uiContractOptions = useMemo(
+    () => [
+      { value: '', label: 'No UI Contract selected' },
+      ...(uiContractResponse?.data ?? [])
+        .filter((row) =>
+          String(row.status ?? '').toUpperCase() === 'ACTIVE'
+          && (!form.frameworkKey || (row.frameworkKeys ?? []).includes(form.frameworkKey)),
+        )
+        .map((row) => ({
+          value: row.uiContractKey,
+          label: `${row.name ?? row.uiContractKey} (${row.uiContractKey})`,
+        })),
+    ],
+    [form.frameworkKey, uiContractResponse],
   )
 
   useEffect(() => {
@@ -378,9 +523,9 @@ function SuperAdminFrameworkPackageEditor() {
   const tabErrorCounts = {
     access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
     sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
-    runtime: countErrorsForFields(errors, ['runtimeSettings']),
-    validation: countErrorsForFields(errors, ['validationConfig']),
-    workflows: countErrorsForFields(errors, ['workflowPolicyConfig', 'compatibleWorkflowKeys']),
+    runtime: countErrorsForFields(errors, ['runtimeSettings', 'executionModel', 'uiContractKey']),
+    validation: countErrorsForFields(errors, ['validationConfig', 'validationBindings']),
+    workflows: countErrorsForFields(errors, ['workflowPolicyConfig', 'workflowBindings', 'compatibleWorkflowKeys']),
     outputs: countErrorsForFields(errors, ['availableOutputKeys', 'defaultOutputStyles', 'artifactRetentionDays']),
   }
 
@@ -650,20 +795,113 @@ function SuperAdminFrameworkPackageEditor() {
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
                         title="Sections"
-                        copy="Define the framework sections this package exposes and requires at runtime."
+                        copy="Define the structured framework sections this package exposes and requires at runtime."
                       />
-                      <Textarea
-                        id="framework-package-editor-sections"
-                        label="Section Rows"
-                        helperText="One section per line. Use section-key or section-key|Display label."
-                        value={form.sectionsText}
-                        onChange={(event) =>
-                          setForm((current) => ({ ...current, sectionsText: event.target.value }))
-                        }
-                        error={errors.sectionsText}
-                        rows={8}
-                        fullWidth
-                      />
+                      {errors.sections || errors.sectionsText ? (
+                        <p className="super-admin-framework-package-editor__error" role="alert">
+                          {errors.sections || errors.sectionsText}
+                        </p>
+                      ) : null}
+                      <div className="super-admin-framework-package-editor__section-toolbar">
+                        <Button type="button" variant="outline" size="sm" onClick={() => addSection(setForm)}>
+                          Add Section
+                        </Button>
+                      </div>
+                      <div className="super-admin-framework-package-editor__row-list">
+                        {(form.sections ?? []).length === 0 ? (
+                          <p className="super-admin-framework-package-editor__helper">
+                            No sections configured yet. Add at least the runtime sections this package should expose.
+                          </p>
+                        ) : null}
+                        {(form.sections ?? []).map((section, index) => (
+                          <div className="super-admin-framework-package-editor__config-row" key={`${section.sectionKey}-${index}`}>
+                            <div className="super-admin-framework-package-editor__row-header">
+                              <h3 className="super-admin-framework-package-editor__row-title">
+                                {section.label || section.sectionKey || `Section ${index + 1}`}
+                              </h3>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeSection(setForm, index)}>
+                                Remove
+                              </Button>
+                            </div>
+                            <div className="super-admin-framework-package-editor__field-grid">
+                              <Input
+                                id={`framework-package-editor-section-key-${index}`}
+                                label="Section Key"
+                                value={section.sectionKey}
+                                onChange={(event) => updateSection(setForm, index, 'sectionKey', event.target.value)}
+                                fullWidth
+                              />
+                              <Input
+                                id={`framework-package-editor-section-label-${index}`}
+                                label="Label"
+                                value={section.label}
+                                onChange={(event) => updateSection(setForm, index, 'label', event.target.value)}
+                                fullWidth
+                              />
+                              <Select
+                                id={`framework-package-editor-section-type-${index}`}
+                                label="Data Type"
+                                value={section.dataType ?? 'STRING'}
+                                options={FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS}
+                                onChange={(event) => updateSection(setForm, index, 'dataType', event.target.value)}
+                              />
+                              <Input
+                                id={`framework-package-editor-section-max-length-${index}`}
+                                label="Max Length"
+                                type="number"
+                                value={section.maxLength ?? ''}
+                                onChange={(event) => updateSection(setForm, index, 'maxLength', event.target.value)}
+                                fullWidth
+                              />
+                            </div>
+                            <div className="super-admin-framework-package-editor__option-panel super-admin-framework-package-editor__option-panel--inline">
+                              <Tickbox
+                                id={`framework-package-editor-section-required-${index}`}
+                                label="Required"
+                                checked={section.required !== false}
+                                onChange={(event) => updateSection(setForm, index, 'required', event.target.checked)}
+                              />
+                              <Tickbox
+                                id={`framework-package-editor-section-visible-${index}`}
+                                label="Visible"
+                                checked={section.visible !== false}
+                                onChange={(event) => updateSection(setForm, index, 'visible', event.target.checked)}
+                              />
+                              <Tickbox
+                                id={`framework-package-editor-section-editable-${index}`}
+                                label="Runtime editable"
+                                checked={section.runtimeEditable !== false}
+                                onChange={(event) => updateSection(setForm, index, 'runtimeEditable', event.target.checked)}
+                              />
+                              <Tickbox
+                                id={`framework-package-editor-section-summary-${index}`}
+                                label="Include in summary"
+                                checked={Boolean(section.includeInSummary)}
+                                onChange={(event) => updateSection(setForm, index, 'includeInSummary', event.target.checked)}
+                              />
+                            </div>
+                            <div className="super-admin-framework-package-editor__grid super-admin-framework-package-editor__grid--wide">
+                              <Textarea
+                                id={`framework-package-editor-section-help-${index}`}
+                                label="Help Text"
+                                value={section.helpText ?? ''}
+                                onChange={(event) => updateSection(setForm, index, 'helpText', event.target.value)}
+                                rows={3}
+                                fullWidth
+                              />
+                              <Textarea
+                                id={`framework-package-editor-section-validations-${index}`}
+                                label="Validation Keys"
+                                helperText="Comma or newline separated validation registry keys."
+                                value={listToText(section.validationKeys)}
+                                onChange={(event) => updateSection(setForm, index, 'validationKeys', textToList(event.target.value))}
+                                rows={3}
+                                fullWidth
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </TabView.Tab>
 
@@ -673,6 +911,48 @@ function SuperAdminFrameworkPackageEditor() {
                         title="Runtime"
                         copy="Configure runtime behavior for package execution without storing runtime instance data."
                       />
+                      <div className="super-admin-framework-package-editor__field-group">
+                        <div className="super-admin-framework-package-editor__field-group-header">
+                          <h3 className="super-admin-framework-package-editor__field-group-title">Execution Model</h3>
+                          <p className="super-admin-framework-package-editor__field-group-copy">
+                            Define how this package evaluates validations and workflow policies at runtime.
+                          </p>
+                        </div>
+                        <div className="super-admin-framework-package-editor__field-grid">
+                          <Select
+                            id="framework-package-editor-execution-mode"
+                            label="Execution Mode"
+                            value={form.executionModel?.mode ?? 'EVENT_DRIVEN'}
+                            options={FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS}
+                            onChange={(event) => updateExecutionModel(setForm, 'mode', event.target.value)}
+                          />
+                          <Select
+                            id="framework-package-editor-state-model"
+                            label="State Model"
+                            value={form.executionModel?.stateModel ?? 'LIFECYCLE_BASED'}
+                            options={FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS}
+                            onChange={(event) => updateExecutionModel(setForm, 'stateModel', event.target.value)}
+                          />
+                          <Select
+                            id="framework-package-editor-evaluation-mode"
+                            label="Evaluation Mode"
+                            value={form.executionModel?.evaluationMode ?? 'POLICY_DRIVEN'}
+                            options={FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS}
+                            onChange={(event) => updateExecutionModel(setForm, 'evaluationMode', event.target.value)}
+                          />
+                          <Select
+                            id="framework-package-editor-ui-contract"
+                            label="UI Contract"
+                            value={form.uiContractKey ?? ''}
+                            options={uiContractOptions}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, uiContractKey: event.target.value }))
+                            }
+                            helperText="Presentation is configured in the UI Contract Registry; packages only reference it."
+                            error={errors.uiContractKey}
+                          />
+                        </div>
+                      </div>
                       <div className="super-admin-framework-package-editor__option-panel">
                         <Tickbox
                           id="framework-package-editor-runtime-preview"
@@ -749,25 +1029,77 @@ function SuperAdminFrameworkPackageEditor() {
                       />
                       <Select
                         id="framework-package-editor-validation-picker"
-                        label="Add Validation Registry Entry"
+                        label="Add Validation Binding"
                         value=""
                         options={[
                           { value: '', label: validationOptions.length ? 'Select validation' : 'No compatible validations' },
-                          ...validationOptions.filter((option) =>
-                            !(form.validationConfig ?? []).some((item) => item.validationKey === option.value),
-                          ),
+                          ...validationOptions,
                         ]}
-                        onChange={(event) => addValidationConfig(setForm, event.target.value)}
+                        onChange={(event) => addValidationBinding(setForm, event.target.value)}
                         helperText="Only ACTIVE, package-usable, framework-compatible validations are shown."
-                        error={errors.validationConfig}
+                        error={errors.validationBindings || errors.validationConfig}
                       />
-                      <div className="super-admin-framework-package-editor__selection-list">
-                        {(form.validationConfig ?? []).map((item) => (
-                          <div className="super-admin-framework-package-editor__selection-row" key={item.validationKey}>
-                            <span>{item.validationKey}</span>
-                            <Button variant="ghost" size="sm" onClick={() => removeValidationConfig(setForm, item.validationKey)}>
-                              Remove
-                            </Button>
+                      <div className="super-admin-framework-package-editor__row-list">
+                        {(form.validationBindings ?? []).length === 0 ? (
+                          <p className="super-admin-framework-package-editor__helper">
+                            No validation bindings configured.
+                          </p>
+                        ) : null}
+                        {(form.validationBindings ?? []).map((item, index) => (
+                          <div className="super-admin-framework-package-editor__config-row" key={`${item.validationKey}-${item.trigger}-${index}`}>
+                            <div className="super-admin-framework-package-editor__row-header">
+                              <h3 className="super-admin-framework-package-editor__row-title">{item.validationKey}</h3>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeValidationBinding(setForm, index)}>
+                                Remove
+                              </Button>
+                            </div>
+                            <div className="super-admin-framework-package-editor__field-grid">
+                              <Select
+                                id={`framework-package-editor-validation-trigger-${index}`}
+                                label="Trigger"
+                                value={item.trigger ?? 'ON_SUBMIT'}
+                                options={FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS}
+                                onChange={(event) => updateValidationBinding(setForm, index, 'trigger', event.target.value)}
+                              />
+                              <Input
+                                id={`framework-package-editor-validation-priority-${index}`}
+                                label="Priority"
+                                type="number"
+                                value={item.priority ?? 100}
+                                onChange={(event) => updateValidationBinding(setForm, index, 'priority', event.target.value)}
+                                fullWidth
+                              />
+                              <Input
+                                id={`framework-package-editor-validation-freshness-${index}`}
+                                label="Freshness Minutes"
+                                type="number"
+                                value={item.freshnessMinutes ?? ''}
+                                onChange={(event) => updateValidationBinding(setForm, index, 'freshnessMinutes', event.target.value)}
+                                fullWidth
+                              />
+                            </div>
+                            <div className="super-admin-framework-package-editor__option-panel super-admin-framework-package-editor__option-panel--inline">
+                              <Tickbox
+                                id={`framework-package-editor-validation-blocking-${index}`}
+                                label="Blocking"
+                                checked={item.blocking !== false}
+                                onChange={(event) => updateValidationBinding(setForm, index, 'blocking', event.target.checked)}
+                              />
+                              <Tickbox
+                                id={`framework-package-editor-validation-enabled-${index}`}
+                                label="Enabled"
+                                checked={item.enabled !== false}
+                                onChange={(event) => updateValidationBinding(setForm, index, 'enabled', event.target.checked)}
+                              />
+                            </div>
+                            <Textarea
+                              id={`framework-package-editor-validation-notes-${index}`}
+                              label="Notes"
+                              value={item.notes ?? ''}
+                              onChange={(event) => updateValidationBinding(setForm, index, 'notes', event.target.value)}
+                              rows={2}
+                              fullWidth
+                            />
                           </div>
                         ))}
                       </div>
@@ -782,25 +1114,61 @@ function SuperAdminFrameworkPackageEditor() {
                       />
                       <Select
                         id="framework-package-editor-workflow-picker"
-                        label="Add Workflow Policy"
+                        label="Add Workflow Binding"
                         value=""
                         options={[
                           { value: '', label: workflowPolicyOptions.length ? 'Select workflow policy' : 'No compatible policies' },
-                          ...workflowPolicyOptions.filter((option) =>
-                            !(form.workflowPolicyConfig ?? []).some((item) => item.policyKey === option.value),
-                          ),
+                          ...workflowPolicyOptions,
                         ]}
-                        onChange={(event) => addWorkflowPolicyConfig(setForm, event.target.value)}
+                        onChange={(event) => addWorkflowBinding(setForm, event.target.value)}
                         helperText="Only ACTIVE, framework-compatible workflow policies are shown."
-                        error={errors.workflowPolicyConfig}
+                        error={errors.workflowBindings || errors.workflowPolicyConfig}
                       />
-                      <div className="super-admin-framework-package-editor__selection-list">
-                        {(form.workflowPolicyConfig ?? []).map((item) => (
-                          <div className="super-admin-framework-package-editor__selection-row" key={item.policyKey}>
-                            <span>{item.policyKey}</span>
-                            <Button variant="ghost" size="sm" onClick={() => removeWorkflowPolicyConfig(setForm, item.policyKey)}>
-                              Remove
-                            </Button>
+                      <div className="super-admin-framework-package-editor__row-list">
+                        {(form.workflowBindings ?? []).length === 0 ? (
+                          <p className="super-admin-framework-package-editor__helper">
+                            No workflow bindings configured.
+                          </p>
+                        ) : null}
+                        {(form.workflowBindings ?? []).map((item, index) => (
+                          <div className="super-admin-framework-package-editor__config-row" key={`${item.policyKey}-${item.executionContext}-${index}`}>
+                            <div className="super-admin-framework-package-editor__row-header">
+                              <h3 className="super-admin-framework-package-editor__row-title">{item.policyKey}</h3>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeWorkflowBinding(setForm, index)}>
+                                Remove
+                              </Button>
+                            </div>
+                            <div className="super-admin-framework-package-editor__field-grid">
+                              <Select
+                                id={`framework-package-editor-workflow-context-${index}`}
+                                label="Execution Context"
+                                value={item.executionContext ?? 'ON_SUBMIT'}
+                                options={FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS}
+                                onChange={(event) => updateWorkflowBinding(setForm, index, 'executionContext', event.target.value)}
+                              />
+                              <Input
+                                id={`framework-package-editor-workflow-priority-${index}`}
+                                label="Priority"
+                                type="number"
+                                value={item.priority ?? 100}
+                                onChange={(event) => updateWorkflowBinding(setForm, index, 'priority', event.target.value)}
+                                fullWidth
+                              />
+                              <Tickbox
+                                id={`framework-package-editor-workflow-enabled-${index}`}
+                                label="Enabled"
+                                checked={item.enabled !== false}
+                                onChange={(event) => updateWorkflowBinding(setForm, index, 'enabled', event.target.checked)}
+                              />
+                            </div>
+                            <Textarea
+                              id={`framework-package-editor-workflow-notes-${index}`}
+                              label="Notes"
+                              value={item.notes ?? ''}
+                              onChange={(event) => updateWorkflowBinding(setForm, index, 'notes', event.target.value)}
+                              rows={2}
+                              fullWidth
+                            />
                           </div>
                         ))}
                       </div>

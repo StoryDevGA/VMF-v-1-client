@@ -72,6 +72,10 @@ describe('SuperAdminDashboard page', () => {
       'href',
       '/super-admin/runtime-control/workflow-policies',
     )
+    expect(screen.getByRole('link', { name: /ui contracts open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/ui-contracts',
+    )
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
       'href',
       '/super-admin/system-monitoring',
@@ -115,6 +119,10 @@ describe('SuperAdminDashboard page', () => {
     expect(within(runtimeControlCard).getByRole('link', { name: /workflow policies open now/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/workflow-policies',
+    )
+    expect(within(runtimeControlCard).getByRole('link', { name: /ui contracts open now/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/ui-contracts',
     )
   })
 })

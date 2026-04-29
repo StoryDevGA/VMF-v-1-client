@@ -301,6 +301,7 @@ export const baseApi = createApi({
     'RuntimePath',
     'RuntimeWorkflowPolicy',
     'RuntimeWorkflowPolicyDependencies',
+    'RuntimeUIContract',
     'SkillRole',
     'SkillRoleDependencies',
     'ValidationRegistry',

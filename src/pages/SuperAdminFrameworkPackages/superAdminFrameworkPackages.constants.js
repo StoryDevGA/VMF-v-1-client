@@ -40,6 +40,54 @@ export const FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS = Object.freeze([
   { value: 'RETRY_WITH_BACKOFF', label: 'Retry with backoff' },
 ])
 
+export const FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS = Object.freeze([
+  { value: 'STRING', label: 'Text' },
+  { value: 'NUMBER', label: 'Number' },
+  { value: 'BOOLEAN', label: 'Yes / No' },
+  { value: 'OBJECT', label: 'Object' },
+  { value: 'ARRAY', label: 'List' },
+])
+
+export const FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS = Object.freeze([
+  { value: 'ON_SAVE', label: 'On save' },
+  { value: 'ON_SUBMIT', label: 'On submit' },
+  { value: 'ON_STAGE_CHANGE', label: 'On stage change' },
+  { value: 'ON_PUBLISH', label: 'On publish' },
+  { value: 'MANUAL', label: 'Manual' },
+])
+
+export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freeze([
+  { value: 'ON_CREATE', label: 'On create' },
+  { value: 'ON_SAVE', label: 'On save' },
+  { value: 'ON_SUBMIT', label: 'On submit' },
+  { value: 'ON_STAGE_ENTER', label: 'On stage enter' },
+  { value: 'ON_STAGE_EXIT', label: 'On stage exit' },
+  { value: 'ON_APPROVAL', label: 'On approval' },
+  { value: 'ON_PUBLISH', label: 'On publish' },
+])
+
+export const FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS = Object.freeze([
+  { value: 'EVENT_DRIVEN', label: 'Event driven' },
+  { value: 'MANUAL', label: 'Manual' },
+])
+
+export const FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS = Object.freeze([
+  { value: 'LIFECYCLE_BASED', label: 'Lifecycle based' },
+  { value: 'FREEFORM', label: 'Freeform' },
+])
+
+export const FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS = Object.freeze([
+  { value: 'POLICY_DRIVEN', label: 'Policy driven' },
+  { value: 'VALIDATION_FIRST', label: 'Validation first' },
+])
+
+export const FRAMEWORK_PACKAGE_LIFECYCLE_STAGE_OPTIONS = Object.freeze([
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'REVIEW_READY', label: 'Ready for review' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'PUBLISHED', label: 'Published' },
+])
+
 export const FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS = Object.freeze([
   { value: FRAMEWORK_PACKAGE_STATUSES.DRAFT, label: 'Draft' },
   { value: FRAMEWORK_PACKAGE_STATUSES.VALIDATED, label: 'Validated' },
@@ -65,7 +113,13 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   visibility: 'INTERNAL_ONLY',
   customerAccessMode: 'ALL_CUSTOMERS',
   assignedCustomerIds: '',
+  sections: Object.freeze([]),
   sectionsText: '',
+  executionModel: Object.freeze({
+    mode: 'EVENT_DRIVEN',
+    stateModel: 'LIFECYCLE_BASED',
+    evaluationMode: 'POLICY_DRIVEN',
+  }),
   runtimeSettings: Object.freeze({
     enablePreviewMode: true,
     enableRuntimeValidation: true,
@@ -78,6 +132,9 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   }),
   validationConfig: Object.freeze([]),
   workflowPolicyConfig: Object.freeze([]),
+  validationBindings: Object.freeze([]),
+  workflowBindings: Object.freeze([]),
+  uiContractKey: '',
   availableOutputKeys: '',
   defaultOutputStyles: '',
   allowCustomerOutputDefinitions: false,
@@ -123,12 +180,24 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       defaultTimeoutMs: 30000,
       maxPolicyExecutionsPerRun: 10,
     }),
+    executionModel: Object.freeze({
+      mode: 'EVENT_DRIVEN',
+      stateModel: 'LIFECYCLE_BASED',
+      evaluationMode: 'POLICY_DRIVEN',
+    }),
     validationConfig: Object.freeze([
       Object.freeze({ validationKey: 'required-sections-check', enabled: true }),
     ]),
     workflowPolicyConfig: Object.freeze([
       Object.freeze({ policyKey: 'vmf-publish', enabled: true, executionOrder: 10 }),
     ]),
+    validationBindings: Object.freeze([
+      Object.freeze({ validationKey: 'required-sections-check', trigger: 'ON_SUBMIT', blocking: true, priority: 100, freshnessMinutes: null, enabled: true, notes: '' }),
+    ]),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
+    uiContractKey: 'vmf-ui-contract-v1',
     availableOutputKeys: Object.freeze(['board-summary', 'executive-brief']),
     defaultOutputStyles: Object.freeze(['executive-concise']),
     allowCustomerOutputDefinitions: false,
@@ -276,12 +345,19 @@ export function cloneFrameworkPackage(pkg) {
     ...pkg,
     assignedCustomerIds: [...(pkg.assignedCustomerIds ?? [])],
     sections: (pkg.sections ?? []).map((section) => ({ ...section })),
+    executionModel: {
+      ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel,
+      ...(pkg.executionModel ?? {}),
+    },
     runtimeSettings: {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings,
       ...(pkg.runtimeSettings ?? {}),
     },
     validationConfig: (pkg.validationConfig ?? []).map((item) => ({ ...item })),
     workflowPolicyConfig: (pkg.workflowPolicyConfig ?? []).map((item) => ({ ...item })),
+    validationBindings: (pkg.validationBindings ?? []).map((item) => ({ ...item })),
+    workflowBindings: (pkg.workflowBindings ?? []).map((item) => ({ ...item })),
+    uiContractKey: String(pkg.uiContractKey ?? '').trim(),
     availableOutputKeys: [...(pkg.availableOutputKeys ?? [])],
     defaultOutputStyles: [...(pkg.defaultOutputStyles ?? [])],
     compatibleWorkflowKeys: [...(pkg.compatibleWorkflowKeys ?? [])],
@@ -387,9 +463,183 @@ function parseSectionRows(value) {
         includeInSummary: false,
         helpText: '',
         placeholder: '',
+        dataType: 'STRING',
+        maxLength: null,
+        validationKeys: [],
       }
     })
     .filter(Boolean)
+}
+
+function normalizeSectionRows(sections) {
+  if (!Array.isArray(sections)) return []
+
+  return sections
+    .map((section, index) => {
+      const sectionKey = normalizeKeyToken(section.sectionKey ?? section.key)
+      if (!sectionKey) return null
+      const generatedLabel = sectionKey
+        .split('-')
+        .map((word) => word.replace(/^\w/, (character) => character.toUpperCase()))
+        .join(' ')
+
+      return {
+        sectionKey,
+        label: String(section.label || generatedLabel).trim(),
+        description: String(section.description ?? '').trim(),
+        required: section.required !== false,
+        displayOrder: Number(section.displayOrder ?? ((index + 1) * 10)),
+        visible: section.visible !== false,
+        runtimeEditable: section.runtimeEditable !== false,
+        includeInSummary: Boolean(section.includeInSummary),
+        helpText: String(section.helpText ?? '').trim(),
+        placeholder: String(section.placeholder ?? '').trim(),
+        dataType: String(section.dataType ?? 'STRING').trim().toUpperCase(),
+        maxLength: section.maxLength === null || section.maxLength === ''
+          ? null
+          : Number(section.maxLength ?? 0),
+        validationKeys: Array.isArray(section.validationKeys)
+          ? [...new Set(section.validationKeys.map(normalizeKeyToken).filter(Boolean))]
+          : parseKeyList(section.validationKeys),
+      }
+    })
+    .filter(Boolean)
+}
+
+function normalizeValidationBindings(bindings, fallbackConfig = []) {
+  const source = Array.isArray(bindings) && bindings.length > 0
+    ? bindings
+    : (fallbackConfig ?? []).map((item, index) => ({
+        validationKey: item.validationKey,
+        trigger: 'ON_SUBMIT',
+        blocking: item.warningOnlyOverride === true ? false : true,
+        priority: (index + 1) * 100,
+        freshnessMinutes: item.freshnessOverrideMinutes ?? null,
+        enabled: item.enabled !== false,
+        notes: item.notes ?? '',
+      }))
+
+  return source
+    .map((binding, index) => ({
+      validationKey: normalizeKeyToken(binding.validationKey),
+      trigger: String(binding.trigger ?? 'ON_SUBMIT').trim().toUpperCase(),
+      blocking: binding.blocking !== false,
+      priority: Number(binding.priority ?? ((index + 1) * 100)),
+      freshnessMinutes: binding.freshnessMinutes === null || binding.freshnessMinutes === ''
+        ? null
+        : Number(binding.freshnessMinutes ?? 0),
+      enabled: binding.enabled !== false,
+      notes: String(binding.notes ?? '').trim(),
+    }))
+    .filter((binding) => binding.validationKey)
+}
+
+function normalizeWorkflowBindings(bindings, fallbackConfig = []) {
+  const source = Array.isArray(bindings) && bindings.length > 0
+    ? bindings
+    : (fallbackConfig ?? []).map((item, index) => ({
+        policyKey: item.policyKey,
+        executionContext: 'ON_SUBMIT',
+        priority: Number(item.executionOrder ?? ((index + 1) * 100)),
+        enabled: item.enabled !== false,
+        notes: item.notes ?? '',
+      }))
+
+  return source
+    .map((binding, index) => ({
+      policyKey: normalizeKeyToken(binding.policyKey),
+      executionContext: String(binding.executionContext ?? 'ON_SUBMIT').trim().toUpperCase(),
+      priority: Number(binding.priority ?? ((index + 1) * 100)),
+      enabled: binding.enabled !== false,
+      notes: String(binding.notes ?? '').trim(),
+    }))
+    .filter((binding) => binding.policyKey)
+}
+
+function hasDuplicateBy(items, getKey) {
+  const seen = new Set()
+  return items.some((item) => {
+    const key = getKey(item)
+    if (!key) return false
+    if (seen.has(key)) return true
+    seen.add(key)
+    return false
+  })
+}
+
+function validateSectionRows(sections, errors) {
+  const validDataTypes = new Set(FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS.map((option) => option.value))
+  const invalidSection = sections.find((section) => !KEY_TOKEN_PATTERN.test(section.sectionKey))
+  if (invalidSection) {
+    errors.sections = `Invalid section key "${invalidSection.sectionKey}". Use letters, numbers, or hyphens.`
+    return
+  }
+
+  if (hasDuplicateBy(sections, (section) => section.sectionKey)) {
+    errors.sections = 'Section keys must be unique.'
+    return
+  }
+
+  const invalidDataType = sections.find((section) => !validDataTypes.has(section.dataType))
+  if (invalidDataType) {
+    errors.sections = `Section "${invalidDataType.sectionKey}" has an invalid data type.`
+    return
+  }
+
+  const invalidMaxLength = sections.find((section) =>
+    section.maxLength !== null
+    && (!Number.isInteger(section.maxLength) || section.maxLength < 0 || section.maxLength > 100000),
+  )
+  if (invalidMaxLength) {
+    errors.sections = `Section "${invalidMaxLength.sectionKey}" max length must be between 0 and 100000.`
+  }
+}
+
+function validateValidationBindings(validationBindings, errors) {
+  const validTriggers = new Set(FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS.map((option) => option.value))
+  const invalidBinding = validationBindings.find((binding) =>
+    !KEY_TOKEN_PATTERN.test(binding.validationKey)
+    || !validTriggers.has(binding.trigger)
+    || !Number.isInteger(binding.priority)
+    || binding.priority < 1
+    || binding.priority > 10000
+    || (
+      binding.freshnessMinutes !== null
+      && (!Number.isInteger(binding.freshnessMinutes) || binding.freshnessMinutes < 1 || binding.freshnessMinutes > 10080)
+    ),
+  )
+  if (invalidBinding) {
+    errors.validationBindings = 'Validation bindings require a valid key, trigger, priority, and freshness window.'
+    return
+  }
+
+  if (hasDuplicateBy(validationBindings, (binding) => `${binding.validationKey}:${binding.trigger}`)) {
+    errors.validationBindings = 'Validation binding keys must be unique per trigger.'
+  }
+}
+
+function validateWorkflowBindings(workflowBindings, errors) {
+  const validExecutionContexts = new Set(FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS.map((option) => option.value))
+  const invalidBinding = workflowBindings.find((binding) =>
+    !KEY_TOKEN_PATTERN.test(binding.policyKey)
+    || !validExecutionContexts.has(binding.executionContext)
+    || !Number.isInteger(binding.priority)
+    || binding.priority < 1
+    || binding.priority > 10000,
+  )
+  if (invalidBinding) {
+    errors.workflowBindings = 'Workflow bindings require a valid policy key, execution context, and priority.'
+    return
+  }
+
+  if (hasDuplicateBy(workflowBindings, (binding) => `${binding.policyKey}:${binding.executionContext}`)) {
+    errors.workflowBindings = 'Workflow policy keys must be unique per execution context.'
+    return
+  }
+
+  if (hasDuplicateBy(workflowBindings, (binding) => `${binding.executionContext}:${binding.priority}`)) {
+    errors.workflowBindings = 'Workflow priority must be unique within each execution context.'
+  }
 }
 
 export function mapFrameworkPackageToForm(pkg) {
@@ -401,6 +651,10 @@ export function mapFrameworkPackageToForm(pkg) {
     visibility === 'CUSTOMER_VISIBLE' && customerAccessMode === 'SELECTED_CUSTOMERS'
       ? formatKeyList(pkg.assignedCustomerIds)
       : ''
+
+  const sections = normalizeSectionRows(pkg.sections)
+  const validationBindings = normalizeValidationBindings(pkg.validationBindings, pkg.validationConfig)
+  const workflowBindings = normalizeWorkflowBindings(pkg.workflowBindings, pkg.workflowPolicyConfig)
 
   return {
     frameworkKey: pkg.frameworkKey ?? '',
@@ -416,13 +670,21 @@ export function mapFrameworkPackageToForm(pkg) {
     visibility,
     customerAccessMode,
     assignedCustomerIds,
+    sections,
     sectionsText: formatSectionRows(pkg.sections),
+    executionModel: {
+      ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel,
+      ...(pkg.executionModel ?? {}),
+    },
     runtimeSettings: {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings,
       ...(pkg.runtimeSettings ?? {}),
     },
     validationConfig: (pkg.validationConfig ?? []).map((item) => ({ ...item })),
     workflowPolicyConfig: (pkg.workflowPolicyConfig ?? []).map((item) => ({ ...item })),
+    validationBindings,
+    workflowBindings,
+    uiContractKey: String(pkg.uiContractKey ?? '').trim(),
     availableOutputKeys: formatKeyList(pkg.availableOutputKeys),
     defaultOutputStyles: formatKeyList(pkg.defaultOutputStyles),
     allowCustomerOutputDefinitions: Boolean(pkg.allowCustomerOutputDefinitions),
@@ -453,13 +715,27 @@ export function validateFrameworkPackageForm(
   const packageKey = normalizeKeyToken(formState.packageKey)
   const packageName = String(formState.packageName ?? '').trim()
   const assignedCustomerIds = parseCustomerIdList(formState.assignedCustomerIds)
-  const sections = parseSectionRows(formState.sectionsText)
-  const validationConfig = Array.isArray(formState.validationConfig)
-    ? formState.validationConfig
-    : []
-  const workflowPolicyConfig = Array.isArray(formState.workflowPolicyConfig)
-    ? formState.workflowPolicyConfig
-    : []
+  const sections = normalizeSectionRows(
+    Array.isArray(formState.sections) && formState.sections.length > 0
+      ? formState.sections
+      : parseSectionRows(formState.sectionsText),
+  )
+  const validationBindings = normalizeValidationBindings(formState.validationBindings, formState.validationConfig)
+  const workflowBindings = normalizeWorkflowBindings(formState.workflowBindings, formState.workflowPolicyConfig)
+  const validationConfig = validationBindings.map((binding) => ({
+    validationKey: binding.validationKey,
+    enabled: binding.enabled,
+    warningOnlyOverride: binding.blocking ? null : true,
+    freshnessOverrideMinutes: binding.freshnessMinutes,
+    notes: binding.notes,
+  }))
+  const workflowPolicyConfig = workflowBindings.map((binding) => ({
+    policyKey: binding.policyKey,
+    enabled: binding.enabled,
+    executionOrder: binding.priority,
+    notes: binding.notes,
+  }))
+  const uiContractKey = normalizeKeyToken(formState.uiContractKey)
   const availableOutputKeys = parseKeyList(formState.availableOutputKeys)
   const defaultOutputStyles = parseKeyList(formState.defaultOutputStyles)
   const compatibleWorkflowKeys = parseKeyList(formState.compatibleWorkflowKeys)
@@ -527,9 +803,11 @@ export function validateFrameworkPackageForm(
     errors.assignedCustomerIds = 'Assigned customers must be empty when access mode is all customers.'
   }
 
-  const invalidSection = sections.find((section) => !KEY_TOKEN_PATTERN.test(section.sectionKey))
-  if (invalidSection) {
-    errors.sectionsText = `Invalid section key "${invalidSection.sectionKey}". Use letters, numbers, or hyphens.`
+  validateSectionRows(sections, errors)
+  validateValidationBindings(validationBindings, errors)
+  validateWorkflowBindings(workflowBindings, errors)
+  if (uiContractKey && !KEY_TOKEN_PATTERN.test(uiContractKey)) {
+    errors.uiContractKey = 'UI Contract key must use letters, numbers, or hyphens.'
   }
 
   const invalidWorkflowKey = compatibleWorkflowKeys.find((value) => !KEY_TOKEN_PATTERN.test(value))
@@ -575,6 +853,10 @@ export function validateFrameworkPackageForm(
       customerAccessMode: normalizedCustomerAccessMode,
       assignedCustomerIds: normalizedAssignedCustomerIds,
       sections,
+      executionModel: {
+        ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel,
+        ...(formState.executionModel ?? {}),
+      },
       runtimeSettings: {
         ...formState.runtimeSettings,
         defaultTimeoutMs: Number(formState.runtimeSettings?.defaultTimeoutMs ?? 0),
@@ -582,6 +864,9 @@ export function validateFrameworkPackageForm(
       },
       validationConfig,
       workflowPolicyConfig,
+      validationBindings,
+      workflowBindings,
+      uiContractKey,
       availableOutputKeys,
       defaultOutputStyles,
       allowCustomerOutputDefinitions: Boolean(formState.allowCustomerOutputDefinitions),

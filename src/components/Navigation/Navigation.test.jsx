@@ -409,14 +409,6 @@ describe('Navigation', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /runtime control/i }))
-    expect(screen.getByRole('link', { name: /^runtime control$/i })).toHaveAttribute(
-      'href',
-      '/super-admin/runtime-control',
-    )
-    expect(screen.getByRole('link', { name: /system versioning/i })).toHaveAttribute(
-      'href',
-      '/super-admin/system-versioning',
-    )
     expect(screen.getByRole('link', { name: /framework registry/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/framework-registry',
@@ -436,6 +428,10 @@ describe('Navigation', () => {
     expect(screen.getByRole('link', { name: /workflow policies/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/workflow-policies',
+    )
+    expect(screen.getByRole('link', { name: /ui contracts/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/ui-contracts',
     )
   })
 
@@ -487,7 +483,7 @@ describe('Navigation', () => {
     renderNavigation(store, onLinkClick)
 
     await user.click(screen.getByRole('button', { name: /runtime control/i }))
-    await user.click(screen.getByRole('link', { name: /^runtime control$/i }))
+    await user.click(screen.getByRole('link', { name: /framework registry/i }))
     expect(onLinkClick).toHaveBeenCalled()
   })
 
@@ -507,10 +503,10 @@ describe('Navigation', () => {
     renderNavigation(store)
 
     await user.click(screen.getByRole('button', { name: /runtime control/i }))
-    expect(screen.getByRole('link', { name: /system versioning/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /framework registry/i })).toBeInTheDocument()
 
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('link', { name: /system versioning/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /framework registry/i })).not.toBeInTheDocument()
   })
 
   it('renders navigation with expected accessibility attributes', () => {

@@ -9,6 +9,7 @@ import {
   MdInventory2,
   MdKey,
   MdLabel,
+  MdPalette,
   MdRule,
   MdSmartToy,
   MdTune,
@@ -70,6 +71,12 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
     description: 'Define framework identity, version, status, defaults, and compatibility guardrails.',
     taskKey: 'FE-05',
     Icon: MdInventory2,
+  },
+  {
+    routeKey: 'uiContracts',
+    description: 'Define reusable presentation contracts for section labels, lifecycle wording, and governed action copy.',
+    taskKey: 'FE-14',
+    Icon: MdPalette,
   },
 ]).map((module) => ({
   ...module,

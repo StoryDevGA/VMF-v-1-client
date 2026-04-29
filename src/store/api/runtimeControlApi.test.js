@@ -27,11 +27,13 @@ import {
   useGetValidationRegistryQuery,
   useGetWorkflowPolicyQuery,
   useGetWorkflowPolicyDependenciesQuery,
+  useGetUiContractQuery,
   useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useListRuntimeAgentsQuery,
   useListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
+  useListUiContractsQuery,
   useListValidationRegistryQuery,
   useListWorkflowPoliciesQuery,
   useTestWorkflowPolicyMutation,
@@ -41,6 +43,8 @@ import {
   useUpdateRuntimeAgentMutation,
   useUpdateRuntimePathMutation,
   useUpdateRuntimeSkillMutation,
+  useCreateUiContractMutation,
+  useUpdateUiContractMutation,
   useUpdateValidationRegistryMutation,
   useUpdateWorkflowPolicyMutation,
 } from './runtimeControlApi.js'
@@ -96,6 +100,10 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('createWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('getWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateWorkflowPolicy')
+    expect(runtimeControlApi.endpoints).toHaveProperty('listUiContracts')
+    expect(runtimeControlApi.endpoints).toHaveProperty('createUiContract')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getUiContract')
+    expect(runtimeControlApi.endpoints).toHaveProperty('updateUiContract')
   })
 
   it('exports query hooks', () => {
@@ -116,6 +124,8 @@ describe('runtimeControlApi', () => {
     expect(typeof useListWorkflowPoliciesQuery).toBe('function')
     expect(typeof useGetWorkflowPolicyQuery).toBe('function')
     expect(typeof useGetWorkflowPolicyDependenciesQuery).toBe('function')
+    expect(typeof useListUiContractsQuery).toBe('function')
+    expect(typeof useGetUiContractQuery).toBe('function')
   })
 
   it('exports mutation hooks', () => {
@@ -139,6 +149,8 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateWorkflowPolicyMutation).toBe('function')
     expect(typeof useTestWorkflowPolicyMutation).toBe('function')
     expect(typeof useUpdateWorkflowPolicyMutation).toBe('function')
+    expect(typeof useCreateUiContractMutation).toBe('function')
+    expect(typeof useUpdateUiContractMutation).toBe('function')
   })
 
   it('registers query and mutation initiators for each Runtime Control resource', () => {
@@ -179,6 +191,10 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicyDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.testWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateWorkflowPolicy.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.listUiContracts.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.createUiContract.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getUiContract.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.updateUiContract.initiate).toBe('function')
   })
 
   it('builds live framework package catalogue and mutation requests', () => {

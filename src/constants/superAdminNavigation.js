@@ -40,7 +40,7 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages', 'uiContracts']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
@@ -52,6 +52,7 @@ const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'agents',
   'workflowPolicies',
   'frameworkPackages',
+  'uiContracts',
 ])
 
 const SUPER_ADMIN_DASHBOARD_GROUP_CATALOG = Object.freeze({
@@ -204,6 +205,16 @@ const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       canonical: 'Framework Packages',
       legacyNav: 'Framework Packages',
       phase1aNav: 'Framework Packages',
+    }),
+  }),
+  uiContracts: Object.freeze({
+    key: 'ui-contracts',
+    to: '/super-admin/runtime-control/ui-contracts',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'UI Contracts',
+      legacyNav: 'UI Contracts',
+      phase1aNav: 'UI Contracts',
     }),
   }),
   agents: Object.freeze({

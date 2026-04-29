@@ -53,8 +53,14 @@ import {
   VALIDATION_REGISTRY_PAGE_SIZE,
   VALIDATION_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminValidationRegistry/superAdminValidationRegistry.constants.js'
+import {
+  cloneUIContract,
+  INITIAL_UI_CONTRACTS,
+  UI_CONTRACT_PAGE_SIZE,
+} from '../../pages/SuperAdminUiContracts/superAdminUiContracts.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
+const UI_CONTRACT_LIST_TAG = { type: 'RuntimeUIContract', id: 'LIST' }
 const FRAMEWORK_REGISTRY_LIST_TAG = { type: 'RuntimeFrameworkRegistry', id: 'LIST' }
 const AGENT_LIST_TAG = { type: 'RuntimeAgent', id: 'LIST' }
 const SKILL_LIST_TAG = { type: 'RuntimeSkill', id: 'LIST' }
@@ -331,6 +337,7 @@ const buildInitialRuntimeControlState = () => ({
     .map((entry) => cloneRuntimePathRegistryEntry(entry)),
   skillRoles: INITIAL_SKILL_ROLE_REGISTRY.map((entry) => cloneSkillRoleRegistryEntry(entry)),
   validationRegistry: INITIAL_VALIDATION_REGISTRY.map((entry) => cloneValidationRegistryEntry(entry)),
+  uiContracts: INITIAL_UI_CONTRACTS.map((entry) => cloneUIContract(entry)),
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
@@ -1154,6 +1161,11 @@ const getFrameworkPackageRows = ({
         pkg.version,
         pkg.description,
         pkg.status,
+        JSON.stringify(pkg.sections ?? []),
+        JSON.stringify(pkg.executionModel ?? {}),
+        JSON.stringify(pkg.validationBindings ?? []),
+        JSON.stringify(pkg.workflowBindings ?? []),
+        JSON.stringify(pkg.uiContract ?? {}),
         pkg.compatibleWorkflowKeys,
         pkg.defaultAgentIds,
         pkg.requiredSkillIds,
@@ -1163,6 +1175,43 @@ const getFrameworkPackageRows = ({
     })
     .map((pkg) => cloneFrameworkPackage(pkg))
 }
+
+const getUIContractRows = ({
+  q = '',
+  status = '',
+  frameworkKey = '',
+} = {}) => {
+  const normalizedSearch = normalizeSearch(q)
+  const normalizedStatus = String(status ?? '').trim().toUpperCase()
+  const normalizedFrameworkKey = normalizeFrameworkKey(frameworkKey)
+
+  return runtimeControlState.uiContracts
+    .filter((contract) => {
+      const matchesStatus = normalizedStatus ? contract.status === normalizedStatus : true
+      const matchesFramework = normalizedFrameworkKey
+        ? (contract.frameworkKeys ?? []).includes(normalizedFrameworkKey)
+        : true
+      const queryMatches = matchesSearch(normalizedSearch, [
+        contract.uiContractKey,
+        contract.name,
+        contract.description,
+        contract.status,
+        contract.frameworkKeys,
+        contract.compatibilityTags,
+        JSON.stringify(contract.sections ?? []),
+        JSON.stringify(contract.lifecycleStages ?? []),
+        JSON.stringify(contract.actions ?? []),
+      ])
+
+      return matchesStatus && matchesFramework && queryMatches
+    })
+    .map((contract) => cloneUIContract(contract))
+}
+
+const findUIContractById = (uiContractId) =>
+  runtimeControlState.uiContracts.find((contract) =>
+    contract.id === uiContractId || contract.uiContractKey === uiContractId,
+  )
 
 const getFrameworkRegistryRows = ({
   q = '',
@@ -1996,6 +2045,138 @@ const findWorkflowPolicyById = (policyId) =>
 
 export const runtimeControlApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    listUiContracts: build.query({
+      queryFn: async (
+        { page = 1, pageSize = UI_CONTRACT_PAGE_SIZE, q = '', status = '', frameworkKey = '', version = '' } = {},
+        api,
+        extraOptions,
+        baseQuery,
+      ) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlListRequest({
+              resourcePath: 'ui-contracts',
+              page,
+              pageSize,
+              q,
+              status,
+              frameworkKey,
+              version,
+              defaultPageSize: UI_CONTRACT_PAGE_SIZE,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const rows = getUIContractRows({ q, status, frameworkKey })
+        return {
+          data: buildListResponse({
+            rows,
+            page,
+            pageSize,
+            filters: { q, status, frameworkKey, version },
+          }),
+        }
+      },
+      providesTags: (result) =>
+        result?.data
+          ? [
+              ...result.data.map(({ id }) => ({ type: 'RuntimeUIContract', id })),
+              UI_CONTRACT_LIST_TAG,
+            ]
+          : [UI_CONTRACT_LIST_TAG],
+    }),
+
+    createUiContract: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'ui-contracts',
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const duplicate = runtimeControlState.uiContracts.find((contract) =>
+          contract.uiContractKey === String(payload.uiContractKey ?? '').trim().toLowerCase(),
+        )
+        if (duplicate) {
+          return buildConflictError('UI Contract key must be unique.', {
+            field: 'uiContractKey',
+            reason: 'UI_CONTRACT_KEY_CONFLICT',
+          })
+        }
+
+        const created = cloneUIContract({
+          id: `ui-contract-${String(payload.uiContractKey ?? '').trim().toLowerCase()}`,
+          ...payload,
+          ...buildAuditFields(),
+        })
+        runtimeControlState = {
+          ...runtimeControlState,
+          uiContracts: [created, ...runtimeControlState.uiContracts],
+        }
+        return { data: buildEntityResponse(cloneUIContract(created)) }
+      },
+      invalidatesTags: [UI_CONTRACT_LIST_TAG],
+    }),
+
+    getUiContract: build.query({
+      queryFn: async (uiContractId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('ui-contracts', uiContractId),
+            api,
+            extraOptions,
+          )
+        }
+
+        const contract = findUIContractById(uiContractId)
+        if (!contract) return buildNotFoundError('UI Contract was not found.')
+        return { data: buildEntityResponse(cloneUIContract(contract)) }
+      },
+      providesTags: (_result, _error, uiContractId) => [
+        { type: 'RuntimeUIContract', id: uiContractId },
+      ],
+    }),
+
+    updateUiContract: build.mutation({
+      queryFn: async ({ uiContractId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'ui-contracts',
+              entityId: uiContractId,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existing = findUIContractById(uiContractId)
+        if (!existing) return buildNotFoundError('UI Contract was not found.')
+        const next = cloneUIContract({ ...existing, ...payload, uiContractKey: existing.uiContractKey, ...buildAuditFields() })
+        runtimeControlState = {
+          ...runtimeControlState,
+          uiContracts: runtimeControlState.uiContracts.map((contract) =>
+            contract.id === existing.id ? next : contract,
+          ),
+        }
+        return { data: buildEntityResponse(cloneUIContract(next)) }
+      },
+      invalidatesTags: (_result, _error, { uiContractId }) => [
+        UI_CONTRACT_LIST_TAG,
+        { type: 'RuntimeUIContract', id: uiContractId },
+      ],
+    }),
+
     listFrameworkPackages: build.query({
       queryFn: async (
         { page = 1, pageSize = FRAMEWORK_PACKAGE_PAGE_SIZE, q = '', status = '', frameworkKey = '' } = {},
@@ -4469,6 +4650,10 @@ export const {
   useGetFrameworkPackageQuery,
   useUpdateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
+  useListUiContractsQuery,
+  useCreateUiContractMutation,
+  useGetUiContractQuery,
+  useUpdateUiContractMutation,
   useListRuntimeAgentsQuery,
   useCreateRuntimeAgentMutation,
   useGetRuntimeAgentQuery,

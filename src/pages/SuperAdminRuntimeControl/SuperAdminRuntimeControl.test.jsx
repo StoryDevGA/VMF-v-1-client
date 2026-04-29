@@ -45,7 +45,7 @@ describe('SuperAdminRuntimeControl page', () => {
     expect(screen.getByText('/super-admin/system-versioning')).toBeInTheDocument()
   })
 
-  it('shows all seven catalogue modules as live Runtime Control surfaces', () => {
+  it('shows all eight catalogue modules as live Runtime Control surfaces', () => {
     renderRuntimeControl()
 
     expect(screen.getByRole('heading', { name: /phase 1b catalogue surfaces/i })).toBeInTheDocument()
@@ -56,6 +56,7 @@ describe('SuperAdminRuntimeControl page', () => {
     expect(screen.getByRole('heading', { name: /runtime paths/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /skill roles/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /workflow policies/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /ui contracts/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open framework registry/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/framework-registry',
@@ -83,6 +84,10 @@ describe('SuperAdminRuntimeControl page', () => {
     expect(screen.getByRole('link', { name: /open workflow policies/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/workflow-policies',
+    )
+    expect(screen.getByRole('link', { name: /open ui contracts/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/ui-contracts',
     )
   })
 })

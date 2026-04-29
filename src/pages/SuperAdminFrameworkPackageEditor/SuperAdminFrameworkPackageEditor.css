@@ -24,7 +24,9 @@
 .super-admin-framework-package-editor__field-group-header,
 .super-admin-framework-package-editor__field-grid,
 .super-admin-framework-package-editor__tab-panel,
-.super-admin-framework-package-editor__selection-list {
+.super-admin-framework-package-editor__selection-list,
+.super-admin-framework-package-editor__row-list,
+.super-admin-framework-package-editor__config-row {
   display: grid;
 }
 
@@ -91,7 +93,8 @@
 .super-admin-framework-package-editor__field-group-copy,
 .super-admin-framework-package-editor__helper,
 .super-admin-framework-package-editor__error,
-.super-admin-framework-package-editor__summary-label {
+.super-admin-framework-package-editor__summary-label,
+.super-admin-framework-package-editor__row-title {
   margin: 0;
 }
 
@@ -249,8 +252,22 @@
   background: color-mix(in srgb, var(--color-surface) 96%, transparent);
 }
 
+.super-admin-framework-package-editor__option-panel--inline {
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--spacing-md) * 9), 1fr));
+  align-items: center;
+}
+
+.super-admin-framework-package-editor__section-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .super-admin-framework-package-editor__selection-list {
   gap: var(--spacing-xs);
+}
+
+.super-admin-framework-package-editor__row-list {
+  gap: var(--spacing-sm);
 }
 
 .super-admin-framework-package-editor__selection-row {
@@ -264,6 +281,28 @@
   background: color-mix(in srgb, var(--color-surface) 96%, transparent);
 }
 
+.super-admin-framework-package-editor__config-row {
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-radius: var(--border-radius-lg);
+  background: color-mix(in srgb, var(--color-surface) 97%, transparent);
+}
+
+.super-admin-framework-package-editor__row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.super-admin-framework-package-editor__row-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+}
 
 .super-admin-framework-package-editor__error {
   color: var(--color-danger);
