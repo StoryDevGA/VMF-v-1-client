@@ -1,9 +1,9 @@
 {
   "version": "0.0.0",
-  "buildNumber": "20260428.164557",
-  "commit": "ae78d66",
-  "branch": "workflow-policy-tab-reorder",
+  "buildNumber": "20260429.082811",
+  "commit": "59df870",
+  "branch": "main",
   "environment": "dev",
-  "builtAt": "2026-04-28T16:45:57.375Z",
-  "fullVersion": "0.0.0+20260428.164557.ae78d66"
+  "builtAt": "2026-04-29T08:28:11.212Z",
+  "fullVersion": "0.0.0+20260429.082811.59df870"
 }

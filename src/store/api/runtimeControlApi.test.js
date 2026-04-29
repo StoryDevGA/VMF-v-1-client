@@ -181,7 +181,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.updateWorkflowPolicy.initiate).toBe('function')
   })
 
-  it('builds live framework package requests with step-up headers for protected mutations', () => {
+  it('builds live framework package catalogue and mutation requests', () => {
     expect(
       buildRuntimeControlListRequest({
         resourcePath: 'framework-packages',

@@ -2047,7 +2047,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
     createFrameworkPackage: build.mutation({
       queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
-        const { stepUpToken = '', ...runtimePayload } = payload ?? {}
+        const runtimePayload = payload ?? {}
 
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
@@ -2055,7 +2055,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               resourcePath: 'framework-packages',
               method: 'POST',
               body: runtimePayload,
-              headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
             }),
             api,
             extraOptions,
@@ -2120,7 +2119,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     updateFrameworkPackage: build.mutation({
-      queryFn: async ({ packageId, stepUpToken = '', ...payload }, api, extraOptions, baseQuery) => {
+      queryFn: async ({ packageId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
@@ -2128,7 +2127,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               entityId: packageId,
               method: 'PATCH',
               body: payload,
-              headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
             }),
             api,
             extraOptions,

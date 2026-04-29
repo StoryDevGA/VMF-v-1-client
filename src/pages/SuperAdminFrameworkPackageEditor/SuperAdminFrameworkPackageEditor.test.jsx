@@ -24,22 +24,6 @@ vi.mock('../../components/Toaster', () => ({
   useToaster: () => ({ addToast: addToastMock }),
 }))
 
-vi.mock('../../components/StepUpAuthForm', () => ({
-  StepUpAuthForm: ({ onStepUpComplete, onCancel }) => (
-    <div>
-      <p>Mock Step-Up Form</p>
-      <button type="button" onClick={() => onStepUpComplete?.('mock-step-up-token', 900)}>
-        Mock Verify
-      </button>
-      {onCancel ? (
-        <button type="button" onClick={onCancel}>
-          Mock Cancel
-        </button>
-      ) : null}
-    </div>
-  ),
-}))
-
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
@@ -123,7 +107,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByRole('tab', { name: /access .*1 validation errors/i })).toBeInTheDocument()
   })
 
-  it('opens step-up verification before saving and sends the token with package updates', async () => {
+  it('saves package updates directly from the editor', async () => {
     const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
@@ -139,36 +123,29 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
-    expect(screen.getByRole('heading', { name: /verify before saving changes/i })).toBeInTheDocument()
-    expect(screen.getByText(/mock step-up form/i)).toBeInTheDocument()
-    expect(updateFrameworkPackageMock).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: /mock verify/i }))
-
     await waitFor(() => {
       expect(updateFrameworkPackageMock).toHaveBeenCalledWith(
         expect.objectContaining({
           packageId: 'pkg-live-2',
-          stepUpToken: 'mock-step-up-token',
         }),
       )
     })
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages')
   })
 
-  it('reopens step-up guidance when the API rejects a save with a step-up error', async () => {
+  it('shows the API error when a save fails', async () => {
     const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
     updateFrameworkPackageMock.mockReturnValue({
       unwrap: () =>
         Promise.reject({
-          status: 403,
+          status: 409,
           data: {
             error: {
-              code: 'STEP_UP_INVALID',
-              message: 'Step-up token expired or invalid.',
-              requestId: 'step-up-expired-1',
+              code: 'CONFLICT',
+              message: 'Framework key and version must be unique.',
+              requestId: 'pkg-conflict-1',
             },
           },
         }),
@@ -181,12 +158,15 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /save changes/i }))
-    await user.click(screen.getByRole('button', { name: /mock verify/i }))
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /verify before saving changes/i })).toBeInTheDocument()
+      expect(addToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Failed to update framework package',
+          description: 'Framework key and version must be unique. (Ref: pkg-conflict-1)',
+          variant: 'error',
+        }),
+      )
     })
-    expect(screen.getByRole('alert')).toHaveTextContent(/step-up token expired or invalid/i)
-    expect(screen.getByRole('alert')).toHaveTextContent(/\(Ref: step-up-expired-1\)/i)
   })
 })

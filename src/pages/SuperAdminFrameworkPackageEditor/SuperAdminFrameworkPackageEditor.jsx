@@ -3,13 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
-import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
-import { StepUpAuthForm } from '../../components/StepUpAuthForm'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
@@ -24,7 +22,6 @@ import {
   useUpdateFrameworkPackageMutation,
 } from '../../store/api/runtimeControlApi.js'
 import {
-  getStepUpErrorSignal,
   normalizeError,
 } from '../../utils/errors.js'
 import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
@@ -218,9 +215,6 @@ function SuperAdminFrameworkPackageEditor() {
   })
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState(0)
-  const [stepUpDialogOpen, setStepUpDialogOpen] = useState(false)
-  const [stepUpToken, setStepUpToken] = useState('')
-  const [stepUpDialogError, setStepUpDialogError] = useState('')
 
   const {
     data: packageResponse,
@@ -324,19 +318,17 @@ function SuperAdminFrameworkPackageEditor() {
     navigate('/super-admin/runtime-control/framework-packages')
   }
 
-  const executeSave = async ({ payload, stepUpToken: nextStepUpToken }) => {
-    setStepUpDialogError('')
-
+  const executeSave = async (payload) => {
     try {
       if (isEditMode) {
-        await updateFrameworkPackage({ packageId, stepUpToken: nextStepUpToken, ...payload }).unwrap()
+        await updateFrameworkPackage({ packageId, ...payload }).unwrap()
         addToast({
           title: 'Framework package updated',
           description: 'Changes were saved successfully.',
           variant: 'success',
         })
       } else {
-        await createFrameworkPackage({ ...payload, stepUpToken: nextStepUpToken }).unwrap()
+        await createFrameworkPackage(payload).unwrap()
         addToast({
           title: 'Framework package created',
           description: `${payload.frameworkKey} ${payload.version} is now available in the catalogue.`,
@@ -344,8 +336,6 @@ function SuperAdminFrameworkPackageEditor() {
         })
       }
 
-      setStepUpDialogOpen(false)
-      setStepUpToken('')
       handleBack()
     } catch (err) {
       const appError = normalizeError(err)
@@ -355,21 +345,6 @@ function SuperAdminFrameworkPackageEditor() {
         setErrors(fieldErrors)
         return
       }
-
-      const stepUpSignal = getStepUpErrorSignal(appError)
-      if (stepUpSignal) {
-        setStepUpToken('')
-        setStepUpDialogOpen(true)
-
-        if (stepUpSignal === 'required') {
-          setStepUpDialogError('Step-up verification is required before saving this framework package.')
-        } else {
-          setStepUpDialogError(appError.message)
-        }
-        return
-      }
-
-      setStepUpDialogOpen(false)
       addToast({
         title: isEditMode ? 'Failed to update framework package' : 'Failed to create framework package',
         description: appError.message,
@@ -393,13 +368,7 @@ function SuperAdminFrameworkPackageEditor() {
       return
     }
 
-    if (!stepUpToken) {
-      setStepUpDialogError('')
-      setStepUpDialogOpen(true)
-      return
-    }
-
-    await executeSave({ payload, stepUpToken })
+    await executeSave(payload)
   }
 
   const pageTitle = isEditMode ? 'Framework Package Editor' : 'Create Framework Package'
@@ -918,62 +887,6 @@ function SuperAdminFrameworkPackageEditor() {
           </Card>
         ) : null}
       </Fieldset>
-
-      <Dialog
-        open={stepUpDialogOpen}
-        onClose={() => {
-          if (isSaving) return
-          setStepUpDialogOpen(false)
-          setStepUpDialogError('')
-        }}
-        size="md"
-      >
-        <Dialog.Header>
-          <h2>{isEditMode ? 'Verify Before Saving Changes' : 'Verify Before Creating Package'}</h2>
-        </Dialog.Header>
-        <Dialog.Body className="super-admin-framework-package-editor__step-up-dialog-body">
-          <p className="super-admin-framework-package-editor__helper">
-            Framework Package save actions require step-up authentication. Re-enter your current password to continue.
-          </p>
-          <StepUpAuthForm
-            submitLabel="Verify To Continue"
-            passwordLabel="Current Super Admin Password"
-            passwordHelperText="Verification is required for create and update package actions."
-            onStepUpComplete={async (token) => {
-              setStepUpToken(token)
-              setStepUpDialogError('')
-
-              const { errors: nextErrors, payload } = validateFrameworkPackageForm(
-                form,
-                existingPackages,
-                packageId,
-                supportedFrameworkKeys,
-              )
-
-              if (Object.keys(nextErrors).length > 0) {
-                setErrors(nextErrors)
-                setStepUpDialogOpen(false)
-                return
-              }
-
-              await executeSave({ payload, stepUpToken: token })
-            }}
-            onError={() => {
-              setStepUpToken('')
-            }}
-            onCancel={() => {
-              if (isSaving) return
-              setStepUpDialogOpen(false)
-              setStepUpDialogError('')
-            }}
-          />
-          {stepUpDialogError ? (
-            <p className="super-admin-framework-package-editor__error" role="alert">
-              {stepUpDialogError}
-            </p>
-          ) : null}
-        </Dialog.Body>
-      </Dialog>
     </section>
   )
 }
