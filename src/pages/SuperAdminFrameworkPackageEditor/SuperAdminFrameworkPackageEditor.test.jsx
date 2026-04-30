@@ -148,6 +148,9 @@ const buildLoadedPackage = () => ({
         },
       ],
       uiContractKey: 'vmf-ui-contract-v1',
+      stateModelKey: null,
+      stateModelVersion: null,
+      stateModelMode: 'INTERNAL',
       availableOutputKeys: [],
       defaultOutputStyles: [],
       allowCustomerOutputDefinitions: false,
@@ -196,6 +199,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
     })
 
+    expect(screen.queryByLabelText(/^state model$/i)).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
     await waitFor(() => {
@@ -227,6 +232,9 @@ describe('SuperAdminFrameworkPackageEditor', () => {
             }),
           ]),
           uiContractKey: 'vmf-ui-contract-v1',
+          stateModelKey: null,
+          stateModelVersion: null,
+          stateModelMode: 'INTERNAL',
         }),
       )
     })

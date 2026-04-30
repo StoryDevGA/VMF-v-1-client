@@ -40,7 +40,6 @@ import {
   FRAMEWORK_PACKAGE_SCOPE_OPTIONS,
   FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS,
   FRAMEWORK_PACKAGE_STATUSES,
-  FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS,
   FRAMEWORK_PACKAGE_TYPE_OPTIONS,
   FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS,
   FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS,
@@ -74,6 +73,9 @@ const SERVER_ERROR_FIELDS = Object.freeze([
   'validationBindings',
   'workflowBindings',
   'uiContractKey',
+  'stateModelKey',
+  'stateModelVersion',
+  'stateModelMode',
   'availableOutputKeys',
   'defaultOutputStyles',
   'artifactRetentionDays',
@@ -929,13 +931,6 @@ function SuperAdminFrameworkPackageEditor() {
                             value={form.executionModel?.mode ?? 'EVENT_DRIVEN'}
                             options={FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS}
                             onChange={(event) => updateExecutionModel(setForm, 'mode', event.target.value)}
-                          />
-                          <Select
-                            id="framework-package-editor-state-model"
-                            label="State Model"
-                            value={form.executionModel?.stateModel ?? 'LIFECYCLE_BASED'}
-                            options={FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS}
-                            onChange={(event) => updateExecutionModel(setForm, 'stateModel', event.target.value)}
                           />
                           <Select
                             id="framework-package-editor-evaluation-mode"

@@ -76,6 +76,11 @@ export const FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS = Object.freeze([
   { value: 'FREEFORM', label: 'Freeform' },
 ])
 
+export const FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES = Object.freeze({
+  INTERNAL: 'INTERNAL',
+  EXTERNAL: 'EXTERNAL',
+})
+
 export const FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS = Object.freeze([
   { value: 'POLICY_DRIVEN', label: 'Policy driven' },
   { value: 'VALIDATION_FIRST', label: 'Validation first' },
@@ -135,6 +140,9 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   validationBindings: Object.freeze([]),
   workflowBindings: Object.freeze([]),
   uiContractKey: '',
+  stateModelKey: '',
+  stateModelVersion: '',
+  stateModelMode: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL,
   availableOutputKeys: '',
   defaultOutputStyles: '',
   allowCustomerOutputDefinitions: false,
@@ -198,6 +206,9 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
     ]),
     uiContractKey: 'vmf-ui-contract-v1',
+    stateModelKey: null,
+    stateModelVersion: null,
+    stateModelMode: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL,
     availableOutputKeys: Object.freeze(['board-summary', 'executive-brief']),
     defaultOutputStyles: Object.freeze(['executive-concise']),
     allowCustomerOutputDefinitions: false,
@@ -358,6 +369,9 @@ export function cloneFrameworkPackage(pkg) {
     validationBindings: (pkg.validationBindings ?? []).map((item) => ({ ...item })),
     workflowBindings: (pkg.workflowBindings ?? []).map((item) => ({ ...item })),
     uiContractKey: String(pkg.uiContractKey ?? '').trim(),
+    stateModelKey: pkg.stateModelKey ?? null,
+    stateModelVersion: pkg.stateModelVersion ?? null,
+    stateModelMode: String(pkg.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
     availableOutputKeys: [...(pkg.availableOutputKeys ?? [])],
     defaultOutputStyles: [...(pkg.defaultOutputStyles ?? [])],
     compatibleWorkflowKeys: [...(pkg.compatibleWorkflowKeys ?? [])],
@@ -685,6 +699,9 @@ export function mapFrameworkPackageToForm(pkg) {
     validationBindings,
     workflowBindings,
     uiContractKey: String(pkg.uiContractKey ?? '').trim(),
+    stateModelKey: String(pkg.stateModelKey ?? '').trim(),
+    stateModelVersion: String(pkg.stateModelVersion ?? '').trim(),
+    stateModelMode: String(pkg.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
     availableOutputKeys: formatKeyList(pkg.availableOutputKeys),
     defaultOutputStyles: formatKeyList(pkg.defaultOutputStyles),
     allowCustomerOutputDefinitions: Boolean(pkg.allowCustomerOutputDefinitions),
@@ -736,6 +753,11 @@ export function validateFrameworkPackageForm(
     notes: binding.notes,
   }))
   const uiContractKey = normalizeKeyToken(formState.uiContractKey)
+  const stateModelKey = normalizeKeyToken(formState.stateModelKey)
+  const stateModelVersion = String(formState.stateModelVersion ?? '').trim()
+  const stateModelMode = String(formState.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL)
+    .trim()
+    .toUpperCase() || FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL
   const availableOutputKeys = parseKeyList(formState.availableOutputKeys)
   const defaultOutputStyles = parseKeyList(formState.defaultOutputStyles)
   const compatibleWorkflowKeys = parseKeyList(formState.compatibleWorkflowKeys)
@@ -810,6 +832,18 @@ export function validateFrameworkPackageForm(
     errors.uiContractKey = 'UI Contract key must use letters, numbers, or hyphens.'
   }
 
+  if (stateModelKey && !KEY_TOKEN_PATTERN.test(stateModelKey)) {
+    errors.stateModelKey = 'State Model key must use letters, numbers, or hyphens.'
+  }
+
+  if (stateModelVersion.length > 50) {
+    errors.stateModelVersion = 'State Model version must be 50 characters or fewer.'
+  }
+
+  if (!Object.values(FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES).includes(stateModelMode)) {
+    errors.stateModelMode = 'State Model mode must be INTERNAL or EXTERNAL.'
+  }
+
   const invalidWorkflowKey = compatibleWorkflowKeys.find((value) => !KEY_TOKEN_PATTERN.test(value))
   if (invalidWorkflowKey) {
     errors.compatibleWorkflowKeys = `Invalid workflow key "${invalidWorkflowKey}". Use letters, numbers, or hyphens.`
@@ -867,6 +901,9 @@ export function validateFrameworkPackageForm(
       validationBindings,
       workflowBindings,
       uiContractKey,
+      stateModelKey: stateModelKey || null,
+      stateModelVersion: stateModelVersion || null,
+      stateModelMode,
       availableOutputKeys,
       defaultOutputStyles,
       allowCustomerOutputDefinitions: Boolean(formState.allowCustomerOutputDefinitions),
