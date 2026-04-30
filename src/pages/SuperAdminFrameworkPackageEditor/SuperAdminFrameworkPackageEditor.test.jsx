@@ -77,6 +77,25 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
       ],
     },
   }),
+  useLazyListRuntimePathsQuery: () => [
+    vi.fn(),
+    {
+      data: {
+        data: [
+          {
+            pathKey: 'framework_state.sections.customer_problem',
+            label: 'Customer Problem Section',
+            status: 'ACTIVE',
+            frameworkKeys: ['VMF'],
+            scope: 'FRAMEWORK_STATE',
+            category: 'SECTION',
+            allowedOperations: ['READ', 'BIND'],
+          },
+        ],
+      },
+      isFetching: false,
+    },
+  ],
   useUpdateFrameworkPackageMutation: () => [updateFrameworkPackageMock, { isLoading: false }],
 }))
 
@@ -98,16 +117,11 @@ const buildLoadedPackage = () => ({
       assignedCustomerIds: [],
       sections: [
         {
-          sectionKey: 'overview',
-          label: 'Overview',
+          sectionKey: 'customer_problem',
+          runtimePath: 'framework_state.sections.customer_problem',
           required: true,
-          displayOrder: 10,
-          visible: true,
-          runtimeEditable: true,
-          includeInSummary: true,
-          dataType: 'STRING',
-          maxLength: 500,
           validationKeys: ['required-sections-check'],
+          notes: '',
         },
       ],
       executionModel: {
@@ -214,8 +228,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
           }),
           sections: expect.arrayContaining([
             expect.objectContaining({
-              sectionKey: 'overview',
-              dataType: 'STRING',
+              sectionKey: 'customer_problem',
+              runtimePath: 'framework_state.sections.customer_problem',
               validationKeys: ['required-sections-check'],
             }),
           ]),
@@ -242,6 +256,37 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('keeps selected runtime path and derived key when adding a package section', async () => {
+    const user = userEvent.setup()
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^sections$/i }))
+    await user.click(screen.getByRole('button', { name: /add section/i }))
+
+    const runtimePathInput = screen.getByRole('combobox', { name: /runtime path/i })
+    await user.click(runtimePathInput)
+    await user.type(runtimePathInput, 'customer')
+    await user.click(await screen.findByRole('option', {
+      name: /framework_state\.sections\.customer_problem/i,
+    }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^section key$/i)).toHaveValue('customer_problem')
+    })
+
+    const saveSectionButton = screen.getByRole('button', { name: /save section/i })
+    await waitFor(() => {
+      expect(saveSectionButton).not.toBeDisabled()
+    })
+    await user.click(saveSectionButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('customer_problem')).toBeInTheDocument()
+      expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/runtime path required/i)).not.toBeInTheDocument()
   })
 
   it('shows the API error when a save fails', async () => {

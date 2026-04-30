@@ -22,7 +22,7 @@ const defaultListResult = {
         name: 'VMF UI Contract',
         status: 'ACTIVE',
         frameworkKeys: ['VMF'],
-        sections: [{ sectionKey: 'customer-problem' }],
+        sections: [{ sectionKey: 'customer_problem' }],
         actions: [{ actionKey: 'SUBMIT_FOR_REVIEW' }],
         updatedAt: '2026-04-29T08:00:00.000Z',
       },
@@ -98,6 +98,25 @@ describe('SuperAdminUiContracts page', () => {
     expect(errors.name).toBe('Name is required.')
     expect(errors.frameworkKeys).toBe('Select at least one framework.')
     expect(errors.sections).toBe('Value must be valid JSON.')
+  })
+
+  it('keeps runtime paths out of UI Contract section presentation rows', () => {
+    const { errors } = validateUIContractForm({
+      ...INITIAL_UI_CONTRACT_FORM,
+      uiContractKey: 'vmf-ui-contract-v2',
+      name: 'VMF UI Contract v2',
+      sectionsJson: JSON.stringify([
+        {
+          sectionKey: 'customer_problem',
+          runtimePath: 'framework_state.sections.customer_problem',
+          label: 'Customer Problem',
+        },
+      ]),
+    })
+
+    expect(errors.sections).toBe(
+      'UI Contract sections must not include runtimePath. Runtime paths belong to Package Sections.',
+    )
   })
 
   it('shows a quiet refresh state instead of skeleton rows after returning from save', () => {

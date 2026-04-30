@@ -40,6 +40,7 @@ function RuntimePathSearchSelect({
   id,
   frameworkKeys = [],
   scope = '',
+  category = '',
   operation = 'READ',
   allowedOperations = null,
   pathPrefix = '',
@@ -81,6 +82,7 @@ function RuntimePathSearchSelect({
     [frameworkKeys],
   )
   const normalizedScope = String(scope ?? '').trim().toUpperCase()
+  const normalizedCategory = String(category ?? '').trim().toUpperCase()
   const normalizedOperations = useMemo(() => {
     if (allowedOperations !== null && allowedOperations !== undefined) {
       return normalizeUpperTokens(allowedOperations)
@@ -132,11 +134,12 @@ function RuntimePathSearchSelect({
         ? { frameworkKeys: normalizedFrameworkKeys.join(',') }
         : {}),
       ...(normalizedScope ? { scope: normalizedScope } : {}),
+      ...(normalizedCategory ? { category: normalizedCategory } : {}),
       ...(queryOperation ? { operation: queryOperation } : {}),
       ...(isProtectedOnly ? { isProtected: 'true' } : {}),
       status: 'ACTIVE',
     })
-  }, [isProtectedOnly, normalizedFrameworkKeys, normalizedScope, queryOperation, triggerSearch])
+  }, [isProtectedOnly, normalizedCategory, normalizedFrameworkKeys, normalizedScope, queryOperation, triggerSearch])
 
   useEffect(() => {
     if (!isOpen || disabled) return undefined

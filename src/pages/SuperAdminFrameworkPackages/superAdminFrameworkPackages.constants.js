@@ -40,14 +40,6 @@ export const FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS = Object.freeze([
   { value: 'RETRY_WITH_BACKOFF', label: 'Retry with backoff' },
 ])
 
-export const FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS = Object.freeze([
-  { value: 'STRING', label: 'Text' },
-  { value: 'NUMBER', label: 'Number' },
-  { value: 'BOOLEAN', label: 'Yes / No' },
-  { value: 'OBJECT', label: 'Object' },
-  { value: 'ARRAY', label: 'List' },
-])
-
 export const FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS = Object.freeze([
   { value: 'ON_SAVE', label: 'On save' },
   { value: 'ON_SUBMIT', label: 'On submit' },
@@ -175,8 +167,10 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     customerAccessMode: 'ALL_CUSTOMERS',
     assignedCustomerIds: Object.freeze([]),
     sections: Object.freeze([
-      Object.freeze({ sectionKey: 'overview', label: 'Overview', required: true, displayOrder: 10, visible: true, runtimeEditable: true, includeInSummary: true }),
-      Object.freeze({ sectionKey: 'value-drivers', label: 'Value Drivers', required: true, displayOrder: 20, visible: true, runtimeEditable: true, includeInSummary: true }),
+      Object.freeze({ sectionKey: 'customer_problem', runtimePath: 'framework_state.sections.customer_problem', required: true, validationKeys: Object.freeze(['required-sections-check']), notes: '' }),
+      Object.freeze({ sectionKey: 'proposed_solution', runtimePath: 'framework_state.sections.proposed_solution', required: true, validationKeys: Object.freeze(['required-sections-check']), notes: '' }),
+      Object.freeze({ sectionKey: 'value_metrics', runtimePath: 'framework_state.sections.value_metrics', required: false, validationKeys: Object.freeze([]), notes: '' }),
+      Object.freeze({ sectionKey: 'proof_points', runtimePath: 'framework_state.sections.proof_points', required: true, validationKeys: Object.freeze(['required-sections-check']), notes: '' }),
     ]),
     runtimeSettings: Object.freeze({
       enablePreviewMode: true,
@@ -223,7 +217,7 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       requiresValidationBeforePublish: true,
     }),
     validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview', 'value-drivers']),
+      requiredSections: Object.freeze(['customer_problem', 'proposed_solution', 'proof_points']),
       publishChecks: Object.freeze(['all-required-sections-complete', 'validation-pass']),
     }),
     updatedAt: '2026-04-08T09:15:00.000Z',
@@ -347,6 +341,8 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
 ])
 
 const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/i
+const SECTION_KEY_PATTERN = /^[a-z][a-z0-9_-]*$/i
+const RUNTIME_PATH_PATTERN = /^\S+$/
 const FRAMEWORK_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
 const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
@@ -418,6 +414,23 @@ function normalizeKeyToken(value) {
     .toLowerCase()
 }
 
+export function normalizeSectionKey(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .toLowerCase()
+}
+
+export function normalizeRuntimePath(value) {
+  return String(value ?? '').trim()
+}
+
+export function deriveSectionKeyFromRuntimePath(runtimePath) {
+  const normalizedRuntimePath = normalizeRuntimePath(runtimePath)
+  const [, sectionKey = ''] = normalizedRuntimePath.match(/framework_state\.sections\.([^.\s]+)$/i) ?? []
+  return normalizeSectionKey(sectionKey)
+}
+
 function parseKeyList(value) {
   return [...new Set(
     String(value ?? '')
@@ -446,10 +459,8 @@ function formatSectionRows(sections) {
     .map((section) => {
       const sectionKey = String(section.sectionKey ?? '').trim()
       if (!sectionKey) return ''
-      const label = String(section.label ?? '').trim()
-      return label && label.toLowerCase() !== sectionKey.replace(/-/g, ' ')
-        ? `${sectionKey}|${label}`
-        : sectionKey
+      const runtimePath = normalizeRuntimePath(section.runtimePath)
+      return runtimePath ? `${sectionKey}|${runtimePath}` : sectionKey
     })
     .filter(Boolean)
     .join('\n')
@@ -458,28 +469,22 @@ function formatSectionRows(sections) {
 function parseSectionRows(value) {
   return String(value ?? '')
     .split(/\n+/)
-    .map((row, index) => {
-      const [rawKey, rawLabel = ''] = row.split('|')
-      const sectionKey = normalizeKeyToken(rawKey)
+    .map((row) => {
+      const [rawKey, rawRuntimePath = ''] = row.split('|')
+      const runtimePath = normalizeRuntimePath(
+        rawRuntimePath
+        || (String(rawKey).includes('.') ? rawKey : `framework_state.sections.${normalizeSectionKey(rawKey)}`),
+      )
+      const sectionKey = normalizeSectionKey(
+        rawRuntimePath ? rawKey : deriveSectionKeyFromRuntimePath(runtimePath),
+      )
       if (!sectionKey) return null
-      const generatedLabel = sectionKey
-        .split('-')
-        .map((word) => word.replace(/^\w/, (character) => character.toUpperCase()))
-        .join(' ')
       return {
         sectionKey,
-        label: String(rawLabel || generatedLabel).trim(),
-        description: '',
+        runtimePath,
         required: true,
-        displayOrder: (index + 1) * 10,
-        visible: true,
-        runtimeEditable: true,
-        includeInSummary: false,
-        helpText: '',
-        placeholder: '',
-        dataType: 'STRING',
-        maxLength: null,
         validationKeys: [],
+        notes: '',
       }
     })
     .filter(Boolean)
@@ -489,32 +494,23 @@ function normalizeSectionRows(sections) {
   if (!Array.isArray(sections)) return []
 
   return sections
-    .map((section, index) => {
-      const sectionKey = normalizeKeyToken(section.sectionKey ?? section.key)
+    .map((section) => {
+      const runtimePath = normalizeRuntimePath(section.runtimePath ?? section.path)
+      const sectionKey = normalizeSectionKey(
+        section.sectionKey
+        ?? section.key
+        ?? deriveSectionKeyFromRuntimePath(runtimePath),
+      )
       if (!sectionKey) return null
-      const generatedLabel = sectionKey
-        .split('-')
-        .map((word) => word.replace(/^\w/, (character) => character.toUpperCase()))
-        .join(' ')
 
       return {
         sectionKey,
-        label: String(section.label || generatedLabel).trim(),
-        description: String(section.description ?? '').trim(),
+        runtimePath,
         required: section.required !== false,
-        displayOrder: Number(section.displayOrder ?? ((index + 1) * 10)),
-        visible: section.visible !== false,
-        runtimeEditable: section.runtimeEditable !== false,
-        includeInSummary: Boolean(section.includeInSummary),
-        helpText: String(section.helpText ?? '').trim(),
-        placeholder: String(section.placeholder ?? '').trim(),
-        dataType: String(section.dataType ?? 'STRING').trim().toUpperCase(),
-        maxLength: section.maxLength === null || section.maxLength === ''
-          ? null
-          : Number(section.maxLength ?? 0),
         validationKeys: Array.isArray(section.validationKeys)
           ? [...new Set(section.validationKeys.map(normalizeKeyToken).filter(Boolean))]
           : parseKeyList(section.validationKeys),
+        notes: String(section.notes ?? '').trim(),
       }
     })
     .filter(Boolean)
@@ -582,10 +578,9 @@ function hasDuplicateBy(items, getKey) {
 }
 
 function validateSectionRows(sections, errors) {
-  const validDataTypes = new Set(FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS.map((option) => option.value))
-  const invalidSection = sections.find((section) => !KEY_TOKEN_PATTERN.test(section.sectionKey))
+  const invalidSection = sections.find((section) => !SECTION_KEY_PATTERN.test(section.sectionKey))
   if (invalidSection) {
-    errors.sections = `Invalid section key "${invalidSection.sectionKey}". Use letters, numbers, or hyphens.`
+    errors.sections = `Invalid section key "${invalidSection.sectionKey}". Use letters, numbers, underscores, or hyphens.`
     return
   }
 
@@ -594,18 +589,20 @@ function validateSectionRows(sections, errors) {
     return
   }
 
-  const invalidDataType = sections.find((section) => !validDataTypes.has(section.dataType))
-  if (invalidDataType) {
-    errors.sections = `Section "${invalidDataType.sectionKey}" has an invalid data type.`
+  const missingRuntimePath = sections.find((section) => !normalizeRuntimePath(section.runtimePath))
+  if (missingRuntimePath) {
+    errors.sections = `Section "${missingRuntimePath.sectionKey}" requires a runtime path.`
     return
   }
 
-  const invalidMaxLength = sections.find((section) =>
-    section.maxLength !== null
-    && (!Number.isInteger(section.maxLength) || section.maxLength < 0 || section.maxLength > 100000),
-  )
-  if (invalidMaxLength) {
-    errors.sections = `Section "${invalidMaxLength.sectionKey}" max length must be between 0 and 100000.`
+  const invalidRuntimePath = sections.find((section) => !RUNTIME_PATH_PATTERN.test(section.runtimePath))
+  if (invalidRuntimePath) {
+    errors.sections = `Section "${invalidRuntimePath.sectionKey}" has an invalid runtime path.`
+    return
+  }
+
+  if (hasDuplicateBy(sections, (section) => section.runtimePath)) {
+    errors.sections = 'Section runtime paths must be unique.'
   }
 }
 

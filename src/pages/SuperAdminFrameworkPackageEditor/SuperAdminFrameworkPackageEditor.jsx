@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
+import { Table } from '../../components/Table'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect'
 import {
   useCreateFrameworkPackageMutation,
   useGetFrameworkPackageQuery,
@@ -38,16 +42,18 @@ import {
   FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS,
   FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS,
   FRAMEWORK_PACKAGE_SCOPE_OPTIONS,
-  FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS,
   FRAMEWORK_PACKAGE_STATUSES,
   FRAMEWORK_PACKAGE_TYPE_OPTIONS,
   FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS,
   FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS,
   FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS,
   INITIAL_FRAMEWORK_PACKAGE_FORM,
+  deriveSectionKeyFromRuntimePath,
   formatFrameworkPackageStatus,
   getFrameworkPackageStatusVariant,
   mapFrameworkPackageToForm,
+  normalizeRuntimePath,
+  normalizeSectionKey,
   validateFrameworkPackageForm,
 } from '../SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 import '../SuperAdminFrameworkPackages/SuperAdminFrameworkPackages.css'
@@ -115,16 +121,13 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
   }
 }
 
-const listToText = (items) => Array.isArray(items) ? items.join('\n') : ''
-
-const textToList = (value) => [
-  ...new Set(
-    String(value ?? '')
-      .split(/[\n,]+/)
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  ),
-]
+const EMPTY_SECTION_DRAFT = Object.freeze({
+  sectionKey: '',
+  runtimePath: '',
+  required: true,
+  validationKeys: Object.freeze([]),
+  notes: '',
+})
 
 const updateRuntimeSetting = (setForm, key, value) => {
   setForm((current) => ({
@@ -143,41 +146,6 @@ const updateExecutionModel = (setForm, key, value) => {
       ...current.executionModel,
       [key]: value,
     },
-  }))
-}
-
-const addSection = (setForm) => {
-  setForm((current) => {
-    const nextIndex = (current.sections ?? []).length + 1
-    const section = {
-      sectionKey: `section-${nextIndex}`,
-      label: `Section ${nextIndex}`,
-      description: '',
-      required: true,
-      displayOrder: nextIndex * 10,
-      visible: true,
-      runtimeEditable: true,
-      includeInSummary: false,
-      helpText: '',
-      placeholder: '',
-      dataType: 'STRING',
-      maxLength: '',
-      validationKeys: [],
-    }
-
-    return {
-      ...current,
-      sections: [...(current.sections ?? []), section],
-    }
-  })
-}
-
-const updateSection = (setForm, index, key, value) => {
-  setForm((current) => ({
-    ...current,
-    sections: (current.sections ?? []).map((section, sectionIndex) =>
-      sectionIndex === index ? { ...section, [key]: value } : section,
-    ),
   }))
 }
 
@@ -338,6 +306,16 @@ function SuperAdminFrameworkPackageEditor() {
   })
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState(0)
+  const [sectionDialog, setSectionDialog] = useState({
+    open: false,
+    index: -1,
+    draft: { ...EMPTY_SECTION_DRAFT },
+  })
+  const sectionDialogRef = useRef({
+    open: false,
+    index: -1,
+    draft: { ...EMPTY_SECTION_DRAFT },
+  })
 
   const {
     data: packageResponse,
@@ -438,6 +416,191 @@ function SuperAdminFrameworkPackageEditor() {
     ],
     [form.frameworkKey, uiContractResponse],
   )
+
+  const closeSectionDialog = () => {
+    const nextDialog = {
+      open: false,
+      index: -1,
+      draft: { ...EMPTY_SECTION_DRAFT },
+    }
+    sectionDialogRef.current = nextDialog
+    setSectionDialog(nextDialog)
+  }
+
+  const openAddSectionDialog = () => {
+    const nextDialog = {
+      open: true,
+      index: -1,
+      draft: { ...EMPTY_SECTION_DRAFT, validationKeys: [] },
+    }
+    sectionDialogRef.current = nextDialog
+    setSectionDialog(nextDialog)
+  }
+
+  const openEditSectionDialog = (section, index) => {
+    const nextDialog = {
+      open: true,
+      index,
+      draft: {
+        ...EMPTY_SECTION_DRAFT,
+        ...section,
+        sectionKey: normalizeSectionKey(section.sectionKey),
+        runtimePath: normalizeRuntimePath(section.runtimePath),
+        required: section.required !== false,
+        validationKeys: Array.isArray(section.validationKeys) ? [...section.validationKeys] : [],
+        notes: String(section.notes ?? '').trim(),
+      },
+    }
+    sectionDialogRef.current = nextDialog
+    setSectionDialog(nextDialog)
+  }
+
+  const updateSectionDraft = (key, value) => {
+    const nextDialog = {
+      ...sectionDialogRef.current,
+      draft: {
+        ...sectionDialogRef.current.draft,
+        [key]: value,
+      },
+    }
+    sectionDialogRef.current = nextDialog
+    setSectionDialog(nextDialog)
+  }
+
+  const applySelectedSectionRuntimePath = (runtimePathValue) => {
+    const runtimePath = normalizeRuntimePath(runtimePathValue)
+    const sectionKey = deriveSectionKeyFromRuntimePath(runtimePath)
+    const nextDialog = {
+      ...sectionDialogRef.current,
+      draft: {
+        ...sectionDialogRef.current.draft,
+        runtimePath,
+        sectionKey: sectionKey || sectionDialogRef.current.draft.sectionKey,
+      },
+    }
+    sectionDialogRef.current = nextDialog
+    setSectionDialog(nextDialog)
+  }
+
+  const handleSectionRuntimePathChange = (selectedRuntimePaths) => {
+    const [runtimePath = ''] = selectedRuntimePaths
+    applySelectedSectionRuntimePath(runtimePath)
+  }
+
+  const handleSectionRuntimePathSelect = (runtimePathRow) => {
+    const runtimePath = normalizeRuntimePath(runtimePathRow?.pathKey)
+    if (!runtimePath) return
+    applySelectedSectionRuntimePath(runtimePath)
+  }
+
+  const handleSaveSection = () => {
+    const currentDialog = sectionDialogRef.current
+    const nextSection = {
+      sectionKey: normalizeSectionKey(currentDialog.draft.sectionKey),
+      runtimePath: normalizeRuntimePath(currentDialog.draft.runtimePath),
+      required: currentDialog.draft.required !== false,
+      validationKeys: Array.isArray(currentDialog.draft.validationKeys)
+        ? currentDialog.draft.validationKeys
+        : [],
+      notes: String(currentDialog.draft.notes ?? '').trim(),
+    }
+    setForm((current) => {
+      const currentSections = current.sections ?? []
+      const nextSections = currentDialog.index >= 0
+        ? currentSections.map((section, index) =>
+            index === currentDialog.index ? nextSection : section,
+          )
+        : [...currentSections, nextSection]
+
+      return {
+        ...current,
+        sections: nextSections,
+      }
+    })
+    setErrors((current) => {
+      const remainingErrors = { ...current }
+      delete remainingErrors.sections
+      delete remainingErrors.sectionsText
+      return remainingErrors
+    })
+    closeSectionDialog()
+  }
+
+  const sectionRows = useMemo(
+    () => (form.sections ?? []).map((section, index) => ({
+      ...section,
+      id: `${section.sectionKey || 'section'}-${index}`,
+      index,
+    })),
+    [form.sections],
+  )
+
+  const sectionColumns = [
+    {
+      key: 'sectionKey',
+      label: 'Section Key',
+      width: '18%',
+      render: (sectionKey) => (
+        <code className="super-admin-framework-package-editor__code-token">
+          {sectionKey || '—'}
+        </code>
+      ),
+    },
+    {
+      key: 'runtimePath',
+      label: 'Runtime Path',
+      width: '42%',
+      render: (runtimePath) => (
+        <span className="super-admin-framework-package-editor__path-token">
+          {runtimePath || 'Runtime path required'}
+        </span>
+      ),
+    },
+    {
+      key: 'required',
+      label: 'Required',
+      width: '12%',
+      render: (required) => (
+        <Badge variant={required !== false ? 'success' : 'neutral'} size="sm" pill>
+          {required !== false ? 'Required' : 'Optional'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'validationKeys',
+      label: 'Validation',
+      width: '14%',
+      render: (validationKeys) => {
+        const count = Array.isArray(validationKeys) ? validationKeys.length : 0
+        return count > 0 ? `${count} key${count === 1 ? '' : 's'}` : 'Future'
+      },
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: '14%',
+      render: (_value, row) => (
+        <div className="super-admin-framework-package-editor__table-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => openEditSectionDialog(row, row.index)}
+          >
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => removeSection(setForm, row.index)}
+          >
+            Remove
+          </Button>
+        </div>
+      ),
+    },
+  ]
 
   useEffect(() => {
     if (isEditMode && loadedPackage) {
@@ -808,106 +971,30 @@ function SuperAdminFrameworkPackageEditor() {
                           {errors.sections || errors.sectionsText}
                         </p>
                       ) : null}
-                      <div className="super-admin-framework-package-editor__section-toolbar">
-                        <Button type="button" variant="outline" size="sm" onClick={() => addSection(setForm)}>
+                      <div className="super-admin-framework-package-editor__toolbar">
+                        <p className="super-admin-framework-package-editor__helper">
+                          Package sections define what exists and where it binds in framework_state. Labels, help text,
+                          placeholders, and display order belong in the selected UI Contract.
+                        </p>
+                        <Button type="button" variant="outline" size="sm" onClick={openAddSectionDialog}>
                           Add Section
                         </Button>
                       </div>
-                      <div className="super-admin-framework-package-editor__row-list">
-                        {(form.sections ?? []).length === 0 ? (
-                          <p className="super-admin-framework-package-editor__helper">
-                            No sections configured yet. Add at least the runtime sections this package should expose.
-                          </p>
-                        ) : null}
-                        {(form.sections ?? []).map((section, index) => (
-                          <div className="super-admin-framework-package-editor__config-row" key={`${section.sectionKey}-${index}`}>
-                            <div className="super-admin-framework-package-editor__row-header">
-                              <h3 className="super-admin-framework-package-editor__row-title">
-                                {section.label || section.sectionKey || `Section ${index + 1}`}
-                              </h3>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => removeSection(setForm, index)}>
-                                Remove
-                              </Button>
-                            </div>
-                            <div className="super-admin-framework-package-editor__field-grid">
-                              <Input
-                                id={`framework-package-editor-section-key-${index}`}
-                                label="Section Key"
-                                value={section.sectionKey}
-                                onChange={(event) => updateSection(setForm, index, 'sectionKey', event.target.value)}
-                                fullWidth
-                              />
-                              <Input
-                                id={`framework-package-editor-section-label-${index}`}
-                                label="Label"
-                                value={section.label}
-                                onChange={(event) => updateSection(setForm, index, 'label', event.target.value)}
-                                fullWidth
-                              />
-                              <Select
-                                id={`framework-package-editor-section-type-${index}`}
-                                label="Data Type"
-                                value={section.dataType ?? 'STRING'}
-                                options={FRAMEWORK_PACKAGE_SECTION_DATA_TYPE_OPTIONS}
-                                onChange={(event) => updateSection(setForm, index, 'dataType', event.target.value)}
-                              />
-                              <Input
-                                id={`framework-package-editor-section-max-length-${index}`}
-                                label="Max Length"
-                                type="number"
-                                value={section.maxLength ?? ''}
-                                onChange={(event) => updateSection(setForm, index, 'maxLength', event.target.value)}
-                                fullWidth
-                              />
-                            </div>
-                            <div className="super-admin-framework-package-editor__option-panel super-admin-framework-package-editor__option-panel--inline">
-                              <Tickbox
-                                id={`framework-package-editor-section-required-${index}`}
-                                label="Required"
-                                checked={section.required !== false}
-                                onChange={(event) => updateSection(setForm, index, 'required', event.target.checked)}
-                              />
-                              <Tickbox
-                                id={`framework-package-editor-section-visible-${index}`}
-                                label="Visible"
-                                checked={section.visible !== false}
-                                onChange={(event) => updateSection(setForm, index, 'visible', event.target.checked)}
-                              />
-                              <Tickbox
-                                id={`framework-package-editor-section-editable-${index}`}
-                                label="Runtime editable"
-                                checked={section.runtimeEditable !== false}
-                                onChange={(event) => updateSection(setForm, index, 'runtimeEditable', event.target.checked)}
-                              />
-                              <Tickbox
-                                id={`framework-package-editor-section-summary-${index}`}
-                                label="Include in summary"
-                                checked={Boolean(section.includeInSummary)}
-                                onChange={(event) => updateSection(setForm, index, 'includeInSummary', event.target.checked)}
-                              />
-                            </div>
-                            <div className="super-admin-framework-package-editor__grid super-admin-framework-package-editor__grid--wide">
-                              <Textarea
-                                id={`framework-package-editor-section-help-${index}`}
-                                label="Help Text"
-                                value={section.helpText ?? ''}
-                                onChange={(event) => updateSection(setForm, index, 'helpText', event.target.value)}
-                                rows={3}
-                                fullWidth
-                              />
-                              <Textarea
-                                id={`framework-package-editor-section-validations-${index}`}
-                                label="Validation Keys"
-                                helperText="Comma or newline separated validation registry keys."
-                                value={listToText(section.validationKeys)}
-                                onChange={(event) => updateSection(setForm, index, 'validationKeys', textToList(event.target.value))}
-                                rows={3}
-                                fullWidth
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <HorizontalScroll
+                        className="super-admin-framework-package-editor__sections-table-wrap"
+                        ariaLabel="Package sections table"
+                        gap="sm"
+                      >
+                        <Table
+                          className="super-admin-framework-package-editor__sections-table"
+                          columns={sectionColumns}
+                          data={sectionRows}
+                          variant="striped"
+                          hoverable
+                          emptyMessage="No sections configured yet. Add the runtime sections this package should expose."
+                          ariaLabel="Package sections"
+                        />
+                      </HorizontalScroll>
                     </div>
                   </TabView.Tab>
 
@@ -1254,6 +1341,81 @@ function SuperAdminFrameworkPackageEditor() {
           </Card>
         ) : null}
       </Fieldset>
+      <Dialog
+        open={sectionDialog.open}
+        onClose={closeSectionDialog}
+        size="lg"
+        className="super-admin-framework-package-editor__section-dialog"
+      >
+        <Dialog.Header>
+          <h2 className="dialog__title">
+            {sectionDialog.index >= 0 ? 'Edit Section' : 'Add Section'}
+          </h2>
+          <p className="dialog__subtitle">
+            Bind a package section to an active framework_state section runtime path. Presentation stays in the UI Contract.
+          </p>
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="super-admin-framework-package-editor__dialog-fields">
+            <RuntimePathSearchSelect
+              id="framework-package-editor-section-runtime-path"
+              label="Runtime Path"
+              frameworkKeys={form.frameworkKey ? [form.frameworkKey] : []}
+              scope="FRAMEWORK_STATE"
+              category="SECTION"
+              operation={null}
+              allowedOperations={['READ', 'BIND']}
+              pathPrefix="framework_state.sections."
+              selectionMode="single"
+              selectedKeys={sectionDialog.draft.runtimePath ? [sectionDialog.draft.runtimePath] : []}
+              onChange={handleSectionRuntimePathChange}
+              onSelect={handleSectionRuntimePathSelect}
+              placeholder="Search section runtime paths"
+              helperText="Only ACTIVE framework_state.sections.* runtime paths in the Runtime Path Registry are selectable."
+            />
+            <Input
+              id="framework-package-editor-section-key"
+              label="Section Key"
+              value={sectionDialog.draft.sectionKey}
+              onChange={(event) => updateSectionDraft('sectionKey', event.target.value)}
+              helperText="Auto-derived from the selected runtime path. Must match the UI Contract section key."
+              fullWidth
+            />
+            <Tickbox
+              id="framework-package-editor-section-required"
+              label="Required"
+              checked={sectionDialog.draft.required !== false}
+              onChange={(event) => updateSectionDraft('required', event.target.checked)}
+            />
+            <Textarea
+              id="framework-package-editor-section-notes"
+              label="Notes"
+              value={sectionDialog.draft.notes ?? ''}
+              onChange={(event) => updateSectionDraft('notes', event.target.value)}
+              helperText="Internal structural notes only. Do not add labels, help text, or placeholder copy here."
+              rows={3}
+              fullWidth
+            />
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button type="button" variant="outline" size="sm" onClick={closeSectionDialog}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={handleSaveSection}
+            disabled={
+              !normalizeSectionKey(sectionDialog.draft.sectionKey)
+              || !normalizeRuntimePath(sectionDialog.draft.runtimePath)
+            }
+          >
+            Save Section
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 }

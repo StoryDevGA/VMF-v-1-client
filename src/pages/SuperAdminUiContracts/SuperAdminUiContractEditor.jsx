@@ -259,7 +259,7 @@ function SuperAdminUiContractEditor() {
                     <UiContractEditorField id="ui-contract-sections" label="Sections JSON" fullWidth>
                       <Textarea
                         id="ui-contract-sections"
-                        helperText="JSON array of section presentation rows."
+                        helperText="JSON array of section presentation rows. Do not include runtimePath; runtime paths are configured in Package Sections."
                         value={form.sectionsJson}
                         onChange={(event) => setForm((current) => ({ ...current, sectionsJson: event.target.value }))}
                         error={errors.sections}

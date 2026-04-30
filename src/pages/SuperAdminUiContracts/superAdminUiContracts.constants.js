@@ -91,6 +91,19 @@ const parseJsonArray = (value, field, errors) => {
 
 const formatJsonArray = (items) => JSON.stringify(Array.isArray(items) ? items : [], null, 2)
 
+const normalizeSectionPresentationRows = (sections = []) =>
+  (Array.isArray(sections) ? sections : []).map((section) => ({
+    sectionKey: String(section.sectionKey ?? '').trim(),
+    label: String(section.label ?? '').trim(),
+    shortLabel: String(section.shortLabel ?? '').trim(),
+    helpText: String(section.helpText ?? '').trim(),
+    placeholder: String(section.placeholder ?? '').trim(),
+    displayOrder: Number(section.displayOrder ?? 0),
+    isVisible: section.isVisible !== false,
+    isEditable: section.isEditable !== false,
+    isRequiredDisplay: Boolean(section.isRequiredDisplay),
+  }))
+
 export const cloneUIContract = (contract = {}) => ({
   id: String(contract.id ?? contract.stableId ?? '').trim(),
   uiContractKey: String(contract.uiContractKey ?? '').trim(),
@@ -102,7 +115,7 @@ export const cloneUIContract = (contract = {}) => ({
   deprecatedInVersion: String(contract.deprecatedInVersion ?? '').trim(),
   compatibilityTags: Array.isArray(contract.compatibilityTags) ? [...contract.compatibilityTags] : [],
   compatibilityMode: String(contract.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-  sections: Array.isArray(contract.sections) ? contract.sections.map((item) => ({ ...item })) : [],
+  sections: normalizeSectionPresentationRows(contract.sections),
   lifecycleStages: Array.isArray(contract.lifecycleStages) ? contract.lifecycleStages.map((item) => ({ ...item })) : [],
   actions: Array.isArray(contract.actions) ? contract.actions.map((item) => ({ ...item })) : [],
   isSystem: Boolean(contract.isSystem),
@@ -125,7 +138,7 @@ export const mapUIContractToForm = (contract = {}) => ({
   deprecatedInVersion: String(contract.deprecatedInVersion ?? '').trim(),
   compatibilityTags: formatList(contract.compatibilityTags),
   compatibilityMode: String(contract.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-  sectionsJson: formatJsonArray(contract.sections),
+  sectionsJson: formatJsonArray(normalizeSectionPresentationRows(contract.sections)),
   lifecycleStagesJson: formatJsonArray(contract.lifecycleStages),
   actionsJson: formatJsonArray(contract.actions),
   isSystem: Boolean(contract.isSystem),
@@ -174,6 +187,8 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
   if (!errors.sections) {
     if (sections.some((section) => !section.sectionKey || !section.label)) {
       errors.sections = 'Each section requires sectionKey and label.'
+    } else if (sections.some((section) => Object.prototype.hasOwnProperty.call(section, 'runtimePath'))) {
+      errors.sections = 'UI Contract sections must not include runtimePath. Runtime paths belong to Package Sections.'
     } else if (duplicate(sections, 'sectionKey')) {
       errors.sections = 'Section keys must be unique.'
     }
@@ -207,7 +222,7 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
       deprecatedInVersion: String(form.deprecatedInVersion ?? '').trim(),
       compatibilityTags: parseList(form.compatibilityTags),
       compatibilityMode: String(form.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-      sections,
+      sections: normalizeSectionPresentationRows(sections),
       lifecycleStages,
       actions,
       isSystem: Boolean(form.isSystem),
@@ -232,24 +247,24 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
     sections: [
       {
         sectionKey: 'customer_problem',
-        runtimePath: 'framework_state.sections.customer_problem',
         label: 'Customer Problem',
         shortLabel: 'Problem',
         helpText: 'Describe the core problem the customer is trying to solve.',
         placeholder: 'Example: Proposal creation is slow, manual, and inconsistent.',
         displayOrder: 10,
         isVisible: true,
+        isEditable: true,
         isRequiredDisplay: true,
       },
       {
         sectionKey: 'proposed_solution',
-        runtimePath: 'framework_state.sections.proposed_solution',
         label: 'Proposed Solution',
         shortLabel: 'Solution',
         helpText: 'Describe how the proposed solution addresses the customer problem.',
         placeholder: 'Example: StorylineOS provides a governed framework workflow...',
         displayOrder: 20,
         isVisible: true,
+        isEditable: true,
         isRequiredDisplay: true,
       },
     ],
