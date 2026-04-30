@@ -24,6 +24,35 @@ vi.mock('../../components/Toaster', () => ({
   useToaster: () => ({ addToast: addToastMock }),
 }))
 
+vi.mock('../../components/CustomerSearchSelect', () => ({
+  default: ({
+    id,
+    label,
+    selectedIds = [],
+    onChange,
+    helperText,
+    error,
+    disabled,
+  }) => (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <input id={id} role="combobox" disabled={disabled} aria-label={label} readOnly />
+      {helperText ? <span>{helperText}</span> : null}
+      {error ? <span role="alert">{error}</span> : null}
+      {selectedIds.map((customerId) => (
+        <span key={customerId}>{customerId === 'cust-acme' ? 'Acme Corp' : customerId}</span>
+      ))}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange(['cust-acme'])}
+      >
+        Select Acme Corp
+      </button>
+    </div>
+  ),
+}))
+
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
@@ -256,6 +285,47 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('assigns selected customers through the customer picker', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.visibility = 'CUSTOMER_VISIBLE'
+    frameworkPackageQueryMock.data.data.customerAccessMode = 'SELECTED_CUSTOMERS'
+    updateFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-live-2' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^access$/i }))
+
+    const customerPicker = screen.getByRole('combobox', { name: /assigned customers/i })
+    await waitFor(() => {
+      expect(customerPicker).not.toBeDisabled()
+    })
+    await user.click(screen.getByRole('button', { name: /select acme corp/i }))
+    await waitFor(() => {
+      expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(updateFrameworkPackageMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageId: 'pkg-live-2',
+          visibility: 'CUSTOMER_VISIBLE',
+          customerAccessMode: 'SELECTED_CUSTOMERS',
+          assignedCustomerIds: ['cust-acme'],
+        }),
+      )
+    })
   })
 
   it('keeps selected runtime path and derived key when adding a package section', async () => {

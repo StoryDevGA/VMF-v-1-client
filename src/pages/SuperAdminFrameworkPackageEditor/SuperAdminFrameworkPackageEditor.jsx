@@ -15,6 +15,7 @@ import { Table } from '../../components/Table'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
+import CustomerSearchSelect from '../../components/CustomerSearchSelect'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect'
 import {
   useCreateFrameworkPackageMutation,
@@ -54,6 +55,8 @@ import {
   mapFrameworkPackageToForm,
   normalizeRuntimePath,
   normalizeSectionKey,
+  parseCustomerIdList,
+  formatCustomerIdList,
   validateFrameworkPackageForm,
 } from '../SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 import '../SuperAdminFrameworkPackages/SuperAdminFrameworkPackages.css'
@@ -603,26 +606,28 @@ function SuperAdminFrameworkPackageEditor() {
   ]
 
   useEffect(() => {
-    if (isEditMode && loadedPackage) {
-      const timeoutId = window.setTimeout(() => {
-        setForm(mapFrameworkPackageToForm(loadedPackage))
-      }, 0)
+    if (!isEditMode || !loadedPackage) return undefined
 
-      return () => window.clearTimeout(timeoutId)
+    const timeoutId = window.setTimeout(() => {
+      setForm(mapFrameworkPackageToForm(loadedPackage))
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isEditMode, loadedPackage])
+
+  useEffect(() => {
+    if (isEditMode || !Array.isArray(registryRows) || registryRows.length === 0) {
+      return undefined
     }
 
-    if (!isEditMode && Array.isArray(registryRows) && registryRows.length > 0) {
-      const timeoutId = window.setTimeout(() => {
-        setForm((current) =>
-          current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
-        )
-      }, 0)
+    const timeoutId = window.setTimeout(() => {
+      setForm((current) =>
+        current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
+      )
+    }, 0)
 
-      return () => window.clearTimeout(timeoutId)
-    }
-
-    return undefined
-  }, [isEditMode, loadedPackage, registryRows])
+    return () => window.clearTimeout(timeoutId)
+  }, [isEditMode, registryRows])
 
   const navigateToFrameworkPackages = (options) => {
     navigate('/super-admin/runtime-control/framework-packages', options)
@@ -689,6 +694,10 @@ function SuperAdminFrameworkPackageEditor() {
   const canAssignCustomers =
     form.visibility === 'CUSTOMER_VISIBLE'
     && form.customerAccessMode === 'SELECTED_CUSTOMERS'
+  const selectedCustomerIds = useMemo(
+    () => parseCustomerIdList(form.assignedCustomerIds),
+    [form.assignedCustomerIds],
+  )
   const tabErrorCounts = {
     access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
     sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
@@ -942,20 +951,21 @@ function SuperAdminFrameworkPackageEditor() {
                           error={errors.customerAccessMode}
                         />
                       </div>
-                      <Textarea
+                      <CustomerSearchSelect
                         id="framework-package-editor-assigned-customers"
-                        label="Assigned Customer IDs"
+                        label="Assigned Customers"
                         helperText={canAssignCustomers
-                          ? 'Required for selected-customer package access.'
+                          ? 'Search and select active customers from the Customer table.'
                           : 'Available only when visibility is customer visible and access is selected customers.'}
-                        value={form.assignedCustomerIds}
-                        onChange={(event) =>
-                          setForm((current) => ({ ...current, assignedCustomerIds: event.target.value }))
+                        selectedIds={selectedCustomerIds}
+                        onChange={(nextCustomerIds) =>
+                          setForm((current) => ({
+                            ...current,
+                            assignedCustomerIds: formatCustomerIdList(nextCustomerIds),
+                          }))
                         }
                         error={errors.assignedCustomerIds}
                         disabled={!canAssignCustomers}
-                        rows={4}
-                        fullWidth
                       />
                     </div>
                   </TabView.Tab>

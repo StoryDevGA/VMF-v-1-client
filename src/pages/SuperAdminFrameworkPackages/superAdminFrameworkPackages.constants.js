@@ -440,13 +440,19 @@ function parseKeyList(value) {
   )]
 }
 
-function parseCustomerIdList(value) {
+export function parseCustomerIdList(value) {
   return [...new Set(
     String(value ?? '')
       .split(/[\n,]+/)
       .map((item) => item.trim())
       .filter(Boolean),
   )]
+}
+
+export function formatCustomerIdList(items) {
+  return Array.isArray(items)
+    ? items.map((item) => String(item ?? '').trim()).filter(Boolean).join('\n')
+    : ''
 }
 
 function formatKeyList(items) {
@@ -660,7 +666,7 @@ export function mapFrameworkPackageToForm(pkg) {
     : (pkg.customerAccessMode ?? 'ALL_CUSTOMERS')
   const assignedCustomerIds =
     visibility === 'CUSTOMER_VISIBLE' && customerAccessMode === 'SELECTED_CUSTOMERS'
-      ? formatKeyList(pkg.assignedCustomerIds)
+      ? formatCustomerIdList(pkg.assignedCustomerIds)
       : ''
 
   const sections = normalizeSectionRows(pkg.sections)
