@@ -105,7 +105,7 @@ function SuperAdminUiContracts() {
     frameworkKey: frameworkKey || undefined,
   })
 
-  const rows = data?.data ?? []
+  const rows = useMemo(() => data?.data ?? [], [data?.data])
   const meta = data?.meta ?? {}
   const appError = error ? normalizeError(error) : null
   const totalPages = Number(meta.totalPages ?? 1)

@@ -36,12 +36,16 @@ export const UI_CONTRACT_FORM_ERROR_FIELDS = Object.freeze([
   'deprecatedInVersion',
   'compatibilityTags',
   'compatibilityMode',
+  'sourcePackageKey',
+  'sourcePackageVersion',
+  'sourceFrameworkKey',
   'sections',
   'lifecycleStages',
   'actions',
 ])
 
 const KEY_PATTERN = /^[a-z][a-z0-9-]*$/
+const FRAMEWORK_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/
 
 export const INITIAL_UI_CONTRACT_FORM = Object.freeze({
@@ -54,16 +58,19 @@ export const INITIAL_UI_CONTRACT_FORM = Object.freeze({
   deprecatedInVersion: '',
   compatibilityTags: 'VMF\n2.3.1',
   compatibilityMode: UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR,
-  sectionsJson: '[]',
-  lifecycleStagesJson: '[]',
-  actionsJson: '[]',
+  sourcePackageKey: '',
+  sourcePackageVersion: '',
+  sourceFrameworkKey: '',
+  sections: Object.freeze([]),
+  lifecycleStages: Object.freeze([]),
+  actions: Object.freeze([]),
   isSystem: false,
   isProtected: false,
   isLocked: false,
   clonedFromStableId: '',
 })
 
-const parseList = (value, { upper = false } = {}) => [
+export const parseUIContractList = (value, { upper = false } = {}) => [
   ...new Set(
     String(value ?? '')
       .split(/[\n,]+/)
@@ -75,34 +82,97 @@ const parseList = (value, { upper = false } = {}) => [
 
 const formatList = (items) => Array.isArray(items) ? items.join('\n') : ''
 
-const parseJsonArray = (value, field, errors) => {
-  try {
-    const parsed = JSON.parse(String(value || '[]'))
-    if (!Array.isArray(parsed)) {
-      errors[field] = 'Value must be a JSON array.'
-      return []
-    }
-    return parsed
-  } catch {
-    errors[field] = 'Value must be valid JSON.'
-    return []
-  }
+export const formatJsonArray = (items) => JSON.stringify(Array.isArray(items) ? items : [], null, 2)
+
+const normalizeNumber = (value, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
-const formatJsonArray = (items) => JSON.stringify(Array.isArray(items) ? items : [], null, 2)
-
-const normalizeSectionPresentationRows = (sections = []) =>
+export const normalizeSectionPresentationRows = (sections = []) =>
   (Array.isArray(sections) ? sections : []).map((section) => ({
     sectionKey: String(section.sectionKey ?? '').trim(),
+    runtimePath: String(section.runtimePath ?? '').trim(),
+    sourcePackageKey: String(section.sourcePackageKey ?? '').trim().toLowerCase(),
     label: String(section.label ?? '').trim(),
     shortLabel: String(section.shortLabel ?? '').trim(),
     helpText: String(section.helpText ?? '').trim(),
     placeholder: String(section.placeholder ?? '').trim(),
-    displayOrder: Number(section.displayOrder ?? 0),
+    displayOrder: normalizeNumber(section.displayOrder, 0),
     isVisible: section.isVisible !== false,
     isEditable: section.isEditable !== false,
     isRequiredDisplay: Boolean(section.isRequiredDisplay),
+    isReadOnlyDisplay: Boolean(section.isReadOnlyDisplay),
+    isCollapsedByDefault: Boolean(section.isCollapsedByDefault),
+    sectionGroup: String(section.sectionGroup ?? '').trim(),
+    iconKey: String(section.iconKey ?? '').trim(),
+    presentationKey: String(section.presentationKey ?? '').trim(),
   }))
+
+export const normalizeLifecycleStageRows = (lifecycleStages = []) =>
+  (Array.isArray(lifecycleStages) ? lifecycleStages : []).map((stage) => ({
+    stageKey: String(stage.stageKey ?? '').trim().toUpperCase(),
+    label: String(stage.label ?? '').trim(),
+    description: String(stage.description ?? '').trim(),
+    badgeLabel: String(stage.badgeLabel ?? '').trim(),
+    displayOrder: normalizeNumber(stage.displayOrder, 0),
+    isVisible: stage.isVisible !== false,
+    badgePresentationKey: String(stage.badgePresentationKey ?? '').trim(),
+  }))
+
+export const normalizeActionRows = (actions = []) =>
+  (Array.isArray(actions) ? actions : []).map((action) => {
+    const actionKey = String(action.actionKey ?? '').trim().toUpperCase()
+    const governedAction = String(action.governedAction ?? actionKey).trim().toUpperCase()
+    return {
+      actionKey,
+      governedAction,
+      buttonLabel: String(action.buttonLabel ?? '').trim(),
+      confirmationTitle: String(action.confirmationTitle ?? '').trim(),
+      confirmationMessage: String(action.confirmationMessage ?? '').trim(),
+      successMessage: String(action.successMessage ?? '').trim(),
+      failureMessage: String(action.failureMessage ?? '').trim(),
+      loadingMessage: String(action.loadingMessage ?? '').trim(),
+      displayOrder: normalizeNumber(action.displayOrder, 0),
+      isVisible: action.isVisible !== false,
+      requiresConfirmation: Boolean(action.requiresConfirmation),
+      presentationKey: String(action.presentationKey ?? '').trim(),
+    }
+  })
+
+export const buildSectionLabelFromKey = (sectionKey = '') =>
+  String(sectionKey || '')
+    .trim()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+
+export const buildDefaultSectionPresentation = ({
+  sectionKey = '',
+  runtimePath = '',
+  sourcePackageKey = '',
+  required = false,
+  displayOrder = 10,
+} = {}) => {
+  const label = buildSectionLabelFromKey(sectionKey)
+  return {
+    sectionKey,
+    runtimePath,
+    sourcePackageKey,
+    label,
+    shortLabel: label,
+    helpText: '',
+    placeholder: label ? `Enter ${label.toLowerCase()}...` : '',
+    displayOrder,
+    isVisible: true,
+    isEditable: true,
+    isRequiredDisplay: Boolean(required),
+    isReadOnlyDisplay: false,
+    isCollapsedByDefault: false,
+    sectionGroup: '',
+    iconKey: '',
+    presentationKey: 'standard-section',
+  }
+}
 
 export const cloneUIContract = (contract = {}) => ({
   id: String(contract.id ?? contract.stableId ?? '').trim(),
@@ -115,9 +185,12 @@ export const cloneUIContract = (contract = {}) => ({
   deprecatedInVersion: String(contract.deprecatedInVersion ?? '').trim(),
   compatibilityTags: Array.isArray(contract.compatibilityTags) ? [...contract.compatibilityTags] : [],
   compatibilityMode: String(contract.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
+  sourcePackageKey: String(contract.sourcePackageKey ?? '').trim().toLowerCase(),
+  sourcePackageVersion: String(contract.sourcePackageVersion ?? '').trim(),
+  sourceFrameworkKey: String(contract.sourceFrameworkKey ?? '').trim().toUpperCase(),
   sections: normalizeSectionPresentationRows(contract.sections),
-  lifecycleStages: Array.isArray(contract.lifecycleStages) ? contract.lifecycleStages.map((item) => ({ ...item })) : [],
-  actions: Array.isArray(contract.actions) ? contract.actions.map((item) => ({ ...item })) : [],
+  lifecycleStages: normalizeLifecycleStageRows(contract.lifecycleStages),
+  actions: normalizeActionRows(contract.actions),
   isSystem: Boolean(contract.isSystem),
   isProtected: Boolean(contract.isProtected),
   isLocked: Boolean(contract.isLocked),
@@ -138,22 +211,52 @@ export const mapUIContractToForm = (contract = {}) => ({
   deprecatedInVersion: String(contract.deprecatedInVersion ?? '').trim(),
   compatibilityTags: formatList(contract.compatibilityTags),
   compatibilityMode: String(contract.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-  sectionsJson: formatJsonArray(normalizeSectionPresentationRows(contract.sections)),
-  lifecycleStagesJson: formatJsonArray(contract.lifecycleStages),
-  actionsJson: formatJsonArray(contract.actions),
+  sourcePackageKey: String(contract.sourcePackageKey ?? '').trim().toLowerCase(),
+  sourcePackageVersion: String(contract.sourcePackageVersion ?? '').trim(),
+  sourceFrameworkKey: String(contract.sourceFrameworkKey ?? '').trim().toUpperCase(),
+  sections: normalizeSectionPresentationRows(contract.sections),
+  lifecycleStages: normalizeLifecycleStageRows(contract.lifecycleStages),
+  actions: normalizeActionRows(contract.actions),
   isSystem: Boolean(contract.isSystem),
   isProtected: Boolean(contract.isProtected),
   isLocked: Boolean(contract.isLocked),
   clonedFromStableId: String(contract.clonedFromStableId ?? '').trim(),
 })
 
+const duplicate = (items, key, { upper = true } = {}) => {
+  const seen = new Set()
+  return items.some((item) => {
+    const raw = String(item?.[key] ?? '').trim()
+    const value = upper ? raw.toUpperCase() : raw.toLowerCase()
+    if (!value) return false
+    if (seen.has(value)) return true
+    seen.add(value)
+    return false
+  })
+}
+
+const duplicateVisibleOrder = (items) => {
+  const seen = new Set()
+  return items.some((item) => {
+    if (item?.isVisible === false) return false
+    const value = String(item?.displayOrder ?? '').trim()
+    if (!value) return false
+    if (seen.has(value)) return true
+    seen.add(value)
+    return false
+  })
+}
+
 export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) => {
   const errors = {}
   const uiContractKey = String(form.uiContractKey ?? '').trim().toLowerCase()
-  const frameworkKeys = parseList(form.frameworkKeys, { upper: true })
-  const sections = parseJsonArray(form.sectionsJson, 'sections', errors)
-  const lifecycleStages = parseJsonArray(form.lifecycleStagesJson, 'lifecycleStages', errors)
-  const actions = parseJsonArray(form.actionsJson, 'actions', errors)
+  const frameworkKeys = parseUIContractList(form.frameworkKeys, { upper: true })
+  const sections = normalizeSectionPresentationRows(form.sections)
+  const lifecycleStages = normalizeLifecycleStageRows(form.lifecycleStages)
+  const actions = normalizeActionRows(form.actions)
+  const sourcePackageKey = String(form.sourcePackageKey ?? '').trim().toLowerCase()
+  const sourcePackageVersion = String(form.sourcePackageVersion ?? '').trim()
+  const sourceFrameworkKey = String(form.sourceFrameworkKey ?? '').trim().toUpperCase()
 
   if (!isEditMode) {
     if (!uiContractKey) {
@@ -166,48 +269,45 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
   if (!String(form.name ?? '').trim()) errors.name = 'Name is required.'
   if (frameworkKeys.length === 0) errors.frameworkKeys = 'Select at least one framework.'
 
-  for (const field of ['introducedInVersion', 'deprecatedInVersion']) {
+  for (const field of ['introducedInVersion', 'deprecatedInVersion', 'sourcePackageVersion']) {
     const value = String(form[field] ?? '').trim()
     if (value && !SEMVER_PATTERN.test(value)) {
       errors[field] = 'Version must use semantic version format.'
     }
   }
 
-  const duplicate = (items, key) => {
-    const seen = new Set()
-    return items.some((item) => {
-      const value = String(item?.[key] ?? '').trim().toUpperCase()
-      if (!value) return false
-      if (seen.has(value)) return true
-      seen.add(value)
-      return false
-    })
+  if (sourcePackageKey && !KEY_PATTERN.test(sourcePackageKey)) {
+    errors.sourcePackageKey = 'Source package key must use lowercase letters, numbers, or hyphens.'
   }
 
-  if (!errors.sections) {
-    if (sections.some((section) => !section.sectionKey || !section.label)) {
-      errors.sections = 'Each section requires sectionKey and label.'
-    } else if (sections.some((section) => Object.prototype.hasOwnProperty.call(section, 'runtimePath'))) {
-      errors.sections = 'UI Contract sections must not include runtimePath. Runtime paths belong to Package Sections.'
-    } else if (duplicate(sections, 'sectionKey')) {
-      errors.sections = 'Section keys must be unique.'
-    }
+  if (sourceFrameworkKey && !FRAMEWORK_KEY_PATTERN.test(sourceFrameworkKey)) {
+    errors.sourceFrameworkKey = 'Source framework key must use uppercase letters, numbers, or underscores.'
   }
 
-  if (!errors.lifecycleStages) {
-    if (lifecycleStages.some((stage) => !stage.stageKey || !stage.label)) {
-      errors.lifecycleStages = 'Each lifecycle stage requires stageKey and label.'
-    } else if (duplicate(lifecycleStages, 'stageKey')) {
-      errors.lifecycleStages = 'Lifecycle stage keys must be unique.'
-    }
+  if (sections.some((section) => !section.sectionKey)) {
+    errors.sections = 'Each section requires a section key.'
+  } else if (sections.some((section) => section.isVisible !== false && !section.label)) {
+    errors.sections = 'Visible sections require a label.'
+  } else if (duplicate(sections, 'sectionKey', { upper: false })) {
+    errors.sections = 'Section keys must be unique.'
+  } else if (duplicateVisibleOrder(sections)) {
+    errors.sections = 'Visible section display order values must be unique.'
   }
 
-  if (!errors.actions) {
-    if (actions.some((action) => !action.actionKey || !action.buttonLabel)) {
-      errors.actions = 'Each action requires actionKey and buttonLabel.'
-    } else if (duplicate(actions, 'actionKey')) {
-      errors.actions = 'Action keys must be unique.'
-    }
+  if (lifecycleStages.some((stage) => !stage.stageKey || !stage.label)) {
+    errors.lifecycleStages = 'Each lifecycle stage requires stageKey and label.'
+  } else if (duplicate(lifecycleStages, 'stageKey')) {
+    errors.lifecycleStages = 'Lifecycle stage keys must be unique.'
+  } else if (duplicateVisibleOrder(lifecycleStages)) {
+    errors.lifecycleStages = 'Visible lifecycle display order values must be unique.'
+  }
+
+  if (actions.some((action) => !action.actionKey || !action.governedAction || !action.buttonLabel)) {
+    errors.actions = 'Each action requires actionKey, governedAction, and buttonLabel.'
+  } else if (duplicate(actions, 'actionKey')) {
+    errors.actions = 'Action keys must be unique.'
+  } else if (duplicateVisibleOrder(actions)) {
+    errors.actions = 'Visible action display order values must be unique.'
   }
 
   return {
@@ -220,9 +320,12 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
       frameworkKeys,
       introducedInVersion: String(form.introducedInVersion ?? '').trim(),
       deprecatedInVersion: String(form.deprecatedInVersion ?? '').trim(),
-      compatibilityTags: parseList(form.compatibilityTags),
+      compatibilityTags: parseUIContractList(form.compatibilityTags),
       compatibilityMode: String(form.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-      sections: normalizeSectionPresentationRows(sections),
+      sourcePackageKey,
+      sourcePackageVersion,
+      sourceFrameworkKey,
+      sections,
       lifecycleStages,
       actions,
       isSystem: Boolean(form.isSystem),
@@ -244,9 +347,14 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
     introducedInVersion: '2.3.1',
     compatibilityTags: ['VMF', '2.3.1'],
     compatibilityMode: UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR,
+    sourcePackageKey: 'vmf-2-3-1',
+    sourcePackageVersion: '2.3.1',
+    sourceFrameworkKey: 'VMF',
     sections: [
       {
         sectionKey: 'customer_problem',
+        runtimePath: 'framework_state.sections.customer_problem',
+        sourcePackageKey: 'vmf-2-3-1',
         label: 'Customer Problem',
         shortLabel: 'Problem',
         helpText: 'Describe the core problem the customer is trying to solve.',
@@ -255,9 +363,15 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
         isVisible: true,
         isEditable: true,
         isRequiredDisplay: true,
+        isReadOnlyDisplay: false,
+        isCollapsedByDefault: false,
+        sectionGroup: 'Core Message',
+        presentationKey: 'standard-section',
       },
       {
         sectionKey: 'proposed_solution',
+        runtimePath: 'framework_state.sections.proposed_solution',
+        sourcePackageKey: 'vmf-2-3-1',
         label: 'Proposed Solution',
         shortLabel: 'Solution',
         helpText: 'Describe how the proposed solution addresses the customer problem.',
@@ -266,15 +380,19 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
         isVisible: true,
         isEditable: true,
         isRequiredDisplay: true,
+        isReadOnlyDisplay: false,
+        isCollapsedByDefault: false,
+        sectionGroup: 'Core Message',
+        presentationKey: 'standard-section',
       },
     ],
     lifecycleStages: [
-      { stageKey: 'DRAFT', label: 'Draft', description: 'The framework is being prepared and can still be edited.', badgeLabel: 'Draft', displayOrder: 10, isVisible: true },
-      { stageKey: 'REVIEW_READY', label: 'Ready for Review', description: 'The framework has been submitted and is ready for review.', badgeLabel: 'Review Ready', displayOrder: 20, isVisible: true },
+      { stageKey: 'DRAFT', label: 'Draft', description: 'The framework is being prepared and can still be edited.', badgeLabel: 'Draft', displayOrder: 10, isVisible: true, badgePresentationKey: 'neutral' },
+      { stageKey: 'REVIEW_READY', label: 'Ready for Review', description: 'The framework has been submitted and is ready for review.', badgeLabel: 'Review Ready', displayOrder: 20, isVisible: true, badgePresentationKey: 'info' },
     ],
     actions: [
-      { actionKey: 'SAVE_DRAFT', buttonLabel: 'Save Draft', confirmationMessage: '', successMessage: 'Draft saved.', failureMessage: 'Draft could not be saved.', displayOrder: 10, isVisible: true, requiresConfirmation: false },
-      { actionKey: 'SUBMIT_FOR_REVIEW', buttonLabel: 'Submit for Review', confirmationMessage: 'Submit this framework for review?', successMessage: 'Framework submitted for review.', failureMessage: 'Framework could not be submitted.', displayOrder: 20, isVisible: true, requiresConfirmation: true },
+      { actionKey: 'SAVE_DRAFT', governedAction: 'SAVE_DRAFT', buttonLabel: 'Save Draft', confirmationTitle: '', confirmationMessage: '', successMessage: 'Draft saved.', failureMessage: 'Draft could not be saved.', loadingMessage: 'Saving draft...', displayOrder: 10, isVisible: true, requiresConfirmation: false, presentationKey: 'secondary-action' },
+      { actionKey: 'SUBMIT_FOR_REVIEW', governedAction: 'SUBMIT_FOR_REVIEW', buttonLabel: 'Submit for Review', confirmationTitle: 'Submit for Review?', confirmationMessage: 'Submit this framework for review?', successMessage: 'Framework submitted for review.', failureMessage: 'Framework could not be submitted.', loadingMessage: 'Submitting framework...', displayOrder: 20, isVisible: true, requiresConfirmation: true, presentationKey: 'primary-action' },
     ],
     isSystem: true,
   }),

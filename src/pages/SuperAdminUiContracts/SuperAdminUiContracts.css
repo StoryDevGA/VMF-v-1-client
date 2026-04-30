@@ -202,6 +202,99 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.super-admin-ui-contracts__subsection,
+.super-admin-ui-contracts__section-header,
+.super-admin-ui-contracts__dialog-body {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.super-admin-ui-contracts__subsection {
+  padding: var(--spacing-md);
+  border: var(--border-width-thin) solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+}
+
+.super-admin-ui-contracts__subsection h3,
+.super-admin-ui-contracts__section-header h3,
+.super-admin-ui-contracts__tab-panel h3 {
+  margin: 0;
+}
+
+.super-admin-ui-contracts__section-header {
+  align-items: start;
+}
+
+.super-admin-ui-contracts__row-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-ui-contracts__table--structured {
+  min-width: 68rem;
+}
+
+.super-admin-ui-contracts__readonly,
+.super-admin-ui-contracts__readonly-grid,
+.super-admin-ui-contracts__dependency-grid {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.super-admin-ui-contracts__readonly {
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+}
+
+.super-admin-ui-contracts__readonly-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.super-admin-ui-contracts__readonly-grid,
+.super-admin-ui-contracts__dependency-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.super-admin-ui-contracts__readonly .super-admin-ui-contracts__key {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.super-admin-ui-contracts__json-preview {
+  max-height: 32rem;
+  margin: 0;
+  overflow: auto;
+  padding: var(--spacing-md);
+  border: var(--border-width-thin) solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+@media (min-width: 768px) {
+  .super-admin-ui-contracts__section-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
 @media (max-width: 767px) {
   .super-admin-ui-contracts__body,
   .super-admin-ui-contracts__card-body {
@@ -223,5 +316,9 @@
 
   .super-admin-ui-contracts__key {
     white-space: normal;
+  }
+
+  .super-admin-ui-contracts__row-buttons {
+    justify-content: flex-start;
   }
 }

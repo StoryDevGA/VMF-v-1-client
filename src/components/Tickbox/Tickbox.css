@@ -5,6 +5,7 @@
  */
 
 .tickbox-container {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -14,12 +15,12 @@
 }
 
 .tickbox-input {
-  /* Hide the native checkbox */
   position: absolute;
+  inset: 0;
   opacity: 0;
   cursor: pointer;
-  height: 0;
-  width: 0;
+  height: 100%;
+  width: 100%;
 }
 
 .tickbox-box {
@@ -105,6 +106,10 @@
 .tickbox-container--disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.tickbox-container--disabled .tickbox-input {
+  cursor: not-allowed;
 }
 
 /* ===========================

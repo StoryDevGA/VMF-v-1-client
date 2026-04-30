@@ -85,38 +85,44 @@ describe('SuperAdminUiContracts page', () => {
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/ui-contract-vmf-ui-contract-v1')
   })
 
-  it('validates required UI Contract fields and JSON arrays', () => {
+  it('validates required UI Contract fields and structured rows', () => {
     const { errors } = validateUIContractForm({
       ...INITIAL_UI_CONTRACT_FORM,
       uiContractKey: '',
       name: '',
       frameworkKeys: '',
-      sectionsJson: '{',
+      sections: [
+        {
+          sectionKey: 'customer_problem',
+          label: '',
+          displayOrder: 10,
+          isVisible: true,
+        },
+      ],
     })
 
     expect(errors.uiContractKey).toBe('UI Contract key is required.')
     expect(errors.name).toBe('Name is required.')
     expect(errors.frameworkKeys).toBe('Select at least one framework.')
-    expect(errors.sections).toBe('Value must be valid JSON.')
+    expect(errors.sections).toBe('Visible sections require a label.')
   })
 
-  it('keeps runtime paths out of UI Contract section presentation rows', () => {
-    const { errors } = validateUIContractForm({
+  it('keeps runtime paths read-only compatible in UI Contract section presentation rows', () => {
+    const { errors, payload } = validateUIContractForm({
       ...INITIAL_UI_CONTRACT_FORM,
       uiContractKey: 'vmf-ui-contract-v2',
       name: 'VMF UI Contract v2',
-      sectionsJson: JSON.stringify([
+      sections: [
         {
           sectionKey: 'customer_problem',
           runtimePath: 'framework_state.sections.customer_problem',
           label: 'Customer Problem',
         },
-      ]),
+      ],
     })
 
-    expect(errors.sections).toBe(
-      'UI Contract sections must not include runtimePath. Runtime paths belong to Package Sections.',
-    )
+    expect(errors.sections).toBeUndefined()
+    expect(payload.sections[0].runtimePath).toBe('framework_state.sections.customer_problem')
   })
 
   it('shows a quiet refresh state instead of skeleton rows after returning from save', () => {
