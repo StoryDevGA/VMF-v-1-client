@@ -121,8 +121,10 @@
 
 .tabview--even-tabs.tabview--horizontal .tabview__tab {
   /* Token-based min width so the row can wrap instead of shrinking infinitely. */
+  /* Editors opt in to wrapped tabs; keep them responsive without forcing full-row stretching. */
   flex: 1 1 calc(var(--spacing-md) * 10);
   min-width: calc(var(--spacing-md) * 10);
+  max-width: clamp(calc(var(--spacing-md) * 10), 28vw, calc(var(--spacing-md) * 16));
   white-space: normal;
 }
 
