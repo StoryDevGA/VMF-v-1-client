@@ -11,6 +11,18 @@ export const UI_CONTRACT_COMPATIBILITY_MODES = Object.freeze({
   OPEN: 'OPEN',
 })
 
+export const UI_CONTRACT_SECTION_SOURCES = Object.freeze({
+  PACKAGE: 'PACKAGE',
+  CUSTOM: 'CUSTOM',
+})
+
+export const UI_CONTRACT_SECTION_MAPPING_STATUSES = Object.freeze({
+  MAPPED: 'MAPPED',
+  MISSING: 'MISSING',
+  ORPHANED: 'ORPHANED',
+  CUSTOM: 'CUSTOM',
+})
+
 export const UI_CONTRACT_PAGE_SIZE = 20
 
 export const UI_CONTRACT_STATUS_OPTIONS = Object.freeze([
@@ -89,25 +101,34 @@ const normalizeNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+export const isCustomSectionPresentation = (section = {}) =>
+  section?.isCustom === true
+  || String(section.source ?? '').trim().toUpperCase() === UI_CONTRACT_SECTION_SOURCES.CUSTOM
+
 export const normalizeSectionPresentationRows = (sections = []) =>
-  (Array.isArray(sections) ? sections : []).map((section) => ({
-    sectionKey: String(section.sectionKey ?? '').trim(),
-    runtimePath: String(section.runtimePath ?? '').trim(),
-    sourcePackageKey: String(section.sourcePackageKey ?? '').trim().toLowerCase(),
-    label: String(section.label ?? '').trim(),
-    shortLabel: String(section.shortLabel ?? '').trim(),
-    helpText: String(section.helpText ?? '').trim(),
-    placeholder: String(section.placeholder ?? '').trim(),
-    displayOrder: normalizeNumber(section.displayOrder, 0),
-    isVisible: section.isVisible !== false,
-    isEditable: section.isEditable !== false,
-    isRequiredDisplay: Boolean(section.isRequiredDisplay),
-    isReadOnlyDisplay: Boolean(section.isReadOnlyDisplay),
-    isCollapsedByDefault: Boolean(section.isCollapsedByDefault),
-    sectionGroup: String(section.sectionGroup ?? '').trim(),
-    iconKey: String(section.iconKey ?? '').trim(),
-    presentationKey: String(section.presentationKey ?? '').trim(),
-  }))
+  (Array.isArray(sections) ? sections : []).map((section) => {
+    const isCustom = isCustomSectionPresentation(section)
+    return {
+      sectionKey: String(section.sectionKey ?? '').trim(),
+      runtimePath: String(section.runtimePath ?? '').trim(),
+      sourcePackageKey: String(section.sourcePackageKey ?? '').trim().toLowerCase(),
+      source: isCustom ? UI_CONTRACT_SECTION_SOURCES.CUSTOM : UI_CONTRACT_SECTION_SOURCES.PACKAGE,
+      isCustom,
+      label: String(section.label ?? '').trim(),
+      shortLabel: String(section.shortLabel ?? '').trim(),
+      helpText: String(section.helpText ?? '').trim(),
+      placeholder: String(section.placeholder ?? '').trim(),
+      displayOrder: normalizeNumber(section.displayOrder, 0),
+      isVisible: section.isVisible !== false,
+      isEditable: section.isEditable !== false,
+      isRequiredDisplay: Boolean(section.isRequiredDisplay),
+      isReadOnlyDisplay: Boolean(section.isReadOnlyDisplay),
+      isCollapsedByDefault: Boolean(section.isCollapsedByDefault),
+      sectionGroup: String(section.sectionGroup ?? '').trim(),
+      iconKey: String(section.iconKey ?? '').trim(),
+      presentationKey: String(section.presentationKey ?? '').trim(),
+    }
+  })
 
 export const normalizeLifecycleStageRows = (lifecycleStages = []) =>
   (Array.isArray(lifecycleStages) ? lifecycleStages : []).map((stage) => ({
@@ -158,6 +179,8 @@ export const buildDefaultSectionPresentation = ({
     sectionKey,
     runtimePath,
     sourcePackageKey,
+    source: UI_CONTRACT_SECTION_SOURCES.PACKAGE,
+    isCustom: false,
     label,
     shortLabel: label,
     helpText: '',
@@ -247,7 +270,82 @@ const duplicateVisibleOrder = (items) => {
   })
 }
 
-export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) => {
+const normalizeNullableVersion = (value) => {
+  const normalized = String(value ?? '').trim()
+  return normalized || null
+}
+
+const normalizePackageSectionKey = (value) => String(value ?? '').trim().toLowerCase()
+const normalizePackageRuntimePath = (value) => String(value ?? '').trim()
+
+const validateSectionMappings = (sections = [], sourcePackage = null) => {
+  const packageBackedSections = sections.filter((section) => !isCustomSectionPresentation(section))
+  if (!sourcePackage) {
+    return packageBackedSections.length > 0
+      ? 'Package-backed UI Contract sections require a source package.'
+      : ''
+  }
+
+  const packageSections = Array.isArray(sourcePackage.sections) ? sourcePackage.sections : []
+  const packageSectionByKey = new Map(
+    packageSections
+      .map((section) => [normalizePackageSectionKey(section?.sectionKey), section])
+      .filter(([sectionKey]) => Boolean(sectionKey)),
+  )
+  const mappedSectionKeys = new Set()
+  const emptyRuntimePathKeys = []
+  const orphanedSectionKeys = []
+  const runtimePathMismatchKeys = []
+
+  packageBackedSections.forEach((section) => {
+    const sectionKey = normalizePackageSectionKey(section.sectionKey)
+    if (!sectionKey) return
+
+    const runtimePath = normalizePackageRuntimePath(section.runtimePath)
+    if (!runtimePath) {
+      emptyRuntimePathKeys.push(sectionKey)
+      return
+    }
+
+    const packageSection = packageSectionByKey.get(sectionKey)
+    if (!packageSection) {
+      orphanedSectionKeys.push(sectionKey)
+      return
+    }
+
+    if (runtimePath !== normalizePackageRuntimePath(packageSection.runtimePath)) {
+      runtimePathMismatchKeys.push(sectionKey)
+      return
+    }
+
+    mappedSectionKeys.add(sectionKey)
+  })
+
+  const missingRequiredSectionKeys = packageSections
+    .filter((section) => section?.required === true)
+    .map((section) => normalizePackageSectionKey(section?.sectionKey))
+    .filter((sectionKey) => sectionKey && !mappedSectionKeys.has(sectionKey))
+
+  if (emptyRuntimePathKeys.length > 0) {
+    return `Package-backed UI Contract sections require runtime paths: ${emptyRuntimePathKeys.join(', ')}.`
+  }
+
+  if (orphanedSectionKeys.length > 0) {
+    return `UI Contract sections must exist in the source package unless marked custom: ${orphanedSectionKeys.join(', ')}.`
+  }
+
+  if (runtimePathMismatchKeys.length > 0) {
+    return `UI Contract section runtime paths must match the source package: ${runtimePathMismatchKeys.join(', ')}.`
+  }
+
+  if (missingRequiredSectionKeys.length > 0) {
+    return `Required package sections must have mapped UI Contract sections: ${missingRequiredSectionKeys.join(', ')}.`
+  }
+
+  return ''
+}
+
+export const validateUIContractForm = (form = {}, { isEditMode = false, sourcePackage = null } = {}) => {
   const errors = {}
   const uiContractKey = String(form.uiContractKey ?? '').trim().toLowerCase()
   const frameworkKeys = parseUIContractList(form.frameworkKeys, { upper: true })
@@ -292,6 +390,9 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
     errors.sections = 'Section keys must be unique.'
   } else if (duplicateVisibleOrder(sections)) {
     errors.sections = 'Visible section display order values must be unique.'
+  } else {
+    const sectionMappingError = validateSectionMappings(sections, sourcePackage)
+    if (sectionMappingError) errors.sections = sectionMappingError
   }
 
   if (lifecycleStages.some((stage) => !stage.stageKey || !stage.label)) {
@@ -318,12 +419,12 @@ export const validateUIContractForm = (form = {}, { isEditMode = false } = {}) =
       description: String(form.description ?? '').trim(),
       status: String(form.status ?? UI_CONTRACT_STATUSES.DRAFT).trim().toUpperCase(),
       frameworkKeys,
-      introducedInVersion: String(form.introducedInVersion ?? '').trim(),
-      deprecatedInVersion: String(form.deprecatedInVersion ?? '').trim(),
+      introducedInVersion: normalizeNullableVersion(form.introducedInVersion),
+      deprecatedInVersion: normalizeNullableVersion(form.deprecatedInVersion),
       compatibilityTags: parseUIContractList(form.compatibilityTags),
       compatibilityMode: String(form.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
       sourcePackageKey,
-      sourcePackageVersion,
+      sourcePackageVersion: normalizeNullableVersion(sourcePackageVersion),
       sourceFrameworkKey,
       sections,
       lifecycleStages,

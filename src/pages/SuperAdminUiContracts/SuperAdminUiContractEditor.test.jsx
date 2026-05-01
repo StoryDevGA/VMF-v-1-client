@@ -89,7 +89,7 @@ describe('SuperAdminUiContractEditor', () => {
     expect(screen.getByText('customer_problem')).toBeInTheDocument()
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
     expect(screen.getByText('Customer Problem')).toBeInTheDocument()
-    expect(screen.getByText('Mapped')).toBeInTheDocument()
+    expect(screen.getByText('MAPPED')).toBeInTheDocument()
   })
 
   it('keeps JSON as read-only inspection output', async () => {

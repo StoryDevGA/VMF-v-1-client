@@ -30,10 +30,13 @@ import {
   INITIAL_UI_CONTRACT_FORM,
   UI_CONTRACT_COMPATIBILITY_MODE_OPTIONS,
   UI_CONTRACT_FORM_ERROR_FIELDS,
+  UI_CONTRACT_SECTION_MAPPING_STATUSES,
+  UI_CONTRACT_SECTION_SOURCES,
   UI_CONTRACT_FORM_STATUS_OPTIONS,
   UI_CONTRACT_STATUSES,
   buildDefaultSectionPresentation,
   buildSectionLabelFromKey,
+  isCustomSectionPresentation,
   mapUIContractToForm,
   normalizeActionRows,
   normalizeLifecycleStageRows,
@@ -47,6 +50,8 @@ const EMPTY_SECTION_DRAFT = Object.freeze({
   sectionKey: '',
   runtimePath: '',
   sourcePackageKey: '',
+  source: UI_CONTRACT_SECTION_SOURCES.CUSTOM,
+  isCustom: true,
   label: '',
   shortLabel: '',
   helpText: '',
@@ -126,15 +131,19 @@ const getNextDisplayOrder = (rows = []) => {
 const toBooleanLabel = (value) => value ? 'Yes' : 'No'
 
 const makeSectionStatus = (section, packageSection) => {
-  if (!packageSection) return 'Orphaned in UI Contract'
-  if (!section?.runtimePath && !packageSection?.runtimePath) return 'Runtime Path Missing'
-  return 'Mapped'
+  if (isCustomSectionPresentation(section)) return UI_CONTRACT_SECTION_MAPPING_STATUSES.CUSTOM
+  if (!packageSection) return UI_CONTRACT_SECTION_MAPPING_STATUSES.ORPHANED
+  if (String(section?.runtimePath || '').trim() !== String(packageSection?.runtimePath || '').trim()) {
+    return UI_CONTRACT_SECTION_MAPPING_STATUSES.ORPHANED
+  }
+  return UI_CONTRACT_SECTION_MAPPING_STATUSES.MAPPED
 }
 
 const getMappingStatusVariant = (status) => {
-  if (status === 'Mapped') return 'success'
-  if (status === 'Missing from UI Contract') return 'warning'
-  if (status === 'Runtime Path Missing') return 'danger'
+  if (status === UI_CONTRACT_SECTION_MAPPING_STATUSES.MAPPED) return 'success'
+  if (status === UI_CONTRACT_SECTION_MAPPING_STATUSES.MISSING) return 'warning'
+  if (status === UI_CONTRACT_SECTION_MAPPING_STATUSES.ORPHANED) return 'danger'
+  if (status === UI_CONTRACT_SECTION_MAPPING_STATUSES.CUSTOM) return 'info'
   return 'neutral'
 }
 
@@ -238,6 +247,7 @@ function SuperAdminUiContractEditor() {
         sourcePackageKey: sourcePackageSelectValue,
         sourcePackageVersion: current.sourcePackageVersion || sourcePackage?.version || '',
         sourceFrameworkKey: current.sourceFrameworkKey || sourcePackage?.frameworkKey || '',
+        introducedInVersion: current.introducedInVersion || sourcePackage?.version || '',
       }
     }), 0)
     return () => window.clearTimeout(timeoutId)
@@ -313,7 +323,7 @@ function SuperAdminUiContractEditor() {
 
     ;(selectedPackage?.sections ?? []).forEach((packageSection) => {
       const sectionKey = String(packageSection?.sectionKey || '').trim()
-      if (!sectionKey || formSections.some((section) => section.sectionKey === sectionKey)) return
+      if (!sectionKey || formSections.some((section) => !isCustomSectionPresentation(section) && section.sectionKey === sectionKey)) return
       rows.push({
         ...buildDefaultSectionPresentation({
           sectionKey,
@@ -324,7 +334,7 @@ function SuperAdminUiContractEditor() {
         }),
         id: `missing-section-${sectionKey}`,
         rowIndex: -1,
-        mappingStatus: 'Missing from UI Contract',
+        mappingStatus: UI_CONTRACT_SECTION_MAPPING_STATUSES.MISSING,
         required: Boolean(packageSection.required),
         packageRuntimePath: packageSection.runtimePath,
       })
@@ -356,9 +366,9 @@ function SuperAdminUiContractEditor() {
     const formForValidation = sourcePackageSelectValue && !form.sourcePackageKey
       ? { ...form, sourcePackageKey: sourcePackageSelectValue }
       : form
-    const { payload } = validateUIContractForm(formForValidation, { isEditMode })
+    const { payload } = validateUIContractForm(formForValidation, { isEditMode, sourcePackage: selectedPackage })
     return JSON.stringify(payload, null, 2)
-  }, [form, isEditMode, sourcePackageSelectValue])
+  }, [form, isEditMode, selectedPackage, sourcePackageSelectValue])
 
   const navigateToUiContracts = (options) => navigate('/super-admin/runtime-control/ui-contracts', options)
   const handleBack = () => navigateToUiContracts()
@@ -370,6 +380,7 @@ function SuperAdminUiContractEditor() {
       sourcePackageKey: packageKey,
       sourcePackageVersion: pkg?.version ?? '',
       sourceFrameworkKey: pkg?.frameworkKey ?? '',
+      introducedInVersion: current.introducedInVersion || pkg?.version || '',
     }))
   }
 
@@ -382,19 +393,43 @@ function SuperAdminUiContractEditor() {
       return
     }
 
+    const packageSectionByCurrentKey = new Map(
+      (selectedPackage.sections ?? [])
+        .map((packageSection) => [String(packageSection?.sectionKey || '').trim(), packageSection])
+        .filter(([sectionKey]) => Boolean(sectionKey)),
+    )
+    const runtimePathConflicts = normalizeSectionPresentationRows(form.sections)
+      .filter((section) => !isCustomSectionPresentation(section))
+      .filter((section) => {
+        const packageSection = packageSectionByCurrentKey.get(section.sectionKey)
+        if (!packageSection) return false
+        const existingRuntimePath = String(section.runtimePath || '').trim()
+        const packageRuntimePath = String(packageSection.runtimePath || '').trim()
+        return existingRuntimePath && packageRuntimePath && existingRuntimePath !== packageRuntimePath
+      })
+      .map((section) => section.sectionKey)
+
     setForm((current) => {
       const sourcePackageKey = getPackageKey(selectedPackage)
       const existingSections = normalizeSectionPresentationRows(current.sections)
-      const existingByKey = new Map(existingSections.map((section) => [section.sectionKey, section]))
+      const existingByKey = new Map(
+        existingSections
+          .filter((section) => !isCustomSectionPresentation(section))
+          .map((section) => [section.sectionKey, section]),
+      )
       let nextDisplayOrder = getNextDisplayOrder(existingSections) - 10
       const syncedSections = (selectedPackage.sections ?? []).map((packageSection) => {
         const sectionKey = String(packageSection?.sectionKey || '').trim()
         const existing = existingByKey.get(sectionKey)
         if (existing) {
+          const packageRuntimePath = String(packageSection.runtimePath || '').trim()
+          const existingRuntimePath = String(existing.runtimePath || '').trim()
           return {
             ...existing,
-            runtimePath: String(packageSection.runtimePath || '').trim(),
+            runtimePath: existingRuntimePath || packageRuntimePath,
             sourcePackageKey,
+            source: UI_CONTRACT_SECTION_SOURCES.PACKAGE,
+            isCustom: false,
             isRequiredDisplay: existing.isRequiredDisplay || Boolean(packageSection.required),
           }
         }
@@ -409,17 +444,25 @@ function SuperAdminUiContractEditor() {
       })
 
       const syncedKeys = new Set(syncedSections.map((section) => section.sectionKey))
-      const orphanedSections = existingSections.filter((section) => !syncedKeys.has(section.sectionKey))
+      const orphanedSections = existingSections.filter((section) =>
+        isCustomSectionPresentation(section) || !syncedKeys.has(section.sectionKey))
 
       return {
         ...current,
         sourcePackageKey,
         sourcePackageVersion: selectedPackage.version ?? '',
         sourceFrameworkKey: selectedPackage.frameworkKey ?? '',
+        introducedInVersion: current.introducedInVersion || selectedPackage.version || '',
         sections: [...syncedSections, ...orphanedSections],
       }
     })
-    setErrors((current) => ({ ...current, sections: undefined, sourcePackageKey: undefined }))
+    setErrors((current) => ({
+      ...current,
+      sourcePackageKey: undefined,
+      sections: runtimePathConflicts.length > 0
+        ? `Runtime path conflicts detected for package sections: ${runtimePathConflicts.join(', ')}.`
+        : undefined,
+    }))
   }
 
   const handleSubmit = async (event) => {
@@ -428,7 +471,7 @@ function SuperAdminUiContractEditor() {
     const formForValidation = sourcePackageSelectValue && !form.sourcePackageKey
       ? { ...form, sourcePackageKey: sourcePackageSelectValue }
       : form
-    const { errors: nextErrors, payload } = validateUIContractForm(formForValidation, { isEditMode })
+    const { errors: nextErrors, payload } = validateUIContractForm(formForValidation, { isEditMode, sourcePackage: selectedPackage })
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       return

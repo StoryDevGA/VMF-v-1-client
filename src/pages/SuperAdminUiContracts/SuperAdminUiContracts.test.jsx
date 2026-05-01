@@ -112,17 +112,92 @@ describe('SuperAdminUiContracts page', () => {
       ...INITIAL_UI_CONTRACT_FORM,
       uiContractKey: 'vmf-ui-contract-v2',
       name: 'VMF UI Contract v2',
+      sourcePackageKey: 'vmf-2-3-1',
+      sourcePackageVersion: '2.3.1',
+      sourceFrameworkKey: 'VMF',
       sections: [
         {
           sectionKey: 'customer_problem',
           runtimePath: 'framework_state.sections.customer_problem',
+          sourcePackageKey: 'vmf-2-3-1',
           label: 'Customer Problem',
+        },
+      ],
+    }, {
+      sourcePackage: {
+        packageKey: 'vmf-2-3-1',
+        frameworkKey: 'VMF',
+        version: '2.3.1',
+        sections: [
+          {
+            sectionKey: 'customer_problem',
+            runtimePath: 'framework_state.sections.customer_problem',
+            required: true,
+          },
+        ],
+      },
+    })
+
+    expect(errors.sections).toBeUndefined()
+    expect(payload.sections[0].runtimePath).toBe('framework_state.sections.customer_problem')
+    expect(payload.sections[0].source).toBe('PACKAGE')
+    expect(payload.sections[0].isCustom).toBe(false)
+  })
+
+  it('blocks orphan package-backed UI Contract sections against the selected package', () => {
+    const { errors } = validateUIContractForm({
+      ...INITIAL_UI_CONTRACT_FORM,
+      uiContractKey: 'vmf-ui-contract-v2',
+      name: 'VMF UI Contract v2',
+      sourcePackageKey: 'vmf-2-3-1',
+      sourcePackageVersion: '2.3.1',
+      sourceFrameworkKey: 'VMF',
+      sections: [
+        {
+          sectionKey: 'overview',
+          runtimePath: 'framework_state.sections.overview',
+          sourcePackageKey: 'vmf-2-3-1',
+          label: 'Overview',
+        },
+      ],
+    }, {
+      sourcePackage: {
+        packageKey: 'vmf-2-3-1',
+        sections: [
+          {
+            sectionKey: 'customer_problem',
+            runtimePath: 'framework_state.sections.customer_problem',
+            required: true,
+          },
+        ],
+      },
+    })
+
+    expect(errors.sections).toBe(
+      'UI Contract sections must exist in the source package unless marked custom: overview.',
+    )
+  })
+
+  it('allows explicitly custom UI Contract sections without runtime paths', () => {
+    const { errors, payload } = validateUIContractForm({
+      ...INITIAL_UI_CONTRACT_FORM,
+      uiContractKey: 'vmf-ui-contract-v2',
+      name: 'VMF UI Contract v2',
+      sections: [
+        {
+          sectionKey: 'overview',
+          source: 'CUSTOM',
+          isCustom: true,
+          label: 'Overview',
         },
       ],
     })
 
     expect(errors.sections).toBeUndefined()
-    expect(payload.sections[0].runtimePath).toBe('framework_state.sections.customer_problem')
+    expect(payload.sections[0].runtimePath).toBe('')
+    expect(payload.sections[0].source).toBe('CUSTOM')
+    expect(payload.sections[0].isCustom).toBe(true)
+    expect(payload.deprecatedInVersion).toBeNull()
   })
 
   it('shows a quiet refresh state instead of skeleton rows after returning from save', () => {
