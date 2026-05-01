@@ -52,6 +52,7 @@ import {
   deriveSectionKeyFromRuntimePath,
   formatFrameworkPackageStatus,
   getFrameworkPackageStatusVariant,
+  hasLegacyFrameworkPackageContractFields,
   mapFrameworkPackageToForm,
   normalizeRuntimePath,
   normalizeSectionKey,
@@ -77,8 +78,6 @@ const SERVER_ERROR_FIELDS = Object.freeze([
   'sectionsText',
   'executionModel',
   'runtimeSettings',
-  'validationConfig',
-  'workflowPolicyConfig',
   'validationBindings',
   'workflowBindings',
   'uiContractKey',
@@ -101,8 +100,6 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
       sections: [],
       runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
       executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
-      validationConfig: [],
-      workflowPolicyConfig: [],
       validationBindings: [],
       workflowBindings: [],
       uiContractKey: '',
@@ -116,8 +113,6 @@ const buildDefaultFrameworkPackageForm = (registryRows) => {
     sections: [],
     runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
     executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
-    validationConfig: [],
-    workflowPolicyConfig: [],
     validationBindings: [],
     workflowBindings: [],
     uiContractKey: '',
@@ -301,8 +296,6 @@ function SuperAdminFrameworkPackageEditor() {
     sections: [],
     executionModel: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel },
     runtimeSettings: { ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings },
-    validationConfig: [],
-    workflowPolicyConfig: [],
     validationBindings: [],
     workflowBindings: [],
     uiContractKey: '',
@@ -374,6 +367,10 @@ function SuperAdminFrameworkPackageEditor() {
   const existingPackages = packageListResponse?.data ?? []
   const loadedPackage = packageResponse?.data ?? null
   const packageAppError = packageError ? normalizeError(packageError) : null
+  const legacyContractFieldsDetected = useMemo(
+    () => isEditMode && hasLegacyFrameworkPackageContractFields(loadedPackage),
+    [isEditMode, loadedPackage],
+  )
 
   const validationOptions = useMemo(
     () =>
@@ -702,8 +699,8 @@ function SuperAdminFrameworkPackageEditor() {
     access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
     sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
     runtime: countErrorsForFields(errors, ['runtimeSettings', 'executionModel', 'uiContractKey']),
-    validation: countErrorsForFields(errors, ['validationConfig', 'validationBindings']),
-    workflows: countErrorsForFields(errors, ['workflowPolicyConfig', 'workflowBindings', 'compatibleWorkflowKeys']),
+    validation: countErrorsForFields(errors, ['validationBindings']),
+    workflows: countErrorsForFields(errors, ['workflowBindings']),
     outputs: countErrorsForFields(errors, ['availableOutputKeys', 'defaultOutputStyles', 'artifactRetentionDays']),
   }
 
@@ -766,6 +763,17 @@ function SuperAdminFrameworkPackageEditor() {
                     Skills and Agents are resolved dependencies, not direct package selections.
                   </p>
                 </div>
+
+                {legacyContractFieldsDetected ? (
+                  <div className="super-admin-framework-package-editor__legacy-warning" role="status" aria-live="polite">
+                    <Badge variant="warning" size="sm" pill outline>
+                      Legacy Contract
+                    </Badge>
+                    <p className="super-admin-framework-package-editor__helper">
+                      This package includes deprecated package-level config. The editor is showing canonical bindings synthesized from that data, and saving will keep only the canonical package contract.
+                    </p>
+                  </div>
+                ) : null}
 
                 <section className="super-admin-framework-package-editor__basic-section" aria-labelledby="framework-package-editor-basic-information">
                   <SectionHeader
@@ -866,7 +874,7 @@ function SuperAdminFrameworkPackageEditor() {
                             setForm((current) => ({ ...current, packageKey: event.target.value }))
                           }
                           error={errors.packageKey}
-                          helperText="Optional. Defaults from framework and version."
+                          helperText="Drafts can default from framework and version; validation requires a package key."
                           fullWidth
                         />
                         <Input
@@ -1133,7 +1141,7 @@ function SuperAdminFrameworkPackageEditor() {
                         ]}
                         onChange={(event) => addValidationBinding(setForm, event.target.value)}
                         helperText="Only ACTIVE, package-usable, framework-compatible validations are shown."
-                        error={errors.validationBindings || errors.validationConfig}
+                        error={errors.validationBindings}
                       />
                       <div className="super-admin-framework-package-editor__row-list">
                         {(form.validationBindings ?? []).length === 0 ? (
@@ -1218,7 +1226,7 @@ function SuperAdminFrameworkPackageEditor() {
                         ]}
                         onChange={(event) => addWorkflowBinding(setForm, event.target.value)}
                         helperText="Only ACTIVE, framework-compatible workflow policies are shown."
-                        error={errors.workflowBindings || errors.workflowPolicyConfig}
+                        error={errors.workflowBindings}
                       />
                       <div className="super-admin-framework-package-editor__row-list">
                         {(form.workflowBindings ?? []).length === 0 ? (

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminFrameworkPackageEditor from '../SuperAdminFrameworkPackageEditor'
@@ -85,12 +85,17 @@ describe('SuperAdminFrameworkPackages page', () => {
       '2.5.0',
     )
     await user.click(screen.getByRole('tab', { name: /^sections$/i }))
-    fireEvent.change(
-      screen.getByLabelText(/section rows/i, {
-        selector: 'textarea#framework-package-editor-sections',
-      }),
-      { target: { value: 'overview|Overview\nvalue-drivers|Value Drivers' } },
-    )
+    await user.click(screen.getByRole('button', { name: /add section/i }))
+    const runtimePathInput = screen.getByRole('combobox', { name: /runtime path/i })
+    await user.click(runtimePathInput)
+    await user.type(runtimePathInput, 'customer')
+    await user.click(await screen.findByRole('option', {
+      name: /framework_state\.sections\.customer_problem/i,
+    }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^section key$/i)).toHaveValue('customer_problem')
+    })
+    await user.click(screen.getByRole('button', { name: /save section/i }))
     await user.click(screen.getByRole('tab', { name: /^outputs$/i }))
     fireEvent.change(
       screen.getByLabelText(/available output keys/i, {

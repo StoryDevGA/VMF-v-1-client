@@ -54,8 +54,10 @@ function renderFrameworkSummary(_value, row) {
   )
 }
 
-function renderCompatibilitySummary(value) {
-  const items = Array.isArray(value) ? value : []
+function renderWorkflowBindingSummary(value) {
+  const items = Array.isArray(value)
+    ? value.map((binding) => binding?.policyKey).filter(Boolean)
+    : []
 
   if (items.length === 0) {
     return '--'
@@ -78,10 +80,15 @@ function renderCompatibilitySummary(value) {
 }
 
 function renderBundleSummary(_value, row) {
+  const sectionCount = Array.isArray(row.sections) ? row.sections.length : 0
+  const validationCount = Array.isArray(row.validationBindings) ? row.validationBindings.length : 0
+  const hasUiContract = Boolean(row.uiContractKey)
+
   return (
     <div className="super-admin-framework-packages__bundle-summary">
-      <span>{row.defaultAgentIds.length} agent{row.defaultAgentIds.length === 1 ? '' : 's'}</span>
-      <span>{row.requiredSkillIds.length} skill{row.requiredSkillIds.length === 1 ? '' : 's'}</span>
+      <span>{sectionCount} section{sectionCount === 1 ? '' : 's'}</span>
+      <span>{validationCount} validation{validationCount === 1 ? '' : 's'}</span>
+      <span>{hasUiContract ? 'UI Contract' : 'No UI Contract'}</span>
     </div>
   )
 }
@@ -160,10 +167,10 @@ export function FrameworkPackageListView({
           ),
       },
       {
-        key: 'compatibleWorkflowKeys',
-        label: 'Workflows',
-        mobileLabel: 'Workflows',
-        render: renderCompatibilitySummary,
+        key: 'workflowBindings',
+        label: 'Policies',
+        mobileLabel: 'Policies',
+        render: renderWorkflowBindingSummary,
       },
       {
         key: 'runtimeBundle',
@@ -214,7 +221,7 @@ export function FrameworkPackageListView({
               label="Search"
               size="sm"
               value={search}
-              placeholder="Search by framework, version, workflow, agent, or skill"
+              placeholder="Search by framework, package, section, validation, workflow, or UI contract"
               onChange={(event) => {
                 setSearch(event.target.value)
                 setPage(1)

@@ -353,22 +353,16 @@ const buildMockRuntimeAgentDependencies = (agentId) => {
   const workflowPolicies = (runtimeControlState.workflowPolicies || []).filter((policy) =>
     Array.isArray(policy.requiredAgentIds) && policy.requiredAgentIds.includes(agentId),
   )
-  const frameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
-    Array.isArray(pkg.defaultAgentIds) && pkg.defaultAgentIds.includes(agentId),
-  )
+  const frameworkPackages = []
 
   const activeWorkflowPolicies = workflowPolicies.filter((policy) => policy.status === 'ACTIVE')
-  const activeFrameworkPackages = frameworkPackages.filter((pkg) => pkg.status === 'ACTIVE')
+  const activeFrameworkPackages = []
 
   const warnings = []
   const blocks = []
 
   if (activeWorkflowPolicies.length > 0) {
     warnings.push(`This Agent is used by ${activeWorkflowPolicies.length} ACTIVE workflow policies.`)
-  }
-
-  if (activeFrameworkPackages.length > 0) {
-    warnings.push(`This Agent is used by ${activeFrameworkPackages.length} ACTIVE framework packages.`)
   }
 
   if (warnings.length > 0) {
@@ -584,10 +578,18 @@ const buildMockValidationRegistryDependencies = (validation) => {
 
   const frameworkPackages = (runtimeControlState.frameworkPackages || [])
     .filter((pkg) => {
-      const requiredSections = pkg?.validationRules?.requiredSections
-      const publishChecks = pkg?.validationRules?.publishChecks
-      return (Array.isArray(requiredSections) && requiredSections.includes(normalizedKey))
-        || (Array.isArray(publishChecks) && publishChecks.includes(normalizedKey))
+      const validationBindingMatch = Array.isArray(pkg?.validationBindings)
+        && pkg.validationBindings.some((binding) =>
+          String(binding?.validationKey ?? '').trim().toLowerCase() === normalizedKey,
+        )
+      const sectionValidationMatch = Array.isArray(pkg?.sections)
+        && pkg.sections.some((section) =>
+          Array.isArray(section?.validationKeys)
+          && section.validationKeys.some((validationKey) =>
+            String(validationKey ?? '').trim().toLowerCase() === normalizedKey,
+          ),
+        )
+      return validationBindingMatch || sectionValidationMatch
     })
     .map((pkg) => ({
       id: pkg.id,
@@ -610,8 +612,10 @@ const buildMockValidationRegistryDependencies = (validation) => {
 const buildMockWorkflowPolicyDependencies = (policy) => {
   const normalizedPolicyKey = String(policy?.key ?? '').trim().toLowerCase()
   const referencedFrameworkPackages = (runtimeControlState.frameworkPackages || []).filter((pkg) =>
-    Array.isArray(pkg.compatibleWorkflowKeys)
-    && pkg.compatibleWorkflowKeys.map((value) => String(value ?? '').trim().toLowerCase()).includes(normalizedPolicyKey),
+    Array.isArray(pkg.workflowBindings)
+    && pkg.workflowBindings.some((binding) =>
+      String(binding?.policyKey ?? '').trim().toLowerCase() === normalizedPolicyKey,
+    ),
   )
   const agentIds = [
     ...new Set([
@@ -1165,10 +1169,9 @@ const getFrameworkPackageRows = ({
         JSON.stringify(pkg.executionModel ?? {}),
         JSON.stringify(pkg.validationBindings ?? []),
         JSON.stringify(pkg.workflowBindings ?? []),
-        JSON.stringify(pkg.uiContract ?? {}),
-        pkg.compatibleWorkflowKeys,
-        pkg.defaultAgentIds,
-        pkg.requiredSkillIds,
+        pkg.uiContractKey,
+        pkg.packageKey,
+        pkg.packageName,
       ])
 
       return matchesStatus && matchesFramework && queryMatches

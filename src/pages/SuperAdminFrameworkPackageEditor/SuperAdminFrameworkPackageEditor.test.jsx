@@ -168,8 +168,6 @@ const buildLoadedPackage = () => ({
         defaultTimeoutMs: 30000,
         maxPolicyExecutionsPerRun: 10,
       },
-      validationConfig: [],
-      workflowPolicyConfig: [],
       validationBindings: [
         {
           validationKey: 'required-sections-check',
@@ -281,10 +279,43 @@ describe('SuperAdminFrameworkPackageEditor', () => {
         }),
       )
     })
+    const savedPayload = updateFrameworkPackageMock.mock.calls[0][0]
+    expect(savedPayload).not.toHaveProperty('validationConfig')
+    expect(savedPayload).not.toHaveProperty('workflowPolicyConfig')
+    expect(savedPayload).not.toHaveProperty('compatibleWorkflowKeys')
+    expect(savedPayload).not.toHaveProperty('defaultAgentIds')
+    expect(savedPayload).not.toHaveProperty('requiredSkillIds')
+    expect(savedPayload).not.toHaveProperty('validationRules')
+    expect(savedPayload).not.toHaveProperty('isDefault')
     expect(navigateMock).toHaveBeenCalledWith(
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('warns when legacy package config is synthesized into canonical bindings', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.validationBindings = []
+    frameworkPackageQueryMock.data.data.workflowBindings = []
+    frameworkPackageQueryMock.data.data.validationConfig = [
+      {
+        validationKey: 'required-sections-check',
+        enabled: true,
+      },
+    ]
+    frameworkPackageQueryMock.data.data.workflowPolicyConfig = [
+      {
+        policyKey: 'vmf-submit-gate',
+        enabled: true,
+        executionOrder: 100,
+      },
+    ]
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByText(/legacy contract/i)).toBeInTheDocument()
+    expect(screen.getByText(/canonical bindings synthesized/i)).toBeInTheDocument()
   })
 
   it('assigns selected customers through the customer picker', async () => {

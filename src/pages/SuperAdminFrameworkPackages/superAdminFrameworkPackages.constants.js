@@ -5,6 +5,11 @@ export const FRAMEWORK_PACKAGE_STATUSES = Object.freeze({
   DEPRECATED: 'DEPRECATED',
 })
 
+const READY_FRAMEWORK_PACKAGE_STATUSES = new Set([
+  FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+  FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
+])
+
 export const FRAMEWORK_PACKAGE_STATUS_OPTIONS = Object.freeze([
   { value: '', label: 'All lifecycle states' },
   { value: FRAMEWORK_PACKAGE_STATUSES.DRAFT, label: 'Draft' },
@@ -127,8 +132,6 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
     defaultTimeoutMs: 30000,
     maxPolicyExecutionsPerRun: 10,
   }),
-  validationConfig: Object.freeze([]),
-  workflowPolicyConfig: Object.freeze([]),
   validationBindings: Object.freeze([]),
   workflowBindings: Object.freeze([]),
   uiContractKey: '',
@@ -140,11 +143,6 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   allowCustomerOutputDefinitions: false,
   artifactRetentionDays: 365,
   allowOutputRevisionHistory: true,
-  compatibleWorkflowKeys: '',
-  defaultAgentIds: '',
-  requiredSkillIds: '',
-  requiredSections: '',
-  publishChecks: '',
   supportsPreviewMode: true,
   supportsFullReport: true,
   requiresValidationBeforePublish: true,
@@ -187,12 +185,6 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       stateModel: 'LIFECYCLE_BASED',
       evaluationMode: 'POLICY_DRIVEN',
     }),
-    validationConfig: Object.freeze([
-      Object.freeze({ validationKey: 'required-sections-check', enabled: true }),
-    ]),
-    workflowPolicyConfig: Object.freeze([
-      Object.freeze({ policyKey: 'vmf-publish', enabled: true, executionOrder: 10 }),
-    ]),
     validationBindings: Object.freeze([
       Object.freeze({ validationKey: 'required-sections-check', trigger: 'ON_SUBMIT', blocking: true, priority: 100, freshnessMinutes: null, enabled: true, notes: '' }),
     ]),
@@ -208,17 +200,10 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     allowCustomerOutputDefinitions: false,
     artifactRetentionDays: 365,
     allowOutputRevisionHistory: true,
-    compatibleWorkflowKeys: Object.freeze(['vmf-baseline', 'vmf-publish']),
-    defaultAgentIds: Object.freeze(['agent-validator']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
     capabilities: Object.freeze({
       supportsPreviewMode: true,
       supportsFullReport: true,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['customer_problem', 'proposed_solution', 'proof_points']),
-      publishChecks: Object.freeze(['all-required-sections-complete', 'validation-pass']),
     }),
     updatedAt: '2026-04-08T09:15:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
@@ -228,20 +213,17 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     frameworkKey: 'VMF',
     frameworkName: 'Value Management Framework',
     version: '2.3.0',
+    packageKey: 'vmf-2-3-0',
     description: 'Validated fallback package retained for rollback review.',
     status: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
     isDefault: false,
-    compatibleWorkflowKeys: Object.freeze(['vmf-baseline', 'vmf-publish']),
-    defaultAgentIds: Object.freeze(['agent-validator']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
     capabilities: Object.freeze({
       supportsPreviewMode: true,
       supportsFullReport: true,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview', 'value-drivers']),
-      publishChecks: Object.freeze(['validation-pass']),
     }),
     updatedAt: '2026-04-07T16:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
@@ -251,20 +233,17 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     frameworkKey: 'VMF',
     frameworkName: 'Value Management Framework',
     version: '2.4.0',
+    packageKey: 'vmf-2-4-0',
     description: 'Draft next-wave VMF package with expanded publish checks.',
     status: FRAMEWORK_PACKAGE_STATUSES.DRAFT,
     isDefault: false,
-    compatibleWorkflowKeys: Object.freeze(['vmf-baseline', 'vmf-publish']),
-    defaultAgentIds: Object.freeze(['agent-validator', 'agent-reporter']),
-    requiredSkillIds: Object.freeze(['skill-snapshot', 'skill-summary']),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
     capabilities: Object.freeze({
       supportsPreviewMode: true,
       supportsFullReport: true,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview', 'value-drivers', 'execution-plan']),
-      publishChecks: Object.freeze(['validation-pass', 'snapshot-current']),
     }),
     updatedAt: '2026-04-06T10:20:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-2', name: 'Release Admin' }),
@@ -274,20 +253,17 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     frameworkKey: 'RLD',
     frameworkName: 'Revenue Lifecycle Design',
     version: '1.1.0',
+    packageKey: 'rld-1-1-0',
     description: 'Current active RLD package for internal rollout.',
     status: FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
     isDefault: true,
-    compatibleWorkflowKeys: Object.freeze(['rld-baseline']),
-    defaultAgentIds: Object.freeze(['agent-validator']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'rld-baseline', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
     capabilities: Object.freeze({
       supportsPreviewMode: false,
       supportsFullReport: true,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview', 'revenue-map']),
-      publishChecks: Object.freeze(['validation-pass']),
     }),
     updatedAt: '2026-04-05T14:45:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-3', name: 'Operations Lead' }),
@@ -297,20 +273,17 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     frameworkKey: 'RLD',
     frameworkName: 'Revenue Lifecycle Design',
     version: '1.2.0',
+    packageKey: 'rld-1-2-0',
     description: 'Validated successor package awaiting activation approval.',
     status: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
     isDefault: false,
-    compatibleWorkflowKeys: Object.freeze(['rld-baseline', 'rld-publish']),
-    defaultAgentIds: Object.freeze(['agent-validator', 'agent-summary']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'rld-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
     capabilities: Object.freeze({
       supportsPreviewMode: true,
       supportsFullReport: true,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview', 'revenue-map', 'go-to-market']),
-      publishChecks: Object.freeze(['validation-pass', 'snapshot-current']),
     }),
     updatedAt: '2026-04-04T11:05:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-3', name: 'Operations Lead' }),
@@ -320,20 +293,17 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
     frameworkKey: 'RLD',
     frameworkName: 'Revenue Lifecycle Design',
     version: '1.0.0',
+    packageKey: 'rld-1-0-0',
     description: 'Deprecated seed package retained for audit and migration planning.',
     status: FRAMEWORK_PACKAGE_STATUSES.DEPRECATED,
     isDefault: false,
-    compatibleWorkflowKeys: Object.freeze(['rld-baseline']),
-    defaultAgentIds: Object.freeze(['agent-validator']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
+    workflowBindings: Object.freeze([
+      Object.freeze({ policyKey: 'rld-baseline', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
+    ]),
     capabilities: Object.freeze({
       supportsPreviewMode: false,
       supportsFullReport: false,
       requiresValidationBeforePublish: true,
-    }),
-    validationRules: Object.freeze({
-      requiredSections: Object.freeze(['overview']),
-      publishChecks: Object.freeze(['validation-pass']),
     }),
     updatedAt: '2026-04-03T08:40:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-2', name: 'Release Admin' }),
@@ -360,8 +330,6 @@ export function cloneFrameworkPackage(pkg) {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings,
       ...(pkg.runtimeSettings ?? {}),
     },
-    validationConfig: (pkg.validationConfig ?? []).map((item) => ({ ...item })),
-    workflowPolicyConfig: (pkg.workflowPolicyConfig ?? []).map((item) => ({ ...item })),
     validationBindings: (pkg.validationBindings ?? []).map((item) => ({ ...item })),
     workflowBindings: (pkg.workflowBindings ?? []).map((item) => ({ ...item })),
     uiContractKey: String(pkg.uiContractKey ?? '').trim(),
@@ -370,15 +338,8 @@ export function cloneFrameworkPackage(pkg) {
     stateModelMode: String(pkg.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
     availableOutputKeys: [...(pkg.availableOutputKeys ?? [])],
     defaultOutputStyles: [...(pkg.defaultOutputStyles ?? [])],
-    compatibleWorkflowKeys: [...(pkg.compatibleWorkflowKeys ?? [])],
-    defaultAgentIds: [...(pkg.defaultAgentIds ?? [])],
-    requiredSkillIds: [...(pkg.requiredSkillIds ?? [])],
     capabilities: {
       ...pkg.capabilities,
-    },
-    validationRules: {
-      requiredSections: [...(pkg.validationRules?.requiredSections ?? [])],
-      publishChecks: [...(pkg.validationRules?.publishChecks ?? [])],
     },
     updatedBy: {
       ...pkg.updatedBy,
@@ -572,6 +533,28 @@ function normalizeWorkflowBindings(bindings, fallbackConfig = []) {
     .filter((binding) => binding.policyKey)
 }
 
+const hasNonEmptyArray = (value) => Array.isArray(value) && value.length > 0
+
+const hasNonEmptyValidationRules = (value) =>
+  Boolean(value && typeof value === 'object')
+  && (
+    hasNonEmptyArray(value.requiredSections)
+    || hasNonEmptyArray(value.publishChecks)
+  )
+
+export function hasLegacyFrameworkPackageContractFields(pkg = {}) {
+  const source = pkg || {}
+
+  return (
+    hasNonEmptyArray(source.validationConfig)
+    || hasNonEmptyArray(source.workflowPolicyConfig)
+    || hasNonEmptyArray(source.compatibleWorkflowKeys)
+    || hasNonEmptyArray(source.defaultAgentIds)
+    || hasNonEmptyArray(source.requiredSkillIds)
+    || hasNonEmptyValidationRules(source.validationRules)
+  )
+}
+
 function hasDuplicateBy(items, getKey) {
   const seen = new Set()
   return items.some((item) => {
@@ -697,8 +680,6 @@ export function mapFrameworkPackageToForm(pkg) {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings,
       ...(pkg.runtimeSettings ?? {}),
     },
-    validationConfig: (pkg.validationConfig ?? []).map((item) => ({ ...item })),
-    workflowPolicyConfig: (pkg.workflowPolicyConfig ?? []).map((item) => ({ ...item })),
     validationBindings,
     workflowBindings,
     uiContractKey: String(pkg.uiContractKey ?? '').trim(),
@@ -710,11 +691,6 @@ export function mapFrameworkPackageToForm(pkg) {
     allowCustomerOutputDefinitions: Boolean(pkg.allowCustomerOutputDefinitions),
     artifactRetentionDays: Number(pkg.artifactRetentionDays ?? 365),
     allowOutputRevisionHistory: pkg.allowOutputRevisionHistory !== false,
-    compatibleWorkflowKeys: formatKeyList(pkg.compatibleWorkflowKeys),
-    defaultAgentIds: formatKeyList(pkg.defaultAgentIds),
-    requiredSkillIds: formatKeyList(pkg.requiredSkillIds),
-    requiredSections: formatKeyList(pkg.validationRules?.requiredSections),
-    publishChecks: formatKeyList(pkg.validationRules?.publishChecks),
     supportsPreviewMode: Boolean(pkg.capabilities?.supportsPreviewMode),
     supportsFullReport: Boolean(pkg.capabilities?.supportsFullReport),
     requiresValidationBeforePublish: Boolean(pkg.capabilities?.requiresValidationBeforePublish),
@@ -740,21 +716,8 @@ export function validateFrameworkPackageForm(
       ? formState.sections
       : parseSectionRows(formState.sectionsText),
   )
-  const validationBindings = normalizeValidationBindings(formState.validationBindings, formState.validationConfig)
-  const workflowBindings = normalizeWorkflowBindings(formState.workflowBindings, formState.workflowPolicyConfig)
-  const validationConfig = validationBindings.map((binding) => ({
-    validationKey: binding.validationKey,
-    enabled: binding.enabled,
-    warningOnlyOverride: binding.blocking ? null : true,
-    freshnessOverrideMinutes: binding.freshnessMinutes,
-    notes: binding.notes,
-  }))
-  const workflowPolicyConfig = workflowBindings.map((binding) => ({
-    policyKey: binding.policyKey,
-    enabled: binding.enabled,
-    executionOrder: binding.priority,
-    notes: binding.notes,
-  }))
+  const validationBindings = normalizeValidationBindings(formState.validationBindings)
+  const workflowBindings = normalizeWorkflowBindings(formState.workflowBindings)
   const uiContractKey = normalizeKeyToken(formState.uiContractKey)
   const stateModelKey = normalizeKeyToken(formState.stateModelKey)
   const stateModelVersion = String(formState.stateModelVersion ?? '').trim()
@@ -763,11 +726,6 @@ export function validateFrameworkPackageForm(
     .toUpperCase() || FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL
   const availableOutputKeys = parseKeyList(formState.availableOutputKeys)
   const defaultOutputStyles = parseKeyList(formState.defaultOutputStyles)
-  const compatibleWorkflowKeys = parseKeyList(formState.compatibleWorkflowKeys)
-  const defaultAgentIds = parseKeyList(formState.defaultAgentIds)
-  const requiredSkillIds = parseKeyList(formState.requiredSkillIds)
-  const requiredSections = parseKeyList(formState.requiredSections)
-  const publishChecks = parseKeyList(formState.publishChecks)
   const status = String(formState.status ?? '').trim() || FRAMEWORK_PACKAGE_STATUSES.DRAFT
   const normalizedCustomerAccessMode = formState.visibility === 'INTERNAL_ONLY'
     ? 'ALL_CUSTOMERS'
@@ -799,6 +757,10 @@ export function validateFrameworkPackageForm(
 
   if (packageKey && !KEY_TOKEN_PATTERN.test(packageKey)) {
     errors.packageKey = 'Package key must use letters, numbers, or hyphens.'
+  }
+
+  if (READY_FRAMEWORK_PACKAGE_STATUSES.has(status) && !packageKey) {
+    errors.packageKey = 'Package key is required before validation.'
   }
 
   if (packageName.length > 160) {
@@ -835,6 +797,10 @@ export function validateFrameworkPackageForm(
     errors.uiContractKey = 'UI Contract key must use letters, numbers, or hyphens.'
   }
 
+  if (READY_FRAMEWORK_PACKAGE_STATUSES.has(status) && sections.length > 0 && !uiContractKey) {
+    errors.uiContractKey = 'UI Contract is required before validation when sections are configured.'
+  }
+
   if (stateModelKey && !KEY_TOKEN_PATTERN.test(stateModelKey)) {
     errors.stateModelKey = 'State Model key must use letters, numbers, or hyphens.'
   }
@@ -845,21 +811,6 @@ export function validateFrameworkPackageForm(
 
   if (!Object.values(FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES).includes(stateModelMode)) {
     errors.stateModelMode = 'State Model mode must be INTERNAL or EXTERNAL.'
-  }
-
-  const invalidWorkflowKey = compatibleWorkflowKeys.find((value) => !KEY_TOKEN_PATTERN.test(value))
-  if (invalidWorkflowKey) {
-    errors.compatibleWorkflowKeys = `Invalid workflow key "${invalidWorkflowKey}". Use letters, numbers, or hyphens.`
-  }
-
-  const invalidAgentId = defaultAgentIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
-  if (invalidAgentId) {
-    errors.defaultAgentIds = `Invalid agent id "${invalidAgentId}". Use letters, numbers, or hyphens.`
-  }
-
-  const invalidSkillId = requiredSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
-  if (invalidSkillId) {
-    errors.requiredSkillIds = `Invalid skill id "${invalidSkillId}". Use letters, numbers, or hyphens.`
   }
 
   const duplicateVersion = existingPackages.find(
@@ -885,7 +836,6 @@ export function validateFrameworkPackageForm(
       derivedFromPackageId: String(formState.derivedFromPackageId ?? '').trim(),
       description,
       status,
-      isDefault: status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
       visibility: formState.visibility,
       customerAccessMode: normalizedCustomerAccessMode,
       assignedCustomerIds: normalizedAssignedCustomerIds,
@@ -899,8 +849,6 @@ export function validateFrameworkPackageForm(
         defaultTimeoutMs: Number(formState.runtimeSettings?.defaultTimeoutMs ?? 0),
         maxPolicyExecutionsPerRun: Number(formState.runtimeSettings?.maxPolicyExecutionsPerRun ?? 1),
       },
-      validationConfig,
-      workflowPolicyConfig,
       validationBindings,
       workflowBindings,
       uiContractKey,
@@ -912,17 +860,10 @@ export function validateFrameworkPackageForm(
       allowCustomerOutputDefinitions: Boolean(formState.allowCustomerOutputDefinitions),
       artifactRetentionDays: Number(formState.artifactRetentionDays ?? 365),
       allowOutputRevisionHistory: Boolean(formState.allowOutputRevisionHistory),
-      compatibleWorkflowKeys,
-      defaultAgentIds,
-      requiredSkillIds,
       capabilities: {
         supportsPreviewMode: Boolean(formState.supportsPreviewMode),
         supportsFullReport: Boolean(formState.supportsFullReport),
         requiresValidationBeforePublish: Boolean(formState.requiresValidationBeforePublish),
-      },
-      validationRules: {
-        requiredSections,
-        publishChecks,
       },
     },
   }

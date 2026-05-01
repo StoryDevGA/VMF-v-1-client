@@ -70,6 +70,15 @@
   flex-wrap: wrap;
 }
 
+.super-admin-framework-package-editor__legacy-warning {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-warning-border);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning-bg) 82%, var(--color-surface));
+}
+
 .super-admin-framework-package-editor__summary-item {
   display: inline-flex;
   align-items: center;
