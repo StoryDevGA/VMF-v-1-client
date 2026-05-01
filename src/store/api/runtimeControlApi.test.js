@@ -18,6 +18,10 @@ import {
   useDisableRuntimePathMutation,
   useDuplicateRuntimePathMutation,
   useGetFrameworkRegistryQuery,
+  useGetFrameworkPackageAuditQuery,
+  useGetFrameworkPackageDependenciesQuery,
+  useGetFrameworkPackageDiffQuery,
+  useGetFrameworkPackageIntegrityQuery,
   useGetFrameworkPackageQuery,
   useGetRuntimeAgentQuery,
   useGetRuntimePathDependenciesQuery,
@@ -72,6 +76,10 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('listFrameworkPackages')
     expect(runtimeControlApi.endpoints).toHaveProperty('createFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackage')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDependencies')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageIntegrity')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageAudit')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDiff')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('activateFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeAgents')
@@ -111,6 +119,10 @@ describe('runtimeControlApi', () => {
     expect(typeof useGetFrameworkRegistryQuery).toBe('function')
     expect(typeof useListFrameworkPackagesQuery).toBe('function')
     expect(typeof useGetFrameworkPackageQuery).toBe('function')
+    expect(typeof useGetFrameworkPackageDependenciesQuery).toBe('function')
+    expect(typeof useGetFrameworkPackageIntegrityQuery).toBe('function')
+    expect(typeof useGetFrameworkPackageAuditQuery).toBe('function')
+    expect(typeof useGetFrameworkPackageDiffQuery).toBe('function')
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
     expect(typeof useGetRuntimeAgentQuery).toBe('function')
     expect(typeof useListRuntimePathsQuery).toBe('function')
@@ -161,6 +173,10 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.listFrameworkPackages.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackage.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getFrameworkPackageDependencies.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getFrameworkPackageIntegrity.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getFrameworkPackageAudit.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getFrameworkPackageDiff.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.activateFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimeAgents.initiate).toBe('function')
@@ -223,6 +239,24 @@ describe('runtimeControlApi', () => {
       buildRuntimeControlDetailRequest('framework-packages', 'pkg-live-2'),
     ).toEqual({
       url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
+    })
+
+    expect(
+      buildRuntimeControlDetailRequest('framework-packages', 'pkg-live-2/dependencies'),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2/dependencies',
+    })
+
+    expect(
+      buildRuntimeControlDetailRequest('framework-packages', 'pkg-live-2/integrity'),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2/integrity',
+    })
+
+    expect(
+      buildRuntimeControlDetailRequest('framework-packages', 'pkg-live-2/diff/2.3.0'),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-live-2/diff/2.3.0',
     })
 
     expect(
@@ -341,6 +375,80 @@ describe('runtimeControlApi', () => {
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
     })
+  })
+
+  it('keeps mock framework package mutations aligned with live deprecated-field rejection', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.9',
+        validationConfig: [],
+      }),
+    )
+
+    expect(createResult.error?.status).toBe(422)
+    expect(createResult.error?.data?.error?.details?.validationConfig).toContain('validationBindings')
+
+    const updateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateFrameworkPackage.initiate({
+        packageId: 'pkg-vmf-240',
+        workflowPolicyConfig: [],
+      }),
+    )
+
+    expect(updateResult.error?.status).toBe(422)
+    expect(updateResult.error?.data?.error?.details?.workflowPolicyConfig).toContain('workflowBindings')
+
+    const getResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate('pkg-vmf-240'),
+    )
+
+    expect(getResult.error).toBeUndefined()
+    expect(getResult.data?.data?.workflowPolicyConfig).toBeUndefined()
+    expect(getResult.data?.data?.validationConfig).toBeUndefined()
+  })
+
+  it('keeps mock framework package integrity aligned with dependency issues', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.8',
+        packageKey: 'vmf-mock-integrity-998',
+        status: 'DRAFT',
+        validationBindings: [
+          {
+            validationKey: 'missing-validation-check',
+            trigger: 'ON_SUBMIT',
+            blocking: true,
+            priority: 100,
+            enabled: true,
+          },
+        ],
+      }),
+    )
+    const packageId = createResult.data?.data?.id
+
+    const integrityResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackageIntegrity.initiate(packageId),
+    )
+
+    expect(integrityResult.error).toBeUndefined()
+    expect(integrityResult.data?.data?.status).toBe('FAIL')
+    expect(integrityResult.data?.data?.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'dependencies.validations',
+          severity: 'FAIL',
+          message: expect.stringContaining('missing-validation-check'),
+        }),
+      ]),
+    )
   })
 
   it('round-trips mock Runtime Path Registry CRUD, duplicate, dependencies, and lifecycle', async () => {

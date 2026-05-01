@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminFrameworkPackageEditor from './SuperAdminFrameworkPackageEditor.jsx'
 
@@ -7,9 +7,59 @@ const navigateMock = vi.fn()
 const addToastMock = vi.fn()
 const createFrameworkPackageMock = vi.fn()
 const updateFrameworkPackageMock = vi.fn()
+const packageIntegrityRefetchMock = vi.fn()
 
 let paramsMock = {}
 let frameworkPackageQueryMock = { data: null, isLoading: false, error: null }
+let frameworkPackageDependenciesQueryMock = {
+  data: {
+    data: {
+      summary: {
+        agents: 1,
+        skills: 1,
+        runtimePaths: 1,
+        validations: 1,
+        workflowPolicies: 1,
+        uiContract: 1,
+      },
+      agents: [],
+      skills: [],
+      runtimePaths: [],
+      validations: [],
+      workflowPolicies: [],
+      uiContract: null,
+    },
+  },
+  isLoading: false,
+  error: null,
+}
+let frameworkPackageIntegrityQueryMock = {
+  data: {
+    data: {
+      status: 'PASS',
+      summary: { pass: 3, warn: 0, fail: 0 },
+      checks: [],
+    },
+  },
+  isFetching: false,
+  error: null,
+  refetch: packageIntegrityRefetchMock,
+}
+let frameworkPackageAuditQueryMock = {
+  data: {
+    data: [
+      {
+        id: 'audit-1',
+        ts: '2026-05-01T12:00:00.000Z',
+        actorUserId: 'qa-user',
+        action: 'FRAMEWORK_PACKAGE_UPDATED',
+        summary: 'Updated framework package.',
+      },
+    ],
+  },
+  isLoading: false,
+  error: null,
+}
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -55,6 +105,9 @@ vi.mock('../../components/CustomerSearchSelect', () => ({
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
+  useGetFrameworkPackageAuditQuery: () => frameworkPackageAuditQueryMock,
+  useGetFrameworkPackageDependenciesQuery: () => frameworkPackageDependenciesQueryMock,
+  useGetFrameworkPackageIntegrityQuery: () => frameworkPackageIntegrityQueryMock,
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
   useListFrameworkPackagesQuery: () => ({ data: { data: [] } }),
   useListFrameworkRegistriesQuery: () => ({
@@ -102,6 +155,16 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
           name: 'VMF UI Contract v1',
           status: 'ACTIVE',
           frameworkKeys: ['VMF'],
+          sourcePackageVersion: '2.3.1',
+          compatibilityMode: 'INHERITED_MINOR',
+          sections: [
+            {
+              sectionKey: 'customer_problem',
+              runtimePath: 'framework_state.sections.customer_problem',
+              source: 'PACKAGE',
+              isCustom: false,
+            },
+          ],
         },
       ],
     },
@@ -189,9 +252,19 @@ const buildLoadedPackage = () => ({
         },
       ],
       uiContractKey: 'vmf-ui-contract-v1',
+      uiContractBinding: {
+        key: 'vmf-ui-contract-v1',
+        version: '2.3.1',
+        status: 'ACTIVE',
+        compatibilityMode: 'INHERITED_MINOR',
+        resolvedAt: '2026-05-01T12:00:00.000Z',
+      },
       stateModelKey: null,
       stateModelVersion: null,
       stateModelMode: 'INTERNAL',
+      stateBindingMode: 'STRICT',
+      statePersistence: 'SESSION',
+      stateContractNotes: '',
       availableOutputKeys: [],
       defaultOutputStyles: [],
       allowCustomerOutputDefinitions: false,
@@ -209,8 +282,58 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     addToastMock.mockClear()
     createFrameworkPackageMock.mockReset()
     updateFrameworkPackageMock.mockReset()
+    packageIntegrityRefetchMock.mockReset()
     paramsMock = {}
     frameworkPackageQueryMock = { data: null, isLoading: false, error: null }
+    frameworkPackageDependenciesQueryMock = {
+      data: {
+        data: {
+          summary: {
+            agents: 1,
+            skills: 1,
+            runtimePaths: 1,
+            validations: 1,
+            workflowPolicies: 1,
+            uiContract: 1,
+          },
+          agents: [],
+          skills: [],
+          runtimePaths: [],
+          validations: [],
+          workflowPolicies: [],
+          uiContract: null,
+        },
+      },
+      isLoading: false,
+      error: null,
+    }
+    frameworkPackageIntegrityQueryMock = {
+      data: {
+        data: {
+          status: 'PASS',
+          summary: { pass: 3, warn: 0, fail: 0 },
+          checks: [],
+        },
+      },
+      isFetching: false,
+      error: null,
+      refetch: packageIntegrityRefetchMock,
+    }
+    frameworkPackageAuditQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'audit-1',
+            ts: '2026-05-01T12:00:00.000Z',
+            actorUserId: 'qa-user',
+            action: 'FRAMEWORK_PACKAGE_UPDATED',
+            summary: 'Updated framework package.',
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    }
   })
 
   it('marks tab labels when validation errors live inside tab panels', async () => {
@@ -276,6 +399,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
           stateModelKey: null,
           stateModelVersion: null,
           stateModelMode: 'INTERNAL',
+          stateBindingMode: 'STRICT',
+          statePersistence: 'SESSION',
         }),
       )
     })
@@ -388,6 +513,103 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
     })
     expect(screen.queryByText(/runtime path required/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the final governed package editor tab set without editable agent or skill tabs', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('tab', { name: /^access$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^sections$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^runtime$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^validation$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^workflows$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^outputs$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^ui contract$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^state contract$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^dependencies$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^integrity$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^audit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^json \/ diff$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /^agents$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /^skills$/i })).not.toBeInTheDocument()
+  })
+
+  it('uses the shared paginated table pattern for resolved dependency rows', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageDependenciesQueryMock = {
+      data: {
+        data: {
+          summary: {
+            agents: 0,
+            skills: 0,
+            runtimePaths: 6,
+            validations: 0,
+            workflowPolicies: 0,
+            uiContract: 0,
+          },
+          agents: [],
+          skills: [],
+          runtimePaths: Array.from({ length: 6 }, (_, index) => ({
+            id: `runtime-path-${index + 1}`,
+            key: `framework_state.sections.extra_${index + 1}`,
+            name: `Extra Runtime Path ${index + 1}`,
+            status: 'ACTIVE',
+            issues: [],
+          })),
+          validations: [],
+          workflowPolicies: [],
+          uiContract: null,
+        },
+      },
+      isLoading: false,
+      error: null,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^dependencies$/i }))
+
+    expect(screen.getByRole('table', { name: /framework package dependencies/i })).toBeInTheDocument()
+    expect(screen.getByText('Extra Runtime Path 1')).toBeInTheDocument()
+    expect(screen.queryByText('Extra Runtime Path 6')).not.toBeInTheDocument()
+
+    const pagination = screen.getByRole('navigation', {
+      name: /framework package dependencies pagination/i,
+    })
+    expect(screen.getByLabelText(/dependency summary/i)).toHaveClass(
+      'super-admin-framework-package-editor__summary-chip-row',
+    )
+    expect(within(pagination).getByText('Page 1 of 2')).toBeInTheDocument()
+
+    await user.click(within(pagination).getByRole('button', { name: /^next$/i }))
+
+    expect(screen.getByText('Extra Runtime Path 6')).toBeInTheDocument()
+    expect(within(pagination).getByText('Page 2 of 2')).toBeInTheDocument()
+  })
+
+  it('requires external state contracts to provide a key and version', async () => {
+    const user = userEvent.setup()
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^state contract$/i }))
+    await user.selectOptions(screen.getByRole('combobox', { name: /^state model mode$/i }), 'EXTERNAL')
+    await user.click(screen.getByRole('button', { name: /create framework package/i }))
+
+    expect(screen.getByText(/state model key is required when state model mode is external/i)).toBeInTheDocument()
+    expect(screen.getByText(/state model version is required when state model mode is external/i)).toBeInTheDocument()
   })
 
   it('shows the API error when a save fails', async () => {

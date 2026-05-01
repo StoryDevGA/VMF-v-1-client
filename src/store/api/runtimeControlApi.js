@@ -1,6 +1,8 @@
 import { baseApi } from './baseApi.js'
 import {
   cloneFrameworkPackage,
+  DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES,
+  DEPRECATED_FRAMEWORK_PACKAGE_FIELDS,
   FRAMEWORK_PACKAGE_PAGE_SIZE,
   FRAMEWORK_PACKAGE_STATUSES,
   INITIAL_FRAMEWORK_PACKAGES,
@@ -324,6 +326,20 @@ const buildNotFoundError = (message) => ({
     },
   },
 })
+
+const validateMockDeprecatedFrameworkPackageFields = (payload = {}) => {
+  const details = {}
+
+  for (const field of DEPRECATED_FRAMEWORK_PACKAGE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(payload, field)) continue
+
+    details[field] = DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES[field]
+  }
+
+  return Object.keys(details).length > 0
+    ? buildValidationFailedError('Please check the form for errors.', details)
+    : null
+}
 
 const buildAuditFields = (timestamp = new Date().toISOString()) => ({
   updatedAt: timestamp,
@@ -1587,6 +1603,357 @@ const findRuntimePathByPathKey = (pathKey) => {
   )
 }
 
+const getPackageValidationKeys = (pkg = {}) => [
+  ...new Set([
+    ...(Array.isArray(pkg.validationBindings)
+      ? pkg.validationBindings.map((binding) => binding?.validationKey)
+      : []),
+    ...(Array.isArray(pkg.sections)
+      ? pkg.sections.flatMap((section) => Array.isArray(section?.validationKeys) ? section.validationKeys : [])
+      : []),
+  ].map((value) => String(value ?? '').trim().toLowerCase()).filter(Boolean)),
+]
+
+const getPackageWorkflowPolicyKeys = (pkg = {}) => [
+  ...new Set((Array.isArray(pkg.workflowBindings) ? pkg.workflowBindings : [])
+    .map((binding) => String(binding?.policyKey ?? '').trim().toLowerCase())
+    .filter(Boolean)),
+]
+
+const buildMockDependencyRow = ({
+  id,
+  key,
+  name,
+  status = 'UNKNOWN',
+  source = 'PACKAGE',
+  frameworkCompatible = true,
+  issues = [],
+  ...rest
+}) => ({
+  id: id || key || '',
+  key: key || id || '',
+  name: name || key || id || '',
+  status,
+  source,
+  frameworkCompatible,
+  issues,
+  ...rest,
+})
+
+const buildMockFrameworkPackageDependencies = (pkg) => {
+  const frameworkKey = normalizeFrameworkKey(pkg?.frameworkKey)
+  const validationKeys = getPackageValidationKeys(pkg)
+  const workflowPolicyKeys = getPackageWorkflowPolicyKeys(pkg)
+  const validations = validationKeys.map((validationKey) => {
+    const row = (runtimeControlState.validationRegistry || []).find((entry) => entry.key === validationKey)
+    const issues = []
+    if (!row) issues.push(`Validation "${validationKey}" was not found.`)
+    else {
+      if (row.status !== 'ACTIVE') issues.push('Validation must be ACTIVE.')
+      if (row.packageUsable === false) issues.push('Validation must be package-usable.')
+      if (!(row.supportedFrameworkKeys || []).includes(frameworkKey)) {
+        issues.push(`Validation is not compatible with framework "${frameworkKey}".`)
+      }
+    }
+    return buildMockDependencyRow({
+      id: row?.id || validationKey,
+      key: row?.key || validationKey,
+      name: row?.label || validationKey,
+      status: row?.status || 'MISSING',
+      source: 'validationBindings',
+      frameworkCompatible: issues.length === 0,
+      issues,
+      outputPath: row?.outputPath || '',
+      producerSkillId: row?.producerSkillId || '',
+    })
+  })
+
+  const workflowPolicies = workflowPolicyKeys.map((policyKey) => {
+    const row = (runtimeControlState.workflowPolicies || []).find((entry) => entry.key === policyKey)
+    const issues = []
+    if (!row) issues.push(`Workflow policy "${policyKey}" was not found.`)
+    else {
+      if (row.status !== 'ACTIVE') issues.push('Workflow policy must be ACTIVE.')
+      if (!(row.frameworkKeys || []).includes(frameworkKey)) {
+        issues.push(`Workflow policy is not compatible with framework "${frameworkKey}".`)
+      }
+    }
+    return buildMockDependencyRow({
+      id: row?.id || policyKey,
+      key: row?.key || policyKey,
+      name: row?.name || policyKey,
+      status: row?.status || 'MISSING',
+      source: 'workflowBindings',
+      frameworkCompatible: issues.length === 0,
+      issues,
+    })
+  })
+
+  const workflowRows = workflowPolicyKeys
+    .map((policyKey) => (runtimeControlState.workflowPolicies || []).find((entry) => entry.key === policyKey))
+    .filter(Boolean)
+  const validationRows = validationKeys
+    .map((validationKey) => (runtimeControlState.validationRegistry || []).find((entry) => entry.key === validationKey))
+    .filter(Boolean)
+  const agentIds = [
+    ...new Set([
+      ...workflowRows.flatMap((policy) => [
+        policy.primaryAgentId,
+        policy.fallbackAgentId,
+        ...(Array.isArray(policy.requiredAgentIds) ? policy.requiredAgentIds : []),
+      ]),
+      ...validationRows.flatMap((validation) =>
+        Array.isArray(validation.defaultAgentIds) ? validation.defaultAgentIds : []),
+    ].map((value) => String(value ?? '').trim()).filter(Boolean)),
+  ]
+  const agents = agentIds.map((agentId) => {
+    const row = findRuntimeAgentById(agentId)
+    const issues = []
+    if (!row) issues.push(`Runtime Agent "${agentId}" was not found.`)
+    else if (!(row.supportedFrameworkKeys || []).includes(frameworkKey)) {
+      issues.push(`Runtime Agent is not compatible with framework "${frameworkKey}".`)
+    }
+    return buildMockDependencyRow({
+      id: row?.id || agentId,
+      key: row?.key || agentId,
+      name: row?.name || agentId,
+      status: row?.status || 'MISSING',
+      source: 'workflow/validation',
+      frameworkCompatible: issues.length === 0,
+      issues,
+    })
+  })
+
+  const agentRows = agentIds.map((agentId) => findRuntimeAgentById(agentId)).filter(Boolean)
+  const skillIds = [
+    ...new Set([
+      ...workflowRows.flatMap((policy) => Array.isArray(policy.requiredSkillIds) ? policy.requiredSkillIds : []),
+      ...validationRows.map((validation) => validation.producerSkillId),
+      ...agentRows.flatMap((agent) => [
+        ...(Array.isArray(agent.defaultSkillIds) ? agent.defaultSkillIds : []),
+        ...(Array.isArray(agent.primarySkillIds) ? agent.primarySkillIds : []),
+        ...(Array.isArray(agent.optionalSkillIds) ? agent.optionalSkillIds : []),
+        ...(Array.isArray(agent.executionPlan) ? agent.executionPlan.map((step) => step?.skillId) : []),
+      ]),
+    ].map((value) => String(value ?? '').trim()).filter(Boolean)),
+  ]
+  const skills = skillIds.map((skillId) => {
+    const row = findRuntimeSkillById(skillId)
+    const issues = []
+    if (!row) issues.push(`Runtime Skill "${skillId}" was not found.`)
+    else if (!(row.supportedFrameworkKeys || []).includes(frameworkKey)) {
+      issues.push(`Runtime Skill is not compatible with framework "${frameworkKey}".`)
+    }
+    return buildMockDependencyRow({
+      id: row?.id || skillId,
+      key: row?.key || skillId,
+      name: row?.name || skillId,
+      status: row?.status || 'MISSING',
+      source: 'workflow/validation/agent',
+      frameworkCompatible: issues.length === 0,
+      issues,
+      skillRoleKey: row?.skillRoleKey || '',
+      category: row?.category || '',
+    })
+  })
+
+  const sectionRuntimePaths = (pkg.sections || []).map((section) => section.runtimePath).filter(Boolean)
+  const validationRuntimePaths = validationRows.flatMap((validation) => [
+    validation.outputPath,
+    validation.passFieldPath,
+    validation.detailsFieldPath,
+  ])
+  const workflowRuntimePaths = workflowRows.flatMap((policy) => [
+    ...(Array.isArray(policy.conditions) ? policy.conditions.map((condition) => condition?.path) : []),
+    ...(Array.isArray(policy.onPassEffects) ? policy.onPassEffects.map((effect) => effect?.targetPath) : []),
+    ...(Array.isArray(policy.onFailEffects) ? policy.onFailEffects.map((effect) => effect?.targetPath) : []),
+  ])
+  const runtimePathKeys = [
+    ...new Set([...sectionRuntimePaths, ...validationRuntimePaths, ...workflowRuntimePaths]
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean)),
+  ]
+  const runtimePaths = runtimePathKeys.map((pathKey) => {
+    const row = findRuntimePathByPathKey(pathKey)
+    const issues = []
+    if (!row) issues.push(`Runtime path "${pathKey}" was not found.`)
+    else if (row.status !== 'ACTIVE') issues.push('Runtime path must be ACTIVE.')
+    return buildMockDependencyRow({
+      id: row?.id || pathKey,
+      key: row?.pathKey || pathKey,
+      name: row?.label || pathKey,
+      status: row?.status || 'MISSING',
+      source: sectionRuntimePaths.includes(pathKey)
+        ? 'sections'
+        : validationRuntimePaths.includes(pathKey)
+          ? 'validation'
+          : 'workflow',
+      frameworkCompatible: issues.length === 0,
+      issues,
+      scope: row?.scope || '',
+      category: row?.category || '',
+      isProtected: Boolean(row?.isProtected),
+    })
+  })
+
+  const uiContractRow = pkg.uiContractKey ? findUIContractById(pkg.uiContractKey) : null
+  const uiContract = pkg.uiContractKey
+    ? buildMockDependencyRow({
+        id: uiContractRow?.id || pkg.uiContractKey,
+        key: uiContractRow?.uiContractKey || pkg.uiContractKey,
+        name: uiContractRow?.name || pkg.uiContractKey,
+        status: uiContractRow?.status || 'MISSING',
+        source: 'uiContractKey',
+        frameworkCompatible: Boolean(uiContractRow && (uiContractRow.frameworkKeys || []).includes(frameworkKey)),
+        issues: uiContractRow ? [] : [`UI Contract "${pkg.uiContractKey}" was not found.`],
+        version: uiContractRow?.sourcePackageVersion || uiContractRow?.introducedInVersion || '',
+        compatibilityMode: uiContractRow?.compatibilityMode || '',
+      })
+    : null
+
+  const allRows = [
+    ...agents,
+    ...skills,
+    ...runtimePaths,
+    ...validations,
+    ...workflowPolicies,
+    ...(uiContract ? [uiContract] : []),
+  ]
+
+  return {
+    id: pkg.id,
+    frameworkKey,
+    packageKey: pkg.packageKey || '',
+    summary: {
+      agents: agents.length,
+      skills: skills.length,
+      runtimePaths: runtimePaths.length,
+      validations: validations.length,
+      workflowPolicies: workflowPolicies.length,
+      uiContract: uiContract ? 1 : 0,
+      issues: allRows.reduce((count, row) => count + (Array.isArray(row.issues) ? row.issues.length : 0), 0),
+    },
+    agents,
+    skills,
+    runtimePaths,
+    validations,
+    workflowPolicies,
+    uiContract,
+  }
+}
+
+const buildMockDependencyResolutionIntegrityChecks = (dependencies = {}) => {
+  const dependencyGroups = [
+    { key: 'agents', label: 'Resolved Agents', field: 'workflowBindings' },
+    { key: 'skills', label: 'Resolved Skills', field: 'workflowBindings' },
+    { key: 'runtimePaths', label: 'Resolved Runtime Paths', field: 'sections' },
+    { key: 'validations', label: 'Resolved Validations', field: 'validationBindings' },
+    { key: 'workflowPolicies', label: 'Resolved Workflow Policies', field: 'workflowBindings' },
+    { key: 'uiContract', label: 'Resolved UI Contract', field: 'uiContractKey', singleton: true },
+  ]
+
+  return dependencyGroups.map(({ key, label, field, singleton = false }) => {
+    const rows = singleton
+      ? (dependencies[key] ? [dependencies[key]] : [])
+      : (Array.isArray(dependencies[key]) ? dependencies[key] : [])
+    const issueRows = rows.filter((row) => Array.isArray(row.issues) && row.issues.length > 0)
+
+    return {
+      key: `dependencies.${key}`,
+      group: 'Dependency Integrity',
+      severity: issueRows.length > 0 ? 'FAIL' : 'PASS',
+      message: rows.length === 0
+        ? `${label} are not required by this package.`
+        : issueRows.length > 0
+          ? `${label} have unresolved issues: ${issueRows
+            .map((row) => `${row.key || row.id}: ${(row.issues || []).join(' ')}`)
+            .join(' ')}`
+          : `${label} resolve without dependency issues.`,
+      field,
+      ...(issueRows.length > 0
+        ? {
+            details: {
+              issues: issueRows.map((row) => ({
+                key: row.key || row.id,
+                status: row.status,
+                issues: row.issues,
+              })),
+            },
+          }
+        : {}),
+    }
+  })
+}
+
+const buildMockFrameworkPackageIntegrity = (pkg) => {
+  const checks = []
+  const ready = ['VALIDATED', 'ACTIVE'].includes(String(pkg.status ?? '').trim().toUpperCase())
+  const packageKey = String(pkg.packageKey ?? '').trim()
+  checks.push({
+    key: 'packageKey.required',
+    group: 'Configuration Integrity',
+    severity: packageKey ? 'PASS' : ready ? 'FAIL' : 'WARN',
+    message: packageKey ? 'Package key is present.' : 'Package key is required before validation.',
+    field: 'packageKey',
+  })
+  const sections = Array.isArray(pkg.sections) ? pkg.sections : []
+  const sectionKeys = sections.map((section) => String(section.sectionKey ?? '').trim()).filter(Boolean)
+  checks.push({
+    key: 'sections.uniqueKeys',
+    group: 'Sections Integrity',
+    severity: sectionKeys.length === new Set(sectionKeys).size ? 'PASS' : 'FAIL',
+    message: sectionKeys.length === new Set(sectionKeys).size ? 'Section keys are unique.' : 'Section keys must be unique.',
+    field: 'sections',
+  })
+  checks.push({
+    key: 'uiContract.required',
+    group: 'UI Contract Integrity',
+    severity: sections.length > 0 && !pkg.uiContractKey ? ready ? 'FAIL' : 'WARN' : 'PASS',
+    message: sections.length > 0 && !pkg.uiContractKey
+      ? 'UI Contract is required before validation when sections are configured.'
+      : 'UI Contract binding is present or not required.',
+    field: 'uiContractKey',
+  })
+  const dependencies = buildMockFrameworkPackageDependencies(pkg)
+  checks.push(...buildMockDependencyResolutionIntegrityChecks(dependencies))
+  const externalStateMissing =
+    String(pkg.stateModelMode ?? '').trim().toUpperCase() === 'EXTERNAL'
+    && (!String(pkg.stateModelKey ?? '').trim() || !String(pkg.stateModelVersion ?? '').trim())
+  checks.push({
+    key: 'stateContract.consistency',
+    group: 'State Contract Integrity',
+    severity: externalStateMissing ? 'FAIL' : 'PASS',
+    message: externalStateMissing
+      ? 'External state model mode requires a key and version.'
+      : 'State Contract fields are internally consistent.',
+    field: externalStateMissing ? 'stateModelKey' : 'stateModelMode',
+  })
+  checks.push({
+    key: 'outputs.metadataOnly',
+    group: 'Output Placeholder Integrity',
+    severity: 'PASS',
+    message: 'Output fields are metadata placeholders only.',
+    field: 'availableOutputKeys',
+  })
+  const summary = checks.reduce(
+    (counts, check) => ({
+      ...counts,
+      [String(check.severity).toLowerCase()]: (counts[String(check.severity).toLowerCase()] || 0) + 1,
+    }),
+    { pass: 0, warn: 0, fail: 0 },
+  )
+  return {
+    id: pkg.id,
+    frameworkKey: pkg.frameworkKey,
+    packageKey: pkg.packageKey,
+    version: pkg.version,
+    packageStatus: pkg.status,
+    status: summary.fail > 0 ? 'FAIL' : summary.warn > 0 ? 'WARN' : 'PASS',
+    summary,
+    checks,
+  }
+}
+
 const getActiveFrameworkRegistryKeys = () =>
   new Set(
     runtimeControlState.frameworkRegistries
@@ -2245,6 +2612,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           )
         }
 
+        const deprecatedFieldError = validateMockDeprecatedFrameworkPackageFields(runtimePayload)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
+        }
+
         const duplicatePackage = runtimeControlState.frameworkPackages.find(
           (pkg) =>
             normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(runtimePayload.frameworkKey)
@@ -2302,6 +2674,118 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getFrameworkPackageDependencies: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/dependencies`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return { data: buildEntityResponse(buildMockFrameworkPackageDependencies(pkg)) }
+      },
+      providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    getFrameworkPackageIntegrity: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/integrity`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return { data: buildEntityResponse(buildMockFrameworkPackageIntegrity(pkg)) }
+      },
+      providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    getFrameworkPackageAudit: build.query({
+      queryFn: async ({ packageId, page = 1, pageSize = 20 } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/audit`,
+              params: {
+                page: normalizePositiveInteger(page, 1),
+                pageSize: normalizePositiveInteger(pageSize, 20),
+              },
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return {
+          data: {
+            data: [],
+            meta: {
+              page: normalizePositiveInteger(page, 1),
+              pageSize: normalizePositiveInteger(pageSize, 20),
+              totalCount: 0,
+              totalPages: 0,
+            },
+          },
+        }
+      },
+      providesTags: (_result, _error, args = {}) => [
+        { type: 'RuntimeFrameworkPackage', id: args.packageId },
+      ],
+    }),
+
+    getFrameworkPackageDiff: build.query({
+      queryFn: async ({ packageId, version } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/diff/${version}`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return {
+          error: {
+            status: 501,
+            data: {
+              error: {
+                code: 'FRAMEWORK_PACKAGE_DIFF_NOT_AVAILABLE',
+                message: 'Framework package version diff is not available until package snapshot history is implemented.',
+                details: { packageId, requestedVersion: version },
+              },
+            },
+          },
+        }
+      },
+    }),
+
     updateFrameworkPackage: build.mutation({
       queryFn: async ({ packageId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -2318,6 +2802,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const runtimePayload = payload
+        const deprecatedFieldError = validateMockDeprecatedFrameworkPackageFields(runtimePayload)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
+        }
 
         const existingPackage = findFrameworkPackageById(packageId)
         if (!existingPackage) {
@@ -4651,6 +5139,10 @@ export const {
   useListFrameworkPackagesQuery,
   useCreateFrameworkPackageMutation,
   useGetFrameworkPackageQuery,
+  useGetFrameworkPackageAuditQuery,
+  useGetFrameworkPackageDependenciesQuery,
+  useGetFrameworkPackageDiffQuery,
+  useGetFrameworkPackageIntegrityQuery,
   useUpdateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
   useListUiContractsQuery,

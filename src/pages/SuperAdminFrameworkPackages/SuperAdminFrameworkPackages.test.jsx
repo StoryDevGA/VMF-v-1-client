@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminFrameworkPackageEditor from '../SuperAdminFrameworkPackageEditor'
 import SuperAdminFrameworkPackages from './SuperAdminFrameworkPackages'
@@ -97,12 +97,8 @@ describe('SuperAdminFrameworkPackages page', () => {
     })
     await user.click(screen.getByRole('button', { name: /save section/i }))
     await user.click(screen.getByRole('tab', { name: /^outputs$/i }))
-    fireEvent.change(
-      screen.getByLabelText(/available output keys/i, {
-        selector: 'textarea#framework-package-editor-available-output-keys',
-      }),
-      { target: { value: 'board-summary\nexecutive-brief' } },
-    )
+    await user.click(screen.getByRole('checkbox', { name: /board summary/i }))
+    await user.click(screen.getByRole('checkbox', { name: /executive brief/i }))
 
     await user.click(screen.getByRole('button', { name: /create framework package/i }))
 
@@ -191,7 +187,7 @@ describe('SuperAdminFrameworkPackages page', () => {
     renderPage()
 
     await user.selectOptions(
-      await screen.findByLabelText(/actions for vmf 2.3.1/i),
+      await screen.findByLabelText(/actions for vmf 2.4.0/i),
       'Edit',
     )
 

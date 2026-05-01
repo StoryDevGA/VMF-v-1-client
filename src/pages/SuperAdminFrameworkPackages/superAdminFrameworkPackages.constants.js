@@ -78,9 +78,36 @@ export const FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES = Object.freeze({
   EXTERNAL: 'EXTERNAL',
 })
 
+export const FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODE_OPTIONS = Object.freeze([
+  { value: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL, label: 'Internal' },
+  { value: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.EXTERNAL, label: 'External' },
+])
+
+export const FRAMEWORK_PACKAGE_STATE_BINDING_MODE_OPTIONS = Object.freeze([
+  { value: 'STRICT', label: 'Strict' },
+  { value: 'FLEXIBLE', label: 'Flexible' },
+])
+
+export const FRAMEWORK_PACKAGE_STATE_PERSISTENCE_OPTIONS = Object.freeze([
+  { value: 'SESSION', label: 'Session' },
+  { value: 'PERSISTED', label: 'Persisted' },
+])
+
 export const FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS = Object.freeze([
   { value: 'POLICY_DRIVEN', label: 'Policy driven' },
   { value: 'VALIDATION_FIRST', label: 'Validation first' },
+])
+
+export const FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS = Object.freeze([
+  { value: 'board-summary', label: 'Board Summary' },
+  { value: 'executive-brief', label: 'Executive Brief' },
+  { value: 'review-pack', label: 'Review Pack' },
+])
+
+export const FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS = Object.freeze([
+  { value: 'executive-concise', label: 'Executive concise' },
+  { value: 'board-ready', label: 'Board ready' },
+  { value: 'review-detail', label: 'Review detail' },
 ])
 
 export const FRAMEWORK_PACKAGE_LIFECYCLE_STAGE_OPTIONS = Object.freeze([
@@ -100,6 +127,19 @@ export const FRAMEWORK_PACKAGE_PAGE_SIZE = 4
 
 export const FRAMEWORK_PACKAGES_HELP_TEXT =
   'Validated packages can be activated. The active default package for a framework becomes the authoritative binding for future framework-aware products.'
+
+export const DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES = Object.freeze({
+  compatibleWorkflowKeys: 'compatibleWorkflowKeys is deprecated. Use workflowBindings instead.',
+  defaultAgentIds: 'defaultAgentIds is deprecated. Agents are assigned through workflow policies.',
+  requiredSkillIds: 'requiredSkillIds is deprecated. Skills are resolved through workflow policies.',
+  validationRules: 'validationRules is deprecated. Use sections and validationBindings instead.',
+  validationConfig: 'validationConfig is deprecated. Use validationBindings instead.',
+  workflowPolicyConfig: 'workflowPolicyConfig is deprecated. Use workflowBindings instead.',
+})
+
+export const DEPRECATED_FRAMEWORK_PACKAGE_FIELDS = Object.freeze(
+  Object.keys(DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES),
+)
 
 export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   frameworkKey: 'VMF',
@@ -135,9 +175,13 @@ export const INITIAL_FRAMEWORK_PACKAGE_FORM = Object.freeze({
   validationBindings: Object.freeze([]),
   workflowBindings: Object.freeze([]),
   uiContractKey: '',
+  uiContractBinding: null,
   stateModelKey: '',
   stateModelVersion: '',
   stateModelMode: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL,
+  stateBindingMode: 'STRICT',
+  statePersistence: 'SESSION',
+  stateContractNotes: '',
   availableOutputKeys: '',
   defaultOutputStyles: '',
   allowCustomerOutputDefinitions: false,
@@ -192,9 +236,19 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
     ]),
     uiContractKey: 'vmf-ui-contract-v1',
+    uiContractBinding: Object.freeze({
+      key: 'vmf-ui-contract-v1',
+      version: '2.3.1',
+      status: 'ACTIVE',
+      compatibilityMode: 'INHERITED_MINOR',
+      resolvedAt: '2026-04-08T09:15:00.000Z',
+    }),
     stateModelKey: null,
     stateModelVersion: null,
     stateModelMode: FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL,
+    stateBindingMode: 'STRICT',
+    statePersistence: 'SESSION',
+    stateContractNotes: '',
     availableOutputKeys: Object.freeze(['board-summary', 'executive-brief']),
     defaultOutputStyles: Object.freeze(['executive-concise']),
     allowCustomerOutputDefinitions: false,
@@ -317,32 +371,50 @@ const FRAMEWORK_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/
 const DEFAULT_SUPPORTED_FRAMEWORK_KEYS = Object.freeze(['VMF', 'RLD'])
 
+export function omitDeprecatedFrameworkPackageFields(pkg = {}) {
+  const canonicalPackage = { ...pkg }
+
+  for (const field of DEPRECATED_FRAMEWORK_PACKAGE_FIELDS) {
+    delete canonicalPackage[field]
+  }
+
+  return canonicalPackage
+}
+
 export function cloneFrameworkPackage(pkg) {
+  const source = omitDeprecatedFrameworkPackageFields(pkg)
+
   return {
-    ...pkg,
-    assignedCustomerIds: [...(pkg.assignedCustomerIds ?? [])],
-    sections: (pkg.sections ?? []).map((section) => ({ ...section })),
+    ...source,
+    assignedCustomerIds: [...(source.assignedCustomerIds ?? [])],
+    sections: (source.sections ?? []).map((section) => ({ ...section })),
     executionModel: {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.executionModel,
-      ...(pkg.executionModel ?? {}),
+      ...(source.executionModel ?? {}),
     },
     runtimeSettings: {
       ...INITIAL_FRAMEWORK_PACKAGE_FORM.runtimeSettings,
-      ...(pkg.runtimeSettings ?? {}),
+      ...(source.runtimeSettings ?? {}),
     },
-    validationBindings: (pkg.validationBindings ?? []).map((item) => ({ ...item })),
-    workflowBindings: (pkg.workflowBindings ?? []).map((item) => ({ ...item })),
-    uiContractKey: String(pkg.uiContractKey ?? '').trim(),
-    stateModelKey: pkg.stateModelKey ?? null,
-    stateModelVersion: pkg.stateModelVersion ?? null,
-    stateModelMode: String(pkg.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
-    availableOutputKeys: [...(pkg.availableOutputKeys ?? [])],
-    defaultOutputStyles: [...(pkg.defaultOutputStyles ?? [])],
+    validationBindings: (source.validationBindings ?? []).map((item) => ({ ...item })),
+    workflowBindings: (source.workflowBindings ?? []).map((item) => ({ ...item })),
+    uiContractKey: String(source.uiContractKey ?? '').trim(),
+    uiContractBinding: source.uiContractBinding && typeof source.uiContractBinding === 'object'
+      ? { ...source.uiContractBinding }
+      : null,
+    stateModelKey: source.stateModelKey ?? null,
+    stateModelVersion: source.stateModelVersion ?? null,
+    stateModelMode: String(source.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
+    stateBindingMode: String(source.stateBindingMode ?? 'STRICT').trim().toUpperCase(),
+    statePersistence: String(source.statePersistence ?? 'SESSION').trim().toUpperCase(),
+    stateContractNotes: String(source.stateContractNotes ?? '').trim(),
+    availableOutputKeys: [...(source.availableOutputKeys ?? [])],
+    defaultOutputStyles: [...(source.defaultOutputStyles ?? [])],
     capabilities: {
-      ...pkg.capabilities,
+      ...source.capabilities,
     },
     updatedBy: {
-      ...pkg.updatedBy,
+      ...source.updatedBy,
     },
   }
 }
@@ -683,9 +755,15 @@ export function mapFrameworkPackageToForm(pkg) {
     validationBindings,
     workflowBindings,
     uiContractKey: String(pkg.uiContractKey ?? '').trim(),
+    uiContractBinding: pkg.uiContractBinding && typeof pkg.uiContractBinding === 'object'
+      ? { ...pkg.uiContractBinding }
+      : null,
     stateModelKey: String(pkg.stateModelKey ?? '').trim(),
     stateModelVersion: String(pkg.stateModelVersion ?? '').trim(),
     stateModelMode: String(pkg.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL).trim().toUpperCase(),
+    stateBindingMode: String(pkg.stateBindingMode ?? 'STRICT').trim().toUpperCase(),
+    statePersistence: String(pkg.statePersistence ?? 'SESSION').trim().toUpperCase(),
+    stateContractNotes: String(pkg.stateContractNotes ?? '').trim(),
     availableOutputKeys: formatKeyList(pkg.availableOutputKeys),
     defaultOutputStyles: formatKeyList(pkg.defaultOutputStyles),
     allowCustomerOutputDefinitions: Boolean(pkg.allowCustomerOutputDefinitions),
@@ -724,6 +802,9 @@ export function validateFrameworkPackageForm(
   const stateModelMode = String(formState.stateModelMode ?? FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL)
     .trim()
     .toUpperCase() || FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.INTERNAL
+  const stateBindingMode = String(formState.stateBindingMode ?? 'STRICT').trim().toUpperCase() || 'STRICT'
+  const statePersistence = String(formState.statePersistence ?? 'SESSION').trim().toUpperCase() || 'SESSION'
+  const stateContractNotes = String(formState.stateContractNotes ?? '').trim()
   const availableOutputKeys = parseKeyList(formState.availableOutputKeys)
   const defaultOutputStyles = parseKeyList(formState.defaultOutputStyles)
   const status = String(formState.status ?? '').trim() || FRAMEWORK_PACKAGE_STATUSES.DRAFT
@@ -813,6 +894,28 @@ export function validateFrameworkPackageForm(
     errors.stateModelMode = 'State Model mode must be INTERNAL or EXTERNAL.'
   }
 
+  if (stateModelMode === FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.EXTERNAL && !stateModelKey) {
+    errors.stateModelKey = 'State Model key is required when State Model Mode is EXTERNAL.'
+  }
+
+  if (stateModelMode === FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.EXTERNAL && !stateModelVersion) {
+    errors.stateModelVersion = 'State Model version is required when State Model Mode is EXTERNAL.'
+  } else if (stateModelVersion && !VERSION_PATTERN.test(stateModelVersion)) {
+    errors.stateModelVersion = 'State Model version must use semantic version format.'
+  }
+
+  if (!FRAMEWORK_PACKAGE_STATE_BINDING_MODE_OPTIONS.some((option) => option.value === stateBindingMode)) {
+    errors.stateBindingMode = 'State Binding Mode must be STRICT or FLEXIBLE.'
+  }
+
+  if (!FRAMEWORK_PACKAGE_STATE_PERSISTENCE_OPTIONS.some((option) => option.value === statePersistence)) {
+    errors.statePersistence = 'State Persistence must be SESSION or PERSISTED.'
+  }
+
+  if (stateContractNotes.length > 1000) {
+    errors.stateContractNotes = 'State Contract notes must be 1000 characters or fewer.'
+  }
+
   const duplicateVersion = existingPackages.find(
     (pkg) =>
       pkg.id !== selectedPackageId
@@ -852,9 +955,16 @@ export function validateFrameworkPackageForm(
       validationBindings,
       workflowBindings,
       uiContractKey,
-      stateModelKey: stateModelKey || null,
-      stateModelVersion: stateModelVersion || null,
+      stateModelKey: stateModelMode === FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.EXTERNAL
+        ? (stateModelKey || null)
+        : null,
+      stateModelVersion: stateModelMode === FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES.EXTERNAL
+        ? (stateModelVersion || null)
+        : null,
       stateModelMode,
+      stateBindingMode,
+      statePersistence,
+      stateContractNotes,
       availableOutputKeys,
       defaultOutputStyles,
       allowCustomerOutputDefinitions: Boolean(formState.allowCustomerOutputDefinitions),
