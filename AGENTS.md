@@ -1,5 +1,12 @@
 # AGENTS.md instructions for C:\Users\garya\OneDrive\Documents\StoryLineOS\VMF-APP\dev-v1\VMF-v-1-client
 
+## Operating Principles (Non-Negotiable)
+
+1. Don't assume. Don't hide confusion. Surface tradeoffs.
+2. Minimum code that solves the problem. Nothing speculative.
+3. Touch only what you must. Clean up only your own mess.
+4. Define success criteria. Loop until verified.
+
 ## Super Admin Page Standard
 
 - Super Admin management and catalogue pages must follow `docs/design-system/super-admin-management-page-standard.md`.
