@@ -1095,19 +1095,9 @@ function SuperAdminValidationRegistryEditor() {
             <section className="super-admin-validation-registry-editor__insight-card" aria-label="Validation JSON preview">
               <div className="super-admin-validation-registry-editor__insight-header">
                 <h2 className="super-admin-validation-registry-editor__insight-title">Live JSON Preview</h2>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!form.allowManualRun}
-                  onClick={() => addToast({
-                    variant: 'info',
-                    title: 'Validation Console required',
-                    description: 'Manual test runs will execute from the Validation Console follow-up.',
-                  })}
-                >
-                  Test Validation
-                </Button>
+                <Badge variant={form.allowManualRun ? 'info' : 'neutral'} size="sm" pill outline>
+                  {form.allowManualRun ? 'Validation Console Pending' : 'Manual Run Disabled'}
+                </Badge>
               </div>
               <pre className="super-admin-validation-registry-editor__json-preview" aria-label="Validation registry JSON preview">
                 {previewJson}

@@ -79,7 +79,8 @@ describe('SuperAdminValidationRegistryEditor page', () => {
     expect(await screen.findByRole('heading', { name: /^usage$/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^live json preview$/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/validation registry json preview/i)).toHaveTextContent('"executionMode": "SYNC"')
-    expect(screen.getByRole('button', { name: /^test validation$/i })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /^test validation$/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/validation console pending/i)).toBeInTheDocument()
   })
 
   it('quick-fills descendant runtime output paths from the selected output path', async () => {
