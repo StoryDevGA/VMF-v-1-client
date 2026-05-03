@@ -230,7 +230,7 @@ export const INITIAL_FRAMEWORK_PACKAGES = Object.freeze([
       evaluationMode: 'POLICY_DRIVEN',
     }),
     validationBindings: Object.freeze([
-      Object.freeze({ validationKey: 'required-sections-check', trigger: 'ON_SUBMIT', blocking: true, priority: 100, freshnessMinutes: null, enabled: true, notes: '' }),
+      Object.freeze({ bindingKey: 'required-sections-on-submit', validationKey: 'required-sections-check', trigger: 'ON_SUBMIT', blocking: true, priority: 100, freshnessMinutes: null, enabled: true, notes: '' }),
     ]),
     workflowBindings: Object.freeze([
       Object.freeze({ policyKey: 'vmf-publish', executionContext: 'ON_SUBMIT', priority: 100, enabled: true, notes: '' }),
@@ -447,6 +447,30 @@ function normalizeKeyToken(value) {
     .toLowerCase()
 }
 
+function slugifyKeyToken(value) {
+  const normalized = normalizeKeyToken(value)
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (!normalized) return ''
+  if (KEY_TOKEN_PATTERN.test(normalized)) return normalized
+
+  const prefixed = `binding-${normalized}`.replace(/-+/g, '-').replace(/^-+|-+$/g, '')
+  return KEY_TOKEN_PATTERN.test(prefixed) ? prefixed : 'binding'
+}
+
+function buildUniqueKeyToken(base, seen) {
+  const safeBase = slugifyKeyToken(base) || 'binding'
+  if (!seen.has(safeBase)) return safeBase
+
+  let counter = 2
+  while (seen.has(`${safeBase}-${counter}`)) {
+    counter += 1
+  }
+  return `${safeBase}-${counter}`
+}
+
 export function normalizeSectionKey(value) {
   return String(value ?? '')
     .trim()
@@ -559,6 +583,7 @@ function normalizeValidationBindings(bindings, fallbackConfig = []) {
   const source = Array.isArray(bindings) && bindings.length > 0
     ? bindings
     : (fallbackConfig ?? []).map((item, index) => ({
+        bindingKey: `${item.validationKey}-${index + 1}`,
         validationKey: item.validationKey,
         trigger: 'ON_SUBMIT',
         blocking: item.warningOnlyOverride === true ? false : true,
@@ -568,19 +593,32 @@ function normalizeValidationBindings(bindings, fallbackConfig = []) {
         notes: item.notes ?? '',
       }))
 
+  const seenBindingKeys = new Set()
   return source
-    .map((binding, index) => ({
-      validationKey: normalizeKeyToken(binding.validationKey),
-      trigger: String(binding.trigger ?? 'ON_SUBMIT').trim().toUpperCase(),
-      blocking: binding.blocking !== false,
-      priority: Number(binding.priority ?? ((index + 1) * 100)),
-      freshnessMinutes: binding.freshnessMinutes === null || binding.freshnessMinutes === ''
-        ? null
-        : Number(binding.freshnessMinutes ?? 0),
-      enabled: binding.enabled !== false,
-      notes: String(binding.notes ?? '').trim(),
-    }))
-    .filter((binding) => binding.validationKey)
+    .map((binding, index) => {
+      const validationKey = slugifyKeyToken(binding.validationKey)
+      const trigger = String(binding.trigger ?? 'ON_SUBMIT').trim().toUpperCase()
+      const triggerSlug = slugifyKeyToken(trigger.toLowerCase().replace(/_/g, '-'))
+      const baseKey = `${validationKey || 'validation'}-${triggerSlug || 'trigger'}`
+      const bindingKeyBase = binding.bindingKey || baseKey
+      const bindingKey = buildUniqueKeyToken(bindingKeyBase, seenBindingKeys)
+      seenBindingKeys.add(bindingKey)
+
+      return {
+        bindingKey,
+        validationKey,
+        trigger,
+        blocking: binding.blocking !== false,
+        priority: Number(binding.priority ?? ((index + 1) * 100)),
+        freshnessMinutes: binding.freshnessMinutes === null || binding.freshnessMinutes === ''
+          ? null
+          : Number(binding.freshnessMinutes ?? 0),
+        enabled: binding.enabled !== false,
+        parameters: binding.parameters && typeof binding.parameters === 'object' ? binding.parameters : undefined,
+        notes: String(binding.notes ?? '').trim(),
+      }
+    })
+    .filter((binding) => binding.validationKey && binding.bindingKey)
 }
 
 function normalizeWorkflowBindings(bindings, fallbackConfig = []) {
@@ -670,7 +708,8 @@ function validateSectionRows(sections, errors) {
 function validateValidationBindings(validationBindings, errors) {
   const validTriggers = new Set(FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS.map((option) => option.value))
   const invalidBinding = validationBindings.find((binding) =>
-    !KEY_TOKEN_PATTERN.test(binding.validationKey)
+    !KEY_TOKEN_PATTERN.test(binding.bindingKey)
+    || !KEY_TOKEN_PATTERN.test(binding.validationKey)
     || !validTriggers.has(binding.trigger)
     || !Number.isInteger(binding.priority)
     || binding.priority < 1
@@ -685,8 +724,8 @@ function validateValidationBindings(validationBindings, errors) {
     return
   }
 
-  if (hasDuplicateBy(validationBindings, (binding) => `${binding.validationKey}:${binding.trigger}`)) {
-    errors.validationBindings = 'Validation binding keys must be unique per trigger.'
+  if (hasDuplicateBy(validationBindings, (binding) => binding.bindingKey)) {
+    errors.validationBindings = 'Validation binding ids must be unique within a package.'
   }
 }
 

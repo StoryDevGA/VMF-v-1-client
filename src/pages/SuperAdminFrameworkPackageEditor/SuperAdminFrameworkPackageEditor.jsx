@@ -104,6 +104,40 @@ const SERVER_ERROR_FIELDS = Object.freeze([
 ])
 
 const TABLE_PAGE_SIZE = 5
+const TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/
+
+const slugifyToken = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (!normalized) return ''
+  if (TOKEN_PATTERN.test(normalized)) return normalized
+
+  const prefixed = `binding-${normalized}`.replace(/-+/g, '-').replace(/^-+|-+$/g, '')
+  return TOKEN_PATTERN.test(prefixed) ? prefixed : 'binding'
+}
+
+const buildUniqueBindingKey = (existingBindings, validationKey, trigger) => {
+  const seen = new Set(
+    (existingBindings ?? [])
+      .map((binding) => slugifyToken(binding?.bindingKey))
+      .filter(Boolean),
+  )
+
+  const triggerSlug = slugifyToken(String(trigger || '').toLowerCase().replace(/_/g, '-'))
+  const base = `${slugifyToken(validationKey) || 'validation'}-${triggerSlug || 'trigger'}`
+  if (!seen.has(base)) return base
+
+  let counter = 2
+  while (seen.has(`${base}-${counter}`)) {
+    counter += 1
+  }
+  return `${base}-${counter}`
+}
 
 const buildDefaultFrameworkPackageForm = (registryRows) => {
   const [firstRegistry] = registryRows
@@ -177,6 +211,7 @@ const addValidationBinding = (setForm, validationKey) => {
     validationBindings: [
       ...(current.validationBindings ?? []),
       {
+        bindingKey: buildUniqueBindingKey(current.validationBindings, validationKey, 'ON_SUBMIT'),
         validationKey,
         trigger: 'ON_SUBMIT',
         blocking: true,
@@ -185,12 +220,7 @@ const addValidationBinding = (setForm, validationKey) => {
         enabled: true,
         notes: '',
       },
-    ].filter((item, index, list) =>
-      list.findIndex((candidate) =>
-        candidate.validationKey === item.validationKey
-        && candidate.trigger === item.trigger,
-      ) === index,
-    ),
+    ],
   }))
 }
 
@@ -561,7 +591,7 @@ function SuperAdminFrameworkPackageEditor() {
   const frameworkOptions = buildFrameworkRegistryOptions(registryRows).filter((option) => option.value)
   const frameworkNameLookup = buildFrameworkRegistryNameLookup(registryRows)
   const supportedFrameworkKeys = buildFrameworkRegistryAllowedKeys(registryRows)
-  const existingPackages = packageListResponse?.data ?? []
+  const existingPackages = useMemo(() => packageListResponse?.data ?? [], [packageListResponse?.data])
   const loadedPackage = packageResponse?.data ?? null
   const packageAppError = packageError ? normalizeError(packageError) : null
   const dependencyAppError = dependencyError ? normalizeError(dependencyError) : null
@@ -1525,6 +1555,9 @@ function SuperAdminFrameworkPackageEditor() {
                         error={errors.validationBindings}
                         disabled={runtimeStructureLocked}
                       />
+                      <p className="super-admin-framework-package-editor__helper">
+                        Binding IDs are stable runtime identifiers and remain unchanged when trigger or priority changes.
+                      </p>
                       <div className="super-admin-framework-package-editor__row-list">
                         {(form.validationBindings ?? []).length === 0 ? (
                           <p className="super-admin-framework-package-editor__helper">
@@ -1532,9 +1565,14 @@ function SuperAdminFrameworkPackageEditor() {
                           </p>
                         ) : null}
                         {(form.validationBindings ?? []).map((item, index) => (
-                          <div className="super-admin-framework-package-editor__config-row" key={`${item.validationKey}-${item.trigger}-${index}`}>
+                          <div className="super-admin-framework-package-editor__config-row" key={item.bindingKey ?? `${item.validationKey}-${item.trigger}-${index}`}>
                             <div className="super-admin-framework-package-editor__row-header">
-                              <h3 className="super-admin-framework-package-editor__row-title">{item.validationKey}</h3>
+                              <div>
+                                <h3 className="super-admin-framework-package-editor__row-title">{item.validationKey}</h3>
+                                <p className="super-admin-framework-package-editor__helper">
+                                  Binding ID: {item.bindingKey || 'Pending'}
+                                </p>
+                              </div>
                               <Button type="button" variant="ghost" size="sm" onClick={() => removeValidationBinding(setForm, index)} disabled={runtimeStructureLocked}>
                                 Remove
                               </Button>

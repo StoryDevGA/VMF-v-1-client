@@ -233,6 +233,7 @@ const buildLoadedPackage = () => ({
       },
       validationBindings: [
         {
+          bindingKey: 'required-sections-on-submit',
           validationKey: 'required-sections-check',
           trigger: 'ON_SUBMIT',
           blocking: true,
@@ -416,6 +417,60 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('adds the same validation twice with distinct stable binding ids', async () => {
+    const user = userEvent.setup()
+    createFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-new' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.type(screen.getByLabelText(/^version$/i), '0.5.34')
+    await user.click(screen.getByRole('tab', { name: /^validation$/i }))
+    const validationPicker = screen.getByLabelText(/add validation binding/i)
+
+    await user.selectOptions(validationPicker, 'required-sections-check')
+    await user.selectOptions(validationPicker, 'required-sections-check')
+
+    expect(screen.getByText(/binding id: required-sections-check-on-submit$/i)).toBeInTheDocument()
+    expect(screen.getByText(/binding id: required-sections-check-on-submit-2/i)).toBeInTheDocument()
+
+    const triggerFields = screen.getAllByLabelText(/^trigger$/i)
+    const priorityFields = screen.getAllByLabelText(/^priority$/i)
+
+    await user.selectOptions(triggerFields[0], 'ON_SAVE')
+    await user.clear(priorityFields[0])
+    await user.type(priorityFields[0], '125')
+    await user.clear(priorityFields[1])
+    await user.type(priorityFields[1], '225')
+
+    expect(screen.getByText(/binding id: required-sections-check-on-submit$/i)).toBeInTheDocument()
+    expect(screen.getByText(/binding id: required-sections-check-on-submit-2/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /create framework package/i }))
+
+    await waitFor(() => {
+      expect(createFrameworkPackageMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          validationBindings: expect.arrayContaining([
+            expect.objectContaining({
+              bindingKey: 'required-sections-check-on-submit',
+              validationKey: 'required-sections-check',
+              trigger: 'ON_SAVE',
+              priority: 125,
+            }),
+            expect.objectContaining({
+              bindingKey: 'required-sections-check-on-submit-2',
+              validationKey: 'required-sections-check',
+              trigger: 'ON_SUBMIT',
+              priority: 225,
+            }),
+          ]),
+        }),
+      )
+    })
   })
 
   it('warns when legacy package config is synthesized into canonical bindings', async () => {
