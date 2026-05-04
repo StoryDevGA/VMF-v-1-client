@@ -50,6 +50,7 @@ import {
   useUpdateRuntimePathMutation,
   useUpdateRuntimeSkillMutation,
   useCreateUiContractMutation,
+  useCloneUiContractMutation,
   useUpdateUiContractMutation,
   useUpdateValidationRegistryMutation,
   useUpdateWorkflowPolicyMutation,
@@ -114,6 +115,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('listUiContracts')
     expect(runtimeControlApi.endpoints).toHaveProperty('createUiContract')
     expect(runtimeControlApi.endpoints).toHaveProperty('getUiContract')
+    expect(runtimeControlApi.endpoints).toHaveProperty('cloneUiContract')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateUiContract')
   })
 
@@ -166,6 +168,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useTestWorkflowPolicyMutation).toBe('function')
     expect(typeof useUpdateWorkflowPolicyMutation).toBe('function')
     expect(typeof useCreateUiContractMutation).toBe('function')
+    expect(typeof useCloneUiContractMutation).toBe('function')
     expect(typeof useUpdateUiContractMutation).toBe('function')
   })
 
@@ -215,6 +218,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.listUiContracts.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createUiContract.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getUiContract.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.cloneUiContract.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateUiContract.initiate).toBe('function')
   })
 
@@ -380,6 +384,69 @@ describe('runtimeControlApi', () => {
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
     })
+  })
+
+  it('builds live UI Contract clone requests and aligns mock clone/lock behavior', async () => {
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'ui-contracts',
+        entityId: 'ui-contract-vmf-ui-contract-v1/clone',
+        method: 'POST',
+        body: { uiContractKey: 'vmf-ui-contract-v2' },
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/ui-contracts/ui-contract-vmf-ui-contract-v1/clone',
+      method: 'POST',
+      body: { uiContractKey: 'vmf-ui-contract-v2' },
+    })
+
+    const store = createTestStore()
+    const cloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneUiContract.initiate({
+        uiContractId: 'ui-contract-vmf-ui-contract-v1',
+        uiContractKey: 'vmf-ui-contract-v2',
+        name: 'VMF UI Contract v2',
+      }),
+    )
+
+    expect(cloneResult.error).toBeUndefined()
+    expect(cloneResult.data?.data?.uiContractKey).toBe('vmf-ui-contract-v2')
+    expect(cloneResult.data?.data?.status).toBe('DRAFT')
+    expect(cloneResult.data?.data?.componentVersion).toBe(2)
+    expect(cloneResult.data?.data?.versionStatus).toBe('DRAFT')
+    expect(cloneResult.data?.data?.isLocked).toBe(false)
+    expect(cloneResult.data?.data?.clonedFromStableId).toBe('ui-contract-vmf-ui-contract-v1')
+
+    const immutableKeyResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateUiContract.initiate({
+        uiContractId: 'ui-contract-vmf-ui-contract-v1',
+        uiContractKey: 'renamed-ui-contract',
+      }),
+    )
+    expect(immutableKeyResult.error?.status).toBe(422)
+    expect(immutableKeyResult.error?.data?.error?.details?.uiContractKey).toContain('server-managed governance metadata')
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      uiContracts: state.uiContracts.map((contract) =>
+        contract.id === 'ui-contract-vmf-ui-contract-v1'
+          ? {
+              ...contract,
+              isLocked: true,
+              lockedByPackageKeys: ['vmf-qa-manual-951'],
+            }
+          : contract),
+    }))
+
+    const lockedUpdateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateUiContract.initiate({
+        uiContractId: 'ui-contract-vmf-ui-contract-v1',
+        name: 'Blocked Update',
+      }),
+    )
+
+    expect(lockedUpdateResult.error?.status).toBe(409)
+    expect(lockedUpdateResult.error?.data?.error?.details?.reason).toBe('UI_CONTRACT_LOCKED')
   })
 
   it('keeps mock framework package mutations aligned with live deprecated-field rejection', async () => {

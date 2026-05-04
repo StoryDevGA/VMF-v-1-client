@@ -7,15 +7,19 @@ import SuperAdminUiContractEditor from './SuperAdminUiContractEditor.jsx'
 
 const navigateMock = vi.fn()
 const {
+  cloneUiContractMock,
   createUiContractMock,
   getUiContractQueryMock,
   listFrameworkPackagesQueryMock,
+  listWorkflowPoliciesQueryMock,
   routeParamsMock,
   updateUiContractMock,
 } = vi.hoisted(() => ({
+  cloneUiContractMock: vi.fn(),
   createUiContractMock: vi.fn(),
   getUiContractQueryMock: vi.fn(),
   listFrameworkPackagesQueryMock: vi.fn(),
+  listWorkflowPoliciesQueryMock: vi.fn(),
   routeParamsMock: { value: {} },
   updateUiContractMock: vi.fn(),
 }))
@@ -30,9 +34,11 @@ vi.mock('react-router-dom', async () => {
 })
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
+  useCloneUiContractMutation: () => [cloneUiContractMock, { isLoading: false }],
   useCreateUiContractMutation: () => [createUiContractMock, { isLoading: false }],
   useGetUiContractQuery: getUiContractQueryMock,
   useListFrameworkPackagesQuery: listFrameworkPackagesQueryMock,
+  useListWorkflowPoliciesQuery: listWorkflowPoliciesQueryMock,
   useUpdateUiContractMutation: () => [updateUiContractMock, { isLoading: false }],
 }))
 
@@ -72,6 +78,24 @@ describe('SuperAdminUiContractEditor', () => {
           },
         ],
         meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      error: null,
+    })
+    listWorkflowPoliciesQueryMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            key: 'submit-for-review',
+            status: 'ACTIVE',
+            governedAction: 'SUBMIT_FOR_REVIEW',
+          },
+          {
+            key: 'approve-gate',
+            status: 'ACTIVE',
+            governedAction: 'APPROVE',
+          },
+        ],
       },
       isLoading: false,
       error: null,
@@ -166,5 +190,79 @@ describe('SuperAdminUiContractEditor', () => {
     await waitFor(() => expect(sourcePackage).toHaveValue('vmf-2-3-1'))
     expect(screen.getByRole('option', { name: 'VMF 2.3.1 - VMF - v2.3.1' }).selected).toBe(true)
     expect(screen.getAllByRole('option', { name: /VMF .* - VMF - v2\.3\.1/ })).toHaveLength(1)
+  })
+
+  it('locks direct editing and offers clone for locked UI Contracts', async () => {
+    const user = userEvent.setup()
+    routeParamsMock.value = { uiContractId: 'ui-contract-vmf' }
+    getUiContractQueryMock.mockReturnValue({
+      data: {
+        data: {
+          id: 'ui-contract-vmf',
+          uiContractKey: 'vmf-ui-contract-v1',
+          name: 'VMF UI Contract',
+          status: 'ACTIVE',
+          componentVersion: 1,
+          versionStatus: 'ACTIVE',
+          lineageId: 'ui-contract-vmf',
+          isLocked: true,
+          lockedByPackageKeys: ['vmf-qa-manual-951'],
+          frameworkKeys: ['VMF'],
+          compatibilityTags: [],
+          sections: [],
+          lifecycleStages: [],
+          actions: [],
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    renderEditor()
+
+    expect(screen.getByText(/locked runtime control records cannot be edited directly/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /^clone$/i }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/new?cloneFrom=ui-contract-vmf')
+  })
+
+  it('omits immutable UI Contract keys from edit save payloads', async () => {
+    const user = userEvent.setup()
+    const unwrap = vi.fn().mockResolvedValue({})
+    updateUiContractMock.mockReturnValue({ unwrap })
+    routeParamsMock.value = { uiContractId: 'ui-contract-vmf' }
+    getUiContractQueryMock.mockReturnValue({
+      data: {
+        data: {
+          id: 'ui-contract-vmf',
+          uiContractKey: 'vmf-ui-contract-v1',
+          name: 'VMF UI Contract',
+          status: 'DRAFT',
+          componentVersion: 1,
+          versionStatus: 'DRAFT',
+          lineageId: 'ui-contract-vmf',
+          isLocked: false,
+          frameworkKeys: ['VMF'],
+          compatibilityTags: [],
+          sections: [],
+          lifecycleStages: [],
+          actions: [],
+        },
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    renderEditor()
+
+    await screen.findByDisplayValue('VMF UI Contract')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(updateUiContractMock).toHaveBeenCalledWith(expect.objectContaining({
+      uiContractId: 'ui-contract-vmf',
+      name: 'VMF UI Contract',
+    }))
+    expect(updateUiContractMock.mock.calls[0][0].uiContractKey).toBeUndefined()
   })
 })

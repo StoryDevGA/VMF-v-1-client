@@ -60,6 +60,7 @@ import {
   cloneUIContract,
   INITIAL_UI_CONTRACTS,
   UI_CONTRACT_PAGE_SIZE,
+  UI_CONTRACT_STATUSES,
 } from '../../pages/SuperAdminUiContracts/superAdminUiContracts.constants.js'
 
 const FRAMEWORK_PACKAGE_LIST_TAG = { type: 'RuntimeFrameworkPackage', id: 'LIST' }
@@ -336,6 +337,42 @@ const buildRuntimePathLockedConflictError = (runtimePath = {}) =>
       ? runtimePath.lockedByPackageKeys
       : [],
   })
+
+const UI_CONTRACT_GOVERNANCE_FIELDS = Object.freeze([
+  'componentVersion',
+  'versionStatus',
+  'stableId',
+  'lineageId',
+  'isLocked',
+  'lockedAt',
+  'lockedBy',
+  'lockedReason',
+  'lockedByPackageKeys',
+  'clonedFromStableId',
+  'supersedesStableId',
+  'supersededByStableId',
+])
+
+const buildUIContractLockedConflictError = (uiContract = {}) =>
+  buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+    field: uiContract.isLocked ? 'isLocked' : 'isProtected',
+    reason: 'UI_CONTRACT_LOCKED',
+    lockedByPackageKeys: Array.isArray(uiContract.lockedByPackageKeys)
+      ? uiContract.lockedByPackageKeys
+      : [],
+  })
+
+const validateMockUIContractGovernanceFields = (payload = {}) => {
+  const details = {}
+  for (const field of UI_CONTRACT_GOVERNANCE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(payload, field)) continue
+    details[field] = `${field} is server-managed governance metadata and cannot be edited directly.`
+  }
+
+  return Object.keys(details).length > 0
+    ? buildValidationFailedError('Please check the form for errors.', details)
+    : null
+}
 
 const validateMockDeprecatedFrameworkPackageFields = (payload = {}) => {
   const details = {}
@@ -1813,6 +1850,20 @@ const buildMockFrameworkPackageDependencies = (pkg) => {
   })
 
   const uiContractRow = pkg.uiContractKey ? findUIContractById(pkg.uiContractKey) : null
+  const uiContractIssues = []
+  if (pkg.uiContractKey && !uiContractRow) {
+    uiContractIssues.push(`UI Contract "${pkg.uiContractKey}" was not found.`)
+  } else if (uiContractRow) {
+    if (uiContractRow.status !== UI_CONTRACT_STATUSES.ACTIVE) {
+      uiContractIssues.push(`UI Contract must be ACTIVE; current status is ${uiContractRow.status}.`)
+    }
+    if (uiContractRow.versionStatus !== 'ACTIVE') {
+      uiContractIssues.push(`UI Contract version status must be ACTIVE; current version status is ${uiContractRow.versionStatus || 'UNKNOWN'}.`)
+    }
+    if (!(uiContractRow.frameworkKeys || []).includes(frameworkKey)) {
+      uiContractIssues.push(`UI Contract is not compatible with framework "${frameworkKey}".`)
+    }
+  }
   const uiContract = pkg.uiContractKey
     ? buildMockDependencyRow({
         id: uiContractRow?.id || pkg.uiContractKey,
@@ -1820,10 +1871,18 @@ const buildMockFrameworkPackageDependencies = (pkg) => {
         name: uiContractRow?.name || pkg.uiContractKey,
         status: uiContractRow?.status || 'MISSING',
         source: 'uiContractKey',
-        frameworkCompatible: Boolean(uiContractRow && (uiContractRow.frameworkKeys || []).includes(frameworkKey)),
-        issues: uiContractRow ? [] : [`UI Contract "${pkg.uiContractKey}" was not found.`],
+        frameworkCompatible: uiContractIssues.length === 0,
+        issues: uiContractIssues,
         version: uiContractRow?.sourcePackageVersion || uiContractRow?.introducedInVersion || '',
         compatibilityMode: uiContractRow?.compatibilityMode || '',
+        componentVersion: Number(uiContractRow?.componentVersion) || 1,
+        versionStatus: uiContractRow?.versionStatus || '',
+        lineageId: uiContractRow?.lineageId || uiContractRow?.id || '',
+        isLocked: Boolean(uiContractRow?.isLocked),
+        lockedAt: uiContractRow?.lockedAt || null,
+        lockedByPackageKeys: Array.isArray(uiContractRow?.lockedByPackageKeys)
+          ? uiContractRow.lockedByPackageKeys
+          : [],
       })
     : null
 
@@ -2488,6 +2547,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           )
         }
 
+        const governanceError = validateMockUIContractGovernanceFields(payload)
+        if (governanceError) return governanceError
+
         const duplicate = runtimeControlState.uiContracts.find((contract) =>
           contract.uiContractKey === String(payload.uiContractKey ?? '').trim().toLowerCase(),
         )
@@ -2501,8 +2563,21 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const created = cloneUIContract({
           id: `ui-contract-${String(payload.uiContractKey ?? '').trim().toLowerCase()}`,
           ...payload,
+          componentVersion: 1,
+          versionStatus: String(payload.status ?? '').trim().toUpperCase() === UI_CONTRACT_STATUSES.ACTIVE
+            ? 'ACTIVE'
+            : 'DRAFT',
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: null,
+          supersedesStableId: null,
+          supersededByStableId: null,
           ...buildAuditFields(),
         })
+        created.lineageId = created.lineageId || created.id
         runtimeControlState = {
           ...runtimeControlState,
           uiContracts: [created, ...runtimeControlState.uiContracts],
@@ -2510,6 +2585,85 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         return { data: buildEntityResponse(cloneUIContract(created)) }
       },
       invalidatesTags: [UI_CONTRACT_LIST_TAG],
+    }),
+
+    cloneUiContract: build.mutation({
+      queryFn: async ({ uiContractId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'ui-contracts',
+              entityId: `${uiContractId}/clone`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const governanceError = validateMockUIContractGovernanceFields(payload)
+        if (governanceError) return governanceError
+
+        const source = findUIContractById(uiContractId)
+        if (!source) return buildNotFoundError('UI Contract was not found.')
+
+        const nextKey = String(payload.uiContractKey ?? '').trim().toLowerCase()
+        const duplicate = runtimeControlState.uiContracts.find((contract) =>
+          contract.uiContractKey === nextKey,
+        )
+        if (duplicate) {
+          return buildConflictError('UI Contract key must be unique.', {
+            field: 'uiContractKey',
+            reason: 'UI_CONTRACT_KEY_CONFLICT',
+          })
+        }
+
+        const sourceStableId = source.id
+        const clone = cloneUIContract({
+          ...source,
+          id: `ui-contract-${nextKey}`,
+          uiContractKey: nextKey,
+          name: String(payload.name ?? '').trim(),
+          description: String(payload.description ?? source.description ?? '').trim(),
+          status: UI_CONTRACT_STATUSES.DRAFT,
+          isSystem: false,
+          isProtected: false,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          componentVersion: (Number(source.componentVersion) || 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: source.lineageId || sourceStableId,
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          ...buildAuditFields(),
+        })
+        const supersededSource = cloneUIContract({
+          ...source,
+          supersededByStableId: clone.id,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          uiContracts: [
+            clone,
+            ...runtimeControlState.uiContracts.map((contract) =>
+              contract.id === source.id ? supersededSource : contract,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(cloneUIContract(clone)) }
+      },
+      invalidatesTags: (_result, _error, { uiContractId }) => [
+        UI_CONTRACT_LIST_TAG,
+        { type: 'RuntimeUIContract', id: uiContractId },
+      ],
     }),
 
     getUiContract: build.query({
@@ -2548,6 +2702,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const existing = findUIContractById(uiContractId)
         if (!existing) return buildNotFoundError('UI Contract was not found.')
+        if (Object.prototype.hasOwnProperty.call(payload, 'uiContractKey')) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            uiContractKey: 'uiContractKey is server-managed governance metadata and cannot be edited directly.',
+          })
+        }
+        const governanceError = validateMockUIContractGovernanceFields(payload)
+        if (governanceError) return governanceError
+        if (existing.isLocked || existing.isProtected) {
+          return buildUIContractLockedConflictError(existing)
+        }
         const next = cloneUIContract({ ...existing, ...payload, uiContractKey: existing.uiContractKey, ...buildAuditFields() })
         runtimeControlState = {
           ...runtimeControlState,
@@ -5278,6 +5442,7 @@ export const {
   useActivateFrameworkPackageMutation,
   useListUiContractsQuery,
   useCreateUiContractMutation,
+  useCloneUiContractMutation,
   useGetUiContractQuery,
   useUpdateUiContractMutation,
   useListRuntimeAgentsQuery,

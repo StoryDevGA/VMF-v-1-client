@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SuperAdminUiContracts from './SuperAdminUiContracts.jsx'
@@ -21,6 +21,8 @@ const defaultListResult = {
         uiContractKey: 'vmf-ui-contract-v1',
         name: 'VMF UI Contract',
         status: 'ACTIVE',
+        componentVersion: 1,
+        versionStatus: 'ACTIVE',
         frameworkKeys: ['VMF'],
         sections: [{ sectionKey: 'customer_problem' }],
         actions: [{ actionKey: 'SUBMIT_FOR_REVIEW' }],
@@ -31,6 +33,8 @@ const defaultListResult = {
         uiContractKey: 'vmf-ui-contract-draft',
         name: 'Draft UI Contract',
         status: 'DRAFT',
+        componentVersion: 2,
+        versionStatus: 'DRAFT',
         frameworkKeys: ['VMF'],
         sections: [],
         actions: [],
@@ -73,7 +77,10 @@ describe('SuperAdminUiContracts page', () => {
     expect(screen.getByRole('heading', { name: /ui contracts/i })).toBeInTheDocument()
     expect(screen.getByText('VMF UI Contract')).toBeInTheDocument()
     expect(screen.getByText('vmf-ui-contract-v1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Status: DRAFT')).toHaveClass('status--warning')
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Action Copy' })).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader', { name: 'Actions' })).toHaveLength(1)
+    expect(screen.getAllByLabelText('Status: DRAFT')[0]).toHaveClass('status--warning')
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/new')
@@ -83,6 +90,40 @@ describe('SuperAdminUiContracts page', () => {
       'Edit',
     )
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/ui-contract-vmf-ui-contract-v1')
+
+    await user.selectOptions(
+      screen.getByLabelText(/actions for vmf-ui-contract-v1/i),
+      'Clone',
+    )
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/new?cloneFrom=ui-contract-vmf-ui-contract-v1')
+  })
+
+  it('renders version, version status, and lock state in the Version column', () => {
+    listUiContractsQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          {
+            ...defaultListResult.data.data[0],
+            isLocked: true,
+          },
+        ],
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <SuperAdminUiContracts />
+      </MemoryRouter>,
+    )
+
+    const versionSummary = screen.getByText('v1').closest('.super-admin-ui-contracts__version-summary')
+
+    expect(versionSummary).toBeInTheDocument()
+    expect(versionSummary?.firstElementChild).toHaveTextContent('v1')
+    expect(within(versionSummary).getByLabelText('Status: ACTIVE')).toHaveClass('status--success')
+    expect(within(versionSummary).getByText('Locked')).toBeInTheDocument()
   })
 
   it('validates required UI Contract fields and structured rows', () => {

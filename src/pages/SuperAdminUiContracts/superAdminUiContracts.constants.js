@@ -3,6 +3,7 @@ export const UI_CONTRACT_STATUSES = Object.freeze({
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   DEPRECATED: 'DEPRECATED',
+  ARCHIVED: 'ARCHIVED',
 })
 
 export const UI_CONTRACT_COMPATIBILITY_MODES = Object.freeze({
@@ -79,7 +80,16 @@ export const INITIAL_UI_CONTRACT_FORM = Object.freeze({
   isSystem: false,
   isProtected: false,
   isLocked: false,
-  clonedFromStableId: '',
+  componentVersion: 1,
+  versionStatus: 'DRAFT',
+  lineageId: '',
+  lockedAt: null,
+  lockedBy: null,
+  lockedReason: '',
+  lockedByPackageKeys: Object.freeze([]),
+  clonedFromStableId: null,
+  supersedesStableId: null,
+  supersededByStableId: null,
 })
 
 export const parseUIContractList = (value, { upper = false } = {}) => [
@@ -217,7 +227,25 @@ export const cloneUIContract = (contract = {}) => ({
   isSystem: Boolean(contract.isSystem),
   isProtected: Boolean(contract.isProtected),
   isLocked: Boolean(contract.isLocked),
-  clonedFromStableId: String(contract.clonedFromStableId ?? '').trim(),
+  componentVersion: Number(contract.componentVersion ?? 1) || 1,
+  versionStatus: String(
+    contract.versionStatus
+      ?? (contract.status === UI_CONTRACT_STATUSES.ACTIVE
+        ? 'ACTIVE'
+        : contract.status === UI_CONTRACT_STATUSES.DEPRECATED
+          ? 'DEPRECATED'
+          : contract.status === UI_CONTRACT_STATUSES.ARCHIVED || contract.status === UI_CONTRACT_STATUSES.INACTIVE
+            ? 'ARCHIVED'
+            : 'DRAFT'),
+  ).trim().toUpperCase(),
+  lineageId: String(contract.lineageId ?? contract.stableId ?? contract.id ?? '').trim(),
+  lockedAt: contract.lockedAt ?? null,
+  lockedBy: contract.lockedBy ?? null,
+  lockedReason: String(contract.lockedReason ?? '').trim(),
+  lockedByPackageKeys: Array.isArray(contract.lockedByPackageKeys) ? [...contract.lockedByPackageKeys] : [],
+  clonedFromStableId: contract.clonedFromStableId ?? null,
+  supersedesStableId: contract.supersedesStableId ?? null,
+  supersededByStableId: contract.supersededByStableId ?? null,
   createdAt: contract.createdAt ?? null,
   updatedAt: contract.updatedAt ?? null,
   createdBy: contract.createdBy ?? null,
@@ -243,7 +271,16 @@ export const mapUIContractToForm = (contract = {}) => ({
   isSystem: Boolean(contract.isSystem),
   isProtected: Boolean(contract.isProtected),
   isLocked: Boolean(contract.isLocked),
-  clonedFromStableId: String(contract.clonedFromStableId ?? '').trim(),
+  componentVersion: Number(contract.componentVersion ?? 1) || 1,
+  versionStatus: String(contract.versionStatus ?? '').trim().toUpperCase(),
+  lineageId: String(contract.lineageId ?? contract.id ?? '').trim(),
+  lockedAt: contract.lockedAt ?? null,
+  lockedBy: contract.lockedBy ?? null,
+  lockedReason: String(contract.lockedReason ?? '').trim(),
+  lockedByPackageKeys: Array.isArray(contract.lockedByPackageKeys) ? [...contract.lockedByPackageKeys] : [],
+  clonedFromStableId: contract.clonedFromStableId ?? null,
+  supersedesStableId: contract.supersedesStableId ?? null,
+  supersededByStableId: contract.supersededByStableId ?? null,
 })
 
 const duplicate = (items, key, { upper = true } = {}) => {
@@ -411,30 +448,30 @@ export const validateUIContractForm = (form = {}, { isEditMode = false, sourcePa
     errors.actions = 'Visible action display order values must be unique.'
   }
 
-  return {
-    errors,
-    payload: {
-      uiContractKey,
-      name: String(form.name ?? '').trim(),
-      description: String(form.description ?? '').trim(),
-      status: String(form.status ?? UI_CONTRACT_STATUSES.DRAFT).trim().toUpperCase(),
-      frameworkKeys,
-      introducedInVersion: normalizeNullableVersion(form.introducedInVersion),
-      deprecatedInVersion: normalizeNullableVersion(form.deprecatedInVersion),
-      compatibilityTags: parseUIContractList(form.compatibilityTags),
-      compatibilityMode: String(form.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
-      sourcePackageKey,
-      sourcePackageVersion: normalizeNullableVersion(sourcePackageVersion),
-      sourceFrameworkKey,
-      sections,
-      lifecycleStages,
-      actions,
-      isSystem: Boolean(form.isSystem),
-      isProtected: Boolean(form.isProtected),
-      isLocked: Boolean(form.isLocked),
-      clonedFromStableId: String(form.clonedFromStableId ?? '').trim(),
-    },
+  const payload = {
+    name: String(form.name ?? '').trim(),
+    description: String(form.description ?? '').trim(),
+    status: String(form.status ?? UI_CONTRACT_STATUSES.DRAFT).trim().toUpperCase(),
+    frameworkKeys,
+    introducedInVersion: normalizeNullableVersion(form.introducedInVersion),
+    deprecatedInVersion: normalizeNullableVersion(form.deprecatedInVersion),
+    compatibilityTags: parseUIContractList(form.compatibilityTags),
+    compatibilityMode: String(form.compatibilityMode ?? UI_CONTRACT_COMPATIBILITY_MODES.INHERITED_MINOR).trim().toUpperCase(),
+    sourcePackageKey,
+    sourcePackageVersion: normalizeNullableVersion(sourcePackageVersion),
+    sourceFrameworkKey,
+    sections,
+    lifecycleStages,
+    actions,
+    isSystem: Boolean(form.isSystem),
+    isProtected: Boolean(form.isProtected),
   }
+
+  if (!isEditMode) {
+    payload.uiContractKey = uiContractKey
+  }
+
+  return { errors, payload }
 }
 
 export const INITIAL_UI_CONTRACTS = Object.freeze([
@@ -444,6 +481,7 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
     name: 'VMF UI Contract v1',
     description: 'Default UI presentation contract for VMF v2.3.1 runtime packages.',
     status: UI_CONTRACT_STATUSES.ACTIVE,
+    versionStatus: 'ACTIVE',
     frameworkKeys: ['VMF'],
     introducedInVersion: '2.3.1',
     compatibilityTags: ['VMF', '2.3.1'],

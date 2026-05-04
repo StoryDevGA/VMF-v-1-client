@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -16,8 +16,10 @@ import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateUiContractMutation,
+  useCloneUiContractMutation,
   useGetUiContractQuery,
   useListFrameworkPackagesQuery,
+  useListWorkflowPoliciesQuery,
   useUpdateUiContractMutation,
 } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -44,6 +46,10 @@ import {
   parseUIContractList,
   validateUIContractForm,
 } from './superAdminUiContracts.constants.js'
+import {
+  LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE,
+  formatRuntimeControlVersionStatus,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import './SuperAdminUiContracts.css'
 
 const EMPTY_SECTION_DRAFT = Object.freeze({
@@ -173,11 +179,33 @@ function ReadOnlyValue({ label, value }) {
   )
 }
 
+const mapUIContractToCloneForm = (contract = {}) => ({
+  ...mapUIContractToForm(contract),
+  uiContractKey: '',
+  name: contract.name ? `${contract.name} Clone` : '',
+  status: UI_CONTRACT_STATUSES.DRAFT,
+  isSystem: false,
+  isProtected: false,
+  isLocked: false,
+  componentVersion: (Number(contract.componentVersion) || 1) + 1,
+  versionStatus: 'DRAFT',
+  lockedAt: null,
+  lockedBy: null,
+  lockedReason: '',
+  lockedByPackageKeys: [],
+  clonedFromStableId: contract.id ?? null,
+  supersedesStableId: contract.id ?? null,
+  supersededByStableId: null,
+})
+
 function SuperAdminUiContractEditor() {
   const navigate = useNavigate()
   const { uiContractId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const cloneFromId = String(searchParams.get('cloneFrom') || '').trim()
   const { addToast } = useToaster()
   const isEditMode = Boolean(uiContractId)
+  const isCloneMode = !isEditMode && Boolean(cloneFromId)
   const [form, setForm] = useState({ ...INITIAL_UI_CONTRACT_FORM })
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState(0)
@@ -185,22 +213,34 @@ function SuperAdminUiContractEditor() {
   const [lifecycleDialog, setLifecycleDialog] = useState({ open: false, index: -1, draft: { ...EMPTY_LIFECYCLE_DRAFT } })
   const [actionDialog, setActionDialog] = useState({ open: false, index: -1, draft: { ...EMPTY_ACTION_DRAFT } })
 
-  const { data, isLoading, error } = useGetUiContractQuery(uiContractId, { skip: !isEditMode })
+  const sourceContractId = isEditMode ? uiContractId : cloneFromId
+  const { data, isLoading, error } = useGetUiContractQuery(sourceContractId, { skip: !sourceContractId })
   const { data: packagesData, isLoading: isLoadingPackages } = useListFrameworkPackagesQuery({
     page: 1,
     pageSize: 100,
   })
+  const { data: policiesData } = useListWorkflowPoliciesQuery({
+    page: 1,
+    pageSize: 100,
+  })
   const [createUiContract, { isLoading: isCreating }] = useCreateUiContractMutation()
+  const [cloneUiContract, { isLoading: isCloning }] = useCloneUiContractMutation()
   const [updateUiContract, { isLoading: isUpdating }] = useUpdateUiContractMutation()
-  const isSaving = isCreating || isUpdating
+  const isSaving = isCreating || isUpdating || isCloning
   const loaded = data?.data ?? null
+  const isReadOnly = isEditMode && Boolean(loaded?.isLocked || loaded?.isProtected)
+  const isFormDisabled = isSaving || isReadOnly
   const packageRows = useMemo(() => packagesData?.data ?? [], [packagesData?.data])
 
   useEffect(() => {
-    if (!isEditMode || !loaded) return
-    const timeoutId = window.setTimeout(() => setForm(mapUIContractToForm(loaded)), 0)
+    if (!loaded) return
+    if (!isEditMode && !isCloneMode) return
+    const nextForm = isCloneMode
+      ? mapUIContractToCloneForm(loaded)
+      : mapUIContractToForm(loaded)
+    const timeoutId = window.setTimeout(() => setForm(nextForm), 0)
     return () => window.clearTimeout(timeoutId)
-  }, [isEditMode, loaded])
+  }, [isCloneMode, isEditMode, loaded])
 
   const selectedFrameworkKeys = useMemo(
     () => parseUIContractList(form.frameworkKeys, { upper: true }),
@@ -348,10 +388,16 @@ function SuperAdminUiContractEditor() {
 
   const governedActionOptions = useMemo(() => {
     const actions = new Set()
-    ;(selectedPackage?.workflowBindings ?? []).forEach((binding) => {
-      const policyKey = String(binding?.policyKey || '').trim().toUpperCase().replace(/-/g, '_')
-      if (policyKey) actions.add(policyKey)
+    const policyRows = policiesData?.data ?? []
+    const activePolicies = policyRows.filter((policy) => policy?.status === 'ACTIVE')
+
+    // Add governedAction from active policies (not policy keys!)
+    activePolicies.forEach((policy) => {
+      const governedAction = String(policy?.governedAction || '').trim()
+      if (governedAction) actions.add(governedAction)
     })
+
+    // Add actions from existing action rows
     actionRows.forEach((action) => {
       if (action.governedAction) actions.add(action.governedAction)
       if (action.actionKey) actions.add(action.actionKey)
@@ -360,18 +406,25 @@ function SuperAdminUiContractEditor() {
       { value: '', label: 'Select governed action' },
       ...[...actions].sort().map((value) => ({ value, label: value })),
     ]
-  }, [actionRows, selectedPackage])
+  }, [actionRows, policiesData?.data])
 
   const jsonPreview = useMemo(() => {
     const formForValidation = sourcePackageSelectValue && !form.sourcePackageKey
       ? { ...form, sourcePackageKey: sourcePackageSelectValue }
       : form
-    const { payload } = validateUIContractForm(formForValidation, { isEditMode, sourcePackage: selectedPackage })
+    const { payload } = validateUIContractForm(formForValidation, {
+      isEditMode: isEditMode && !isCloneMode,
+      sourcePackage: selectedPackage,
+    })
     return JSON.stringify(payload, null, 2)
-  }, [form, isEditMode, selectedPackage, sourcePackageSelectValue])
+  }, [form, isCloneMode, isEditMode, selectedPackage, sourcePackageSelectValue])
 
   const navigateToUiContracts = (options) => navigate('/super-admin/runtime-control/ui-contracts', options)
   const handleBack = () => navigateToUiContracts()
+  const handleCloneCurrent = () => {
+    if (!loaded?.id) return
+    navigate(`/super-admin/runtime-control/ui-contracts/new?cloneFrom=${encodeURIComponent(loaded.id)}`)
+  }
 
   const handleSourcePackageChange = (packageKey) => {
     const pkg = packageRows.find((row) => getPackageKey(row) === packageKey)
@@ -467,26 +520,40 @@ function SuperAdminUiContractEditor() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (isReadOnly) {
+      addToast({
+        variant: 'warning',
+        title: 'Clone required',
+        description: LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE,
+      })
+      return
+    }
+
     setErrors({})
     const formForValidation = sourcePackageSelectValue && !form.sourcePackageKey
       ? { ...form, sourcePackageKey: sourcePackageSelectValue }
       : form
-    const { errors: nextErrors, payload } = validateUIContractForm(formForValidation, { isEditMode, sourcePackage: selectedPackage })
+    const { errors: nextErrors, payload } = validateUIContractForm(formForValidation, {
+      isEditMode: isEditMode && !isCloneMode,
+      sourcePackage: selectedPackage,
+    })
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       return
     }
 
     try {
-      if (isEditMode) {
+      if (isCloneMode) {
+        await cloneUiContract({ uiContractId: cloneFromId, ...payload }).unwrap()
+      } else if (isEditMode) {
         await updateUiContract({ uiContractId, ...payload }).unwrap()
       } else {
         await createUiContract(payload).unwrap()
       }
       addToast({
         variant: 'success',
-        title: isEditMode ? 'UI Contract updated' : 'UI Contract created',
-        description: `${payload.uiContractKey} saved.`,
+        title: isCloneMode ? 'UI Contract cloned' : isEditMode ? 'UI Contract updated' : 'UI Contract created',
+        description: `${payload.uiContractKey || form.uiContractKey} saved.`,
       })
       navigateToUiContracts({ state: { runtimeControlSaved: true } })
     } catch (err) {
@@ -664,7 +731,7 @@ function SuperAdminUiContractEditor() {
     },
   ]
 
-  if (isEditMode && isLoading) {
+  if ((isEditMode || isCloneMode) && isLoading) {
     return (
       <section className="super-admin-ui-contracts container">
         <Card variant="elevated" className="super-admin-ui-contracts__card">
@@ -674,7 +741,7 @@ function SuperAdminUiContractEditor() {
     )
   }
 
-  if (isEditMode && error) {
+  if ((isEditMode || isCloneMode) && error) {
     return (
       <section className="super-admin-ui-contracts container">
         <Card variant="elevated" className="super-admin-ui-contracts__card">
@@ -690,7 +757,9 @@ function SuperAdminUiContractEditor() {
   return (
     <section className="super-admin-ui-contracts container" aria-label="UI Contract editor">
       <header className="super-admin-ui-contracts__header">
-        <h1 className="super-admin-ui-contracts__title">{isEditMode ? 'UI Contract Editor' : 'Create UI Contract'}</h1>
+        <h1 className="super-admin-ui-contracts__title">
+          {isCloneMode ? 'Clone UI Contract' : isEditMode ? 'UI Contract Editor' : 'Create UI Contract'}
+        </h1>
         <p className="super-admin-ui-contracts__subtitle">
           Configure package-synced presentation controls for runtime sections, lifecycle stages, and governed actions.
         </p>
@@ -703,8 +772,32 @@ function SuperAdminUiContractEditor() {
             <Card.Body className="super-admin-ui-contracts__body">
               <div className="super-admin-ui-contracts__actions">
                 <Button type="button" variant="outline" size="sm" onClick={() => handleBack()}>Back</Button>
+                {isEditMode && loaded ? (
+                  <Button type="button" variant="primary" size="sm" onClick={handleCloneCurrent}>Clone</Button>
+                ) : null}
               </div>
 
+              {isReadOnly ? (
+                <div className="super-admin-ui-contracts__locked-banner" role="status">
+                  <Badge size="sm" variant="warning" pill outline>
+                    Locked
+                  </Badge>
+                  <p className="super-admin-ui-contracts__locked-copy">
+                    {LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE}
+                  </p>
+                </div>
+              ) : null}
+
+              {(isEditMode || isCloneMode) && loaded ? (
+                <div className="super-admin-ui-contracts__dependency-grid">
+                  <ReadOnlyValue label="Version" value={`v${form.componentVersion || 1}`} />
+                  <ReadOnlyValue label="Version Status" value={formatRuntimeControlVersionStatus(form.versionStatus)} />
+                  <ReadOnlyValue label="Lineage" value={form.lineageId} />
+                  <ReadOnlyValue label="Locked By Packages" value={(form.lockedByPackageKeys || []).join(', ')} />
+                </div>
+              ) : null}
+
+              <fieldset className="super-admin-ui-contracts__edit-fieldset" disabled={isFormDisabled}>
               <section className="super-admin-ui-contracts__basic">
                 <h2>Basic Information</h2>
                 <div className="super-admin-ui-contracts__filters">
@@ -752,7 +845,6 @@ function SuperAdminUiContractEditor() {
               <div className="super-admin-ui-contracts__toggles">
                 <Tickbox id="ui-contract-system" label="System Contract" checked={Boolean(form.isSystem)} onChange={(event) => setForm((current) => ({ ...current, isSystem: event.target.checked }))} />
                 <Tickbox id="ui-contract-protected" label="Protected" checked={Boolean(form.isProtected)} onChange={(event) => setForm((current) => ({ ...current, isProtected: event.target.checked }))} />
-                <Tickbox id="ui-contract-locked" label="Locked" checked={Boolean(form.isLocked)} onChange={(event) => setForm((current) => ({ ...current, isLocked: event.target.checked }))} />
               </div>
 
               <TabView activeTab={activeTab} onTabChange={setActiveTab} variant="pills" size="sm" evenTabs>
@@ -960,6 +1052,7 @@ function SuperAdminUiContractEditor() {
                   </div>
                 </TabView.Tab>
               </TabView>
+              </fieldset>
 
               {Object.keys(errors).filter((key) => errors[key]).length > 0 ? (
                 <p className="super-admin-ui-contracts__error" role="alert">Review the highlighted fields and try again.</p>
@@ -967,7 +1060,9 @@ function SuperAdminUiContractEditor() {
 
               <div className="super-admin-ui-contracts__actions">
                 <Button type="button" variant="outline" size="sm" disabled={isSaving} onClick={() => handleBack()}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" loading={isSaving}>{isEditMode ? 'Save Changes' : 'Create UI Contract'}</Button>
+                <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={isReadOnly}>
+                  {isCloneMode ? 'Save Clone' : isEditMode ? 'Save Changes' : 'Create UI Contract'}
+                </Button>
               </div>
             </Card.Body>
           </form>

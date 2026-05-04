@@ -47,12 +47,34 @@
 }
 
 .super-admin-ui-contracts__actions,
-.super-admin-ui-contracts__catalogue-actions {
+.super-admin-ui-contracts__catalogue-actions,
+.super-admin-ui-contracts__locked-banner {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
   flex-wrap: wrap;
+}
+
+.super-admin-ui-contracts__locked-banner {
+  justify-content: flex-start;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+}
+
+.super-admin-ui-contracts__locked-copy,
+.super-admin-ui-contracts__edit-fieldset {
+  margin: 0;
+}
+
+.super-admin-ui-contracts__edit-fieldset {
+  display: grid;
+  gap: var(--spacing-md);
+  min-width: 0;
+  padding: 0;
+  border: 0;
 }
 
 .super-admin-ui-contracts__filters {
@@ -110,7 +132,7 @@
 }
 
 .super-admin-ui-contracts__table {
-  min-width: 78rem;
+  min-width: 1460px;
 }
 
 @media (min-width: 768px) {
@@ -125,6 +147,7 @@
 .super-admin-ui-contracts__pagination-info,
 .super-admin-ui-contracts__muted {
   margin: 0;
+  font-size: var(--font-size-sm);
 }
 
 .super-admin-ui-contracts__summary,
@@ -154,7 +177,25 @@
 }
 
 .super-admin-ui-contracts__key {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
   white-space: nowrap;
+}
+
+.super-admin-ui-contracts__version-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-ui-contracts__version-text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
 }
 
 .super-admin-ui-contracts__row-actions {
@@ -295,15 +336,28 @@
   }
 }
 
+@media (max-width: 1023px) {
+  .super-admin-ui-contracts__toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 767px) {
   .super-admin-ui-contracts__body,
   .super-admin-ui-contracts__card-body {
     padding: var(--spacing-sm);
   }
 
-  .super-admin-ui-contracts__toolbar,
   .super-admin-ui-contracts__filters {
     grid-template-columns: 1fr;
+  }
+
+  .super-admin-ui-contracts__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .super-admin-ui-contracts__catalogue-actions > * {
+    width: 100%;
   }
 
   .super-admin-ui-contracts__table {
@@ -316,9 +370,29 @@
 
   .super-admin-ui-contracts__key {
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .super-admin-ui-contracts__row-buttons {
     justify-content: flex-start;
+  }
+
+  .super-admin-ui-contracts__pagination {
+    align-items: stretch;
+  }
+
+  .super-admin-ui-contracts__pagination-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .super-admin-ui-contracts__pagination-controls > * {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .super-admin-ui-contracts__pagination-info {
+    text-align: center;
+    width: 100%;
   }
 }
