@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   RUNTIME_PATH_REGISTRY_DATA_TYPES,
   RUNTIME_PATH_REGISTRY_OPERATIONS,
+  RUNTIME_PATH_REGISTRY_STATUSES,
   RUNTIME_PATH_REGISTRY_UI_CONTROLS,
   buildRuntimePathRegistryStableId,
+  getRuntimeControlVersionStatusVariant,
+  getRuntimePathRegistryStatusVariant,
   validateRuntimePathRegistryForm,
 } from './superAdminRuntimePathRegistry.constants.js'
 
@@ -86,5 +89,12 @@ describe('validateRuntimePathRegistryForm', () => {
       maxValue: 'Max Value must be greater than or equal to Min Value.',
       maxLength: 'Max Length must be greater than or equal to Min Length.',
     })
+  })
+})
+
+describe('Runtime Path status variants', () => {
+  it('renders draft operational and version statuses as warning/amber', () => {
+    expect(getRuntimePathRegistryStatusVariant(RUNTIME_PATH_REGISTRY_STATUSES.DRAFT)).toBe('warning')
+    expect(getRuntimeControlVersionStatusVariant('DRAFT')).toBe('warning')
   })
 })

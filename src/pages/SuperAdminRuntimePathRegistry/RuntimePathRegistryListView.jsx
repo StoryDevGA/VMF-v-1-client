@@ -16,6 +16,8 @@ import {
   RUNTIME_PATH_REGISTRY_PROTECTED_OPTIONS,
   RUNTIME_PATH_REGISTRY_STATUS_OPTIONS,
   formatRuntimePathRegistryStatus,
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
   getRuntimePathRegistryStatusVariant,
 } from './superAdminRuntimePathRegistry.constants.js'
 import './RuntimePathRegistryListView.css'
@@ -61,6 +63,30 @@ function renderFlagBadges(_value, row) {
           Extension
         </Badge>
       )}
+    </div>
+  )
+}
+
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row?.componentVersion) || 1
+  const versionStatus = row?.versionStatus || ''
+  const isLocked = Boolean(row?.isLocked)
+
+  return (
+    <div className="super-admin-runtime-path-registry__version-summary">
+      <span className="super-admin-runtime-path-registry__version-number">
+        v{componentVersion}
+      </span>
+      {versionStatus ? (
+        <Status size="sm" showIcon variant={getRuntimeControlVersionStatusVariant(versionStatus)}>
+          {formatRuntimeControlVersionStatus(versionStatus)}
+        </Status>
+      ) : null}
+      {isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -203,7 +229,7 @@ function RuntimePathRowActionsMenu({ row, onAction, disabled = false }) {
   const status = String(row?.status ?? '').toUpperCase()
   const actionOptions = [
     { value: 'Edit', label: 'Edit' },
-    { value: 'Duplicate', label: 'Duplicate' },
+    { value: 'Clone', label: 'Clone' },
     ...(status !== 'ACTIVE' ? [{ value: 'Activate', label: 'Activate' }] : []),
     ...(status !== 'INACTIVE' ? [{ value: 'Disable', label: 'Disable' }] : []),
     ...(status !== 'DEPRECATED' ? [{ value: 'Deprecate', label: 'Deprecate' }] : []),
@@ -249,7 +275,7 @@ export function RuntimePathRegistryListView({
   onBackClick,
   onCreatePath,
   onEditPath,
-  onDuplicatePath,
+  onClonePath,
   onActivatePath,
   onDisablePath,
   onDeprecatePath,
@@ -261,8 +287,8 @@ export function RuntimePathRegistryListView({
         onEditPath(row)
       }
 
-      if (label === 'Duplicate') {
-        onDuplicatePath(row)
+      if (label === 'Clone') {
+        onClonePath(row)
       }
 
       if (label === 'Activate') {
@@ -281,7 +307,7 @@ export function RuntimePathRegistryListView({
       onActivatePath,
       onDeprecatePath,
       onDisablePath,
-      onDuplicatePath,
+      onClonePath,
       onEditPath,
     ],
   )
@@ -292,14 +318,14 @@ export function RuntimePathRegistryListView({
         key: 'pathKey',
         label: 'Runtime Path',
         mobileLabel: 'Runtime Path',
-        width: '26%',
+        width: '300px',
         render: renderPathSummary,
       },
       {
         key: 'status',
         label: 'Status',
         mobileLabel: 'Status',
-        width: '8%',
+        width: '112px',
         render: (value) => (
           <Status size="sm" showIcon variant={getRuntimePathRegistryStatusVariant(value)}>
             {formatRuntimePathRegistryStatus(value)}
@@ -307,24 +333,31 @@ export function RuntimePathRegistryListView({
         ),
       },
       {
+        key: 'version',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '136px',
+        render: renderVersionSummary,
+      },
+      {
         key: 'flags',
         label: 'Flags',
         mobileLabel: 'Flags',
-        width: '10%',
+        width: '128px',
         render: renderFlagBadges,
       },
       {
         key: 'compatibility',
         label: 'Compatibility',
         mobileLabel: 'Compatibility',
-        width: '18%',
+        width: '208px',
         render: renderCompatibilitySummary,
       },
       {
         key: 'scope',
         label: 'Scope',
         mobileLabel: 'Scope',
-        width: '10%',
+        width: '164px',
         render: (value) => (
           <span className="super-admin-runtime-path-registry__scope-cell">{value}</span>
         ),
@@ -333,14 +366,14 @@ export function RuntimePathRegistryListView({
         key: 'schema',
         label: 'Schema',
         mobileLabel: 'Schema',
-        width: '18%',
+        width: '220px',
         render: (_value, row) => <SchemaAccordionCell row={row} />,
       },
       {
         key: 'updatedAt',
         label: 'Updated',
         mobileLabel: 'Updated',
-        width: '10%',
+        width: '132px',
         render: (value) => <TableDateTime value={value} />,
       },
       {

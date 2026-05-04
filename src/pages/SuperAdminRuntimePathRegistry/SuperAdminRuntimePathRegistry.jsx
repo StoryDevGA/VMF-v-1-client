@@ -41,9 +41,9 @@ function SuperAdminRuntimePathRegistry() {
     navigate(`/super-admin/runtime-control/runtime-paths/${row.id}/edit`)
   }, [navigate])
 
-  const handleDuplicatePath = useCallback((row) => {
+  const handleClonePath = useCallback((row) => {
     if (!row?.id) return
-    navigate(`/super-admin/runtime-control/runtime-paths/new?duplicateFrom=${encodeURIComponent(row.id)}`)
+    navigate(`/super-admin/runtime-control/runtime-paths/new?cloneFrom=${encodeURIComponent(row.id)}`)
   }, [navigate])
 
   const handleActivatePath = useCallback(async (row) => {
@@ -153,7 +153,7 @@ function SuperAdminRuntimePathRegistry() {
         onBackClick={handleBackClick}
         onCreatePath={handleCreatePath}
         onEditPath={handleEditPath}
-        onDuplicatePath={handleDuplicatePath}
+        onClonePath={handleClonePath}
         onActivatePath={handleActivatePath}
         onDisablePath={handleDisablePath}
         onDeprecatePath={handleDeprecatePath}

@@ -5,6 +5,7 @@ import {
   buildRuntimeControlDetailRequest,
   buildRuntimeControlListRequest,
   buildRuntimeControlMutationRequest,
+  __mutateRuntimeControlApiStateForTests,
   __resetRuntimeControlApiStateForTests,
   useCreateFrameworkRegistryMutation,
   useActivateFrameworkPackageMutation,
@@ -16,6 +17,7 @@ import {
   useCreateWorkflowPolicyMutation,
   useDeprecateRuntimePathMutation,
   useDisableRuntimePathMutation,
+  useCloneRuntimePathMutation,
   useDuplicateRuntimePathMutation,
   useGetFrameworkRegistryQuery,
   useGetFrameworkPackageAuditQuery,
@@ -90,6 +92,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimePath')
+    expect(runtimeControlApi.endpoints).toHaveProperty('cloneRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('duplicateRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimePathDependencies')
     expect(runtimeControlApi.endpoints).toHaveProperty('activateRuntimePath')
@@ -150,6 +153,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useUpdateRuntimeAgentMutation).toBe('function')
     expect(typeof useCreateRuntimePathMutation).toBe('function')
     expect(typeof useUpdateRuntimePathMutation).toBe('function')
+    expect(typeof useCloneRuntimePathMutation).toBe('function')
     expect(typeof useDuplicateRuntimePathMutation).toBe('function')
     expect(typeof useActivateRuntimePathMutation).toBe('function')
     expect(typeof useDisableRuntimePathMutation).toBe('function')
@@ -187,6 +191,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.createRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateRuntimePath.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.cloneRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.duplicateRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimePathDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.activateRuntimePath.initiate).toBe('function')
@@ -451,7 +456,7 @@ describe('runtimeControlApi', () => {
     )
   })
 
-  it('round-trips mock Runtime Path Registry CRUD, duplicate, dependencies, and lifecycle', async () => {
+  it('round-trips mock Runtime Path Registry CRUD, clone, dependencies, and lifecycle', async () => {
     const store = createTestStore()
 
     const createResult = await store.dispatch(
@@ -496,15 +501,20 @@ describe('runtimeControlApi', () => {
     expect(updateResult.data?.data?.allowedValues).toEqual(['TRUE', 'FALSE'])
     expect(updateResult.data?.data?.allowedValueLabels).toEqual({ TRUE: 'True', FALSE: 'False' })
 
-    const duplicateResult = await store.dispatch(
-      runtimeControlApi.endpoints.duplicateRuntimePath.initiate({
+    const cloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneRuntimePath.initiate({
         pathId,
         pathKey: 'framework_state.custom.flag_copy',
         label: 'Custom Runtime Flag Copy',
       }),
     )
-    expect(duplicateResult.error).toBeUndefined()
-    expect(duplicateResult.data?.data?.isSystem).toBe(false)
+    expect(cloneResult.error).toBeUndefined()
+    expect(cloneResult.data?.data?.isSystem).toBe(false)
+    expect(cloneResult.data?.data?.componentVersion).toBe(2)
+    expect(cloneResult.data?.data?.versionStatus).toBe('DRAFT')
+    expect(cloneResult.data?.data?.isLocked).toBe(false)
+    expect(cloneResult.data?.data?.lineageId).toBe(pathId)
+    expect(cloneResult.data?.data?.clonedFromStableId).toBe(pathId)
 
     const dependencyResult = await store.dispatch(
       runtimeControlApi.endpoints.getRuntimePathDependencies.initiate(pathId),
@@ -523,6 +533,60 @@ describe('runtimeControlApi', () => {
     )
     expect(disableResult.error).toBeUndefined()
     expect(disableResult.data?.data?.status).toBe('INACTIVE')
+  })
+
+  it('keeps mock Runtime Path clone and lock behavior aligned with live API', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createRuntimePath.initiate({
+        pathKey: 'framework_state.custom.locked_flag',
+        label: 'Locked Flag',
+        description: 'Custom flag used to verify locked mock behavior.',
+        frameworkKeys: ['VMF'],
+        scope: 'FRAMEWORK_STATE',
+        allowedOperations: ['READ', 'WRITE'],
+        dataType: 'BOOLEAN',
+        category: 'STATE',
+        sourceType: 'RUNTIME_STATE',
+      }),
+    )
+    const pathId = createResult.data?.data?.id
+
+    const invalidCloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneRuntimePath.initiate({
+        pathId,
+        pathKey: 'framework_state.custom.locked_flag_clone',
+        label: 'Locked Flag Clone',
+        status: 'ACTIVE',
+      }),
+    )
+    expect(invalidCloneResult.error?.status).toBe(422)
+    expect(invalidCloneResult.error?.data?.error?.details?.status).toContain('DRAFT')
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimePaths: state.runtimePaths.map((row) =>
+        row.id === pathId
+          ? { ...row, isLocked: true, lockedByPackageKeys: ['vmf-2-3-1'] }
+          : row,
+      ),
+    }))
+
+    const lockedUpdateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateRuntimePath.initiate({
+        pathId,
+        label: 'Edited Locked Flag',
+      }),
+    )
+    expect(lockedUpdateResult.error?.status).toBe(409)
+    expect(lockedUpdateResult.error?.data?.error?.details?.reason).toBe('RUNTIME_PATH_LOCKED')
+
+    const lockedLifecycleResult = await store.dispatch(
+      runtimeControlApi.endpoints.disableRuntimePath.initiate({ pathId, confirmDependencies: true }),
+    )
+    expect(lockedLifecycleResult.error?.status).toBe(409)
+    expect(lockedLifecycleResult.error?.data?.error?.details?.reason).toBe('RUNTIME_PATH_LOCKED')
   })
 
   it('round-trips mock Validation Registry PDF follow-up fields', async () => {

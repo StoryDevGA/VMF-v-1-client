@@ -34,6 +34,7 @@ import {
 import {
   buildRuntimePathRegistryStableId,
   cloneRuntimePathRegistryEntry,
+  LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE,
   RUNTIME_PATH_REGISTRY_PAGE_SIZE,
   RUNTIME_PATH_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
@@ -327,6 +328,15 @@ const buildNotFoundError = (message) => ({
   },
 })
 
+const buildRuntimePathLockedConflictError = (runtimePath = {}) =>
+  buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+    field: 'isLocked',
+    reason: 'RUNTIME_PATH_LOCKED',
+    lockedByPackageKeys: Array.isArray(runtimePath.lockedByPackageKeys)
+      ? runtimePath.lockedByPackageKeys
+      : [],
+  })
+
 const validateMockDeprecatedFrameworkPackageFields = (payload = {}) => {
   const details = {}
 
@@ -363,6 +373,12 @@ let runtimeControlState = buildInitialRuntimeControlState()
 
 export const __resetRuntimeControlApiStateForTests = () => {
   runtimeControlState = buildInitialRuntimeControlState()
+}
+
+export const __mutateRuntimeControlApiStateForTests = (updater) => {
+  if (typeof updater === 'function') {
+    runtimeControlState = updater(runtimeControlState)
+  }
 }
 
 const buildMockRuntimeAgentDependencies = (agentId) => {
@@ -3952,6 +3968,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Runtime path was not found.')
         }
 
+        if (existing.isLocked === true) {
+          return buildRuntimePathLockedConflictError(existing)
+        }
+
         if (
           payload.pathKey !== undefined
           && String(payload.pathKey ?? '').trim() !== String(existing.pathKey ?? '').trim()
@@ -3989,6 +4009,81 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    cloneRuntimePath: build.mutation({
+      queryFn: async ({ pathId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'runtime-paths',
+              entityId: `${pathId}/clone`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const source = findRuntimePathById(pathId)
+        if (!source) {
+          return buildNotFoundError('Runtime path was not found.')
+        }
+
+        const pathKey = String(payload.pathKey ?? '').trim()
+        if (findRuntimePathByPathKey(pathKey)) {
+          return buildConflictError('Path key must be unique.', {
+            pathKey: 'Path key must be unique.',
+          })
+        }
+
+        if (payload.status !== undefined && payload.status !== RUNTIME_PATH_REGISTRY_STATUSES.DRAFT) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            status: 'Cloned runtime paths must start in DRAFT status.',
+          })
+        }
+
+        const nextPayload = {
+          ...buildRuntimePathMockPayload({
+            ...source,
+            pathKey,
+            label: payload.label ?? source.label,
+            description: payload.description ?? source.description,
+            status: RUNTIME_PATH_REGISTRY_STATUSES.DRAFT,
+            isSystem: false,
+          }),
+          componentVersion: (Number(source.componentVersion) || 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: source.lineageId || source.stableId || source.id,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: source.stableId || source.id,
+          supersedesStableId: source.stableId || source.id,
+          supersededByStableId: null,
+        }
+        const validationErrors = validateMockRuntimePathPayload(nextPayload)
+        if (Object.keys(validationErrors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validationErrors)
+        }
+
+        const created = cloneRuntimePathRegistryEntry({
+          ...nextPayload,
+          id: buildRuntimePathRegistryStableId(nextPayload.pathKey),
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimePaths: [created, ...runtimeControlState.runtimePaths],
+        }
+
+        return { data: buildEntityResponse(cloneRuntimePathRegistryEntry(created)) }
+      },
+      invalidatesTags: [RUNTIME_PATH_LIST_TAG],
+    }),
+
     duplicateRuntimePath: build.mutation({
       queryFn: async ({ pathId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -4016,14 +4111,33 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
-        const nextPayload = buildRuntimePathMockPayload({
-          ...source,
-          pathKey,
-          label: payload.label ?? source.label,
-          description: payload.description ?? source.description,
-          status: payload.status ?? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT,
-          isSystem: false,
-        })
+        if (payload.status !== undefined && payload.status !== RUNTIME_PATH_REGISTRY_STATUSES.DRAFT) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            status: 'Cloned runtime paths must start in DRAFT status.',
+          })
+        }
+
+        const nextPayload = {
+          ...buildRuntimePathMockPayload({
+            ...source,
+            pathKey,
+            label: payload.label ?? source.label,
+            description: payload.description ?? source.description,
+            status: RUNTIME_PATH_REGISTRY_STATUSES.DRAFT,
+            isSystem: false,
+          }),
+          componentVersion: (Number(source.componentVersion) || 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: source.lineageId || source.stableId || source.id,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: source.stableId || source.id,
+          supersedesStableId: source.stableId || source.id,
+          supersededByStableId: null,
+        }
         const validationErrors = validateMockRuntimePathPayload(nextPayload)
         if (Object.keys(validationErrors).length > 0) {
           return buildValidationFailedError('Please check the form for errors.', validationErrors)
@@ -4093,6 +4207,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Runtime path was not found.')
         }
 
+        if (runtimePath.isLocked === true) {
+          return buildRuntimePathLockedConflictError(runtimePath)
+        }
+
         const next = cloneRuntimePathRegistryEntry({
           ...runtimePath,
           status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
@@ -4134,6 +4252,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Runtime path was not found.')
         }
 
+        if (runtimePath.isLocked === true) {
+          return buildRuntimePathLockedConflictError(runtimePath)
+        }
+
         const dependencies = buildMockRuntimePathDependencies(runtimePath.pathKey)
         if (dependencies.hasActiveDependencies && !confirmDependencies) {
           return buildRuntimePathDependencyConfirmationError(dependencies)
@@ -4161,14 +4283,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     deprecateRuntimePath: build.mutation({
-      queryFn: async ({ pathId, deprecatedInVersion = '' } = {}, api, extraOptions, baseQuery) => {
+      queryFn: async ({ pathId, deprecatedInVersion = '', confirmDependencies = false } = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'runtime-paths',
               entityId: `${pathId}/deprecate`,
               method: 'POST',
-              body: { deprecatedInVersion },
+              body: { deprecatedInVersion, confirmDependencies },
             }),
             api,
             extraOptions,
@@ -4178,6 +4300,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const runtimePath = findRuntimePathById(pathId)
         if (!runtimePath) {
           return buildNotFoundError('Runtime path was not found.')
+        }
+
+        if (runtimePath.isLocked === true) {
+          return buildRuntimePathLockedConflictError(runtimePath)
+        }
+
+        const dependencies = buildMockRuntimePathDependencies(runtimePath.pathKey)
+        if (dependencies.hasActiveDependencies && !confirmDependencies) {
+          return buildRuntimePathDependencyConfirmationError(dependencies)
         }
 
         const next = cloneRuntimePathRegistryEntry({
@@ -5169,6 +5300,7 @@ export const {
   useCreateRuntimePathMutation,
   useGetRuntimePathQuery,
   useUpdateRuntimePathMutation,
+  useCloneRuntimePathMutation,
   useDuplicateRuntimePathMutation,
   useGetRuntimePathDependenciesQuery,
   useActivateRuntimePathMutation,

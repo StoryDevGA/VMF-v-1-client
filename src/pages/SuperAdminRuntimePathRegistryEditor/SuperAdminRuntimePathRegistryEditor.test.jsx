@@ -5,6 +5,7 @@ import SuperAdminRuntimePathRegistryEditor from './SuperAdminRuntimePathRegistry
 
 const navigateMock = vi.fn()
 let paramsMock = {}
+let searchParamsMock = new URLSearchParams()
 let runtimePathQueryMock = { data: null, isLoading: false, error: null }
 
 vi.mock('react-router-dom', async () => {
@@ -13,7 +14,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => navigateMock,
     useParams: () => paramsMock,
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useSearchParams: () => [searchParamsMock, vi.fn()],
   }
 })
 
@@ -22,8 +23,8 @@ vi.mock('../../components/Toaster', () => ({
 }))
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
+  useCloneRuntimePathMutation: () => [vi.fn(), { isLoading: false }],
   useCreateRuntimePathMutation: () => [vi.fn(), { isLoading: false }],
-  useDuplicateRuntimePathMutation: () => [vi.fn(), { isLoading: false }],
   useGetRuntimePathDependenciesQuery: () => ({ data: null, isLoading: false, error: null }),
   useGetRuntimePathQuery: (_id, options = {}) => (options.skip ? { data: null, isLoading: false, error: null } : runtimePathQueryMock),
   useListFrameworkRegistriesQuery: () => ({
@@ -37,6 +38,7 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
   beforeEach(() => {
     navigateMock.mockClear()
     paramsMock = {}
+    searchParamsMock = new URLSearchParams()
     runtimePathQueryMock = { data: null, isLoading: false, error: null }
   })
 
@@ -126,6 +128,91 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
     const currentRecord = screen.getByLabelText(/current runtime path record json/i)
     expect(currentRecord).toHaveTextContent('"stableId": "path-framework-state-metadata-tenant-id-1y5pv6y"')
     expect(currentRecord).toHaveTextContent('"createdAt": "2026-04-24T17:21:22.100Z"')
+  })
+
+  it('renders clone mode from a source runtime path', async () => {
+    searchParamsMock = new URLSearchParams('cloneFrom=path-framework-state-metadata-tenant-id-1y5pv6y')
+    runtimePathQueryMock = {
+      data: {
+        data: {
+          id: 'path-framework-state-metadata-tenant-id-1y5pv6y',
+          pathKey: 'framework_state.metadata.tenant_id',
+          label: 'Tenant ID',
+          description: 'Tenant ID runtime path for VMF v2.3.1.',
+          status: 'ACTIVE',
+          frameworkKeys: ['VMF'],
+          scope: 'FRAMEWORK_STATE',
+          allowedOperations: ['READ', 'BIND'],
+          dataType: 'STRING',
+          category: 'METADATA',
+          sourceType: 'RUNTIME_STATE',
+          isProtected: true,
+          isSystem: true,
+        },
+      },
+      isLoading: false,
+      error: null,
+    }
+
+    render(<SuperAdminRuntimePathRegistryEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /clone runtime path/i })).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('textbox', { name: /path key/i })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: /label/i })).toHaveValue('Tenant ID Clone')
+    expect(screen.getByRole('combobox', { name: /status/i })).toBeDisabled()
+    expect(screen.getByText(/source fields locked/i)).toBeInTheDocument()
+    expect(screen.getByText(/clone mode uses the source path metadata/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /clone path/i })).toBeInTheDocument()
+  })
+
+  it('locks persisted records that are package controlled and routes edits through clone', async () => {
+    const user = userEvent.setup()
+    paramsMock = { pathId: 'path-framework-state-metadata-tenant-id-1y5pv6y' }
+    runtimePathQueryMock = {
+      data: {
+        data: {
+          id: 'path-framework-state-metadata-tenant-id-1y5pv6y',
+          pathKey: 'framework_state.metadata.tenant_id',
+          label: 'Tenant ID',
+          description: 'Tenant ID runtime path for VMF v2.3.1.',
+          status: 'ACTIVE',
+          componentVersion: 3,
+          versionStatus: 'ACTIVE',
+          lineageId: 'path-framework-state-metadata-tenant-id-1y5pv6y',
+          frameworkKeys: ['VMF'],
+          scope: 'FRAMEWORK_STATE',
+          allowedOperations: ['READ', 'BIND'],
+          dataType: 'STRING',
+          category: 'METADATA',
+          sourceType: 'RUNTIME_STATE',
+          isProtected: false,
+          isSystem: true,
+          isLocked: true,
+          lockedByPackageKeys: ['vmf-qa-manual-951'],
+        },
+      },
+      isLoading: false,
+      error: null,
+    }
+
+    render(<SuperAdminRuntimePathRegistryEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/locked by validated package usage/i)).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('v3')).toBeInTheDocument()
+    expect(screen.getByText('vmf-qa-manual-951')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /label/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /^clone$/i }))
+    expect(navigateMock).toHaveBeenCalledWith(
+      '/super-admin/runtime-control/runtime-paths/new?cloneFrom=path-framework-state-metadata-tenant-id-1y5pv6y',
+    )
   })
 
   it('validates min and max constraints before submit', async () => {

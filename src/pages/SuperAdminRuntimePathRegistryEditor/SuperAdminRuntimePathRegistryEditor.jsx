@@ -15,8 +15,8 @@ import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import {
+  useCloneRuntimePathMutation,
   useCreateRuntimePathMutation,
-  useDuplicateRuntimePathMutation,
   useGetRuntimePathDependenciesQuery,
   useGetRuntimePathQuery,
   useListFrameworkRegistriesQuery,
@@ -39,6 +39,8 @@ import {
   RUNTIME_PATH_REGISTRY_STATUSES,
   RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS,
   formatRuntimePathRegistryStatus,
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
   getRuntimePathRegistryStatusVariant,
   normalizeRuntimePathRegistryList as normalizeList,
   parseOptionalRuntimePathRegistryNumber as parseOptionalNumber,
@@ -130,12 +132,12 @@ const renderTabLabel = (label, count = 0) => (
   </span>
 )
 
-const mapRuntimePathToForm = (runtimePath, { duplicate = false } = {}) => ({
+const mapRuntimePathToForm = (runtimePath, { clone = false } = {}) => ({
   ...INITIAL_FORM,
-  pathKey: duplicate ? '' : (runtimePath?.pathKey ?? ''),
-  label: duplicate && runtimePath?.label ? `${runtimePath.label} Copy` : (runtimePath?.label ?? ''),
+  pathKey: clone ? '' : (runtimePath?.pathKey ?? ''),
+  label: clone && runtimePath?.label ? `${runtimePath.label} Clone` : (runtimePath?.label ?? ''),
   description: runtimePath?.description ?? '',
-  status: duplicate ? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT : (runtimePath?.status ?? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT),
+  status: clone ? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT : (runtimePath?.status ?? RUNTIME_PATH_REGISTRY_STATUSES.DRAFT),
   frameworkKeys: normalizeList(runtimePath?.frameworkKeys, { upper: true }),
   scope: runtimePath?.scope ?? INITIAL_FORM.scope,
   allowedOperations: normalizeList(runtimePath?.allowedOperations, { upper: true }),
@@ -143,7 +145,7 @@ const mapRuntimePathToForm = (runtimePath, { duplicate = false } = {}) => ({
   category: runtimePath?.category ?? INITIAL_FORM.category,
   sourceType: runtimePath?.sourceType ?? INITIAL_FORM.sourceType,
   isProtected: Boolean(runtimePath?.isProtected),
-  isSystem: duplicate ? false : Boolean(runtimePath?.isSystem),
+  isSystem: clone ? false : Boolean(runtimePath?.isSystem),
   introducedInVersion: runtimePath?.introducedInVersion ?? '',
   deprecatedInVersion: runtimePath?.deprecatedInVersion ?? '',
   replacementPathKey: runtimePath?.replacementPathKey ?? '',
@@ -286,9 +288,9 @@ function SuperAdminRuntimePathRegistryEditor() {
   const { pathId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const { addToast } = useToaster()
-  const duplicateFrom = String(searchParams.get('duplicateFrom') ?? '').trim()
+  const cloneFrom = String(searchParams.get('cloneFrom') ?? searchParams.get('duplicateFrom') ?? '').trim()
   const isEditMode = Boolean(pathId)
-  const isDuplicateMode = !isEditMode && Boolean(duplicateFrom)
+  const isCloneMode = !isEditMode && Boolean(cloneFrom)
 
   const [form, setForm] = useState(INITIAL_FORM)
   const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
@@ -302,10 +304,10 @@ function SuperAdminRuntimePathRegistryEditor() {
   } = useGetRuntimePathQuery(pathId, { skip: !isEditMode })
 
   const {
-    data: duplicateSourceResponse,
-    isLoading: isDuplicateSourceLoading,
-    error: duplicateSourceError,
-  } = useGetRuntimePathQuery(duplicateFrom, { skip: !isDuplicateMode })
+    data: cloneSourceResponse,
+    isLoading: isCloneSourceLoading,
+    error: cloneSourceError,
+  } = useGetRuntimePathQuery(cloneFrom, { skip: !isCloneMode })
 
   const {
     data: dependencyResponse,
@@ -324,16 +326,17 @@ function SuperAdminRuntimePathRegistryEditor() {
 
   const [createRuntimePath, { isLoading: isCreating }] = useCreateRuntimePathMutation()
   const [updateRuntimePath, { isLoading: isUpdating }] = useUpdateRuntimePathMutation()
-  const [duplicateRuntimePath, { isLoading: isDuplicating }] = useDuplicateRuntimePathMutation()
+  const [cloneRuntimePath, { isLoading: isCloning }] = useCloneRuntimePathMutation()
 
   const loadedRuntimePath = runtimePathResponse?.data ?? null
-  const duplicateSource = duplicateSourceResponse?.data ?? null
+  const cloneSource = cloneSourceResponse?.data ?? null
   const runtimePathAppError = runtimePathError ? normalizeError(runtimePathError) : null
-  const duplicateSourceAppError = duplicateSourceError ? normalizeError(duplicateSourceError) : null
+  const cloneSourceAppError = cloneSourceError ? normalizeError(cloneSourceError) : null
   const frameworkAppError = frameworkError ? normalizeError(frameworkError) : null
-  const isLoading = isRuntimePathLoading || isDuplicateSourceLoading
-  const isSaving = isCreating || isUpdating || isDuplicating
-  const readOnlyCopiedFields = isDuplicateMode
+  const isLoading = isRuntimePathLoading || isCloneSourceLoading
+  const isSaving = isCreating || isUpdating || isCloning
+  const isLockedRecord = isEditMode && Boolean(loadedRuntimePath?.isLocked)
+  const readOnlySourceFields = isCloneMode || isLockedRecord
   const currentRuntimePathJson = useMemo(
     () => (loadedRuntimePath ? formatRecordJson(loadedRuntimePath) : ''),
     [loadedRuntimePath],
@@ -350,14 +353,14 @@ function SuperAdminRuntimePathRegistryEditor() {
   }, [isEditMode, loadedRuntimePath])
 
   useEffect(() => {
-    if (!isDuplicateMode || !duplicateSource) return undefined
+    if (!isCloneMode || !cloneSource) return undefined
 
     const timeoutId = window.setTimeout(() => {
-      setForm(mapRuntimePathToForm(duplicateSource, { duplicate: true }))
+      setForm(mapRuntimePathToForm(cloneSource, { clone: true }))
     }, 0)
 
     return () => window.clearTimeout(timeoutId)
-  }, [duplicateSource, isDuplicateMode])
+  }, [cloneSource, isCloneMode])
 
   const frameworkRows = useMemo(() => {
     const data = frameworkResponse?.data
@@ -386,6 +389,12 @@ function SuperAdminRuntimePathRegistryEditor() {
     navigate('/super-admin/runtime-control/runtime-paths')
   }, [navigate])
 
+  const handleCloneCurrent = useCallback(() => {
+    const sourceId = loadedRuntimePath?.id ?? pathId
+    if (!sourceId) return
+    navigate(`/super-admin/runtime-control/runtime-paths/new?cloneFrom=${encodeURIComponent(sourceId)}`)
+  }, [loadedRuntimePath?.id, navigate, pathId])
+
   const updateForm = useCallback((field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
   }, [])
@@ -403,6 +412,15 @@ function SuperAdminRuntimePathRegistryEditor() {
 
   const handleSubmit = useCallback(async (event) => {
     event.preventDefault()
+
+    if (isLockedRecord) {
+      addToast({
+        variant: 'warning',
+        title: 'Runtime path locked',
+        description: 'Clone this runtime path before making changes.',
+      })
+      return
+    }
 
     const clientErrors = validateForm(form, { isEditMode })
     if (Object.keys(clientErrors).length > 0) {
@@ -432,17 +450,16 @@ function SuperAdminRuntimePathRegistryEditor() {
           title: 'Saved',
           description: `Updated ${response?.data?.pathKey ?? 'runtime path'}.`,
         })
-      } else if (isDuplicateMode) {
-        response = await duplicateRuntimePath({
-          pathId: duplicateFrom,
+      } else if (isCloneMode) {
+        response = await cloneRuntimePath({
+          pathId: cloneFrom,
           pathKey: payload.pathKey,
           label: payload.label,
           description: payload.description,
-          status: payload.status,
         }).unwrap()
         addToast({
           variant: 'success',
-          title: 'Runtime path duplicated',
+          title: 'Runtime path cloned',
           description: `${response?.data?.pathKey ?? 'Runtime path'} is ready for review.`,
         })
       } else {
@@ -476,12 +493,13 @@ function SuperAdminRuntimePathRegistryEditor() {
     }
   }, [
     addToast,
+    cloneFrom,
+    cloneRuntimePath,
     createRuntimePath,
-    duplicateFrom,
-    duplicateRuntimePath,
     form,
-    isDuplicateMode,
+    isCloneMode,
     isEditMode,
+    isLockedRecord,
     navigate,
     pathId,
     updateRuntimePath,
@@ -489,10 +507,15 @@ function SuperAdminRuntimePathRegistryEditor() {
 
   const pageTitle = isEditMode
     ? 'Edit Runtime Path'
-    : isDuplicateMode
-      ? 'Duplicate Runtime Path'
+    : isCloneMode
+      ? 'Clone Runtime Path'
       : 'Create Runtime Path'
-  const pathError = runtimePathAppError || duplicateSourceAppError
+  const pathError = runtimePathAppError || cloneSourceAppError
+  const loadedComponentVersion = Number(loadedRuntimePath?.componentVersion) || 1
+  const loadedVersionStatus = loadedRuntimePath?.versionStatus
+  const lockedByPackageKeys = Array.isArray(loadedRuntimePath?.lockedByPackageKeys)
+    ? loadedRuntimePath.lockedByPackageKeys.filter(Boolean)
+    : []
   const tabErrorCounts = {
     frameworkCompatibility: countErrorsForFields(errors, ['frameworkKeys', 'allowedOperations']),
     schemaUi: countErrorsForFields(errors, [
@@ -536,7 +559,7 @@ function SuperAdminRuntimePathRegistryEditor() {
             {isLoading ? (
               <div className="super-admin-runtime-path-registry-editor__loading">
                 <Spinner size="lg" />
-                <p>{isEditMode ? 'Loading runtime path...' : 'Loading duplicate source...'}</p>
+                <p>{isEditMode ? 'Loading runtime path...' : 'Loading clone source...'}</p>
               </div>
             ) : null}
 
@@ -557,15 +580,47 @@ function SuperAdminRuntimePathRegistryEditor() {
                   <Status size="sm" showIcon variant={getRuntimePathRegistryStatusVariant(form.status)}>
                     {formatRuntimePathRegistryStatus(form.status)}
                   </Status>
+                  {isEditMode ? (
+                    <>
+                      <Badge variant="neutral" size="sm" pill outline>v{loadedComponentVersion}</Badge>
+                      {loadedVersionStatus ? (
+                        <Status size="sm" showIcon variant={getRuntimeControlVersionStatusVariant(loadedVersionStatus)}>
+                          {formatRuntimeControlVersionStatus(loadedVersionStatus)}
+                        </Status>
+                      ) : null}
+                    </>
+                  ) : null}
                   {isEditMode && loadedRuntimePath?.isSystem ? (
                     <Badge variant="info" size="sm" pill outline>System</Badge>
                   ) : (
                     <Badge variant="neutral" size="sm" pill outline>Extension</Badge>
                   )}
-                  {isDuplicateMode ? (
-                    <Badge variant="warning" size="sm" pill outline>Copied Fields Locked</Badge>
+                  {isCloneMode ? (
+                    <Badge variant="warning" size="sm" pill outline>Source Fields Locked</Badge>
+                  ) : null}
+                  {isLockedRecord ? (
+                    <Badge variant="warning" size="sm" pill outline>Locked</Badge>
                   ) : null}
                 </div>
+
+                {isLockedRecord ? (
+                  <div className="super-admin-runtime-path-registry-editor__lock-notice" role="status">
+                    <div className="super-admin-runtime-path-registry-editor__lock-copy">
+                      <strong>Locked by validated package usage.</strong>
+                      <span>Clone this runtime path to make behavior changes.</span>
+                    </div>
+                    {lockedByPackageKeys.length > 0 ? (
+                      <div className="super-admin-runtime-path-registry-editor__lock-packages" aria-label="Locked by packages">
+                        {lockedByPackageKeys.map((packageKey) => (
+                          <Badge key={packageKey} variant="neutral" size="sm" pill outline>{packageKey}</Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                    <Button type="button" variant="primary" size="sm" onClick={handleCloneCurrent}>
+                      Clone
+                    </Button>
+                  </div>
+                ) : null}
 
                 <div className="super-admin-runtime-path-registry-editor__section">
                   <div className="super-admin-runtime-path-registry-editor__section-header">
@@ -595,6 +650,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                         value={form.label}
                         onChange={(event) => updateForm('label', event.target.value)}
                         error={errors.label}
+                        disabled={isLockedRecord}
                         required
                         fullWidth
                       />
@@ -606,8 +662,14 @@ function SuperAdminRuntimePathRegistryEditor() {
                         options={RUNTIME_PATH_REGISTRY_STATUS_OPTIONS.filter((option) => option.value)}
                         onChange={(event) => updateForm('status', event.target.value)}
                         error={errors.status}
-                        helperText={isEditMode ? 'Use catalogue lifecycle actions for status changes.' : undefined}
-                        disabled={isEditMode}
+                        helperText={
+                          isEditMode
+                            ? 'Use catalogue lifecycle actions for status changes.'
+                            : isCloneMode
+                              ? 'Cloned runtime paths always start as DRAFT.'
+                              : undefined
+                        }
+                        disabled={isEditMode || isCloneMode}
                       />
                     </RuntimePathEditorField>
                   </div>
@@ -619,6 +681,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                       onChange={(event) => updateForm('description', event.target.value)}
                       error={errors.description}
                       rows={4}
+                      disabled={isLockedRecord}
                       required
                       fullWidth
                     />
@@ -630,14 +693,14 @@ function SuperAdminRuntimePathRegistryEditor() {
                       label="Protected write guard"
                       checked={Boolean(form.isProtected)}
                       onChange={(event) => updateForm('isProtected', event.target.checked)}
-                      disabled={readOnlyCopiedFields}
+                      disabled={readOnlySourceFields}
                     />
                     <Tickbox
                       id="runtime-path-editor-system"
                       label="System managed"
                       checked={Boolean(form.isSystem)}
                       onChange={(event) => updateForm('isSystem', event.target.checked)}
-                      disabled={readOnlyCopiedFields}
+                      disabled={readOnlySourceFields}
                     />
                   </div>
                 </div>
@@ -665,7 +728,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                             options={[{ label: 'Select...', value: '' }, ...frameworkOptions]}
                             onChange={(event) => setPendingFrameworkKey(event.target.value)}
                             helperText={frameworkAppError ? `Failed to load frameworks: ${frameworkAppError.message}` : undefined}
-                            disabled={readOnlyCopiedFields || frameworkOptions.length === 0}
+                            disabled={readOnlySourceFields || frameworkOptions.length === 0}
                           />
                         </RuntimePathEditorField>
                         <Button
@@ -673,7 +736,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           variant="outline"
                           size="sm"
                           className="super-admin-runtime-path-registry-editor__framework-add-button"
-                          disabled={!pendingFrameworkKey || readOnlyCopiedFields}
+                          disabled={!pendingFrameworkKey || readOnlySourceFields}
                           onClick={() => {
                             const frameworkKey = String(pendingFrameworkKey ?? '').trim().toUpperCase()
                             if (!frameworkKey) return
@@ -695,7 +758,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              disabled={readOnlyCopiedFields}
+                              disabled={readOnlySourceFields}
                               onClick={() => setForm((current) => ({
                                 ...current,
                                 frameworkKeys: selectedFrameworkKeys.filter((value) => value !== frameworkKey),
@@ -718,7 +781,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                             label={option.label}
                             checked={form.allowedOperations.includes(option.value)}
                             onChange={(event) => toggleOperation(option.value, event.target.checked)}
-                            disabled={readOnlyCopiedFields}
+                            disabled={readOnlySourceFields}
                           />
                         ))}
                       </div>
@@ -732,7 +795,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                             id="runtime-path-editor-introduced"
                             value={form.introducedInVersion}
                             onChange={(event) => updateForm('introducedInVersion', event.target.value)}
-                            disabled={readOnlyCopiedFields}
+                            disabled={readOnlySourceFields}
                             fullWidth
                           />
                         </RuntimePathEditorField>
@@ -741,7 +804,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                             id="runtime-path-editor-deprecated"
                             value={form.deprecatedInVersion}
                             onChange={(event) => updateForm('deprecatedInVersion', event.target.value)}
-                            disabled={readOnlyCopiedFields}
+                            disabled={readOnlySourceFields}
                             fullWidth
                           />
                         </RuntimePathEditorField>
@@ -753,7 +816,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           onChange={(event) => updateForm('compatibilityTags', event.target.value)}
                           helperText="Comma or newline separated."
                           rows={3}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
@@ -771,18 +834,18 @@ function SuperAdminRuntimePathRegistryEditor() {
 
                       <div className="super-admin-runtime-path-registry-editor__row">
                         <RuntimePathEditorField id="runtime-path-editor-scope" label="Scope" required>
-                          <Select id="runtime-path-editor-scope" value={form.scope} options={RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS} onChange={(event) => updateForm('scope', event.target.value)} disabled={readOnlyCopiedFields} />
+                          <Select id="runtime-path-editor-scope" value={form.scope} options={RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS} onChange={(event) => updateForm('scope', event.target.value)} disabled={readOnlySourceFields} />
                         </RuntimePathEditorField>
                         <RuntimePathEditorField id="runtime-path-editor-data-type" label="Data Type" required>
-                          <Select id="runtime-path-editor-data-type" value={form.dataType} options={RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS} onChange={(event) => updateForm('dataType', event.target.value)} disabled={readOnlyCopiedFields} />
+                          <Select id="runtime-path-editor-data-type" value={form.dataType} options={RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS} onChange={(event) => updateForm('dataType', event.target.value)} disabled={readOnlySourceFields} />
                         </RuntimePathEditorField>
                       </div>
                       <div className="super-admin-runtime-path-registry-editor__row">
                         <RuntimePathEditorField id="runtime-path-editor-category" label="Category" required>
-                          <Select id="runtime-path-editor-category" value={form.category} options={RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS} onChange={(event) => updateForm('category', event.target.value)} disabled={readOnlyCopiedFields} />
+                          <Select id="runtime-path-editor-category" value={form.category} options={RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS} onChange={(event) => updateForm('category', event.target.value)} disabled={readOnlySourceFields} />
                         </RuntimePathEditorField>
                         <RuntimePathEditorField id="runtime-path-editor-source-type" label="Source Type" required>
-                          <Select id="runtime-path-editor-source-type" value={form.sourceType} options={RUNTIME_PATH_REGISTRY_SOURCE_TYPE_OPTIONS} onChange={(event) => updateForm('sourceType', event.target.value)} disabled={readOnlyCopiedFields} />
+                          <Select id="runtime-path-editor-source-type" value={form.sourceType} options={RUNTIME_PATH_REGISTRY_SOURCE_TYPE_OPTIONS} onChange={(event) => updateForm('sourceType', event.target.value)} disabled={readOnlySourceFields} />
                         </RuntimePathEditorField>
                       </div>
                       <RuntimePathEditorField id="runtime-path-editor-ui-control" label="UI Control">
@@ -792,40 +855,40 @@ function SuperAdminRuntimePathRegistryEditor() {
                           options={RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS}
                           onChange={(event) => updateForm('uiControl', event.target.value)}
                           error={errors.uiControl}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                         />
                       </RuntimePathEditorField>
                       <div className="super-admin-runtime-path-registry-editor__row">
                         <RuntimePathEditorField id="runtime-path-editor-placeholder" label="Placeholder Text">
-                          <Input id="runtime-path-editor-placeholder" value={form.placeholderText} onChange={(event) => updateForm('placeholderText', event.target.value)} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-placeholder" value={form.placeholderText} onChange={(event) => updateForm('placeholderText', event.target.value)} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                         <RuntimePathEditorField id="runtime-path-editor-display-order" label="Display Order">
-                          <Input id="runtime-path-editor-display-order" type="number" value={form.displayOrder} onChange={(event) => updateForm('displayOrder', event.target.value)} error={errors.displayOrder} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-display-order" type="number" value={form.displayOrder} onChange={(event) => updateForm('displayOrder', event.target.value)} error={errors.displayOrder} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                       </div>
                       <RuntimePathEditorField id="runtime-path-editor-help-text" label="Help Text">
-                        <Textarea id="runtime-path-editor-help-text" value={form.helpText} onChange={(event) => updateForm('helpText', event.target.value)} rows={3} disabled={readOnlyCopiedFields} fullWidth />
+                        <Textarea id="runtime-path-editor-help-text" value={form.helpText} onChange={(event) => updateForm('helpText', event.target.value)} rows={3} disabled={readOnlySourceFields} fullWidth />
                       </RuntimePathEditorField>
                       <RuntimePathEditorField id="runtime-path-editor-allowed-values" label="Allowed Values">
-                        <Textarea id="runtime-path-editor-allowed-values" value={form.allowedValues} onChange={(event) => updateForm('allowedValues', event.target.value)} helperText="Comma or newline separated. Required for SELECT." rows={3} disabled={readOnlyCopiedFields} fullWidth />
+                        <Textarea id="runtime-path-editor-allowed-values" value={form.allowedValues} onChange={(event) => updateForm('allowedValues', event.target.value)} helperText="Comma or newline separated. Required for SELECT." rows={3} disabled={readOnlySourceFields} fullWidth />
                       </RuntimePathEditorField>
                       <RuntimePathEditorField id="runtime-path-editor-allowed-labels" label="Allowed Value Labels JSON">
-                        <Textarea id="runtime-path-editor-allowed-labels" value={form.allowedValueLabels} onChange={(event) => updateForm('allowedValueLabels', event.target.value)} error={errors.allowedValueLabels} helperText='Optional JSON object, e.g. {"DRAFT":"Draft"}.' rows={4} disabled={readOnlyCopiedFields} fullWidth />
+                        <Textarea id="runtime-path-editor-allowed-labels" value={form.allowedValueLabels} onChange={(event) => updateForm('allowedValueLabels', event.target.value)} error={errors.allowedValueLabels} helperText='Optional JSON object, e.g. {"DRAFT":"Draft"}.' rows={4} disabled={readOnlySourceFields} fullWidth />
                       </RuntimePathEditorField>
                       <div className="super-admin-runtime-path-registry-editor__row">
                         <RuntimePathEditorField id="runtime-path-editor-min-value" label="Min Value">
-                          <Input id="runtime-path-editor-min-value" value={form.minValue} onChange={(event) => updateForm('minValue', event.target.value)} error={errors.minValue} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-min-value" value={form.minValue} onChange={(event) => updateForm('minValue', event.target.value)} error={errors.minValue} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                         <RuntimePathEditorField id="runtime-path-editor-max-value" label="Max Value">
-                          <Input id="runtime-path-editor-max-value" value={form.maxValue} onChange={(event) => updateForm('maxValue', event.target.value)} error={errors.maxValue} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-max-value" value={form.maxValue} onChange={(event) => updateForm('maxValue', event.target.value)} error={errors.maxValue} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                       </div>
                       <div className="super-admin-runtime-path-registry-editor__row">
                         <RuntimePathEditorField id="runtime-path-editor-min-length" label="Min Length">
-                          <Input id="runtime-path-editor-min-length" value={form.minLength} onChange={(event) => updateForm('minLength', event.target.value)} error={errors.minLength} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-min-length" value={form.minLength} onChange={(event) => updateForm('minLength', event.target.value)} error={errors.minLength} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                         <RuntimePathEditorField id="runtime-path-editor-max-length" label="Max Length">
-                          <Input id="runtime-path-editor-max-length" value={form.maxLength} onChange={(event) => updateForm('maxLength', event.target.value)} error={errors.maxLength} disabled={readOnlyCopiedFields} fullWidth />
+                          <Input id="runtime-path-editor-max-length" value={form.maxLength} onChange={(event) => updateForm('maxLength', event.target.value)} error={errors.maxLength} disabled={readOnlySourceFields} fullWidth />
                         </RuntimePathEditorField>
                       </div>
                       <RuntimePathEditorField id="runtime-path-editor-regex" label="Regex Pattern">
@@ -834,11 +897,11 @@ function SuperAdminRuntimePathRegistryEditor() {
                           value={form.regexPattern}
                           onChange={(event) => updateForm('regexPattern', event.target.value)}
                           helperText="Use simple anchored patterns where possible; complex backtracking patterns can slow validation."
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
-                      <Tickbox id="runtime-path-editor-nullable" label="Nullable value" checked={Boolean(form.isNullable)} onChange={(event) => updateForm('isNullable', event.target.checked)} disabled={readOnlyCopiedFields} />
+                      <Tickbox id="runtime-path-editor-nullable" label="Nullable value" checked={Boolean(form.isNullable)} onChange={(event) => updateForm('isNullable', event.target.checked)} disabled={readOnlySourceFields} />
                     </div>
                   </TabView.Tab>
 
@@ -881,7 +944,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           onChange={(event) => updateForm('exampleValue', event.target.value)}
                           helperText="JSON values are parsed when valid; plain strings are saved as strings."
                           rows={5}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
@@ -892,7 +955,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           onChange={(event) => updateForm('defaultValue', event.target.value)}
                           helperText="Leave blank when no default should be stored."
                           rows={5}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
@@ -901,7 +964,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           id="runtime-path-editor-replacement"
                           value={form.replacementPathKey}
                           onChange={(event) => updateForm('replacementPathKey', event.target.value)}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
@@ -911,7 +974,7 @@ function SuperAdminRuntimePathRegistryEditor() {
                           value={form.notes}
                           onChange={(event) => updateForm('notes', event.target.value)}
                           rows={4}
-                          disabled={readOnlyCopiedFields}
+                          disabled={readOnlySourceFields}
                           fullWidth
                         />
                       </RuntimePathEditorField>
@@ -939,9 +1002,9 @@ function SuperAdminRuntimePathRegistryEditor() {
                   </p>
                 ) : null}
 
-                {isDuplicateMode ? (
+                {isCloneMode ? (
                   <p className="super-admin-runtime-path-registry-editor__helper">
-                    Duplicate mode uses the source path metadata and only submits the new path key, label, description, and initial status.
+                    Clone mode uses the source path metadata and only submits the new path key, label, and description. The clone always starts as DRAFT.
                   </p>
                 ) : null}
 
@@ -949,8 +1012,8 @@ function SuperAdminRuntimePathRegistryEditor() {
                   <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
                     Cancel
                   </Button>
-                  <Button type="submit" variant="primary" size="sm" loading={isSaving}>
-                    {isEditMode ? 'Save Changes' : isDuplicateMode ? 'Duplicate Path' : 'Create Path'}
+                  <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={isLockedRecord}>
+                    {isEditMode ? 'Save Changes' : isCloneMode ? 'Clone Path' : 'Create Path'}
                   </Button>
                 </div>
               </form>

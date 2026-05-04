@@ -73,6 +73,9 @@ export const RUNTIME_PATH_REGISTRY_UI_CONTROLS = Object.freeze({
 
 export const RUNTIME_PATH_REGISTRY_PAGE_SIZE = 20
 
+export const LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE =
+  'Locked Runtime Control records cannot be edited directly. Clone the record to make behavior changes.'
+
 export const RUNTIME_PATH_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
   'pathKey',
   'label',
@@ -172,9 +175,25 @@ export const formatRuntimePathRegistryStatus = (value) =>
 export const getRuntimePathRegistryStatusVariant = (value) => {
   const normalized = formatRuntimePathRegistryStatus(value)
 
-  if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DRAFT) return 'info'
+  if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DRAFT) return 'warning'
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE) return 'success'
   if (normalized === RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED) return 'warning'
+  return 'neutral'
+}
+
+export const formatRuntimeControlVersionStatus = (value) =>
+  String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/_/g, ' ')
+
+export const getRuntimeControlVersionStatusVariant = (value) => {
+  const normalized = formatRuntimeControlVersionStatus(value).replace(/\s+/g, '_')
+
+  if (normalized === 'ACTIVE') return 'success'
+  if (normalized === 'DRAFT') return 'warning'
+  if (normalized === 'DEPRECATED') return 'warning'
+  if (normalized === 'ARCHIVED') return 'neutral'
   return 'neutral'
 }
 
@@ -263,6 +282,24 @@ export const validateRuntimePathRegistryForm = (form = {}, { isEditMode = false 
 
 export const cloneRuntimePathRegistryEntry = (entry) => ({
   ...entry,
+  componentVersion: Number(entry.componentVersion) || 1,
+  versionStatus: entry.versionStatus
+    ?? (entry.status === RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE
+      ? 'ACTIVE'
+      : entry.status === RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED
+        ? 'DEPRECATED'
+        : entry.status === RUNTIME_PATH_REGISTRY_STATUSES.INACTIVE
+          ? 'ARCHIVED'
+          : 'DRAFT'),
+  lineageId: entry.lineageId ?? entry.id ?? buildRuntimePathRegistryStableId(entry.pathKey),
+  isLocked: Boolean(entry.isLocked),
+  lockedAt: entry.lockedAt ?? null,
+  lockedBy: entry.lockedBy ? { ...entry.lockedBy } : null,
+  lockedReason: entry.lockedReason ?? '',
+  lockedByPackageKeys: [...(entry.lockedByPackageKeys ?? [])],
+  clonedFromStableId: entry.clonedFromStableId ?? null,
+  supersedesStableId: entry.supersedesStableId ?? null,
+  supersededByStableId: entry.supersededByStableId ?? null,
   frameworkKeys: [...(entry.frameworkKeys ?? [])],
   allowedOperations: [...(entry.allowedOperations ?? [])],
   compatibilityTags: [...(entry.compatibilityTags ?? [])],

@@ -36,6 +36,10 @@ vi.mock('../../components/Toaster', () => ({
   useToaster: () => ({ addToast: vi.fn() }),
 }))
 
+vi.mock('../../hooks/usePostSaveListRefreshState.js', () => ({
+  usePostSaveListRefreshState: () => false,
+}))
+
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useActivateRuntimePathMutation: () => [vi.fn(), { isLoading: false }],
   useDisableRuntimePathMutation: () => [vi.fn(), { isLoading: false }],
@@ -82,7 +86,7 @@ describe('SuperAdminRuntimePathRegistry', () => {
     expect(screen.getByLabelText(/actions for test runtime path/i)).toBeInTheDocument()
   })
 
-  it('uses the compact row action select pattern for edit and duplicate actions', async () => {
+  it('uses the compact row action select pattern for edit and clone actions', async () => {
     const user = userEvent.setup()
     render(<SuperAdminRuntimePathRegistry />)
 
@@ -91,9 +95,9 @@ describe('SuperAdminRuntimePathRegistry', () => {
     await user.selectOptions(actionSelect, 'Edit')
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/runtime-paths/path-test-row/edit')
 
-    await user.selectOptions(actionSelect, 'Duplicate')
+    await user.selectOptions(actionSelect, 'Clone')
     expect(navigateMock).toHaveBeenCalledWith(
-      '/super-admin/runtime-control/runtime-paths/new?duplicateFrom=path-test-row',
+      '/super-admin/runtime-control/runtime-paths/new?cloneFrom=path-test-row',
     )
   })
 })

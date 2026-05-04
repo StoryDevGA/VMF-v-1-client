@@ -80,6 +80,35 @@
   margin-bottom: var(--spacing-md);
 }
 
+.super-admin-runtime-path-registry-editor__lock-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.super-admin-runtime-path-registry-editor__lock-copy,
+.super-admin-runtime-path-registry-editor__lock-packages {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-runtime-path-registry-editor__lock-copy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-runtime-path-registry-editor__lock-copy strong {
+  color: var(--color-text-primary);
+}
+
 .super-admin-runtime-path-registry-editor__section {
   display: grid;
   gap: var(--spacing-md);
@@ -233,6 +262,7 @@
 
   .super-admin-runtime-path-registry-editor__top-actions > *,
   .super-admin-runtime-path-registry-editor__footer-actions > *,
+  .super-admin-runtime-path-registry-editor__lock-notice > *,
   .super-admin-runtime-path-registry-editor__framework-controls > * {
     width: 100%;
   }
