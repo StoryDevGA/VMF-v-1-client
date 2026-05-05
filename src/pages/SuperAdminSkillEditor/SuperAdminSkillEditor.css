@@ -8,6 +8,13 @@
   min-width: 0;
 }
 
+.super-admin-skill-editor__edit-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .super-admin-skill-editor__card,
 .super-admin-skill-editor__loading-card,
 .super-admin-skill-editor__error-card {
@@ -51,6 +58,34 @@
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
   color: var(--color-text-secondary);
+}
+
+.super-admin-skill-editor__lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+}
+
+.super-admin-skill-editor__lock-copy,
+.super-admin-skill-editor__lock-packages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-skill-editor__lock-copy {
+  color: var(--color-text-secondary);
+}
+
+.super-admin-skill-editor__lock-copy strong {
+  color: var(--color-text-primary);
 }
 
 .super-admin-skill-editor__section {

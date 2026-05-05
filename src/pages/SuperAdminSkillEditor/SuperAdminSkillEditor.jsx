@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
@@ -13,6 +14,7 @@ import { useToaster } from '../../components/Toaster'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import {
   useCreateRuntimeSkillMutation,
+  useCloneRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
   useListFrameworkRegistriesQuery,
   useListSkillRolesQuery,
@@ -34,6 +36,7 @@ import {
   RUNTIME_SKILL_CATEGORY_OPTIONS,
   RUNTIME_SKILL_EXECUTION_MODE_OPTIONS,
   RUNTIME_SKILL_FORM_STATUS_OPTIONS,
+  RUNTIME_SKILL_STATUSES,
   RUNTIME_SKILL_RETRY_POLICY_OPTIONS,
   RUNTIME_SKILL_TYPE_OPTIONS,
   isContractStructured,
@@ -169,6 +172,8 @@ function FrameworkCompatibilityField({
 
 function SkillEditorForm({
   isEditMode,
+  isCloneMode,
+  isLockedSkill,
   form,
   setForm,
   errors,
@@ -177,6 +182,7 @@ function SkillEditorForm({
   skillRoleOptions,
   isSkillRolesLoading,
   onBack,
+  onClone,
   onCancel,
   onSubmit,
   onReviewMissingFields,
@@ -190,7 +196,10 @@ function SkillEditorForm({
     () => parseFrameworkKeyList(form.supportedFrameworkKeys),
     [form.supportedFrameworkKeys],
   )
-  const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
+  const hintErrors = useMemo(
+    () => (validationHints && typeof validationHints === 'object' ? validationHints : {}),
+    [validationHints],
+  )
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
     classification: ['skillRoleKey', 'category', 'type', 'executionMode'].filter((key) => hintErrors[key]).length,
@@ -348,11 +357,20 @@ function SkillEditorForm({
             <Button type="button" variant="outline" size="sm" onClick={onBack}>
               Back
             </Button>
+            {isLockedSkill ? (
+              <Button type="button" variant="primary" size="sm" onClick={onClone}>
+                Clone
+              </Button>
+            ) : null}
           </div>
 
           <div className="super-admin-skill-editor__intro">
             <p className="super-admin-skill-editor__form-title">
-              {isEditMode ? 'Editor surface for an existing runtime skill.' : 'Editor surface for a new runtime skill.'}
+              {isEditMode
+                ? 'Editor surface for an existing runtime skill.'
+                : isCloneMode
+                  ? 'Clone this runtime skill into an editable draft.'
+                  : 'Editor surface for a new runtime skill.'}
             </p>
             <p className="super-admin-skills__table-note">
               Keep the editor aligned to the runtime skills catalogue by using the same naming,
@@ -360,6 +378,28 @@ function SkillEditorForm({
             </p>
           </div>
 
+          {isLockedSkill ? (
+            <div className="super-admin-skill-editor__lock-banner" role="status">
+              <Badge variant="warning" size="sm" pill outline>
+                Locked
+              </Badge>
+              <div className="super-admin-skill-editor__lock-copy">
+                <strong>Locked by validated package usage.</strong>
+                <span>Clone this runtime skill to make behavior changes.</span>
+              </div>
+              {(Array.isArray(loadedSkill?.lockedByPackageKeys) ? loadedSkill.lockedByPackageKeys : []).length > 0 ? (
+                <div className="super-admin-skill-editor__lock-packages" aria-label="Locking packages">
+                  {loadedSkill.lockedByPackageKeys.map((packageKey) => (
+                    <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                      {packageKey}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <fieldset className="super-admin-skill-editor__edit-fieldset" disabled={isLockedSkill}>
           <SkillEditorSection
             title="Basic Information"
             copy="Define the skill identity that downstream Runtime Control resources will reference."
@@ -805,19 +845,60 @@ function SkillEditorForm({
                         </p>
                       )}
                     </div>
+                    <div className="super-admin-skill-editor__dependency-group">
+                      <p className="super-admin-skill-editor__dependency-label">
+                        Referencing Validations
+                      </p>
+                      {loadedSkill?.dependencySummary?.validationIds?.length > 0 ? (
+                        <ul className="super-admin-skill-editor__dependency-list">
+                          {loadedSkill.dependencySummary.validationIds.map((validationId) => (
+                            <li key={validationId} className="super-admin-skill-editor__dependency-item">
+                              {validationId}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="super-admin-skill-editor__helper">
+                          No validations reference this skill.
+                        </p>
+                      )}
+                    </div>
+                    <div className="super-admin-skill-editor__dependency-group">
+                      <p className="super-admin-skill-editor__dependency-label">
+                        Locking Framework Packages
+                      </p>
+                      {loadedSkill?.dependencySummary?.frameworkPackageIds?.length > 0 ? (
+                        <ul className="super-admin-skill-editor__dependency-list">
+                          {loadedSkill.dependencySummary.frameworkPackageIds.map((packageId) => (
+                            <li key={packageId} className="super-admin-skill-editor__dependency-item">
+                              {packageId}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="super-admin-skill-editor__helper">
+                          No framework packages currently lock this skill.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </SkillEditorSection>
               </TabView.Tab>
             ) : null}
           </TabView>
+          </fieldset>
 
           <div className="super-admin-skills__catalogue-actions super-admin-skill-editor__footer-actions">
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>
               Cancel
             </Button>
             {isEditMode ? (
-              <Button type="submit" variant="primary" size="sm" loading={isSaving}>
+              <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={isLockedSkill}>
                 Save Changes
+              </Button>
+            ) : isCloneMode && isCreateReady ? (
+              <Button type="submit" variant="primary" size="sm" loading={isSaving}>
+                Save Clone
               </Button>
             ) : isCreateReady ? (
               <Button type="submit" variant="primary" size="sm" loading={isSaving}>
@@ -1171,8 +1252,12 @@ function SkillEditorErrorState({ message, onBack }) {
 function SuperAdminSkillEditor() {
   const navigate = useNavigate()
   const { skillId = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const { addToast } = useToaster()
   const isEditMode = Boolean(skillId)
+  const cloneFromSkillId = !isEditMode ? String(searchParams.get('cloneFrom') ?? '').trim() : ''
+  const isCloneMode = Boolean(cloneFromSkillId)
+  const loadedSkillId = isEditMode ? skillId : cloneFromSkillId
 
   const [form, setForm] = useState({
     ...INITIAL_RUNTIME_SKILL_FORM,
@@ -1186,8 +1271,8 @@ function SuperAdminSkillEditor() {
     data: skillResponse,
     isLoading: isSkillLoading,
     error: skillError,
-  } = useGetRuntimeSkillQuery(skillId, {
-    skip: !isEditMode,
+  } = useGetRuntimeSkillQuery(loadedSkillId, {
+    skip: !loadedSkillId,
   })
 
   const { data: registryResponse } = useListFrameworkRegistriesQuery({
@@ -1208,9 +1293,11 @@ function SuperAdminSkillEditor() {
   })
 
   const [createRuntimeSkill, { isLoading: isCreating }] = useCreateRuntimeSkillMutation()
+  const [cloneRuntimeSkill, { isLoading: isCloning }] = useCloneRuntimeSkillMutation()
   const [updateRuntimeSkill, { isLoading: isUpdating }] = useUpdateRuntimeSkillMutation()
 
   const loadedSkill = skillResponse?.data ?? null
+  const isLockedSkill = Boolean(isEditMode && loadedSkill?.isLocked)
   const skillAppError = skillError ? normalizeError(skillError) : null
   const activeFrameworkRegistryRows = useMemo(
     () =>
@@ -1304,14 +1391,15 @@ function SuperAdminSkillEditor() {
   )
   const isCreateDisabled = useMemo(() => {
     if (isEditMode) return false
-    if (isCreating) return true
+    if (isCreating || isCloning) return true
+    if (isCloneMode && isSkillLoading) return true
     return Object.keys(liveValidation.errors || {}).length > 0
-  }, [isCreating, isEditMode, liveValidation.errors])
+  }, [isCloneMode, isCloning, isCreating, isEditMode, isSkillLoading, liveValidation.errors])
   const isCreateReady = !isEditMode && !isCreateDisabled
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      if (!isEditMode) {
+      if (!isEditMode && !isCloneMode) {
         setForm({
           ...INITIAL_RUNTIME_SKILL_FORM,
         })
@@ -1323,7 +1411,15 @@ function SuperAdminSkillEditor() {
       }
 
       if (loadedSkill) {
-        setForm(mapRuntimeSkillToForm(loadedSkill))
+        const nextForm = mapRuntimeSkillToForm(loadedSkill)
+        setForm(isCloneMode
+          ? {
+              ...nextForm,
+              key: '',
+              name: `${nextForm.name} Clone`,
+              status: RUNTIME_SKILL_STATUSES.DRAFT,
+            }
+          : nextForm)
         setErrors({})
         setErrorsSource(null)
         setActiveEditorTab(0)
@@ -1331,7 +1427,7 @@ function SuperAdminSkillEditor() {
       }
     }, 0)
     return () => window.clearTimeout(timeoutId)
-  }, [isEditMode, loadedSkill])
+  }, [isCloneMode, isEditMode, loadedSkill])
 
   useEffect(() => {
     if (isEditMode) return
@@ -1436,6 +1532,15 @@ function SuperAdminSkillEditor() {
     setErrors({})
     setErrorsSource(null)
 
+    if (isLockedSkill) {
+      addToast({
+        title: 'Locked skill',
+        description: 'Locked Runtime Control records must be cloned before behavior changes can be saved.',
+        variant: 'warning',
+      })
+      return
+    }
+
     const { errors: nextErrors, payload } = validateRuntimeSkillForm(
       form,
       existingSkills,
@@ -1458,6 +1563,19 @@ function SuperAdminSkillEditor() {
         addToast({
           title: 'Skill updated',
           description: 'The skill editor changes were saved successfully.',
+          variant: 'success',
+        })
+      } else if (isCloneMode) {
+        await cloneRuntimeSkill({
+          skillId: cloneFromSkillId,
+          key: payload.key,
+          name: payload.name,
+          description: payload.description,
+        }).unwrap()
+
+        addToast({
+          title: 'Skill cloned',
+          description: `${payload.name} is now available as an editable draft.`,
           variant: 'success',
         })
       } else {
@@ -1485,7 +1603,11 @@ function SuperAdminSkillEditor() {
       }
 
       addToast({
-        title: isEditMode ? 'Failed to update skill' : 'Failed to create skill',
+        title: isEditMode
+          ? 'Failed to update skill'
+          : isCloneMode
+            ? 'Failed to clone skill'
+            : 'Failed to create skill',
         description: appError.message,
         variant: 'error',
       })
@@ -1498,7 +1620,9 @@ function SuperAdminSkillEditor() {
       aria-label="Super admin skill editor"
     >
       <header className="super-admin-skills__header">
-        <h1 className="super-admin-skills__title">{isEditMode ? 'Skill Editor' : 'Create Skill'}</h1>
+        <h1 className="super-admin-skills__title">
+          {isEditMode ? 'Skill Editor' : isCloneMode ? 'Clone Skill' : 'Create Skill'}
+        </h1>
         <p className="super-admin-skills__subtitle">
           Register reusable runtime skills, control their availability, and align framework
           compatibility before packages and workflow policies reference them.
@@ -1507,13 +1631,15 @@ function SuperAdminSkillEditor() {
 
       <Fieldset className="super-admin-skills__fieldset super-admin-skill-editor__fieldset">
         <Fieldset.Legend className="sr-only">Runtime skill editor</Fieldset.Legend>
-        {isEditMode && (isSkillLoading || (!skillAppError && !loadedSkill)) ? <SkillEditorLoadingState /> : null}
-        {isEditMode && skillAppError ? (
+        {loadedSkillId && (isSkillLoading || (!skillAppError && !loadedSkill)) ? <SkillEditorLoadingState /> : null}
+        {loadedSkillId && skillAppError ? (
           <SkillEditorErrorState message={skillAppError.message} onBack={handleBackToSkills} />
         ) : null}
-        {!isSkillLoading && !skillAppError && (!isEditMode || loadedSkill) ? (
+        {!isSkillLoading && !skillAppError && (!loadedSkillId || loadedSkill) ? (
           <SkillEditorForm
             isEditMode={isEditMode}
+            isCloneMode={isCloneMode}
+            isLockedSkill={isLockedSkill}
             form={form}
             setForm={setForm}
             errors={errors}
@@ -1522,10 +1648,13 @@ function SuperAdminSkillEditor() {
             skillRoleOptions={skillRoleOptions}
             isSkillRolesLoading={isSkillRolesLoading}
             onBack={handleBackToSkills}
+            onClone={() =>
+              navigate(`/super-admin/runtime-control/skills/new?cloneFrom=${encodeURIComponent(skillId)}`)
+            }
             onCancel={handleBackToSkills}
             onSubmit={handleSubmit}
             onReviewMissingFields={handleReviewMissingFields}
-            isSaving={isCreating || isUpdating}
+            isSaving={isCreating || isUpdating || isCloning}
             isCreateReady={isCreateReady}
             activeTab={activeEditorTab}
             onTabChange={setActiveEditorTab}

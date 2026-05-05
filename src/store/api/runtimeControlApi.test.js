@@ -13,6 +13,7 @@ import {
   useCreateRuntimeAgentMutation,
   useCreateRuntimePathMutation,
   useCreateRuntimeSkillMutation,
+  useCloneRuntimeSkillMutation,
   useCreateValidationRegistryMutation,
   useCreateWorkflowPolicyMutation,
   useCloneWorkflowPolicyMutation,
@@ -102,6 +103,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('deprecateRuntimePath')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeSkills')
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeSkill')
+    expect(runtimeControlApi.endpoints).toHaveProperty('cloneRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateRuntimeSkill')
     expect(runtimeControlApi.endpoints).toHaveProperty('listValidationRegistry')
@@ -163,6 +165,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useDisableRuntimePathMutation).toBe('function')
     expect(typeof useDeprecateRuntimePathMutation).toBe('function')
     expect(typeof useCreateRuntimeSkillMutation).toBe('function')
+    expect(typeof useCloneRuntimeSkillMutation).toBe('function')
     expect(typeof useUpdateRuntimeSkillMutation).toBe('function')
     expect(typeof useCreateValidationRegistryMutation).toBe('function')
     expect(typeof useUpdateValidationRegistryMutation).toBe('function')
@@ -205,6 +208,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.deprecateRuntimePath.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimeSkills.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createRuntimeSkill.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.cloneRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateRuntimeSkill.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listValidationRegistry.initiate).toBe('function')
@@ -496,6 +500,68 @@ describe('runtimeControlApi', () => {
 
     expect(managedFieldResult.error?.status).toBe(422)
     expect(managedFieldResult.error?.data?.error?.details?.componentVersion).toContain('managed by the server')
+  })
+
+  it('keeps mock Runtime Skill clone and lock behavior aligned with live API', async () => {
+    const store = createTestStore()
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      skills: state.skills.map((skill) =>
+        skill.id === 'skill-snapshot'
+          ? {
+              ...skill,
+              componentVersion: 1,
+              versionStatus: 'ACTIVE',
+              isLocked: true,
+              lockedByPackageKeys: ['vmf-package-1'],
+            }
+          : skill,
+      ),
+    }))
+
+    const lockedUpdateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateRuntimeSkill.initiate({
+        skillId: 'SKILL-SNAPSHOT',
+        name: 'Blocked Skill Update',
+      }),
+    )
+
+    expect(lockedUpdateResult.error?.status).toBe(409)
+    expect(lockedUpdateResult.error?.data?.error?.details?.reason).toBe('RUNTIME_SKILL_LOCKED')
+
+    const governedMetadataResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneRuntimeSkill.initiate({
+        skillId: 'skill-snapshot',
+        key: 'snapshot-v2',
+        name: 'Snapshot v2',
+        isLocked: false,
+      }),
+    )
+
+    expect(governedMetadataResult.error?.status).toBe(422)
+    expect(governedMetadataResult.error?.data?.error?.details?.isLocked).toContain('server')
+
+    const cloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneRuntimeSkill.initiate({
+        skillId: 'SKILL-SNAPSHOT',
+        key: 'snapshot-v2',
+        name: 'Snapshot v2',
+        description: 'Editable draft successor.',
+      }),
+    )
+
+    expect(cloneResult.error).toBeUndefined()
+    expect(cloneResult.data?.data).toMatchObject({
+      key: 'snapshot-v2',
+      name: 'Snapshot v2',
+      status: 'DRAFT',
+      componentVersion: 2,
+      versionStatus: 'DRAFT',
+      isLocked: false,
+      lockedByPackageKeys: [],
+      clonedFromStableId: 'skill-snapshot',
+      supersedesStableId: 'skill-snapshot',
+    })
   })
 
   it('builds live UI Contract clone requests and aligns mock clone/lock behavior', async () => {

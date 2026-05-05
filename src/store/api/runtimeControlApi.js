@@ -23,6 +23,7 @@ import {
   cloneRuntimeSkill,
   INITIAL_RUNTIME_SKILLS,
   RUNTIME_SKILL_PAGE_SIZE,
+  RUNTIME_SKILL_STATUSES,
 } from '../../pages/SuperAdminSkills/superAdminSkills.constants.js'
 import {
   cloneWorkflowPolicy,
@@ -96,6 +97,7 @@ const WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS = Object.freeze([
 ])
 
 const RUNTIME_AGENT_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
+const RUNTIME_SKILL_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
 
 const isRuntimeControlMockMode = () => {
   const mockModeAllowed = import.meta.env.MODE === 'test'
@@ -370,12 +372,33 @@ const validateMockRuntimeAgentGovernedMetadataFields = (payload = {}) => {
   })
 }
 
+const validateMockRuntimeSkillGovernedMetadataFields = (payload = {}) => {
+  const field = RUNTIME_SKILL_GOVERNED_METADATA_FIELDS.find((fieldName) =>
+    Object.prototype.hasOwnProperty.call(payload, fieldName),
+  )
+
+  if (!field) return null
+
+  return buildValidationFailedError('Please check the form for errors.', {
+    [field]: 'Runtime Skill version and lock metadata is managed by the server.',
+  })
+}
+
 const buildRuntimeAgentLockedConflictError = (agent = {}) =>
   buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
     field: 'isLocked',
     reason: 'RUNTIME_AGENT_LOCKED',
     lockedByPackageKeys: Array.isArray(agent.lockedByPackageKeys)
       ? agent.lockedByPackageKeys
+      : [],
+  })
+
+const buildRuntimeSkillLockedConflictError = (skill = {}) =>
+  buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+    field: 'isLocked',
+    reason: 'RUNTIME_SKILL_LOCKED',
+    lockedByPackageKeys: Array.isArray(skill.lockedByPackageKeys)
+      ? skill.lockedByPackageKeys
       : [],
   })
 
@@ -2467,8 +2490,16 @@ const validateMockRuntimeAgent = (agent) => {
   }
 }
 
-const findRuntimeSkillById = (skillId) =>
-  runtimeControlState.skills.find((skill) => skill.id === skillId)
+const findRuntimeSkillById = (skillId) => {
+  const normalized = normalizeMockRegistryId(skillId).toLowerCase()
+  return runtimeControlState.skills.find((skill) =>
+    [
+      skill.id,
+      skill.stableId,
+      skill.key,
+    ].some((value) => normalizeMockRegistryId(value).toLowerCase() === normalized),
+  )
+}
 
 const findValidationRegistryById = (validationId) =>
   runtimeControlState.validationRegistry.find((row) => row.id === validationId || row.key === validationId)
@@ -4742,6 +4773,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const runtimePayload = payload
+        const governedMetadataError = validateMockRuntimeSkillGovernedMetadataFields(runtimePayload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
 
         const duplicateSkill = runtimeControlState.skills.find(
           (skill) => String(skill.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
@@ -4761,10 +4796,26 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const stableId = generateRuntimeId('skill', runtimePayload.key)
         const createdSkill = {
-          id: generateRuntimeId('skill', runtimePayload.key),
+          id: stableId,
           ...cloneRuntimeSkill({
+            id: stableId,
+            stableId,
             ...runtimePayload,
+            componentVersion: 1,
+            versionStatus: String(runtimePayload.status ?? '').trim().toUpperCase() === 'ACTIVE'
+              ? 'ACTIVE'
+              : 'DRAFT',
+            lineageId: stableId,
+            isLocked: false,
+            lockedAt: null,
+            lockedBy: null,
+            lockedReason: '',
+            lockedByPackageKeys: [],
+            clonedFromStableId: null,
+            supersedesStableId: null,
+            supersededByStableId: null,
             dependencySummary: { agentIds: [], workflowPolicyIds: [] },
             ...buildAuditFields(),
           }),
@@ -4778,6 +4829,90 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         return { data: buildEntityResponse(cloneRuntimeSkill(createdSkill)) }
       },
       invalidatesTags: [SKILL_LIST_TAG],
+    }),
+
+    cloneRuntimeSkill: build.mutation({
+      queryFn: async ({ skillId, ...payload } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skills',
+              entityId: `${skillId}/clone`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const governedMetadataError = validateMockRuntimeSkillGovernedMetadataFields(payload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
+
+        const sourceSkill = findRuntimeSkillById(skillId)
+        if (!sourceSkill) {
+          return buildNotFoundError('Skill was not found.')
+        }
+
+        const duplicateSkill = runtimeControlState.skills.find(
+          (skill) => String(skill.key ?? '').trim() === String(payload.key ?? '').trim(),
+        )
+
+        if (duplicateSkill) {
+          return buildConflictError('Skill key must be unique.', {
+            field: 'key',
+            reason: 'RUNTIME_SKILL_KEY_CONFLICT',
+          })
+        }
+
+        const stableId = generateRuntimeId('skill', payload.key)
+        const sourceStableId = sourceSkill.stableId || sourceSkill.id
+        const clonedSkill = cloneRuntimeSkill({
+          ...sourceSkill,
+          id: stableId,
+          stableId,
+          key: payload.key,
+          name: payload.name,
+          description: payload.description ?? sourceSkill.description ?? '',
+          status: RUNTIME_SKILL_STATUSES.DRAFT,
+          componentVersion: Number(sourceSkill.componentVersion ?? 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: sourceSkill.lineageId || sourceStableId,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          skills: [
+            clonedSkill,
+            ...runtimeControlState.skills.map((skill) =>
+              skill.id === sourceSkill.id
+                ? cloneRuntimeSkill({
+                    ...skill,
+                    supersededByStableId: stableId,
+                    ...buildAuditFields(),
+                  })
+                : skill,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(cloneRuntimeSkill(clonedSkill)) }
+      },
+      invalidatesTags: (_result, _error, { skillId }) => [
+        SKILL_LIST_TAG,
+        { type: 'RuntimeSkill', id: skillId },
+      ],
     }),
 
     getRuntimeSkill: build.query({
@@ -4818,6 +4953,15 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const existingSkill = findRuntimeSkillById(skillId)
         if (!existingSkill) {
           return buildNotFoundError('Skill was not found.')
+        }
+
+        const governedMetadataError = validateMockRuntimeSkillGovernedMetadataFields(payload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
+
+        if (existingSkill.isLocked === true) {
+          return buildRuntimeSkillLockedConflictError(existingSkill)
         }
 
         const duplicateSkill = runtimeControlState.skills.find(
@@ -5883,6 +6027,7 @@ export const {
   useDeprecateRuntimePathMutation,
   useListRuntimeSkillsQuery,
   useCreateRuntimeSkillMutation,
+  useCloneRuntimeSkillMutation,
   useGetRuntimeSkillQuery,
   useUpdateRuntimeSkillMutation,
   useListValidationRegistryQuery,

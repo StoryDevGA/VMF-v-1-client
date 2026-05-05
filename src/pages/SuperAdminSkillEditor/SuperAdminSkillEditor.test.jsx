@@ -28,6 +28,18 @@ function renderSkillEditor(route) {
   })
 }
 
+function getSkillNameCell(name) {
+  return screen
+    .getAllByText(name)
+    .find((element) => element.classList.contains('super-admin-skills__skill-name'))
+}
+
+function getSkillKeyCell(key) {
+  return screen
+    .getAllByText(key)
+    .find((element) => element.classList.contains('super-admin-skills__skill-key'))
+}
+
 describe('SuperAdminSkillEditor page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
@@ -153,8 +165,8 @@ describe('SuperAdminSkillEditor page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^skills$/i })).toBeInTheDocument()
     })
-    expect(screen.getByText('Alignment')).toBeInTheDocument()
-    expect(screen.getByText('alignment')).toBeInTheDocument()
+    expect(getSkillNameCell('Alignment')).toBeInTheDocument()
+    expect(getSkillKeyCell('alignment')).toBeInTheDocument()
   })
 
   it('only offers active frameworks in the compatibility dropdown', async () => {
@@ -228,7 +240,7 @@ describe('SuperAdminSkillEditor page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^skills$/i })).toBeInTheDocument()
     })
-    expect(screen.getByText('State Snapshot')).toBeInTheDocument()
+    expect(getSkillNameCell('State Snapshot')).toBeInTheDocument()
   })
 
   it('shows validation error for invalid JSON in contract fields', async () => {

@@ -22,6 +22,13 @@ function SuperAdminSkills() {
     },
     [navigate],
   )
+  const handleCloneClick = useCallback(
+    (skill) => {
+      if (!skill?.id) return
+      navigate(`/super-admin/runtime-control/skills/new?cloneFrom=${encodeURIComponent(skill.id)}`)
+    },
+    [navigate],
+  )
 
   return (
     <section className="super-admin-skills container" aria-label="Super admin runtime skills">
@@ -52,6 +59,7 @@ function SuperAdminSkills() {
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
+        onCloneClick={handleCloneClick}
         setSkillStatus={mgmt.setSkillStatus}
       />
     </section>

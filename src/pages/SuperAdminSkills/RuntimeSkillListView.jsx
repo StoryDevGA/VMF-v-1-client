@@ -9,6 +9,11 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { Tooltip } from '../../components/Tooltip'
+import {
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import {
   formatRuntimeSkillStatus,
   getRuntimeSkillStatusVariant,
@@ -18,16 +23,35 @@ import {
 } from './superAdminSkills.constants.js'
 import './RuntimeSkillListView.css'
 
+function TruncatedText({ value, className = '', mono = false }) {
+  const text = String(value || '--')
+  const classes = [
+    'super-admin-skills__truncated-text',
+    mono ? 'super-admin-skills__truncated-text--mono' : '',
+    className,
+  ].filter(Boolean).join(' ')
+
+  return (
+    <Tooltip content={text} position="top" align="start" className="super-admin-skills__truncated-tooltip">
+      <span className={classes} title={text}>
+        {text}
+      </span>
+    </Tooltip>
+  )
+}
+
 function RuntimeSkillRowActionsMenu({ row, onAction }) {
+  const isLocked = Boolean(row.isLocked)
   const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    ...(row.status !== RUNTIME_SKILL_STATUSES.ACTIVE
+    ...(!isLocked ? [{ value: 'Edit', label: 'Edit' }] : []),
+    { value: 'Clone', label: 'Clone' },
+    ...(!isLocked && row.status !== RUNTIME_SKILL_STATUSES.ACTIVE
       ? [{ value: 'Set Active', label: 'Set Active' }]
       : []),
-    ...(row.status !== RUNTIME_SKILL_STATUSES.INACTIVE
+    ...(!isLocked && row.status !== RUNTIME_SKILL_STATUSES.INACTIVE
       ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
       : []),
-    ...(row.status !== RUNTIME_SKILL_STATUSES.DEPRECATED
+    ...(!isLocked && row.status !== RUNTIME_SKILL_STATUSES.DEPRECATED
       ? [{ value: 'Set Deprecated', label: 'Set Deprecated' }]
       : []),
   ]
@@ -54,8 +78,27 @@ function RuntimeSkillRowActionsMenu({ row, onAction }) {
 function renderSkillSummary(_value, row) {
   return (
     <div className="super-admin-skills__skill-summary">
-      <span className="super-admin-skills__skill-name">{row.name}</span>
-      <span className="super-admin-skills__skill-key">{row.key}</span>
+      <TruncatedText value={row.name || '--'} className="super-admin-skills__skill-name" />
+      <TruncatedText value={row.key || '--'} className="super-admin-skills__skill-key" mono />
+    </div>
+  )
+}
+
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row.componentVersion ?? 1) || 1
+  const versionStatus = row.versionStatus ?? row.status
+
+  return (
+    <div className="super-admin-skills__version-summary">
+      <span className="super-admin-skills__version-text">v{componentVersion}</span>
+      <Status size="sm" showIcon variant={getRuntimeControlVersionStatusVariant(versionStatus)}>
+        {formatRuntimeControlVersionStatus(versionStatus)}
+      </Status>
+      {row.isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -97,12 +140,17 @@ export function RuntimeSkillListView({
   onBackClick,
   onCreateClick,
   onEditClick,
+  onCloneClick,
   setSkillStatus,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
         onEditClick(row)
+      }
+
+      if (label === 'Clone') {
+        onCloneClick(row)
       }
 
       if (label === 'Set Active') {
@@ -117,7 +165,7 @@ export function RuntimeSkillListView({
         setSkillStatus(row, RUNTIME_SKILL_STATUSES.DEPRECATED)
       }
     },
-    [onEditClick, setSkillStatus],
+    [onCloneClick, onEditClick, setSkillStatus],
   )
 
   const columns = useMemo(
@@ -126,6 +174,7 @@ export function RuntimeSkillListView({
         key: 'name',
         label: 'Skill',
         mobileLabel: 'Skill',
+        width: '300px',
         render: renderSkillSummary,
       },
       {
@@ -137,6 +186,13 @@ export function RuntimeSkillListView({
             {formatRuntimeSkillStatus(value)}
           </Status>
         ),
+      },
+      {
+        key: 'componentVersion',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '136px',
+        render: renderVersionSummary,
       },
       {
         key: 'supportedFrameworkKeys',

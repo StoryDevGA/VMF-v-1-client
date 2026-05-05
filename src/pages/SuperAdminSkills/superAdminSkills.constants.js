@@ -67,7 +67,7 @@ export const INITIAL_RUNTIME_SKILL_FORM = Object.freeze({
   key: '',
   name: '',
   description: '',
-  status: RUNTIME_SKILL_STATUSES.ACTIVE,
+  status: RUNTIME_SKILL_STATUSES.DRAFT,
   supportedFrameworkKeys: '',
   skillRoleKey: '',
   category: 'VALIDATION',
@@ -231,6 +231,18 @@ const REFERENCE_ASSET_STATUSES = new Set(['ACTIVE', 'INACTIVE'])
 export function cloneRuntimeSkill(skill) {
   return {
     ...skill,
+    componentVersion: Number(skill.componentVersion ?? 1) || 1,
+    versionStatus: String(skill.versionStatus ?? 'ACTIVE').trim().toUpperCase(),
+    stableId: skill.stableId ?? skill.id,
+    lineageId: skill.lineageId ?? skill.stableId ?? skill.id,
+    isLocked: Boolean(skill.isLocked),
+    lockedAt: skill.lockedAt ?? null,
+    lockedBy: skill.lockedBy ?? null,
+    lockedReason: skill.lockedReason ?? '',
+    lockedByPackageKeys: [...(skill.lockedByPackageKeys ?? [])],
+    clonedFromStableId: skill.clonedFromStableId ?? null,
+    supersedesStableId: skill.supersedesStableId ?? null,
+    supersededByStableId: skill.supersededByStableId ?? null,
     supportedFrameworkKeys: [...(skill.supportedFrameworkKeys ?? [])],
     skillRoleKey: String(skill.skillRoleKey ?? '').trim().toUpperCase(),
     inputContract: { ...(skill.inputContract ?? {}) },
@@ -247,8 +259,10 @@ export function cloneRuntimeSkill(skill) {
       ? {
           agentIds: [...(skill.dependencySummary.agentIds ?? [])],
           workflowPolicyIds: [...(skill.dependencySummary.workflowPolicyIds ?? [])],
+          validationIds: [...(skill.dependencySummary.validationIds ?? [])],
+          frameworkPackageIds: [...(skill.dependencySummary.frameworkPackageIds ?? [])],
         }
-      : { agentIds: [], workflowPolicyIds: [] },
+      : { agentIds: [], workflowPolicyIds: [], validationIds: [], frameworkPackageIds: [] },
     createdBy: skill.createdBy
       ? { ...skill.createdBy }
       : undefined,

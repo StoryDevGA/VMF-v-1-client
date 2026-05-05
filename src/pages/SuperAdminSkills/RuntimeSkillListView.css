@@ -47,6 +47,14 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.super-admin-skills__version-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
 }
 
 .super-admin-skills__skill-name {
@@ -54,9 +62,33 @@
   color: var(--color-text-primary);
 }
 
+.super-admin-skills__version-text {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
 .super-admin-skills__skill-key {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
+}
+
+.super-admin-skills__truncated-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-skills__truncated-tooltip {
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.super-admin-skills__truncated-text--mono {
+  font-family: var(--font-mono);
 }
 
 .super-admin-skills__row-actions {
