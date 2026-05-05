@@ -87,10 +87,10 @@ describe('SuperAdminAgents page', () => {
     const user = userEvent.setup()
     renderPage()
 
-    expect(await screen.findByText(/page 1 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^last$/i }))
-    expect(await screen.findByText(/page 2 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 3 of 3/i)).toBeInTheDocument()
 
     await user.selectOptions(
       screen.getByLabelText(/^framework$/i, {
@@ -146,25 +146,17 @@ describe('SuperAdminAgents page', () => {
     })
   })
 
-  it('blocks re-activating a deprecated agent from the row action menu', async () => {
+  it('blocks lifecycle changes when an agent has active dependencies', async () => {
     const user = userEvent.setup()
     renderPage()
 
     await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Deprecate')
 
-    await waitFor(() => {
-      const validatorRow = screen.getByText('Validator').closest('tr')
-      expect(validatorRow).not.toBeNull()
-      expect(within(validatorRow).getByText(/deprecated/i)).toBeInTheDocument()
-    })
-
-    await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Set Active')
-
     expect(await screen.findByText(/failed to update agent status/i)).toBeInTheDocument()
 
     const validatorRow = screen.getByText('Validator').closest('tr')
     expect(validatorRow).not.toBeNull()
-    expect(within(validatorRow).getByText(/deprecated/i)).toBeInTheDocument()
+    expect(within(validatorRow).getAllByText(/^active$/i).length).toBeGreaterThan(0)
   })
 
   it('validates an agent from the row action menu and shows a toast', async () => {

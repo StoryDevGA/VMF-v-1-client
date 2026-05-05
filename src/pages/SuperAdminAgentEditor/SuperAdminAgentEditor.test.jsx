@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminAgents from '../SuperAdminAgents'
-import SuperAdminAgentEditor from './SuperAdminAgentEditor'
+import SuperAdminAgentEditor, { AgentEditorErrorState } from './SuperAdminAgentEditor'
 import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
@@ -263,6 +263,31 @@ describe('SuperAdminAgentEditor page', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /open dependencies tab/i })).toBeInTheDocument()
+  })
+
+  it('renders locked detail conflicts as a compact lock notice', () => {
+    const onBack = vi.fn()
+    const onClone = vi.fn()
+
+    render(
+      <AgentEditorErrorState
+        appError={{
+          details: {
+            reason: 'RUNTIME_AGENT_LOCKED',
+            lockedByPackageKeys: ['qa-dependency-lock-05031724'],
+          },
+        }}
+        onBack={onBack}
+        onClone={onClone}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(/locked by validated package usage/i)
+    expect(screen.getByText('qa-dependency-lock-05031724')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^clone$/i }))
+    expect(onClone).toHaveBeenCalledTimes(1)
   })
 
   it('shows validation error for invalid JSON in contract fields', async () => {

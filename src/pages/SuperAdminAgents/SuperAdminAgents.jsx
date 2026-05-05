@@ -23,6 +23,13 @@ function SuperAdminAgents() {
     },
     [navigate],
   )
+  const handleCloneClick = useCallback(
+    (agent) => {
+      if (!agent?.id) return
+      navigate(`/super-admin/runtime-control/agents/new?cloneFrom=${encodeURIComponent(agent.id)}`)
+    },
+    [navigate],
+  )
 
   return (
     <section className="super-admin-agents container" aria-label="Super admin runtime agents">
@@ -53,6 +60,7 @@ function SuperAdminAgents() {
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
+        onCloneClick={handleCloneClick}
         setAgentStatus={mgmt.setAgentStatus}
         validateAgent={mgmt.validateAgent}
         openTestDialog={mgmt.openTestDialog}

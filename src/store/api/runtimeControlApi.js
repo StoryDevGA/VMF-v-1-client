@@ -95,6 +95,8 @@ const WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS = Object.freeze([
   'supersededByStableId',
 ])
 
+const RUNTIME_AGENT_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
+
 const isRuntimeControlMockMode = () => {
   const mockModeAllowed = import.meta.env.MODE === 'test'
     || import.meta.env.VITE_RUNTIME_CONTROL_ALLOW_MOCK === 'true'
@@ -355,6 +357,27 @@ const validateMockWorkflowPolicyGovernedMetadataFields = (payload = {}) => {
     [field]: 'Workflow Policy version and lock metadata is managed by the server.',
   })
 }
+
+const validateMockRuntimeAgentGovernedMetadataFields = (payload = {}) => {
+  const field = RUNTIME_AGENT_GOVERNED_METADATA_FIELDS.find((fieldName) =>
+    Object.prototype.hasOwnProperty.call(payload, fieldName),
+  )
+
+  if (!field) return null
+
+  return buildValidationFailedError('Please check the form for errors.', {
+    [field]: 'Runtime Agent version and lock metadata is managed by the server.',
+  })
+}
+
+const buildRuntimeAgentLockedConflictError = (agent = {}) =>
+  buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+    field: 'isLocked',
+    reason: 'RUNTIME_AGENT_LOCKED',
+    lockedByPackageKeys: Array.isArray(agent.lockedByPackageKeys)
+      ? agent.lockedByPackageKeys
+      : [],
+  })
 
 const buildRuntimePathLockedConflictError = (runtimePath = {}) =>
   buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
@@ -3390,6 +3413,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           )
         }
 
+        const governedMetadataError = validateMockRuntimeAgentGovernedMetadataFields(payload)
+        if (governedMetadataError) return governedMetadataError
+
         const duplicateAgent = runtimeControlState.agents.find(
           (agent) => String(agent.key ?? '').trim() === String(payload.key ?? '').trim(),
         )
@@ -3406,10 +3432,23 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildValidationFailedError('Please check the form for errors.', validation.errors)
         }
 
+        const stableId = generateRuntimeId('agent', payload.key)
         const createdAgent = {
-          id: generateRuntimeId('agent', payload.key),
+          id: stableId,
+          stableId,
           ...cloneRuntimeAgent({
             ...payload,
+            componentVersion: 1,
+            versionStatus: 'DRAFT',
+            lineageId: stableId,
+            isLocked: false,
+            lockedAt: null,
+            lockedBy: null,
+            lockedReason: '',
+            lockedByPackageKeys: [],
+            clonedFromStableId: null,
+            supersedesStableId: null,
+            supersededByStableId: null,
             ...buildAuditFields(),
           }),
         }
@@ -3486,6 +3525,93 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, agentId) => [{ type: 'RuntimeAgentDependencies', id: agentId }],
     }),
 
+    cloneRuntimeAgent: build.mutation({
+      queryFn: async ({ agentId, ...payload } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'agents',
+              entityId: `${agentId}/clone`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const governedMetadataError = validateMockRuntimeAgentGovernedMetadataFields(payload)
+        if (governedMetadataError) return governedMetadataError
+
+        const sourceAgent = findRuntimeAgentById(agentId)
+        if (!sourceAgent) {
+          return buildNotFoundError('Agent was not found.')
+        }
+
+        const duplicateAgent = runtimeControlState.agents.find(
+          (agent) => String(agent.key ?? '').trim() === String(payload.key ?? '').trim(),
+        )
+
+        if (duplicateAgent) {
+          return buildConflictError('Agent key must be unique.', {
+            field: 'key',
+            reason: 'RUNTIME_AGENT_KEY_CONFLICT',
+          })
+        }
+
+        const stableId = generateRuntimeId('agent', payload.key)
+        const sourceStableId = sourceAgent.stableId || sourceAgent.id
+        const clonedAgent = cloneRuntimeAgent({
+          ...sourceAgent,
+          id: stableId,
+          stableId,
+          key: payload.key,
+          name: payload.name,
+          description: payload.description ?? sourceAgent.description ?? '',
+          status: RUNTIME_AGENT_STATUSES.DRAFT,
+          componentVersion: Number(sourceAgent.componentVersion ?? 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: sourceAgent.lineageId || sourceStableId,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          ...buildAuditFields(),
+        })
+
+        const validation = validateMockRuntimeAgent(clonedAgent)
+        if (Object.keys(validation.errors).length > 0) {
+          return buildValidationFailedError('Please check the form for errors.', validation.errors)
+        }
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          agents: [
+            clonedAgent,
+            ...runtimeControlState.agents.map((agent) =>
+              agent.id === agentId
+                ? cloneRuntimeAgent({
+                    ...agent,
+                    supersededByStableId: stableId,
+                    ...buildAuditFields(),
+                  })
+                : agent,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(cloneRuntimeAgent(clonedAgent)) }
+      },
+      invalidatesTags: (_result, _error, { agentId }) => [
+        AGENT_LIST_TAG,
+        { type: 'RuntimeAgent', id: agentId },
+      ],
+    }),
+
     updateRuntimeAgent: build.mutation({
       queryFn: async ({ agentId, ...payload }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -3504,6 +3630,13 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const existingAgent = findRuntimeAgentById(agentId)
         if (!existingAgent) {
           return buildNotFoundError('Agent was not found.')
+        }
+
+        const governedMetadataError = validateMockRuntimeAgentGovernedMetadataFields(payload)
+        if (governedMetadataError) return governedMetadataError
+
+        if (existingAgent.isLocked === true) {
+          return buildRuntimeAgentLockedConflictError(existingAgent)
         }
 
         const requestedStatus = String(payload.status ?? '').trim().toUpperCase()
@@ -5723,6 +5856,7 @@ export const {
   useUpdateUiContractMutation,
   useListRuntimeAgentsQuery,
   useCreateRuntimeAgentMutation,
+  useCloneRuntimeAgentMutation,
   useGetRuntimeAgentQuery,
   useGetRuntimeAgentDependenciesQuery,
   useUpdateRuntimeAgentMutation,

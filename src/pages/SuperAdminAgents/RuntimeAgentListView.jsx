@@ -16,19 +16,27 @@ import {
   RUNTIME_AGENT_STATUSES,
   RUNTIME_AGENT_STATUS_OPTIONS,
 } from './superAdminAgents.constants.js'
+import {
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import './RuntimeAgentListView.css'
 
 function RuntimeAgentRowActionsMenu({ row, onAction }) {
+  const isLocked = Boolean(row.isLocked)
   const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    { value: 'Validate', label: 'Validate' },
-    { value: 'Test', label: 'Test' },
-    ...(row.status === RUNTIME_AGENT_STATUSES.DEPRECATED
-      ? []
-      : [{ value: 'Deprecate', label: 'Deprecate' }]),
-    ...(row.status === RUNTIME_AGENT_STATUSES.ACTIVE
-      ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
-      : [{ value: 'Set Active', label: 'Set Active' }]),
+    ...(!isLocked ? [{ value: 'Edit', label: 'Edit' }] : []),
+    { value: 'Clone', label: 'Clone' },
+    ...(!isLocked ? [{ value: 'Validate', label: 'Validate' }] : []),
+    ...(!isLocked ? [{ value: 'Test', label: 'Test' }] : []),
+    ...(!isLocked && row.status !== RUNTIME_AGENT_STATUSES.DEPRECATED
+      ? [{ value: 'Deprecate', label: 'Deprecate' }]
+      : []),
+    ...(!isLocked
+      ? (row.status === RUNTIME_AGENT_STATUSES.ACTIVE
+        ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
+        : [{ value: 'Set Active', label: 'Set Active' }])
+      : []),
   ]
 
   return (
@@ -46,6 +54,25 @@ function RuntimeAgentRowActionsMenu({ row, onAction }) {
         }}
         aria-label={`Actions for ${row.name}`}
       />
+    </div>
+  )
+}
+
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row.componentVersion ?? 1) || 1
+  const versionStatus = row.versionStatus ?? row.status
+
+  return (
+    <div className="super-admin-agents__version-summary">
+      <span className="super-admin-agents__version-text">v{componentVersion}</span>
+      <Status size="sm" showIcon variant={getRuntimeControlVersionStatusVariant(versionStatus)}>
+        {formatRuntimeControlVersionStatus(versionStatus)}
+      </Status>
+      {row.isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -101,6 +128,7 @@ export function RuntimeAgentListView({
   onBackClick,
   onCreateClick,
   onEditClick,
+  onCloneClick,
   setAgentStatus,
   validateAgent,
   openTestDialog,
@@ -109,6 +137,10 @@ export function RuntimeAgentListView({
     (label, row) => {
       if (label === 'Edit') {
         onEditClick(row)
+      }
+
+      if (label === 'Clone') {
+        onCloneClick(row)
       }
 
       if (label === 'Validate') {
@@ -131,7 +163,7 @@ export function RuntimeAgentListView({
         setAgentStatus(row, RUNTIME_AGENT_STATUSES.DEPRECATED)
       }
     },
-    [onEditClick, openTestDialog, setAgentStatus, validateAgent],
+    [onCloneClick, onEditClick, openTestDialog, setAgentStatus, validateAgent],
   )
 
   const columns = useMemo(
@@ -151,6 +183,13 @@ export function RuntimeAgentListView({
             {formatRuntimeAgentStatus(value)}
           </Status>
         ),
+      },
+      {
+        key: 'componentVersion',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '136px',
+        render: renderVersionSummary,
       },
       {
         key: 'supportedFrameworkKeys',

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
@@ -9,6 +10,7 @@ import { useToaster } from '../../components/Toaster'
 import {
   useCreateRuntimeAgentMutation,
   useActivateRuntimeAgentMutation,
+  useCloneRuntimeAgentMutation,
   useDisableRuntimeAgentMutation,
   useDeprecateRuntimeAgentMutation,
   useGetRuntimeAgentQuery,
@@ -27,6 +29,7 @@ import {
 import {
   INITIAL_RUNTIME_AGENT_FORM,
   mapRuntimeAgentToForm,
+  RUNTIME_AGENT_STATUSES,
   validateRuntimeAgentForm,
 } from '../SuperAdminAgents/superAdminAgents.constants.js'
 import {
@@ -58,6 +61,10 @@ const AGENT_ERROR_TAB_LOOKUP = Object.freeze({
   outputContractJson: 4,
   policyMaxTokenBudget: 5,
   policyTimeoutMs: 5,
+  runtimeTimeoutMs: 5,
+  runtimeRetryPolicy: 5,
+  runtimeMaxRetries: 5,
+  runtimeExecutionMode: 5,
 })
 
 const toAgentServerFieldErrors = (details) => {
@@ -70,6 +77,16 @@ const toAgentServerFieldErrors = (details) => {
   )
 }
 
+const isRuntimeAgentLockedConflict = (error) =>
+  String(error?.details?.reason ?? '').trim().toUpperCase() === 'RUNTIME_AGENT_LOCKED'
+
+const getLockingPackageKeys = (error) =>
+  Array.isArray(error?.details?.lockedByPackageKeys)
+    ? error.details.lockedByPackageKeys
+        .map((packageKey) => String(packageKey ?? '').trim())
+        .filter(Boolean)
+    : []
+
 function AgentEditorLoadingState() {
   return (
     <Card variant="elevated" className="super-admin-agents__card super-admin-agent-editor__loading-card">
@@ -81,12 +98,61 @@ function AgentEditorLoadingState() {
   )
 }
 
-function AgentEditorErrorState({ message, onBack }) {
+export function AgentEditorErrorState({ appError, message, onBack, onClone }) {
+  const packageKeys = getLockingPackageKeys(appError)
+  const isLockedConflict = isRuntimeAgentLockedConflict(appError)
+
+  if (isLockedConflict) {
+    return (
+      <Card
+        variant="elevated"
+        className="super-admin-agents__card super-admin-agent-editor__error-card super-admin-agent-editor__error-card--locked"
+      >
+        <Card.Body className="super-admin-agents__card-body super-admin-agents__card-body--compact super-admin-agent-editor__locked-conflict-body">
+          <div className="super-admin-agents__catalogue-actions super-admin-agent-editor__top-actions">
+            <Button variant="outline" size="sm" onClick={onBack}>
+              Back
+            </Button>
+            <Button variant="primary" size="sm" onClick={onClone}>
+              Clone
+            </Button>
+          </div>
+
+          <div className="super-admin-agent-editor__lock-banner super-admin-agent-editor__lock-banner--standalone" role="status">
+            <Badge variant="warning" size="sm" pill outline>
+              Locked
+            </Badge>
+            <div className="super-admin-agent-editor__lock-copy">
+              <strong>Locked by validated package usage.</strong>
+              <span>Clone this runtime agent to make behavior changes.</span>
+            </div>
+            {packageKeys.length > 0 ? (
+              <div className="super-admin-agent-editor__lock-packages" aria-label="Locked by packages">
+                {packageKeys.map((packageKey) => (
+                  <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                    {packageKey}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <p className="super-admin-agent-editor__locked-conflict-copy">
+            Direct editing is blocked while package dependency locks point at this agent.
+            Existing packages stay pinned to this version until a package is intentionally updated.
+          </p>
+        </Card.Body>
+      </Card>
+    )
+  }
+
+  const effectiveMessage = message || appError?.message || 'Unable to load agent details.'
+
   return (
     <Card variant="elevated" className="super-admin-agents__card super-admin-agent-editor__error-card">
       <Card.Body className="super-admin-agents__card-body super-admin-agents__card-body--compact super-admin-agent-editor__error-body">
         <p className="super-admin-agents__error" role="alert">
-          {message}
+          {effectiveMessage}
         </p>
         <div className="super-admin-agents__catalogue-actions super-admin-agent-editor__top-actions">
           <Button variant="outline" size="sm" onClick={onBack}>
@@ -101,8 +167,12 @@ function AgentEditorErrorState({ message, onBack }) {
 function SuperAdminAgentEditor() {
   const navigate = useNavigate()
   const { agentId = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const { addToast } = useToaster()
   const isEditMode = Boolean(agentId)
+  const cloneFromAgentId = !isEditMode ? String(searchParams.get('cloneFrom') ?? '').trim() : ''
+  const isCloneMode = Boolean(cloneFromAgentId)
+  const loadedAgentId = isEditMode ? agentId : cloneFromAgentId
 
   const [form, setForm] = useState({
     ...INITIAL_RUNTIME_AGENT_FORM,
@@ -117,8 +187,8 @@ function SuperAdminAgentEditor() {
     data: agentResponse,
     isLoading: isAgentLoading,
     error: agentError,
-  } = useGetRuntimeAgentQuery(agentId, {
-    skip: !isEditMode,
+  } = useGetRuntimeAgentQuery(loadedAgentId, {
+    skip: !loadedAgentId,
   })
 
   const {
@@ -154,17 +224,19 @@ function SuperAdminAgentEditor() {
     error: skillRolesError,
   } = useListSkillRolesQuery({
     page: 1,
-    pageSize: 1000,
+    pageSize: 100,
     q: '',
   })
 
   const [createRuntimeAgent, { isLoading: isCreating }] = useCreateRuntimeAgentMutation()
   const [updateRuntimeAgent, { isLoading: isUpdating }] = useUpdateRuntimeAgentMutation()
+  const [cloneRuntimeAgent, { isLoading: isCloning }] = useCloneRuntimeAgentMutation()
   const [activateRuntimeAgent] = useActivateRuntimeAgentMutation()
   const [disableRuntimeAgent] = useDisableRuntimeAgentMutation()
   const [deprecateRuntimeAgent] = useDeprecateRuntimeAgentMutation()
 
   const loadedAgent = agentResponse?.data ?? null
+  const isLockedAgent = Boolean(isEditMode && loadedAgent?.isLocked)
   const agentAppError = agentError ? normalizeError(agentError) : null
   const loadedDependencies = dependenciesResponse?.data ?? null
   const dependenciesAppError = dependenciesError ? normalizeError(dependenciesError) : null
@@ -192,7 +264,7 @@ function SuperAdminAgentEditor() {
     () => frameworkOptions.map((option) => option.value),
     [frameworkOptions],
   )
-  const existingAgents = agentsResponse?.data ?? []
+  const existingAgents = useMemo(() => agentsResponse?.data ?? [], [agentsResponse?.data])
   const availableSkills = useMemo(() => {
     const direct = skillsResponse?.data
 
@@ -231,7 +303,7 @@ function SuperAdminAgentEditor() {
   const skillRolesAppError = skillRolesError ? normalizeError(skillRolesError) : null
   useEffect(() => {
     const totalCount = skillRolesResponse?.meta?.totalCount ?? 0
-    const pageSize = 1000
+    const pageSize = 100
     if (totalCount > pageSize) {
       console.warn(
         `Skill role registry has ${totalCount} roles but only fetched ${pageSize}. ` +
@@ -263,17 +335,18 @@ function SuperAdminAgentEditor() {
 
   const isCreateDisabled = useMemo(() => {
     if (isEditMode) return false
-    if (isCreating) return true
+    if (isCreating || isCloning) return true
     if (isSkillsLoading) return true
+    if (isCloneMode && isAgentLoading) return true
 
     return Object.keys(liveValidation.errors || {}).length > 0
-  }, [isEditMode, isCreating, isSkillsLoading, liveValidation.errors])
+  }, [isAgentLoading, isCloneMode, isCloning, isCreating, isEditMode, isSkillsLoading, liveValidation.errors])
 
   const isCreateReady = !isEditMode && !isCreateDisabled
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      if (!isEditMode) {
+      if (!isEditMode && !isCloneMode) {
         setForm({
           ...INITIAL_RUNTIME_AGENT_FORM,
         })
@@ -285,7 +358,15 @@ function SuperAdminAgentEditor() {
       }
 
       if (loadedAgent) {
-        setForm(mapRuntimeAgentToForm(loadedAgent))
+        const nextForm = mapRuntimeAgentToForm(loadedAgent)
+        setForm(isCloneMode
+          ? {
+              ...nextForm,
+              key: '',
+              name: `${nextForm.name} Clone`,
+              status: RUNTIME_AGENT_STATUSES.DRAFT,
+            }
+          : nextForm)
         setErrors({})
         setErrorsSource(null)
         setActiveEditorTab(0)
@@ -293,7 +374,7 @@ function SuperAdminAgentEditor() {
       }
     }, 0)
     return () => window.clearTimeout(timeoutId)
-  }, [isEditMode, loadedAgent])
+  }, [isCloneMode, isEditMode, loadedAgent])
 
   useEffect(() => {
     if (isEditMode) return
@@ -342,7 +423,7 @@ function SuperAdminAgentEditor() {
     setShowValidationHints(true)
 
     if (!isEditMode) {
-      const prefix = 'runtime-agent-create'
+      const prefix = isCloneMode ? 'runtime-agent-clone' : 'runtime-agent-create'
       const jumpTargets = [
         { tabIndex: 0, fieldKey: 'supportedFrameworkKeys', focusId: `${prefix}-framework-select` },
         { tabIndex: 1, fieldKey: 'requiredSkillRoleKeys', focusId: `${prefix}-required-role-select` },
@@ -388,6 +469,15 @@ function SuperAdminAgentEditor() {
   const submitForm = async ({ bypassDependencyConfirm } = {}) => {
     setErrors({})
     setErrorsSource(null)
+
+    if (isLockedAgent) {
+      addToast({
+        title: 'Locked agent',
+        description: 'Locked Runtime Control records must be cloned before behavior changes can be saved.',
+        variant: 'warning',
+      })
+      return
+    }
 
     const { errors: nextErrors, payload } = validateRuntimeAgentForm(
       form,
@@ -447,6 +537,19 @@ function SuperAdminAgentEditor() {
           description: 'The agent editor changes were saved successfully.',
           variant: 'success',
         })
+      } else if (isCloneMode) {
+        await cloneRuntimeAgent({
+          agentId: cloneFromAgentId,
+          key: payload.key,
+          name: payload.name,
+          description: payload.description,
+        }).unwrap()
+
+        addToast({
+          title: 'Agent cloned',
+          description: `${payload.name} is now available as an editable draft.`,
+          variant: 'success',
+        })
       } else {
         await createRuntimeAgent({
           ...payload,
@@ -482,7 +585,11 @@ function SuperAdminAgentEditor() {
       }
 
       addToast({
-        title: isEditMode ? 'Failed to update agent' : 'Failed to create agent',
+        title: isEditMode
+          ? 'Failed to update agent'
+          : isCloneMode
+            ? 'Failed to clone agent'
+            : 'Failed to create agent',
         description: appError.message,
         variant: 'error',
       })
@@ -500,7 +607,9 @@ function SuperAdminAgentEditor() {
       aria-label="Super admin runtime agent editor"
     >
       <header className="super-admin-agents__header">
-        <h1 className="super-admin-agents__title">{isEditMode ? 'Agent Editor' : 'Create Agent'}</h1>
+        <h1 className="super-admin-agents__title">
+          {isEditMode ? 'Agent Editor' : isCloneMode ? 'Clone Agent' : 'Create Agent'}
+        </h1>
         <p className="super-admin-agents__subtitle">
           Govern runtime agents, control their availability, and define the framework and skill
           metadata that downstream Runtime Control modules depend on.
@@ -509,9 +618,15 @@ function SuperAdminAgentEditor() {
 
       <Fieldset className="super-admin-agent-editor__fieldset">
         <Fieldset.Legend className="sr-only">Runtime agent editor</Fieldset.Legend>
-        {isEditMode && isAgentLoading ? <AgentEditorLoadingState /> : null}
-        {isEditMode && agentAppError ? (
-          <AgentEditorErrorState message={agentAppError.message} onBack={handleBackToAgents} />
+        {loadedAgentId && isAgentLoading ? <AgentEditorLoadingState /> : null}
+        {loadedAgentId && agentAppError ? (
+          <AgentEditorErrorState
+            appError={agentAppError}
+            onBack={handleBackToAgents}
+            onClone={() =>
+              navigate(`/super-admin/runtime-control/agents/new?cloneFrom=${encodeURIComponent(loadedAgentId)}`)
+            }
+          />
         ) : null}
         {!isAgentLoading && !agentAppError ? (
           <Card variant="elevated" className="super-admin-agents__card super-admin-agent-editor__card">
@@ -521,12 +636,26 @@ function SuperAdminAgentEditor() {
                   <Button type="button" variant="outline" size="sm" onClick={handleBackToAgents}>
                     Back
                   </Button>
+                  {isLockedAgent ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() =>
+                        navigate(`/super-admin/runtime-control/agents/new?cloneFrom=${encodeURIComponent(agentId)}`)
+                      }
+                    >
+                      Clone
+                    </Button>
+                  ) : null}
                 </div>
 
                 <div className="super-admin-agent-editor__intro">
                   <p className="super-admin-agent-editor__form-title">
                     {isEditMode
                       ? 'Editor surface for an existing runtime agent.'
+                      : isCloneMode
+                        ? 'Clone this runtime agent into an editable draft.'
                       : 'Editor surface for a new runtime agent.'}
                   </p>
                   <p className="super-admin-agents__table-note">
@@ -536,34 +665,61 @@ function SuperAdminAgentEditor() {
                   </p>
                 </div>
 
-                <RuntimeAgentFormFields
-                  prefix={isEditMode ? 'runtime-agent-edit' : 'runtime-agent-create'}
-                  isEditMode={isEditMode}
-                  form={form}
-                  setForm={setForm}
-                  errors={errors}
-                  validationHints={showValidationHints ? liveValidation.errors : {}}
-                  activeTab={activeEditorTab}
-                  onTabChange={setActiveEditorTab}
-                  frameworkOptions={frameworkOptions}
-                  availableSkills={availableSkills}
-                  availableSkillRoles={availableSkillRoles}
-                  isSkillsLoading={isSkillsLoading}
-                  skillsError={skillsAppError?.message ?? ''}
-                  isSkillRolesLoading={isSkillRolesLoading}
-                  skillRolesError={skillRolesAppError?.message ?? ''}
-                  dependencies={loadedDependencies}
-                  isDependenciesLoading={isDependenciesLoading}
-                  dependenciesError={dependenciesAppError?.message ?? ''}
-                />
+                {isLockedAgent ? (
+                  <div className="super-admin-agent-editor__lock-banner" role="status">
+                    <Badge variant="warning" size="sm" pill outline>
+                      Locked
+                    </Badge>
+                    <div className="super-admin-agent-editor__lock-copy">
+                      <strong>Locked by validated package usage.</strong>
+                      <span>Clone this runtime agent to make behavior changes.</span>
+                    </div>
+                    {(Array.isArray(loadedAgent?.lockedByPackageKeys) ? loadedAgent.lockedByPackageKeys : []).length > 0 ? (
+                      <div className="super-admin-agent-editor__lock-packages" aria-label="Locking packages">
+                        {loadedAgent.lockedByPackageKeys.map((packageKey) => (
+                          <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                            {packageKey}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <fieldset className="super-admin-agent-editor__edit-fieldset" disabled={isLockedAgent}>
+                  <RuntimeAgentFormFields
+                    prefix={isEditMode ? 'runtime-agent-edit' : isCloneMode ? 'runtime-agent-clone' : 'runtime-agent-create'}
+                    isEditMode={isEditMode}
+                    form={form}
+                    setForm={setForm}
+                    errors={errors}
+                    validationHints={showValidationHints ? liveValidation.errors : {}}
+                    activeTab={activeEditorTab}
+                    onTabChange={setActiveEditorTab}
+                    frameworkOptions={frameworkOptions}
+                    availableSkills={availableSkills}
+                    availableSkillRoles={availableSkillRoles}
+                    isSkillsLoading={isSkillsLoading}
+                    skillsError={skillsAppError?.message ?? ''}
+                    isSkillRolesLoading={isSkillRolesLoading}
+                    skillRolesError={skillRolesAppError?.message ?? ''}
+                    dependencies={loadedDependencies}
+                    isDependenciesLoading={isDependenciesLoading}
+                    dependenciesError={dependenciesAppError?.message ?? ''}
+                  />
+                </fieldset>
 
                 <div className="super-admin-agents__catalogue-actions super-admin-agent-editor__footer-actions">
                   <Button type="button" variant="outline" size="sm" onClick={handleBackToAgents}>
                     Cancel
                   </Button>
                   {isEditMode ? (
-                    <Button type="submit" variant="primary" size="sm" loading={isUpdating}>
+                    <Button type="submit" variant="primary" size="sm" loading={isUpdating} disabled={isLockedAgent}>
                       Save Changes
+                    </Button>
+                  ) : isCloneMode && isCreateReady ? (
+                    <Button type="submit" variant="primary" size="sm" loading={isCloning}>
+                      Save Clone
                     </Button>
                   ) : isCreateReady ? (
                     <Button type="submit" variant="primary" size="sm" loading={isCreating}>

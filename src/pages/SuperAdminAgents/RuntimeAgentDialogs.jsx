@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
@@ -10,6 +10,7 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
+import { Tickbox } from '../../components/Tickbox'
 import { Tooltip } from '../../components/Tooltip'
 import {
   formatKeyList,
@@ -17,7 +18,9 @@ import {
   parseEnumKeyList,
   parseFrameworkKeyList,
   parseKeyList,
+  RUNTIME_AGENT_EXECUTION_MODE_OPTIONS,
   RUNTIME_AGENT_FORM_STATUS_OPTIONS,
+  RUNTIME_AGENT_RETRY_POLICY_OPTIONS,
   RUNTIME_AGENT_TYPE_OPTIONS,
 } from './superAdminAgents.constants.js'
 import {
@@ -182,6 +185,11 @@ function normalizePathSelectionList(values) {
   )]
 }
 
+function buildExecutionStepKey(skillId, order) {
+  const normalizedSkillId = normalizeAgentKey(skillId) || 'step'
+  return normalizeAgentKey(`run-${normalizedSkillId}-${order}`)
+}
+
 function buildExecutionPlanDiagnostics({
   executionPlan = [],
   assignedSkillIds = [],
@@ -190,6 +198,8 @@ function buildExecutionPlanDiagnostics({
 }) {
   const diagnostics = []
   const seenSkillIds = new Set()
+  const seenStepKeys = new Set()
+  const seenOrders = new Set()
   const assignedSkillIdSet = new Set(assignedSkillIds)
 
   if (executionPlan.length === 0) {
@@ -200,6 +210,24 @@ function buildExecutionPlanDiagnostics({
   executionPlan.forEach((step, index) => {
     const stepNumber = index + 1
     const skillId = normalizeAgentKey(step?.skillId)
+    const stepKey = normalizeAgentKey(step?.stepKey) || buildExecutionStepKey(skillId, stepNumber)
+    const order = Number.parseInt(String(step?.order ?? stepNumber), 10)
+
+    if (!stepKey) {
+      diagnostics.push(`Step ${stepNumber} is missing a binding step key.`)
+    } else if (seenStepKeys.has(stepKey)) {
+      diagnostics.push(`Step ${stepNumber} duplicates step key "${stepKey}".`)
+    } else {
+      seenStepKeys.add(stepKey)
+    }
+
+    if (!Number.isInteger(order) || order <= 0) {
+      diagnostics.push(`Step ${stepNumber} has an invalid order.`)
+    } else if (seenOrders.has(order)) {
+      diagnostics.push(`Step ${stepNumber} duplicates order "${order}".`)
+    } else {
+      seenOrders.add(order)
+    }
 
     if (!skillId) {
       diagnostics.push(`Step ${stepNumber} is missing a governed skill selection.`)
@@ -516,7 +544,7 @@ function RuntimeAgentSkillCompositionSection({
     setPendingSkillId('')
   }
 
-  const handleRemoveSkill = (skillId) => {
+  const handleRemoveSkill = useCallback((skillId) => {
     const normalizedSkillId = normalizeAgentKey(skillId)
     if (!normalizedSkillId) return
 
@@ -529,7 +557,7 @@ function RuntimeAgentSkillCompositionSection({
         ? current.executionPlan.filter((step) => normalizeAgentKey(step?.skillId) !== normalizedSkillId)
         : [],
     }))
-  }
+  }, [setForm])
 
   const handleAddRequiredRole = (roleKey) => {
     const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
@@ -821,7 +849,10 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
     [form.defaultSkillIds, form.primarySkillIds, form.optionalSkillIds],
   )
 
-  const executionPlan = Array.isArray(form.executionPlan) ? form.executionPlan : []
+  const executionPlan = useMemo(
+    () => (Array.isArray(form.executionPlan) ? form.executionPlan : []),
+    [form.executionPlan],
+  )
   const normalizedPlanSkillIds = useMemo(
     () => executionPlan.map((step) => normalizeAgentKey(step?.skillId)).filter(Boolean),
     [executionPlan],
@@ -903,25 +934,34 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
   const handleAddStep = () => {
     const normalized = normalizeAgentKey(pendingStepSkillId)
     if (!normalized) return
+    const nextOrder = executionPlan.length + 1
 
     setForm((current) => ({
       ...current,
       executionPlan: [
         ...(Array.isArray(current.executionPlan) ? current.executionPlan : []),
-        { skillId: normalized, description: '', readsFrom: [], writesTo: [] },
+        {
+          stepKey: buildExecutionStepKey(normalized, nextOrder),
+          order: nextOrder,
+          required: true,
+          skillId: normalized,
+          description: '',
+          readsFrom: [],
+          writesTo: [],
+        },
       ],
     }))
     setPendingStepSkillId('')
   }
 
-  const handleRemoveStep = (index) => {
+  const handleRemoveStep = useCallback((index) => {
     setForm((current) => ({
       ...current,
       executionPlan: (Array.isArray(current.executionPlan) ? current.executionPlan : []).filter((_step, i) => i !== index),
     }))
-  }
+  }, [setForm])
 
-  const handleUpdateStep = (index, nextStep) => {
+  const handleUpdateStep = useCallback((index, nextStep) => {
     setForm((current) => {
       const currentPlan = Array.isArray(current.executionPlan) ? [...current.executionPlan] : []
       if (index < 0 || index >= currentPlan.length) return current
@@ -929,14 +969,19 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
       currentPlan[index] = nextStep
       return { ...current, executionPlan: currentPlan }
     })
-  }
+  }, [setForm])
 
   const rows = useMemo(
     () =>
       executionPlan.map((step, index) => ({
-        id: `${normalizeAgentKey(step?.skillId) || 'step'}-${index}`,
+        id: `${normalizeAgentKey(step?.stepKey) || normalizeAgentKey(step?.skillId) || 'step'}-${index}`,
         stepNumber: index + 1,
         ...step,
+        stepKey: normalizeAgentKey(step?.stepKey) || buildExecutionStepKey(step?.skillId, index + 1),
+        order: Number.isInteger(Number(step?.order)) && Number(step?.order) > 0
+          ? Number(step.order)
+          : index + 1,
+        required: step?.required !== false,
       })),
     [executionPlan],
   )
@@ -944,11 +989,76 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
   const columns = useMemo(
     () => [
       {
-        key: 'stepNumber',
-        label: 'Step #',
-        mobileLabel: 'Step #',
-        width: '84px',
-        render: (value) => <span className="super-admin-agents__skill-key">{value}</span>,
+        key: 'stepKey',
+        label: 'Step Key',
+        mobileLabel: 'Step Key',
+        width: '220px',
+        render: (value, row) => (
+          <Input
+            id={`${prefix}-execution-step-${row.stepNumber}-key`}
+            size="sm"
+            value={String(value ?? '')}
+            onChange={(event) => {
+              const currentStep = executionPlan[row.stepNumber - 1] ?? {}
+              handleUpdateStep(row.stepNumber - 1, {
+                ...currentStep,
+                stepKey: normalizeAgentKey(event.target.value),
+                readsFrom: normalizePathSelectionList(currentStep.readsFrom),
+                writesTo: normalizePathSelectionList(currentStep.writesTo),
+              })
+            }}
+            aria-label={`Execution step key for step ${row.stepNumber}`}
+            fullWidth
+          />
+        ),
+      },
+      {
+        key: 'order',
+        label: 'Order',
+        mobileLabel: 'Order',
+        width: '112px',
+        render: (value, row) => (
+          <Input
+            id={`${prefix}-execution-step-${row.stepNumber}-order`}
+            size="sm"
+            type="number"
+            min="1"
+            value={String(value ?? row.stepNumber)}
+            onChange={(event) => {
+              const currentStep = executionPlan[row.stepNumber - 1] ?? {}
+              handleUpdateStep(row.stepNumber - 1, {
+                ...currentStep,
+                order: Number.parseInt(event.target.value, 10),
+                readsFrom: normalizePathSelectionList(currentStep.readsFrom),
+                writesTo: normalizePathSelectionList(currentStep.writesTo),
+              })
+            }}
+            aria-label={`Execution order for step ${row.stepNumber}`}
+          />
+        ),
+      },
+      {
+        key: 'required',
+        label: 'Required',
+        mobileLabel: 'Required',
+        width: '112px',
+        render: (value, row) => (
+          <Tickbox
+            id={`${prefix}-execution-step-${row.stepNumber}-required`}
+            size="sm"
+            checked={value !== false}
+            onChange={(event) => {
+              const currentStep = executionPlan[row.stepNumber - 1] ?? {}
+              handleUpdateStep(row.stepNumber - 1, {
+                ...currentStep,
+                required: event.target.checked,
+                readsFrom: normalizePathSelectionList(currentStep.readsFrom),
+                writesTo: normalizePathSelectionList(currentStep.writesTo),
+              })
+            }}
+            aria-label={`Required execution step ${row.stepNumber}`}
+          />
+        ),
       },
       {
         key: 'skillId',
@@ -995,8 +1105,8 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
                 disabled={supportedFrameworkKeySet.size === 0 || options.length === 0}
                 onChange={(event) =>
                   handleUpdateStep(row.stepNumber - 1, {
+                    ...(executionPlan[row.stepNumber - 1] ?? {}),
                     skillId: normalizeAgentKey(event.target.value),
-                    description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
                     readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
                     writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
                   })
@@ -1038,7 +1148,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
             placeholder="Optional"
             onChange={(event) =>
               handleUpdateStep(row.stepNumber - 1, {
-                skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
+                ...(executionPlan[row.stepNumber - 1] ?? {}),
                 description: event.target.value,
                 readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
                 writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
@@ -1061,8 +1171,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
             selectedKeys={normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom)}
             onChange={(nextKeys) =>
               handleUpdateStep(row.stepNumber - 1, {
-                skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
-                description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
+                ...(executionPlan[row.stepNumber - 1] ?? {}),
                 readsFrom: nextKeys,
                 writesTo: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo),
               })
@@ -1084,8 +1193,7 @@ function RuntimeAgentExecutionPlanSection({ prefix, form, setForm, errors, avail
             selectedKeys={normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.writesTo)}
             onChange={(nextKeys) =>
               handleUpdateStep(row.stepNumber - 1, {
-                skillId: normalizeAgentKey(executionPlan[row.stepNumber - 1]?.skillId),
-                description: String(executionPlan[row.stepNumber - 1]?.description ?? ''),
+                ...(executionPlan[row.stepNumber - 1] ?? {}),
                 readsFrom: normalizePathSelectionList(executionPlan[row.stepNumber - 1]?.readsFrom),
                 writesTo: nextKeys,
               })
@@ -1349,6 +1457,56 @@ function RuntimeAgentRuntimeSection({ prefix, form, setForm, errors }) {
     >
       <div className="super-admin-agents__row">
         <Input
+          id={`${prefix}-runtime-timeout-ms`}
+          label="Runtime Timeout (ms)"
+          helperText="Required. Positive integer."
+          value={form.runtimeTimeoutMs}
+          onChange={(event) =>
+            setForm((current) => ({ ...current, runtimeTimeoutMs: event.target.value }))
+          }
+          error={errors.runtimeTimeoutMs}
+          fullWidth
+        />
+
+        <Select
+          id={`${prefix}-runtime-retry-policy`}
+          label="Runtime Retry Policy"
+          className="super-admin-agent-editor__select-field"
+          value={form.runtimeRetryPolicy}
+          options={RUNTIME_AGENT_RETRY_POLICY_OPTIONS}
+          onChange={(event) =>
+            setForm((current) => ({ ...current, runtimeRetryPolicy: event.target.value }))
+          }
+          error={errors.runtimeRetryPolicy}
+        />
+
+        <Input
+          id={`${prefix}-runtime-max-retries`}
+          label="Max Retries"
+          helperText="Required. Zero or greater."
+          value={form.runtimeMaxRetries}
+          onChange={(event) =>
+            setForm((current) => ({ ...current, runtimeMaxRetries: event.target.value }))
+          }
+          error={errors.runtimeMaxRetries}
+          fullWidth
+        />
+
+        <Select
+          id={`${prefix}-runtime-execution-mode`}
+          label="Execution Mode"
+          className="super-admin-agent-editor__select-field"
+          value={form.runtimeExecutionMode}
+          options={RUNTIME_AGENT_EXECUTION_MODE_OPTIONS}
+          onChange={(event) =>
+            setForm((current) => ({ ...current, runtimeExecutionMode: event.target.value }))
+          }
+          error={errors.runtimeExecutionMode}
+        />
+      </div>
+
+      <div className="super-admin-agents__row">
+        <Input
           id={`${prefix}-policy-max-token-budget`}
           label="Max Token Budget"
           helperText="Leave empty for default."
@@ -1603,7 +1761,10 @@ export function RuntimeAgentFormFields({
   dependenciesError = '',
 }) {
   const compiledPrompt = useMemo(() => compilePromptPreview(form), [form])
-  const hintErrors = validationHints && typeof validationHints === 'object' ? validationHints : {}
+  const hintErrors = useMemo(
+    () => (validationHints && typeof validationHints === 'object' ? validationHints : {}),
+    [validationHints],
+  )
 
   const tabErrorCounts = useMemo(() => ({
     framework: hintErrors.supportedFrameworkKeys ? 1 : 0,
@@ -1611,7 +1772,13 @@ export function RuntimeAgentFormFields({
     execution: hintErrors.executionPlan ? 1 : 0,
     prompts: 0,
     contracts: (hintErrors.inputContractJson ? 1 : 0) + (hintErrors.outputContractJson ? 1 : 0),
-    runtime: (hintErrors.policyMaxTokenBudget ? 1 : 0) + (hintErrors.policyTimeoutMs ? 1 : 0),
+    runtime:
+      (hintErrors.runtimeTimeoutMs ? 1 : 0)
+      + (hintErrors.runtimeRetryPolicy ? 1 : 0)
+      + (hintErrors.runtimeMaxRetries ? 1 : 0)
+      + (hintErrors.runtimeExecutionMode ? 1 : 0)
+      + (hintErrors.policyMaxTokenBudget ? 1 : 0)
+      + (hintErrors.policyTimeoutMs ? 1 : 0),
     dependencies: 0,
   }), [hintErrors])
 

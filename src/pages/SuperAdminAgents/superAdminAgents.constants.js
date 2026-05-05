@@ -14,10 +14,32 @@ export const RUNTIME_AGENT_STATUS_OPTIONS = Object.freeze([
 ])
 
 export const RUNTIME_AGENT_FORM_STATUS_OPTIONS = Object.freeze([
+  { value: RUNTIME_AGENT_STATUSES.DRAFT, label: 'Draft' },
   { value: RUNTIME_AGENT_STATUSES.ACTIVE, label: 'Active' },
   { value: RUNTIME_AGENT_STATUSES.INACTIVE, label: 'Inactive' },
-  { value: RUNTIME_AGENT_STATUSES.DRAFT, label: 'Draft' },
   { value: RUNTIME_AGENT_STATUSES.DEPRECATED, label: 'Deprecated' },
+])
+
+export const RUNTIME_AGENT_RETRY_POLICIES = Object.freeze({
+  NONE: 'NONE',
+  RETRY_ONCE: 'RETRY_ONCE',
+  RETRY_TWICE: 'RETRY_TWICE',
+  EXPONENTIAL_BACKOFF: 'EXPONENTIAL_BACKOFF',
+})
+
+export const RUNTIME_AGENT_RETRY_POLICY_OPTIONS = Object.freeze([
+  { value: RUNTIME_AGENT_RETRY_POLICIES.NONE, label: 'None' },
+  { value: RUNTIME_AGENT_RETRY_POLICIES.RETRY_ONCE, label: 'Retry once' },
+  { value: RUNTIME_AGENT_RETRY_POLICIES.RETRY_TWICE, label: 'Retry twice' },
+  { value: RUNTIME_AGENT_RETRY_POLICIES.EXPONENTIAL_BACKOFF, label: 'Exponential backoff' },
+])
+
+export const RUNTIME_AGENT_EXECUTION_MODES = Object.freeze({
+  SYSTEM: 'SYSTEM',
+})
+
+export const RUNTIME_AGENT_EXECUTION_MODE_OPTIONS = Object.freeze([
+  { value: RUNTIME_AGENT_EXECUTION_MODES.SYSTEM, label: 'System' },
 ])
 
 const RUNTIME_AGENT_TYPES = Object.freeze({
@@ -49,7 +71,7 @@ export const INITIAL_RUNTIME_AGENT_FORM = Object.freeze({
   key: '',
   name: '',
   description: '',
-  status: RUNTIME_AGENT_STATUSES.ACTIVE,
+  status: RUNTIME_AGENT_STATUSES.DRAFT,
   agentType: RUNTIME_AGENT_TYPES.EXECUTION,
   supportedFrameworkKeys: 'VMF\nRLD',
   requiredSkillRoleKeys: '',
@@ -68,6 +90,10 @@ export const INITIAL_RUNTIME_AGENT_FORM = Object.freeze({
   policyMaxTokenBudget: '',
   policyTimeoutMs: '',
   policyRetryPolicy: '',
+  runtimeTimeoutMs: '10000',
+  runtimeRetryPolicy: RUNTIME_AGENT_RETRY_POLICIES.NONE,
+  runtimeMaxRetries: '0',
+  runtimeExecutionMode: RUNTIME_AGENT_EXECUTION_MODES.SYSTEM,
 })
 
 export const INITIAL_RUNTIME_AGENTS = Object.freeze([
@@ -362,6 +388,11 @@ function normalizeEnumToken(value) {
     .toUpperCase()
 }
 
+function buildExecutionStepKey(skillId, fallbackOrder) {
+  const normalizedSkillId = normalizeAgentKey(skillId) || 'step'
+  return normalizeAgentKey(`run-${normalizedSkillId}-${fallbackOrder}`)
+}
+
 export function cloneRuntimeAgent(agent) {
   return {
     ...agent,
@@ -371,8 +402,13 @@ export function cloneRuntimeAgent(agent) {
     primarySkillIds: [...(agent.primarySkillIds ?? [])],
     optionalSkillIds: [...(agent.optionalSkillIds ?? [])],
     executionPlan: Array.isArray(agent.executionPlan)
-      ? agent.executionPlan.map((step) => ({
+      ? agent.executionPlan.map((step, index) => ({
           ...step,
+          stepKey: normalizeAgentKey(step?.stepKey) || buildExecutionStepKey(step?.skillId, index + 1),
+          order: Number.isInteger(Number(step?.order)) && Number(step?.order) > 0
+            ? Number(step.order)
+            : index + 1,
+          required: step?.required !== false,
           readsFrom: normalizePathSelectionList(step?.readsFrom),
           writesTo: normalizePathSelectionList(step?.writesTo),
         }))
@@ -381,6 +417,7 @@ export function cloneRuntimeAgent(agent) {
     inputContract: { ...(agent.inputContract ?? {}) },
     outputContract: { ...(agent.outputContract ?? {}) },
     policies: { ...(agent.policies ?? {}) },
+    runtimeConfig: { ...(agent.runtimeConfig ?? {}) },
     updatedBy: {
       ...agent.updatedBy,
     },
@@ -389,6 +426,8 @@ export function cloneRuntimeAgent(agent) {
 
 export function getRuntimeAgentStatusVariant(status) {
   if (status === RUNTIME_AGENT_STATUSES.ACTIVE) return 'success'
+  if (status === RUNTIME_AGENT_STATUSES.DRAFT) return 'warning'
+  if (status === RUNTIME_AGENT_STATUSES.DEPRECATED) return 'warning'
   return 'neutral'
 }
 
@@ -460,8 +499,14 @@ export function formatKeyList(items) {
 export function mapRuntimeAgentToForm(agent) {
   const promptConfig = agent.promptConfig ?? {}
   const policies = agent.policies ?? {}
+  const runtimeConfig = agent.runtimeConfig ?? {}
   const executionPlan = Array.isArray(agent.executionPlan)
-    ? agent.executionPlan.map((step) => ({
+    ? agent.executionPlan.map((step, index) => ({
+        stepKey: normalizeAgentKey(step?.stepKey) || buildExecutionStepKey(step?.skillId, index + 1),
+        order: Number.isInteger(Number(step?.order)) && Number(step?.order) > 0
+          ? Number(step.order)
+          : index + 1,
+        required: step?.required !== false,
         skillId: normalizeAgentKey(step?.skillId),
         description: String(step?.description ?? ''),
         readsFrom: normalizePathSelectionList(step?.readsFrom),
@@ -473,7 +518,7 @@ export function mapRuntimeAgentToForm(agent) {
     key: agent.key ?? '',
     name: agent.name ?? '',
     description: agent.description ?? '',
-    status: agent.status ?? RUNTIME_AGENT_STATUSES.ACTIVE,
+    status: agent.status ?? RUNTIME_AGENT_STATUSES.DRAFT,
     agentType: agent.agentType ?? RUNTIME_AGENT_TYPES.EXECUTION,
     supportedFrameworkKeys: formatKeyList(agent.supportedFrameworkKeys),
     requiredSkillRoleKeys: formatKeyList(agent.requiredSkillRoleKeys),
@@ -498,6 +543,16 @@ export function mapRuntimeAgentToForm(agent) {
         ? String(policies.timeoutMs)
         : '',
     policyRetryPolicy: policies.retryPolicy ?? '',
+    runtimeTimeoutMs:
+      runtimeConfig.timeoutMs === 0 || runtimeConfig.timeoutMs
+        ? String(runtimeConfig.timeoutMs)
+        : '10000',
+    runtimeRetryPolicy: runtimeConfig.retryPolicy ?? RUNTIME_AGENT_RETRY_POLICIES.NONE,
+    runtimeMaxRetries:
+      runtimeConfig.maxRetries === 0 || runtimeConfig.maxRetries
+        ? String(runtimeConfig.maxRetries)
+        : '0',
+    runtimeExecutionMode: runtimeConfig.executionMode ?? RUNTIME_AGENT_EXECUTION_MODES.SYSTEM,
   }
 }
 
@@ -531,7 +586,7 @@ export function validateRuntimeAgentForm(
   const key = normalizeAgentKey(formState.key)
   const name = String(formState.name ?? '').trim()
   const description = String(formState.description ?? '').trim()
-  const status = String(formState.status ?? '').trim() || RUNTIME_AGENT_STATUSES.ACTIVE
+  const status = String(formState.status ?? '').trim() || RUNTIME_AGENT_STATUSES.DRAFT
   const agentType = normalizeEnumToken(formState.agentType) || RUNTIME_AGENT_TYPES.EXECUTION
   const supportedFrameworkKeys = parseFrameworkKeyList(formState.supportedFrameworkKeys)
   const requiredSkillRoleKeys = parseEnumKeyList(formState.requiredSkillRoleKeys)
@@ -540,7 +595,12 @@ export function validateRuntimeAgentForm(
   const optionalSkillIds = parseKeyList(formState.optionalSkillIds)
   const assignedSkillIds = [...new Set([...defaultSkillIds, ...primarySkillIds, ...optionalSkillIds])]
   const executionPlanStepsRaw = Array.isArray(formState.executionPlan) ? formState.executionPlan : []
-  const executionPlan = executionPlanStepsRaw.map((step) => ({
+  const executionPlan = executionPlanStepsRaw.map((step, index) => ({
+    stepKey: normalizeAgentKey(step?.stepKey) || buildExecutionStepKey(step?.skillId, index + 1),
+    order: Number.isInteger(Number(step?.order)) && Number(step?.order) > 0
+      ? Number(step.order)
+      : index + 1,
+    required: step?.required !== false,
     skillId: normalizeAgentKey(step?.skillId),
     description: String(step?.description ?? '').trim(),
     readsFrom: normalizePathSelectionList(step?.readsFrom),
@@ -642,6 +702,37 @@ export function validateRuntimeAgentForm(
     errors.policyTimeoutMs = 'Timeout must be a non-negative integer.'
   }
 
+  const runtimeTimeoutMsRaw = String(formState.runtimeTimeoutMs ?? '').trim()
+  const runtimeMaxRetriesRaw = String(formState.runtimeMaxRetries ?? '').trim()
+  const runtimeTimeoutMs = runtimeTimeoutMsRaw === ''
+    ? 10000
+    : Number.parseInt(runtimeTimeoutMsRaw, 10)
+  const runtimeMaxRetries = runtimeMaxRetriesRaw === ''
+    ? 0
+    : Number.parseInt(runtimeMaxRetriesRaw, 10)
+  const runtimeRetryPolicy = String(
+    formState.runtimeRetryPolicy ?? RUNTIME_AGENT_RETRY_POLICIES.NONE,
+  ).trim().toUpperCase()
+  const runtimeExecutionMode = String(
+    formState.runtimeExecutionMode ?? RUNTIME_AGENT_EXECUTION_MODES.SYSTEM,
+  ).trim().toUpperCase()
+
+  if (!Number.isInteger(runtimeTimeoutMs) || runtimeTimeoutMs <= 0) {
+    errors.runtimeTimeoutMs = 'Runtime timeout must be a positive integer.'
+  }
+
+  if (!Object.values(RUNTIME_AGENT_RETRY_POLICIES).includes(runtimeRetryPolicy)) {
+    errors.runtimeRetryPolicy = 'Runtime retry policy must use a supported option.'
+  }
+
+  if (!Number.isInteger(runtimeMaxRetries) || runtimeMaxRetries < 0) {
+    errors.runtimeMaxRetries = 'Runtime max retries must be a non-negative integer.'
+  }
+
+  if (!Object.values(RUNTIME_AGENT_EXECUTION_MODES).includes(runtimeExecutionMode)) {
+    errors.runtimeExecutionMode = 'Runtime execution mode must use a supported option.'
+  }
+
   const duplicateKey = existingAgents.find(
     (agent) => agent.id !== selectedAgentId && normalizeAgentKey(agent.key) === key,
   )
@@ -670,8 +761,35 @@ export function validateRuntimeAgentForm(
     errors.executionPlan = 'Execution plan must contain at least one step.'
   } else {
     const stepSkillIds = executionPlan.map((step) => step.skillId).filter(Boolean)
+    const stepKeys = executionPlan.map((step) => step.stepKey).filter(Boolean)
+    const stepOrders = executionPlan.map((step) => step.order).filter((value) => Number.isInteger(value))
+    const invalidStepKey = stepKeys.find((value) => !KEY_TOKEN_PATTERN.test(value))
+    if (invalidStepKey) {
+      errors.executionPlan = `Invalid step key "${invalidStepKey}" in execution plan.`
+    }
+
+    const stepKeySet = new Set()
+    const duplicateStepKey = stepKeys.find((value) => {
+      if (stepKeySet.has(value)) return true
+      stepKeySet.add(value)
+      return false
+    })
+    if (!errors.executionPlan && duplicateStepKey) {
+      errors.executionPlan = `Duplicate step key "${duplicateStepKey}" is not allowed in the execution plan.`
+    }
+
+    const stepOrderSet = new Set()
+    const duplicateStepOrder = stepOrders.find((value) => {
+      if (stepOrderSet.has(value)) return true
+      stepOrderSet.add(value)
+      return false
+    })
+    if (!errors.executionPlan && duplicateStepOrder) {
+      errors.executionPlan = `Duplicate step order "${duplicateStepOrder}" is not allowed in the execution plan.`
+    }
+
     const invalidStepSkillId = stepSkillIds.find((value) => !KEY_TOKEN_PATTERN.test(value))
-    if (invalidStepSkillId) {
+    if (!errors.executionPlan && invalidStepSkillId) {
       errors.executionPlan = `Invalid skill id "${invalidStepSkillId}" in execution plan.`
     }
 
@@ -787,6 +905,12 @@ export function validateRuntimeAgentForm(
       inputContract: inputContract.value ?? {},
       outputContract: outputContract.value ?? {},
       policies,
+      runtimeConfig: {
+        timeoutMs: runtimeTimeoutMs,
+        retryPolicy: runtimeRetryPolicy,
+        maxRetries: runtimeMaxRetries,
+        executionMode: runtimeExecutionMode,
+      },
     },
   }
 }
