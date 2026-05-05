@@ -99,6 +99,17 @@
   margin-top: 0;
 }
 
+.super-admin-skills__table {
+  min-width: 1068px;
+}
+
+@media (min-width: 768px) {
+  .super-admin-skills__table .table__header,
+  .super-admin-skills__table .table__cell {
+    padding-inline: var(--spacing-sm);
+  }
+}
+
 .super-admin-skills__pagination {
   display: flex;
   justify-content: space-between;
@@ -116,6 +127,12 @@
 @media (max-width: 1023px) {
   .super-admin-skills__toolbar {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .super-admin-skills__table {
+    min-width: 0;
   }
 }
 

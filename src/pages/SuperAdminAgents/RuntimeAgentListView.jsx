@@ -9,6 +9,7 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { Tooltip } from '../../components/Tooltip'
 import {
   formatRuntimeAgentStatus,
   getRuntimeAgentStatusVariant,
@@ -21,6 +22,23 @@ import {
   getRuntimeControlVersionStatusVariant,
 } from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import './RuntimeAgentListView.css'
+
+function TruncatedText({ value, className = '', mono = false }) {
+  const text = String(value || '--')
+  const classes = [
+    'super-admin-agents__truncated-text',
+    mono ? 'super-admin-agents__truncated-text--mono' : '',
+    className,
+  ].filter(Boolean).join(' ')
+
+  return (
+    <Tooltip content={text} position="top" align="start" className="super-admin-agents__truncated-tooltip">
+      <span className={classes} title={text}>
+        {text}
+      </span>
+    </Tooltip>
+  )
+}
 
 function RuntimeAgentRowActionsMenu({ row, onAction }) {
   const isLocked = Boolean(row.isLocked)
@@ -80,8 +98,8 @@ function renderVersionSummary(_value, row) {
 function renderAgentSummary(_value, row) {
   return (
     <div className="super-admin-agents__agent-summary">
-      <span className="super-admin-agents__agent-name">{row.name}</span>
-      <span className="super-admin-agents__agent-key">{row.key}</span>
+      <TruncatedText value={row.name || '--'} className="super-admin-agents__agent-name" />
+      <TruncatedText value={row.key || '--'} className="super-admin-agents__agent-key" mono />
     </div>
   )
 }
@@ -172,12 +190,14 @@ export function RuntimeAgentListView({
         key: 'name',
         label: 'Agent',
         mobileLabel: 'Agent',
+        width: '300px',
         render: renderAgentSummary,
       },
       {
         key: 'status',
         label: 'Status',
         mobileLabel: 'Status',
+        width: '112px',
         render: (value) => (
           <Status size="sm" showIcon variant={getRuntimeAgentStatusVariant(value)}>
             {formatRuntimeAgentStatus(value)}
@@ -195,12 +215,14 @@ export function RuntimeAgentListView({
         key: 'supportedFrameworkKeys',
         label: 'Frameworks',
         mobileLabel: 'Frameworks',
+        width: '160px',
         render: (value) => renderTokenList(value),
       },
       {
         key: 'defaultSkillIds',
         label: 'Default Skills',
         mobileLabel: 'Default Skills',
+        width: '240px',
         render: (value) => renderTokenList(value),
       },
       {

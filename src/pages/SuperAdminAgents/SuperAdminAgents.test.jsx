@@ -29,6 +29,18 @@ function renderPage() {
   })
 }
 
+function getAgentNameCell(name) {
+  return screen
+    .getAllByText(name)
+    .find((element) => element.classList.contains('super-admin-agents__agent-name'))
+}
+
+function queryAgentNameCell(name) {
+  return screen
+    .queryAllByText(name)
+    .find((element) => element.classList.contains('super-admin-agents__agent-name')) || null
+}
+
 describe('SuperAdminAgents page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
@@ -42,6 +54,8 @@ describe('SuperAdminAgents page', () => {
     expect(screen.getByText(/active agents remain selectable/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /^agents$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
+    await waitFor(() => expect(getAgentNameCell('Validator')).toBeInTheDocument())
+    expect(getAgentNameCell('Validator')).toHaveAttribute('title', 'Validator')
 
     await user.click(screen.getByRole('button', { name: /^create$/i }))
 
@@ -100,9 +114,9 @@ describe('SuperAdminAgents page', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Validator')).toBeInTheDocument()
-      expect(screen.getByText('Readiness Check')).toBeInTheDocument()
-      expect(screen.queryByText('Governance Review')).not.toBeInTheDocument()
+      expect(getAgentNameCell('Validator')).toBeInTheDocument()
+      expect(getAgentNameCell('Readiness Check')).toBeInTheDocument()
+      expect(queryAgentNameCell('Governance Review')).not.toBeInTheDocument()
     })
 
     await user.type(
@@ -113,8 +127,8 @@ describe('SuperAdminAgents page', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Report Publisher')).toBeInTheDocument()
-      expect(screen.queryByText('Validator')).not.toBeInTheDocument()
+      expect(getAgentNameCell('Report Publisher')).toBeInTheDocument()
+      expect(queryAgentNameCell('Validator')).not.toBeInTheDocument()
     })
   })
 
@@ -140,7 +154,7 @@ describe('SuperAdminAgents page', () => {
     await user.selectOptions(await screen.findByLabelText(/actions for validator/i), 'Set Inactive')
 
     await waitFor(() => {
-      const validatorRow = screen.getByText('Validator').closest('tr')
+      const validatorRow = getAgentNameCell('Validator')?.closest('tr')
       expect(validatorRow).not.toBeNull()
       expect(within(validatorRow).getByText(/inactive/i)).toBeInTheDocument()
     })
@@ -154,7 +168,7 @@ describe('SuperAdminAgents page', () => {
 
     expect(await screen.findByText(/failed to update agent status/i)).toBeInTheDocument()
 
-    const validatorRow = screen.getByText('Validator').closest('tr')
+    const validatorRow = getAgentNameCell('Validator')?.closest('tr')
     expect(validatorRow).not.toBeNull()
     expect(within(validatorRow).getAllByText(/^active$/i).length).toBeGreaterThan(0)
   })

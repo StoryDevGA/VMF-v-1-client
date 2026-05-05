@@ -181,6 +181,7 @@ export function RuntimeSkillListView({
         key: 'status',
         label: 'Status',
         mobileLabel: 'Status',
+        width: '112px',
         render: (value) => (
           <Status size="sm" showIcon variant={getRuntimeSkillStatusVariant(value)}>
             {formatRuntimeSkillStatus(value)}
@@ -198,6 +199,7 @@ export function RuntimeSkillListView({
         key: 'supportedFrameworkKeys',
         label: 'Frameworks',
         mobileLabel: 'Frameworks',
+        width: '160px',
         render: renderFrameworkTokens,
       },
       {
