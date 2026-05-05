@@ -15,6 +15,7 @@ import {
   useCreateRuntimeSkillMutation,
   useCreateValidationRegistryMutation,
   useCreateWorkflowPolicyMutation,
+  useCloneWorkflowPolicyMutation,
   useDeprecateRuntimePathMutation,
   useDisableRuntimePathMutation,
   useCloneRuntimePathMutation,
@@ -110,6 +111,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('getValidationRegistryDependencies')
     expect(runtimeControlApi.endpoints).toHaveProperty('listWorkflowPolicies')
     expect(runtimeControlApi.endpoints).toHaveProperty('createWorkflowPolicy')
+    expect(runtimeControlApi.endpoints).toHaveProperty('cloneWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('getWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateWorkflowPolicy')
     expect(runtimeControlApi.endpoints).toHaveProperty('listUiContracts')
@@ -165,6 +167,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateValidationRegistryMutation).toBe('function')
     expect(typeof useUpdateValidationRegistryMutation).toBe('function')
     expect(typeof useCreateWorkflowPolicyMutation).toBe('function')
+    expect(typeof useCloneWorkflowPolicyMutation).toBe('function')
     expect(typeof useTestWorkflowPolicyMutation).toBe('function')
     expect(typeof useUpdateWorkflowPolicyMutation).toBe('function')
     expect(typeof useCreateUiContractMutation).toBe('function')
@@ -211,6 +214,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.getValidationRegistryDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listWorkflowPolicies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createWorkflowPolicy.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.cloneWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicy.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getWorkflowPolicyDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.testWorkflowPolicy.initiate).toBe('function')
@@ -384,6 +388,114 @@ describe('runtimeControlApi', () => {
       method: 'PATCH',
       body: { name: 'VMF Release Policy' },
     })
+  })
+
+  it('keeps mock Workflow Policy clone and lock behavior aligned with live API', async () => {
+    const store = createTestStore()
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      workflowPolicies: state.workflowPolicies.map((policy) =>
+        policy.id === 'policy-vmf-publish'
+          ? {
+              ...policy,
+              componentVersion: 2,
+              versionStatus: 'ACTIVE',
+              isLocked: true,
+              lockedByPackageKeys: ['vmf-package-1'],
+              steps: [{
+                stepKey: 'publish-ready',
+                type: 'EVENT_EMIT',
+                order: 1,
+                eventKey: 'publish-ready',
+              }],
+            }
+          : policy,
+      ),
+    }))
+
+    const lockedUpdateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateWorkflowPolicy.initiate({
+        policyId: 'policy-vmf-publish',
+        name: 'Blocked Update',
+      }),
+    )
+
+    expect(lockedUpdateResult.error?.status).toBe(409)
+    expect(lockedUpdateResult.error?.data?.error?.details?.reason).toBe('WORKFLOW_POLICY_LOCKED')
+
+    const cloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneWorkflowPolicy.initiate({
+        policyId: 'policy-vmf-publish',
+        body: {
+          key: 'vmf-publish-v2',
+          name: 'VMF Publish Policy v2',
+        },
+      }),
+    )
+
+    expect(cloneResult.error).toBeUndefined()
+    expect(cloneResult.data?.data).toMatchObject({
+      key: 'vmf-publish-v2',
+      name: 'VMF Publish Policy v2',
+      status: 'DRAFT',
+      componentVersion: 3,
+      versionStatus: 'DRAFT',
+      isLocked: false,
+      lockedByPackageKeys: [],
+      clonedFromStableId: 'policy-vmf-publish',
+      supersedesStableId: 'policy-vmf-publish',
+      steps: [expect.objectContaining({ stepKey: 'publish-ready' })],
+    })
+
+    const clonedPolicyId = cloneResult.data?.data?.id
+    expect(clonedPolicyId).toBeTruthy()
+
+    const stepsUpdateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateWorkflowPolicy.initiate({
+        policyId: clonedPolicyId,
+        executionType: 'ORDERED_STEPS',
+        steps: [{
+          stepKey: 'emit-review-ready',
+          type: 'EVENT_EMIT',
+          order: 1,
+          eventKey: 'review-ready',
+        }],
+        timeoutMs: 0,
+        validationFreshnessMinutes: 30,
+        requiredAgentIds: [],
+        requiredSkillIds: [],
+      }),
+    )
+
+    expect(stepsUpdateResult.error).toBeUndefined()
+    expect(stepsUpdateResult.data?.data?.steps).toEqual([
+      expect.objectContaining({
+        stepKey: 'emit-review-ready',
+        type: 'EVENT_EMIT',
+        order: 1,
+        eventKey: 'review-ready',
+      }),
+    ])
+
+    const reloadedPolicy = await store.dispatch(
+      runtimeControlApi.endpoints.getWorkflowPolicy.initiate(clonedPolicyId, { forceRefetch: true }),
+    )
+    expect(reloadedPolicy.data?.data?.steps).toEqual([
+      expect.objectContaining({ stepKey: 'emit-review-ready' }),
+    ])
+
+    const managedFieldResult = await store.dispatch(
+      runtimeControlApi.endpoints.createWorkflowPolicy.initiate({
+        body: {
+          key: 'vmf-managed-field',
+          name: 'VMF Managed Field',
+          componentVersion: 99,
+        },
+      }),
+    )
+
+    expect(managedFieldResult.error?.status).toBe(422)
+    expect(managedFieldResult.error?.data?.error?.details?.componentVersion).toContain('managed by the server')
   })
 
   it('builds live UI Contract clone requests and aligns mock clone/lock behavior', async () => {

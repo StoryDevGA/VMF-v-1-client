@@ -16,6 +16,20 @@ const WORKFLOW_POLICY_TYPES = Object.freeze({
   COMPOSITE: 'COMPOSITE',
 })
 
+export const WORKFLOW_POLICY_EXECUTION_TYPES = Object.freeze({
+  SINGLE_STEP: 'SINGLE_STEP',
+  ORDERED_STEPS: 'ORDERED_STEPS',
+  COMPOSITE: 'COMPOSITE',
+})
+
+export const WORKFLOW_POLICY_STEP_TYPES = Object.freeze({
+  VALIDATION: 'VALIDATION',
+  STATE_UPDATE: 'STATE_UPDATE',
+  AGENT_EXECUTION: 'AGENT_EXECUTION',
+  SKILL_EXECUTION: 'SKILL_EXECUTION',
+  EVENT_EMIT: 'EVENT_EMIT',
+})
+
 const WORKFLOW_POLICY_APPLIES_TO = Object.freeze({
   FRAMEWORK_LIFECYCLE: 'FRAMEWORK_LIFECYCLE',
   WORKSPACE_ACTION: 'WORKSPACE_ACTION',
@@ -163,6 +177,14 @@ export const WORKFLOW_POLICY_TYPE_OPTIONS = Object.freeze(
   toOptions(WORKFLOW_POLICY_TYPES, { includeAllLabel: 'All policy types' }),
 )
 
+export const WORKFLOW_POLICY_EXECUTION_TYPE_OPTIONS = Object.freeze(
+  toOptions(WORKFLOW_POLICY_EXECUTION_TYPES),
+)
+
+export const WORKFLOW_POLICY_STEP_TYPE_OPTIONS = Object.freeze(
+  toOptions(WORKFLOW_POLICY_STEP_TYPES),
+)
+
 export const WORKFLOW_POLICY_APPLIES_TO_OPTIONS = Object.freeze(
   toOptions(WORKFLOW_POLICY_APPLIES_TO),
 )
@@ -276,6 +298,8 @@ export const INITIAL_WORKFLOW_POLICY_FORM = Object.freeze({
   slaMinutes: '0',
   version: '1',
   lastActivatedAt: '',
+  executionType: WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP,
+  steps: [],
   orderedSteps: [],
   requiredAgentIds: [],
   requiredSkillIds: [],
@@ -606,6 +630,28 @@ const parseConditionValue = (value, operator) => {
 export function cloneWorkflowPolicy(policy) {
   return {
     ...policy,
+    componentVersion: Number(policy.componentVersion ?? 1),
+    versionStatus: policy.versionStatus ?? (
+      String(policy.status ?? '').trim().toUpperCase() === WORKFLOW_POLICY_STATUSES.ACTIVE
+        ? 'ACTIVE'
+        : String(policy.status ?? '').trim().toUpperCase() === WORKFLOW_POLICY_STATUSES.DEPRECATED
+          ? 'DEPRECATED'
+          : 'DRAFT'
+    ),
+    isLocked: Boolean(policy.isLocked),
+    lockedAt: policy.lockedAt ?? null,
+    lockedBy: policy.lockedBy ? { ...policy.lockedBy } : null,
+    lockedReason: policy.lockedReason ?? '',
+    lockedByPackageKeys: [...(policy.lockedByPackageKeys ?? [])],
+    stableId: policy.stableId ?? policy.id ?? '',
+    lineageId: policy.lineageId ?? policy.stableId ?? policy.id ?? '',
+    clonedFromStableId: policy.clonedFromStableId ?? null,
+    supersedesStableId: policy.supersedesStableId ?? null,
+    supersededByStableId: policy.supersededByStableId ?? null,
+    introducedInVersion: policy.introducedInVersion ?? null,
+    deprecatedInVersion: policy.deprecatedInVersion ?? null,
+    compatibilityTags: [...(policy.compatibilityTags ?? [])],
+    compatibilityMode: policy.compatibilityMode ?? 'INHERITED_MINOR',
     frameworkKeys: [...(policy.frameworkKeys ?? [])],
     conditions: Array.isArray(policy.conditions)
       ? policy.conditions.map((condition) => ({
@@ -627,6 +673,15 @@ export function cloneWorkflowPolicy(policy) {
         }))
       : [],
     overrideRoles: [...(policy.overrideRoles ?? [])],
+    steps: Array.isArray(policy.steps)
+      ? policy.steps.map((step) => ({
+          ...step,
+          bindingKeys: [...(step.bindingKeys ?? [])],
+          parameters: step.parameters && typeof step.parameters === 'object' && !Array.isArray(step.parameters)
+            ? { ...step.parameters }
+            : {},
+        }))
+      : [],
     orderedSteps: [...(policy.orderedSteps ?? [])],
     requiredAgentIds: [...(policy.requiredAgentIds ?? [])],
     requiredSkillIds: [...(policy.requiredSkillIds ?? [])],
@@ -637,7 +692,7 @@ export function cloneWorkflowPolicy(policy) {
 export function getWorkflowPolicyStatusVariant(status) {
   const normalized = String(status ?? '').trim().toUpperCase()
   if (normalized === WORKFLOW_POLICY_STATUSES.ACTIVE) return 'success'
-  if (normalized === WORKFLOW_POLICY_STATUSES.DRAFT) return 'info'
+  if (normalized === WORKFLOW_POLICY_STATUSES.DRAFT) return 'warning'
   if (normalized === WORKFLOW_POLICY_STATUSES.DEPRECATED) return 'warning'
   return 'neutral'
 }
@@ -745,6 +800,25 @@ export function mapWorkflowPolicyToForm(policy) {
     slaMinutes: String(policy.slaMinutes ?? 0),
     version: String(policy.version ?? 1),
     lastActivatedAt: policy.lastActivatedAt ?? '',
+    executionType: policy.executionType ?? (
+      Array.isArray(policy.steps) && policy.steps.length > 0
+        ? WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS
+        : WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP
+    ),
+    steps: Array.isArray(policy.steps)
+      ? policy.steps.map((step, index) => ({
+          stepKey: step?.stepKey ?? '',
+          type: step?.type ?? WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT,
+          order: String(step?.order ?? index + 1),
+          bindingKeys: Array.isArray(step?.bindingKeys) ? [...step.bindingKeys] : [],
+          targetPath: step?.targetPath ?? '',
+          value: step?.value === undefined || step?.value === null ? '' : formatConditionValue(step.value),
+          agentId: step?.agentId ?? '',
+          skillId: step?.skillId ?? '',
+          eventKey: step?.eventKey ?? '',
+          blocking: step?.blocking ?? true,
+        }))
+      : [],
     orderedSteps: Array.isArray(policy.orderedSteps) ? [...policy.orderedSteps] : [],
     requiredAgentIds: Array.isArray(policy.requiredAgentIds) ? [...policy.requiredAgentIds] : [],
     requiredSkillIds: Array.isArray(policy.requiredSkillIds) ? [...policy.requiredSkillIds] : [],
@@ -810,6 +884,8 @@ export function validateWorkflowPolicyForm(
   const escalationRoleKey = normalizeEscalationRoleKey(formState.escalationRoleKey)
   const escalationMessage = String(formState.escalationMessage ?? '').trim()
   const slaMinutes = Number.parseInt(String(formState.slaMinutes ?? '').trim(), 10)
+  const executionType = String(formState.executionType ?? WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP).trim().toUpperCase()
+  const steps = Array.isArray(formState.steps) ? formState.steps : []
   const orderedSteps = Array.isArray(formState.orderedSteps) ? [...formState.orderedSteps] : []
   const requiredAgentIds = Array.isArray(formState.requiredAgentIds) ? [...formState.requiredAgentIds] : []
   const requiredSkillIds = Array.isArray(formState.requiredSkillIds) ? [...formState.requiredSkillIds] : []
@@ -1015,6 +1091,107 @@ export function validateWorkflowPolicyForm(
     errors.slaMinutes = 'Approval-required escalation must use at least 1 SLA minute.'
   }
 
+  if (!Object.values(WORKFLOW_POLICY_EXECUTION_TYPES).includes(executionType)) {
+    errors.steps = 'Execution Type must use a supported Workflow Policy execution mode.'
+  }
+
+  const normalizedSteps = steps
+    .map((step, index) => ({
+      stepKey: normalizePolicyKey(step?.stepKey),
+      type: String(step?.type ?? '').trim().toUpperCase(),
+      order: Number.parseInt(String(step?.order ?? index + 1).trim(), 10),
+      bindingKeys: [...new Set(
+        (Array.isArray(step?.bindingKeys) ? step.bindingKeys : [])
+          .map(normalizeValidationKey)
+          .filter(Boolean),
+      )],
+      targetPath: String(step?.targetPath ?? '').trim(),
+      value: String(step?.value ?? '').trim(),
+      agentId: normalizeAgentId(step?.agentId),
+      skillId: normalizeAgentId(step?.skillId),
+      eventKey: normalizePolicyKey(step?.eventKey),
+      blocking: step?.blocking !== false,
+    }))
+    .filter((step) =>
+      step.stepKey
+      || step.type
+      || step.bindingKeys.length > 0
+      || step.targetPath
+      || step.value
+      || step.agentId
+      || step.skillId
+      || step.eventKey,
+    )
+
+  if (!errors.steps && executionType !== WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP && normalizedSteps.length === 0) {
+    errors.steps = 'Ordered or composite execution requires at least one governed step.'
+  }
+
+  if (!errors.steps) {
+    const stepKeys = new Set()
+    const stepOrders = new Set()
+    for (const step of normalizedSteps) {
+      if (!KEY_TOKEN_PATTERN.test(step.stepKey)) {
+        errors.steps = 'Each governed step must include a unique Step Key.'
+        break
+      }
+      if (stepKeys.has(step.stepKey)) {
+        errors.steps = `Duplicate governed step key "${step.stepKey}".`
+        break
+      }
+      stepKeys.add(step.stepKey)
+      if (!Number.isInteger(step.order) || step.order < 1 || step.order > 9999) {
+        errors.steps = `Step "${step.stepKey}" must use an order between 1 and 9999.`
+        break
+      }
+      if (stepOrders.has(step.order)) {
+        errors.steps = `Duplicate governed step order "${step.order}".`
+        break
+      }
+      stepOrders.add(step.order)
+      if (!Object.values(WORKFLOW_POLICY_STEP_TYPES).includes(step.type)) {
+        errors.steps = `Step "${step.stepKey}" must use a supported step type.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.VALIDATION && step.bindingKeys.length === 0) {
+        errors.steps = `Validation step "${step.stepKey}" must include at least one validation binding key.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.STATE_UPDATE && !step.targetPath) {
+        errors.steps = `State update step "${step.stepKey}" must include a writable runtime path.`
+        break
+      }
+      if (
+        step.type === WORKFLOW_POLICY_STEP_TYPES.STATE_UPDATE
+        && availableWritePathRows.length > 0
+        && !new Set(
+          availableWritePathRows
+            .map((row) => String(row?.pathKey ?? row?.value ?? '').trim())
+            .filter(Boolean),
+        ).has(step.targetPath)
+      ) {
+        errors.steps = `Step runtime path "${step.targetPath}" is not available for governed writes.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.AGENT_EXECUTION && !step.agentId) {
+        errors.steps = `Agent execution step "${step.stepKey}" must include an agent.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION && !step.skillId) {
+        errors.steps = `Skill execution step "${step.stepKey}" must include a skill.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT && !step.eventKey) {
+        errors.steps = `Event step "${step.stepKey}" must include an event key.`
+        break
+      }
+      if (step.type === WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT && !KEY_TOKEN_PATTERN.test(step.eventKey)) {
+        errors.steps = `Event step "${step.stepKey}" event key must use letters, numbers, or hyphens.`
+        break
+      }
+    }
+  }
+
   const duplicateKey = existingPolicies.find(
     (policy) => policy.id !== selectedPolicyId && normalizePolicyKey(policy.key) === key,
   )
@@ -1108,6 +1285,19 @@ export function validateWorkflowPolicyForm(
       escalationRoleKey,
       escalationMessage,
       slaMinutes,
+      executionType,
+      steps: normalizedSteps.map((step) => ({
+        stepKey: step.stepKey,
+        type: step.type,
+        order: step.order,
+        blocking: step.blocking,
+        ...(step.bindingKeys.length > 0 ? { bindingKeys: step.bindingKeys } : {}),
+        ...(step.targetPath ? { targetPath: step.targetPath } : {}),
+        ...(step.value ? { value: step.value } : {}),
+        ...(step.agentId ? { agentId: step.agentId } : {}),
+        ...(step.skillId ? { skillId: step.skillId } : {}),
+        ...(step.eventKey ? { eventKey: step.eventKey } : {}),
+      })),
       orderedSteps,
       requiredAgentIds,
       requiredSkillIds,

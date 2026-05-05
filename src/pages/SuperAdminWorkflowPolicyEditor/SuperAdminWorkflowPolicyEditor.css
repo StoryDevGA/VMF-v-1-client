@@ -23,6 +23,7 @@
 .super-admin-workflow-policy-editor__subtitle,
 .super-admin-workflow-policy-editor__form-title,
 .super-admin-workflow-policy-editor__helper,
+.super-admin-workflow-policy-editor__summary-label,
 .super-admin-workflow-policy-editor__section-title {
   margin: 0;
 }
@@ -88,6 +89,44 @@
   justify-content: flex-end;
   gap: var(--spacing-xs);
   flex-wrap: wrap;
+}
+
+.super-admin-workflow-policy-editor__lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+}
+
+.super-admin-workflow-policy-editor__lock-copy,
+.super-admin-workflow-policy-editor__lock-packages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-workflow-policy-editor__lock-copy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-workflow-policy-editor__lock-copy strong {
+  color: var(--color-text-primary);
+}
+
+.super-admin-workflow-policy-editor__edit-lock-fieldset {
+  display: grid;
+  gap: var(--spacing-sm);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .super-admin-workflow-policy-editor__summary {
@@ -238,11 +277,34 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.super-admin-workflow-policy-editor__dependency-card {
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__audit-metric {
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-card .card__header,
+.super-admin-workflow-policy-editor__dependency-card .card__body,
+.super-admin-workflow-policy-editor__audit-metric .card__header,
+.super-admin-workflow-policy-editor__audit-metric .card__body {
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-card .card__body,
+.super-admin-workflow-policy-editor__dependency-card .super-admin-workflow-policy-editor__helper {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.super-admin-workflow-policy-editor__dependency-card .super-admin-workflow-policy-editor__summary-label {
+  overflow-wrap: anywhere;
+}
+
 .super-admin-workflow-policy-editor__condition-row,
 .super-admin-workflow-policy-editor__agent-summary,
 .super-admin-workflow-policy-editor__token-pill,
-.super-admin-workflow-policy-editor__dependency-card,
-.super-admin-workflow-policy-editor__audit-card,
 .super-admin-workflow-policy-editor__json-card {
   border: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
   border-radius: var(--border-radius-md);
@@ -251,14 +313,56 @@
 
 .super-admin-workflow-policy-editor__condition-row,
 .super-admin-workflow-policy-editor__agent-summary,
-.super-admin-workflow-policy-editor__dependency-card,
-.super-admin-workflow-policy-editor__audit-card,
 .super-admin-workflow-policy-editor__json-card {
   padding: var(--spacing-sm);
 }
 
 .super-admin-workflow-policy-editor__grid--condition {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.super-admin-workflow-policy-editor__grid--step-main {
+  grid-template-columns:
+    minmax(10rem, 1fr)
+    minmax(5rem, 0.55fr)
+    minmax(12rem, 1fr);
+}
+
+.super-admin-workflow-policy-editor__grid--step-detail {
+  grid-template-columns:
+    minmax(14rem, 1fr)
+    minmax(9rem, 0.55fr)
+    max-content;
+  align-items: start;
+  margin-top: var(--spacing-sm);
+}
+
+.super-admin-workflow-policy-editor__grid--step-main > *,
+.super-admin-workflow-policy-editor__grid--step-detail > * {
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__step-detail--wide {
+  grid-column: span 2;
+}
+
+.super-admin-workflow-policy-editor__step-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-xs);
+}
+
+.super-admin-workflow-policy-editor__step-footer .btn {
+  flex: 0 0 auto;
+}
+
+.super-admin-workflow-policy-editor__step-blocking {
+  align-self: start;
+  padding-top: var(--spacing-md);
+  min-width: max-content;
 }
 
 .super-admin-workflow-policy-editor__logic-terminal {
@@ -300,8 +404,6 @@
 }
 
 .super-admin-workflow-policy-editor__effect-section,
-.super-admin-workflow-policy-editor__dependency-card,
-.super-admin-workflow-policy-editor__audit-card,
 .super-admin-workflow-policy-editor__json-card,
 .super-admin-workflow-policy-editor__diff-list,
 .super-admin-workflow-policy-editor__diff-copy {
@@ -539,19 +641,117 @@
 
 .super-admin-workflow-policy-editor__dependency-token-grid {
   display: grid;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
 }
 
-.super-admin-workflow-policy-editor__dependency-token {
-  display: flex;
+.super-admin-workflow-policy-editor__dependency-token,
+.super-admin-workflow-policy-editor__dependency-warning {
+  display: grid;
+  gap: var(--spacing-2xs);
+  align-items: start;
+  justify-items: start;
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-token-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-xs);
-  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
 }
 
-.super-admin-workflow-policy-editor__dependency-list {
-  margin: 0;
-  padding-left: var(--spacing-md);
+.super-admin-workflow-policy-editor__dependency-token-meta > .status {
+  grid-column: 1 / -1;
+}
+
+.super-admin-workflow-policy-editor__dependency-card .badge,
+.super-admin-workflow-policy-editor__dependency-card .status {
+  flex: 0 1 auto;
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-tooltip {
+  flex: 0 0 auto;
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.super-admin-workflow-policy-editor__dependency-tooltip .tooltip__bubble {
+  width: max-content;
+  max-width: min(18rem, calc(100vw - var(--spacing-xl)));
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.super-admin-workflow-policy-editor__dependency-tooltip > .super-admin-workflow-policy-editor__dependency-badge-trigger {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-badge-trigger:focus-visible {
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: var(--spacing-2xs);
+  border-radius: var(--border-radius-pill);
+}
+
+.super-admin-workflow-policy-editor__dependency-value-badge {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.super-admin-workflow-policy-editor__dependency-info-badge {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--font-size-sm);
+  block-size: var(--font-size-sm);
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--border-radius-full);
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: help;
+  font: inherit;
+  line-height: 1;
+}
+
+.super-admin-workflow-policy-editor__dependency-badge-trigger.super-admin-workflow-policy-editor__dependency-info-badge svg {
+  width: 100%;
+  height: 100%;
+  inline-size: 100%;
+  block-size: 100%;
+  color: currentColor;
+}
+
+.super-admin-workflow-policy-editor__dependency-token > span,
+.super-admin-workflow-policy-editor__dependency-warning > span {
+  width: 100%;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.super-admin-workflow-policy-editor__dependency-warning-stack {
+  display: grid;
+  gap: var(--spacing-sm);
   color: var(--color-text-primary);
 }
 
@@ -595,6 +795,38 @@
   .super-admin-workflow-policy-editor__top-actions > *,
   .super-admin-workflow-policy-editor__footer-actions > * {
     width: 100%;
+  }
+
+  .super-admin-workflow-policy-editor__grid--step-main,
+  .super-admin-workflow-policy-editor__grid--step-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .super-admin-workflow-policy-editor__step-blocking {
+    justify-self: start;
+  }
+
+  .super-admin-workflow-policy-editor__step-footer {
+    justify-content: stretch;
+  }
+
+  .super-admin-workflow-policy-editor__step-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .super-admin-workflow-policy-editor__grid--step-main,
+  .super-admin-workflow-policy-editor__grid--step-detail {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .super-admin-workflow-policy-editor__step-detail--wide {
+    grid-column: auto;
+  }
+
+  .super-admin-workflow-policy-editor__step-blocking {
+    padding-top: 0;
   }
 }
 

@@ -510,9 +510,45 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
     await user.click(screen.getByRole('tab', { name: /dependencies/i }))
     expect(await screen.findByText(/read-only impact view/i)).toBeInTheDocument()
+    const agentsDependencyCard = screen.getByText('Uses Agents').closest('.card')
+    const packagesDependencyCard = screen.getByText('Referenced By Framework Packages').closest('.card')
+    const warningsDependencyCard = screen.getByText('Warnings').closest('.card')
+    const runtimePathsDependencyCard = screen.getByText('Runtime Paths Used').closest('.card')
+    expect(agentsDependencyCard).toHaveClass('card', 'card--compact', 'super-admin-workflow-policy-editor__dependency-card')
+    expect(packagesDependencyCard).toHaveClass('card', 'card--compact', 'super-admin-workflow-policy-editor__dependency-card')
+    expect(agentsDependencyCard.querySelector('.tooltip__content')).toHaveTextContent(/\S/)
+    expect(agentsDependencyCard.querySelector('.super-admin-workflow-policy-editor__dependency-info-badge svg')).toBeInTheDocument()
+    const agentsDependencyMeta = agentsDependencyCard.querySelector('.super-admin-workflow-policy-editor__dependency-token-meta')
+    const agentsDependencyTooltip = agentsDependencyMeta.querySelector('.super-admin-workflow-policy-editor__dependency-tooltip')
+    const agentsDependencyBadge = agentsDependencyMeta.querySelector('.super-admin-workflow-policy-editor__dependency-value-badge')
+    const agentsDependencyTrigger = agentsDependencyMeta.querySelector('.super-admin-workflow-policy-editor__dependency-badge-trigger')
+    expect(Array.from(agentsDependencyMeta.children).indexOf(agentsDependencyTooltip)).toBeLessThan(
+      Array.from(agentsDependencyMeta.children).indexOf(agentsDependencyBadge),
+    )
+    expect(agentsDependencyTrigger).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/^Full value: /),
+    )
+    expect(agentsDependencyTrigger).toHaveAttribute('aria-expanded', 'false')
+    await user.hover(agentsDependencyTrigger)
+    await waitFor(() => {
+      expect(agentsDependencyTrigger).toHaveAttribute('aria-expanded', 'true')
+      expect(agentsDependencyCard.querySelector('[role="tooltip"]')).toHaveAttribute('aria-hidden', 'false')
+    })
+    const runtimePathDependencyItem = runtimePathsDependencyCard.querySelector('.super-admin-workflow-policy-editor__dependency-token')
+    expect(runtimePathDependencyItem).toBeInTheDocument()
+    expect(runtimePathDependencyItem).not.toHaveClass('super-admin-workflow-policy-editor__dependency-token--inline')
+    expect(runtimePathDependencyItem.querySelector('span[title]')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/\S/),
+    )
+    expect(within(warningsDependencyCard).queryByRole('list')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /audit & versioning/i }))
     expect(screen.getByText(/^version$/i)).toBeInTheDocument()
+    const versionAuditCard = screen.getByText(/^version$/i).closest('.card')
+    expect(versionAuditCard).toHaveClass('card', 'card--compact', 'super-admin-workflow-policy-editor__audit-metric')
+    expect(versionAuditCard).not.toHaveClass('super-admin-workflow-policy-editor__audit-card')
 
     await user.click(screen.getByRole('tab', { name: /escalation & overrides/i }))
     expect(screen.getByLabelText(/^override allowed$/i)).toBeChecked()
@@ -542,6 +578,33 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       expect(screen.getByRole('heading', { name: /workflow policies/i })).toBeInTheDocument()
       expect(screen.getByText('VMF Release Gate')).toBeInTheDocument()
     })
+  })
+
+  it('renders locked workflow policy notice with peer editor spacing and one clone action', async () => {
+    runtimeControlApiModule.__mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      workflowPolicies: state.workflowPolicies.map((policy) =>
+        policy.key === 'vmf-publish'
+          ? {
+              ...policy,
+              isLocked: true,
+              lockedByPackageKeys: ['qa-dependency-lock-05031724'],
+              componentVersion: 3,
+              versionStatus: 'ACTIVE',
+            }
+          : policy,
+      ),
+    }))
+
+    renderWorkflowPolicyEditorRoutes([
+      '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
+    ])
+
+    expect(await screen.findByText(/locked by validated package usage/i)).toBeInTheDocument()
+    expect(screen.getByText(/clone this workflow policy to make behavior changes/i)).toBeInTheDocument()
+    expect(screen.getByText('qa-dependency-lock-05031724')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^clone$/i })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
   it('warns before leaving the editor with unsaved changes', async () => {

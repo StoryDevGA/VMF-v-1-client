@@ -80,6 +80,21 @@ const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
   name: 'Super Admin',
 })
 
+const WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS = Object.freeze([
+  'componentVersion',
+  'versionStatus',
+  'stableId',
+  'lineageId',
+  'isLocked',
+  'lockedAt',
+  'lockedBy',
+  'lockedReason',
+  'lockedByPackageKeys',
+  'clonedFromStableId',
+  'supersedesStableId',
+  'supersededByStableId',
+])
+
 const isRuntimeControlMockMode = () => {
   const mockModeAllowed = import.meta.env.MODE === 'test'
     || import.meta.env.VITE_RUNTIME_CONTROL_ALLOW_MOCK === 'true'
@@ -328,6 +343,18 @@ const buildNotFoundError = (message) => ({
     },
   },
 })
+
+const validateMockWorkflowPolicyGovernedMetadataFields = (payload = {}) => {
+  const field = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS.find((fieldName) =>
+    Object.prototype.hasOwnProperty.call(payload, fieldName),
+  )
+
+  if (!field) return null
+
+  return buildValidationFailedError('Please check the form for errors.', {
+    [field]: 'Workflow Policy version and lock metadata is managed by the server.',
+  })
+}
 
 const buildRuntimePathLockedConflictError = (runtimePath = {}) =>
   buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
@@ -691,14 +718,23 @@ const buildMockWorkflowPolicyDependencies = (policy) => {
       String(policy?.primaryAgentId ?? '').trim(),
       String(policy?.fallbackAgentId ?? '').trim(),
       ...(Array.isArray(policy?.requiredAgentIds) ? policy.requiredAgentIds : []),
+      ...(Array.isArray(policy?.steps) ? policy.steps.map((step) => step?.agentId) : []),
     ].filter(Boolean)),
   ]
   const agents = (runtimeControlState.agents || []).filter((agent) => agentIds.includes(agent.id))
+  const skillIds = [
+    ...new Set([
+      ...(Array.isArray(policy?.requiredSkillIds) ? policy.requiredSkillIds : []),
+      ...(Array.isArray(policy?.steps) ? policy.steps.map((step) => step?.skillId) : []),
+    ].map((value) => String(value ?? '').trim()).filter(Boolean)),
+  ]
+  const skills = (runtimeControlState.skills || []).filter((skill) => skillIds.includes(skill.id) || skillIds.includes(skill.key))
   const runtimePathKeys = [
     ...new Set([
       ...(Array.isArray(policy?.conditions) ? policy.conditions.map((condition) => condition?.path) : []),
       ...(Array.isArray(policy?.onPassEffects) ? policy.onPassEffects.map((effect) => effect?.targetPath) : []),
       ...(Array.isArray(policy?.onFailEffects) ? policy.onFailEffects.map((effect) => effect?.targetPath) : []),
+      ...(Array.isArray(policy?.steps) ? policy.steps.map((step) => step?.targetPath) : []),
     ].map((value) => String(value ?? '').trim()).filter(Boolean)),
   ]
   const runtimePaths = (runtimeControlState.runtimePaths || []).filter((path) => runtimePathKeys.includes(path.pathKey))
@@ -748,6 +784,12 @@ const buildMockWorkflowPolicyDependencies = (policy) => {
         name: agent.name,
         status: agent.status,
       })),
+      skills: skills.map((skill) => ({
+        id: skill.id,
+        key: skill.key,
+        name: skill.name,
+        status: skill.status,
+      })),
       frameworks: frameworks.map((entry) => ({
         id: entry.id,
         key: entry.frameworkKey,
@@ -779,6 +821,7 @@ const buildMockWorkflowPolicyDependencies = (policy) => {
       frameworkPackages: referencedFrameworkPackages.length,
       activeFrameworkPackages: activeFrameworkPackages.length,
       agents: agents.length,
+      skills: skills.length,
       frameworks: frameworks.length,
       validationOutputs: Array.isArray(policy?.requiredValidationKeys) ? policy.requiredValidationKeys.length : 0,
       runtimePaths: runtimePaths.length,
@@ -5140,6 +5183,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const runtimePayload = body
+        const governedMetadataError = validateMockWorkflowPolicyGovernedMetadataFields(runtimePayload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
 
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) => String(policy.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
@@ -5200,6 +5247,106 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         return { data: buildEntityResponse(cloneWorkflowPolicy(createdPolicy)) }
       },
       invalidatesTags: [WORKFLOW_POLICY_LIST_TAG],
+    }),
+
+    cloneWorkflowPolicy: build.mutation({
+      queryFn: async ({ policyId, body = {} } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/workflow-policies/${policyId}/clone`,
+              method: 'POST',
+              body,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const runtimePayload = body
+        const governedMetadataError = validateMockWorkflowPolicyGovernedMetadataFields(runtimePayload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
+
+        const sourcePolicy = findWorkflowPolicyById(policyId)
+        if (!sourcePolicy) {
+          return buildNotFoundError('Workflow policy was not found.')
+        }
+
+        const key = String(runtimePayload.key ?? '').trim().toLowerCase()
+        if (!key) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            key: 'Workflow policy key is required.',
+          })
+        }
+
+        const duplicatePolicy = runtimeControlState.workflowPolicies.find(
+          (policy) => String(policy.key ?? '').trim().toLowerCase() === key,
+        )
+
+        if (duplicatePolicy) {
+          return buildConflictError('Workflow policy key must be unique.', {
+            field: 'key',
+            reason: 'WORKFLOW_POLICY_KEY_CONFLICT',
+          })
+        }
+
+        const now = new Date().toISOString()
+        const nextId = generateRuntimeId('policy', key)
+        const sourceStableId = sourcePolicy.stableId || sourcePolicy.id
+        const clonedPolicy = cloneWorkflowPolicy({
+          ...sourcePolicy,
+          id: nextId,
+          stableId: nextId,
+          key,
+          name: String(runtimePayload.name ?? '').trim() || `${sourcePolicy.name || sourcePolicy.key} Clone`,
+          description: String(runtimePayload.description ?? sourcePolicy.description ?? '').trim(),
+          status: 'DRAFT',
+          componentVersion: Number(sourcePolicy.componentVersion ?? sourcePolicy.version ?? 1) + 1,
+          version: Number(sourcePolicy.version ?? 1) + 1,
+          versionStatus: 'DRAFT',
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          lineageId: sourcePolicy.lineageId || sourceStableId,
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          lastActivatedAt: '',
+          updatedAt: now,
+          updatedBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+          createdAt: now,
+          createdBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+        })
+
+        const updatedSourcePolicy = cloneWorkflowPolicy({
+          ...sourcePolicy,
+          supersededByStableId: clonedPolicy.stableId,
+          updatedAt: now,
+          updatedBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          workflowPolicies: [
+            clonedPolicy,
+            ...runtimeControlState.workflowPolicies.map((policy) =>
+              policy.id === sourcePolicy.id ? updatedSourcePolicy : policy,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(cloneWorkflowPolicy(clonedPolicy)) }
+      },
+      invalidatesTags: (_result, _error, { policyId }) => [
+        WORKFLOW_POLICY_LIST_TAG,
+        { type: 'RuntimeWorkflowPolicy', id: policyId },
+        { type: 'RuntimeWorkflowPolicyDependencies', id: policyId },
+        WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG,
+      ],
     }),
 
     getWorkflowPolicy: build.query({
@@ -5338,6 +5485,21 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const existingPolicy = findWorkflowPolicyById(policyId)
         if (!existingPolicy) {
           return buildNotFoundError('Workflow policy was not found.')
+        }
+
+        const governedMetadataError = validateMockWorkflowPolicyGovernedMetadataFields(runtimePayload)
+        if (governedMetadataError) {
+          return governedMetadataError
+        }
+
+        if (existingPolicy.isLocked === true) {
+          return buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+            field: 'isLocked',
+            reason: 'WORKFLOW_POLICY_LOCKED',
+            lockedByPackageKeys: Array.isArray(existingPolicy.lockedByPackageKeys)
+              ? existingPolicy.lockedByPackageKeys
+              : [],
+          })
         }
 
         if (
@@ -5484,6 +5646,7 @@ export const {
   useLazyGetValidationRegistryDependenciesQuery,
   useListWorkflowPoliciesQuery,
   useCreateWorkflowPolicyMutation,
+  useCloneWorkflowPolicyMutation,
   useGetWorkflowPolicyQuery,
   useGetWorkflowPolicyDependenciesQuery,
   useTestWorkflowPolicyMutation,

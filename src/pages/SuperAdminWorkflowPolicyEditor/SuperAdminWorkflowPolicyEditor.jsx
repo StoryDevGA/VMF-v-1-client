@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { MdInfo } from 'react-icons/md'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
@@ -12,12 +13,14 @@ import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
+import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import { RuntimePathValueControl } from '../../components/RuntimePathValueControl'
 import ValidationKeySearchSelect from '../../components/ValidationKeySearchSelect'
 import {
   useCreateWorkflowPolicyMutation,
+  useCloneWorkflowPolicyMutation,
   useGetWorkflowPolicyDependenciesQuery,
   useGetWorkflowPolicyQuery,
   useListFrameworkRegistriesQuery,
@@ -44,11 +47,15 @@ import {
   WORKFLOW_POLICY_DECISION_MODE_OPTIONS,
   WORKFLOW_POLICY_EDITOR_TABS,
   WORKFLOW_POLICY_EFFECT_TYPE_OPTIONS,
+  WORKFLOW_POLICY_EXECUTION_TYPE_OPTIONS,
+  WORKFLOW_POLICY_EXECUTION_TYPES,
   WORKFLOW_POLICY_FORM_STATUS_OPTIONS,
   WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS,
   WORKFLOW_POLICY_OVERRIDE_ROLE_OPTIONS,
   WORKFLOW_POLICY_ROUTING_MODE_OPTIONS,
   WORKFLOW_POLICY_SEVERITY_OPTIONS,
+  WORKFLOW_POLICY_STEP_TYPE_OPTIONS,
+  WORKFLOW_POLICY_STEP_TYPES,
   WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS,
   WORKFLOW_POLICY_TRIGGER_MODE_OPTIONS,
   WORKFLOW_POLICY_TYPE_OPTIONS,
@@ -164,6 +171,8 @@ const WORKFLOW_POLICY_SERVER_ERROR_FIELDS = Object.freeze([
   'retryOverride',
   'requiredValidationKeys',
   'validationFreshnessMinutes',
+  'executionType',
+  'steps',
   'orderedSteps',
   'requiredAgentIds',
   'requiredSkillIds',
@@ -225,6 +234,8 @@ const WORKFLOW_POLICY_VALIDATION_JUMP_TARGETS = Object.freeze([
   { tabIndex: 2, fieldKey: 'conditions', focusId: 'workflow-policy-editor-add-condition' },
   { tabIndex: 3, fieldKey: 'requiredValidationKeys', focusId: 'workflow-policy-editor-validation-key' },
   { tabIndex: 3, fieldKey: 'validationFreshnessMinutes', focusId: 'workflow-policy-editor-validation-freshness' },
+  { tabIndex: 5, fieldKey: 'executionType', focusId: 'workflow-policy-editor-execution-type' },
+  { tabIndex: 5, fieldKey: 'steps', focusId: 'workflow-policy-editor-add-step' },
   { tabIndex: 4, fieldKey: 'governedAction', focusId: 'workflow-policy-editor-governed-action' },
   { tabIndex: 4, fieldKey: 'decisionMode', focusId: 'workflow-policy-editor-decision-mode' },
   { tabIndex: 4, fieldKey: 'severity', focusId: 'workflow-policy-editor-severity' },
@@ -255,6 +266,19 @@ const buildEffectRow = () => ({
   type: '',
   targetPath: '',
   value: '',
+})
+
+const buildStepRow = (index = 0) => ({
+  stepKey: `step-${index + 1}`,
+  type: WORKFLOW_POLICY_STEP_TYPES.VALIDATION,
+  order: String(index + 1),
+  bindingKeys: [],
+  targetPath: '',
+  value: '',
+  agentId: '',
+  skillId: '',
+  eventKey: '',
+  blocking: true,
 })
 
 const normalizePreviewList = (values = [], { uppercase = false } = {}) =>
@@ -338,6 +362,30 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   slaMinutes: parsePreviewInteger(formState.slaMinutes, 0),
   version: parsePreviewInteger(formState.version, 1),
   lastActivatedAt: String(formState.lastActivatedAt ?? '').trim(),
+  executionType: String(formState.executionType ?? WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP).trim().toUpperCase(),
+  steps: (Array.isArray(formState.steps) ? formState.steps : [])
+    .map((step, index) => ({
+      stepKey: String(step?.stepKey ?? '').trim(),
+      type: String(step?.type ?? '').trim().toUpperCase(),
+      order: parsePreviewInteger(step?.order, index + 1),
+      bindingKeys: normalizePreviewList(step?.bindingKeys),
+      targetPath: String(step?.targetPath ?? '').trim(),
+      value: String(step?.value ?? '').trim(),
+      agentId: String(step?.agentId ?? '').trim().toLowerCase(),
+      skillId: String(step?.skillId ?? '').trim().toLowerCase(),
+      eventKey: String(step?.eventKey ?? '').trim(),
+      blocking: step?.blocking !== false,
+    }))
+    .filter((step) =>
+      step.stepKey
+      || step.type
+      || step.bindingKeys.length > 0
+      || step.targetPath
+      || step.value
+      || step.agentId
+      || step.skillId
+      || step.eventKey,
+    ),
   orderedSteps: normalizePreviewList(formState.orderedSteps),
   requiredAgentIds: normalizePreviewList(formState.requiredAgentIds),
   requiredSkillIds: normalizePreviewList(formState.requiredSkillIds),
@@ -540,12 +588,92 @@ function AgentSummaryCard({ title, agent, hideTitle = false }) {
   )
 }
 
+function WorkflowPolicyDependencyCard({ title, children }) {
+  return (
+    <Card
+      variant="default"
+      className="card--compact super-admin-workflow-policy-editor__dependency-card"
+    >
+      <Card.Header>
+        <p className="super-admin-workflow-policy-editor__summary-label">{title}</p>
+      </Card.Header>
+      <Card.Body>{children}</Card.Body>
+    </Card>
+  )
+}
+
+function WorkflowPolicyAuditMetric({ label, value }) {
+  return (
+    <Card
+      variant="default"
+      className="card--compact super-admin-workflow-policy-editor__audit-metric"
+    >
+      <Card.Header>
+        <p className="super-admin-workflow-policy-editor__summary-label">{label}</p>
+      </Card.Header>
+      <Card.Body>
+        <p className="super-admin-workflow-policy-editor__audit-value">{value}</p>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function WorkflowPolicyDependencyBadge({ children, tooltipContent, ...badgeProps }) {
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false)
+  const content = String(tooltipContent ?? children ?? '').trim()
+  const badgeClassName = [
+    'super-admin-workflow-policy-editor__dependency-value-badge',
+    badgeProps.className,
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const badge = <Badge {...badgeProps} className={badgeClassName}>{children}</Badge>
+
+  if (!content) {
+    return badge
+  }
+
+  const showTooltip = () => setIsTooltipOpen(true)
+  const hideTooltip = () => setIsTooltipOpen(false)
+
+  return (
+    <>
+      <Tooltip
+        content={content}
+        open={isTooltipOpen}
+        position="top"
+        align="start"
+        className="super-admin-workflow-policy-editor__dependency-tooltip"
+      >
+        <button
+          type="button"
+          className="super-admin-workflow-policy-editor__dependency-badge-trigger super-admin-workflow-policy-editor__dependency-info-badge"
+          aria-expanded={isTooltipOpen}
+          aria-label={`Full value: ${content}`}
+          onClick={showTooltip}
+          onFocus={showTooltip}
+          onBlur={hideTooltip}
+          onMouseEnter={showTooltip}
+          onMouseLeave={hideTooltip}
+        >
+          <MdInfo className="status__icon" focusable="false" />
+        </button>
+      </Tooltip>
+      {badge}
+    </>
+  )
+}
+
 function WorkflowPolicyEditor() {
   const navigate = useNavigate()
   const { policyId = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const { addToast } = useToaster()
   const isEditMode = Boolean(policyId)
-  const formIdentity = policyId || '__new__'
+  const cloneFromPolicyId = String(searchParams.get('cloneFrom') ?? '').trim()
+  const isCloneMode = !isEditMode && Boolean(cloneFromPolicyId)
+  const sourcePolicyId = isEditMode ? policyId : cloneFromPolicyId
+  const formIdentity = isEditMode ? policyId : (isCloneMode ? `clone:${cloneFromPolicyId}` : '__new__')
 
   const [formDraftState, setFormDraftState] = useState({
     identity: '__new__',
@@ -569,8 +697,8 @@ function WorkflowPolicyEditor() {
     data: policyResponse,
     isLoading: isPolicyLoading,
     error: policyError,
-  } = useGetWorkflowPolicyQuery(policyId, {
-    skip: !isEditMode,
+  } = useGetWorkflowPolicyQuery(sourcePolicyId, {
+    skip: !sourcePolicyId,
   })
   const {
     data: dependenciesResponse,
@@ -629,6 +757,7 @@ function WorkflowPolicyEditor() {
     isProtected: 'false',
   })
   const [createWorkflowPolicy, { isLoading: isCreating }] = useCreateWorkflowPolicyMutation()
+  const [cloneWorkflowPolicy, { isLoading: isCloning }] = useCloneWorkflowPolicyMutation()
   const [updateWorkflowPolicy, { isLoading: isUpdating }] = useUpdateWorkflowPolicyMutation()
   const [testWorkflowPolicy, { isLoading: isTestRunning }] = useTestWorkflowPolicyMutation()
 
@@ -713,10 +842,25 @@ function WorkflowPolicyEditor() {
     }
   }
   const dependencyData = dependenciesResponse?.data ?? null
-  const loadedPolicyForm = useMemo(
-    () => (isEditMode && loadedPolicy ? mapWorkflowPolicyToForm(loadedPolicy) : null),
-    [isEditMode, loadedPolicy],
-  )
+  const loadedPolicyForm = useMemo(() => {
+    if (isEditMode && loadedPolicy) {
+      return mapWorkflowPolicyToForm(loadedPolicy)
+    }
+
+    if (isCloneMode && loadedPolicy) {
+      const sourceForm = mapWorkflowPolicyToForm(loadedPolicy)
+      return {
+        ...sourceForm,
+        key: '',
+        name: sourceForm.name ? `${sourceForm.name} Clone` : '',
+        status: 'DRAFT',
+        version: String(Number.parseInt(sourceForm.version || '1', 10) + 1),
+        lastActivatedAt: '',
+      }
+    }
+
+    return null
+  }, [isCloneMode, isEditMode, loadedPolicy])
   const form = useMemo(() => {
     if (formDraftState.identity === formIdentity && formDraftState.form) {
       return formDraftState.form
@@ -847,7 +991,8 @@ function WorkflowPolicyEditor() {
   const testConditionSummary = matchedTestConditions.length > 0
     ? `${matchedTestConditionCount} of ${matchedTestConditions.length} governed condition${matchedTestConditions.length === 1 ? '' : 's'} matched.`
     : 'No governed conditions were configured for this policy.'
-  const isSaving = isCreating || isUpdating
+  const isSaving = isCreating || isUpdating || isCloning
+  const isLockedPolicy = Boolean(isEditMode && loadedPolicy?.isLocked)
   const currentJsonPreview = useMemo(() => buildWorkflowPolicyJsonPreview(form), [form])
   const previousJsonPreview = useMemo(
     () => (loadedPolicyForm ? buildWorkflowPolicyJsonPreview(loadedPolicyForm) : {}),
@@ -878,10 +1023,10 @@ function WorkflowPolicyEditor() {
   )
   const isCreateDisabled = useMemo(() => {
     if (isEditMode) return false
-    if (isCreating) return true
+    if (isCreating || isCloning) return true
 
     return Object.keys(liveValidation.errors || {}).length > 0
-  }, [isCreating, isEditMode, liveValidation.errors])
+  }, [isCloning, isCreating, isEditMode, liveValidation.errors])
   const isCreateReady = !isEditMode && !isCreateDisabled
   const hintErrors = useMemo(() => {
     if (errorsSource === 'server') return errors
@@ -895,7 +1040,7 @@ function WorkflowPolicyEditor() {
     frameworkStateConditions: hintErrors.conditions ? 1 : 0,
     actionGovernance: ['governedAction', 'decisionMode', 'severity', 'passMessage', 'failMessage']
       .filter((key) => hintErrors[key]).length,
-    agentRouting: ['routingMode', 'primaryAgentId', 'fallbackAgentId', 'timeoutMs', 'retryOverride']
+    agentRouting: ['routingMode', 'primaryAgentId', 'fallbackAgentId', 'timeoutMs', 'retryOverride', 'executionType', 'steps']
       .filter((key) => hintErrors[key]).length,
     validationRequirements: ['requiredValidationKeys', 'validationFreshnessMinutes']
       .filter((key) => hintErrors[key]).length,
@@ -919,7 +1064,7 @@ function WorkflowPolicyEditor() {
   }
 
   useEffect(() => {
-    if (!isEditMode) {
+    if (!isEditMode && !isCloneMode) {
       setFormDraftState({
         identity: '__new__',
         form: { ...INITIAL_WORKFLOW_POLICY_FORM },
@@ -955,7 +1100,7 @@ function WorkflowPolicyEditor() {
       setTestConsoleError('')
       setTestConsoleResult(null)
     }
-  }, [formIdentity, isEditMode, loadedPolicyForm])
+  }, [formIdentity, isCloneMode, isEditMode, loadedPolicyForm])
 
   useEffect(() => {
     if (isEditMode) return
@@ -1001,6 +1146,11 @@ function WorkflowPolicyEditor() {
     }
 
     navigateToWorkflowPolicies()
+  }
+
+  const handleCloneFromCurrent = () => {
+    if (!loadedPolicy?.id) return
+    navigate(`/super-admin/runtime-control/workflow-policies/new?cloneFrom=${encodeURIComponent(loadedPolicy.id)}`)
   }
 
   const focusFirstErrorField = (fieldErrors) => {
@@ -1141,6 +1291,15 @@ function WorkflowPolicyEditor() {
   const handleSubmit = async (event) => {
     event.preventDefault()
 
+    if (isLockedPolicy) {
+      addToast({
+        title: 'Workflow policy locked',
+        description: 'Clone this Workflow Policy before making changes.',
+        variant: 'warning',
+      })
+      return
+    }
+
     const { errors: clientErrors, payload } = validateWorkflowPolicyForm(
       form,
       [],
@@ -1170,6 +1329,31 @@ function WorkflowPolicyEditor() {
             : 'Saved successfully.',
           variant: 'success',
         })
+      } else if (isCloneMode) {
+        const response = await cloneWorkflowPolicy({
+          policyId: cloneFromPolicyId,
+          body: {
+            key: payload.key,
+            name: payload.name,
+            description: payload.description,
+          },
+        }).unwrap()
+        const clonedPolicyId = response?.data?.id
+        const clonedPolicyKey = response?.data?.key
+
+        addToast({
+          title: 'Workflow policy cloned',
+          description: `${clonedPolicyKey || payload.name} is now available as an editable draft.`,
+          variant: 'success',
+        })
+
+        skipUnsavedPromptRef.current = true
+        if (clonedPolicyId) {
+          navigate(`/super-admin/runtime-control/workflow-policies/${clonedPolicyId}/edit`, {
+            state: { runtimeControlSaved: true },
+          })
+          return
+        }
       } else {
         const response = await createWorkflowPolicy({
           body: payload,
@@ -1200,7 +1384,11 @@ function WorkflowPolicyEditor() {
       }
 
       addToast({
-        title: isEditMode ? 'Failed to update workflow policy' : 'Failed to create workflow policy',
+        title: isEditMode
+          ? 'Failed to update workflow policy'
+          : isCloneMode
+            ? 'Failed to clone workflow policy'
+            : 'Failed to create workflow policy',
         description: appError.message,
         variant: 'error',
       })
@@ -1525,6 +1713,279 @@ function WorkflowPolicyEditor() {
             <AgentSummaryCard title="Fallback Agent" agent={fallbackAgent} />
           </div>
         ) : null}
+        <div className="super-admin-workflow-policy-editor__effect-section">
+          <div className="super-admin-workflow-policy-editor__effect-section-header">
+            <div>
+              <p className="super-admin-workflow-policy-editor__section-title">Governed Steps</p>
+              <p className="super-admin-workflow-policy-editor__helper">
+                Define ordered runtime steps only when the policy is more than a single governed decision.
+              </p>
+            </div>
+            <Button
+              id="workflow-policy-editor-add-step"
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  executionType:
+                    current.executionType === WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP
+                      ? WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS
+                      : current.executionType,
+                  steps: [
+                    ...(Array.isArray(current.steps) ? current.steps : []),
+                    buildStepRow(Array.isArray(current.steps) ? current.steps.length : 0),
+                  ],
+                }))
+              }
+            >
+              Add Step
+            </Button>
+          </div>
+          <div className="super-admin-workflow-policy-editor__grid">
+            <Select
+              id="workflow-policy-editor-execution-type"
+              label="Execution Type"
+              value={form.executionType}
+              options={WORKFLOW_POLICY_EXECUTION_TYPE_OPTIONS}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  executionType: event.target.value,
+                }))
+              }
+              error={errors.executionType}
+            />
+          </div>
+          {Array.isArray(form.steps) && form.steps.length > 0 ? (
+            <div className="super-admin-workflow-policy-editor__condition-list">
+              {form.steps.map((step, index) => {
+                const stepType = String(step?.type ?? '').trim().toUpperCase()
+                return (
+                  <div key={`${step.stepKey || 'step'}-${index}`} className="super-admin-workflow-policy-editor__condition-row">
+                    <div className="super-admin-workflow-policy-editor__grid super-admin-workflow-policy-editor__grid--step-main">
+                      <Input
+                        id={`workflow-policy-editor-step-key-${index}`}
+                        label="Step Key"
+                        value={step.stepKey ?? ''}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            steps: current.steps.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, stepKey: event.target.value } : item,
+                            ),
+                          }))
+                        }
+                        fullWidth
+                      />
+                      <Input
+                        id={`workflow-policy-editor-step-order-${index}`}
+                        type="number"
+                        label="Order"
+                        value={step.order ?? ''}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            steps: current.steps.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, order: event.target.value } : item,
+                            ),
+                          }))
+                        }
+                        fullWidth
+                      />
+                      <Select
+                        id={`workflow-policy-editor-step-type-${index}`}
+                        label="Step Type"
+                        value={step.type ?? ''}
+                        options={WORKFLOW_POLICY_STEP_TYPE_OPTIONS}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            steps: current.steps.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    type: event.target.value,
+                                    bindingKeys: [],
+                                    targetPath: '',
+                                    value: '',
+                                    agentId: '',
+                                    skillId: '',
+                                    eventKey: '',
+                                  }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="super-admin-workflow-policy-editor__grid super-admin-workflow-policy-editor__grid--step-detail">
+                      {stepType === WORKFLOW_POLICY_STEP_TYPES.VALIDATION ? (
+                        <Input
+                          id={`workflow-policy-editor-step-binding-keys-${index}`}
+                          label="Validation Binding Keys"
+                          value={(Array.isArray(step.bindingKeys) ? step.bindingKeys : []).join(', ')}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              steps: current.steps.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? {
+                                      ...item,
+                                      bindingKeys: event.target.value
+                                        .split(',')
+                                        .map((value) => value.trim())
+                                        .filter(Boolean),
+                                    }
+                                  : item,
+                              ),
+                            }))
+                          }
+                          helperText="Comma-separated package validation binding IDs."
+                          className="super-admin-workflow-policy-editor__step-detail super-admin-workflow-policy-editor__step-detail--wide"
+                          fullWidth
+                        />
+                      ) : null}
+                      {stepType === WORKFLOW_POLICY_STEP_TYPES.STATE_UPDATE ? (
+                        <>
+                          <RuntimePathSearchSelect
+                            id={`workflow-policy-editor-step-target-path-${index}`}
+                            label="Target Path"
+                            frameworkKeys={runtimePathLookupFrameworkKeys}
+                            scope="FRAMEWORK_STATE"
+                            operation="WRITE"
+                            selectionMode="single"
+                            selectedKeys={step.targetPath ? [step.targetPath] : []}
+                            onChange={(keys, rows) => {
+                              const nextKey = keys[0] ?? ''
+                              if (rows?.[0]) rememberSelectedRuntimePath(rows[0])
+                              setForm((current) => ({
+                                ...current,
+                                steps: current.steps.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, targetPath: nextKey } : item,
+                                ),
+                              }))
+                            }}
+                            helperText="Writable FRAMEWORK_STATE runtime path."
+                            className="super-admin-workflow-policy-editor__step-detail"
+                          />
+                          <Input
+                            id={`workflow-policy-editor-step-value-${index}`}
+                            label="Value"
+                            value={step.value ?? ''}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                steps: current.steps.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, value: event.target.value } : item,
+                                ),
+                              }))
+                            }
+                            className="super-admin-workflow-policy-editor__step-detail"
+                            fullWidth
+                          />
+                        </>
+                      ) : null}
+                      {stepType === WORKFLOW_POLICY_STEP_TYPES.AGENT_EXECUTION ? (
+                        <Select
+                          id={`workflow-policy-editor-step-agent-${index}`}
+                          label="Agent"
+                          value={step.agentId ?? ''}
+                          options={compatibleAgentOptions}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              steps: current.steps.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, agentId: event.target.value } : item,
+                              ),
+                            }))
+                          }
+                          className="super-admin-workflow-policy-editor__step-detail super-admin-workflow-policy-editor__step-detail--wide"
+                        />
+                      ) : null}
+                      {stepType === WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION ? (
+                        <Input
+                          id={`workflow-policy-editor-step-skill-${index}`}
+                          label="Skill ID"
+                          value={step.skillId ?? ''}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              steps: current.steps.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, skillId: event.target.value } : item,
+                              ),
+                            }))
+                          }
+                          helperText="Existing active Skill stable id or key."
+                          className="super-admin-workflow-policy-editor__step-detail super-admin-workflow-policy-editor__step-detail--wide"
+                          fullWidth
+                        />
+                      ) : null}
+                      {stepType === WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT ? (
+                        <Input
+                          id={`workflow-policy-editor-step-event-${index}`}
+                          label="Event Key"
+                          value={step.eventKey ?? ''}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              steps: current.steps.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, eventKey: event.target.value } : item,
+                              ),
+                            }))
+                          }
+                          helperText="Use letters, numbers, or hyphens. Dotted event names are not accepted."
+                          className="super-admin-workflow-policy-editor__step-detail super-admin-workflow-policy-editor__step-detail--wide"
+                          fullWidth
+                        />
+                      ) : null}
+                      <Tickbox
+                        id={`workflow-policy-editor-step-blocking-${index}`}
+                        size="sm"
+                        checked={step.blocking !== false}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            steps: current.steps.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, blocking: event.target.checked } : item,
+                            ),
+                          }))
+                        }
+                        label="Blocking"
+                        className="super-admin-workflow-policy-editor__step-blocking"
+                      />
+                    </div>
+                    <div className="super-admin-workflow-policy-editor__step-footer">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            steps: current.steps.filter((_item, itemIndex) => itemIndex !== index),
+                          }))
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="super-admin-workflow-policy-editor__helper">
+              No governed steps configured. Single-step policies continue to execute through the existing policy evaluator.
+            </p>
+          )}
+          {errors.steps ? (
+            <p className="super-admin-workflow-policy-editor__error" role="alert">
+              {errors.steps}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   )
@@ -1929,6 +2390,7 @@ function WorkflowPolicyEditor() {
       ? dependencyData.referencedBy.frameworkPackages
       : []
     const agents = Array.isArray(dependencyData?.uses?.agents) ? dependencyData.uses.agents : []
+    const skills = Array.isArray(dependencyData?.uses?.skills) ? dependencyData.uses.skills : []
     const frameworks = Array.isArray(dependencyData?.uses?.frameworks) ? dependencyData.uses.frameworks : []
     const validationOutputs = Array.isArray(dependencyData?.uses?.validationOutputs)
       ? dependencyData.uses.validationOutputs
@@ -1950,94 +2412,137 @@ function WorkflowPolicyEditor() {
             <p className="super-admin-workflow-policy-editor__helper">Loading dependency summary...</p>
           ) : (
             <div className="super-admin-workflow-policy-editor__dependency-grid">
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Warnings</p>
+              <WorkflowPolicyDependencyCard title="Warnings">
                 {warnings.length > 0 ? (
-                  <ul className="super-admin-workflow-policy-editor__dependency-list">
+                  <div className="super-admin-workflow-policy-editor__dependency-warning-stack">
                     {warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
+                      <div key={warning} className="super-admin-workflow-policy-editor__dependency-warning">
+                        <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                          <Badge variant="warning" size="sm" pill outline>
+                            Warn
+                          </Badge>
+                        </div>
+                        <span>{warning}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
                   <p className="super-admin-workflow-policy-editor__helper">No dependency warnings for this policy.</p>
                 )}
-              </div>
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Referenced By Framework Packages</p>
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Referenced By Framework Packages">
                 {frameworkPackages.length > 0 ? (
                   <div className="super-admin-workflow-policy-editor__dependency-token-grid">
                     {frameworkPackages.map((pkg) => (
                       <div key={pkg.id || `${pkg.frameworkKey}-${pkg.version}`} className="super-admin-workflow-policy-editor__dependency-token">
-                        <Badge variant="info" size="sm" pill outline>{pkg.frameworkKey}</Badge>
-                        <span>{pkg.frameworkName ? `${pkg.frameworkName} ${pkg.version || ''}`.trim() : pkg.version || pkg.frameworkKey}</span>
-                        <Status size="sm" showIcon variant={String(pkg.status ?? '').trim().toUpperCase() === 'ACTIVE' ? 'success' : 'neutral'}>
-                          {formatWorkflowPolicyStatus(pkg.status)}
-                        </Status>
+                        <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                          <WorkflowPolicyDependencyBadge variant="info" size="sm" pill outline>
+                            {pkg.frameworkKey}
+                          </WorkflowPolicyDependencyBadge>
+                          <Status size="sm" showIcon variant={String(pkg.status ?? '').trim().toUpperCase() === 'ACTIVE' ? 'success' : 'neutral'}>
+                            {formatWorkflowPolicyStatus(pkg.status)}
+                          </Status>
+                        </div>
+                        <span title={pkg.frameworkName ? `${pkg.frameworkName} ${pkg.version || ''}`.trim() : pkg.version || pkg.frameworkKey}>
+                          {pkg.frameworkName ? `${pkg.frameworkName} ${pkg.version || ''}`.trim() : pkg.version || pkg.frameworkKey}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="super-admin-workflow-policy-editor__helper">No framework packages currently reference this workflow policy.</p>
                 )}
-              </div>
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Uses Agents</p>
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Uses Agents">
                 {agents.length > 0 ? (
                   <div className="super-admin-workflow-policy-editor__dependency-token-grid">
                     {agents.map((agent) => (
                       <div key={agent.id || agent.key} className="super-admin-workflow-policy-editor__dependency-token">
-                        <Badge variant="primary" size="sm" pill outline>{agent.key}</Badge>
-                        <span>{agent.name || agent.key}</span>
-                        <Status size="sm" showIcon variant={String(agent.status ?? '').trim().toUpperCase() === 'ACTIVE' ? 'success' : 'warning'}>
-                          {formatWorkflowPolicyStatus(agent.status)}
-                        </Status>
+                        <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                          <WorkflowPolicyDependencyBadge variant="primary" size="sm" pill outline>
+                            {agent.key}
+                          </WorkflowPolicyDependencyBadge>
+                          <Status size="sm" showIcon variant={String(agent.status ?? '').trim().toUpperCase() === 'ACTIVE' ? 'success' : 'warning'}>
+                            {formatWorkflowPolicyStatus(agent.status)}
+                          </Status>
+                        </div>
+                        <span title={agent.name || agent.key}>{agent.name || agent.key}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="super-admin-workflow-policy-editor__helper">No agents are currently referenced by this policy.</p>
                 )}
-              </div>
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Uses Frameworks</p>
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Uses Skills">
+                {skills.length > 0 ? (
+                  <div className="super-admin-workflow-policy-editor__dependency-token-grid">
+                    {skills.map((skill) => (
+                      <div key={skill.id || skill.key} className="super-admin-workflow-policy-editor__dependency-token">
+                        <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                          <WorkflowPolicyDependencyBadge variant="primary" size="sm" pill outline>
+                            {skill.key}
+                          </WorkflowPolicyDependencyBadge>
+                          <Status size="sm" showIcon variant={String(skill.status ?? '').trim().toUpperCase() === 'ACTIVE' ? 'success' : 'warning'}>
+                            {formatWorkflowPolicyStatus(skill.status)}
+                          </Status>
+                        </div>
+                        <span title={skill.name || skill.key}>{skill.name || skill.key}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="super-admin-workflow-policy-editor__helper">No skills are currently referenced by this policy.</p>
+                )}
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Uses Frameworks">
                 <div className="super-admin-workflow-policy-editor__dependency-token-grid">
                   {frameworks.map((framework) => (
                     <div key={framework.id || framework.key} className="super-admin-workflow-policy-editor__dependency-token">
-                      <Badge variant="primary" size="sm" pill outline>{framework.key}</Badge>
-                      <span>{framework.name || framework.key}</span>
+                      <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                        <WorkflowPolicyDependencyBadge variant="primary" size="sm" pill outline>
+                          {framework.key}
+                        </WorkflowPolicyDependencyBadge>
+                      </div>
+                      <span title={framework.name || framework.key}>{framework.name || framework.key}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Validation Outputs</p>
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Validation Outputs">
                 {validationOutputs.length > 0 ? (
                   <div className="super-admin-workflow-policy-editor__token-row">
                     {validationOutputs.map((output) => (
-                      <Badge key={output.id || output.key} variant="info" size="sm" pill outline>
+                      <WorkflowPolicyDependencyBadge key={output.id || output.key} variant="info" size="sm" pill outline>
                         {output.name || output.key}
-                      </Badge>
+                      </WorkflowPolicyDependencyBadge>
                     ))}
                   </div>
                 ) : (
                   <p className="super-admin-workflow-policy-editor__helper">No validation outputs are configured.</p>
                 )}
-              </div>
-              <div className="super-admin-workflow-policy-editor__dependency-card">
-                <p className="super-admin-workflow-policy-editor__summary-label">Runtime Paths Used</p>
+              </WorkflowPolicyDependencyCard>
+              <WorkflowPolicyDependencyCard title="Runtime Paths Used">
                 {runtimePaths.length > 0 ? (
                   <div className="super-admin-workflow-policy-editor__dependency-token-grid">
                     {runtimePaths.map((path) => (
-                      <div key={path.id || path.key} className="super-admin-workflow-policy-editor__dependency-token">
-                        <Badge variant="neutral" size="sm" pill outline>{path.scope || 'PATH'}</Badge>
-                        <span>{path.name || path.key}</span>
+                      <div
+                        key={path.id || path.key}
+                        className="super-admin-workflow-policy-editor__dependency-token"
+                      >
+                        <div className="super-admin-workflow-policy-editor__dependency-token-meta">
+                          <WorkflowPolicyDependencyBadge variant="neutral" size="sm" pill outline>
+                            {path.scope || 'PATH'}
+                          </WorkflowPolicyDependencyBadge>
+                        </div>
+                        <span title={path.name || path.key}>{path.name || path.key}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="super-admin-workflow-policy-editor__helper">No governed runtime paths are currently referenced.</p>
                 )}
-              </div>
+              </WorkflowPolicyDependencyCard>
             </div>
           )}
         </div>
@@ -2052,30 +2557,12 @@ function WorkflowPolicyEditor() {
           Review current version metadata and promotion context. Full revision compare and restore actions remain a later slice.
         </p>
         <div className="super-admin-workflow-policy-editor__audit-grid">
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Version</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{form.version || '1'}</p>
-          </div>
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Created By</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{loadedPolicy?.createdBy?.name || '--'}</p>
-          </div>
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Updated By</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{loadedPolicy?.updatedBy?.name || '--'}</p>
-          </div>
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Created At</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{formatAuditDate(loadedPolicy?.createdAt)}</p>
-          </div>
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Updated At</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{formatAuditDate(loadedPolicy?.updatedAt)}</p>
-          </div>
-          <div className="super-admin-workflow-policy-editor__audit-card">
-            <p className="super-admin-workflow-policy-editor__summary-label">Last Activated</p>
-            <p className="super-admin-workflow-policy-editor__audit-value">{formatAuditDate(form.lastActivatedAt)}</p>
-          </div>
+          <WorkflowPolicyAuditMetric label="Version" value={form.version || '1'} />
+          <WorkflowPolicyAuditMetric label="Created By" value={loadedPolicy?.createdBy?.name || '--'} />
+          <WorkflowPolicyAuditMetric label="Updated By" value={loadedPolicy?.updatedBy?.name || '--'} />
+          <WorkflowPolicyAuditMetric label="Created At" value={formatAuditDate(loadedPolicy?.createdAt)} />
+          <WorkflowPolicyAuditMetric label="Updated At" value={formatAuditDate(loadedPolicy?.updatedAt)} />
+          <WorkflowPolicyAuditMetric label="Last Activated" value={formatAuditDate(form.lastActivatedAt)} />
         </div>
       </div>
     </div>
@@ -2537,7 +3024,7 @@ function WorkflowPolicyEditor() {
     >
       <header className="super-admin-workflow-policy-editor__header">
         <h1 className="super-admin-workflow-policy-editor__title">
-          {isEditMode ? 'Workflow Policy Editor' : 'Create Workflow Policy'}
+          {isEditMode ? 'Workflow Policy Editor' : isCloneMode ? 'Clone Workflow Policy' : 'Create Workflow Policy'}
         </h1>
         <p className="super-admin-workflow-policy-editor__subtitle">
           Configure workflow policy foundations, governed FRAMEWORK_STATE conditions, routed execution, outcome effects, escalation controls, and promotion metadata.
@@ -2546,8 +3033,8 @@ function WorkflowPolicyEditor() {
 
       <Fieldset className="super-admin-workflow-policy-editor__fieldset">
         <Fieldset.Legend className="sr-only">Workflow policy editor</Fieldset.Legend>
-        {isEditMode && isPolicyLoading ? <WorkflowPolicyEditorLoadingState isEditMode /> : null}
-        {isEditMode && policyAppError ? (
+        {(isEditMode || isCloneMode) && isPolicyLoading ? <WorkflowPolicyEditorLoadingState isEditMode /> : null}
+        {(isEditMode || isCloneMode) && policyAppError ? (
           <WorkflowPolicyEditorErrorState message={policyAppError.message} onBack={handleBack} />
         ) : null}
 
@@ -2558,7 +3045,31 @@ function WorkflowPolicyEditor() {
                 <Button type="button" variant="outline" size="sm" onClick={handleBack}>
                   Back
                 </Button>
+                {isEditMode && loadedPolicy?.id ? (
+                  <Button type="button" variant="outline" size="sm" onClick={handleCloneFromCurrent}>
+                    Clone
+                  </Button>
+                ) : null}
               </div>
+
+              {isLockedPolicy ? (
+                <div className="super-admin-workflow-policy-editor__lock-banner" role="status" aria-live="polite">
+                  <Badge variant="warning" size="sm" pill outline>
+                    Locked
+                  </Badge>
+                  <div className="super-admin-workflow-policy-editor__lock-copy">
+                    <strong>Locked by validated package usage.</strong>
+                    <span>Clone this workflow policy to make behavior changes.</span>
+                  </div>
+                  <div className="super-admin-workflow-policy-editor__lock-packages" aria-label="Locked by packages">
+                    {(Array.isArray(loadedPolicy?.lockedByPackageKeys) ? loadedPolicy.lockedByPackageKeys : []).map((packageKey) => (
+                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                        {packageKey}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {isEditMode ? (
                 <div className="super-admin-workflow-policy-editor__summary">
@@ -2599,6 +3110,10 @@ function WorkflowPolicyEditor() {
                 onSubmit={handleSubmit}
                 noValidate
               >
+                <fieldset
+                  className="super-admin-workflow-policy-editor__edit-lock-fieldset"
+                  disabled={isLockedPolicy}
+                >
                 <section className="super-admin-workflow-policy-editor__basic-section" aria-labelledby="workflow-policy-editor-basic-information">
                   <div className="super-admin-workflow-policy-editor__basic-section-header">
                     <h2
@@ -2860,6 +3375,7 @@ function WorkflowPolicyEditor() {
                     {renderTestConsoleTab()}
                   </TabView.Tab>
                 </TabView>
+                </fieldset>
 
                 {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
                   <p className="super-admin-workflow-policy-editor__error" role="alert">
@@ -2877,7 +3393,7 @@ function WorkflowPolicyEditor() {
                       variant="primary"
                       size="sm"
                       loading={isSaving}
-                      disabled={isSaving || isPolicyLoading}
+                      disabled={isSaving || isPolicyLoading || isLockedPolicy}
                     >
                       Save Changes
                     </Button>
@@ -2889,7 +3405,7 @@ function WorkflowPolicyEditor() {
                       loading={isSaving}
                       disabled={isSaving}
                     >
-                      Create Workflow Policy
+                      {isCloneMode ? 'Clone Workflow Policy' : 'Create Workflow Policy'}
                     </Button>
                   ) : (
                     <Button type="button" variant="primary" size="sm" onClick={handleReviewMissingFields}>

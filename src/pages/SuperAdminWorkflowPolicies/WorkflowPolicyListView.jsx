@@ -10,6 +10,10 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import {
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
+import {
   formatWorkflowPolicyEnumLabel,
   formatWorkflowPolicyStatus,
   formatWorkflowPolicyType,
@@ -22,11 +26,15 @@ import {
 import './WorkflowPolicyListView.css'
 
 function WorkflowPolicyRowActionsMenu({ row, onAction }) {
+  const isLocked = Boolean(row.isLocked)
   const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    ...(row.status === WORKFLOW_POLICY_STATUSES.ACTIVE
-      ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
-      : [{ value: 'Set Active', label: 'Set Active' }]),
+    ...(!isLocked ? [{ value: 'Edit', label: 'Edit' }] : []),
+    { value: 'Clone', label: 'Clone' },
+    ...(!isLocked
+      ? (row.status === WORKFLOW_POLICY_STATUSES.ACTIVE
+          ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
+          : [{ value: 'Set Active', label: 'Set Active' }])
+      : []),
   ]
 
   return (
@@ -117,6 +125,29 @@ function renderActionSummary(_value, row) {
   )
 }
 
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row.componentVersion ?? 1)
+  const versionStatus = row.versionStatus ?? row.status
+
+  return (
+    <div className="super-admin-workflow-policies__version-summary">
+      <span className="super-admin-workflow-policies__version-text">v{componentVersion}</span>
+      <Status
+        size="sm"
+        showIcon
+        variant={getRuntimeControlVersionStatusVariant(versionStatus)}
+      >
+        {formatRuntimeControlVersionStatus(versionStatus)}
+      </Status>
+      {row.isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
+    </div>
+  )
+}
+
 export function WorkflowPolicyListView({
   search,
   setSearch,
@@ -138,12 +169,17 @@ export function WorkflowPolicyListView({
   onBackClick,
   onCreateClick,
   onEditClick,
+  onCloneClick,
   setWorkflowPolicyStatus,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
       if (label === 'Edit') {
         onEditClick(row)
+      }
+
+      if (label === 'Clone') {
+        onCloneClick(row)
       }
 
       if (label === 'Set Active') {
@@ -154,7 +190,7 @@ export function WorkflowPolicyListView({
         setWorkflowPolicyStatus(row, WORKFLOW_POLICY_STATUSES.INACTIVE)
       }
     },
-    [onEditClick, setWorkflowPolicyStatus],
+    [onCloneClick, onEditClick, setWorkflowPolicyStatus],
   )
 
   const columns = useMemo(
@@ -163,18 +199,21 @@ export function WorkflowPolicyListView({
         key: 'name',
         label: 'Policy',
         mobileLabel: 'Policy',
+        width: '260px',
         render: renderPolicySummary,
       },
       {
         key: 'policyType',
         label: 'Type',
         mobileLabel: 'Type',
+        width: '156px',
         render: renderType,
       },
       {
         key: 'status',
         label: 'Status',
         mobileLabel: 'Status',
+        width: '112px',
         render: (value) => (
           <Status size="sm" showIcon variant={getWorkflowPolicyStatusVariant(value)}>
             {formatWorkflowPolicyStatus(value)}
@@ -182,21 +221,31 @@ export function WorkflowPolicyListView({
         ),
       },
       {
+        key: 'version',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '136px',
+        render: renderVersionSummary,
+      },
+      {
         key: 'frameworkKeys',
         label: 'Frameworks',
         mobileLabel: 'Frameworks',
+        width: '160px',
         render: renderFrameworkList,
       },
       {
         key: 'triggerSummary',
         label: 'Trigger',
         mobileLabel: 'Trigger',
+        width: '180px',
         render: renderTriggerSummary,
       },
       {
         key: 'actionSummary',
         label: 'Action Governance',
         mobileLabel: 'Action',
+        width: '180px',
         render: renderActionSummary,
       },
       {

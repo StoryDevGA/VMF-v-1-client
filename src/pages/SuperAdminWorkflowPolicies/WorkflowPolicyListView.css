@@ -37,6 +37,7 @@
 }
 
 .super-admin-workflow-policies__policy-summary,
+.super-admin-workflow-policies__version-summary,
 .super-admin-workflow-policies__token-list {
   display: flex;
   flex-wrap: wrap;
@@ -50,11 +51,18 @@
   gap: var(--spacing-2xs);
 }
 
+.super-admin-workflow-policies__version-summary {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+}
+
 .super-admin-workflow-policies__policy-name {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
+.super-admin-workflow-policies__version-text,
 .super-admin-workflow-policies__policy-key {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
@@ -72,6 +80,15 @@
 
 .super-admin-workflow-policies__table-wrap {
   margin-top: 0;
+}
+
+.super-admin-workflow-policies__table {
+  min-width: 1460px;
+}
+
+.super-admin-workflow-policies__table th,
+.super-admin-workflow-policies__table td {
+  padding-inline: var(--spacing-sm);
 }
 
 .super-admin-workflow-policies__pagination {

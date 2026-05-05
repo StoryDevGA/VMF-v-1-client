@@ -23,6 +23,11 @@ function SuperAdminWorkflowPolicies() {
     navigate(`/super-admin/runtime-control/workflow-policies/${policy.id}/edit`)
   }, [navigate])
 
+  const handleCloneClick = useCallback((policy) => {
+    if (!policy?.id) return
+    navigate(`/super-admin/runtime-control/workflow-policies/new?cloneFrom=${encodeURIComponent(policy.id)}`)
+  }, [navigate])
+
   return (
     <section
       className="super-admin-workflow-policies container"
@@ -57,6 +62,7 @@ function SuperAdminWorkflowPolicies() {
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
+        onCloneClick={handleCloneClick}
         setWorkflowPolicyStatus={mgmt.setWorkflowPolicyStatus}
       />
     </section>
