@@ -20,6 +20,7 @@ const buildValidForm = (overrides = {}) => ({
   outputPath,
   passFieldPath: `${outputPath}.is_valid`,
   detailsFieldPath: `${outputPath}.missing_sections`,
+  messageFieldPath: `${outputPath}.message`,
   freshnessDefaultMinutes: 30,
   blockingDefault: true,
   warningOnlyDefault: false,
@@ -69,6 +70,7 @@ describe('validateValidationRegistryForm', () => {
     const errors = validateValidationRegistryForm(buildValidForm({
       passFieldPath: 'framework_state.validation.other.is_valid',
       detailsFieldPath: 'framework_state.validation.other.message',
+      messageFieldPath: 'framework_state.validation.other.message',
       blockingDefault: true,
       warningOnlyDefault: true,
     }))
@@ -76,7 +78,26 @@ describe('validateValidationRegistryForm', () => {
     expect(errors).toMatchObject({
       passFieldPath: 'Pass Field Path must be inside the selected Output Path.',
       detailsFieldPath: 'Details Field Path must be inside the selected Output Path.',
+      messageFieldPath: 'Message Field Path must be inside the selected Output Path.',
       warningOnlyDefault: 'Blocking Default and Warning Only Default cannot both be true.',
+    })
+  })
+
+  it('validates parameter JSON and retry policy controls', () => {
+    const errors = validateValidationRegistryForm(buildValidForm({
+      parameterSchema: ['not-object'],
+      defaultParameters: null,
+      retryPolicy: {
+        maxAttempts: 0,
+        backoffSeconds: -1,
+      },
+    }))
+
+    expect(errors).toMatchObject({
+      parameterSchema: 'Parameter Schema must be a JSON object.',
+      defaultParameters: 'Default Parameters must be a JSON object.',
+      'retryPolicy.maxAttempts': 'Max Attempts must be a whole number from 1 to 10.',
+      'retryPolicy.backoffSeconds': 'Backoff Seconds must be a whole number from 0 to 3600.',
     })
   })
 

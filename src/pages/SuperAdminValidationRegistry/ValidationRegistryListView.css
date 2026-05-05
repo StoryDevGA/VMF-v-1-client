@@ -54,6 +54,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--spacing-2xs);
+  min-width: 0;
 }
 
 .super-admin-validation-registry__validation-label {
@@ -62,9 +63,32 @@
 }
 
 .super-admin-validation-registry__validation-key {
-  font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+}
+
+.super-admin-validation-registry__truncated-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-validation-registry__truncated-tooltip {
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.super-admin-validation-registry__truncated-text--mono {
+  font-family: var(--font-mono);
+}
+
+.super-admin-validation-registry__table-token {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
 }
 
 .super-admin-validation-registry__framework-badges {
@@ -72,6 +96,20 @@
   flex-wrap: wrap;
   gap: var(--spacing-xs);
   justify-content: center;
+}
+
+.super-admin-validation-registry__version-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.super-admin-validation-registry__version-text {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
 }
 
 .super-admin-validation-registry__row-actions {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -13,6 +13,7 @@ import { useToaster } from '../../components/Toaster'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import {
   useCreateValidationRegistryMutation,
+  useCloneValidationRegistryMutation,
   useGetValidationRegistryDependenciesQuery,
   useGetValidationRegistryQuery,
   useLazyGetValidationRegistryDependenciesQuery,
@@ -56,6 +57,10 @@ const INITIAL_FORM = Object.freeze({
   resultType: '',
   passFieldPath: '',
   detailsFieldPath: '',
+  messageFieldPath: '',
+  parameterSchema: {},
+  defaultParameters: {},
+  retryPolicy: { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 },
   policyUsable: true,
   packageUsable: true,
   requiresLatestRun: false,
@@ -73,7 +78,7 @@ const shallowEqualObject = (left, right) => {
   const leftKeys = Object.keys(left)
   const rightKeys = Object.keys(right)
   if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key) => left[key] === right[key])
+  return leftKeys.every((key) => JSON.stringify(left[key]) === JSON.stringify(right[key]))
 }
 
 const areStableIdListsEqual = (left, right) => {
@@ -91,6 +96,20 @@ const buildDescendantPath = (outputPath, suffix) => {
 
 const formatPreviewJson = (value) => JSON.stringify(value, null, 2)
 
+const parseJsonObjectField = (value, label) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return { value: {}, error: null }
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { value: {}, error: `${label} must be a JSON object.` }
+    }
+    return { value: parsed, error: null }
+  } catch {
+    return { value: {}, error: `${label} must be valid JSON.` }
+  }
+}
+
 const buildValidationPreview = (form, { isEditMode = false, loadedValidation = null } = {}) => ({
   ...(isEditMode && loadedValidation?.id ? { id: loadedValidation.id } : {}),
   ...(isEditMode && loadedValidation?.stableId ? { stableId: loadedValidation.stableId } : {}),
@@ -107,6 +126,12 @@ const buildValidationPreview = (form, { isEditMode = false, loadedValidation = n
   resultType: String(form.resultType ?? '').trim().toUpperCase(),
   passFieldPath: String(form.passFieldPath ?? '').trim(),
   detailsFieldPath: String(form.detailsFieldPath ?? '').trim(),
+  messageFieldPath: String(form.messageFieldPath ?? '').trim(),
+  parameterSchema: form.parameterSchema && typeof form.parameterSchema === 'object' ? form.parameterSchema : {},
+  defaultParameters: form.defaultParameters && typeof form.defaultParameters === 'object' ? form.defaultParameters : {},
+  retryPolicy: form.retryPolicy && typeof form.retryPolicy === 'object'
+    ? form.retryPolicy
+    : { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 },
   policyUsable: Boolean(form.policyUsable),
   packageUsable: Boolean(form.packageUsable),
   requiresLatestRun: Boolean(form.requiresLatestRun),
@@ -158,9 +183,15 @@ function SuperAdminValidationRegistryEditor() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
   const { validationId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const cloneFrom = String(searchParams.get('cloneFrom') ?? '').trim()
   const isEditMode = Boolean(validationId)
+  const isCloneMode = !isEditMode && Boolean(cloneFrom)
 
   const [form, dispatchForm] = useReducer(formStateReducer, INITIAL_FORM)
+  const [parameterSchemaText, setParameterSchemaText] = useState(formatPreviewJson(INITIAL_FORM.parameterSchema))
+  const [defaultParametersText, setDefaultParametersText] = useState(formatPreviewJson(INITIAL_FORM.defaultParameters))
+  const [retryableErrorCodesText, setRetryableErrorCodesText] = useState('')
   const [pendingFrameworkKey, setPendingFrameworkKey] = useState('')
   const [pendingDefaultAgentId, setPendingDefaultAgentId] = useState('')
   const [errors, setErrors] = useState({})
@@ -176,8 +207,18 @@ function SuperAdminValidationRegistryEditor() {
     error: validationError,
   } = useGetValidationRegistryQuery(validationId, { skip: !isEditMode })
 
+  const {
+    data: cloneSourceResponse,
+    isLoading: isCloneSourceLoading,
+    error: cloneSourceError,
+  } = useGetValidationRegistryQuery(cloneFrom, { skip: !isCloneMode })
+
   const loadedValidation = validationResponse?.data ?? null
-  const validationAppError = validationError ? normalizeError(validationError) : null
+  const cloneSourceValidation = cloneSourceResponse?.data ?? null
+  const displayedValidation = loadedValidation || cloneSourceValidation
+  const validationAppError = (validationError || cloneSourceError)
+    ? normalizeError(validationError || cloneSourceError)
+    : null
 
   const {
     data: dependencyResponse,
@@ -228,7 +269,6 @@ function SuperAdminValidationRegistryEditor() {
     pageSize: 100,
     q: '',
     status: 'ACTIVE',
-    frameworkKey: '',
   })
 
   const runtimeSkillRows = useMemo(() => {
@@ -261,10 +301,9 @@ function SuperAdminValidationRegistryEditor() {
 
   const { data: agentResponse, isFetching: isAgentFetching, error: agentError } = useListRuntimeAgentsQuery({
     page: 1,
-    pageSize: 1000,
+    pageSize: 100,
     q: '',
-    status: '',
-    frameworkKey: '',
+    status: RUNTIME_AGENT_STATUSES.ACTIVE,
   })
 
   const runtimeAgentRows = useMemo(() => {
@@ -359,10 +398,12 @@ function SuperAdminValidationRegistryEditor() {
   )
 
   const [createValidation, { isLoading: isCreating }] = useCreateValidationRegistryMutation()
+  const [cloneValidation, { isLoading: isCloning }] = useCloneValidationRegistryMutation()
   const [updateValidation, { isLoading: isUpdating }] = useUpdateValidationRegistryMutation()
   const [fetchDependencies] = useLazyGetValidationRegistryDependenciesQuery()
 
-  const isSaving = isCreating || isUpdating
+  const isSaving = isCreating || isUpdating || isCloning
+  const isLocked = isEditMode && Boolean(loadedValidation?.isLocked)
 
   useEffect(() => {
     if (!isEditMode) return
@@ -385,6 +426,10 @@ function SuperAdminValidationRegistryEditor() {
         resultType: loadedValidation.resultType ?? '',
         passFieldPath: loadedValidation.passFieldPath ?? '',
         detailsFieldPath: loadedValidation.detailsFieldPath ?? '',
+        messageFieldPath: loadedValidation.messageFieldPath ?? '',
+        parameterSchema: loadedValidation.parameterSchema ?? {},
+        defaultParameters: loadedValidation.defaultParameters ?? {},
+        retryPolicy: loadedValidation.retryPolicy ?? { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 },
         policyUsable: loadedValidation.policyUsable !== undefined ? Boolean(loadedValidation.policyUsable) : true,
         packageUsable: loadedValidation.packageUsable !== undefined ? Boolean(loadedValidation.packageUsable) : true,
         requiresLatestRun: Boolean(loadedValidation.requiresLatestRun),
@@ -398,14 +443,98 @@ function SuperAdminValidationRegistryEditor() {
 
       return shallowEqualObject(current, next) ? current : next
     })
+    const timeoutId = window.setTimeout(() => {
+      setParameterSchemaText(formatPreviewJson(loadedValidation.parameterSchema ?? {}))
+      setDefaultParametersText(formatPreviewJson(loadedValidation.defaultParameters ?? {}))
+      setRetryableErrorCodesText(Array.isArray(loadedValidation.retryPolicy?.retryableErrorCodes)
+        ? loadedValidation.retryPolicy.retryableErrorCodes.join(', ')
+        : '')
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
   }, [isEditMode, loadedValidation, setForm])
+
+  useEffect(() => {
+    if (!isCloneMode) return
+    if (!cloneSourceValidation) return
+
+    const next = {
+      key: `${cloneSourceValidation.key ?? ''}-clone`,
+      label: `${cloneSourceValidation.label ?? cloneSourceValidation.key ?? 'Validation'} Clone`,
+      description: cloneSourceValidation.description ?? '',
+      status: VALIDATION_REGISTRY_STATUSES.DRAFT,
+      supportedFrameworkKeys: Array.isArray(cloneSourceValidation.supportedFrameworkKeys)
+        ? [...cloneSourceValidation.supportedFrameworkKeys]
+        : [],
+      category: cloneSourceValidation.category ?? VALIDATION_REGISTRY_CATEGORIES.COMPLETENESS,
+      severity: cloneSourceValidation.severity ?? VALIDATION_REGISTRY_SEVERITIES.ERROR,
+      producerSkillId: cloneSourceValidation.producerSkillId ?? '',
+      defaultAgentIds: Array.isArray(cloneSourceValidation.defaultAgentIds) ? [...cloneSourceValidation.defaultAgentIds] : [],
+      outputPath: cloneSourceValidation.outputPath ?? '',
+      resultType: cloneSourceValidation.resultType ?? '',
+      passFieldPath: cloneSourceValidation.passFieldPath ?? '',
+      detailsFieldPath: cloneSourceValidation.detailsFieldPath ?? '',
+      messageFieldPath: cloneSourceValidation.messageFieldPath ?? '',
+      parameterSchema: cloneSourceValidation.parameterSchema ?? {},
+      defaultParameters: cloneSourceValidation.defaultParameters ?? {},
+      retryPolicy: cloneSourceValidation.retryPolicy ?? { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 },
+      policyUsable: cloneSourceValidation.policyUsable !== undefined ? Boolean(cloneSourceValidation.policyUsable) : true,
+      packageUsable: cloneSourceValidation.packageUsable !== undefined ? Boolean(cloneSourceValidation.packageUsable) : true,
+      requiresLatestRun: Boolean(cloneSourceValidation.requiresLatestRun),
+      freshnessDefaultMinutes: Number(cloneSourceValidation.freshnessDefaultMinutes ?? 30) || 30,
+      blockingDefault: cloneSourceValidation.blockingDefault !== undefined ? Boolean(cloneSourceValidation.blockingDefault) : true,
+      warningOnlyDefault: Boolean(cloneSourceValidation.warningOnlyDefault),
+      allowManualRun: cloneSourceValidation.allowManualRun === undefined ? true : Boolean(cloneSourceValidation.allowManualRun),
+      executionMode: cloneSourceValidation.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC,
+      version: Number(cloneSourceValidation.version ?? 1) + 1,
+    }
+
+    setForm(next)
+    const timeoutId = window.setTimeout(() => {
+      setParameterSchemaText(formatPreviewJson(next.parameterSchema))
+      setDefaultParametersText(formatPreviewJson(next.defaultParameters))
+      setRetryableErrorCodesText(Array.isArray(next.retryPolicy?.retryableErrorCodes)
+        ? next.retryPolicy.retryableErrorCodes.join(', ')
+        : '')
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [cloneSourceValidation, isCloneMode, setForm])
 
   const handleBack = useCallback(() => {
     navigate('/super-admin/runtime-control/validation-registry')
   }, [navigate])
 
   const submit = useCallback(async ({ bypassStatusWarning = false } = {}) => {
-    const clientErrors = validateForm(form, { isEditMode })
+    if (isLocked) {
+      addToast({
+        variant: 'warning',
+        title: 'Locked validation',
+        description: 'Clone this validation before changing runtime behavior.',
+      })
+      return
+    }
+
+    const parameterSchemaResult = parseJsonObjectField(parameterSchemaText, 'Parameter Schema')
+    const defaultParametersResult = parseJsonObjectField(defaultParametersText, 'Default Parameters')
+    const retryableErrorCodes = retryableErrorCodesText
+      .split(',')
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+    const formForValidation = {
+      ...form,
+      parameterSchema: parameterSchemaResult.value,
+      defaultParameters: defaultParametersResult.value,
+      retryPolicy: {
+        ...form.retryPolicy,
+        retryableErrorCodes,
+      },
+    }
+    const clientErrors = {
+      ...validateForm(formForValidation, { isEditMode }),
+      ...(parameterSchemaResult.error ? { parameterSchema: parameterSchemaResult.error } : {}),
+      ...(defaultParametersResult.error ? { defaultParameters: defaultParametersResult.error } : {}),
+    }
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors)
       setErrorsSource('client')
@@ -443,7 +572,7 @@ function SuperAdminValidationRegistryEditor() {
 
       const normalizedResultType = String(form.resultType ?? '').trim().toUpperCase()
       const payload = {
-        ...(isEditMode ? {} : { key: String(form.key ?? '').trim().toLowerCase() }),
+        ...(isEditMode ? {} : { key: String(formForValidation.key ?? '').trim().toLowerCase() }),
         label: String(form.label ?? '').trim(),
         description: String(form.description ?? '').trim(),
         status: nextStatus,
@@ -456,6 +585,14 @@ function SuperAdminValidationRegistryEditor() {
         ...(normalizedResultType ? { resultType: normalizedResultType } : {}),
         passFieldPath: String(form.passFieldPath ?? '').trim(),
         detailsFieldPath: String(form.detailsFieldPath ?? '').trim(),
+        messageFieldPath: String(form.messageFieldPath ?? '').trim(),
+        parameterSchema: formForValidation.parameterSchema,
+        defaultParameters: formForValidation.defaultParameters,
+        retryPolicy: {
+          maxAttempts: Number(form.retryPolicy?.maxAttempts ?? 1) || 1,
+          retryableErrorCodes,
+          backoffSeconds: Number(form.retryPolicy?.backoffSeconds ?? 0) || 0,
+        },
         policyUsable: Boolean(form.policyUsable),
         packageUsable: Boolean(form.packageUsable),
         requiresLatestRun: Boolean(form.requiresLatestRun),
@@ -468,7 +605,22 @@ function SuperAdminValidationRegistryEditor() {
     }
 
     try {
-      if (isEditMode) {
+      if (isCloneMode) {
+        const res = await cloneValidation({
+          validationId: cloneFrom,
+          body: {
+            key: payload.key,
+            label: payload.label,
+            description: payload.description,
+          },
+        }).unwrap()
+        addToast({
+          variant: 'success',
+          title: 'Validation cloned',
+          description: `${res?.data?.key ?? payload.key} was created as an editable draft.`,
+        })
+        navigate(`/super-admin/runtime-control/validation-registry/${res?.data?.id ?? ''}`)
+      } else if (isEditMode) {
         const res = await updateValidation({ validationId, ...payload }).unwrap()
         addToast({
           variant: 'success',
@@ -508,12 +660,20 @@ function SuperAdminValidationRegistryEditor() {
     }
   }, [
     addToast,
+    cloneFrom,
+    cloneValidation,
     createValidation,
     defaultAgentIdsChanged,
+    defaultParametersText,
     fetchDependencies,
     form,
+    isCloneMode,
     isEditMode,
+    isLocked,
     loadedValidation,
+    navigate,
+    parameterSchemaText,
+    retryableErrorCodesText,
     setForm,
     selectedDefaultAgentIds,
     updateValidation,
@@ -528,9 +688,28 @@ function SuperAdminValidationRegistryEditor() {
 
   const resolveSingle = (values) => (Array.isArray(values) && values.length > 0 ? values[0] : '')
 
+  const previewForm = useMemo(() => {
+    const parameterSchemaResult = parseJsonObjectField(parameterSchemaText, 'Parameter Schema')
+    const defaultParametersResult = parseJsonObjectField(defaultParametersText, 'Default Parameters')
+    const retryableErrorCodes = retryableErrorCodesText
+      .split(',')
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+
+    return {
+      ...form,
+      parameterSchema: parameterSchemaResult.error ? form.parameterSchema : parameterSchemaResult.value,
+      defaultParameters: defaultParametersResult.error ? form.defaultParameters : defaultParametersResult.value,
+      retryPolicy: {
+        ...(form.retryPolicy || {}),
+        retryableErrorCodes,
+      },
+    }
+  }, [defaultParametersText, form, parameterSchemaText, retryableErrorCodesText])
+
   const previewJson = useMemo(
-    () => formatPreviewJson(buildValidationPreview(form, { isEditMode, loadedValidation })),
-    [form, isEditMode, loadedValidation],
+    () => formatPreviewJson(buildValidationPreview(previewForm, { isEditMode, loadedValidation })),
+    [isEditMode, loadedValidation, previewForm],
   )
   const dependencySummary = dependencyData?.dependencies?.summary ?? {}
   const dependencyWorkflowPolicies = dependencyData?.dependencies?.workflowPolicies ?? []
@@ -538,13 +717,15 @@ function SuperAdminValidationRegistryEditor() {
   const dependencyRuntimePaths = dependencyData?.runtimePaths ?? []
   const dependencyDefaultAgents = dependencyData?.defaultAgents ?? []
 
-  const isLoading = isEditMode ? (isValidationLoading && !loadedValidation) : false
+  const isLoading = isEditMode
+    ? (isValidationLoading && !loadedValidation)
+    : (isCloneMode ? (isCloneSourceLoading && !cloneSourceValidation) : false)
 
   if (isLoading) {
     return <ValidationRegistryEditorLoadingState isEditMode={isEditMode} />
   }
 
-  if (validationAppError && !loadedValidation && isEditMode) {
+  if (validationAppError && !displayedValidation && (isEditMode || isCloneMode)) {
     return (
       <Card variant="elevated" className="super-admin-validation-registry__card super-admin-validation-registry-editor__card">
         <Card.Body className="super-admin-validation-registry__card-body super-admin-validation-registry__card-body--compact super-admin-validation-registry-editor__card-body super-admin-validation-registry-editor__card-body--compact">
@@ -559,7 +740,7 @@ function SuperAdminValidationRegistryEditor() {
     )
   }
 
-  const headline = isEditMode ? 'Edit Validation' : 'Create Validation'
+  const headline = isCloneMode ? 'Clone Validation' : (isEditMode ? 'Edit Validation' : 'Create Validation')
 
   return (
     <section className="super-admin-validation-registry super-admin-validation-registry-editor container" aria-label="Super admin validation registry editor">
@@ -581,8 +762,46 @@ function SuperAdminValidationRegistryEditor() {
           >
             <div className="super-admin-validation-registry__catalogue-actions super-admin-validation-registry-editor__top-actions">
               <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>Back</Button>
+              {isLocked ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate(`/super-admin/runtime-control/validation-registry/new?cloneFrom=${encodeURIComponent(validationId)}`)}
+                  disabled={isSaving}
+                >
+                  Clone
+                </Button>
+              ) : null}
             </div>
 
+            {isLocked ? (
+              <div
+                className="super-admin-validation-registry-editor__lock-banner"
+                role="status"
+                aria-label="Locked validation notice"
+                aria-live="polite"
+              >
+                <Badge variant="warning" size="sm" pill outline>
+                  Locked
+                </Badge>
+                <div className="super-admin-validation-registry-editor__lock-copy">
+                  <strong>Locked by validated package usage.</strong>
+                  <span>Clone this validation to make behavior changes.</span>
+                </div>
+                {Array.isArray(loadedValidation?.lockedByPackageKeys) && loadedValidation.lockedByPackageKeys.length > 0 ? (
+                  <div className="super-admin-validation-registry-editor__lock-packages" aria-label="Locked by packages">
+                    {loadedValidation.lockedByPackageKeys.map((packageKey) => (
+                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                        {packageKey}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <fieldset className="super-admin-validation-registry-editor__edit-fieldset" disabled={isLocked}>
             <div className="super-admin-validation-registry-editor__row">
               <div className="super-admin-validation-registry-editor__field">
                 <label className="super-admin-validation-registry-editor__field-label" htmlFor="validation-registry-editor-key">
@@ -907,6 +1126,18 @@ function SuperAdminValidationRegistryEditor() {
                 error={errors.detailsFieldPath}
                 helperText="Optional. If supplied, it must be a descendant of Output Path."
               />
+
+              <RuntimePathSearchSelect
+                id="validation-registry-editor-message-field-path"
+                label="Message Field Path"
+                frameworkKeys={selectedFrameworkKeys}
+                scope="VALIDATION_RESULT"
+                operation={null}
+                selectedKeys={form.messageFieldPath ? [form.messageFieldPath] : []}
+                onChange={(values) => setForm((current) => ({ ...current, messageFieldPath: resolveSingle(values) }))}
+                error={errors.messageFieldPath}
+                helperText="Optional. Human-readable validation result message path."
+              />
             </div>
 
             {form.outputPath ? (
@@ -938,6 +1169,14 @@ function SuperAdminValidationRegistryEditor() {
                     onClick={() => setForm((current) => ({ ...current, detailsFieldPath: buildDescendantPath(current.outputPath, 'missing_sections') }))}
                   >
                     Details: .missing_sections
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm((current) => ({ ...current, messageFieldPath: buildDescendantPath(current.outputPath, 'message') }))}
+                  >
+                    Message: .message
                   </Button>
                   <Button
                     type="button"
@@ -997,6 +1236,69 @@ function SuperAdminValidationRegistryEditor() {
                   onChange={(event) => setForm((current) => ({ ...current, freshnessDefaultMinutes: event.target.value }))}
                   error={errors.freshnessDefaultMinutes}
                   helperText="0 means no freshness window."
+                  fullWidth
+                />
+              </div>
+
+              <div className="super-admin-validation-registry-editor__row">
+                <Input
+                  id="validation-registry-editor-retry-max-attempts"
+                  label="Max Attempts"
+                  type="number"
+                  value={String(form.retryPolicy?.maxAttempts ?? 1)}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    retryPolicy: { ...(current.retryPolicy || {}), maxAttempts: event.target.value },
+                  }))}
+                  error={errors['retryPolicy.maxAttempts']}
+                  fullWidth
+                />
+                <Input
+                  id="validation-registry-editor-retry-backoff"
+                  label="Backoff Seconds"
+                  type="number"
+                  value={String(form.retryPolicy?.backoffSeconds ?? 0)}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    retryPolicy: { ...(current.retryPolicy || {}), backoffSeconds: event.target.value },
+                  }))}
+                  error={errors['retryPolicy.backoffSeconds']}
+                  fullWidth
+                />
+              </div>
+
+              <div className="super-admin-validation-registry-editor__field">
+                <label className="super-admin-validation-registry-editor__field-label" htmlFor="validation-registry-editor-retry-codes">
+                  Retryable Error Codes
+                </label>
+                <Input
+                  id="validation-registry-editor-retry-codes"
+                  value={retryableErrorCodesText}
+                  onChange={(event) => setRetryableErrorCodesText(event.target.value)}
+                  helperText="Comma-separated runtime error codes."
+                  fullWidth
+                />
+              </div>
+
+              <div className="super-admin-validation-registry-editor__row">
+                <Textarea
+                  id="validation-registry-editor-parameter-schema"
+                  label="Parameter Schema"
+                  value={parameterSchemaText}
+                  onChange={(event) => setParameterSchemaText(event.target.value)}
+                  error={errors.parameterSchema}
+                  helperText="JSON object used to validate package binding parameters."
+                  rows={6}
+                  fullWidth
+                />
+                <Textarea
+                  id="validation-registry-editor-default-parameters"
+                  label="Default Parameters"
+                  value={defaultParametersText}
+                  onChange={(event) => setDefaultParametersText(event.target.value)}
+                  error={errors.defaultParameters}
+                  helperText="JSON object merged before package binding parameters."
+                  rows={6}
                   fullWidth
                 />
               </div>
@@ -1108,6 +1410,8 @@ function SuperAdminValidationRegistryEditor() {
             </section>
           </div>
 
+            </fieldset>
+
           {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
             <p className="super-admin-validation-registry-editor__helper">
               Server validation returned {Object.keys(errors).length} field error{Object.keys(errors).length === 1 ? '' : 's'}.
@@ -1118,8 +1422,8 @@ function SuperAdminValidationRegistryEditor() {
               <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="sm" loading={isSaving}>
-                {isEditMode ? 'Save Changes' : 'Create Validation'}
+              <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={isLocked}>
+                {isCloneMode ? 'Create Clone' : (isEditMode ? 'Save Changes' : 'Create Validation')}
               </Button>
             </div>
           </form>

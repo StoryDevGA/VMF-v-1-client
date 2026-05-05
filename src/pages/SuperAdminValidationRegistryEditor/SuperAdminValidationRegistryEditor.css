@@ -41,6 +41,15 @@
   flex-wrap: wrap;
 }
 
+.super-admin-validation-registry-editor__edit-fieldset {
+  display: grid;
+  gap: var(--spacing-md);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .super-admin-validation-registry-editor__row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -129,6 +138,35 @@
 
 .super-admin-validation-registry-editor__summary-meta {
   align-self: center;
+}
+
+.super-admin-validation-registry-editor__lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+}
+
+.super-admin-validation-registry-editor__lock-copy,
+.super-admin-validation-registry-editor__lock-packages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.super-admin-validation-registry-editor__lock-copy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.super-admin-validation-registry-editor__lock-copy strong {
+  color: var(--color-text-primary);
 }
 
 .super-admin-validation-registry-editor__warning-panel {

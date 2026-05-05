@@ -1,4 +1,5 @@
 export const VALIDATION_REGISTRY_STATUSES = Object.freeze({
+  DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   DEPRECATED: 'DEPRECATED',
@@ -54,6 +55,12 @@ export const VALIDATION_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
   'resultType',
   'passFieldPath',
   'detailsFieldPath',
+  'messageFieldPath',
+  'parameterSchema',
+  'defaultParameters',
+  'retryPolicy.maxAttempts',
+  'retryPolicy.retryableErrorCodes',
+  'retryPolicy.backoffSeconds',
   'freshnessDefaultMinutes',
   'blockingDefault',
   'warningOnlyDefault',
@@ -92,6 +99,7 @@ export const VALIDATION_REGISTRY_EXECUTION_MODE_OPTIONS = Object.freeze(
 
 export const getValidationRegistryStatusVariant = (value) => {
   const normalized = String(value || '').trim().toUpperCase()
+  if (normalized === VALIDATION_REGISTRY_STATUSES.DRAFT) return 'warning'
   if (normalized === VALIDATION_REGISTRY_STATUSES.ACTIVE) return 'success'
   if (normalized === VALIDATION_REGISTRY_STATUSES.INACTIVE) return 'warning'
   if (normalized === VALIDATION_REGISTRY_STATUSES.DEPRECATED) return 'danger'
@@ -118,6 +126,20 @@ export const cloneValidationRegistryEntry = (entry = {}) => ({
   resultType: String(entry.resultType ?? '').trim().toUpperCase(),
   passFieldPath: String(entry.passFieldPath ?? '').trim(),
   detailsFieldPath: String(entry.detailsFieldPath ?? '').trim(),
+  messageFieldPath: String(entry.messageFieldPath ?? '').trim(),
+  parameterSchema: entry.parameterSchema && typeof entry.parameterSchema === 'object' && !Array.isArray(entry.parameterSchema)
+    ? JSON.parse(JSON.stringify(entry.parameterSchema))
+    : {},
+  defaultParameters: entry.defaultParameters && typeof entry.defaultParameters === 'object' && !Array.isArray(entry.defaultParameters)
+    ? JSON.parse(JSON.stringify(entry.defaultParameters))
+    : {},
+  retryPolicy: {
+    maxAttempts: Number(entry.retryPolicy?.maxAttempts ?? 1) || 1,
+    retryableErrorCodes: Array.isArray(entry.retryPolicy?.retryableErrorCodes)
+      ? [...entry.retryPolicy.retryableErrorCodes]
+      : [],
+    backoffSeconds: Number(entry.retryPolicy?.backoffSeconds ?? 0) || 0,
+  },
   policyUsable: Boolean(entry.policyUsable),
   packageUsable: Boolean(entry.packageUsable),
   requiresLatestRun: Boolean(entry.requiresLatestRun),
@@ -127,6 +149,17 @@ export const cloneValidationRegistryEntry = (entry = {}) => ({
   allowManualRun: entry.allowManualRun === undefined ? true : Boolean(entry.allowManualRun),
   executionMode: String(entry.executionMode ?? VALIDATION_REGISTRY_EXECUTION_MODES.SYNC).trim().toUpperCase(),
   version: Number(entry.version ?? 1) || 1,
+  componentVersion: Number(entry.componentVersion ?? entry.version ?? 1) || 1,
+  versionStatus: String(entry.versionStatus ?? entry.status ?? '').trim().toUpperCase(),
+  lineageId: String(entry.lineageId ?? entry.id ?? '').trim(),
+  isLocked: Boolean(entry.isLocked),
+  lockedAt: entry.lockedAt ?? null,
+  lockedBy: entry.lockedBy ?? null,
+  lockedReason: String(entry.lockedReason ?? '').trim(),
+  lockedByPackageKeys: Array.isArray(entry.lockedByPackageKeys) ? [...entry.lockedByPackageKeys] : [],
+  clonedFromStableId: entry.clonedFromStableId ?? null,
+  supersedesStableId: entry.supersedesStableId ?? null,
+  supersededByStableId: entry.supersededByStableId ?? null,
   createdAt: entry.createdAt ?? null,
   updatedAt: entry.updatedAt ?? null,
   createdBy: entry.createdBy ?? null,
@@ -192,6 +225,7 @@ export const validateValidationRegistryForm = (form = {}, { isEditMode = false }
   const outputPath = String(form.outputPath ?? '').trim()
   const passFieldPath = String(form.passFieldPath ?? '').trim()
   const detailsFieldPath = String(form.detailsFieldPath ?? '').trim()
+  const messageFieldPath = String(form.messageFieldPath ?? '').trim()
 
   if (outputPath && passFieldPath && !passFieldPath.startsWith(`${outputPath}.`)) {
     errors.passFieldPath = 'Pass Field Path must be inside the selected Output Path.'
@@ -199,6 +233,37 @@ export const validateValidationRegistryForm = (form = {}, { isEditMode = false }
 
   if (outputPath && detailsFieldPath && !detailsFieldPath.startsWith(`${outputPath}.`)) {
     errors.detailsFieldPath = 'Details Field Path must be inside the selected Output Path.'
+  }
+
+  if (outputPath && messageFieldPath && !messageFieldPath.startsWith(`${outputPath}.`)) {
+    errors.messageFieldPath = 'Message Field Path must be inside the selected Output Path.'
+  }
+
+  const parameterSchema = form.parameterSchema
+  if (
+    parameterSchema !== undefined
+    && parameterSchema !== null
+    && (typeof parameterSchema !== 'object' || Array.isArray(parameterSchema))
+  ) {
+    errors.parameterSchema = 'Parameter Schema must be a JSON object.'
+  }
+
+  const defaultParameters = form.defaultParameters
+  if (
+    defaultParameters === null
+    || (defaultParameters !== undefined && (typeof defaultParameters !== 'object' || Array.isArray(defaultParameters)))
+  ) {
+    errors.defaultParameters = 'Default Parameters must be a JSON object.'
+  }
+
+  const maxAttempts = Number(form.retryPolicy?.maxAttempts ?? 1)
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+    errors['retryPolicy.maxAttempts'] = 'Max Attempts must be a whole number from 1 to 10.'
+  }
+
+  const backoffSeconds = Number(form.retryPolicy?.backoffSeconds ?? 0)
+  if (!Number.isInteger(backoffSeconds) || backoffSeconds < 0 || backoffSeconds > 3600) {
+    errors['retryPolicy.backoffSeconds'] = 'Backoff Seconds must be a whole number from 0 to 3600.'
   }
 
   const blockingDefault = Boolean(form.blockingDefault)

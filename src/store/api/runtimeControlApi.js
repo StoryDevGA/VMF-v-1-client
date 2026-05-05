@@ -580,9 +580,9 @@ const validateMockPathDescendant = (outputPath, fieldPath, fieldLabel) => {
   return `${fieldLabel} must be inside the selected Output Path.`
 }
 
-const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, detailsFieldPath } = {}) => {
+const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, detailsFieldPath, messageFieldPath } = {}) => {
   const errors = {}
-  const paths = [outputPath, passFieldPath, detailsFieldPath].filter(Boolean)
+  const paths = [outputPath, passFieldPath, detailsFieldPath, messageFieldPath].filter(Boolean)
   const summaries = buildMockValidationRuntimePathSummaries(paths)
   const allowedValidationPathScopes = new Set(['VALIDATION_RESULT', 'FRAMEWORK_STATE'])
 
@@ -591,6 +591,7 @@ const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, details
       if (summary.pathKey === outputPath) errors.outputPath = `Unknown runtime path "${summary.pathKey}".`
       else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Unknown runtime path "${summary.pathKey}".`
       else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Unknown runtime path "${summary.pathKey}".`
+      else if (summary.pathKey === messageFieldPath) errors.messageFieldPath = `Unknown runtime path "${summary.pathKey}".`
       continue
     }
 
@@ -598,6 +599,7 @@ const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, details
       if (summary.pathKey === outputPath) errors.outputPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
       else if (summary.pathKey === passFieldPath) errors.passFieldPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
       else if (summary.pathKey === detailsFieldPath) errors.detailsFieldPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
+      else if (summary.pathKey === messageFieldPath) errors.messageFieldPath = `Runtime path "${summary.pathKey}" must be a validation-compatible path.`
     }
   }
 
@@ -606,6 +608,9 @@ const validateMockValidationRuntimePaths = ({ outputPath, passFieldPath, details
 
   const detailsErr = validateMockPathDescendant(outputPath, detailsFieldPath, 'Details Field Path')
   if (detailsErr) errors.detailsFieldPath = detailsErr
+
+  const messageErr = validateMockPathDescendant(outputPath, messageFieldPath, 'Message Field Path')
+  if (messageErr) errors.messageFieldPath = messageErr
 
   return errors
 }
@@ -2443,7 +2448,7 @@ const findRuntimeSkillById = (skillId) =>
   runtimeControlState.skills.find((skill) => skill.id === skillId)
 
 const findValidationRegistryById = (validationId) =>
-  runtimeControlState.validationRegistry.find((row) => row.id === validationId)
+  runtimeControlState.validationRegistry.find((row) => row.id === validationId || row.key === validationId)
 
 const findSkillRoleById = (roleId) =>
   runtimeControlState.skillRoles.find((role) => role.id === roleId)
@@ -4869,6 +4874,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           outputPath: String(runtimePayload.outputPath ?? '').trim(),
           passFieldPath: String(runtimePayload.passFieldPath ?? '').trim(),
           detailsFieldPath: String(runtimePayload.detailsFieldPath ?? '').trim(),
+          messageFieldPath: String(runtimePayload.messageFieldPath ?? '').trim(),
           supportedFrameworkKeys: runtimePayload.supportedFrameworkKeys,
         })
         if (Object.keys(pathErrors).length > 0) {
@@ -4892,6 +4898,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           resultType: String(runtimePayload.resultType ?? '').trim().toUpperCase(),
           passFieldPath: String(runtimePayload.passFieldPath ?? '').trim(),
           detailsFieldPath: String(runtimePayload.detailsFieldPath ?? '').trim(),
+          messageFieldPath: String(runtimePayload.messageFieldPath ?? '').trim(),
+          parameterSchema: runtimePayload.parameterSchema && typeof runtimePayload.parameterSchema === 'object'
+            ? runtimePayload.parameterSchema
+            : {},
+          defaultParameters: runtimePayload.defaultParameters && typeof runtimePayload.defaultParameters === 'object'
+            ? runtimePayload.defaultParameters
+            : {},
+          retryPolicy: runtimePayload.retryPolicy && typeof runtimePayload.retryPolicy === 'object'
+            ? runtimePayload.retryPolicy
+            : { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 },
           policyUsable: runtimePayload.policyUsable === undefined ? true : Boolean(runtimePayload.policyUsable),
           packageUsable: runtimePayload.packageUsable === undefined ? true : Boolean(runtimePayload.packageUsable),
           requiresLatestRun: Boolean(runtimePayload.requiresLatestRun),
@@ -4912,6 +4928,89 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         return { data: buildEntityResponse(cloneValidationRegistryEntry(created)) }
       },
       invalidatesTags: [VALIDATION_REGISTRY_LIST_TAG],
+    }),
+
+    cloneValidationRegistry: build.mutation({
+      queryFn: async ({ validationId, body = {} } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'validation-registry',
+              entityId: `${validationId}/clone`,
+              method: 'POST',
+              body,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const source = findValidationRegistryById(validationId)
+        if (!source) {
+          return buildNotFoundError('Validation was not found.')
+        }
+
+        const key = String(body.key ?? '').trim().toLowerCase()
+        const duplicate = runtimeControlState.validationRegistry.some((row) => row.key === key)
+        if (duplicate) {
+          return buildConflictError('Validation key must be unique.', {
+            field: 'key',
+            reason: 'VALIDATION_REGISTRY_KEY_CONFLICT',
+          })
+        }
+
+        const now = new Date().toISOString()
+        const sourceStableId = source.id
+        const clone = cloneValidationRegistryEntry({
+          ...source,
+          id: buildValidationRegistryStableId(key),
+          key,
+          label: String(body.label ?? '').trim(),
+          description: body.description === undefined
+            ? source.description
+            : String(body.description ?? '').trim(),
+          status: VALIDATION_REGISTRY_STATUSES.DRAFT,
+          version: Number(source.version ?? 1) + 1,
+          componentVersion: Number(source.componentVersion ?? source.version ?? 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: source.lineageId || sourceStableId,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+          updatedBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+        })
+        const updatedSource = cloneValidationRegistryEntry({
+          ...source,
+          supersededByStableId: clone.id,
+          updatedAt: now,
+          updatedBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          validationRegistry: [
+            clone,
+            ...runtimeControlState.validationRegistry.map((row) =>
+              row.id === source.id ? updatedSource : row,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(cloneValidationRegistryEntry(clone)) }
+      },
+      invalidatesTags: (_result, _error, { validationId } = {}) => [
+        VALIDATION_REGISTRY_LIST_TAG,
+        { type: 'ValidationRegistry', id: validationId },
+        { type: 'ValidationRegistryDependencies', id: validationId },
+      ],
     }),
 
     getValidationRegistry: build.query({
@@ -4956,6 +5055,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Validation was not found.')
         }
 
+        if (existing.isLocked === true) {
+          return buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+            field: 'isLocked',
+            reason: 'VALIDATION_REGISTRY_LOCKED',
+            lockedByPackageKeys: Array.isArray(existing.lockedByPackageKeys) ? existing.lockedByPackageKeys : [],
+          })
+        }
+
         if (payload.key !== undefined) {
           const nextKey = String(payload.key ?? '').trim().toLowerCase()
           const currentKey = String(existing.key ?? '').trim().toLowerCase()
@@ -4980,6 +5087,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const nextOutputPath = String(payload.outputPath ?? existing.outputPath ?? '').trim()
         const nextPassFieldPath = String(payload.passFieldPath ?? existing.passFieldPath ?? '').trim()
         const nextDetailsFieldPath = String(payload.detailsFieldPath ?? existing.detailsFieldPath ?? '').trim()
+        const nextMessageFieldPath = String(payload.messageFieldPath ?? existing.messageFieldPath ?? '').trim()
 
         if (payload.defaultAgentIds !== undefined || payload.supportedFrameworkKeys !== undefined || payload.status !== undefined) {
           const defaultAgentErrors = validateMockValidationRegistryDefaultAgents({
@@ -5007,11 +5115,12 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           }
         }
 
-        if (payload.outputPath !== undefined || payload.passFieldPath !== undefined || payload.detailsFieldPath !== undefined) {
+        if (payload.outputPath !== undefined || payload.passFieldPath !== undefined || payload.detailsFieldPath !== undefined || payload.messageFieldPath !== undefined) {
           const pathErrors = validateMockValidationRuntimePaths({
             outputPath: nextOutputPath,
             passFieldPath: nextPassFieldPath,
             detailsFieldPath: nextDetailsFieldPath,
+            messageFieldPath: nextMessageFieldPath,
             supportedFrameworkKeys: nextSupportedFrameworkKeys,
           })
           if (Object.keys(pathErrors).length > 0) {
@@ -5039,6 +5148,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ...(payload.resultType !== undefined ? { resultType: String(payload.resultType ?? '').trim().toUpperCase() } : {}),
           ...(payload.passFieldPath !== undefined ? { passFieldPath: String(payload.passFieldPath ?? '').trim() } : {}),
           ...(payload.detailsFieldPath !== undefined ? { detailsFieldPath: String(payload.detailsFieldPath ?? '').trim() } : {}),
+          ...(payload.messageFieldPath !== undefined ? { messageFieldPath: String(payload.messageFieldPath ?? '').trim() } : {}),
+          ...(payload.parameterSchema !== undefined ? { parameterSchema: payload.parameterSchema && typeof payload.parameterSchema === 'object' ? payload.parameterSchema : {} } : {}),
+          ...(payload.defaultParameters !== undefined ? { defaultParameters: payload.defaultParameters && typeof payload.defaultParameters === 'object' ? payload.defaultParameters : {} } : {}),
+          ...(payload.retryPolicy !== undefined ? { retryPolicy: payload.retryPolicy && typeof payload.retryPolicy === 'object' ? payload.retryPolicy : { maxAttempts: 1, retryableErrorCodes: [], backoffSeconds: 0 } } : {}),
           ...(payload.policyUsable !== undefined ? { policyUsable: Boolean(payload.policyUsable) } : {}),
           ...(payload.packageUsable !== undefined ? { packageUsable: Boolean(payload.packageUsable) } : {}),
           ...(payload.requiresLatestRun !== undefined ? { requiresLatestRun: Boolean(payload.requiresLatestRun) } : {}),
@@ -5054,7 +5167,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         runtimeControlState = {
           ...runtimeControlState,
           validationRegistry: runtimeControlState.validationRegistry.map((row) =>
-            row.id === validationId ? next : row,
+            row.id === validationId || row.key === validationId ? next : row,
           ),
         }
 
@@ -5088,6 +5201,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           validation.outputPath,
           validation.passFieldPath,
           validation.detailsFieldPath,
+          validation.messageFieldPath,
         ])
         const defaultAgents = buildMockValidationDefaultAgentSummaries(
           validation.defaultAgentIds,
@@ -5640,6 +5754,7 @@ export const {
   useListValidationRegistryQuery,
   useLazyListValidationRegistryQuery,
   useCreateValidationRegistryMutation,
+  useCloneValidationRegistryMutation,
   useGetValidationRegistryQuery,
   useUpdateValidationRegistryMutation,
   useGetValidationRegistryDependenciesQuery,

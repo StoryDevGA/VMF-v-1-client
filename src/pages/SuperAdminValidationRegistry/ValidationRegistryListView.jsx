@@ -9,6 +9,11 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { Tooltip } from '../../components/Tooltip'
+import {
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import {
   formatValidationRegistryStatus,
   getValidationRegistryStatusVariant,
@@ -20,16 +25,35 @@ import {
 } from './superAdminValidationRegistry.constants.js'
 import './ValidationRegistryListView.css'
 
+function TruncatedText({ value, className = '', mono = false }) {
+  const text = String(value || '--')
+  const classes = [
+    'super-admin-validation-registry__truncated-text',
+    mono ? 'super-admin-validation-registry__truncated-text--mono' : '',
+    className,
+  ].filter(Boolean).join(' ')
+
+  return (
+    <Tooltip content={text} position="top" align="start" className="super-admin-validation-registry__truncated-tooltip">
+      <span className={classes} title={text}>
+        {text}
+      </span>
+    </Tooltip>
+  )
+}
+
 function ValidationRowActionsMenu({ row, onAction, disabled = false }) {
+  const isLocked = Boolean(row.isLocked)
   const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    ...(row.status !== VALIDATION_REGISTRY_STATUSES.ACTIVE
+    ...(!isLocked ? [{ value: 'Edit', label: 'Edit' }] : []),
+    { value: 'Clone', label: 'Clone' },
+    ...(!isLocked && row.status !== VALIDATION_REGISTRY_STATUSES.ACTIVE
       ? [{ value: 'Set Active', label: 'Set Active' }]
       : []),
-    ...(row.status !== VALIDATION_REGISTRY_STATUSES.INACTIVE
+    ...(!isLocked && row.status !== VALIDATION_REGISTRY_STATUSES.INACTIVE
       ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
       : []),
-    ...(row.status !== VALIDATION_REGISTRY_STATUSES.DEPRECATED
+    ...(!isLocked && row.status !== VALIDATION_REGISTRY_STATUSES.DEPRECATED
       ? [{ value: 'Set Deprecated', label: 'Set Deprecated' }]
       : []),
   ]
@@ -57,8 +81,31 @@ function ValidationRowActionsMenu({ row, onAction, disabled = false }) {
 function renderValidationSummary(_value, row) {
   return (
     <div className="super-admin-validation-registry__validation-summary">
-      <span className="super-admin-validation-registry__validation-label">{row.label || '--'}</span>
-      <span className="super-admin-validation-registry__validation-key">{row.key || '--'}</span>
+      <TruncatedText value={row.label || '--'} className="super-admin-validation-registry__validation-label" />
+      <TruncatedText value={row.key || '--'} className="super-admin-validation-registry__validation-key" mono />
+    </div>
+  )
+}
+
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row.componentVersion ?? row.version ?? 1) || 1
+  const versionStatus = row.versionStatus ?? row.status
+
+  return (
+    <div className="super-admin-validation-registry__version-summary">
+      <span className="super-admin-validation-registry__version-text">v{componentVersion}</span>
+      <Status
+        size="sm"
+        showIcon
+        variant={getRuntimeControlVersionStatusVariant(versionStatus)}
+      >
+        {formatRuntimeControlVersionStatus(versionStatus)}
+      </Status>
+      {row.isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -86,12 +133,17 @@ export function ValidationRegistryListView({
   onBackClick,
   onCreateClick,
   onEditClick,
+  onCloneClick,
   setValidationStatus,
   isMutating,
 }) {
   const handleRowAction = useCallback((label, row) => {
     if (label === 'Edit') {
       onEditClick(row)
+    }
+
+    if (label === 'Clone') {
+      onCloneClick(row)
     }
 
     if (label === 'Set Active') {
@@ -105,7 +157,7 @@ export function ValidationRegistryListView({
     if (label === 'Set Deprecated') {
       setValidationStatus(row, VALIDATION_REGISTRY_STATUSES.DEPRECATED)
     }
-  }, [onEditClick, setValidationStatus])
+  }, [onCloneClick, onEditClick, setValidationStatus])
 
   const columns = useMemo(() => [
     {
@@ -141,14 +193,14 @@ export function ValidationRegistryListView({
       label: 'Category',
       mobileLabel: 'Category',
       width: '160px',
-      render: (value) => value || '--',
+      render: (value) => <TruncatedText value={value || '--'} className="super-admin-validation-registry__table-token" />,
     },
     {
       key: 'severity',
       label: 'Severity',
       mobileLabel: 'Severity',
       width: '160px',
-      render: (value) => value || '--',
+      render: (value) => <TruncatedText value={value || '--'} className="super-admin-validation-registry__table-token" />,
     },
     {
       key: 'status',
@@ -161,6 +213,13 @@ export function ValidationRegistryListView({
           {formatValidationRegistryStatus(value)}
         </Status>
       ),
+    },
+    {
+      key: 'version',
+      label: 'Version',
+      mobileLabel: 'Version',
+      width: '136px',
+      render: renderVersionSummary,
     },
     {
       key: 'updatedAt',

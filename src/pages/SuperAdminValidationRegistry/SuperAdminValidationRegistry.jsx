@@ -35,6 +35,10 @@ function SuperAdminValidationRegistry() {
     navigate(`/super-admin/runtime-control/validation-registry/${row.id}`)
   }, [navigate])
 
+  const handleCloneClick = useCallback((row) => {
+    navigate(`/super-admin/runtime-control/validation-registry/new?cloneFrom=${encodeURIComponent(row.id)}`)
+  }, [navigate])
+
   const commitStatus = useCallback(async (row, nextStatus) => {
     try {
       const res = await updateValidation({
@@ -123,6 +127,7 @@ function SuperAdminValidationRegistry() {
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
+        onCloneClick={handleCloneClick}
         setValidationStatus={setValidationStatus}
         isMutating={isUpdating}
       />
