@@ -246,6 +246,7 @@ export const cloneUIContract = (contract = {}) => ({
   clonedFromStableId: contract.clonedFromStableId ?? null,
   supersedesStableId: contract.supersedesStableId ?? null,
   supersededByStableId: contract.supersededByStableId ?? null,
+  resolvedAt: contract.resolvedAt ?? contract.updatedAt ?? contract.createdAt ?? null,
   createdAt: contract.createdAt ?? null,
   updatedAt: contract.updatedAt ?? null,
   createdBy: contract.createdBy ?? null,
@@ -489,6 +490,8 @@ export const INITIAL_UI_CONTRACTS = Object.freeze([
     sourcePackageKey: 'vmf-2-3-1',
     sourcePackageVersion: '2.3.1',
     sourceFrameworkKey: 'VMF',
+    // UI Contract table rendering needs at least one of resolvedAt, updatedAt, or createdAt.
+    resolvedAt: '2026-04-29T07:45:00.000Z',
     sections: [
       {
         sectionKey: 'customer_problem',

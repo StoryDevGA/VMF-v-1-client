@@ -594,6 +594,8 @@ describe('runtimeControlApi', () => {
     expect(cloneResult.data?.data?.versionStatus).toBe('DRAFT')
     expect(cloneResult.data?.data?.isLocked).toBe(false)
     expect(cloneResult.data?.data?.clonedFromStableId).toBe('ui-contract-vmf-ui-contract-v1')
+    expect(new Date(cloneResult.data?.data?.resolvedAt).toISOString()).toBe(cloneResult.data?.data?.resolvedAt)
+    expect(cloneResult.data?.data?.resolvedAt).toBe(cloneResult.data?.data?.updatedAt)
 
     const immutableKeyResult = await store.dispatch(
       runtimeControlApi.endpoints.updateUiContract.initiate({
@@ -603,6 +605,15 @@ describe('runtimeControlApi', () => {
     )
     expect(immutableKeyResult.error?.status).toBe(422)
     expect(immutableKeyResult.error?.data?.error?.details?.uiContractKey).toContain('server-managed governance metadata')
+
+    const resolvedAtResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateUiContract.initiate({
+        uiContractId: 'ui-contract-vmf-ui-contract-v1',
+        resolvedAt: '2026-04-29T08:00:00.000Z',
+      }),
+    )
+    expect(resolvedAtResult.error?.status).toBe(422)
+    expect(resolvedAtResult.error?.data?.error?.details?.resolvedAt).toContain('server-managed governance metadata')
 
     __mutateRuntimeControlApiStateForTests((state) => ({
       ...state,

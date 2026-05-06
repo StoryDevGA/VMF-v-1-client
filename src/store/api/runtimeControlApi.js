@@ -448,6 +448,7 @@ const UI_CONTRACT_GOVERNANCE_FIELDS = Object.freeze([
   'clonedFromStableId',
   'supersedesStableId',
   'supersededByStableId',
+  'resolvedAt',
 ])
 
 const buildUIContractLockedConflictError = (uiContract = {}) =>
@@ -488,6 +489,10 @@ const validateMockDeprecatedFrameworkPackageFields = (payload = {}) => {
 const buildAuditFields = (timestamp = new Date().toISOString()) => ({
   updatedAt: timestamp,
   updatedBy: { ...RUNTIME_CONTROL_UPDATED_BY },
+})
+
+const buildUIContractResolutionFields = (timestamp = new Date().toISOString()) => ({
+  resolvedAt: timestamp,
 })
 
 const buildInitialRuntimeControlState = () => ({
@@ -2729,6 +2734,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const createdTimestamp = new Date().toISOString()
         const created = cloneUIContract({
           id: `ui-contract-${String(payload.uiContractKey ?? '').trim().toLowerCase()}`,
           ...payload,
@@ -2744,7 +2750,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           clonedFromStableId: null,
           supersedesStableId: null,
           supersededByStableId: null,
-          ...buildAuditFields(),
+          ...buildUIContractResolutionFields(createdTimestamp),
+          ...buildAuditFields(createdTimestamp),
         })
         created.lineageId = created.lineageId || created.id
         runtimeControlState = {
@@ -2789,6 +2796,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const sourceStableId = source.id
+        const cloneTimestamp = new Date().toISOString()
         const clone = cloneUIContract({
           ...source,
           id: `ui-contract-${nextKey}`,
@@ -2809,7 +2817,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           clonedFromStableId: sourceStableId,
           supersedesStableId: sourceStableId,
           supersededByStableId: null,
-          ...buildAuditFields(),
+          ...buildUIContractResolutionFields(cloneTimestamp),
+          ...buildAuditFields(cloneTimestamp),
         })
         const supersededSource = cloneUIContract({
           ...source,
@@ -2881,7 +2890,14 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         if (existing.isLocked || existing.isProtected) {
           return buildUIContractLockedConflictError(existing)
         }
-        const next = cloneUIContract({ ...existing, ...payload, uiContractKey: existing.uiContractKey, ...buildAuditFields() })
+        const updateTimestamp = new Date().toISOString()
+        const next = cloneUIContract({
+          ...existing,
+          ...payload,
+          uiContractKey: existing.uiContractKey,
+          ...buildUIContractResolutionFields(updateTimestamp),
+          ...buildAuditFields(updateTimestamp),
+        })
         runtimeControlState = {
           ...runtimeControlState,
           uiContracts: runtimeControlState.uiContracts.map((contract) =>

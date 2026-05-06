@@ -26,6 +26,7 @@ const defaultListResult = {
         frameworkKeys: ['VMF'],
         sections: [{ sectionKey: 'customer_problem' }],
         actions: [{ actionKey: 'SUBMIT_FOR_REVIEW' }],
+        resolvedAt: '2026-04-29T07:45:00.000Z',
         updatedAt: '2026-04-29T08:00:00.000Z',
       },
       {
@@ -38,6 +39,7 @@ const defaultListResult = {
         frameworkKeys: ['VMF'],
         sections: [],
         actions: [],
+        resolvedAt: '2026-04-29T08:45:00.000Z',
         updatedAt: '2026-04-29T09:00:00.000Z',
       },
     ],
@@ -79,6 +81,7 @@ describe('SuperAdminUiContracts page', () => {
     expect(screen.getByText('vmf-ui-contract-v1')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Action Copy' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Resolved' })).toBeInTheDocument()
     expect(screen.getAllByRole('columnheader', { name: 'Actions' })).toHaveLength(1)
     expect(screen.getAllByLabelText('Status: DRAFT')[0]).toHaveClass('status--warning')
 

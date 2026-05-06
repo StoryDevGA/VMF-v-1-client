@@ -231,6 +231,13 @@ function SuperAdminUiContracts() {
         render: (value) => renderItemCount(value, 'action'),
       },
       {
+        key: 'resolvedAt',
+        label: 'Resolved',
+        mobileLabel: 'Resolved',
+        width: '132px',
+        render: (value) => <TableDateTime value={value} />,
+      },
+      {
         key: 'updatedAt',
         label: 'Updated',
         mobileLabel: 'Updated',
