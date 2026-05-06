@@ -593,6 +593,7 @@ describe('runtimeControlApi', () => {
     expect(cloneResult.data?.data?.componentVersion).toBe(2)
     expect(cloneResult.data?.data?.versionStatus).toBe('DRAFT')
     expect(cloneResult.data?.data?.isLocked).toBe(false)
+    expect(cloneResult.data?.data?.lockedReason).toBeNull()
     expect(cloneResult.data?.data?.clonedFromStableId).toBe('ui-contract-vmf-ui-contract-v1')
     expect(new Date(cloneResult.data?.data?.resolvedAt).toISOString()).toBe(cloneResult.data?.data?.resolvedAt)
     expect(cloneResult.data?.data?.resolvedAt).toBe(cloneResult.data?.data?.updatedAt)
@@ -769,6 +770,8 @@ describe('runtimeControlApi', () => {
     expect(cloneResult.data?.data?.componentVersion).toBe(2)
     expect(cloneResult.data?.data?.versionStatus).toBe('DRAFT')
     expect(cloneResult.data?.data?.isLocked).toBe(false)
+    expect(cloneResult.data?.data?.lockedReason).toBeNull()
+    expect(cloneResult.data?.data?.deprecatedInVersion).toBeNull()
     expect(cloneResult.data?.data?.lineageId).toBe(pathId)
     expect(cloneResult.data?.data?.clonedFromStableId).toBe(pathId)
 
@@ -789,6 +792,31 @@ describe('runtimeControlApi', () => {
     )
     expect(disableResult.error).toBeUndefined()
     expect(disableResult.data?.data?.status).toBe('INACTIVE')
+
+    const deprecateWithVersionResult = await store.dispatch(
+      runtimeControlApi.endpoints.deprecateRuntimePath.initiate({
+        pathId,
+        deprecatedInVersion: '9.9.9',
+      }),
+    )
+    expect(deprecateWithVersionResult.error).toBeUndefined()
+    expect(deprecateWithVersionResult.data?.data?.status).toBe('DEPRECATED')
+    expect(deprecateWithVersionResult.data?.data?.deprecatedInVersion).toBe('9.9.9')
+
+    const preserveDeprecatedVersionResult = await store.dispatch(
+      runtimeControlApi.endpoints.deprecateRuntimePath.initiate({ pathId }),
+    )
+    expect(preserveDeprecatedVersionResult.error).toBeUndefined()
+    expect(preserveDeprecatedVersionResult.data?.data?.deprecatedInVersion).toBe('9.9.9')
+
+    const clearDeprecatedVersionResult = await store.dispatch(
+      runtimeControlApi.endpoints.deprecateRuntimePath.initiate({
+        pathId,
+        deprecatedInVersion: '',
+      }),
+    )
+    expect(clearDeprecatedVersionResult.error).toBeUndefined()
+    expect(clearDeprecatedVersionResult.data?.data?.deprecatedInVersion).toBeNull()
   })
 
   it('keeps mock Runtime Path clone and lock behavior aligned with live API', async () => {

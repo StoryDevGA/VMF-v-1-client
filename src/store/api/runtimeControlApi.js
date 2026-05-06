@@ -2181,6 +2181,8 @@ const normalizeRuntimePathValueLabels = (value) => {
   }, {})
 }
 
+const normalizeRuntimePathNullableText = (value) => String(value ?? '').trim() || null
+
 const buildRuntimePathMockPayload = (payload = {}, existing = {}) => ({
   ...existing,
   ...(payload.pathKey !== undefined ? { pathKey: String(payload.pathKey ?? '').trim() } : {}),
@@ -2196,7 +2198,7 @@ const buildRuntimePathMockPayload = (payload = {}, existing = {}) => ({
   ...(payload.isProtected !== undefined ? { isProtected: Boolean(payload.isProtected) } : {}),
   ...(payload.isSystem !== undefined ? { isSystem: Boolean(payload.isSystem) } : {}),
   ...(payload.introducedInVersion !== undefined ? { introducedInVersion: String(payload.introducedInVersion ?? '').trim() } : {}),
-  ...(payload.deprecatedInVersion !== undefined ? { deprecatedInVersion: String(payload.deprecatedInVersion ?? '').trim() } : {}),
+  ...(payload.deprecatedInVersion !== undefined ? { deprecatedInVersion: normalizeRuntimePathNullableText(payload.deprecatedInVersion) } : {}),
   ...(payload.replacementPathKey !== undefined ? { replacementPathKey: String(payload.replacementPathKey ?? '').trim() } : {}),
   ...(payload.notes !== undefined ? { notes: String(payload.notes ?? '').trim() } : {}),
   ...(payload.displayOrder !== undefined && String(payload.displayOrder ?? '').trim() !== ''
@@ -2745,7 +2747,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           clonedFromStableId: null,
           supersedesStableId: null,
@@ -2809,7 +2811,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           componentVersion: (Number(source.componentVersion) || 1) + 1,
           versionStatus: 'DRAFT',
@@ -3689,7 +3691,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           clonedFromStableId: sourceStableId,
           supersedesStableId: sourceStableId,
@@ -4221,7 +4223,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           clonedFromStableId: sourceStableId,
           supersedesStableId: sourceStableId,
@@ -4646,7 +4648,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           clonedFromStableId: source.stableId || source.id,
           supersedesStableId: source.stableId || source.id,
@@ -4721,7 +4723,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           clonedFromStableId: source.stableId || source.id,
           supersedesStableId: source.stableId || source.id,
@@ -4872,14 +4874,23 @@ export const runtimeControlApi = baseApi.injectEndpoints({
     }),
 
     deprecateRuntimePath: build.mutation({
-      queryFn: async ({ pathId, deprecatedInVersion = '', confirmDependencies = false } = {}, api, extraOptions, baseQuery) => {
+      queryFn: async (args = {}, api, extraOptions, baseQuery) => {
+        const {
+          pathId,
+          confirmDependencies = false,
+        } = args
+        const hasDeprecatedInVersion = Object.prototype.hasOwnProperty.call(args, 'deprecatedInVersion')
+        const deprecatedInVersion = hasDeprecatedInVersion ? args.deprecatedInVersion : undefined
         if (!isRuntimeControlMockMode()) {
           return baseQuery(
             buildRuntimeControlMutationRequest({
               resourcePath: 'runtime-paths',
               entityId: `${pathId}/deprecate`,
               method: 'POST',
-              body: { deprecatedInVersion, confirmDependencies },
+              body: {
+                ...(hasDeprecatedInVersion ? { deprecatedInVersion } : {}),
+                confirmDependencies,
+              },
             }),
             api,
             extraOptions,
@@ -4903,7 +4914,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const next = cloneRuntimePathRegistryEntry({
           ...runtimePath,
           status: RUNTIME_PATH_REGISTRY_STATUSES.DEPRECATED,
-          deprecatedInVersion: String(deprecatedInVersion ?? '').trim() || runtimePath.deprecatedInVersion,
+          deprecatedInVersion: hasDeprecatedInVersion
+            ? normalizeRuntimePathNullableText(deprecatedInVersion)
+            : runtimePath.deprecatedInVersion,
           ...buildAuditFields(),
         })
 
