@@ -35,6 +35,10 @@ function SuperAdminSkillRoleRegistry() {
     navigate(`/super-admin/runtime-control/skill-roles/${row.id}`)
   }, [navigate])
 
+  const handleCloneClick = useCallback((row) => {
+    navigate(`/super-admin/runtime-control/skill-roles/new?cloneFrom=${encodeURIComponent(row.id)}`)
+  }, [navigate])
+
   const commitRoleStatus = useCallback(async (row, nextStatus) => {
     try {
       const res = await updateSkillRole({
@@ -123,6 +127,7 @@ function SuperAdminSkillRoleRegistry() {
         onBackClick={handleBackClick}
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
+        onCloneClick={handleCloneClick}
         setRoleStatus={setRoleStatus}
         isMutating={isUpdating}
       />

@@ -370,6 +370,13 @@ export function ValidationRegistryListView({
                 >
                   Previous
                 </Button>
+              </div>
+
+              <div className="super-admin-validation-registry__pagination-info">
+                Page {currentPage} of {totalPages}
+              </div>
+
+              <div className="super-admin-validation-registry__pagination-controls">
                 <Button
                   variant="outline"
                   size="sm"
@@ -386,10 +393,6 @@ export function ValidationRegistryListView({
                 >
                   Last
                 </Button>
-              </div>
-
-              <div className="super-admin-validation-registry__pagination-info">
-                Page {currentPage} of {totalPages}
               </div>
             </div>
           ) : null}

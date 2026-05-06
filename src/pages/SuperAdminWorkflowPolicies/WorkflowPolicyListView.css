@@ -86,9 +86,11 @@
   min-width: 1460px;
 }
 
-.super-admin-workflow-policies__table th,
-.super-admin-workflow-policies__table td {
-  padding-inline: var(--spacing-sm);
+@media (min-width: 768px) {
+  .super-admin-workflow-policies__table .table__header,
+  .super-admin-workflow-policies__table .table__cell {
+    padding-inline: var(--spacing-sm);
+  }
 }
 
 .super-admin-workflow-policies__pagination {
@@ -108,6 +110,46 @@
 @media (max-width: 1023px) {
   .super-admin-workflow-policies__toolbar {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .super-admin-workflow-policies__card-body--compact {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-workflow-policies__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .super-admin-workflow-policies__catalogue-actions > * {
+    width: 100%;
+  }
+
+  .super-admin-workflow-policies__table {
+    min-width: 0;
+  }
+
+  .super-admin-workflow-policies__table-wrap {
+    overflow: visible;
+  }
+
+  .super-admin-workflow-policies__pagination {
+    align-items: stretch;
+  }
+
+  .super-admin-workflow-policies__pagination-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .super-admin-workflow-policies__pagination-controls > * {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .super-admin-workflow-policies__pagination-info {
+    text-align: center;
+    width: 100%;
   }
 }
 

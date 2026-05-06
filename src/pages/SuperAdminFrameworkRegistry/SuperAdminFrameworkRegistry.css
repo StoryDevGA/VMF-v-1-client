@@ -40,6 +40,7 @@
 
 .super-admin-framework-registry__card-body--compact {
   gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
 }
 
 .super-admin-framework-registry__catalogue-actions,
@@ -59,13 +60,19 @@
 }
 
 .super-admin-framework-registry__toolbar {
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
+}
+
+.super-admin-framework-registry__toolbar > * {
+  min-width: 0;
 }
 
 .super-admin-framework-registry__table-note,
 .super-admin-framework-registry__error,
-.super-admin-framework-registry__muted {
+.super-admin-framework-registry__muted,
+.super-admin-framework-registry__pagination-info {
   margin: 0;
   color: var(--color-text-secondary);
 }
@@ -75,7 +82,19 @@
 }
 
 .super-admin-framework-registry__table-wrap {
+  margin-top: 0;
   min-width: 0;
+}
+
+.super-admin-framework-registry__table {
+  min-width: 1120px;
+}
+
+@media (min-width: 768px) {
+  .super-admin-framework-registry__table .table__header,
+  .super-admin-framework-registry__table .table__cell {
+    padding-inline: var(--spacing-sm);
+  }
 }
 
 .super-admin-framework-registry__framework-summary {
@@ -152,12 +171,58 @@
 }
 
 .super-admin-framework-registry__row-actions {
-  display: inline-flex;
+  min-width: 120px;
+}
+
+@media (max-width: 1023px) {
+  .super-admin-framework-registry__toolbar {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1024px) {
   .super-admin-framework-registry__row,
   .super-admin-framework-registry__detail-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .super-admin-framework-registry__card-body--compact {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-framework-registry__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .super-admin-framework-registry__catalogue-actions > * {
+    width: 100%;
+  }
+
+  .super-admin-framework-registry__table {
+    min-width: 0;
+  }
+
+  .super-admin-framework-registry__table-wrap {
+    overflow: visible;
+  }
+
+  .super-admin-framework-registry__pagination {
+    align-items: stretch;
+  }
+
+  .super-admin-framework-registry__pagination-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .super-admin-framework-registry__pagination-controls > * {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .super-admin-framework-registry__pagination-info {
+    text-align: center;
+    width: 100%;
   }
 }

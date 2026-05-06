@@ -46,6 +46,10 @@ vi.mock('../../components/Toaster', () => ({
   useToaster: () => ({ addToast: addToastMock }),
 }))
 
+vi.mock('../../hooks/usePostSaveListRefreshState.js', () => ({
+  usePostSaveListRefreshState: () => false,
+}))
+
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useLazyGetSkillRoleDependenciesQuery: () => [
     fetchSkillRoleDependenciesMock,

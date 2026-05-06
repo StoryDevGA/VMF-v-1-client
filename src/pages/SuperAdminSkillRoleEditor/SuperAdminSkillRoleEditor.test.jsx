@@ -67,7 +67,7 @@ describe('SuperAdminSkillRoleEditor page', () => {
       expect(descriptionInput).toHaveValue('')
     })
 
-    expect(statusSelect).toHaveValue('ACTIVE')
+    expect(statusSelect).toHaveValue('DRAFT')
     expect(document.activeElement).toBe(roleKeyInput)
 
     rafSpy.mockRestore()
@@ -93,5 +93,33 @@ describe('SuperAdminSkillRoleEditor page', () => {
     expect(
       within(screen.getByRole('dialog')).getByText(/will block new assignments but will not remove existing references/i),
     ).toBeInTheDocument()
+  })
+
+  it('keeps clone forms editable when the source skill role is locked', async () => {
+    const user = userEvent.setup()
+
+    renderPage('/super-admin/runtime-control/skill-roles/new?cloneFrom=role-validator')
+
+    expect(await screen.findByRole('heading', { name: /^clone skill role$/i })).toBeInTheDocument()
+
+    const roleKeyInput = await screen.findByLabelText(/^role key/i, {
+      selector: 'input#skill-role-editor-role-key',
+    })
+    const labelInput = screen.getByLabelText(/^label/i, {
+      selector: 'input#skill-role-editor-label',
+    })
+    const statusSelect = screen.getByLabelText(/^status/i, {
+      selector: 'select#skill-role-editor-status',
+    })
+
+    expect(roleKeyInput).toBeEnabled()
+    expect(labelInput).toBeEnabled()
+    expect(statusSelect).toBeEnabled()
+    expect(screen.queryByText(/referenced by validated or active framework packages/i)).not.toBeInTheDocument()
+
+    await user.clear(roleKeyInput)
+    await user.type(roleKeyInput, 'VALIDATOR_CLONE_FOR_TEST')
+
+    expect(screen.getByRole('button', { name: /^save clone$/i })).toBeEnabled()
   })
 })

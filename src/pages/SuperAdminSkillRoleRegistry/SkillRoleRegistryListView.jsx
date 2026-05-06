@@ -9,6 +9,11 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { Tooltip } from '../../components/Tooltip'
+import {
+  formatRuntimeControlVersionStatus,
+  getRuntimeControlVersionStatusVariant,
+} from '../SuperAdminRuntimePathRegistry/superAdminRuntimePathRegistry.constants.js'
 import {
   formatSkillRoleRegistryStatus,
   getSkillRoleRegistryStatusVariant,
@@ -20,15 +25,17 @@ import {
 import './SkillRoleRegistryListView.css'
 
 function SkillRoleRowActionsMenu({ row, onAction, disabled = false }) {
+  const isLocked = Boolean(row.isLocked)
   const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    ...(row.status !== SKILL_ROLE_REGISTRY_STATUSES.ACTIVE
+    ...(!isLocked ? [{ value: 'Edit', label: 'Edit' }] : []),
+    { value: 'Clone', label: 'Clone' },
+    ...(!isLocked && row.status !== SKILL_ROLE_REGISTRY_STATUSES.ACTIVE
       ? [{ value: 'Set Active', label: 'Set Active' }]
       : []),
-    ...(row.status !== SKILL_ROLE_REGISTRY_STATUSES.INACTIVE
+    ...(!isLocked && row.status !== SKILL_ROLE_REGISTRY_STATUSES.INACTIVE
       ? [{ value: 'Set Inactive', label: 'Set Inactive' }]
       : []),
-    ...(row.status !== SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
+    ...(!isLocked && row.status !== SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED
       ? [{ value: 'Set Deprecated', label: 'Set Deprecated' }]
       : []),
   ]
@@ -53,18 +60,57 @@ function SkillRoleRowActionsMenu({ row, onAction, disabled = false }) {
   )
 }
 
+function TruncatedText({ children, className = '' }) {
+  const text = String(children ?? '').trim()
+  if (!text) {
+    return <span className={className}>--</span>
+  }
+
+  return (
+    <Tooltip
+      content={text}
+      position="top"
+      align="start"
+      className="super-admin-skill-role-registry__truncated-tooltip"
+    >
+      <span className={`super-admin-skill-role-registry__truncated-text ${className}`} title={text}>
+        {text}
+      </span>
+    </Tooltip>
+  )
+}
+
 function renderRoleSummary(_value, row) {
   return (
     <div className="super-admin-skill-role-registry__role-summary">
       <div className="super-admin-skill-role-registry__role-heading">
-        <span className="super-admin-skill-role-registry__role-label">{row.label}</span>
+        <TruncatedText className="super-admin-skill-role-registry__role-label">{row.label}</TruncatedText>
         {row.isSystem ? (
           <Badge variant="info" size="sm" pill>
             SYSTEM
           </Badge>
         ) : null}
       </div>
-      <code className="super-admin-skill-role-registry__role-key">{row.roleKey}</code>
+      <TruncatedText className="super-admin-skill-role-registry__role-key">{row.roleKey}</TruncatedText>
+    </div>
+  )
+}
+
+function renderVersionSummary(_value, row) {
+  const componentVersion = Number(row.componentVersion) || 1
+  const versionStatus = row.versionStatus || row.status || 'DRAFT'
+
+  return (
+    <div className="super-admin-skill-role-registry__version-summary">
+      <span className="super-admin-skill-role-registry__version-text">v{componentVersion}</span>
+      <Status size="sm" showIcon variant={getRuntimeControlVersionStatusVariant(versionStatus)}>
+        {formatRuntimeControlVersionStatus(versionStatus)}
+      </Status>
+      {row.isLocked ? (
+        <Badge variant="warning" size="sm" pill outline>
+          Locked
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -87,6 +133,7 @@ export function SkillRoleRegistryListView({
   onBackClick,
   onCreateClick,
   onEditClick,
+  onCloneClick = () => {},
   setRoleStatus,
   isMutating,
 }) {
@@ -94,6 +141,10 @@ export function SkillRoleRegistryListView({
     (label, row) => {
       if (label === 'Edit') {
         onEditClick(row)
+      }
+
+      if (label === 'Clone') {
+        onCloneClick(row)
       }
 
       if (label === 'Set Active') {
@@ -108,7 +159,7 @@ export function SkillRoleRegistryListView({
         setRoleStatus(row, SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED)
       }
     },
-    [onEditClick, setRoleStatus],
+    [onCloneClick, onEditClick, setRoleStatus],
   )
 
   const columns = useMemo(
@@ -124,7 +175,21 @@ export function SkillRoleRegistryListView({
         key: 'description',
         label: 'Description',
         mobileLabel: 'Description',
-        render: (value) => <span className="super-admin-skill-role-registry__description">{value || '--'}</span>,
+        render: (value) => <TruncatedText className="super-admin-skill-role-registry__description">{value}</TruncatedText>,
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        mobileLabel: 'Category',
+        width: '156px',
+        render: (value) => <TruncatedText>{value || '--'}</TruncatedText>,
+      },
+      {
+        key: 'allowedOperations',
+        label: 'Ops',
+        mobileLabel: 'Ops',
+        width: '132px',
+        render: (value) => <TruncatedText>{Array.isArray(value) ? value.join(', ') : '--'}</TruncatedText>,
       },
       {
         key: 'usageCount',
@@ -145,6 +210,13 @@ export function SkillRoleRegistryListView({
             {formatSkillRoleRegistryStatus(value)}
           </Status>
         ),
+      },
+      {
+        key: 'version',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '140px',
+        render: renderVersionSummary,
       },
       {
         key: 'updatedAt',

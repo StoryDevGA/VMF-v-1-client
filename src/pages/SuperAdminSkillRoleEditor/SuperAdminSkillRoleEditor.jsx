@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -12,6 +12,7 @@ import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
 import {
   useCreateSkillRoleMutation,
+  useCloneSkillRoleMutation,
   useGetSkillRoleQuery,
   useLazyGetSkillRoleDependenciesQuery,
   useUpdateSkillRoleMutation,
@@ -20,6 +21,8 @@ import { normalizeError } from '../../utils/errors.js'
 import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import {
   SKILL_ROLE_REGISTRY_FORM_ERROR_FIELDS,
+  SKILL_ROLE_REGISTRY_CATEGORIES,
+  SKILL_ROLE_REGISTRY_OPERATIONS,
   SKILL_ROLE_REGISTRY_STATUSES,
   validateSkillRoleRegistryForm,
 } from '../SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
@@ -30,9 +33,33 @@ const INITIAL_SKILL_ROLE_FORM = Object.freeze({
   roleKey: '',
   label: '',
   description: '',
-  status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+  status: SKILL_ROLE_REGISTRY_STATUSES.DRAFT,
+  category: SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE,
+  allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+  allowedReadScopes: [],
+  allowedWriteScopes: [],
   isSystem: false,
 })
+
+const STATUS_OPTIONS = Object.freeze([
+  { value: SKILL_ROLE_REGISTRY_STATUSES.DRAFT, label: 'DRAFT' },
+  { value: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE, label: 'ACTIVE' },
+  { value: SKILL_ROLE_REGISTRY_STATUSES.INACTIVE, label: 'INACTIVE' },
+  { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
+])
+
+const CATEGORY_OPTIONS = Object.freeze(
+  Object.values(SKILL_ROLE_REGISTRY_CATEGORIES).map((value) => ({ value, label: value })),
+)
+
+const parseListText = (value) => [
+  ...new Set(String(value ?? '')
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)),
+]
+
+const formatListText = (values) => (Array.isArray(values) ? values.join('\n') : '')
 
 const shallowEqualObject = (left, right) => {
   if (left === right) return true
@@ -59,8 +86,11 @@ function SkillRoleEditorLoadingState({ isEditMode }) {
 function SuperAdminSkillRoleEditor() {
   const navigate = useNavigate()
   const { roleId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const cloneFrom = searchParams.get('cloneFrom') || ''
   const { addToast } = useToaster()
   const isEditMode = Boolean(roleId)
+  const isCloneMode = !isEditMode && Boolean(cloneFrom)
 
   const [form, setForm] = useState(INITIAL_SKILL_ROLE_FORM)
   const [errors, setErrors] = useState({})
@@ -72,30 +102,48 @@ function SuperAdminSkillRoleEditor() {
     isLoading: isRoleLoading,
     error: roleError,
   } = useGetSkillRoleQuery(roleId, { skip: !isEditMode })
+  const {
+    data: cloneSourceResponse,
+    isLoading: isCloneSourceLoading,
+    error: cloneSourceError,
+  } = useGetSkillRoleQuery(cloneFrom, { skip: !isCloneMode })
 
   const loadedRole = roleResponse?.data ?? null
-  const roleAppError = roleError ? normalizeError(roleError) : null
+  const cloneSourceRole = cloneSourceResponse?.data ?? null
+  const roleAppError = roleError || cloneSourceError ? normalizeError(roleError || cloneSourceError) : null
 
   const [createSkillRole, { isLoading: isCreating }] = useCreateSkillRoleMutation()
+  const [cloneSkillRole, { isLoading: isCloning }] = useCloneSkillRoleMutation()
   const [updateSkillRole, { isLoading: isUpdating }] = useUpdateSkillRoleMutation()
   const [fetchSkillRoleDependencies] = useLazyGetSkillRoleDependenciesQuery()
 
   const liveErrors = useMemo(() => validateSkillRoleRegistryForm(form), [form])
-  const isSaving = isCreating || isUpdating
+  const isSaving = isCreating || isUpdating || isCloning
   const roleUsageCount = Number(loadedRole?.usageCount) || 0
+  const isLoadingRole = isRoleLoading || isCloneSourceLoading
+  const formSourceRole = isCloneMode ? cloneSourceRole : loadedRole
+  const isLocked = isEditMode && Boolean(loadedRole?.isLocked)
 
   useEffect(() => {
-    if (!isEditMode) return undefined
-    if (!loadedRole) return undefined
+    if (!isEditMode && !isCloneMode) return undefined
+    if (!formSourceRole) return undefined
 
     const timeoutId = window.setTimeout(() => {
       setForm((current) => {
         const next = {
-          roleKey: loadedRole.roleKey ?? '',
-          label: loadedRole.label ?? '',
-          description: loadedRole.description ?? '',
-          status: loadedRole.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
-          isSystem: Boolean(loadedRole.isSystem),
+          roleKey: isCloneMode ? `${formSourceRole.roleKey ?? ''}_CLONE` : formSourceRole.roleKey ?? '',
+          label: formSourceRole.label ?? '',
+          description: formSourceRole.description ?? '',
+          status: isCloneMode
+            ? SKILL_ROLE_REGISTRY_STATUSES.DRAFT
+            : formSourceRole.status ?? SKILL_ROLE_REGISTRY_STATUSES.DRAFT,
+          category: formSourceRole.category ?? SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE,
+          allowedOperations: Array.isArray(formSourceRole.allowedOperations)
+            ? formSourceRole.allowedOperations
+            : [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+          allowedReadScopes: Array.isArray(formSourceRole.allowedReadScopes) ? formSourceRole.allowedReadScopes : [],
+          allowedWriteScopes: Array.isArray(formSourceRole.allowedWriteScopes) ? formSourceRole.allowedWriteScopes : [],
+          isSystem: isCloneMode ? false : Boolean(formSourceRole.isSystem),
         }
 
         return shallowEqualObject(current, next) ? current : next
@@ -103,13 +151,22 @@ function SuperAdminSkillRoleEditor() {
     }, 0)
 
     return () => window.clearTimeout(timeoutId)
-  }, [isEditMode, loadedRole])
+  }, [formSourceRole, isCloneMode, isEditMode])
 
   const submitSkillRole = useCallback(async ({ bypassStatusWarning = false } = {}) => {
     const clientErrors = validateSkillRoleRegistryForm(form)
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors)
       setErrorsSource('client')
+      return
+    }
+
+    if (isLocked) {
+      addToast({
+        variant: 'warning',
+        title: 'Locked record',
+        description: 'Clone this Skill Role to make behavior changes.',
+      })
       return
     }
 
@@ -145,12 +202,20 @@ function SuperAdminSkillRoleEditor() {
     }
 
     try {
+      const payload = {
+        label: form.label.trim(),
+        description: form.description.trim(),
+        status: nextStatus,
+        category: String(form.category || SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE).trim().toUpperCase(),
+        allowedOperations: Array.isArray(form.allowedOperations) ? form.allowedOperations : [],
+        allowedReadScopes: Array.isArray(form.allowedReadScopes) ? form.allowedReadScopes : [],
+        allowedWriteScopes: Array.isArray(form.allowedWriteScopes) ? form.allowedWriteScopes : [],
+      }
+
       if (isEditMode) {
         const res = await updateSkillRole({
           roleId,
-          label: form.label.trim(),
-          description: form.description.trim(),
-          status: nextStatus,
+          ...payload,
         }).unwrap()
 
         addToast({
@@ -158,12 +223,25 @@ function SuperAdminSkillRoleEditor() {
           title: 'Saved',
           description: `Updated ${res?.data?.roleKey ?? 'skill role'}.`,
         })
+      } else if (isCloneMode) {
+        const res = await cloneSkillRole({
+          roleId: cloneFrom,
+          roleKey: form.roleKey.trim().toUpperCase(),
+          ...payload,
+          status: SKILL_ROLE_REGISTRY_STATUSES.DRAFT,
+        }).unwrap()
+
+        addToast({
+          variant: 'success',
+          title: 'Role cloned',
+          description: `${res?.data?.roleKey ?? 'Skill role'} is now an editable draft.`,
+        })
+
+        navigate(`/super-admin/runtime-control/skill-roles/${res?.data?.id ?? ''}`)
       } else {
         const res = await createSkillRole({
           roleKey: form.roleKey.trim().toUpperCase(),
-          label: form.label.trim(),
-          description: form.description.trim(),
-          status: nextStatus,
+          ...payload,
         }).unwrap()
 
         addToast({
@@ -200,11 +278,16 @@ function SuperAdminSkillRoleEditor() {
     }
   }, [
     addToast,
+    cloneFrom,
+    cloneSkillRole,
     createSkillRole,
     fetchSkillRoleDependencies,
     form,
+    isCloneMode,
     isEditMode,
+    isLocked,
     loadedRole?.status,
+    navigate,
     roleId,
     roleUsageCount,
     updateSkillRole,
@@ -213,6 +296,12 @@ function SuperAdminSkillRoleEditor() {
   const handleBack = useCallback(() => {
     navigate('/super-admin/runtime-control/skill-roles')
   }, [navigate])
+
+  const handleClone = useCallback(() => {
+    const loadedRoleId = loadedRole?.id
+    if (!loadedRoleId) return
+    navigate(`/super-admin/runtime-control/skill-roles/new?cloneFrom=${encodeURIComponent(loadedRoleId)}`)
+  }, [loadedRole, navigate])
 
   const handleSubmit = useCallback(async (event) => {
     event.preventDefault()
@@ -231,14 +320,16 @@ function SuperAdminSkillRoleEditor() {
     }
   }, [pendingStatusWarning, submitSkillRole])
 
-  const canSave = Object.keys(liveErrors).length === 0 && !isSaving
+  const canSave = Object.keys(liveErrors).length === 0 && !isSaving && !isLocked
   const roleKeyIsRequired = !isEditMode
   const statusIsRequired = true
 
   return (
     <section className="super-admin-skill-role-registry container" aria-label="Skill role editor">
       <header className="super-admin-skill-role-registry__header">
-        <h1 className="super-admin-skill-role-registry__title">{isEditMode ? 'Edit Skill Role' : 'Create Skill Role'}</h1>
+        <h1 className="super-admin-skill-role-registry__title">
+          {isCloneMode ? 'Clone Skill Role' : isEditMode ? 'Edit Skill Role' : 'Create Skill Role'}
+        </h1>
         <p className="super-admin-skill-role-registry__subtitle">
           Skill Roles classify execution responsibility and are referenced by Skills.
         </p>
@@ -246,9 +337,9 @@ function SuperAdminSkillRoleEditor() {
 
       <Fieldset className="super-admin-skill-role-registry__fieldset">
         <Fieldset.Legend className="sr-only">Skill role editor</Fieldset.Legend>
-        {isEditMode && isRoleLoading ? <SkillRoleEditorLoadingState isEditMode /> : null}
+        {(isEditMode || isCloneMode) && isLoadingRole ? <SkillRoleEditorLoadingState isEditMode={isEditMode} /> : null}
 
-        {isEditMode && roleAppError ? (
+        {(isEditMode || isCloneMode) && roleAppError ? (
           <Card variant="elevated" className="super-admin-skill-role-registry__card">
             <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
               <p className="super-admin-skill-role-editor__error" role="alert">
@@ -263,14 +354,35 @@ function SuperAdminSkillRoleEditor() {
           </Card>
         ) : null}
 
-        {!isEditMode || (!isRoleLoading && !roleAppError) ? (
+        {(!isEditMode && !isCloneMode) || (!isLoadingRole && !roleAppError) ? (
           <Card variant="elevated" className="super-admin-skill-role-registry__card">
             <Card.Body className="super-admin-skill-role-editor__card-body super-admin-skill-role-editor__card-body--compact">
               <div className="super-admin-skill-role-editor__top-actions">
                 <Button type="button" variant="outline" size="sm" onClick={handleBack}>
                   Back
                 </Button>
+                {isEditMode ? (
+                  <Button type="button" variant="primary" size="sm" onClick={handleClone}>
+                    Clone
+                  </Button>
+                ) : null}
               </div>
+
+              {isLocked ? (
+                <div className="super-admin-skill-role-editor__locked-banner" role="status">
+                  <Badge variant="warning" size="sm" pill>
+                    Locked
+                  </Badge>
+                  <span>Referenced by validated or active Framework Packages. Clone to make behavior changes.</span>
+                  <div className="super-admin-skill-role-editor__package-chips" aria-label="Locking packages">
+                    {(loadedRole?.lockedByPackageKeys || []).map((packageKey) => (
+                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                        {packageKey}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {isEditMode ? (
                 <div className="super-admin-skill-role-editor__summary" aria-label="Skill role summary">
@@ -303,7 +415,7 @@ function SuperAdminSkillRoleEditor() {
                       onChange={(event) => setForm((current) => ({ ...current, roleKey: event.target.value }))}
                       error={errors.roleKey}
                       helperText={isEditMode ? 'Role key is immutable after creation.' : 'Uppercase token, e.g. VALIDATOR.'}
-                      disabled={isEditMode}
+                    disabled={isEditMode || isLocked}
                       required={roleKeyIsRequired}
                       fullWidth
                     />
@@ -318,9 +430,7 @@ function SuperAdminSkillRoleEditor() {
                       value={form.status}
                       onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
                       options={[
-                        { value: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE, label: 'ACTIVE' },
-                        { value: SKILL_ROLE_REGISTRY_STATUSES.INACTIVE, label: 'INACTIVE' },
-                        { value: SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED, label: 'DEPRECATED' },
+                        ...STATUS_OPTIONS,
                       ]}
                       error={errors.status}
                       helperText={
@@ -339,6 +449,43 @@ function SuperAdminSkillRoleEditor() {
                           : undefined
                       }
                       required={statusIsRequired}
+                      disabled={isLocked}
+                    />
+                  </div>
+                </div>
+
+                <div className="super-admin-skill-role-editor__row">
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-category">
+                      Category<span className="input-label__required"> *</span>
+                    </label>
+                    <Select
+                      id="skill-role-editor-category"
+                      value={form.category}
+                      onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                      options={CATEGORY_OPTIONS}
+                      error={errors.category}
+                      required
+                      disabled={isLocked}
+                    />
+                  </div>
+
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-operations">
+                      Allowed Operations<span className="input-label__required"> *</span>
+                    </label>
+                    <Textarea
+                      id="skill-role-editor-operations"
+                      value={formatListText(form.allowedOperations)}
+                      onChange={(event) => setForm((current) => ({
+                        ...current,
+                        allowedOperations: parseListText(event.target.value).map((value) => value.toUpperCase()),
+                      }))}
+                      error={errors.allowedOperations}
+                      helperText="One per line or comma-separated: READ, WRITE, EXECUTE."
+                      rows={3}
+                      disabled={isLocked}
+                      fullWidth
                     />
                   </div>
                 </div>
@@ -353,6 +500,7 @@ function SuperAdminSkillRoleEditor() {
                     onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
                     error={errors.label}
                     required
+                    disabled={isLocked}
                     fullWidth
                   />
                 </div>
@@ -368,8 +516,49 @@ function SuperAdminSkillRoleEditor() {
                     error={errors.description}
                     required
                     rows={4}
+                    disabled={isLocked}
                     fullWidth
                   />
+                </div>
+
+                <div className="super-admin-skill-role-editor__row">
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-read-scopes">
+                      Allowed Read Scopes
+                    </label>
+                    <Textarea
+                      id="skill-role-editor-read-scopes"
+                      value={formatListText(form.allowedReadScopes)}
+                      onChange={(event) => setForm((current) => ({
+                        ...current,
+                        allowedReadScopes: parseListText(event.target.value),
+                      }))}
+                      error={errors.allowedReadScopes}
+                      helperText="Runtime path keys or wildcard scopes. One per line or comma-separated."
+                      rows={4}
+                      disabled={isLocked}
+                      fullWidth
+                    />
+                  </div>
+
+                  <div className="super-admin-skill-role-editor__field">
+                    <label className="super-admin-skill-role-editor__field-label" htmlFor="skill-role-editor-write-scopes">
+                      Allowed Write Scopes
+                    </label>
+                    <Textarea
+                      id="skill-role-editor-write-scopes"
+                      value={formatListText(form.allowedWriteScopes)}
+                      onChange={(event) => setForm((current) => ({
+                        ...current,
+                        allowedWriteScopes: parseListText(event.target.value),
+                      }))}
+                      error={errors.allowedWriteScopes}
+                      helperText="Runtime Skill write paths must be covered by these scopes."
+                      rows={4}
+                      disabled={isLocked}
+                      fullWidth
+                    />
+                  </div>
                 </div>
 
                 {errorsSource === 'server' && Object.keys(errors).length > 0 ? (
@@ -383,7 +572,7 @@ function SuperAdminSkillRoleEditor() {
                     Cancel
                   </Button>
                   <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={!canSave}>
-                    {isEditMode ? 'Save Changes' : 'Create Role'}
+                    {isCloneMode ? 'Save Clone' : isEditMode ? 'Save Changes' : 'Create Role'}
                   </Button>
                 </div>
               </form>

@@ -100,16 +100,15 @@
 
 .super-admin-validation-registry__version-summary {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
 }
 
 .super-admin-validation-registry__version-text {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
   color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .super-admin-validation-registry__row-actions {
@@ -118,6 +117,17 @@
 
 .super-admin-validation-registry__table-wrap {
   margin-top: 0;
+}
+
+.super-admin-validation-registry__table {
+  min-width: 1460px;
+}
+
+@media (min-width: 768px) {
+  .super-admin-validation-registry__table .table__header,
+  .super-admin-validation-registry__table .table__cell {
+    padding-inline: var(--spacing-sm);
+  }
 }
 
 .super-admin-validation-registry__pagination {
@@ -138,6 +148,46 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+@media (max-width: 767px) {
+  .super-admin-validation-registry__card-body--compact {
+    padding: var(--spacing-sm);
+  }
+
+  .super-admin-validation-registry__catalogue-actions {
+    justify-content: stretch;
+  }
+
+  .super-admin-validation-registry__catalogue-actions > * {
+    width: 100%;
+  }
+
+  .super-admin-validation-registry__table {
+    min-width: 0;
+  }
+
+  .super-admin-validation-registry__table-wrap {
+    overflow: visible;
+  }
+
+  .super-admin-validation-registry__pagination {
+    align-items: stretch;
+  }
+
+  .super-admin-validation-registry__pagination-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .super-admin-validation-registry__pagination-controls > * {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .super-admin-validation-registry__pagination-info {
+    text-align: center;
+    width: 100%;
+  }
 }
 
 @media (forced-colors: active) {

@@ -22,7 +22,7 @@
 
 .super-admin-skill-role-registry__toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px) minmax(180px, 220px);
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
   gap: var(--spacing-sm);
 }
@@ -45,15 +45,26 @@
   margin-top: 0;
 }
 
+.super-admin-skill-role-registry__table {
+  min-width: 1320px;
+}
+
+@media (min-width: 768px) {
+  .super-admin-skill-role-registry__table .table__header,
+  .super-admin-skill-role-registry__table .table__cell {
+    padding-inline: var(--spacing-sm);
+  }
+}
+
 .super-admin-skill-role-registry__row-actions {
-  display: flex;
-  justify-content: center;
+  min-width: 120px;
 }
 
 .super-admin-skill-role-registry__role-summary {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  min-width: 0;
 }
 
 .super-admin-skill-role-registry__role-heading {
@@ -61,6 +72,7 @@
   align-items: center;
   gap: var(--spacing-2xs);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .super-admin-skill-role-registry__role-label {
@@ -77,6 +89,34 @@
 .super-admin-skill-role-registry__description {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.super-admin-skill-role-registry__truncated-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-skill-role-registry__truncated-tooltip {
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.super-admin-skill-role-registry__version-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+}
+
+.super-admin-skill-role-registry__version-text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .super-admin-skill-role-registry__pagination {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SKILL_ROLE_REGISTRY_CATEGORIES,
+  SKILL_ROLE_REGISTRY_OPERATIONS,
   SKILL_ROLE_REGISTRY_STATUSES,
   validateSkillRoleRegistryForm,
 } from './superAdminSkillRoleRegistry.constants.js'
@@ -9,6 +11,10 @@ const buildValidForm = (overrides = {}) => ({
   label: 'Validator',
   description: 'Evaluates correctness or completeness of state.',
   status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+  category: SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE,
+  allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+  allowedReadScopes: ['*'],
+  allowedWriteScopes: [],
   ...overrides,
 })
 
@@ -19,6 +25,8 @@ describe('validateSkillRoleRegistryForm', () => {
       label: '',
       description: '',
       status: '',
+      category: '',
+      allowedOperations: [],
     }))
 
     expect(errors).toEqual({
@@ -26,6 +34,8 @@ describe('validateSkillRoleRegistryForm', () => {
       label: 'Label is required.',
       description: 'Description is required.',
       status: 'Status is required.',
+      category: 'Category is required.',
+      allowedOperations: 'At least one operation is required.',
     })
   })
 

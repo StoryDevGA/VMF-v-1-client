@@ -1,7 +1,21 @@
 export const SKILL_ROLE_REGISTRY_STATUSES = Object.freeze({
+  DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   DEPRECATED: 'DEPRECATED',
+})
+
+export const SKILL_ROLE_REGISTRY_CATEGORIES = Object.freeze({
+  EXECUTION_ROLE: 'EXECUTION_ROLE',
+  GOVERNANCE_ROLE: 'GOVERNANCE_ROLE',
+  SYSTEM_ROLE: 'SYSTEM_ROLE',
+  CUSTOM_ROLE: 'CUSTOM_ROLE',
+})
+
+export const SKILL_ROLE_REGISTRY_OPERATIONS = Object.freeze({
+  READ: 'READ',
+  WRITE: 'WRITE',
+  EXECUTE: 'EXECUTE',
 })
 
 export const SKILL_ROLE_REGISTRY_PAGE_SIZE = 20
@@ -19,6 +33,10 @@ export const SKILL_ROLE_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
   'label',
   'description',
   'status',
+  'category',
+  'allowedOperations',
+  'allowedReadScopes',
+  'allowedWriteScopes',
 ])
 
 export const SKILL_ROLE_REGISTRY_ROLE_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/
@@ -40,11 +58,38 @@ export const getSkillRoleRegistryStatusVariant = (value) => {
   const normalized = formatSkillRoleRegistryStatus(value)
 
   if (normalized === SKILL_ROLE_REGISTRY_STATUSES.ACTIVE) return 'success'
+  if (normalized === SKILL_ROLE_REGISTRY_STATUSES.DRAFT) return 'warning'
   if (normalized === SKILL_ROLE_REGISTRY_STATUSES.DEPRECATED) return 'warning'
   return 'neutral'
 }
 
-export const cloneSkillRoleRegistryEntry = (entry = {}) => JSON.parse(JSON.stringify(entry))
+export const cloneSkillRoleRegistryEntry = (entry = {}) => {
+  const stableId = entry.stableId || entry.id || buildSkillRoleRegistryStableId(entry.roleKey)
+  return JSON.parse(JSON.stringify({
+    componentVersion: 1,
+    versionStatus: 'DRAFT',
+    lineageId: stableId,
+    isLocked: false,
+    lockedAt: null,
+    lockedBy: null,
+    lockedReason: '',
+    lockedByPackageKeys: [],
+    introducedInVersion: null,
+    deprecatedInVersion: null,
+    compatibilityTags: [],
+    compatibilityMode: 'OPEN',
+    clonedFromStableId: null,
+    supersedesStableId: null,
+    supersededByStableId: null,
+    category: SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE,
+    allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+    allowedReadScopes: [],
+    allowedWriteScopes: [],
+    ...entry,
+    stableId,
+    id: stableId,
+  }))
+}
 
 const normalizeStableKeySegment = (value) =>
   String(value || '')
@@ -78,6 +123,20 @@ export const validateSkillRoleRegistryForm = (form = {}) => {
     errors.status = 'Status is required.'
   }
 
+  if (!String(form.category ?? '').trim()) {
+    errors.category = 'Category is required.'
+  }
+
+  const operations = Array.isArray(form.allowedOperations) ? form.allowedOperations : []
+  if (operations.length === 0) {
+    errors.allowedOperations = 'At least one operation is required.'
+  }
+
+  const writeScopes = Array.isArray(form.allowedWriteScopes) ? form.allowedWriteScopes : []
+  if (operations.includes(SKILL_ROLE_REGISTRY_OPERATIONS.WRITE) && writeScopes.length === 0) {
+    errors.allowedWriteScopes = 'Write roles must define at least one write scope.'
+  }
+
   return errors
 }
 
@@ -88,6 +147,9 @@ export const INITIAL_SKILL_ROLE_REGISTRY = Object.freeze([
     label: 'Reader',
     description: 'Reads runtime state without mutation.',
     status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+    versionStatus: 'ACTIVE',
+    allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+    allowedReadScopes: ['*'],
     isSystem: true,
     updatedAt: '2026-04-18T00:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
@@ -98,6 +160,10 @@ export const INITIAL_SKILL_ROLE_REGISTRY = Object.freeze([
     label: 'Writer',
     description: 'Writes or updates runtime state.',
     status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+    versionStatus: 'ACTIVE',
+    allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ, SKILL_ROLE_REGISTRY_OPERATIONS.WRITE],
+    allowedReadScopes: ['*'],
+    allowedWriteScopes: ['*'],
     isSystem: true,
     updatedAt: '2026-04-18T00:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
@@ -108,6 +174,10 @@ export const INITIAL_SKILL_ROLE_REGISTRY = Object.freeze([
     label: 'Validator',
     description: 'Evaluates correctness or completeness of state.',
     status: SKILL_ROLE_REGISTRY_STATUSES.ACTIVE,
+    versionStatus: 'ACTIVE',
+    allowedOperations: [SKILL_ROLE_REGISTRY_OPERATIONS.READ, SKILL_ROLE_REGISTRY_OPERATIONS.WRITE],
+    allowedReadScopes: ['*'],
+    allowedWriteScopes: ['*'],
     isSystem: true,
     updatedAt: '2026-04-18T00:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),

@@ -47,6 +47,8 @@ import {
   buildSkillRoleRegistryStableId,
   cloneSkillRoleRegistryEntry,
   INITIAL_SKILL_ROLE_REGISTRY,
+  SKILL_ROLE_REGISTRY_CATEGORIES,
+  SKILL_ROLE_REGISTRY_OPERATIONS,
   SKILL_ROLE_REGISTRY_PAGE_SIZE,
   SKILL_ROLE_REGISTRY_STATUSES,
 } from '../../pages/SuperAdminSkillRoleRegistry/superAdminSkillRoleRegistry.constants.js'
@@ -98,6 +100,7 @@ const WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS = Object.freeze([
 
 const RUNTIME_AGENT_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
 const RUNTIME_SKILL_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
+const SKILL_ROLE_GOVERNED_METADATA_FIELDS = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS
 
 const isRuntimeControlMockMode = () => {
   const mockModeAllowed = import.meta.env.MODE === 'test'
@@ -384,6 +387,18 @@ const validateMockRuntimeSkillGovernedMetadataFields = (payload = {}) => {
   })
 }
 
+const validateMockSkillRoleGovernedMetadataFields = (payload = {}) => {
+  const field = SKILL_ROLE_GOVERNED_METADATA_FIELDS.find((fieldName) =>
+    Object.prototype.hasOwnProperty.call(payload, fieldName),
+  )
+
+  if (!field) return null
+
+  return buildValidationFailedError('Please check the form for errors.', {
+    [field]: 'Skill Role version and lock metadata is managed by the server.',
+  })
+}
+
 const buildRuntimeAgentLockedConflictError = (agent = {}) =>
   buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
     field: 'isLocked',
@@ -399,6 +414,15 @@ const buildRuntimeSkillLockedConflictError = (skill = {}) =>
     reason: 'RUNTIME_SKILL_LOCKED',
     lockedByPackageKeys: Array.isArray(skill.lockedByPackageKeys)
       ? skill.lockedByPackageKeys
+      : [],
+  })
+
+const buildSkillRoleLockedConflictError = (role = {}) =>
+  buildConflictError(LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE, {
+    field: 'isLocked',
+    reason: 'SKILL_ROLE_LOCKED',
+    lockedByPackageKeys: Array.isArray(role.lockedByPackageKeys)
+      ? role.lockedByPackageKeys
       : [],
   })
 
@@ -1536,6 +1560,10 @@ const getSkillRoleRows = ({
         role.label,
         role.description,
         role.status,
+        role.category,
+        role.allowedOperations,
+        role.allowedReadScopes,
+        role.allowedWriteScopes,
       ])
 
       return matchesStatus && queryMatches
@@ -2505,7 +2533,11 @@ const findValidationRegistryById = (validationId) =>
   runtimeControlState.validationRegistry.find((row) => row.id === validationId || row.key === validationId)
 
 const findSkillRoleById = (roleId) =>
-  runtimeControlState.skillRoles.find((role) => role.id === roleId)
+  runtimeControlState.skillRoles.find((role) => {
+    const normalizedRoleId = String(roleId ?? '').trim().toLowerCase()
+    return String(role.id ?? '').trim().toLowerCase() === normalizedRoleId
+      || String(role.stableId ?? '').trim().toLowerCase() === normalizedRoleId
+  })
 
 const findSkillRoleByRoleKey = (roleKey) => {
   const normalizedRoleKey = String(roleKey ?? '').trim().toUpperCase()
@@ -2585,6 +2617,41 @@ const validateMockRuntimeSkillRoleKey = (skillRoleKey, { currentSkillRoleKey = '
   }
 
   return ''
+}
+
+const pathMatchesRoleScope = (pathKey, scope) => {
+  const normalizedPathKey = String(pathKey ?? '').trim()
+  const normalizedScope = String(scope ?? '').trim()
+  if (!normalizedPathKey || !normalizedScope) return false
+  if (normalizedScope === '*') return true
+  if (normalizedScope === normalizedPathKey) return true
+  if (normalizedScope.endsWith('.*')) return normalizedPathKey.startsWith(normalizedScope.slice(0, -1))
+  if (normalizedScope.endsWith('*')) return normalizedPathKey.startsWith(normalizedScope.slice(0, -1))
+  return false
+}
+
+const validateMockRuntimeSkillRoleWriteScopes = ({ skillRoleKey, allowedWritePaths = [] } = {}) => {
+  const writePaths = [...new Set((Array.isArray(allowedWritePaths) ? allowedWritePaths : [])
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean))]
+  if (writePaths.length === 0) return ''
+
+  const skillRole = findSkillRoleByRoleKey(skillRoleKey)
+  if (!skillRole) return ''
+
+  const operations = (Array.isArray(skillRole.allowedOperations) ? skillRole.allowedOperations : [])
+    .map((value) => String(value ?? '').trim().toUpperCase())
+  if (!operations.includes(SKILL_ROLE_REGISTRY_OPERATIONS.WRITE)) {
+    return `Skill role "${skillRole.roleKey}" does not allow WRITE operations.`
+  }
+
+  const scopes = Array.isArray(skillRole.allowedWriteScopes) ? skillRole.allowedWriteScopes : []
+  const uncovered = writePaths.filter((pathKey) =>
+    !scopes.some((scope) => pathMatchesRoleScope(pathKey, scope)),
+  )
+
+  if (uncovered.length === 0) return ''
+  return `Allowed write paths must be covered by the selected Skill Role write scopes: ${uncovered.map((value) => `"${value}"`).join(', ')}.`
 }
 
 const findWorkflowPolicyById = (policyId) =>
@@ -4030,6 +4097,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const runtimePayload = payload
+        const metadataError = validateMockSkillRoleGovernedMetadataFields(runtimePayload)
+        if (metadataError) return metadataError
+
         const roleKey = String(runtimePayload.roleKey ?? '').trim().toUpperCase()
 
         const duplicate = runtimeControlState.skillRoles.find(
@@ -4047,7 +4117,17 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           roleKey,
           label: String(runtimePayload.label ?? '').trim(),
           description: String(runtimePayload.description ?? '').trim(),
-          status: String(runtimePayload.status ?? SKILL_ROLE_REGISTRY_STATUSES.ACTIVE).trim().toUpperCase(),
+          status: String(runtimePayload.status ?? SKILL_ROLE_REGISTRY_STATUSES.DRAFT).trim().toUpperCase(),
+          category: String(runtimePayload.category ?? SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE).trim().toUpperCase(),
+          allowedOperations: Array.isArray(runtimePayload.allowedOperations)
+            ? [...new Set(runtimePayload.allowedOperations.map((value) => String(value).trim().toUpperCase()).filter(Boolean))]
+            : [SKILL_ROLE_REGISTRY_OPERATIONS.READ],
+          allowedReadScopes: Array.isArray(runtimePayload.allowedReadScopes)
+            ? [...new Set(runtimePayload.allowedReadScopes.map((value) => String(value).trim()).filter(Boolean))]
+            : [],
+          allowedWriteScopes: Array.isArray(runtimePayload.allowedWriteScopes)
+            ? [...new Set(runtimePayload.allowedWriteScopes.map((value) => String(value).trim()).filter(Boolean))]
+            : [],
           isSystem: false,
           ...buildAuditFields(),
         })
@@ -4058,6 +4138,94 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         return { data: buildEntityResponse(attachSkillRoleUsageCount(createdRole)) }
+      },
+      invalidatesTags: [SKILL_ROLE_LIST_TAG],
+    }),
+
+    cloneSkillRole: build.mutation({
+      queryFn: async ({ roleId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'skill-roles',
+              entityId: `${roleId}/clone`,
+              method: 'POST',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const metadataError = validateMockSkillRoleGovernedMetadataFields(payload)
+        if (metadataError) return metadataError
+
+        const source = findSkillRoleById(roleId)
+        if (!source) {
+          return buildNotFoundError('Skill role was not found.')
+        }
+
+        const roleKey = String(payload.roleKey ?? '').trim().toUpperCase()
+        const duplicate = runtimeControlState.skillRoles.find(
+          (role) => String(role.roleKey ?? '').trim().toUpperCase() === roleKey,
+        )
+
+        if (duplicate) {
+          return buildConflictError('Role key must be unique.', {
+            roleKey: 'Role key must be unique.',
+          })
+        }
+
+        const stableId = buildSkillRoleRegistryStableId(roleKey)
+        const sourceStableId = source.stableId || source.id
+        const clonedRole = cloneSkillRoleRegistryEntry({
+          ...source,
+          id: stableId,
+          stableId,
+          roleKey,
+          label: String(payload.label ?? source.label ?? '').trim(),
+          description: String(payload.description ?? source.description ?? '').trim(),
+          status: SKILL_ROLE_REGISTRY_STATUSES.DRAFT,
+          category: String(payload.category ?? source.category ?? SKILL_ROLE_REGISTRY_CATEGORIES.EXECUTION_ROLE)
+            .trim()
+            .toUpperCase(),
+          allowedOperations: Array.isArray(payload.allowedOperations)
+            ? [...new Set(payload.allowedOperations.map((value) => String(value).trim().toUpperCase()).filter(Boolean))]
+            : source.allowedOperations,
+          allowedReadScopes: Array.isArray(payload.allowedReadScopes)
+            ? [...new Set(payload.allowedReadScopes.map((value) => String(value).trim()).filter(Boolean))]
+            : source.allowedReadScopes,
+          allowedWriteScopes: Array.isArray(payload.allowedWriteScopes)
+            ? [...new Set(payload.allowedWriteScopes.map((value) => String(value).trim()).filter(Boolean))]
+            : source.allowedWriteScopes,
+          isSystem: false,
+          componentVersion: (Number(source.componentVersion) || 1) + 1,
+          versionStatus: 'DRAFT',
+          lineageId: source.lineageId || sourceStableId,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          lockedByPackageKeys: [],
+          clonedFromStableId: sourceStableId,
+          supersedesStableId: sourceStableId,
+          supersededByStableId: null,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          skillRoles: [
+            clonedRole,
+            ...runtimeControlState.skillRoles.map((role) =>
+              role.id === source.id
+                ? cloneSkillRoleRegistryEntry({ ...role, supersededByStableId: clonedRole.id })
+                : role,
+            ),
+          ],
+        }
+
+        return { data: buildEntityResponse(attachSkillRoleUsageCount(clonedRole)) }
       },
       invalidatesTags: [SKILL_ROLE_LIST_TAG],
     }),
@@ -4100,9 +4268,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const runtimePayload = payload
+        const metadataError = validateMockSkillRoleGovernedMetadataFields(runtimePayload)
+        if (metadataError) return metadataError
+
         const existingRole = findSkillRoleById(roleId)
         if (!existingRole) {
           return buildNotFoundError('Skill role was not found.')
+        }
+
+        if (existingRole.isLocked === true) {
+          return buildSkillRoleLockedConflictError(existingRole)
         }
 
         if (runtimePayload.roleKey !== undefined) {
@@ -4119,13 +4294,35 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           ...(runtimePayload.label !== undefined ? { label: String(runtimePayload.label ?? '').trim() } : {}),
           ...(runtimePayload.description !== undefined ? { description: String(runtimePayload.description ?? '').trim() } : {}),
           ...(runtimePayload.status !== undefined ? { status: String(runtimePayload.status ?? '').trim().toUpperCase() } : {}),
+          ...(runtimePayload.category !== undefined ? { category: String(runtimePayload.category ?? '').trim().toUpperCase() } : {}),
+          ...(runtimePayload.allowedOperations !== undefined
+            ? {
+                allowedOperations: Array.isArray(runtimePayload.allowedOperations)
+                  ? [...new Set(runtimePayload.allowedOperations.map((value) => String(value).trim().toUpperCase()).filter(Boolean))]
+                  : [],
+              }
+            : {}),
+          ...(runtimePayload.allowedReadScopes !== undefined
+            ? {
+                allowedReadScopes: Array.isArray(runtimePayload.allowedReadScopes)
+                  ? [...new Set(runtimePayload.allowedReadScopes.map((value) => String(value).trim()).filter(Boolean))]
+                  : [],
+              }
+            : {}),
+          ...(runtimePayload.allowedWriteScopes !== undefined
+            ? {
+                allowedWriteScopes: Array.isArray(runtimePayload.allowedWriteScopes)
+                  ? [...new Set(runtimePayload.allowedWriteScopes.map((value) => String(value).trim()).filter(Boolean))]
+                  : [],
+              }
+            : {}),
           ...buildAuditFields(),
         })
 
         runtimeControlState = {
           ...runtimeControlState,
           skillRoles: runtimeControlState.skillRoles.map((role) =>
-            role.id === roleId ? nextRole : role,
+            role.id === existingRole.id ? nextRole : role,
           ),
         }
 
@@ -4796,6 +4993,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const skillRoleScopeError = validateMockRuntimeSkillRoleWriteScopes({
+          skillRoleKey: runtimePayload.skillRoleKey,
+          allowedWritePaths: runtimePayload.allowedWritePaths,
+        })
+        if (skillRoleScopeError) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            allowedWritePaths: skillRoleScopeError,
+          })
+        }
+
         const stableId = generateRuntimeId('skill', runtimePayload.key)
         const createdSkill = {
           id: stableId,
@@ -4984,6 +5191,16 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         if (skillRoleError) {
           return buildValidationFailedError('Please check the form for errors.', {
             skillRoleKey: skillRoleError,
+          })
+        }
+
+        const skillRoleScopeError = validateMockRuntimeSkillRoleWriteScopes({
+          skillRoleKey: effectiveSkillRoleKey,
+          allowedWritePaths: payload.allowedWritePaths ?? existingSkill.allowedWritePaths,
+        })
+        if (skillRoleScopeError) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            allowedWritePaths: skillRoleScopeError,
           })
         }
 
@@ -6011,6 +6228,7 @@ export const {
   useDeprecateRuntimeAgentMutation,
   useListSkillRolesQuery,
   useCreateSkillRoleMutation,
+  useCloneSkillRoleMutation,
   useGetSkillRoleQuery,
   useLazyGetSkillRoleDependenciesQuery,
   useUpdateSkillRoleMutation,
