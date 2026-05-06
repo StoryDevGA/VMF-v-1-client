@@ -280,7 +280,7 @@ export const INITIAL_WORKFLOW_POLICY_FORM = Object.freeze({
   routingMode: '',
   primaryAgentId: '',
   fallbackAgentId: '',
-  timeoutMs: '0',
+  timeoutMs: '10000',
   retryOverride: '',
   requireSuccess: false,
   requiredValidationKeys: [],
@@ -351,10 +351,16 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     ]),
     version: 3,
     lastActivatedAt: '2026-04-08T12:00:00.000Z',
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'validate', type: WORKFLOW_POLICY_STEP_TYPES.AGENT_EXECUTION, order: 1, agentId: 'agent-validator' }),
+      Object.freeze({ stepKey: 'lock', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 2, eventKey: 'lock' }),
+      Object.freeze({ stepKey: 'publish', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 3, eventKey: 'publish' }),
+    ]),
     orderedSteps: Object.freeze(['validate', 'lock', 'publish']),
     requiredAgentIds: Object.freeze(['agent-validator']),
-    requiredSkillIds: Object.freeze(['skill-snapshot']),
-    gatingRules: Object.freeze(['validation-pass', 'framework-package-active']),
+    requiredSkillIds: Object.freeze([]),
+    gatingRules: Object.freeze([]),
     updatedAt: '2026-04-08T12:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
   }),
@@ -421,10 +427,15 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     ]),
     version: 4,
     lastActivatedAt: '2026-04-07T15:10:00.000Z',
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'snapshot', type: WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION, order: 1, skillId: 'skill-snapshot' }),
+      Object.freeze({ stepKey: 'review', type: WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION, order: 2, skillId: 'skill-review' }),
+    ]),
     orderedSteps: Object.freeze(['snapshot', 'review']),
     requiredAgentIds: Object.freeze(['agent-validator']),
     requiredSkillIds: Object.freeze(['skill-snapshot', 'skill-review']),
-    gatingRules: Object.freeze(['framework-package-active']),
+    gatingRules: Object.freeze([]),
     updatedAt: '2026-04-07T15:10:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-2', name: 'Release Admin' }),
   }),
@@ -454,10 +465,15 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'validate', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 1, eventKey: 'validate' }),
+      Object.freeze({ stepKey: 'synthesise', type: WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION, order: 2, skillId: 'skill-report' }),
+    ]),
     orderedSteps: Object.freeze(['validate', 'synthesise']),
     requiredAgentIds: Object.freeze(['agent-reporter']),
     requiredSkillIds: Object.freeze(['skill-report']),
-    gatingRules: Object.freeze(['framework-package-active']),
+    gatingRules: Object.freeze([]),
     updatedAt: '2026-04-06T13:20:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-3', name: 'Operations Lead' }),
   }),
@@ -487,7 +503,11 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
-    orderedSteps: Object.freeze([]),
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'map', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 1, eventKey: 'map' }),
+    ]),
+    orderedSteps: Object.freeze(['map']),
     requiredAgentIds: Object.freeze([]),
     requiredSkillIds: Object.freeze([]),
     gatingRules: Object.freeze([]),
@@ -520,10 +540,15 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'snapshot', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 1, eventKey: 'snapshot' }),
+      Object.freeze({ stepKey: 'summarise', type: WORKFLOW_POLICY_STEP_TYPES.SKILL_EXECUTION, order: 2, skillId: 'skill-summary' }),
+    ]),
     orderedSteps: Object.freeze(['snapshot', 'summarise']),
-    requiredAgentIds: Object.freeze(['agent-summary']),
+    requiredAgentIds: Object.freeze([]),
     requiredSkillIds: Object.freeze(['skill-summary']),
-    gatingRules: Object.freeze(['framework-package-active']),
+    gatingRules: Object.freeze([]),
     updatedAt: '2026-04-04T10:05:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-2', name: 'Release Admin' }),
   }),
@@ -553,7 +578,11 @@ export const INITIAL_WORKFLOW_POLICIES = Object.freeze([
     escalationRoleKey: '',
     escalationMessage: '',
     slaMinutes: 0,
-    orderedSteps: Object.freeze([]),
+    executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+    steps: Object.freeze([
+      Object.freeze({ stepKey: 'publish', type: WORKFLOW_POLICY_STEP_TYPES.EVENT_EMIT, order: 1, eventKey: 'archive' }),
+    ]),
+    orderedSteps: Object.freeze(['publish']),
     requiredAgentIds: Object.freeze([]),
     requiredSkillIds: Object.freeze([]),
     gatingRules: Object.freeze([]),
@@ -599,6 +628,52 @@ const normalizeAgentId = (value) =>
 
 const normalizeValidationKey = normalizePolicyKey
 
+const normalizePolicyTokenList = (values = []) => [...new Set(
+  (Array.isArray(values) ? values : [])
+    .map(normalizeAgentId)
+    .filter(Boolean),
+)]
+
+const deriveWorkflowPolicyExecutionFields = ({
+  steps = [],
+  primaryAgentId = '',
+  fallbackAgentId = '',
+  orderedSteps = [],
+  requiredAgentIds = [],
+  requiredSkillIds = [],
+} = {}) => {
+  const normalizedSteps = (Array.isArray(steps) ? steps : [])
+    .map((step, index) => ({
+      stepKey: normalizePolicyKey(step?.stepKey),
+      order: Number.parseInt(String(step?.order ?? index + 1).trim(), 10),
+      agentId: normalizeAgentId(step?.agentId),
+      skillId: normalizeAgentId(step?.skillId),
+    }))
+    .filter((step) => step.stepKey || step.agentId || step.skillId)
+  const hasCanonicalSteps = normalizedSteps.length > 0
+
+  return {
+    orderedSteps: hasCanonicalSteps
+      ? [...new Set(
+        [...normalizedSteps]
+          .sort((left, right) => Number(left.order) - Number(right.order))
+          .map((step) => step.stepKey)
+          .filter(Boolean),
+      )]
+      : normalizePolicyTokenList(orderedSteps),
+    requiredAgentIds: [...new Set([
+      normalizeAgentId(primaryAgentId),
+      normalizeAgentId(fallbackAgentId),
+      ...(hasCanonicalSteps
+        ? normalizedSteps.map((step) => step.agentId)
+        : normalizePolicyTokenList(requiredAgentIds)),
+    ].filter(Boolean))],
+    requiredSkillIds: hasCanonicalSteps
+      ? [...new Set(normalizedSteps.map((step) => step.skillId).filter(Boolean))]
+      : normalizePolicyTokenList(requiredSkillIds),
+  }
+}
+
 const parseConditionValue = (value, operator) => {
   const normalizedOperator = String(operator ?? '').trim().toLowerCase()
   const normalizedValue = String(value ?? '').trim()
@@ -628,6 +703,24 @@ const parseConditionValue = (value, operator) => {
 }
 
 export function cloneWorkflowPolicy(policy) {
+  const steps = Array.isArray(policy.steps)
+    ? policy.steps.map((step) => ({
+        ...step,
+        bindingKeys: [...(step.bindingKeys ?? [])],
+        parameters: step.parameters && typeof step.parameters === 'object' && !Array.isArray(step.parameters)
+          ? { ...step.parameters }
+          : {},
+      }))
+    : []
+  const derivedExecutionFields = deriveWorkflowPolicyExecutionFields({
+    steps,
+    primaryAgentId: policy.primaryAgentId,
+    fallbackAgentId: policy.fallbackAgentId,
+    orderedSteps: policy.orderedSteps,
+    requiredAgentIds: policy.requiredAgentIds,
+    requiredSkillIds: policy.requiredSkillIds,
+  })
+
   return {
     ...policy,
     componentVersion: Number(policy.componentVersion ?? 1),
@@ -641,7 +734,7 @@ export function cloneWorkflowPolicy(policy) {
     isLocked: Boolean(policy.isLocked),
     lockedAt: policy.lockedAt ?? null,
     lockedBy: policy.lockedBy ? { ...policy.lockedBy } : null,
-    lockedReason: policy.lockedReason ?? '',
+    lockedReason: String(policy.lockedReason ?? '').trim() || null,
     lockedByPackageKeys: [...(policy.lockedByPackageKeys ?? [])],
     stableId: policy.stableId ?? policy.id ?? '',
     lineageId: policy.lineageId ?? policy.stableId ?? policy.id ?? '',
@@ -673,18 +766,11 @@ export function cloneWorkflowPolicy(policy) {
         }))
       : [],
     overrideRoles: [...(policy.overrideRoles ?? [])],
-    steps: Array.isArray(policy.steps)
-      ? policy.steps.map((step) => ({
-          ...step,
-          bindingKeys: [...(step.bindingKeys ?? [])],
-          parameters: step.parameters && typeof step.parameters === 'object' && !Array.isArray(step.parameters)
-            ? { ...step.parameters }
-            : {},
-        }))
-      : [],
-    orderedSteps: [...(policy.orderedSteps ?? [])],
-    requiredAgentIds: [...(policy.requiredAgentIds ?? [])],
-    requiredSkillIds: [...(policy.requiredSkillIds ?? [])],
+    steps,
+    orderedSteps: derivedExecutionFields.orderedSteps,
+    requiredAgentIds: derivedExecutionFields.requiredAgentIds,
+    requiredSkillIds: derivedExecutionFields.requiredSkillIds,
+    gatingRules: [],
     updatedBy: policy.updatedBy ? { ...policy.updatedBy } : null,
   }
 }
@@ -770,7 +856,7 @@ export function mapWorkflowPolicyToForm(policy) {
     routingMode: policy.routingMode ?? '',
     primaryAgentId: policy.primaryAgentId ?? '',
     fallbackAgentId: policy.fallbackAgentId ?? '',
-    timeoutMs: String(policy.timeoutMs ?? 0),
+    timeoutMs: policy.timeoutMs === null ? '' : String(policy.timeoutMs ?? 10000),
     retryOverride: policy.retryOverride ?? '',
     requireSuccess: Boolean(policy.requireSuccess),
     requiredValidationKeys: Array.isArray(policy.requiredValidationKeys) ? [...policy.requiredValidationKeys] : [],
@@ -819,9 +905,14 @@ export function mapWorkflowPolicyToForm(policy) {
           blocking: step?.blocking ?? true,
         }))
       : [],
-    orderedSteps: Array.isArray(policy.orderedSteps) ? [...policy.orderedSteps] : [],
-    requiredAgentIds: Array.isArray(policy.requiredAgentIds) ? [...policy.requiredAgentIds] : [],
-    requiredSkillIds: Array.isArray(policy.requiredSkillIds) ? [...policy.requiredSkillIds] : [],
+    ...deriveWorkflowPolicyExecutionFields({
+      steps: policy.steps,
+      primaryAgentId: policy.primaryAgentId,
+      fallbackAgentId: policy.fallbackAgentId,
+      orderedSteps: policy.orderedSteps,
+      requiredAgentIds: policy.requiredAgentIds,
+      requiredSkillIds: policy.requiredSkillIds,
+    }),
   }
 }
 
@@ -860,7 +951,10 @@ export function validateWorkflowPolicyForm(
   const routingMode = String(formState.routingMode ?? '').trim()
   const primaryAgentId = normalizeAgentId(formState.primaryAgentId)
   const fallbackAgentId = normalizeAgentId(formState.fallbackAgentId)
-  const timeoutMs = Number.parseInt(String(formState.timeoutMs ?? '').trim(), 10)
+  const timeoutMsInput = String(formState.timeoutMs ?? '').trim()
+  const timeoutMs = timeoutMsInput === ''
+    ? null
+    : Number.parseInt(timeoutMsInput, 10)
   const retryOverride = String(formState.retryOverride ?? '').trim()
   const requireSuccess = Boolean(formState.requireSuccess)
   const requiredValidationKeys = [...new Set(
@@ -886,10 +980,6 @@ export function validateWorkflowPolicyForm(
   const slaMinutes = Number.parseInt(String(formState.slaMinutes ?? '').trim(), 10)
   const executionType = String(formState.executionType ?? WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP).trim().toUpperCase()
   const steps = Array.isArray(formState.steps) ? formState.steps : []
-  const orderedSteps = Array.isArray(formState.orderedSteps) ? [...formState.orderedSteps] : []
-  const requiredAgentIds = Array.isArray(formState.requiredAgentIds) ? [...formState.requiredAgentIds] : []
-  const requiredSkillIds = Array.isArray(formState.requiredSkillIds) ? [...formState.requiredSkillIds] : []
-
   if (!KEY_TOKEN_PATTERN.test(key)) {
     errors.key = 'Workflow policy key is required and must use letters, numbers, or hyphens.'
   }
@@ -1057,8 +1147,8 @@ export function validateWorkflowPolicyForm(
     errors.fallbackAgentId = 'Choose a Primary Agent before setting a Fallback Agent.'
   }
 
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 300000) {
-    errors.timeoutMs = 'Timeout Override must be between 0 and 300000 milliseconds.'
+  if (timeoutMs !== null && (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000)) {
+    errors.timeoutMs = 'Timeout Override must be between 1 and 300000 milliseconds.'
   }
 
   if (retryOverride.length > 120) {
@@ -1079,6 +1169,14 @@ export function validateWorkflowPolicyForm(
 
   if (approvalRequired && !escalationRoleKey) {
     errors.escalationRoleKey = 'Escalate To Role is required when approval is required.'
+  }
+
+  if (
+    policyType === WORKFLOW_POLICY_TYPES.LIFECYCLE_GATE
+    && approvalRequired
+    && severity === WORKFLOW_POLICY_SEVERITIES.INFO
+  ) {
+    errors.severity = 'Approval-required lifecycle gates must use Warning, Critical, or Blocking severity.'
   }
 
   if (escalationMessage.length > 500) {
@@ -1125,6 +1223,15 @@ export function validateWorkflowPolicyForm(
 
   if (!errors.steps && executionType !== WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP && normalizedSteps.length === 0) {
     errors.steps = 'Ordered or composite execution requires at least one governed step.'
+  }
+
+  if (
+    !errors.steps
+    && executionType === WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP
+    && normalizedSteps.length === 0
+    && decisionMode !== WORKFLOW_POLICY_DECISION_MODES.ALLOW
+  ) {
+    errors.steps = 'Single-step policies without governed steps are only allowed for Allow decisions.'
   }
 
   if (!errors.steps) {
@@ -1298,9 +1405,6 @@ export function validateWorkflowPolicyForm(
         ...(step.skillId ? { skillId: step.skillId } : {}),
         ...(step.eventKey ? { eventKey: step.eventKey } : {}),
       })),
-      orderedSteps,
-      requiredAgentIds,
-      requiredSkillIds,
     },
   }
 }

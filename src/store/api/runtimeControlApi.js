@@ -363,6 +363,26 @@ const validateMockWorkflowPolicyGovernedMetadataFields = (payload = {}) => {
   })
 }
 
+const WORKFLOW_POLICY_DEPRECATED_FIELDS = [
+  'gatingRules',
+  'orderedSteps',
+  'requiredAgentIds',
+  'requiredSkillIds',
+]
+
+const validateMockWorkflowPolicyDeprecatedFields = (payload = {}) => {
+  const details = WORKFLOW_POLICY_DEPRECATED_FIELDS.reduce((nextDetails, field) => {
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      nextDetails[field] = `${field} is deprecated. Use conditions and governed steps instead.`
+    }
+    return nextDetails
+  }, {})
+
+  if (Object.keys(details).length === 0) return null
+
+  return buildValidationFailedError('Please check the form for errors.', details)
+}
+
 const validateMockRuntimeAgentGovernedMetadataFields = (payload = {}) => {
   const field = RUNTIME_AGENT_GOVERNED_METADATA_FIELDS.find((fieldName) =>
     Object.prototype.hasOwnProperty.call(payload, fieldName),
@@ -5824,6 +5844,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         if (governedMetadataError) {
           return governedMetadataError
         }
+        const deprecatedFieldError = validateMockWorkflowPolicyDeprecatedFields(runtimePayload)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
+        }
 
         const duplicatePolicy = runtimeControlState.workflowPolicies.find(
           (policy) => String(policy.key ?? '').trim() === String(runtimePayload.key ?? '').trim(),
@@ -5854,7 +5878,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           runtimeControlState.agents,
           writableRuntimePathRows,
         )
-        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(runtimePayload)
+        const normalizedPolicyPayload = cloneWorkflowPolicy(normalizedPayload)
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(normalizedPolicyPayload)
         const mockValidationErrors = {
           ...validationErrors,
           ...dependencyValidationErrors,
@@ -5867,7 +5892,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const createdPolicy = {
           id: generateRuntimeId('policy', normalizedPayload.key),
           ...cloneWorkflowPolicy({
-            ...normalizedPayload,
+            ...normalizedPolicyPayload,
             version: 1,
             lastActivatedAt: String(normalizedPayload.status ?? '').trim().toUpperCase() === 'ACTIVE'
               ? new Date().toISOString()
@@ -5904,6 +5929,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const governedMetadataError = validateMockWorkflowPolicyGovernedMetadataFields(runtimePayload)
         if (governedMetadataError) {
           return governedMetadataError
+        }
+        const deprecatedFieldError = validateMockWorkflowPolicyDeprecatedFields(runtimePayload)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
         }
 
         const sourcePolicy = findWorkflowPolicyById(policyId)
@@ -5946,7 +5975,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           isLocked: false,
           lockedAt: null,
           lockedBy: null,
-          lockedReason: '',
+          lockedReason: null,
           lockedByPackageKeys: [],
           lineageId: sourcePolicy.lineageId || sourceStableId,
           clonedFromStableId: sourceStableId,
@@ -6057,6 +6086,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
             draft: 'Workflow policy draft payload is required for test console runs.',
           })
         }
+        const deprecatedFieldError = validateMockWorkflowPolicyDeprecatedFields(draft)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
+        }
 
         const writableRuntimePathRows = getRuntimePathRows({
           status: 'ACTIVE',
@@ -6068,7 +6101,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const frameworkRegistryKeys = getFrameworkRegistryRows()
           .map((entry) => String(entry.frameworkKey ?? '').trim().toUpperCase())
           .filter(Boolean)
-        const { errors: validationErrors } = validateWorkflowPolicyForm(
+        const { errors: validationErrors, payload: normalizedPayload } = validateWorkflowPolicyForm(
           draft,
           [],
           '',
@@ -6076,7 +6109,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           runtimeControlState.agents,
           writableRuntimePathRows,
         )
-        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(draft)
+        const normalizedPolicyPayload = cloneWorkflowPolicy(normalizedPayload)
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(normalizedPolicyPayload)
         const mockValidationErrors = {
           ...validationErrors,
           ...dependencyValidationErrors,
@@ -6127,6 +6161,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const governedMetadataError = validateMockWorkflowPolicyGovernedMetadataFields(runtimePayload)
         if (governedMetadataError) {
           return governedMetadataError
+        }
+        const deprecatedFieldError = validateMockWorkflowPolicyDeprecatedFields(runtimePayload)
+        if (deprecatedFieldError) {
+          return deprecatedFieldError
         }
 
         if (existingPolicy.isLocked === true) {
@@ -6183,7 +6221,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           runtimeControlState.agents,
           writableRuntimePathRows,
         )
-        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(nextDraft)
+        const normalizedPolicyPayload = cloneWorkflowPolicy({
+          ...existingPolicy,
+          ...normalizedPayload,
+        })
+        const dependencyValidationErrors = validateMockWorkflowPolicyRegistryDependencies(normalizedPolicyPayload)
         const mockValidationErrors = {
           ...validationErrors,
           ...dependencyValidationErrors,
@@ -6194,8 +6236,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const nextPolicy = cloneWorkflowPolicy({
-          ...existingPolicy,
-          ...normalizedPayload,
+          ...normalizedPolicyPayload,
           version: Number(existingPolicy.version ?? 1) + 1,
           lastActivatedAt:
             String(normalizedPayload.status ?? existingPolicy.status ?? '').trim().toUpperCase() === 'ACTIVE'

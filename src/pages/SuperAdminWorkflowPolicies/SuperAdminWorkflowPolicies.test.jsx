@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import SuperAdminWorkflowPolicies from './SuperAdminWorkflowPolicies'
 import SuperAdminWorkflowPolicyEditor from '../SuperAdminWorkflowPolicyEditor'
 import {
+  cloneWorkflowPolicy,
   INITIAL_WORKFLOW_POLICY_FORM,
+  mapWorkflowPolicyToForm,
   WORKFLOW_POLICY_EXECUTION_TYPES,
   WORKFLOW_POLICY_STEP_TYPES,
   validateWorkflowPolicyForm,
@@ -213,5 +215,85 @@ describe('SuperAdminWorkflowPolicies page', () => {
         },
       ],
     }).errors.steps).toBeUndefined()
+  })
+
+  it('validates runtime hardening rules before submit', () => {
+    const baseForm = {
+      ...INITIAL_WORKFLOW_POLICY_FORM,
+      key: 'qa-workflow-policy',
+      name: 'QA Workflow Policy',
+      priority: '100',
+      frameworkKeys: ['VMF'],
+      triggerEvent: 'ON_SUBMIT',
+      governedAction: 'SUBMIT_FOR_REVIEW',
+    }
+
+    expect(validateWorkflowPolicyForm({
+      ...baseForm,
+      timeoutMs: '0',
+    }).errors.timeoutMs).toBe('Timeout Override must be between 1 and 300000 milliseconds.')
+
+    expect(validateWorkflowPolicyForm({
+      ...baseForm,
+      timeoutMs: '',
+    }).payload.timeoutMs).toBeNull()
+    expect(mapWorkflowPolicyToForm({
+      key: 'qa-null-timeout',
+      name: 'QA Null Timeout',
+      timeoutMs: null,
+    }).timeoutMs).toBe('')
+
+    expect(validateWorkflowPolicyForm({
+      ...baseForm,
+      policyType: 'LIFECYCLE_GATE',
+      severity: 'INFO',
+      overrideAllowed: true,
+      overrideRoles: ['SUPER_ADMIN'],
+      approvalRequired: true,
+      escalationRoleKey: 'FRAMEWORK_OWNER',
+      slaMinutes: '15',
+    }).errors.severity).toBe('Approval-required lifecycle gates must use Warning, Critical, or Blocking severity.')
+
+    expect(validateWorkflowPolicyForm({
+      ...baseForm,
+      executionType: WORKFLOW_POLICY_EXECUTION_TYPES.SINGLE_STEP,
+      steps: [],
+      decisionMode: 'REQUIRE_APPROVAL',
+    }).errors.steps).toBe('Single-step policies without governed steps are only allowed for Allow decisions.')
+  })
+
+  it('keeps Workflow Policy compatibility fields derived from canonical or legacy source data', () => {
+    const formResult = validateWorkflowPolicyForm({
+      ...INITIAL_WORKFLOW_POLICY_FORM,
+      key: 'qa-derived-contract',
+      name: 'QA Derived Contract',
+      frameworkKeys: ['VMF'],
+      triggerEvent: 'ON_SUBMIT',
+      governedAction: 'SUBMIT_FOR_REVIEW',
+      executionType: WORKFLOW_POLICY_EXECUTION_TYPES.ORDERED_STEPS,
+      steps: [{
+        stepKey: 'validate',
+        type: WORKFLOW_POLICY_STEP_TYPES.AGENT_EXECUTION,
+        order: '1',
+        agentId: 'agent-validator',
+        blocking: true,
+      }],
+    })
+
+    expect(formResult.payload).not.toHaveProperty('orderedSteps')
+    expect(formResult.payload).not.toHaveProperty('requiredAgentIds')
+    expect(formResult.payload).not.toHaveProperty('requiredSkillIds')
+    expect(cloneWorkflowPolicy({
+      key: 'legacy-policy',
+      name: 'Legacy Policy',
+      steps: [],
+      orderedSteps: ['legacy-step'],
+      requiredAgentIds: ['agent-validator'],
+      requiredSkillIds: ['skill-review'],
+    })).toMatchObject({
+      orderedSteps: ['legacy-step'],
+      requiredAgentIds: ['agent-validator'],
+      requiredSkillIds: ['skill-review'],
+    })
   })
 })

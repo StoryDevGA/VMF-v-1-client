@@ -88,6 +88,22 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     ])
   })
 
+  it('renders inherited timeout and canonical step fields in the working JSON preview', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
+
+    await user.click(screen.getByRole('tab', { name: /agent routing/i }))
+    await user.clear(screen.getByLabelText(/^timeout override \(ms\)$/i))
+    await user.click(screen.getByRole('tab', { name: /json \/ diff/i }))
+
+    const currentJson = container.querySelector('.super-admin-workflow-policy-editor__json-code')?.textContent ?? ''
+
+    expect(currentJson).toContain('"timeoutMs": null')
+    expect(currentJson).not.toContain('"orderedSteps"')
+    expect(currentJson).not.toContain('"requiredAgentIds"')
+    expect(currentJson).not.toContain('"requiredSkillIds"')
+  })
+
   it('explains the accepted FRAMEWORK_STATE JSON shapes in the test console', async () => {
     const user = userEvent.setup()
     renderWorkflowPolicyEditorRoutes(['/super-admin/runtime-control/workflow-policies/new'])
@@ -401,7 +417,7 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
       screen.getByLabelText(/^decision mode$/i, {
         selector: 'select#workflow-policy-editor-decision-mode',
       }),
-      'REQUIRE_AGENT_EVALUATION',
+      'ALLOW',
     )
 
     await user.click(screen.getByRole('tab', { name: /framework state conditions/i }))

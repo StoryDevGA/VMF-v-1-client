@@ -445,6 +445,7 @@ describe('runtimeControlApi', () => {
       componentVersion: 3,
       versionStatus: 'DRAFT',
       isLocked: false,
+      lockedReason: null,
       lockedByPackageKeys: [],
       clonedFromStableId: 'policy-vmf-publish',
       supersedesStableId: 'policy-vmf-publish',
@@ -464,10 +465,8 @@ describe('runtimeControlApi', () => {
           order: 1,
           eventKey: 'review-ready',
         }],
-        timeoutMs: 0,
+        timeoutMs: 10000,
         validationFreshnessMinutes: 30,
-        requiredAgentIds: [],
-        requiredSkillIds: [],
       }),
     )
 
@@ -1106,10 +1105,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: [],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'validate',
+            type: 'AGENT_EXECUTION',
+            order: 1,
+            agentId: 'agent-validator',
+          }],
         },
         frameworkState: {
           lifecycle: {
@@ -1181,10 +1183,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: [],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'validate',
+            type: 'AGENT_EXECUTION',
+            order: 1,
+            agentId: 'agent-validator',
+          }],
         },
         frameworkState: {
           framework_state: {
@@ -1258,10 +1263,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: [],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'validate',
+            type: 'AGENT_EXECUTION',
+            order: 1,
+            agentId: 'agent-validator',
+          }],
         },
         frameworkState: {
           framework_state: null,
@@ -1339,10 +1347,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: [],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'validate',
+            type: 'AGENT_EXECUTION',
+            order: 1,
+            agentId: 'agent-validator',
+          }],
         },
         frameworkState: {
           validation: {
@@ -1428,10 +1439,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: [],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'validate',
+            type: 'AGENT_EXECUTION',
+            order: 1,
+            agentId: 'agent-validator',
+          }],
         },
         frameworkState: {
           lifecycle: {
@@ -1464,7 +1478,25 @@ describe('runtimeControlApi', () => {
     ])
   })
 
-  it('keeps mock Workflow Policy requiredSkillIds validation aligned with the API', async () => {
+  it.each([
+    'gatingRules',
+    'orderedSteps',
+    'requiredAgentIds',
+    'requiredSkillIds',
+  ])('rejects deprecated Workflow Policy %s in the mock API', async (field) => {
+    const store = createTestStore()
+
+    const result = await store.dispatch(
+      runtimeControlApi.endpoints.createWorkflowPolicy.initiate({
+        body: { [field]: [] },
+      }),
+    )
+
+    expect(result.error?.status).toBe(422)
+    expect(result.error?.data?.error?.details?.[field]).toContain('deprecated')
+  })
+
+  it('keeps mock Workflow Policy skill-step validation aligned with the API', async () => {
     const store = createTestStore()
 
     const result = await store.dispatch(
@@ -1508,10 +1540,13 @@ describe('runtimeControlApi', () => {
           escalationRoleKey: '',
           escalationMessage: '',
           slaMinutes: 0,
-          orderedSteps: [],
-          requiredAgentIds: ['agent-validator'],
-          requiredSkillIds: ['skill-report'],
-          gatingRules: [],
+          executionType: 'ORDERED_STEPS',
+          steps: [{
+            stepKey: 'review',
+            type: 'SKILL_EXECUTION',
+            order: 1,
+            skillId: 'skill-report',
+          }],
         },
       }),
     )

@@ -294,6 +294,14 @@ const parsePreviewInteger = (value, fallback = 0) => {
   return Number.isInteger(parsed) ? parsed : fallback
 }
 
+const parsePreviewNullableInteger = (value) => {
+  const normalizedValue = String(value ?? '').trim()
+  if (!normalizedValue) return null
+
+  const parsed = Number.parseInt(normalizedValue, 10)
+  return Number.isInteger(parsed) ? parsed : null
+}
+
 const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   key: String(formState.key ?? '').trim(),
   name: String(formState.name ?? '').trim(),
@@ -326,7 +334,7 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
   routingMode: String(formState.routingMode ?? '').trim().toUpperCase(),
   primaryAgentId: String(formState.primaryAgentId ?? '').trim().toLowerCase(),
   fallbackAgentId: String(formState.fallbackAgentId ?? '').trim().toLowerCase(),
-  timeoutMs: parsePreviewInteger(formState.timeoutMs, 0),
+  timeoutMs: parsePreviewNullableInteger(formState.timeoutMs),
   retryOverride: String(formState.retryOverride ?? '').trim(),
   requireSuccess: Boolean(formState.requireSuccess),
   requiredValidationKeys: normalizePreviewList(formState.requiredValidationKeys),
@@ -386,9 +394,6 @@ const buildWorkflowPolicyJsonPreview = (formState = {}) => ({
       || step.skillId
       || step.eventKey,
     ),
-  orderedSteps: normalizePreviewList(formState.orderedSteps),
-  requiredAgentIds: normalizePreviewList(formState.requiredAgentIds),
-  requiredSkillIds: normalizePreviewList(formState.requiredSkillIds),
 })
 
 const flattenJsonPreviewEntries = (value, prefix = '', entries = []) => {
