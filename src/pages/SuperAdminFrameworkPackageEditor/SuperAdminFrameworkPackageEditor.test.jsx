@@ -545,6 +545,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     await user.click(screen.getByRole('tab', { name: /^sections$/i }))
     await user.click(screen.getByRole('button', { name: /add section/i }))
+    expect(screen.getByText(/runtime paths that allow BIND are selectable/i)).toBeInTheDocument()
 
     const runtimePathInput = screen.getByRole('combobox', { name: /runtime path/i })
     await user.click(runtimePathInput)

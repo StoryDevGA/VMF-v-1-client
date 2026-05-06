@@ -2209,14 +2209,14 @@ function SuperAdminFrameworkPackageEditor() {
               scope="FRAMEWORK_STATE"
               category="SECTION"
               operation={null}
-              allowedOperations={['READ', 'BIND']}
+              allowedOperations={['BIND']}
               pathPrefix="framework_state.sections."
               selectionMode="single"
               selectedKeys={sectionDialog.draft.runtimePath ? [sectionDialog.draft.runtimePath] : []}
               onChange={handleSectionRuntimePathChange}
               onSelect={handleSectionRuntimePathSelect}
               placeholder="Search section runtime paths"
-              helperText="Only ACTIVE framework_state.sections.* runtime paths in the Runtime Path Registry are selectable."
+              helperText="Only ACTIVE framework_state.sections.* runtime paths that allow BIND are selectable."
               disabled={runtimeStructureLocked}
             />
             <Input

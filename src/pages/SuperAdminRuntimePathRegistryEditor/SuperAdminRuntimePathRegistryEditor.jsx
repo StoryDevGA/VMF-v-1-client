@@ -84,6 +84,10 @@ const INITIAL_FORM = Object.freeze({
   isNullable: false,
 })
 
+// Keep this copy aligned with RUNTIME_PATH_REGISTRY_OPERATIONS when operation semantics change.
+const OPERATION_CONTRACT_HELPER =
+  'READ supports workflow policy conditions. WRITE supports workflow effects. BIND supports UI Contract and Framework Package section mapping.'
+
 const formatListText = (values) => (Array.isArray(values) ? values.join('\n') : '')
 
 const formatValueText = (value) => {
@@ -372,6 +376,14 @@ function SuperAdminRuntimePathRegistryEditor() {
   const selectedFrameworkKeys = useMemo(
     () => normalizeList(form.frameworkKeys, { upper: true }),
     [form.frameworkKeys],
+  )
+  const selectedAllowedOperations = useMemo(
+    () => normalizeList(form.allowedOperations, { upper: true }),
+    [form.allowedOperations],
+  )
+  const allowedOperationsContract = useMemo(
+    () => `allowedOperations: [${selectedAllowedOperations.map((operation) => `"${operation}"`).join(', ')}]`,
+    [selectedAllowedOperations],
   )
 
   const frameworkOptions = useMemo(() => {
@@ -687,22 +699,32 @@ function SuperAdminRuntimePathRegistryEditor() {
                     />
                   </RuntimePathEditorField>
 
-                  <div className="super-admin-runtime-path-registry-editor__toggle-row">
-                    <Tickbox
-                      id="runtime-path-editor-protected"
-                      label="Protected write guard"
-                      checked={Boolean(form.isProtected)}
-                      onChange={(event) => updateForm('isProtected', event.target.checked)}
-                      disabled={readOnlySourceFields}
-                    />
-                    <Tickbox
-                      id="runtime-path-editor-system"
-                      label="System managed"
-                      checked={Boolean(form.isSystem)}
-                      onChange={(event) => updateForm('isSystem', event.target.checked)}
-                      disabled={readOnlySourceFields}
-                    />
-                  </div>
+                  <fieldset
+                    className="super-admin-runtime-path-registry-editor__toggle-fieldset"
+                    aria-describedby="runtime-path-editor-protection-helper"
+                  >
+                    <legend className="sr-only">Protection Model</legend>
+                    <div className="super-admin-runtime-path-registry-editor__toggle-row">
+                      <Tickbox
+                        id="runtime-path-editor-protected"
+                        label="Protected write guard"
+                        checked={Boolean(form.isProtected)}
+                        onChange={(event) => updateForm('isProtected', event.target.checked)}
+                        disabled={readOnlySourceFields}
+                      />
+                      <Tickbox
+                        id="runtime-path-editor-system"
+                        label="System managed"
+                        checked={Boolean(form.isSystem)}
+                        onChange={(event) => updateForm('isSystem', event.target.checked)}
+                        disabled={readOnlySourceFields}
+                      />
+                    </div>
+                    <p id="runtime-path-editor-protection-helper" className="super-admin-runtime-path-registry-editor__helper">
+                      System managed records cannot be deleted and allow only restricted edits. Protected write guard blocks
+                      runtime writes even when WRITE is selected.
+                    </p>
+                  </fieldset>
                 </div>
 
                 <TabView
@@ -773,18 +795,36 @@ function SuperAdminRuntimePathRegistryEditor() {
                         <p className="super-admin-runtime-path-registry-editor__error" role="alert">{errors.frameworkKeys}</p>
                       ) : null}
 
-                      <div className="super-admin-runtime-path-registry-editor__operation-grid">
-                        {RUNTIME_PATH_REGISTRY_FORM_OPERATION_OPTIONS.map((option) => (
-                          <Tickbox
-                            key={option.value}
-                            id={`runtime-path-editor-operation-${option.value.toLowerCase()}`}
-                            label={option.label}
-                            checked={form.allowedOperations.includes(option.value)}
-                            onChange={(event) => toggleOperation(option.value, event.target.checked)}
-                            disabled={readOnlySourceFields}
-                          />
-                        ))}
-                      </div>
+                      <fieldset
+                        className="super-admin-runtime-path-registry-editor__operation-fieldset"
+                        aria-describedby="runtime-path-editor-operation-contract runtime-path-editor-operation-helper"
+                      >
+                        <legend className="sr-only">Allowed Operations</legend>
+                        <div className="super-admin-runtime-path-registry-editor__operation-grid">
+                          {RUNTIME_PATH_REGISTRY_FORM_OPERATION_OPTIONS.map((option) => (
+                            <Tickbox
+                              key={option.value}
+                              id={`runtime-path-editor-operation-${option.value.toLowerCase()}`}
+                              label={option.label}
+                              checked={selectedAllowedOperations.includes(option.value)}
+                              onChange={(event) => toggleOperation(option.value, event.target.checked)}
+                              disabled={readOnlySourceFields}
+                            />
+                          ))}
+                        </div>
+                        <div
+                          id="runtime-path-editor-operation-contract"
+                          className="super-admin-runtime-path-registry-editor__operation-contract"
+                          aria-live="polite"
+                        >
+                          <code>{allowedOperationsContract}</code>
+                          <p id="runtime-path-editor-operation-helper" className="super-admin-runtime-path-registry-editor__helper">
+                            {selectedAllowedOperations.length === 0
+                              ? 'Select at least one operation.'
+                              : OPERATION_CONTRACT_HELPER}
+                          </p>
+                        </div>
+                      </fieldset>
                       {errors.allowedOperations ? (
                         <p className="super-admin-runtime-path-registry-editor__error" role="alert">{errors.allowedOperations}</p>
                       ) : null}

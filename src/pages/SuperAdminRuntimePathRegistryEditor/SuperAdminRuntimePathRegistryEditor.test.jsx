@@ -61,6 +61,7 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
       'tabview--sm',
       'tabview--even-tabs',
     )
+    expect(screen.getByText(/system managed records cannot be deleted/i)).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^overview$/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
@@ -74,6 +75,23 @@ describe('SuperAdminRuntimePathRegistryEditor', () => {
     expect(screen.getByRole('option', { name: /^WORKFLOW$/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /^AUDIT$/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /^NOTIFICATION$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^framework compatibility$/i }))
+    const allowedOperationsGroup = screen.getByRole('group', { name: /allowed operations/i })
+    expect(allowedOperationsGroup).toHaveAccessibleDescription(/allowedOperations: \["READ"\]/)
+    expect(allowedOperationsGroup).toHaveAccessibleDescription(/BIND supports UI Contract and Framework Package section mapping/i)
+    expect(screen.getByText('allowedOperations: ["READ"]')).toBeInTheDocument()
+    expect(screen.getByText(/BIND supports UI Contract and Framework Package section mapping/i)).toBeInTheDocument()
+    expect(screen.getByText('allowedOperations: ["READ"]').closest('[aria-live="polite"]')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /^READ$/i }))
+    expect(screen.getByText('allowedOperations: []')).toBeInTheDocument()
+    expect(screen.getByText(/select at least one operation/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /^READ$/i }))
+    await user.click(screen.getByRole('checkbox', { name: /^WRITE$/i }))
+    await user.click(screen.getByRole('checkbox', { name: /^BIND$/i }))
+    expect(screen.getByText('allowedOperations: ["READ", "WRITE", "BIND"]')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: /create path/i })).toBeInTheDocument()
     expect(screen.queryByText(/^XXX$/)).not.toBeInTheDocument()
