@@ -2165,6 +2165,7 @@ const buildMockFrameworkPackageIntegrity = (pkg) => {
     { pass: 0, warn: 0, fail: 0 },
   )
   return {
+    schemaVersion: '1',
     id: pkg.id,
     frameworkKey: pkg.frameworkKey,
     packageKey: pkg.packageKey,
@@ -2175,6 +2176,196 @@ const buildMockFrameworkPackageIntegrity = (pkg) => {
     checks,
   }
 }
+
+const buildMockCheckpointCode = (value) =>
+  String(value || 'checkpoint.issue')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+    || 'CHECKPOINT_ISSUE'
+
+const buildMockFrameworkPackageDependencyLock = (pkg, dependencies = buildMockFrameworkPackageDependencies(pkg)) => {
+  const now = new Date().toISOString()
+  const dependencyRows = [
+    ...(dependencies.agents ?? []).map((row) => ({ ...row, collectionKey: 'RuntimeAgent' })),
+    ...(dependencies.skills ?? []).map((row) => ({ ...row, collectionKey: 'RuntimeSkill' })),
+    ...(dependencies.runtimePaths ?? []).map((row) => ({ ...row, collectionKey: 'RuntimePathRegistry' })),
+    ...(dependencies.validations ?? []).map((row) => ({ ...row, collectionKey: 'ValidationRegistry' })),
+    ...(dependencies.workflowPolicies ?? []).map((row) => ({ ...row, collectionKey: 'WorkflowPolicy' })),
+    ...(dependencies.uiContract ? [{ ...dependencies.uiContract, collectionKey: 'UIContract' }] : []),
+  ]
+  const hasIssues = dependencyRows.some((row) => Array.isArray(row.issues) && row.issues.length > 0)
+
+  return {
+    status: hasIssues ? 'FAIL' : 'PASS',
+    resolvedAt: now,
+    resolvedBy: null,
+    packageKey: pkg.packageKey || '',
+    packageVersion: pkg.version || '',
+    references: dependencyRows.map((row) => ({
+      collectionKey: row.collectionKey,
+      id: row.id || row.key || '',
+      key: row.key || '',
+      name: row.name || '',
+      status: row.status || '',
+      versionStatus: row.versionStatus || 'ACTIVE',
+      componentVersion: Number(row.componentVersion) || 1,
+      lineageId: row.lineageId || row.id || row.key || '',
+      lockedAt: row.lockedAt || null,
+      issues: Array.isArray(row.issues) ? row.issues : [],
+    })),
+  }
+}
+
+const buildMockFrameworkPackageDependencyGraph = (pkg, dependencies = buildMockFrameworkPackageDependencies(pkg)) => {
+  const packageNodeId = `framework-package:${pkg.id || pkg.packageKey || 'package'}`
+  const nodes = [
+    {
+      id: packageNodeId,
+      type: 'FrameworkPackage',
+      key: pkg.packageKey || '',
+      label: pkg.packageName || `${pkg.frameworkKey} ${pkg.version}`,
+      status: pkg.status || '',
+      issueCount: 0,
+    },
+  ]
+  const edges = []
+  const groups = [
+    ['agents', 'RuntimeAgent'],
+    ['skills', 'RuntimeSkill'],
+    ['runtimePaths', 'RuntimePathRegistry'],
+    ['validations', 'ValidationRegistry'],
+    ['workflowPolicies', 'WorkflowPolicy'],
+    ['uiContract', 'UIContract'],
+  ]
+
+  for (const [groupKey, type] of groups) {
+    const rows = groupKey === 'uiContract'
+      ? (dependencies.uiContract ? [dependencies.uiContract] : [])
+      : (dependencies[groupKey] ?? [])
+    for (const row of rows) {
+      const nodeId = `${type}:${row.id || row.key || nodes.length}`
+      nodes.push({
+        id: nodeId,
+        type,
+        key: row.key || row.id || '',
+        label: row.name || row.key || row.id || type,
+        status: row.status || '',
+        issueCount: Array.isArray(row.issues) ? row.issues.length : 0,
+      })
+      edges.push({
+        id: `${packageNodeId}->${nodeId}`,
+        from: packageNodeId,
+        to: nodeId,
+        relationship: row.source || groupKey,
+      })
+    }
+  }
+
+  return {
+    nodes,
+    edges,
+    summary: {
+      nodes: nodes.length,
+      edges: edges.length,
+      issueNodes: nodes.filter((node) => Number(node.issueCount) > 0).length,
+    },
+  }
+}
+
+const buildMockFrameworkPackageCheckpoint = (pkg, { mode = 'FULL' } = {}) => {
+  const checkpointPkg = {
+    ...pkg,
+    status: String(mode ?? '').trim().toUpperCase() === 'ACTIVATION'
+      ? FRAMEWORK_PACKAGE_STATUSES.ACTIVE
+      : FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+  }
+  const dependencies = buildMockFrameworkPackageDependencies(checkpointPkg)
+  const dependencyLockPreview = buildMockFrameworkPackageDependencyLock(checkpointPkg, dependencies)
+  const integrity = buildMockFrameworkPackageIntegrity(checkpointPkg)
+  const checks = (integrity.checks ?? []).map((check) => {
+    if (check.key === 'dependencyLock.snapshot' && check.severity === 'WARN' && dependencyLockPreview.status !== 'FAIL') {
+      return {
+        ...check,
+        severity: 'PASS',
+        message: 'Dependency lock snapshot can be created by this checkpoint.',
+      }
+    }
+    return check
+  })
+  const issues = checks
+    .filter((check) => String(check.severity ?? '').toUpperCase() !== 'PASS')
+    .map((check) => ({
+      code: buildMockCheckpointCode(check.key),
+      severity: check.severity === 'FAIL' ? 'BLOCKING' : 'WARNING',
+      category: check.group || 'Runtime Architecture Checkpoint',
+      message: check.message,
+      path: check.field || check.key,
+      source: check.group || 'Runtime Architecture Checkpoint',
+    }))
+  const errors = issues.filter((issue) => issue.severity === 'BLOCKING')
+  const warnings = issues.filter((issue) => issue.severity === 'WARNING')
+  const passedChecks = checks
+    .filter((check) => String(check.severity ?? '').toUpperCase() === 'PASS')
+    .map((check) => ({
+      code: buildMockCheckpointCode(check.key),
+      category: check.group || 'Runtime Architecture Checkpoint',
+      message: check.message,
+      path: check.field || check.key,
+      source: check.group || 'Runtime Architecture Checkpoint',
+    }))
+
+  return {
+    id: pkg.id,
+    frameworkKey: pkg.frameworkKey,
+    packageKey: pkg.packageKey || '',
+    packageVersion: pkg.version || '',
+    mode: String(mode ?? 'FULL').trim().toUpperCase() || 'FULL',
+    status: errors.length > 0 ? 'FAIL' : warnings.length > 0 ? 'PASS_WITH_WARNINGS' : 'PASS',
+    errors,
+    warnings,
+    issues,
+    passedChecks,
+    dependencyGraph: buildMockFrameworkPackageDependencyGraph(checkpointPkg, dependencies),
+    dependencyLockPreview,
+    summary: {
+      totalChecks: passedChecks.length + warnings.length + errors.length,
+      passed: passedChecks.length,
+      warnings: warnings.length,
+      failed: errors.length,
+      resolvedReferences: dependencyLockPreview.references.length,
+    },
+    timestamp: new Date().toISOString(),
+    runBy: null,
+  }
+}
+
+const compactMockCheckpointForValidationError = (checkpoint = {}) => {
+  const compactCheckpoint = { ...(checkpoint || {}) }
+  delete compactCheckpoint.dependencyGraph
+  delete compactCheckpoint.dependencyLockPreview
+  delete compactCheckpoint.passedChecks
+  return compactCheckpoint
+}
+
+const buildMockCheckpointValidationError = (checkpoint) => ({
+  error: {
+    status: 422,
+    data: {
+      error: {
+        code: 'VALIDATION_FAILED',
+        message: 'Runtime Architecture Checkpoint failed.',
+        details: checkpoint.errors.reduce((details, issue) => ({
+          ...details,
+          [issue.path || issue.code]: issue.message,
+        }), {}),
+        checkpoint: compactMockCheckpointForValidationError(checkpoint),
+      },
+    },
+  },
+})
 
 const getActiveFrameworkRegistryKeys = () =>
   new Set(
@@ -3083,6 +3274,54 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getFrameworkPackageDependencyGraph: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/dependency-graph`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return { data: buildEntityResponse(buildMockFrameworkPackageDependencyGraph(pkg)) }
+      },
+      providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    getFrameworkPackageDependencyLock: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/dependency-lock`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return {
+          data: buildEntityResponse(
+            pkg.dependencyLock || buildMockFrameworkPackageDependencyLock(pkg),
+          ),
+        }
+      },
+      providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
     getFrameworkPackageIntegrity: build.query({
       queryFn: async (packageId, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -3101,6 +3340,126 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         return { data: buildEntityResponse(buildMockFrameworkPackageIntegrity(pkg)) }
       },
       providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    getFrameworkPackageLatestCheckpoint: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlDetailRequest('framework-packages', `${packageId}/checkpoint/latest`),
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return {
+          data: buildEntityResponse(pkg.lastCheckpointResult || {
+            schemaVersion: '1',
+            id: pkg.id,
+            frameworkKey: pkg.frameworkKey,
+            packageKey: pkg.packageKey || '',
+            packageVersion: pkg.version || '',
+            mode: 'FULL',
+            status: pkg.lastCheckpointStatus || 'NOT_RUN',
+            errors: [],
+            warnings: [],
+            issues: [],
+            passedChecks: [],
+            dependencyGraph: null,
+            dependencyLockPreview: pkg.dependencyLock || null,
+            summary: {
+              totalChecks: 0,
+              passed: 0,
+              warnings: 0,
+              failed: 0,
+              resolvedReferences: Number(pkg.dependencyLock?.references?.length) || 0,
+            },
+            timestamp: pkg.lastCheckpointAt || null,
+            runBy: null,
+          }),
+        }
+      },
+      providesTags: (_result, _error, packageId) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    runFrameworkPackageCheckpoint: build.mutation({
+      queryFn: async ({ packageId, mode = 'FULL', persist = false } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/checkpoint`,
+              method: 'POST',
+              body: { mode, persist },
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const pkg = findFrameworkPackageById(packageId)
+        if (!pkg) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        const normalizedMode = String(mode || 'FULL').trim().toUpperCase()
+        if (!['FULL', 'DRY_RUN'].includes(normalizedMode)) {
+          return {
+            error: {
+              status: 422,
+              data: {
+                error: {
+                  code: 'VALIDATION_FAILED',
+                  message: 'Please check the form for errors.',
+                  details: { mode: 'Checkpoint mode must be FULL or DRY_RUN.' },
+                },
+              },
+            },
+          }
+        }
+        if (persist === true && normalizedMode === 'DRY_RUN') {
+          return {
+            error: {
+              status: 422,
+              data: {
+                error: {
+                  code: 'VALIDATION_FAILED',
+                  message: 'Please check the form for errors.',
+                  details: { persist: 'Dry-run checkpoints cannot be persisted.' },
+                },
+              },
+            },
+          }
+        }
+
+        const checkpoint = buildMockFrameworkPackageCheckpoint(pkg, { mode: normalizedMode })
+        if (persist) {
+          runtimeControlState = {
+            ...runtimeControlState,
+            frameworkPackages: runtimeControlState.frameworkPackages.map((row) =>
+              row.id === packageId
+                ? cloneFrameworkPackage({
+                    ...row,
+                    lastCheckpointStatus: checkpoint.status,
+                    lastCheckpointAt: checkpoint.timestamp,
+                    lastCheckpointResult: checkpoint,
+                  })
+                : row,
+            ),
+          }
+        }
+
+        return { data: buildEntityResponse(checkpoint) }
+      },
+      invalidatesTags: (_result, _error, { packageId } = {}) => [
         { type: 'RuntimeFrameworkPackage', id: packageId },
       ],
     }),
@@ -3239,6 +3598,76 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    validateFrameworkPackage: build.mutation({
+      queryFn: async ({ packageId }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/validate`,
+              method: 'POST',
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingPackage = findFrameworkPackageById(packageId)
+        if (!existingPackage) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        const checkpoint = buildMockFrameworkPackageCheckpoint(existingPackage, { mode: 'FULL' })
+        if (checkpoint.status === 'FAIL') {
+          const failedPackage = cloneFrameworkPackage({
+            ...existingPackage,
+            lastCheckpointStatus: checkpoint.status,
+            lastCheckpointAt: checkpoint.timestamp,
+            lastCheckpointResult: checkpoint,
+          })
+
+          runtimeControlState = {
+            ...runtimeControlState,
+            frameworkPackages: runtimeControlState.frameworkPackages.map((pkg) =>
+              pkg.id === packageId ? failedPackage : pkg,
+            ),
+          }
+
+          return buildMockCheckpointValidationError(checkpoint)
+        }
+
+        const validatedPackage = cloneFrameworkPackage({
+          ...existingPackage,
+          status: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+          isDefault: false,
+          isLocked: true,
+          lockedReason: 'Framework package reached a governed runtime release boundary.',
+          dependencyLock: checkpoint.dependencyLockPreview,
+          lastCheckpointStatus: checkpoint.status,
+          lastCheckpointAt: checkpoint.timestamp,
+          lastCheckpointResult: checkpoint,
+          ...buildAuditFields(checkpoint.timestamp),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          frameworkPackages: runtimeControlState.frameworkPackages.map((pkg) =>
+            pkg.id === packageId ? validatedPackage : pkg,
+          ),
+        }
+
+        return {
+          data: buildEntityResponse({
+            package: cloneFrameworkPackage(validatedPackage),
+            checkpoint,
+          }),
+        }
+      },
+      invalidatesTags: (_result, _error, { packageId }) => [
+        FRAMEWORK_PACKAGE_LIST_TAG,
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
     activateFrameworkPackage: build.mutation({
       queryFn: async ({ packageId }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -3264,6 +3693,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           })
         }
 
+        const checkpoint = buildMockFrameworkPackageCheckpoint(existingPackage, { mode: 'ACTIVATION' })
+        if (checkpoint.status === 'FAIL') {
+          return buildMockCheckpointValidationError(checkpoint)
+        }
+
         const activationTime = new Date().toISOString()
         let activatedPackage = null
 
@@ -3279,6 +3713,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
                 ...pkg,
                 status: FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
                 isDefault: true,
+                lastCheckpointStatus: checkpoint.status,
+                lastCheckpointAt: checkpoint.timestamp,
+                lastCheckpointResult: checkpoint,
+                dependencyLock: existingPackage.dependencyLock || checkpoint.dependencyLockPreview,
                 ...buildAuditFields(activationTime),
               })
               return activatedPackage
@@ -6276,9 +6714,14 @@ export const {
   useGetFrameworkPackageQuery,
   useGetFrameworkPackageAuditQuery,
   useGetFrameworkPackageDependenciesQuery,
+  useGetFrameworkPackageDependencyGraphQuery,
+  useGetFrameworkPackageDependencyLockQuery,
   useGetFrameworkPackageDiffQuery,
   useGetFrameworkPackageIntegrityQuery,
+  useGetFrameworkPackageLatestCheckpointQuery,
   useUpdateFrameworkPackageMutation,
+  useRunFrameworkPackageCheckpointMutation,
+  useValidateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
   useListUiContractsQuery,
   useCreateUiContractMutation,

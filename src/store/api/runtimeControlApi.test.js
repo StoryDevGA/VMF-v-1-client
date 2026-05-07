@@ -712,6 +712,71 @@ describe('runtimeControlApi', () => {
     )
   })
 
+  it('validates mock framework packages through the checkpoint contract', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.7',
+        packageKey: 'vmf-mock-checkpoint-997',
+        status: 'DRAFT',
+      }),
+    )
+    expect(createResult.error).toBeUndefined()
+    const packageId = createResult.data?.data?.id
+
+    const validateResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateFrameworkPackage.initiate({ packageId }),
+    )
+
+    expect(validateResult.error).toBeUndefined()
+    expect(validateResult.data?.data?.package?.status).toBe('VALIDATED')
+    expect(validateResult.data?.data?.checkpoint?.status).toBe('PASS')
+
+    const latestCheckpointResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackageLatestCheckpoint.initiate(packageId),
+    )
+    expect(latestCheckpointResult.error).toBeUndefined()
+    expect(latestCheckpointResult.data?.data?.status).toBe('PASS')
+  })
+
+  it('blocks mock framework package activation when the activation checkpoint fails', async () => {
+    const store = createTestStore()
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.6',
+        packageKey: 'vmf-mock-checkpoint-996',
+        status: 'VALIDATED',
+        validationBindings: [
+          {
+            bindingKey: 'missing-validation-on-submit',
+            validationKey: 'missing-validation-check',
+            trigger: 'ON_SUBMIT',
+            blocking: true,
+            priority: 100,
+            enabled: true,
+          },
+        ],
+      }),
+    )
+    expect(createResult.error).toBeUndefined()
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({
+        packageId: createResult.data?.data?.id,
+      }),
+    )
+
+    expect(activateResult.error?.status).toBe(422)
+    expect(activateResult.error?.data?.error?.checkpoint?.status).toBe('FAIL')
+    expect(activateResult.error?.data?.error?.details?.validationBindings).toContain('missing-validation-check')
+  })
+
   it('round-trips mock Runtime Path Registry CRUD, clone, dependencies, and lifecycle', async () => {
     const store = createTestStore()
 

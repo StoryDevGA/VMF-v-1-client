@@ -197,6 +197,17 @@
   font-size: var(--font-size-xl);
 }
 
+.dialog__title {
+  margin: 0;
+}
+
+.dialog__subtitle {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+
 /* ===========================
    DIALOG BODY
    =========================== */

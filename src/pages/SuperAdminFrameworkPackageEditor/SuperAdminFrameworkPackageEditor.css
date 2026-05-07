@@ -74,6 +74,18 @@
   background: color-mix(in srgb, var(--color-warning-bg) 82%, var(--color-surface));
 }
 
+.super-admin-framework-package-editor__readiness-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning-border) 65%, var(--color-border));
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-warning-bg) 70%, var(--color-surface));
+}
+
 .super-admin-framework-package-editor__summary-label,
 .super-admin-framework-package-editor__form-title,
 .super-admin-framework-package-editor__section-copy,

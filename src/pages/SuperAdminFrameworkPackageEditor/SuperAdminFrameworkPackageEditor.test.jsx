@@ -7,10 +7,16 @@ const navigateMock = vi.fn()
 const addToastMock = vi.fn()
 const createFrameworkPackageMock = vi.fn()
 const updateFrameworkPackageMock = vi.fn()
+const runFrameworkPackageCheckpointMock = vi.fn()
+const validateFrameworkPackageMock = vi.fn()
+const activateFrameworkPackageMock = vi.fn()
 const packageIntegrityRefetchMock = vi.fn()
+const packageRefetchMock = vi.fn()
+const packageDependenciesRefetchMock = vi.fn()
+const packageCheckpointRefetchMock = vi.fn()
 
 let paramsMock = {}
-let frameworkPackageQueryMock = { data: null, isLoading: false, error: null }
+let frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
 let frameworkPackageDependenciesQueryMock = {
   data: {
     data: {
@@ -32,6 +38,7 @@ let frameworkPackageDependenciesQueryMock = {
   },
   isLoading: false,
   error: null,
+  refetch: packageDependenciesRefetchMock,
 }
 let frameworkPackageIntegrityQueryMock = {
   data: {
@@ -44,6 +51,20 @@ let frameworkPackageIntegrityQueryMock = {
   isFetching: false,
   error: null,
   refetch: packageIntegrityRefetchMock,
+}
+let frameworkPackageLatestCheckpointQueryMock = {
+  data: {
+    data: {
+      status: 'PASS',
+      summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0 },
+      timestamp: '2026-05-01T12:00:00.000Z',
+      issues: [],
+      errors: [],
+      warnings: [],
+      passedChecks: [],
+    },
+  },
+  refetch: packageCheckpointRefetchMock,
 }
 let frameworkPackageAuditQueryMock = {
   data: {
@@ -145,9 +166,11 @@ let listUiContractsQueryArgs = []
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
+  useActivateFrameworkPackageMutation: () => [activateFrameworkPackageMock, { isLoading: false }],
   useGetFrameworkPackageAuditQuery: () => frameworkPackageAuditQueryMock,
   useGetFrameworkPackageDependenciesQuery: () => frameworkPackageDependenciesQueryMock,
   useGetFrameworkPackageIntegrityQuery: () => frameworkPackageIntegrityQueryMock,
+  useGetFrameworkPackageLatestCheckpointQuery: () => frameworkPackageLatestCheckpointQueryMock,
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
   useListFrameworkPackagesQuery: () => ({ data: { data: [] } }),
   useListFrameworkRegistriesQuery: () => ({
@@ -220,6 +243,8 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
       isFetching: false,
     },
   ],
+  useRunFrameworkPackageCheckpointMutation: () => [runFrameworkPackageCheckpointMock, { isLoading: false }],
+  useValidateFrameworkPackageMutation: () => [validateFrameworkPackageMock, { isLoading: false }],
   useUpdateFrameworkPackageMutation: () => [updateFrameworkPackageMock, { isLoading: false }],
 }))
 
@@ -307,6 +332,7 @@ const buildLoadedPackage = () => ({
   },
   isLoading: false,
   error: null,
+  refetch: packageRefetchMock,
 })
 
 describe('SuperAdminFrameworkPackageEditor', () => {
@@ -315,9 +341,15 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     addToastMock.mockClear()
     createFrameworkPackageMock.mockReset()
     updateFrameworkPackageMock.mockReset()
+    runFrameworkPackageCheckpointMock.mockReset()
+    validateFrameworkPackageMock.mockReset()
+    activateFrameworkPackageMock.mockReset()
     packageIntegrityRefetchMock.mockReset()
+    packageRefetchMock.mockReset()
+    packageDependenciesRefetchMock.mockReset()
+    packageCheckpointRefetchMock.mockReset()
     paramsMock = {}
-    frameworkPackageQueryMock = { data: null, isLoading: false, error: null }
+    frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
     frameworkPackageDependenciesQueryMock = {
       data: {
         data: {
@@ -339,6 +371,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       },
       isLoading: false,
       error: null,
+      refetch: packageDependenciesRefetchMock,
     }
     frameworkPackageIntegrityQueryMock = {
       data: {
@@ -351,6 +384,20 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       isFetching: false,
       error: null,
       refetch: packageIntegrityRefetchMock,
+    }
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'PASS',
+          summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0 },
+          timestamp: '2026-05-01T12:00:00.000Z',
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
     }
     frameworkPackageAuditQueryMock = {
       data: {
@@ -451,6 +498,242 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('runs package validation from the editor header and surfaces checkpoint failures', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'NOT_RUN',
+          summary: { totalChecks: 0, passed: 0, warnings: 0, failed: 0 },
+          timestamp: null,
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+    validateFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.reject({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Runtime Architecture Checkpoint failed.',
+            checkpoint: {
+              status: 'FAIL',
+              summary: { totalChecks: 4, passed: 3, warnings: 0, failed: 1 },
+              errors: [
+                {
+                  code: 'UI_CONTRACT_KEY',
+                  path: 'uiContractKey',
+                  message: 'UI Contract must be ACTIVE.',
+                },
+              ],
+            },
+          },
+        },
+      }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /validate package/i }))
+
+    await waitFor(() => {
+      expect(validateFrameworkPackageMock).toHaveBeenCalledWith({ packageId: 'pkg-live-2' })
+    })
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Checkpoint failed',
+      variant: 'error',
+    }))
+    expect(screen.getByText(/runtime-ready: fail/i)).toBeInTheDocument()
+  })
+
+  it('keeps activation disabled until a positive checkpoint has run', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'NOT_RUN',
+          summary: { totalChecks: 0, passed: 0, warnings: 0, failed: 0 },
+          timestamp: null,
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByRole('button', { name: /activate package/i })[0]).toBeDisabled()
+    expect(screen.getByText(/runtime-ready: not run/i)).toBeInTheDocument()
+  })
+
+  it('uses checkpoint severity in the integrity table after a failed checkpoint', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageIntegrityQueryMock = {
+      data: {
+        data: {
+          status: 'WARN',
+          summary: { pass: 3, warn: 1, fail: 0 },
+          checks: [
+            {
+              key: 'uiContract.required',
+              group: 'UI Contract Integrity',
+              severity: 'WARN',
+              field: 'uiContractKey',
+              message: 'UI Contract is required before validation when sections are configured.',
+            },
+          ],
+        },
+      },
+      isFetching: false,
+      error: null,
+      refetch: packageIntegrityRefetchMock,
+    }
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'FAIL',
+          summary: { totalChecks: 4, passed: 3, warnings: 0, failed: 1 },
+          timestamp: '2026-05-07T13:52:07.000Z',
+          errors: [
+            {
+              code: 'UI_CONTRACT_KEY',
+              severity: 'BLOCKING',
+              source: 'Runtime Architecture Checkpoint',
+              path: 'uiContractKey',
+              message: 'UI Contract is required before validation when sections are configured.',
+            },
+          ],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const issueCell = screen.getByText('UI Contract is required before validation when sections are configured.')
+    const row = issueCell.closest('tr')
+    expect(row).not.toBeNull()
+    expect(within(row).getByText('FAIL')).toBeInTheDocument()
+    expect(screen.getByText('FAIL: 1')).toBeInTheDocument()
+  })
+
+  it('re-runs the checkpoint from the integrity tab without promoting the package', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'NOT_RUN',
+          summary: { totalChecks: 0, passed: 0, warnings: 0, failed: 0 },
+          timestamp: null,
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+    runFrameworkPackageCheckpointMock.mockReturnValue({
+      unwrap: () => Promise.resolve({
+        data: {
+          status: 'FAIL',
+          summary: { totalChecks: 4, passed: 3, warnings: 0, failed: 1 },
+          timestamp: '2026-05-07T13:52:07.000Z',
+          errors: [
+            {
+              code: 'UI_CONTRACT_KEY',
+              severity: 'BLOCKING',
+              path: 'uiContractKey',
+              message: 'UI Contract is required before validation when sections are configured.',
+            },
+          ],
+          warnings: [],
+          passedChecks: [],
+        },
+      }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^integrity$/i }))
+    await user.click(screen.getByRole('button', { name: /re-run checkpoint/i }))
+
+    await waitFor(() => {
+      expect(runFrameworkPackageCheckpointMock).toHaveBeenCalledWith({
+        packageId: 'pkg-live-2',
+        mode: 'FULL',
+        persist: true,
+      })
+    })
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Checkpoint failed',
+      variant: 'error',
+    }))
+    expect(validateFrameworkPackageMock).not.toHaveBeenCalled()
+  })
+
+  it('confirms package activation from a validated package', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+    activateFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-live-2', status: 'ACTIVE' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getAllByRole('button', { name: /activate package/i })[0])
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/once activated, direct editing is locked/i)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: /^activate package$/i }))
+
+    await waitFor(() => {
+      expect(activateFrameworkPackageMock).toHaveBeenCalledWith({ packageId: 'pkg-live-2' })
+    })
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Framework package activated',
+      variant: 'success',
+    }))
   })
 
   it('adds the same validation twice with distinct stable binding ids', async () => {

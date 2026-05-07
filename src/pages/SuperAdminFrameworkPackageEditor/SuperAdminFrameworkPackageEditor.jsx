@@ -20,6 +20,7 @@ import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect'
 import {
   useCreateFrameworkPackageMutation,
   useGetFrameworkPackageAuditQuery,
+  useGetFrameworkPackageLatestCheckpointQuery,
   useGetFrameworkPackageDependenciesQuery,
   useGetFrameworkPackageIntegrityQuery,
   useGetFrameworkPackageQuery,
@@ -28,7 +29,10 @@ import {
   useListUiContractsQuery,
   useListValidationRegistryQuery,
   useListWorkflowPoliciesQuery,
+  useRunFrameworkPackageCheckpointMutation,
+  useValidateFrameworkPackageMutation,
   useUpdateFrameworkPackageMutation,
+  useActivateFrameworkPackageMutation,
 } from '../../store/api/runtimeControlApi.js'
 import {
   normalizeError,
@@ -423,8 +427,62 @@ const getCheckStatusVariant = (status) => {
   const normalized = String(status ?? '').trim().toUpperCase()
   if (normalized === 'PASS' || normalized === 'ACTIVE') return 'success'
   if (normalized === 'FAIL' || normalized === 'MISSING') return 'error'
-  if (normalized === 'WARN' || normalized === 'WARNING') return 'warning'
+  if (normalized === 'WARN' || normalized === 'WARNING' || normalized === 'PASS_WITH_WARNINGS') return 'warning'
   return 'neutral'
+}
+
+const hasCheckpointRun = (checkpoint) => {
+  const status = String(checkpoint?.status ?? '').trim().toUpperCase()
+  return Boolean(checkpoint) && status && status !== 'NOT_RUN'
+}
+
+const FRAMEWORK_PACKAGE_EDITOR_TABS = Object.freeze({
+  INTEGRITY: 9,
+})
+
+const getCheckpointFromMutationError = (error) =>
+  error?.data?.error?.checkpoint
+  ?? error?.data?.checkpoint
+  ?? error?.error?.checkpoint
+  ?? null
+
+const checkpointIssueToIntegrityRow = (issue, fallbackSeverity) => ({
+  key: [issue?.code, issue?.path, issue?.message].filter(Boolean).join(':') || 'checkpoint.issue',
+  group: issue?.source || issue?.category || 'Runtime Architecture Checkpoint',
+  severity: String(fallbackSeverity || '').trim().toUpperCase() === 'BLOCKING' ? 'FAIL' : 'WARN',
+  field: issue?.path || '',
+  message: issue?.message || 'Checkpoint issue detected.',
+})
+
+const checkpointPassedCheckToIntegrityRow = (check) => ({
+  key: [check?.code, check?.path, check?.message].filter(Boolean).join(':') || 'checkpoint.pass',
+  group: check?.source || check?.category || 'Runtime Architecture Checkpoint',
+  severity: 'PASS',
+  field: check?.path || '',
+  message: check?.message || 'Checkpoint check passed.',
+})
+
+const buildCheckpointIntegrityView = (checkpoint) => {
+  if (!hasCheckpointRun(checkpoint)) return null
+
+  const errors = Array.isArray(checkpoint.errors) ? checkpoint.errors : []
+  const warnings = Array.isArray(checkpoint.warnings) ? checkpoint.warnings : []
+  const passedChecks = Array.isArray(checkpoint.passedChecks) ? checkpoint.passedChecks : []
+  const checks = [
+    ...errors.map((issue) => checkpointIssueToIntegrityRow(issue, 'BLOCKING')),
+    ...warnings.map((issue) => checkpointIssueToIntegrityRow(issue, 'WARNING')),
+    ...passedChecks.map(checkpointPassedCheckToIntegrityRow),
+  ]
+
+  return {
+    status: String(checkpoint.status || '').trim().toUpperCase(),
+    summary: {
+      pass: Number(checkpoint.summary?.passed) || passedChecks.length,
+      warn: Number(checkpoint.summary?.warnings) || warnings.length,
+      fail: Number(checkpoint.summary?.failed) || errors.length,
+    },
+    checks,
+  }
 }
 
 const formatDateTime = (value) => {
@@ -509,6 +567,8 @@ function SuperAdminFrameworkPackageEditor() {
     index: -1,
     draft: { ...EMPTY_SECTION_DRAFT },
   })
+  const [activationDialogOpen, setActivationDialogOpen] = useState(false)
+  const [checkpointResult, setCheckpointResult] = useState(null)
   const sectionDialogRef = useRef({
     open: false,
     index: -1,
@@ -519,6 +579,7 @@ function SuperAdminFrameworkPackageEditor() {
     data: packageResponse,
     isLoading: isPackageLoading,
     error: packageError,
+    refetch: refetchPackage,
   } = useGetFrameworkPackageQuery(packageId, {
     skip: !isEditMode,
   })
@@ -527,6 +588,7 @@ function SuperAdminFrameworkPackageEditor() {
     data: dependencyResponse,
     isLoading: isDependenciesLoading,
     error: dependencyError,
+    refetch: refetchDependencies,
   } = useGetFrameworkPackageDependenciesQuery(packageId, {
     skip: !isEditMode,
   })
@@ -537,6 +599,13 @@ function SuperAdminFrameworkPackageEditor() {
     error: integrityError,
     refetch: refetchIntegrity,
   } = useGetFrameworkPackageIntegrityQuery(packageId, {
+    skip: !isEditMode,
+  })
+
+  const {
+    data: latestCheckpointResponse,
+    refetch: refetchLatestCheckpoint,
+  } = useGetFrameworkPackageLatestCheckpointQuery(packageId, {
     skip: !isEditMode,
   })
 
@@ -595,6 +664,9 @@ function SuperAdminFrameworkPackageEditor() {
 
   const [createFrameworkPackage, { isLoading: isCreating }] = useCreateFrameworkPackageMutation()
   const [updateFrameworkPackage, { isLoading: isUpdating }] = useUpdateFrameworkPackageMutation()
+  const [runFrameworkPackageCheckpoint, { isLoading: isRunningCheckpoint }] = useRunFrameworkPackageCheckpointMutation()
+  const [validateFrameworkPackage, { isLoading: isValidatingPackage }] = useValidateFrameworkPackageMutation()
+  const [activateFrameworkPackage, { isLoading: isActivatingPackage }] = useActivateFrameworkPackageMutation()
   const isSaving = isCreating || isUpdating
 
   const registryRows = useMemo(() => registryResponse?.data ?? [], [registryResponse?.data])
@@ -754,6 +826,12 @@ function SuperAdminFrameworkPackageEditor() {
   const uiContractBinding = loadedPackage?.uiContractBinding ?? null
   const dependencyData = dependencyResponse?.data ?? null
   const integrityData = integrityResponse?.data ?? null
+  const latestCheckpointData = checkpointResult ?? latestCheckpointResponse?.data ?? loadedPackage?.lastCheckpointResult ?? null
+  const checkpointIntegrityData = useMemo(
+    () => buildCheckpointIntegrityView(latestCheckpointData),
+    [latestCheckpointData],
+  )
+  const displayedIntegrityData = checkpointIntegrityData ?? integrityData
   const auditRows = auditResponse?.data ?? []
   const dependencyRows = useMemo(() => [
     ...(dependencyData?.agents ?? []).map((row) => ({ ...row, type: 'Agent' })),
@@ -763,10 +841,26 @@ function SuperAdminFrameworkPackageEditor() {
     ...(dependencyData?.workflowPolicies ?? []).map((row) => ({ ...row, type: 'Workflow Policy' })),
     ...(dependencyData?.uiContract ? [{ ...dependencyData.uiContract, type: 'UI Contract' }] : []),
   ], [dependencyData])
-  const integrityRows = integrityData?.checks ?? []
+  const integrityRows = displayedIntegrityData?.checks ?? []
   const activePackageLocked = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
   const validatedStructureLocked = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
   const runtimeStructureLocked = activePackageLocked || validatedStructureLocked
+  const latestCheckpointStatus = String(
+    latestCheckpointData?.status
+    || loadedPackage?.lastCheckpointStatus
+    || 'NOT_RUN',
+  ).trim().toUpperCase()
+  const latestCheckpointAllowsActivation =
+    latestCheckpointStatus === 'PASS'
+    || latestCheckpointStatus === 'PASS_WITH_WARNINGS'
+  const canValidatePackage = isEditMode && !activePackageLocked
+  const canActivatePackage = Boolean(
+    isEditMode
+    && form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+    && normalizeSectionKey(form.packageKey)
+    && (!Array.isArray(form.sections) || form.sections.length === 0 || normalizeSectionKey(form.uiContractKey))
+    && latestCheckpointAllowsActivation
+  )
 
   const closeSectionDialog = () => {
     const nextDialog = {
@@ -1056,6 +1150,100 @@ function SuperAdminFrameworkPackageEditor() {
     await executeSave(payload)
   }
 
+  const refreshRuntimePackageReadiness = () => {
+    refetchPackage?.()
+    refetchDependencies?.()
+    refetchIntegrity?.()
+    refetchLatestCheckpoint?.()
+  }
+
+  const handleRunCheckpoint = async () => {
+    if (!isEditMode || !packageId) return
+    try {
+      const result = await runFrameworkPackageCheckpoint({
+        packageId,
+        mode: 'FULL',
+        persist: true,
+      }).unwrap()
+      const checkpoint = result?.data ?? result ?? null
+      setCheckpointResult(checkpoint)
+      refreshRuntimePackageReadiness()
+      addToast({
+        title: checkpoint?.status === 'FAIL' ? 'Checkpoint failed' : 'Checkpoint completed',
+        description: checkpoint?.status === 'FAIL'
+          ? 'Resolve blocking checkpoint issues before activation.'
+          : 'Runtime Architecture Checkpoint completed.',
+        variant: checkpoint?.status === 'FAIL' ? 'error' : 'success',
+      })
+    } catch (err) {
+      const appError = normalizeError(err)
+      addToast({
+        title: 'Failed to run checkpoint',
+        description: appError.message,
+        variant: 'error',
+      })
+    }
+  }
+
+  const handleValidatePackage = async () => {
+    if (!isEditMode || !packageId) return
+    try {
+      const result = await validateFrameworkPackage({ packageId }).unwrap()
+      const checkpoint = result?.data?.checkpoint ?? result?.checkpoint ?? null
+      setCheckpointResult(checkpoint)
+      refreshRuntimePackageReadiness()
+      addToast({
+        title: checkpoint?.status === 'FAIL' ? 'Checkpoint failed' : 'Package validated',
+        description: checkpoint?.status === 'FAIL'
+          ? 'Resolve blocking checkpoint issues before activation.'
+          : 'Runtime Architecture Checkpoint passed and the package is validated.',
+        variant: checkpoint?.status === 'FAIL' ? 'error' : 'success',
+      })
+    } catch (err) {
+      const checkpoint = getCheckpointFromMutationError(err)
+      if (checkpoint) {
+        setCheckpointResult(checkpoint)
+        refreshRuntimePackageReadiness()
+        addToast({
+          title: 'Checkpoint failed',
+          description: 'Resolve blocking checkpoint issues before activation.',
+          variant: 'error',
+        })
+        return
+      }
+
+      const appError = normalizeError(err)
+      addToast({
+        title: 'Failed to validate package',
+        description: appError.message,
+        variant: 'error',
+      })
+    }
+  }
+
+  const handleConfirmActivatePackage = async () => {
+    if (!isEditMode || !packageId) return
+    try {
+      await activateFrameworkPackage({ packageId }).unwrap()
+      setActivationDialogOpen(false)
+      setCheckpointResult(null)
+      refreshRuntimePackageReadiness()
+      addToast({
+        title: 'Framework package activated',
+        description: 'Activation checkpoint passed and the package is now active.',
+        variant: 'success',
+      })
+    } catch (err) {
+      const appError = normalizeError(err)
+      setActivationDialogOpen(false)
+      addToast({
+        title: 'Failed to activate package',
+        description: appError.message,
+        variant: 'error',
+      })
+    }
+  }
+
   const pageTitle = isEditMode ? 'Framework Package Editor' : 'Create Framework Package'
   const canAssignCustomers =
     form.visibility === 'CUSTOMER_VISIBLE'
@@ -1137,6 +1325,30 @@ function SuperAdminFrameworkPackageEditor() {
             <form className="super-admin-framework-package-editor__form" onSubmit={handleSubmit} noValidate>
               <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-packages__card-body--compact super-admin-framework-package-editor__card-body">
                 <div className="super-admin-framework-package-editor__top-actions">
+                  {isEditMode ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleValidatePackage}
+                        loading={isValidatingPackage}
+                        disabled={!canValidatePackage || isSaving || isActivatingPackage}
+                      >
+                        Validate Package
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setActivationDialogOpen(true)}
+                        loading={isActivatingPackage}
+                        disabled={!canActivatePackage || isSaving || isValidatingPackage}
+                      >
+                        Activate Package
+                      </Button>
+                    </>
+                  ) : null}
                   <Button type="button" variant="outline" size="sm" onClick={handleBack}>
                     Back
                   </Button>
@@ -1146,6 +1358,9 @@ function SuperAdminFrameworkPackageEditor() {
                   <div className="super-admin-framework-packages__token-list" aria-label="Package status summary">
                     <Status size="md" showIcon variant={getFrameworkPackageStatusVariant(form.status)}>
                       Status: {formatFrameworkPackageStatus(form.status)}
+                    </Status>
+                    <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
+                      Last Checkpoint: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
                     </Status>
                     {loadedPackage?.isDefault ? (
                       <Badge variant="success" size="md" pill outline>
@@ -1175,6 +1390,27 @@ function SuperAdminFrameworkPackageEditor() {
                     <p className="super-admin-framework-package-editor__helper">
                       This package includes deprecated package-level config. The editor is showing canonical bindings synthesized from that data, and saving will keep only the canonical package contract.
                     </p>
+                  </div>
+                ) : null}
+
+                {isEditMode && form.status !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE && !latestCheckpointAllowsActivation ? (
+                  <div className="super-admin-framework-package-editor__readiness-banner" role="status" aria-live="polite">
+                    <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
+                      Runtime-ready: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
+                    </Status>
+                    <p className="super-admin-framework-package-editor__helper">
+                      {latestCheckpointStatus === 'FAIL'
+                        ? `${Number(latestCheckpointData?.summary?.failed) || 0} blocking checkpoint issue${Number(latestCheckpointData?.summary?.failed) === 1 ? '' : 's'} must be resolved before activation.`
+                        : 'Run the Runtime Architecture Checkpoint before activation.'}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY)}
+                    >
+                      View Checkpoint
+                    </Button>
                   </div>
                 ) : null}
 
@@ -2076,11 +2312,18 @@ function SuperAdminFrameworkPackageEditor() {
                       ) : (
                         <>
                           <div className="super-admin-framework-package-editor__toolbar">
-                            <Status size="sm" showIcon variant={getCheckStatusVariant(integrityData?.status)}>
-                              {integrityData?.status ?? 'Not run'}
+                            <Status size="sm" showIcon variant={getCheckStatusVariant(displayedIntegrityData?.status)}>
+                              {displayedIntegrityData?.status ?? 'Not run'}
                             </Status>
-                            <Button type="button" variant="outline" size="sm" onClick={() => refetchIntegrity()} loading={isIntegrityFetching}>
-                              Run Full Check
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRunCheckpoint}
+                              loading={isRunningCheckpoint || isIntegrityFetching}
+                              disabled={isRunningCheckpoint || isValidatingPackage || isSaving || isActivatingPackage}
+                            >
+                              Re-run Checkpoint
                             </Button>
                           </div>
                           <div
@@ -2088,13 +2331,13 @@ function SuperAdminFrameworkPackageEditor() {
                             aria-label="Integrity summary"
                           >
                             <Status size="md" showIcon variant="success">
-                              PASS: {Number(integrityData?.summary?.pass) || 0}
+                              PASS: {Number(displayedIntegrityData?.summary?.pass) || 0}
                             </Status>
                             <Status size="md" showIcon variant="warning">
-                              WARN: {Number(integrityData?.summary?.warn) || 0}
+                              WARN: {Number(displayedIntegrityData?.summary?.warn) || 0}
                             </Status>
                             <Status size="md" showIcon variant="error">
-                              FAIL: {Number(integrityData?.summary?.fail) || 0}
+                              FAIL: {Number(displayedIntegrityData?.summary?.fail) || 0}
                             </Status>
                           </div>
                           <TableSurface
@@ -2207,6 +2450,50 @@ function SuperAdminFrameworkPackageEditor() {
           </Card>
         ) : null}
       </Fieldset>
+      <Dialog
+        open={activationDialogOpen}
+        onClose={() => setActivationDialogOpen(false)}
+        size="md"
+        className="super-admin-framework-package-editor__activation-dialog"
+      >
+        <Dialog.Header>
+          <h2 className="dialog__title">Activate Package?</h2>
+          <p className="dialog__subtitle">
+            This will run the activation checkpoint again and lock the package for runtime use.
+          </p>
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="super-admin-framework-package-editor__dialog-fields">
+            <p className="super-admin-framework-package-editor__helper">
+              Package: {form.packageName || form.packageKey || `${form.frameworkKey} ${form.version}`}
+            </p>
+            <p className="super-admin-framework-package-editor__helper">
+              UI Contract: {form.uiContractKey || 'No UI Contract selected'}
+            </p>
+            <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
+              Checkpoint Status: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
+            </Status>
+            <p className="super-admin-framework-package-editor__helper">
+              Once activated, direct editing is locked and future changes require cloning a new version.
+            </p>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button type="button" variant="outline" size="sm" onClick={() => setActivationDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={handleConfirmActivatePackage}
+            loading={isActivatingPackage}
+            disabled={!canActivatePackage}
+          >
+            Activate Package
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
       <Dialog
         open={sectionDialog.open}
         onClose={closeSectionDialog}
