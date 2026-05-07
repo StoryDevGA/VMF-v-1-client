@@ -29,6 +29,9 @@ import {
   FRAMEWORK_PACKAGE_STATUSES,
 } from '../SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 import {
+  WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS,
+} from '../SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
+import {
   INITIAL_UI_CONTRACT_FORM,
   UI_CONTRACT_COMPATIBILITY_MODE_OPTIONS,
   UI_CONTRACT_FORM_ERROR_FIELDS,
@@ -294,7 +297,6 @@ function SuperAdminUiContractEditor() {
   }, [form.sourcePackageKey, packageRows, sourcePackageSelectValue])
 
   const packageOptions = useMemo(() => {
-    const canUseDraftPackages = form.status === UI_CONTRACT_STATUSES.DRAFT
     const selectedPackageKey = sourcePackageSelectValue
     const selectedSourcePackage = packageRows.find((pkg) => getPackageKey(pkg) === selectedPackageKey)
     const currentSourcePackage = selectedPackageKey && !selectedSourcePackage
@@ -313,7 +315,7 @@ function SuperAdminUiContractEditor() {
       const allowedStatus =
         packageStatus === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
         || packageStatus === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
-        || (canUseDraftPackages && packageStatus === FRAMEWORK_PACKAGE_STATUSES.DRAFT)
+        || packageStatus === FRAMEWORK_PACKAGE_STATUSES.DRAFT
       const frameworkCompatible = selectedFrameworkKeys.length === 0 || selectedFrameworkKeys.includes(frameworkKey)
       return packageKey === selectedPackageKey || (allowedStatus && frameworkCompatible)
     })
@@ -331,7 +333,7 @@ function SuperAdminUiContractEditor() {
       { value: '', label: isLoadingPackages ? 'Loading packages...' : 'Select package source' },
       ...[...optionByKey.values()].map((pkg) => ({ value: getPackageKey(pkg), label: getPackageLabel(pkg) })),
     ]
-  }, [form.sourceFrameworkKey, form.sourcePackageVersion, form.status, isLoadingPackages, packageRows, selectedFrameworkKeys, sourcePackageSelectValue])
+  }, [form.sourceFrameworkKey, form.sourcePackageVersion, isLoadingPackages, packageRows, selectedFrameworkKeys, sourcePackageSelectValue])
 
   const selectedPackage = useMemo(
     () => packageRows.find((pkg) => getPackageKey(pkg) === sourcePackageSelectValue) ?? null,
@@ -390,6 +392,11 @@ function SuperAdminUiContractEditor() {
     const actions = new Set()
     const policyRows = policiesData?.data ?? []
     const activePolicies = policyRows.filter((policy) => policy?.status === 'ACTIVE')
+
+    WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.forEach((option) => {
+      const governedAction = String(option?.value || '').trim()
+      if (governedAction) actions.add(governedAction)
+    })
 
     // Add governedAction from active policies (not policy keys!)
     activePolicies.forEach((policy) => {

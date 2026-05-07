@@ -582,6 +582,16 @@ function SuperAdminFrameworkPackageEditor() {
     frameworkKey: form.frameworkKey || undefined,
     version: form.version || undefined,
   })
+  const selectedUiContractKey = String(form.uiContractKey ?? '').trim()
+  const { data: selectedUiContractResponse } = useListUiContractsQuery(
+    {
+      page: 1,
+      pageSize: 25,
+      q: selectedUiContractKey,
+      frameworkKey: form.frameworkKey || undefined,
+    },
+    { skip: !selectedUiContractKey },
+  )
 
   const [createFrameworkPackage, { isLoading: isCreating }] = useCreateFrameworkPackageMutation()
   const [updateFrameworkPackage, { isLoading: isUpdating }] = useUpdateFrameworkPackageMutation()
@@ -631,31 +641,42 @@ function SuperAdminFrameworkPackageEditor() {
     [form.frameworkKey, workflowPolicyResponse],
   )
 
-  const uiContractOptions = useMemo(
-    () => [
-      { value: '', label: 'No UI Contract selected' },
-      ...(uiContractResponse?.data ?? [])
-        .filter((row) =>
-          String(row.status ?? '').toUpperCase() === 'ACTIVE'
-          && (!form.frameworkKey || (row.frameworkKeys ?? []).includes(form.frameworkKey)),
-        )
-        .map((row) => ({
-          value: row.uiContractKey,
-          label: `${row.name ?? row.uiContractKey} (${row.uiContractKey})`,
-        })),
-    ],
-    [form.frameworkKey, uiContractResponse],
-  )
-
   const uiContractRows = useMemo(
-    () => uiContractResponse?.data ?? [],
-    [uiContractResponse],
+    () => {
+      const rowsByKey = new Map()
+      for (const row of [
+        ...(uiContractResponse?.data ?? []),
+        ...(selectedUiContractResponse?.data ?? []),
+      ]) {
+        const key = String(row?.uiContractKey ?? '').trim()
+        if (!key || rowsByKey.has(key)) continue
+        rowsByKey.set(key, row)
+      }
+      return [...rowsByKey.values()]
+    },
+    [selectedUiContractResponse, uiContractResponse],
   )
 
   const selectedUiContract = useMemo(
     () => uiContractRows.find((row) => row.uiContractKey === form.uiContractKey) ?? null,
     [form.uiContractKey, uiContractRows],
   )
+
+  const uiContractOptions = useMemo(() => {
+    const optionRows = uiContractRows.filter((row) =>
+      String(row.status ?? '').toUpperCase() === 'ACTIVE'
+      || row.uiContractKey === selectedUiContract?.uiContractKey)
+
+    return [
+      { value: '', label: 'No UI Contract selected' },
+      ...optionRows.map((row) => ({
+        value: row.uiContractKey,
+        label: `${row.name ?? row.uiContractKey} (${row.uiContractKey})${
+          row.status && row.status !== 'ACTIVE' ? ` - ${row.status}` : ''
+        }`,
+      })),
+    ]
+  }, [selectedUiContract, uiContractRows])
 
   const uiContractCompatibility = useMemo(() => {
     const packageSections = Array.isArray(form.sections) ? form.sections : []

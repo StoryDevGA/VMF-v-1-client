@@ -116,6 +116,53 @@ describe('SuperAdminUiContractEditor', () => {
     expect(screen.getByText('MAPPED')).toBeInTheDocument()
   })
 
+  it('keeps draft source packages selectable while activating a UI Contract independently', async () => {
+    const user = userEvent.setup()
+    listFrameworkPackagesQueryMock.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'pkg-vmf-231',
+            packageKey: 'vmf-2-3-1',
+            packageName: 'VMF 2.3.1',
+            frameworkKey: 'VMF',
+            version: '2.3.1',
+            status: 'DRAFT',
+            sections: [],
+            workflowBindings: [],
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    renderEditor()
+
+    await user.selectOptions(screen.getByDisplayValue('DRAFT'), 'ACTIVE')
+    const sourcePackage = screen.getByLabelText('Source Package')
+
+    expect(screen.getByRole('option', { name: 'VMF 2.3.1 - VMF - v2.3.1' })).toBeInTheDocument()
+    await user.selectOptions(sourcePackage, 'vmf-2-3-1')
+    expect(sourcePackage).toHaveValue('vmf-2-3-1')
+  })
+
+  it('offers known governed actions even when they are not package workflow bindings', async () => {
+    renderEditor()
+
+    const governedAction = document.querySelector('#governed-action')
+    expect(governedAction).not.toBeNull()
+    const optionLabels = within(governedAction).getAllByRole('option', { hidden: true })
+      .map((option) => option.textContent)
+
+    expect(optionLabels).toEqual(expect.arrayContaining([
+      'SAVE',
+      'ARCHIVE',
+      'SUBMIT_FOR_REVIEW',
+    ]))
+  })
+
   it('keeps JSON as read-only inspection output', async () => {
     const user = userEvent.setup()
     renderEditor()

@@ -103,6 +103,46 @@ vi.mock('../../components/CustomerSearchSelect', () => ({
   ),
 }))
 
+const activeUiContractRow = {
+  id: 'ui-contract-vmf-ui-contract-v1',
+  uiContractKey: 'vmf-ui-contract-v1',
+  name: 'VMF UI Contract v1',
+  status: 'ACTIVE',
+  frameworkKeys: ['VMF'],
+  sourcePackageVersion: '2.3.1',
+  compatibilityMode: 'INHERITED_MINOR',
+  sections: [
+    {
+      sectionKey: 'customer_problem',
+      runtimePath: 'framework_state.sections.customer_problem',
+      source: 'PACKAGE',
+      isCustom: false,
+    },
+  ],
+}
+
+const draftUiContractRow = {
+  id: 'ui-contract-standard-ui-contract-2-3-1',
+  uiContractKey: 'standard-ui-contract-2-3-1',
+  name: 'Standard UI Contract 2.3.1',
+  status: 'DRAFT',
+  frameworkKeys: ['VMF'],
+  sourcePackageVersion: '2.3.1',
+  compatibilityMode: 'INHERITED_MINOR',
+  sections: [
+    {
+      sectionKey: 'customer_problem',
+      runtimePath: 'framework_state.sections.customer_problem',
+      source: 'PACKAGE',
+      isCustom: false,
+    },
+  ],
+}
+
+const cloneTestRow = (row) => JSON.parse(JSON.stringify(row))
+let uiContractRowsMock = [cloneTestRow(activeUiContractRow)]
+let listUiContractsQueryArgs = []
+
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
   useGetFrameworkPackageAuditQuery: () => frameworkPackageAuditQueryMock,
@@ -146,29 +186,21 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
       ],
     },
   }),
-  useListUiContractsQuery: () => ({
-    data: {
-      data: [
-        {
-          id: 'ui-contract-vmf-ui-contract-v1',
-          uiContractKey: 'vmf-ui-contract-v1',
-          name: 'VMF UI Contract v1',
-          status: 'ACTIVE',
-          frameworkKeys: ['VMF'],
-          sourcePackageVersion: '2.3.1',
-          compatibilityMode: 'INHERITED_MINOR',
-          sections: [
-            {
-              sectionKey: 'customer_problem',
-              runtimePath: 'framework_state.sections.customer_problem',
-              source: 'PACKAGE',
-              isCustom: false,
-            },
-          ],
-        },
-      ],
-    },
-  }),
+  useListUiContractsQuery: ({ q = '', status = '', frameworkKey = '', pageSize } = {}) => {
+    listUiContractsQueryArgs.push({ q, status, frameworkKey, pageSize })
+    const normalizedSearch = String(q ?? '').trim().toLowerCase()
+    const normalizedStatus = String(status ?? '').trim().toUpperCase()
+    const normalizedFrameworkKey = String(frameworkKey ?? '').trim().toUpperCase()
+    const rows = uiContractRowsMock.filter((row) => {
+      const matchesSearch = !normalizedSearch
+        || String(row.uiContractKey ?? '').toLowerCase().includes(normalizedSearch)
+        || String(row.name ?? '').toLowerCase().includes(normalizedSearch)
+      const matchesStatus = !normalizedStatus || row.status === normalizedStatus
+      const matchesFramework = !normalizedFrameworkKey || (row.frameworkKeys ?? []).includes(normalizedFrameworkKey)
+      return matchesSearch && matchesStatus && matchesFramework
+    })
+    return { data: { data: rows.map((row) => cloneTestRow(row)) } }
+  },
   useLazyListRuntimePathsQuery: () => [
     vi.fn(),
     {
@@ -335,6 +367,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       isLoading: false,
       error: null,
     }
+    uiContractRowsMock = [cloneTestRow(activeUiContractRow)]
+    listUiContractsQueryArgs = []
   })
 
   it('marks tab labels when validation errors live inside tab panels', async () => {
@@ -496,6 +530,44 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     expect(await screen.findByText(/legacy contract/i)).toBeInTheDocument()
     expect(screen.getByText(/canonical bindings synthesized/i)).toBeInTheDocument()
+  })
+
+  it('resolves a selected draft UI Contract that is outside the active picker list', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.uiContractKey = 'standard-ui-contract-2-3-1'
+    frameworkPackageQueryMock.data.data.uiContractBinding = {
+      key: 'standard-ui-contract-2-3-1',
+      version: '2.3.1',
+      status: 'DRAFT',
+      compatibilityMode: 'INHERITED_MINOR',
+      resolvedAt: '2026-05-06T14:30:00.000Z',
+    }
+    uiContractRowsMock = [
+      cloneTestRow(activeUiContractRow),
+      cloneTestRow(draftUiContractRow),
+    ]
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^ui contract$/i }))
+
+    expect(screen.getByRole('combobox', { name: /selected contract/i }))
+      .toHaveValue('standard-ui-contract-2-3-1')
+    expect(listUiContractsQueryArgs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        q: 'standard-ui-contract-2-3-1',
+        pageSize: 25,
+      }),
+    ]))
+    expect(screen.getByText(/Contract: DRAFT/i)).toBeInTheDocument()
+    expect(screen.getByText(/Compatibility: PASS/i)).toBeInTheDocument()
+    expect(screen.getByText(/Missing mappings: 0/i)).toBeInTheDocument()
   })
 
   it('assigns selected customers through the customer picker', async () => {
