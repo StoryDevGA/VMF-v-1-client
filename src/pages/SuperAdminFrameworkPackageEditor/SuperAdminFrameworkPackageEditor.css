@@ -129,8 +129,23 @@
 }
 
 .super-admin-framework-package-editor__summary-card--checkpoint {
-  border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border));
   background: var(--color-surface);
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-success {
+  border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border));
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-warning {
+  border-color: color-mix(in srgb, var(--color-warning) 58%, var(--color-border));
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-error {
+  border-color: color-mix(in srgb, var(--color-error) 58%, var(--color-border));
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-neutral {
+  border-color: color-mix(in srgb, var(--color-border) 72%, transparent);
 }
 
 .super-admin-framework-package-editor__summary-card--intro {
@@ -203,7 +218,22 @@
 .super-admin-framework-package-editor__summary-checkpoint-value {
   font-size: clamp(var(--font-size-2xl), 4vw, calc(var(--font-size-2xl) * 1.7));
   line-height: var(--line-height-tight);
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-success .super-admin-framework-package-editor__summary-checkpoint-value {
   color: var(--color-success);
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-warning .super-admin-framework-package-editor__summary-checkpoint-value {
+  color: var(--color-warning);
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-error .super-admin-framework-package-editor__summary-checkpoint-value {
+  color: var(--color-error);
+}
+
+.super-admin-framework-package-editor__summary-card--checkpoint-neutral .super-admin-framework-package-editor__summary-checkpoint-value {
+  color: var(--color-text-primary);
 }
 
 .super-admin-framework-package-editor__summary-checkpoint-qualifier {

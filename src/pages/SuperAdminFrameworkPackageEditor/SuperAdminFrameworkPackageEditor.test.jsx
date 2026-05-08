@@ -646,6 +646,9 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(row).not.toBeNull()
     expect(within(row).getByText('FAIL')).toBeInTheDocument()
     expect(screen.getByText('FAIL: 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Checkpoint FAIL')).toHaveClass(
+      'super-admin-framework-package-editor__summary-card--checkpoint-error',
+    )
   })
 
   it('re-runs the checkpoint from the integrity tab without promoting the package', async () => {

@@ -936,6 +936,7 @@ function SuperAdminFrameworkPackageEditor() {
   const latestCheckpointSummary = normalizeCheckpointSummary(latestCheckpointData)
   const latestCheckpointTimestamp = getCheckpointTimestamp(latestCheckpointData, loadedPackage)
   const latestCheckpointDisplay = formatCheckpointDisplay(latestCheckpointStatus)
+  const latestCheckpointTone = getCheckStatusVariant(latestCheckpointStatus)
   const latestCheckpointMode = formatGovernanceToken(latestCheckpointData?.mode, 'Mode not recorded')
   const dependencyLockMeta = getDependencyLockMeta(loadedPackage, latestCheckpointData)
   const latestCheckpointAllowsActivation =
@@ -1476,7 +1477,10 @@ function SuperAdminFrameworkPackageEditor() {
 
                 {isEditMode ? (
                   <div className="super-admin-framework-package-editor__governance-summary" aria-label="Runtime release summary">
-                    <section className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--checkpoint" aria-label={`Checkpoint ${latestCheckpointDisplay.text}`}>
+                    <section
+                      className={`super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--checkpoint super-admin-framework-package-editor__summary-card--checkpoint-${latestCheckpointTone}`}
+                      aria-label={`Checkpoint ${latestCheckpointDisplay.text}`}
+                    >
                       <span className="super-admin-framework-package-editor__summary-eyebrow">Checkpoint</span>
                       <strong className="super-admin-framework-package-editor__summary-checkpoint-value">
                         {latestCheckpointDisplay.value}
