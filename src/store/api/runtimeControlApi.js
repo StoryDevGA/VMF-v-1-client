@@ -2338,7 +2338,7 @@ const buildMockFrameworkPackageCheckpoint = (pkg, { mode = 'FULL' } = {}) => {
       resolvedReferences: dependencyLockPreview.references.length,
     },
     timestamp: new Date().toISOString(),
-    runBy: null,
+    runBy: { ...RUNTIME_CONTROL_UPDATED_BY },
   }
 }
 
@@ -3382,7 +3382,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               resolvedReferences: Number(pkg.dependencyLock?.references?.length) || 0,
             },
             timestamp: pkg.lastCheckpointAt || null,
-            runBy: null,
+            runBy: pkg.lastCheckpointStatus ? { ...RUNTIME_CONTROL_UPDATED_BY } : null,
           }),
         }
       },

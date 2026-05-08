@@ -56,7 +56,8 @@ let frameworkPackageLatestCheckpointQueryMock = {
   data: {
     data: {
       status: 'PASS',
-      summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0 },
+      mode: 'ACTIVATION',
+      summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0, resolvedReferences: 6 },
       timestamp: '2026-05-01T12:00:00.000Z',
       issues: [],
       errors: [],
@@ -389,7 +390,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       data: {
         data: {
           status: 'PASS',
-          summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0 },
+          mode: 'ACTIVATION',
+          summary: { totalChecks: 3, passed: 3, warnings: 0, failed: 0, resolvedReferences: 6 },
           timestamp: '2026-05-01T12:00:00.000Z',
           issues: [],
           errors: [],
@@ -736,6 +738,40 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     }))
   })
 
+  it('enables activation after a checkpoint with warnings', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'PASS_WITH_WARNINGS',
+          mode: 'FULL',
+          summary: { totalChecks: 4, passed: 3, warnings: 1, failed: 0, resolvedReferences: 2 },
+          timestamp: '2026-05-07T13:42:00.000Z',
+          runBy: { id: 'sa-local', name: 'Super Admin' },
+          issues: [],
+          errors: [],
+          warnings: [{ code: 'RAC-WARN-001', message: 'Non-blocking warning.' }],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const activateButton = screen.getAllByRole('button', { name: /activate package/i })[0]
+    expect(activateButton).toBeEnabled()
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    expect(within(summary).getByText(/^PASS$/i)).toBeInTheDocument()
+    expect(within(summary).getAllByText(/with warnings/i).length).toBeGreaterThan(0)
+  })
+
   it('adds the same validation twice with distinct stable binding ids', async () => {
     const user = userEvent.setup()
     createFrameworkPackageMock.mockReturnValue({
@@ -926,7 +962,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.queryByText(/runtime path required/i)).not.toBeInTheDocument()
   })
 
-  it('shows the final governed package editor tab set without editable agent or skill tabs', async () => {
+  it('shows identity tabs before runtime package configuration tabs', async () => {
+    const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
 
@@ -936,6 +973,18 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
     })
 
+    const tabLabels = screen.getAllByRole('tab').map((tab) => tab.textContent)
+    expect(tabLabels.slice(0, 3)).toEqual(['Framework Identity', 'Package Identity', 'Access'])
+    expect(screen.getByRole('combobox', { name: /framework key/i })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /package key/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^package identity$/i }))
+
+    expect(screen.getByRole('textbox', { name: /package key/i })).toHaveValue('vmf-core')
+    expect(screen.getByRole('textbox', { name: /description/i })).toHaveValue('Existing package.')
+
+    expect(screen.getByRole('tab', { name: /^framework identity$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^package identity$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^access$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^sections$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^runtime$/i })).toBeInTheDocument()
@@ -950,6 +999,106 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByRole('tab', { name: /^json \/ diff$/i })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^agents$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^skills$/i })).not.toBeInTheDocument()
+  })
+
+  it('surfaces checkpoint evidence in the runtime release summary', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isDefault = true
+    frameworkPackageQueryMock.data.data.dependencyLock = {
+      status: 'PASS',
+      resolvedAt: '2026-05-07T13:42:00.000Z',
+      references: [
+        { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
+        { collectionKey: 'UIContract', key: 'vmf-ui-contract-v1' },
+      ],
+    }
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'PASS',
+          mode: 'ACTIVATION',
+          summary: {
+            totalChecks: 27,
+            passed: 27,
+            warnings: 0,
+            failed: 0,
+            resolvedReferences: 2,
+          },
+          timestamp: '2026-05-07T13:42:00.000Z',
+          runBy: { id: 'sa-local', name: 'Super Admin' },
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    expect(within(summary).getByText(/Lifecycle: Active/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Checkpoint: PASS/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Last Run: 2026-05-07/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Mode: ACTIVATION/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Checks: 27\/27/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Snapshot: Locked - 2 refs/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Run By: Super Admin/i)).toBeInTheDocument()
+    expect(within(summary).getAllByText(/Default Package/i).length).toBeGreaterThan(0)
+    expect(within(summary).getByText(/checkpoint evidence certifies architecture readiness/i)).toBeInTheDocument()
+  })
+
+  it('surfaces preview dependency snapshots before validation locks them', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'DRAFT'
+    frameworkPackageQueryMock.data.data.dependencyLock = null
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'PASS',
+          mode: 'FULL',
+          summary: {
+            totalChecks: 5,
+            passed: 5,
+            warnings: 0,
+            failed: 0,
+            resolvedReferences: 3,
+          },
+          timestamp: '2026-05-07T13:42:00.000Z',
+          runBy: { id: 'sa-local', name: 'Super Admin' },
+          dependencyLockPreview: {
+            status: 'PASS',
+            references: [
+              { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
+              { collectionKey: 'UIContract', key: 'vmf-ui-contract-v1' },
+              { collectionKey: 'WorkflowPolicy', key: 'vmf-submit-gate' },
+            ],
+          },
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    expect(within(summary).getByText(/Snapshot: Preview - 3 refs/i)).toBeInTheDocument()
   })
 
   it('uses the shared paginated table pattern for resolved dependency rows', async () => {

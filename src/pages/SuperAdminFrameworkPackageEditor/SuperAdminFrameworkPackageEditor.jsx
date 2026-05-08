@@ -37,6 +37,7 @@ import {
 import {
   normalizeError,
 } from '../../utils/errors.js'
+import { formatDateTime as formatStandardDateTime } from '../../utils/dateTime.js'
 import { getRuntimeControlFieldErrorMap } from '../../utils/runtimeControlFormErrors.js'
 import {
   buildFrameworkRegistryAllowedKeys,
@@ -431,13 +432,85 @@ const getCheckStatusVariant = (status) => {
   return 'neutral'
 }
 
+const formatGovernanceToken = (value, fallback = 'Not recorded') => {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return fallback
+  if (normalized === 'NOT_RUN') return 'Not Run'
+  return normalized.replaceAll('_', ' ')
+}
+
+const formatCheckpointDisplay = (status) => {
+  const normalized = String(status ?? '').trim().toUpperCase()
+  if (normalized === 'PASS_WITH_WARNINGS') {
+    return {
+      value: 'PASS',
+      qualifier: 'with warnings',
+      text: 'PASS with warnings',
+    }
+  }
+
+  const value = formatGovernanceToken(normalized, 'Not Run')
+  return { value, qualifier: '', text: value }
+}
+
+const normalizeCheckpointSummary = (checkpoint) => {
+  const summary = checkpoint?.summary ?? {}
+  const passed = Number(summary.passed ?? summary.pass) || 0
+  const warnings = Number(summary.warnings ?? summary.warn) || 0
+  const failed = Number(summary.failed ?? summary.fail) || 0
+  const totalChecks = Number(summary.totalChecks) || passed + warnings + failed
+  const resolvedReferences = Number(summary.resolvedReferences) || 0
+
+  return {
+    totalChecks,
+    passed,
+    warnings,
+    failed,
+    resolvedReferences,
+  }
+}
+
+const getCheckpointTimestamp = (checkpoint, pkg) =>
+  checkpoint?.timestamp
+  ?? checkpoint?.lastCheckpointAt
+  ?? pkg?.lastCheckpointAt
+  ?? null
+
+const getDependencyLockMeta = (pkg, checkpoint) => {
+  const persistedLock = pkg?.dependencyLock ?? null
+  const previewLock = checkpoint?.dependencyLockPreview ?? null
+  const lock = persistedLock ?? previewLock
+  const references = Array.isArray(lock?.references) ? lock.references : []
+  const summary = normalizeCheckpointSummary(checkpoint)
+  const referenceCount = references.length || summary.resolvedReferences
+
+  return {
+    hasPersistedLock: Boolean(persistedLock),
+    status: String(lock?.status ?? '').trim().toUpperCase(),
+    referenceCount,
+  }
+}
+
 const hasCheckpointRun = (checkpoint) => {
   const status = String(checkpoint?.status ?? '').trim().toUpperCase()
   return Boolean(checkpoint) && status && status !== 'NOT_RUN'
 }
 
 const FRAMEWORK_PACKAGE_EDITOR_TABS = Object.freeze({
-  INTEGRITY: 9,
+  FRAMEWORK_IDENTITY: 0,
+  PACKAGE_IDENTITY: 1,
+  ACCESS: 2,
+  SECTIONS: 3,
+  RUNTIME: 4,
+  VALIDATION: 5,
+  WORKFLOWS: 6,
+  OUTPUTS: 7,
+  UI_CONTRACT: 8,
+  STATE_CONTRACT: 9,
+  DEPENDENCIES: 10,
+  INTEGRITY: 11,
+  AUDIT: 12,
+  JSON_DIFF: 13,
 })
 
 const getCheckpointFromMutationError = (error) =>
@@ -487,18 +560,28 @@ const buildCheckpointIntegrityView = (checkpoint) => {
 
 const formatDateTime = (value) => {
   if (!value) return '--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleString()
+  return formatStandardDateTime(value, String(value))
 }
 
 const formatIssueList = (issues = []) =>
   Array.isArray(issues) && issues.length > 0 ? issues.join(' ') : 'None'
 
+const isLikelyObjectId = (value) => /^[a-f0-9]{24}$/i.test(String(value || '').trim())
+
 const getAuditActorLabel = (actor) => {
   if (!actor) return '--'
-  if (typeof actor === 'string') return actor
-  return actor.name || actor.email || actor.id || actor._id || '--'
+  if (typeof actor === 'string') {
+    return isLikelyObjectId(actor) ? 'Admin user' : actor
+  }
+  const fallbackId = actor.id || actor._id || ''
+  const fallbackLabel = isLikelyObjectId(fallbackId) ? 'Admin user' : fallbackId
+  return actor.name || actor.email || actor.label || fallbackLabel || '--'
+}
+
+const getCheckpointActorLabel = (checkpoint) => {
+  const label = getAuditActorLabel(checkpoint?.runBy)
+  if (label !== '--') return label
+  return hasCheckpointRun(checkpoint) ? 'Admin user' : '--'
 }
 
 function PackageEditorLoadingState() {
@@ -850,9 +933,25 @@ function SuperAdminFrameworkPackageEditor() {
     || loadedPackage?.lastCheckpointStatus
     || 'NOT_RUN',
   ).trim().toUpperCase()
+  const latestCheckpointSummary = normalizeCheckpointSummary(latestCheckpointData)
+  const latestCheckpointTimestamp = getCheckpointTimestamp(latestCheckpointData, loadedPackage)
+  const latestCheckpointDisplay = formatCheckpointDisplay(latestCheckpointStatus)
+  const latestCheckpointMode = formatGovernanceToken(latestCheckpointData?.mode, 'Mode not recorded')
+  const dependencyLockMeta = getDependencyLockMeta(loadedPackage, latestCheckpointData)
   const latestCheckpointAllowsActivation =
     latestCheckpointStatus === 'PASS'
     || latestCheckpointStatus === 'PASS_WITH_WARNINGS'
+  const dependencySnapshotLabel = `${dependencyLockMeta.hasPersistedLock ? 'Locked' : dependencyLockMeta.referenceCount > 0 ? 'Preview' : 'Not Locked'} - ${dependencyLockMeta.referenceCount} refs`
+  const checkpointRuntimeUse = latestCheckpointStatus === 'FAIL'
+    ? 'Checkpoint issue review required'
+    : latestCheckpointAllowsActivation
+      ? 'Checkpoint evidence certified'
+      : 'Checkpoint evidence pending'
+  const checkpointActorLabel = getCheckpointActorLabel(latestCheckpointData)
+  const packageRoleLabel = loadedPackage?.isDefault ? 'Default Package' : 'Framework Package'
+  const packageRoleCopy = isEditMode
+    ? 'Editor surface for an existing framework package.'
+    : 'Editor surface for a new framework package.'
   const canValidatePackage = isEditMode && !activePackageLocked
   const canActivatePackage = Boolean(
     isEditMode
@@ -1253,6 +1352,8 @@ function SuperAdminFrameworkPackageEditor() {
     [form.assignedCustomerIds],
   )
   const tabErrorCounts = {
+    frameworkIdentity: countErrorsForFields(errors, ['frameworkKey', 'frameworkName', 'version', 'status']),
+    packageIdentity: countErrorsForFields(errors, ['packageScope', 'packageType', 'packageKey', 'packageName', 'description']),
     access: countErrorsForFields(errors, ['visibility', 'customerAccessMode', 'assignedCustomerIds']),
     sections: countErrorsForFields(errors, ['sections', 'sectionsText']),
     runtime: countErrorsForFields(errors, ['runtimeSettings', 'executionModel']),
@@ -1324,63 +1425,142 @@ function SuperAdminFrameworkPackageEditor() {
           <Card variant="elevated" className="super-admin-framework-packages__card super-admin-framework-package-editor__card">
             <form className="super-admin-framework-package-editor__form" onSubmit={handleSubmit} noValidate>
               <Card.Body className="super-admin-framework-packages__card-body super-admin-framework-packages__card-body--compact super-admin-framework-package-editor__card-body">
-                <div className="super-admin-framework-package-editor__top-actions">
-                  {isEditMode ? (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleValidatePackage}
-                        loading={isValidatingPackage}
-                        disabled={!canValidatePackage || isSaving || isActivatingPackage}
-                      >
-                        Validate Package
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setActivationDialogOpen(true)}
-                        loading={isActivatingPackage}
-                        disabled={!canActivatePackage || isSaving || isValidatingPackage}
-                      >
-                        Activate Package
-                      </Button>
-                    </>
-                  ) : null}
-                  <Button type="button" variant="outline" size="sm" onClick={handleBack}>
-                    Back
-                  </Button>
+                <div className="super-admin-framework-package-editor__release-bar">
+                  <div className="super-admin-framework-package-editor__release-state" aria-label="Package status summary">
+                    {isEditMode ? (
+                      <>
+                        <Status size="lg" showIcon variant={getFrameworkPackageStatusVariant(form.status)}>
+                          Lifecycle: {formatFrameworkPackageStatus(form.status)}
+                        </Status>
+                        <Status size="lg" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
+                          Checkpoint: {latestCheckpointDisplay.text}
+                        </Status>
+                      </>
+                    ) : (
+                      <Status size="lg" showIcon variant="neutral">
+                        New Framework Package
+                      </Status>
+                    )}
+                  </div>
+
+                  <div className="super-admin-framework-package-editor__top-actions">
+                    {isEditMode ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleValidatePackage}
+                          loading={isValidatingPackage}
+                          disabled={!canValidatePackage || isSaving || isActivatingPackage}
+                        >
+                          Validate Package
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setActivationDialogOpen(true)}
+                          loading={isActivatingPackage}
+                          disabled={!canActivatePackage || isSaving || isValidatingPackage}
+                        >
+                          Activate Package
+                        </Button>
+                      </>
+                    ) : null}
+                    <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+                      Back
+                    </Button>
+                  </div>
                 </div>
 
                 {isEditMode ? (
-                  <div className="super-admin-framework-packages__token-list" aria-label="Package status summary">
-                    <Status size="md" showIcon variant={getFrameworkPackageStatusVariant(form.status)}>
-                      Status: {formatFrameworkPackageStatus(form.status)}
-                    </Status>
-                    <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
-                      Last Checkpoint: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
-                    </Status>
-                    {loadedPackage?.isDefault ? (
-                      <Badge variant="success" size="md" pill outline>
-                        Default Package
-                      </Badge>
-                    ) : null}
+                  <div className="super-admin-framework-package-editor__governance-summary" aria-label="Runtime release summary">
+                    <section className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--checkpoint" aria-label={`Checkpoint ${latestCheckpointDisplay.text}`}>
+                      <span className="super-admin-framework-package-editor__summary-eyebrow">Checkpoint</span>
+                      <strong className="super-admin-framework-package-editor__summary-checkpoint-value">
+                        {latestCheckpointDisplay.value}
+                      </strong>
+                      {latestCheckpointDisplay.qualifier ? (
+                        <span className="super-admin-framework-package-editor__summary-checkpoint-qualifier">
+                          {latestCheckpointDisplay.qualifier}
+                        </span>
+                      ) : null}
+                      <span className="super-admin-framework-package-editor__summary-detail">
+                        {latestCheckpointSummary.passed}/{latestCheckpointSummary.totalChecks} checks
+                      </span>
+                    </section>
+
+                    <section className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--intro" aria-labelledby="framework-package-editor-summary-title">
+                      <span className="super-admin-framework-package-editor__summary-eyebrow">Framework Package Editor</span>
+                      <h2 id="framework-package-editor-summary-title" className="super-admin-framework-package-editor__summary-title">
+                        Use the identity tabs for source and package metadata while runtime blueprint tabs stay focused.
+                      </h2>
+                      <p className="super-admin-framework-package-editor__summary-copy">
+                        Skills and Agents are resolved dependencies, not direct package selections.
+                      </p>
+                    </section>
+
+                    <section className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--role" aria-label="Package role">
+                      <span className="super-admin-framework-package-editor__summary-eyebrow">Package Role</span>
+                      <strong className="super-admin-framework-package-editor__summary-role">{packageRoleLabel}</strong>
+                      <p className="super-admin-framework-package-editor__summary-copy">{packageRoleCopy}</p>
+                    </section>
+
+                    <div className="super-admin-framework-package-editor__summary-metrics">
+                      <div className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--metric">
+                        <span className="super-admin-framework-package-editor__summary-eyebrow">Last Run</span>
+                        <strong className="super-admin-framework-package-editor__summary-metric-value">
+                          {formatDateTime(latestCheckpointTimestamp)}
+                        </strong>
+                      </div>
+                      <section className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--metric super-admin-framework-package-editor__summary-card--runtime-evidence" aria-label="Runtime checkpoint evidence">
+                        <div className="super-admin-framework-package-editor__summary-inline-metrics">
+                          <div className="super-admin-framework-package-editor__summary-metric-item">
+                            <span className="super-admin-framework-package-editor__summary-eyebrow">Mode</span>
+                            <strong className="super-admin-framework-package-editor__summary-metric-value">{latestCheckpointMode}</strong>
+                          </div>
+                          <div className="super-admin-framework-package-editor__summary-metric-item">
+                            <span className="super-admin-framework-package-editor__summary-eyebrow">Snapshot</span>
+                            <strong className="super-admin-framework-package-editor__summary-metric-value">{dependencySnapshotLabel}</strong>
+                          </div>
+                          <div className="super-admin-framework-package-editor__summary-metric-item">
+                            <span className="super-admin-framework-package-editor__summary-eyebrow">Runtime Use</span>
+                            <strong className="super-admin-framework-package-editor__summary-metric-value">{checkpointRuntimeUse}</strong>
+                          </div>
+                        </div>
+                      </section>
+                      <div className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--metric">
+                        <span className="super-admin-framework-package-editor__summary-eyebrow">Run By</span>
+                        <strong className="super-admin-framework-package-editor__summary-metric-value">
+                          {checkpointActorLabel}
+                        </strong>
+                      </div>
+                    </div>
+                    <p className="sr-only">
+                      Lifecycle: {formatFrameworkPackageStatus(form.status)}.
+                      Checkpoint: {latestCheckpointDisplay.text}.
+                      Checks: {latestCheckpointSummary.passed}/{latestCheckpointSummary.totalChecks}.
+                      Last Run: {formatDateTime(latestCheckpointTimestamp)}.
+                      Mode: {latestCheckpointMode}.
+                      Snapshot: {dependencySnapshotLabel}.
+                      Run By: {checkpointActorLabel}.
+                      Checkpoint evidence certifies architecture readiness; activation re-runs the checkpoint and relies on the locked dependency snapshot for runtime use.
+                    </p>
                   </div>
                 ) : null}
 
-                <div className="super-admin-framework-package-editor__intro">
-                  <p className="super-admin-framework-package-editor__form-title">
-                    {isEditMode
-                      ? 'Editor surface for an existing framework package.'
-                      : 'Editor surface for a new framework package.'}
-                  </p>
-                  <p className="super-admin-framework-packages__table-note">
-                    Keep package identity visible while configuring package-specific runtime blueprint tabs.
-                    Skills and Agents are resolved dependencies, not direct package selections.
-                  </p>
-                </div>
+                {!isEditMode ? (
+                  <div className="super-admin-framework-package-editor__intro">
+                    <p className="super-admin-framework-package-editor__form-title">
+                      {packageRoleCopy}
+                    </p>
+                    <p className="super-admin-framework-packages__table-note">
+                      Use the identity tabs for source and package metadata while runtime blueprint tabs stay focused.
+                      Skills and Agents are resolved dependencies, not direct package selections.
+                    </p>
+                  </div>
+                ) : null}
 
                 {legacyContractFieldsDetected ? (
                   <div className="super-admin-framework-package-editor__legacy-warning" role="status" aria-live="polite">
@@ -1396,7 +1576,7 @@ function SuperAdminFrameworkPackageEditor() {
                 {isEditMode && form.status !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE && !latestCheckpointAllowsActivation ? (
                   <div className="super-admin-framework-package-editor__readiness-banner" role="status" aria-live="polite">
                     <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
-                      Runtime-ready: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
+                      Runtime-ready: {latestCheckpointDisplay.text}
                     </Status>
                     <p className="super-admin-framework-package-editor__helper">
                       {latestCheckpointStatus === 'FAIL'
@@ -1416,7 +1596,7 @@ function SuperAdminFrameworkPackageEditor() {
 
                 {activePackageLocked || validatedStructureLocked ? (
                   <div
-                    className="super-admin-framework-packages__token-list"
+                    className={`super-admin-framework-package-editor__lock-banner ${activePackageLocked ? 'super-admin-framework-package-editor__lock-banner--active' : 'super-admin-framework-package-editor__lock-banner--validated'}`}
                     role="status"
                     aria-live="polite"
                   >
@@ -1431,142 +1611,6 @@ function SuperAdminFrameworkPackageEditor() {
                   </div>
                 ) : null}
 
-                <section className="super-admin-framework-package-editor__basic-section" aria-labelledby="framework-package-editor-basic-information">
-                  <SectionHeader
-                    id="framework-package-editor-basic-information"
-                    title="Basic Information"
-                    copy="Define the package identity and lifecycle metadata that downstream Runtime Control resources reference."
-                  />
-                  <div className="super-admin-framework-package-editor__identity-layout">
-                    <div className="super-admin-framework-package-editor__field-group">
-                      <div className="super-admin-framework-package-editor__field-group-header">
-                        <h3 className="super-admin-framework-package-editor__field-group-title">Framework identity</h3>
-                        <p className="super-admin-framework-package-editor__field-group-copy">
-                          Bind this package to the source framework and release lifecycle.
-                        </p>
-                      </div>
-                      <div className="super-admin-framework-package-editor__field-grid">
-                        <Select
-                          id="framework-package-editor-framework-key"
-                          label="Framework Key"
-                          value={form.frameworkKey}
-                          options={frameworkOptions}
-                          onChange={(event) => {
-                            const nextKey = event.target.value
-                            setForm((current) => ({
-                              ...current,
-                              frameworkKey: nextKey,
-                              frameworkName: frameworkNameLookup[nextKey] ?? current.frameworkName,
-                            }))
-                          }}
-                          error={errors.frameworkKey}
-                          disabled={runtimeStructureLocked}
-                        />
-                        <Input
-                          id="framework-package-editor-framework-name"
-                          label="Framework Name"
-                          value={form.frameworkName}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, frameworkName: event.target.value }))
-                          }
-                          error={errors.frameworkName}
-                          disabled={activePackageLocked}
-                          fullWidth
-                        />
-                        <Input
-                          id="framework-package-editor-version"
-                          label="Version"
-                          value={form.version}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, version: event.target.value }))
-                          }
-                          error={errors.version}
-                          helperText="Use semantic version format, for example 2.3.1."
-                          disabled={runtimeStructureLocked}
-                          fullWidth
-                        />
-                        <Select
-                          id="framework-package-editor-status"
-                          label="Lifecycle State"
-                          value={form.status}
-                          options={isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
-                            ? [{ value: FRAMEWORK_PACKAGE_STATUSES.ACTIVE, label: 'Active' }]
-                            : FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, status: event.target.value }))
-                          }
-                          disabled={activePackageLocked}
-                        />
-                      </div>
-                    </div>
-                    <div className="super-admin-framework-package-editor__field-group">
-                      <div className="super-admin-framework-package-editor__field-group-header">
-                        <h3 className="super-admin-framework-package-editor__field-group-title">Package identity</h3>
-                        <p className="super-admin-framework-package-editor__field-group-copy">
-                          Define how this version appears in the package catalogue.
-                        </p>
-                      </div>
-                      <div className="super-admin-framework-package-editor__field-grid">
-                        <Select
-                          id="framework-package-editor-package-scope"
-                          label="Package Scope"
-                          value={form.packageScope}
-                          options={FRAMEWORK_PACKAGE_SCOPE_OPTIONS}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, packageScope: event.target.value }))
-                          }
-                          disabled={activePackageLocked}
-                        />
-                        <Select
-                          id="framework-package-editor-package-type"
-                          label="Package Type"
-                          value={form.packageType}
-                          options={FRAMEWORK_PACKAGE_TYPE_OPTIONS}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, packageType: event.target.value }))
-                          }
-                          disabled={activePackageLocked}
-                        />
-                        <Input
-                          id="framework-package-editor-package-key"
-                          label="Package Key"
-                          value={form.packageKey}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, packageKey: event.target.value }))
-                          }
-                          error={errors.packageKey}
-                          helperText="Drafts can default from framework and version; validation requires a package key."
-                          disabled={runtimeStructureLocked}
-                          fullWidth
-                        />
-                        <Input
-                          id="framework-package-editor-package-name"
-                          label="Package Name"
-                          value={form.packageName}
-                          onChange={(event) =>
-                            setForm((current) => ({ ...current, packageName: event.target.value }))
-                          }
-                          error={errors.packageName}
-                          disabled={activePackageLocked}
-                          fullWidth
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <Textarea
-                    id="framework-package-editor-description"
-                    label="Description"
-                    value={form.description}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, description: event.target.value }))
-                    }
-                    error={errors.description}
-                    rows={3}
-                    disabled={activePackageLocked}
-                    fullWidth
-                  />
-                </section>
-
                 <TabView
                   activeTab={activeTab}
                   onTabChange={setActiveTab}
@@ -1576,6 +1620,138 @@ function SuperAdminFrameworkPackageEditor() {
                   className="super-admin-framework-package-editor__tabs"
                   aria-label="Framework package editor sections"
                 >
+                  <TabView.Tab label={renderTabLabel('Framework Identity', tabErrorCounts.frameworkIdentity)}>
+                    <div className="super-admin-framework-package-editor__tab-panel super-admin-framework-package-editor__basic-section">
+                      <SectionHeader
+                        title="Framework Identity"
+                        copy="Bind this package to the source framework and release lifecycle."
+                      />
+                      <div className="super-admin-framework-package-editor__field-group">
+                        <div className="super-admin-framework-package-editor__field-grid">
+                          <Select
+                            id="framework-package-editor-framework-key"
+                            label="Framework Key"
+                            value={form.frameworkKey}
+                            options={frameworkOptions}
+                            onChange={(event) => {
+                              const nextKey = event.target.value
+                              setForm((current) => ({
+                                ...current,
+                                frameworkKey: nextKey,
+                                frameworkName: frameworkNameLookup[nextKey] ?? current.frameworkName,
+                              }))
+                            }}
+                            error={errors.frameworkKey}
+                            disabled={runtimeStructureLocked}
+                          />
+                          <Input
+                            id="framework-package-editor-framework-name"
+                            label="Framework Name"
+                            value={form.frameworkName}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, frameworkName: event.target.value }))
+                            }
+                            error={errors.frameworkName}
+                            disabled={activePackageLocked}
+                            fullWidth
+                          />
+                          <Input
+                            id="framework-package-editor-version"
+                            label="Version"
+                            value={form.version}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, version: event.target.value }))
+                            }
+                            error={errors.version}
+                            helperText="Use semantic version format, for example 2.3.1."
+                            disabled={runtimeStructureLocked}
+                            fullWidth
+                          />
+                          <Select
+                            id="framework-package-editor-status"
+                            label="Lifecycle State"
+                            value={form.status}
+                            options={isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
+                              ? [{ value: FRAMEWORK_PACKAGE_STATUSES.ACTIVE, label: 'Active' }]
+                              : FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, status: event.target.value }))
+                            }
+                            disabled={activePackageLocked}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label={renderTabLabel('Package Identity', tabErrorCounts.packageIdentity)}>
+                    <div className="super-admin-framework-package-editor__tab-panel super-admin-framework-package-editor__basic-section">
+                      <SectionHeader
+                        title="Package Identity"
+                        copy="Define how this version appears in the package catalogue."
+                      />
+                      <div className="super-admin-framework-package-editor__field-group">
+                        <div className="super-admin-framework-package-editor__field-grid">
+                          <Select
+                            id="framework-package-editor-package-scope"
+                            label="Package Scope"
+                            value={form.packageScope}
+                            options={FRAMEWORK_PACKAGE_SCOPE_OPTIONS}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, packageScope: event.target.value }))
+                            }
+                            disabled={activePackageLocked}
+                          />
+                          <Select
+                            id="framework-package-editor-package-type"
+                            label="Package Type"
+                            value={form.packageType}
+                            options={FRAMEWORK_PACKAGE_TYPE_OPTIONS}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, packageType: event.target.value }))
+                            }
+                            disabled={activePackageLocked}
+                          />
+                          <Input
+                            id="framework-package-editor-package-key"
+                            label="Package Key"
+                            value={form.packageKey}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, packageKey: event.target.value }))
+                            }
+                            error={errors.packageKey}
+                            helperText="Drafts can default from framework and version; validation requires a package key."
+                            disabled={runtimeStructureLocked}
+                            fullWidth
+                          />
+                          <Input
+                            id="framework-package-editor-package-name"
+                            label="Package Name"
+                            value={form.packageName}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, packageName: event.target.value }))
+                            }
+                            error={errors.packageName}
+                            disabled={activePackageLocked}
+                            fullWidth
+                          />
+                        </div>
+                      </div>
+                      <Textarea
+                        id="framework-package-editor-description"
+                        label="Description"
+                        value={form.description}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, description: event.target.value }))
+                        }
+                        error={errors.description}
+                        rows={3}
+                        disabled={activePackageLocked}
+                        fullWidth
+                      />
+                    </div>
+                  </TabView.Tab>
+
                   <TabView.Tab label={renderTabLabel('Access', tabErrorCounts.access)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
                       <SectionHeader
@@ -2471,7 +2647,7 @@ function SuperAdminFrameworkPackageEditor() {
               UI Contract: {form.uiContractKey || 'No UI Contract selected'}
             </p>
             <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
-              Checkpoint Status: {latestCheckpointStatus === 'NOT_RUN' ? 'Not Run' : latestCheckpointStatus}
+              Checkpoint Status: {latestCheckpointDisplay.text}
             </Status>
             <p className="super-admin-framework-package-editor__helper">
               Once activated, direct editing is locked and future changes require cloning a new version.
