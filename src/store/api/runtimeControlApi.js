@@ -76,6 +76,7 @@ const WORKFLOW_POLICY_DEPENDENCIES_LIST_TAG = { type: 'RuntimeWorkflowPolicyDepe
 const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
 const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
 const VALIDATION_REGISTRY_LIST_TAG = { type: 'ValidationRegistry', id: 'LIST' }
+const RUNTIME_VALIDATION_AUDIT_LIST_TAG = { type: 'RuntimeValidationAudit', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
@@ -526,6 +527,7 @@ const buildInitialRuntimeControlState = () => ({
   agents: INITIAL_RUNTIME_AGENTS.map((agent) => cloneRuntimeAgent(agent)),
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
+  runtimeValidationAudits: [],
 })
 
 let runtimeControlState = buildInitialRuntimeControlState()
@@ -2367,6 +2369,402 @@ const buildMockCheckpointValidationError = (checkpoint) => ({
   },
 })
 
+const MOCK_RUNTIME_VALIDATION_CODES = Object.freeze({
+  SCOPE_OUTSIDE_ALLOWED: 'RVL-SCOPE-001',
+  PATH_INVALID: 'RVL-PATH-002',
+  OUTPUT_CONTRACT_INVALID: 'RVL-OUTPUT-003',
+  LIFECYCLE_TRANSITION_INVALID: 'RVL-LIFECYCLE-004',
+  SKILL_INVALID: 'RVL-SKILL-007',
+  DEPENDENCY_INVALID: 'RVL-DEPENDENCY-008',
+  EXECUTION_INVALID: 'RVL-EXECUTION-009',
+})
+
+const MOCK_RUNTIME_LIFECYCLE_TRANSITIONS = Object.freeze({
+  DRAFT: ['IN_REVIEW', 'VALIDATION', 'ARCHIVED'],
+  IN_REVIEW: ['DRAFT', 'APPROVED', 'REJECTED'],
+  VALIDATION: ['DRAFT', 'APPROVED', 'REJECTED'],
+  APPROVED: ['ACTIVE', 'ARCHIVED'],
+  ACTIVE: ['LOCKED', 'DEPRECATED'],
+  LOCKED: ['ARCHIVED'],
+  REJECTED: ['DRAFT', 'ARCHIVED'],
+  DEPRECATED: ['ARCHIVED'],
+  ARCHIVED: [],
+})
+
+const normalizeMockRuntimeValidationMode = (value) => {
+  const normalized = String(value ?? 'STRICT').trim().toUpperCase()
+  return ['STRICT', 'WARN_ONLY', 'AUDIT_ONLY', 'DISABLED'].includes(normalized)
+    ? normalized
+    : 'STRICT'
+}
+
+const buildMockRuntimeValidationIssue = ({
+  code,
+  severity = 'ERROR',
+  message,
+  path = '',
+  source = 'runtime-validation',
+}) => ({
+  code,
+  severity,
+  message,
+  path,
+  source,
+})
+
+const mockRuntimeScopeMatches = (scopePattern, runtimePath) => {
+  const pattern = String(scopePattern ?? '').trim()
+  const path = String(runtimePath ?? '').trim()
+  if (!pattern || !path) return false
+  if (pattern === path) return true
+  if (pattern.endsWith('.*')) {
+    const prefix = pattern.slice(0, -2)
+    return path === prefix || path.startsWith(`${prefix}.`)
+  }
+  const patternSegments = pattern.split('.')
+  const pathSegments = path.split('.')
+  if (patternSegments.length !== pathSegments.length) return false
+  return patternSegments.every((segment, index) => segment === '*' || segment === pathSegments[index])
+}
+
+const mockRuntimeScopeBoundaryIssue = ({ runtimePath, operation, source }) => buildMockRuntimeValidationIssue({
+  code: MOCK_RUNTIME_VALIDATION_CODES.SCOPE_OUTSIDE_ALLOWED,
+  severity: 'BLOCKING',
+  message: `Runtime path "${runtimePath}" is not covered by the configured ${String(operation ?? 'runtime').toUpperCase()} scopes.`,
+  path: 'runtimePath',
+  source,
+})
+
+const mockRuntimePathAllowedByScopes = (scopes = [], runtimePath = '') => {
+  const normalizedScopes = normalizeRuntimePathList(scopes)
+  if (normalizedScopes.length === 0) return true
+  return normalizedScopes.some((scope) => mockRuntimeScopeMatches(scope, runtimePath))
+}
+
+const validateMockRuntimeOutputContract = ({ outputContract = {}, payload }) => {
+  if (!outputContract || typeof outputContract !== 'object' || Array.isArray(outputContract)) return []
+  const required = Array.isArray(outputContract.required) ? outputContract.required : []
+  const properties = outputContract.properties && typeof outputContract.properties === 'object'
+    ? outputContract.properties
+    : {}
+  const issues = []
+
+  for (const requiredKey of required) {
+    if (!Object.prototype.hasOwnProperty.call(payload ?? {}, requiredKey)) {
+      issues.push(buildMockRuntimeValidationIssue({
+        code: MOCK_RUNTIME_VALIDATION_CODES.OUTPUT_CONTRACT_INVALID,
+        severity: 'BLOCKING',
+        message: `Runtime output / must have required property "${requiredKey}".`,
+        path: `payload.${requiredKey}`,
+        source: 'runtime-output-validator',
+      }))
+    }
+  }
+
+  for (const [propertyKey, propertySchema] of Object.entries(properties)) {
+    if (!Object.prototype.hasOwnProperty.call(payload ?? {}, propertyKey)) continue
+    const expectedType = String(propertySchema?.type ?? '').trim().toLowerCase()
+    if (!expectedType) continue
+    const actualValue = payload[propertyKey]
+    const actualType = Array.isArray(actualValue) ? 'array' : typeof actualValue
+    if (actualType !== expectedType) {
+      issues.push(buildMockRuntimeValidationIssue({
+        code: MOCK_RUNTIME_VALIDATION_CODES.OUTPUT_CONTRACT_INVALID,
+        severity: 'BLOCKING',
+        message: `Runtime output /${propertyKey} must be ${expectedType}.`,
+        path: `payload.${propertyKey}`,
+        source: 'runtime-output-validator',
+      }))
+    }
+  }
+
+  if (outputContract.additionalProperties === false && payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    for (const propertyKey of Object.keys(payload)) {
+      if (Object.prototype.hasOwnProperty.call(properties, propertyKey)) continue
+      issues.push(buildMockRuntimeValidationIssue({
+        code: MOCK_RUNTIME_VALIDATION_CODES.OUTPUT_CONTRACT_INVALID,
+        severity: 'BLOCKING',
+        message: `Runtime output / must NOT have additional property "${propertyKey}".`,
+        path: `payload.${propertyKey}`,
+        source: 'runtime-output-validator',
+      }))
+    }
+  }
+
+  return issues
+}
+
+const validateMockRuntimeOperation = (payload = {}) => {
+  const mode = normalizeMockRuntimeValidationMode(payload.mode)
+  const operationType = String(payload.operationType ?? '').trim().toUpperCase()
+  const operation = String(payload.operation ?? (['STATE_MUTATION', 'STATE_WRITE'].includes(operationType) ? 'WRITE' : 'READ')).trim().toUpperCase()
+  const runtimePath = String(payload.runtimePath ?? '').trim()
+  const frameworkKey = normalizeFrameworkKey(payload.frameworkKey)
+  const issues = []
+
+  if (mode === 'DISABLED') {
+    issues.push(buildMockRuntimeValidationIssue({
+      code: MOCK_RUNTIME_VALIDATION_CODES.EXECUTION_INVALID,
+      severity: 'INFO',
+      message: 'Runtime validation is disabled for this operation.',
+      path: 'mode',
+      source: 'runtime-validation-engine',
+    }))
+  } else {
+    const packageId = String(payload.packageId ?? '').trim()
+    if (packageId) {
+      const pkg = findFrameworkPackageById(packageId)
+      if (!pkg) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.DEPENDENCY_INVALID,
+          severity: 'ERROR',
+          message: `Framework package "${packageId}" was not found.`,
+          path: 'packageId',
+          source: 'runtime-dependency-validator',
+        }))
+      } else if (!pkg.dependencyLock) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.DEPENDENCY_INVALID,
+          severity: 'ERROR',
+          message: `Framework package "${pkg.packageKey || packageId}" does not have a dependency lock snapshot.`,
+          path: 'packageId',
+          source: 'runtime-dependency-validator',
+        }))
+      }
+    }
+
+    if (['STATE_MUTATION', 'STATE_READ', 'STATE_WRITE'].includes(operationType)) {
+      const runtimePathRow = findRuntimePathByPathKey(runtimePath)
+      if (!runtimePath) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+          severity: 'BLOCKING',
+          message: 'Runtime path is required for state mutation validation.',
+          path: 'runtimePath',
+          source: 'runtime-mutation-validator',
+        }))
+      } else if (!runtimePathRow) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+          severity: 'BLOCKING',
+          message: `Runtime path "${runtimePath}" is not registered.`,
+          path: 'runtimePath',
+          source: 'runtime-mutation-validator',
+        }))
+      } else {
+        if (runtimePathRow.status !== 'ACTIVE') {
+          issues.push(buildMockRuntimeValidationIssue({
+            code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+            severity: 'BLOCKING',
+            message: `Runtime path "${runtimePath}" must be ACTIVE before runtime use.`,
+            path: 'runtimePath',
+            source: 'runtime-mutation-validator',
+          }))
+        }
+        if (frameworkKey && Array.isArray(runtimePathRow.frameworkKeys) && runtimePathRow.frameworkKeys.length > 0 && !runtimePathRow.frameworkKeys.includes(frameworkKey)) {
+          issues.push(buildMockRuntimeValidationIssue({
+            code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+            severity: 'BLOCKING',
+            message: `Runtime path "${runtimePath}" does not support framework "${frameworkKey}".`,
+            path: 'runtimePath',
+            source: 'runtime-mutation-validator',
+          }))
+        }
+        if (!normalizeRuntimePathList(runtimePathRow.allowedOperations, { upper: true }).includes(operation)) {
+          issues.push(buildMockRuntimeValidationIssue({
+            code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+            severity: 'BLOCKING',
+            message: `Runtime path "${runtimePath}" does not allow ${operation}.`,
+            path: 'runtimePath',
+            source: 'runtime-mutation-validator',
+          }))
+        }
+        if (operation === 'WRITE' && runtimePathRow.isProtected) {
+          issues.push(buildMockRuntimeValidationIssue({
+            code: MOCK_RUNTIME_VALIDATION_CODES.PATH_INVALID,
+            severity: 'BLOCKING',
+            message: `Runtime path "${runtimePath}" is protected from runtime writes.`,
+            path: 'runtimePath',
+            source: 'runtime-mutation-validator',
+          }))
+        }
+      }
+
+      const skill = payload.skillId ? findRuntimeSkillById(payload.skillId) : null
+      if (payload.skillId && !skill) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SKILL_INVALID,
+          severity: 'BLOCKING',
+          message: `Runtime skill "${payload.skillId}" was not found.`,
+          path: 'skillId',
+          source: 'runtime-mutation-validator',
+        }))
+      }
+      if (skill && skill.status !== 'ACTIVE') {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SKILL_INVALID,
+          severity: 'BLOCKING',
+          message: `Runtime skill "${skill.key || skill.id}" must be ACTIVE before runtime use.`,
+          path: 'skillId',
+          source: 'runtime-mutation-validator',
+        }))
+      }
+      if (skill && operation === 'WRITE' && !mockRuntimePathAllowedByScopes(skill.allowedWritePaths, runtimePath)) {
+        issues.push(mockRuntimeScopeBoundaryIssue({
+          runtimePath,
+          operation,
+          source: 'runtime-skill-boundary-validator',
+        }))
+      }
+      if (skill && operation === 'WRITE' && normalizeRuntimePathList(skill.forbiddenWritePaths).some((scope) => mockRuntimeScopeMatches(scope, runtimePath))) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SCOPE_OUTSIDE_ALLOWED,
+          severity: 'BLOCKING',
+          message: `Runtime path "${runtimePath}" is explicitly forbidden by the skill boundary.`,
+          path: 'runtimePath',
+          source: 'runtime-skill-boundary-validator',
+        }))
+      }
+
+      const roleKey = String(payload.skillRoleKey ?? skill?.skillRoleKey ?? '').trim().toUpperCase()
+      const skillRole = roleKey ? findSkillRoleByRoleKey(roleKey) : null
+      if (roleKey && !skillRole) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SKILL_INVALID,
+          severity: 'BLOCKING',
+          message: `Skill role "${roleKey}" was not found.`,
+          path: 'skillRoleKey',
+          source: 'runtime-mutation-validator',
+        }))
+      }
+      if (skillRole && skillRole.status !== 'ACTIVE') {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SKILL_INVALID,
+          severity: 'BLOCKING',
+          message: `Skill role "${skillRole.roleKey}" must be ACTIVE before runtime use.`,
+          path: 'skillRoleKey',
+          source: 'runtime-mutation-validator',
+        }))
+      }
+      if (skillRole && !normalizeRuntimePathList(skillRole.allowedOperations, { upper: true }).includes(operation)) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.SKILL_INVALID,
+          severity: 'BLOCKING',
+          message: `Skill role "${skillRole.roleKey}" does not allow ${operation}.`,
+          path: 'skillRoleKey',
+          source: 'runtime-mutation-validator',
+        }))
+      }
+      if (skillRole && operation === 'WRITE' && !mockRuntimePathAllowedByScopes(skillRole.allowedWriteScopes, runtimePath)) {
+        issues.push(mockRuntimeScopeBoundaryIssue({
+          runtimePath,
+          operation,
+          source: 'runtime-skill-role-boundary-validator',
+        }))
+      }
+    }
+
+    if (operationType === 'OUTPUT_VALIDATION') {
+      issues.push(...validateMockRuntimeOutputContract({
+        outputContract: payload.outputContract,
+        payload: payload.payload,
+      }))
+    }
+
+    if (operationType === 'LIFECYCLE_TRANSITION') {
+      const fromStage = String(payload.lifecycleStage ?? '').trim().toUpperCase()
+      const toStage = String(payload.targetLifecycleStage ?? '').trim().toUpperCase()
+      if (!fromStage || !toStage || !MOCK_RUNTIME_LIFECYCLE_TRANSITIONS[fromStage]?.includes(toStage)) {
+        issues.push(buildMockRuntimeValidationIssue({
+          code: MOCK_RUNTIME_VALIDATION_CODES.LIFECYCLE_TRANSITION_INVALID,
+          severity: 'BLOCKING',
+          message: fromStage && toStage
+            ? `Lifecycle transition ${fromStage} -> ${toStage} is not allowed.`
+            : 'Lifecycle transition validation requires both lifecycleStage and targetLifecycleStage.',
+          path: !fromStage ? 'lifecycleStage' : 'targetLifecycleStage',
+          source: 'runtime-transition-validator',
+        }))
+      }
+    }
+  }
+
+  const blocking = issues.some((issue) =>
+    ['ERROR', 'BLOCKING', 'CRITICAL'].includes(String(issue.severity ?? '').trim().toUpperCase())
+    && mode !== 'AUDIT_ONLY'
+    && mode !== 'DISABLED',
+  )
+  const validationIssues = issues.length > 0 ? issues : [buildMockRuntimeValidationIssue({
+    code: MOCK_RUNTIME_VALIDATION_CODES.EXECUTION_INVALID,
+    severity: 'INFO',
+    message: 'Runtime validation passed.',
+    path: '',
+    source: 'runtime-validation-engine',
+  })]
+  const hasFailedIssue = validationIssues.some((issue) =>
+    ['ERROR', 'BLOCKING', 'CRITICAL'].includes(String(issue.severity ?? '').trim().toUpperCase()))
+  const hasWarningIssue = validationIssues.some((issue) =>
+    String(issue.severity ?? '').trim().toUpperCase() === 'WARN')
+  const timestamp = new Date().toISOString()
+  const validationId = generateRuntimeId('rvl', operationType || 'runtime-validation')
+  let status = 'PASS'
+  if (blocking) {
+    status = 'FAIL'
+  } else if (hasFailedIssue || hasWarningIssue) {
+    status = 'WARN'
+  }
+  let result = 'ALLOW'
+  if (mode === 'AUDIT_ONLY') {
+    result = 'AUDIT_ONLY'
+  } else if (blocking) {
+    result = 'BLOCK'
+  }
+
+  return {
+    validationId,
+    status,
+    result,
+    mode,
+    operationType,
+    operation,
+    runtimePath,
+    packageId: String(payload.packageId ?? '').trim(),
+    frameworkKey,
+    workspaceId: String(payload.workspaceId ?? '').trim(),
+    actorId: RUNTIME_CONTROL_UPDATED_BY.id,
+    actorType: String(payload.actorType ?? 'USER').trim().toUpperCase(),
+    validationCode: validationIssues[0]?.code || MOCK_RUNTIME_VALIDATION_CODES.EXECUTION_INVALID,
+    severity: validationIssues.find((issue) => ['ERROR', 'BLOCKING', 'CRITICAL'].includes(issue.severity))?.severity || validationIssues[0]?.severity || 'INFO',
+    message: blocking ? 'Runtime validation blocked this operation.' : 'Runtime validation allowed this operation.',
+    issues: validationIssues,
+    summary: {
+      totalChecks: validationIssues.length,
+      passed: validationIssues.filter((issue) => issue.severity === 'INFO').length,
+      warnings: validationIssues.filter((issue) => issue.severity === 'WARN').length,
+      failed: validationIssues.filter((issue) => ['ERROR', 'BLOCKING', 'CRITICAL'].includes(issue.severity)).length,
+    },
+    timestamp,
+    beforeState: payload.beforeState ?? null,
+    afterState: payload.afterState ?? null,
+  }
+}
+
+const buildMockRuntimeValidationError = (validation) => ({
+  error: {
+    status: 422,
+    data: {
+      error: {
+        code: 'RUNTIME_VALIDATION_FAILED',
+        message: validation.message,
+        details: validation.issues.reduce((details, issue) => ({
+          ...details,
+          [issue.path || issue.code]: issue.message,
+        }), {}),
+        validation,
+      },
+    },
+  },
+})
+
 const getActiveFrameworkRegistryKeys = () =>
   new Set(
     runtimeControlState.frameworkRegistries
@@ -3747,6 +4145,112 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { packageId }) => [
         FRAMEWORK_PACKAGE_LIST_TAG,
         { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
+    validateRuntimeOperation: build.mutation({
+      queryFn: async (payload = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/runtime-validation/validate`,
+              method: 'POST',
+              body: payload,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const validModes = ['STRICT', 'WARN_ONLY', 'AUDIT_ONLY', 'DISABLED']
+        const normalizedMode = String(payload.mode ?? 'STRICT').trim().toUpperCase()
+        if (!validModes.includes(normalizedMode)) {
+          return buildValidationFailedError('Runtime validation request is invalid.', {
+            mode: 'Invalid option: expected one of "STRICT"|"WARN_ONLY"|"AUDIT_ONLY"|"DISABLED"',
+          })
+        }
+
+        const validation = validateMockRuntimeOperation(payload)
+        runtimeControlState = {
+          ...runtimeControlState,
+          runtimeValidationAudits: [
+            {
+              id: validation.validationId,
+              validationCode: validation.validationCode,
+              severity: validation.severity,
+              operationType: validation.operationType,
+              runtimePath: validation.runtimePath,
+              actorId: validation.actorId,
+              actorType: validation.actorType,
+              packageId: validation.packageId,
+              frameworkKey: validation.frameworkKey,
+              workspaceId: validation.workspaceId,
+              status: validation.status,
+              result: validation.result,
+              mode: validation.mode,
+              message: validation.message,
+              issues: validation.issues,
+              summary: validation.summary,
+              beforeState: validation.beforeState,
+              afterState: validation.afterState,
+              createdAt: validation.timestamp,
+              updatedAt: validation.timestamp,
+            },
+            ...(runtimeControlState.runtimeValidationAudits ?? []),
+          ],
+        }
+
+        if (validation.result === 'BLOCK') {
+          return buildMockRuntimeValidationError(validation)
+        }
+
+        return { data: buildEntityResponse(validation) }
+      },
+      invalidatesTags: (_result, _error, payload = {}) => [
+        RUNTIME_VALIDATION_AUDIT_LIST_TAG,
+        { type: 'RuntimeValidationAudit', id: payload.packageId || 'LIST' },
+      ],
+    }),
+
+    getRuntimeValidationHistory: build.query({
+      queryFn: async ({ packageId, page = 1, pageSize = 20 } = {}, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/runtime-validation/history/${packageId}`,
+              params: {
+                page: normalizePositiveInteger(page, 1),
+                pageSize: normalizePositiveInteger(pageSize, 20),
+              },
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const normalizedPage = normalizePositiveInteger(page, 1)
+        const normalizedPageSize = normalizePositiveInteger(pageSize, 20)
+        const rows = (runtimeControlState.runtimeValidationAudits ?? [])
+          .filter((row) => String(row.packageId ?? '').trim() === String(packageId ?? '').trim())
+        const start = (normalizedPage - 1) * normalizedPageSize
+        const data = rows.slice(start, start + normalizedPageSize)
+
+        return {
+          data: {
+            data,
+            meta: {
+              page: normalizedPage,
+              pageSize: normalizedPageSize,
+              total: rows.length,
+              totalCount: rows.length,
+              totalPages: Math.ceil(rows.length / normalizedPageSize),
+            },
+          },
+        }
+      },
+      providesTags: (_result, _error, args = {}) => [
+        RUNTIME_VALIDATION_AUDIT_LIST_TAG,
+        { type: 'RuntimeValidationAudit', id: args.packageId || 'LIST' },
       ],
     }),
 
@@ -6723,6 +7227,8 @@ export const {
   useRunFrameworkPackageCheckpointMutation,
   useValidateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
+  useValidateRuntimeOperationMutation,
+  useGetRuntimeValidationHistoryQuery,
   useListUiContractsQuery,
   useCreateUiContractMutation,
   useCloneUiContractMutation,

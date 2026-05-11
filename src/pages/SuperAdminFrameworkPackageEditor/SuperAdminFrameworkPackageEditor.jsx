@@ -33,6 +33,8 @@ import {
   useValidateFrameworkPackageMutation,
   useUpdateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
+  useGetRuntimeValidationHistoryQuery,
+  useValidateRuntimeOperationMutation,
 } from '../../store/api/runtimeControlApi.js'
 import {
   normalizeError,
@@ -426,11 +428,28 @@ const renderTabLabel = (label, count = 0) => (
 
 const getCheckStatusVariant = (status) => {
   const normalized = String(status ?? '').trim().toUpperCase()
-  if (normalized === 'PASS' || normalized === 'ACTIVE') return 'success'
-  if (normalized === 'FAIL' || normalized === 'MISSING') return 'error'
+  if (normalized === 'PASS' || normalized === 'ACTIVE' || normalized === 'ALLOW') return 'success'
+  if (['FAIL', 'MISSING', 'BLOCK', 'ERROR', 'BLOCKING', 'CRITICAL'].includes(normalized)) return 'error'
   if (normalized === 'WARN' || normalized === 'WARNING' || normalized === 'PASS_WITH_WARNINGS') return 'warning'
   return 'neutral'
 }
+
+const deriveRuntimeValidationStatus = (validation) => {
+  const status = String(validation?.status ?? '').trim().toUpperCase()
+  if (['PASS', 'WARN', 'FAIL'].includes(status)) return status
+
+  const result = String(validation?.result ?? '').trim().toUpperCase()
+  if (result === 'ALLOW' || result === 'AUDIT_ONLY') return 'PASS'
+  if (result === 'BLOCK') return 'FAIL'
+  if (['PASS', 'WARN', 'FAIL'].includes(result)) return result
+
+  return 'NOT_RUN'
+}
+
+const normalizeRuntimeValidationAuditRow = (row) => ({
+  ...row,
+  status: deriveRuntimeValidationStatus(row),
+})
 
 const formatGovernanceToken = (value, fallback = 'Not recorded') => {
   const normalized = String(value ?? '').trim().toUpperCase()
@@ -509,14 +528,21 @@ const FRAMEWORK_PACKAGE_EDITOR_TABS = Object.freeze({
   STATE_CONTRACT: 9,
   DEPENDENCIES: 10,
   INTEGRITY: 11,
-  AUDIT: 12,
-  JSON_DIFF: 13,
+  RUNTIME_VALIDATION: 12,
+  AUDIT: 13,
+  JSON_DIFF: 14,
 })
 
 const getCheckpointFromMutationError = (error) =>
   error?.data?.error?.checkpoint
   ?? error?.data?.checkpoint
   ?? error?.error?.checkpoint
+  ?? null
+
+const getRuntimeValidationFromMutationError = (error) =>
+  error?.data?.error?.validation
+  ?? error?.data?.validation
+  ?? error?.error?.validation
   ?? null
 
 const checkpointIssueToIntegrityRow = (issue, fallbackSeverity) => ({
@@ -643,6 +669,7 @@ function SuperAdminFrameworkPackageEditor() {
     sections: 1,
     dependencies: 1,
     integrity: 1,
+    runtimeValidation: 1,
     audit: 1,
   })
   const [sectionDialog, setSectionDialog] = useState({
@@ -652,6 +679,8 @@ function SuperAdminFrameworkPackageEditor() {
   })
   const [activationDialogOpen, setActivationDialogOpen] = useState(false)
   const [checkpointResult, setCheckpointResult] = useState(null)
+  const [runtimeValidationResult, setRuntimeValidationResult] = useState(null)
+  const runtimeValidationProbeRequestRef = useRef(0)
   const sectionDialogRef = useRef({
     open: false,
     index: -1,
@@ -697,6 +726,15 @@ function SuperAdminFrameworkPackageEditor() {
     isLoading: isAuditLoading,
     error: auditError,
   } = useGetFrameworkPackageAuditQuery({ packageId, page: 1, pageSize: 20 }, {
+    skip: !isEditMode,
+  })
+
+  const {
+    data: runtimeValidationHistoryResponse,
+    isLoading: isRuntimeValidationHistoryLoading,
+    error: runtimeValidationHistoryError,
+    refetch: refetchRuntimeValidationHistory,
+  } = useGetRuntimeValidationHistoryQuery({ packageId, page: 1, pageSize: 20 }, {
     skip: !isEditMode,
   })
 
@@ -750,6 +788,7 @@ function SuperAdminFrameworkPackageEditor() {
   const [runFrameworkPackageCheckpoint, { isLoading: isRunningCheckpoint }] = useRunFrameworkPackageCheckpointMutation()
   const [validateFrameworkPackage, { isLoading: isValidatingPackage }] = useValidateFrameworkPackageMutation()
   const [activateFrameworkPackage, { isLoading: isActivatingPackage }] = useActivateFrameworkPackageMutation()
+  const [validateRuntimeOperation, { isLoading: isValidatingRuntimeOperation }] = useValidateRuntimeOperationMutation()
   const isSaving = isCreating || isUpdating
 
   const registryRows = useMemo(() => registryResponse?.data ?? [], [registryResponse?.data])
@@ -762,6 +801,7 @@ function SuperAdminFrameworkPackageEditor() {
   const dependencyAppError = dependencyError ? normalizeError(dependencyError) : null
   const integrityAppError = integrityError ? normalizeError(integrityError) : null
   const auditAppError = auditError ? normalizeError(auditError) : null
+  const runtimeValidationHistoryAppError = runtimeValidationHistoryError ? normalizeError(runtimeValidationHistoryError) : null
   const legacyContractFieldsDetected = useMemo(
     () => isEditMode && hasLegacyFrameworkPackageContractFields(loadedPackage),
     [isEditMode, loadedPackage],
@@ -916,6 +956,25 @@ function SuperAdminFrameworkPackageEditor() {
   )
   const displayedIntegrityData = checkpointIntegrityData ?? integrityData
   const auditRows = auditResponse?.data ?? []
+  const rawRuntimeValidationHistoryRows = runtimeValidationHistoryResponse?.data ?? []
+  const runtimeValidationHistoryRows = useMemo(
+    () => rawRuntimeValidationHistoryRows.map(normalizeRuntimeValidationAuditRow),
+    [rawRuntimeValidationHistoryRows],
+  )
+  const runtimeValidationProbePath = useMemo(
+    () => normalizeRuntimePath((form.sections ?? []).find((section) => normalizeRuntimePath(section.runtimePath))?.runtimePath),
+    [form.sections],
+  )
+  const latestRuntimeValidation = runtimeValidationResult ?? runtimeValidationHistoryRows[0] ?? null
+  const latestRuntimeValidationStatus = deriveRuntimeValidationStatus(latestRuntimeValidation)
+  const latestRuntimeValidationIssueRows = (latestRuntimeValidation?.issues ?? []).map((issue, index) => ({
+    id: `${issue?.code ?? 'unknown'}:${issue?.path ?? ''}:${index}`,
+    code: issue?.code ?? '',
+    severity: issue?.severity ?? '',
+    path: issue?.path ?? '',
+    message: issue?.message ?? '',
+    source: issue?.source ?? '',
+  }))
   const dependencyRows = useMemo(() => [
     ...(dependencyData?.agents ?? []).map((row) => ({ ...row, type: 'Agent' })),
     ...(dependencyData?.skills ?? []).map((row) => ({ ...row, type: 'Skill' })),
@@ -1150,6 +1209,11 @@ function SuperAdminFrameworkPackageEditor() {
   ]
 
   useEffect(() => {
+    setRuntimeValidationResult(null)
+    runtimeValidationProbeRequestRef.current += 1
+  }, [packageId])
+
+  useEffect(() => {
     if (!isEditMode || !loadedPackage) return undefined
 
     const timeoutId = window.setTimeout(() => {
@@ -1255,6 +1319,67 @@ function SuperAdminFrameworkPackageEditor() {
     refetchDependencies?.()
     refetchIntegrity?.()
     refetchLatestCheckpoint?.()
+    refetchRuntimeValidationHistory?.()
+  }
+
+  const handleRunRuntimeValidationProbe = async () => {
+    if (!isEditMode || !packageId) return
+    if (!runtimeValidationProbePath) {
+      addToast({
+        title: 'Runtime validation needs a runtime path',
+        description: 'Add a package section runtime path before running the mutation probe.',
+        variant: 'warning',
+      })
+      return
+    }
+
+    const probeRequestId = runtimeValidationProbeRequestRef.current + 1
+    runtimeValidationProbeRequestRef.current = probeRequestId
+
+    const payload = {
+      operationType: 'STATE_WRITE',
+      packageId,
+      frameworkKey: form.frameworkKey,
+      runtimePath: runtimeValidationProbePath,
+      skillRoleKey: 'VALIDATOR',
+      mode: 'STRICT',
+      beforeState: {},
+      afterState: { probe: true },
+    }
+
+    try {
+      const result = await validateRuntimeOperation(payload).unwrap()
+      if (runtimeValidationProbeRequestRef.current !== probeRequestId) return
+      const validation = result?.data ?? result ?? null
+      setRuntimeValidationResult(validation)
+      const validationBlocked = validation?.result === 'BLOCK'
+      addToast({
+        title: validationBlocked ? 'Runtime validation blocked' : 'Runtime validation passed',
+        description: validationBlocked
+          ? 'Review the Runtime Validation tab for behavioral governance issues.'
+          : 'The sample runtime mutation is allowed by the current package, path, and role boundaries.',
+        variant: validationBlocked ? 'error' : 'success',
+      })
+    } catch (err) {
+      if (runtimeValidationProbeRequestRef.current !== probeRequestId) return
+      const validation = getRuntimeValidationFromMutationError(err)
+      if (validation) {
+        setRuntimeValidationResult(validation)
+        addToast({
+          title: 'Runtime validation blocked',
+          description: 'Review the Runtime Validation tab for behavioral governance issues.',
+          variant: 'error',
+        })
+        return
+      }
+
+      const appError = normalizeError(err)
+      addToast({
+        title: 'Failed to run runtime validation',
+        description: appError.message,
+        variant: 'error',
+      })
+    }
   }
 
   const handleRunCheckpoint = async () => {
@@ -1397,6 +1522,10 @@ function SuperAdminFrameworkPackageEditor() {
   const integrityTableTotalPages = getTableTotalPages(integrityRows.length)
   const integrityTablePage = getClampedPage(tablePages.integrity, integrityTableTotalPages)
   const paginatedIntegrityRows = getPaginatedRows(integrityRows, integrityTablePage)
+
+  const runtimeValidationTableTotalPages = getTableTotalPages(runtimeValidationHistoryRows.length)
+  const runtimeValidationTablePage = getClampedPage(tablePages.runtimeValidation, runtimeValidationTableTotalPages)
+  const paginatedRuntimeValidationRows = getPaginatedRows(runtimeValidationHistoryRows, runtimeValidationTablePage)
 
   const auditTableTotalPages = getTableTotalPages(auditRows.length)
   const auditTablePage = getClampedPage(tablePages.audit, auditTableTotalPages)
@@ -2539,6 +2668,108 @@ function SuperAdminFrameworkPackageEditor() {
                               setEditorTablePage('integrity', nextPage, integrityTableTotalPages)
                             }
                           />
+                        </>
+                      )}
+                    </div>
+                  </TabView.Tab>
+
+                  <TabView.Tab label={renderTabLabel('Runtime Validation')}>
+                    <div className="super-admin-framework-package-editor__tab-panel">
+                      <SectionHeader
+                        title="Runtime Validation"
+                        copy="Exercise the behavioral validation layer against package runtime paths, scope boundaries, dependency locks, and audit persistence."
+                      />
+                      {!isEditMode ? (
+                        <p className="super-admin-framework-package-editor__helper">Runtime validation is available after the package is created.</p>
+                      ) : runtimeValidationHistoryAppError ? (
+                        <p className="super-admin-framework-package-editor__error" role="alert">{runtimeValidationHistoryAppError.message}</p>
+                      ) : (
+                        <>
+                          <div className="super-admin-framework-package-editor__toolbar">
+                            <Status size="sm" showIcon variant={getCheckStatusVariant(latestRuntimeValidationStatus)}>
+                              Last Result: {formatGovernanceToken(latestRuntimeValidationStatus, 'Not Run')}
+                            </Status>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRunRuntimeValidationProbe}
+                              loading={isValidatingRuntimeOperation}
+                              disabled={
+                                isValidatingRuntimeOperation
+                                || isSaving
+                                || isValidatingPackage
+                                || isActivatingPackage
+                                || !runtimeValidationProbePath
+                              }
+                            >
+                              Run Mutation Probe
+                            </Button>
+                          </div>
+                          <div
+                            className="super-admin-framework-packages__token-list super-admin-framework-package-editor__summary-chip-row"
+                            aria-label="Runtime validation summary"
+                          >
+                            <Badge variant="neutral" size="md" pill outline>
+                              Mode: {formatGovernanceToken(latestRuntimeValidation?.mode, 'STRICT')}
+                            </Badge>
+                            <Badge variant={runtimeValidationProbePath ? 'info' : 'warning'} size="md" pill outline>
+                              Probe Path: {runtimeValidationProbePath || 'No section path'}
+                            </Badge>
+                            <Badge variant="neutral" size="md" pill outline>
+                              Audit Rows: {runtimeValidationHistoryRows.length}
+                            </Badge>
+                            <Badge variant={dependencyLockMeta.hasPersistedLock ? 'success' : 'warning'} size="md" pill outline>
+                              Dependency Lock: {dependencyLockMeta.hasPersistedLock ? 'Locked' : 'Not locked'}
+                            </Badge>
+                          </div>
+                          <p className="super-admin-framework-package-editor__helper">
+                            Mutation probe uses the seeded `VALIDATOR` skill role boundary. If that role is not seeded, the probe can block with a role validation issue.
+                          </p>
+                          {latestRuntimeValidationIssueRows.length > 0 ? (
+                            <TableSurface
+                              ariaLabel="Runtime validation issue details"
+                              columns={[
+                                { key: 'code', label: 'Code', width: '16%', render: (value) => value ? <code className="super-admin-framework-package-editor__code-token">{value}</code> : '--' },
+                                { key: 'severity', label: 'Severity', width: '14%', render: (value) => (
+                                  <Status size="sm" showIcon variant={getCheckStatusVariant(value)}>{value}</Status>
+                                ) },
+                                { key: 'path', label: 'Path', width: '20%', render: (value) => value ? <code className="super-admin-framework-package-editor__code-token">{value}</code> : '--' },
+                                { key: 'message', label: 'Message', width: '50%' },
+                              ]}
+                              data={latestRuntimeValidationIssueRows}
+                              emptyMessage="No runtime validation issues returned."
+                              paginationLabel="Runtime validation issue pagination"
+                              currentPage={1}
+                              totalPages={1}
+                              onPageChange={() => {}}
+                            />
+                          ) : null}
+                          {isRuntimeValidationHistoryLoading ? (
+                            <p className="super-admin-framework-package-editor__helper">Loading runtime validation audit stream...</p>
+                          ) : (
+                            <TableSurface
+                              ariaLabel="Runtime validation audit history"
+                              columns={[
+                                { key: 'createdAt', label: 'Timestamp', width: '18%', render: formatDateTime },
+                                { key: 'status', label: 'Result', width: '12%', render: (value) => (
+                                  <Status size="sm" showIcon variant={getCheckStatusVariant(value)}>{value}</Status>
+                                ) },
+                                { key: 'mode', label: 'Mode', width: '12%', render: (value) => formatGovernanceToken(value, '--') },
+                                { key: 'operationType', label: 'Operation', width: '18%', render: (value) => value ? <code className="super-admin-framework-package-editor__code-token">{String(value).trim().toUpperCase()}</code> : '--' },
+                                { key: 'runtimePath', label: 'Runtime Path', width: '24%', render: (value) => value ? <code className="super-admin-framework-package-editor__code-token">{value}</code> : '--' },
+                                { key: 'message', label: 'Message', width: '16%' },
+                              ]}
+                              data={paginatedRuntimeValidationRows}
+                              emptyMessage="No runtime validation audit rows yet. Run the mutation probe to create one."
+                              paginationLabel="Runtime validation audit pagination"
+                              currentPage={runtimeValidationTablePage}
+                              totalPages={runtimeValidationTableTotalPages}
+                              onPageChange={(nextPage) =>
+                                setEditorTablePage('runtimeValidation', nextPage, runtimeValidationTableTotalPages)
+                              }
+                            />
+                          )}
                         </>
                       )}
                     </div>

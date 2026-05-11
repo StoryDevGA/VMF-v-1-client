@@ -27,6 +27,7 @@ import {
   useGetFrameworkPackageDiffQuery,
   useGetFrameworkPackageIntegrityQuery,
   useGetFrameworkPackageQuery,
+  useGetRuntimeValidationHistoryQuery,
   useGetRuntimeAgentQuery,
   useGetRuntimePathDependenciesQuery,
   useGetRuntimePathQuery,
@@ -48,6 +49,7 @@ import {
   useActivateRuntimePathMutation,
   useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
+  useValidateRuntimeOperationMutation,
   useUpdateRuntimeAgentMutation,
   useUpdateRuntimePathMutation,
   useUpdateRuntimeSkillMutation,
@@ -87,6 +89,8 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDiff')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('activateFrameworkPackage')
+    expect(runtimeControlApi.endpoints).toHaveProperty('validateRuntimeOperation')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeValidationHistory')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeAgents')
     expect(runtimeControlApi.endpoints).toHaveProperty('createRuntimeAgent')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeAgent')
@@ -132,6 +136,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useGetFrameworkPackageIntegrityQuery).toBe('function')
     expect(typeof useGetFrameworkPackageAuditQuery).toBe('function')
     expect(typeof useGetFrameworkPackageDiffQuery).toBe('function')
+    expect(typeof useGetRuntimeValidationHistoryQuery).toBe('function')
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
     expect(typeof useGetRuntimeAgentQuery).toBe('function')
     expect(typeof useListRuntimePathsQuery).toBe('function')
@@ -155,6 +160,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateFrameworkPackageMutation).toBe('function')
     expect(typeof useUpdateFrameworkPackageMutation).toBe('function')
     expect(typeof useActivateFrameworkPackageMutation).toBe('function')
+    expect(typeof useValidateRuntimeOperationMutation).toBe('function')
     expect(typeof useCreateRuntimeAgentMutation).toBe('function')
     expect(typeof useUpdateRuntimeAgentMutation).toBe('function')
     expect(typeof useCreateRuntimePathMutation).toBe('function')
@@ -740,6 +746,200 @@ describe('runtimeControlApi', () => {
     )
     expect(latestCheckpointResult.error).toBeUndefined()
     expect(latestCheckpointResult.data?.data?.status).toBe('PASS')
+  })
+
+  it('validates mock runtime mutations and records audit history', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimePaths: [
+        {
+          id: 'path-rvl-sections-probe',
+          pathKey: 'framework_state.sections.rvl_probe',
+          label: 'RVL Probe Section',
+          status: 'ACTIVE',
+          frameworkKeys: ['VMF'],
+          allowedOperations: ['READ', 'WRITE', 'BIND'],
+          isProtected: false,
+        },
+        ...state.runtimePaths,
+      ],
+      skillRoles: [
+        {
+          id: 'role-rvl-validator',
+          stableId: 'role-validator',
+          roleKey: 'VALIDATOR',
+          label: 'Validator',
+          status: 'ACTIVE',
+          allowedOperations: ['READ', 'WRITE', 'EXECUTE'],
+          allowedReadScopes: ['framework_state.sections.*'],
+          allowedWriteScopes: ['framework_state.sections.*'],
+        },
+        ...state.skillRoles,
+      ],
+    }))
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.5',
+        packageKey: 'vmf-mock-rvl-995',
+        status: 'DRAFT',
+      }),
+    )
+    const packageId = createResult.data?.data?.id
+    await store.dispatch(runtimeControlApi.endpoints.validateFrameworkPackage.initiate({ packageId }))
+
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'STATE_WRITE',
+        packageId,
+        frameworkKey: 'VMF',
+        runtimePath: 'framework_state.sections.rvl_probe',
+        skillRoleKey: 'VALIDATOR',
+      }),
+    )
+
+    expect(validationResult.error).toBeUndefined()
+    expect(validationResult.data?.data?.status).toBe('PASS')
+    expect(validationResult.data?.data?.result).toBe('ALLOW')
+    expect(validationResult.data?.data?.operation).toBe('WRITE')
+
+    const historyResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeValidationHistory.initiate({ packageId }),
+    )
+
+    expect(historyResult.error).toBeUndefined()
+    expect(historyResult.data?.data).toEqual([
+      expect.objectContaining({
+        operationType: 'STATE_WRITE',
+        status: 'PASS',
+        result: 'ALLOW',
+        runtimePath: 'framework_state.sections.rvl_probe',
+      }),
+    ])
+  })
+
+  it('blocks mock runtime mutations outside the skill role boundary', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimePaths: [
+        {
+          id: 'path-rvl-sections-blocked',
+          pathKey: 'framework_state.sections.rvl_blocked',
+          label: 'RVL Blocked Section',
+          status: 'ACTIVE',
+          frameworkKeys: ['VMF'],
+          allowedOperations: ['READ', 'WRITE', 'BIND'],
+          isProtected: false,
+        },
+        ...state.runtimePaths,
+      ],
+      skillRoles: [
+        {
+          id: 'role-rvl-validator',
+          stableId: 'role-validator',
+          roleKey: 'VALIDATOR',
+          label: 'Validator',
+          status: 'ACTIVE',
+          allowedOperations: ['READ', 'WRITE', 'EXECUTE'],
+          allowedReadScopes: ['framework_state.validation.*'],
+          allowedWriteScopes: ['framework_state.validation.*'],
+        },
+        ...state.skillRoles,
+      ],
+    }))
+
+    const createResult = await store.dispatch(
+      runtimeControlApi.endpoints.createFrameworkPackage.initiate({
+        frameworkKey: 'VMF',
+        frameworkName: 'Value Management Framework',
+        version: '9.9.4',
+        packageKey: 'vmf-mock-rvl-994',
+        status: 'DRAFT',
+      }),
+    )
+    const packageId = createResult.data?.data?.id
+    await store.dispatch(runtimeControlApi.endpoints.validateFrameworkPackage.initiate({ packageId }))
+
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'STATE_WRITE',
+        packageId,
+        frameworkKey: 'VMF',
+        runtimePath: 'framework_state.sections.rvl_blocked',
+        skillRoleKey: 'VALIDATOR',
+      }),
+    )
+
+    expect(validationResult.error?.status).toBe(422)
+    expect(validationResult.error?.data?.error?.code).toBe('RUNTIME_VALIDATION_FAILED')
+    expect(validationResult.error?.data?.error?.validation?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'RVL-SCOPE-001',
+          source: 'runtime-skill-role-boundary-validator',
+        }),
+      ]),
+    )
+  })
+
+  it('blocks mock runtime outputs with forbidden extra fields', async () => {
+    const store = createTestStore()
+
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'OUTPUT_VALIDATION',
+        frameworkKey: 'VMF',
+        outputContract: {
+          type: 'object',
+          required: ['is_valid'],
+          additionalProperties: false,
+          properties: {
+            is_valid: { type: 'boolean' },
+          },
+        },
+        payload: { is_valid: true, unexpected: true },
+      }),
+    )
+
+    expect(validationResult.error?.status).toBe(422)
+    expect(validationResult.error?.data?.error?.validation?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'RVL-OUTPUT-003',
+          path: 'payload.unexpected',
+        }),
+      ]),
+    )
+  })
+
+  it('does not force mock mutation validation for output validation context paths', async () => {
+    const store = createTestStore()
+
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'OUTPUT_VALIDATION',
+        frameworkKey: 'VMF',
+        runtimePath: 'framework_state.sections.unregistered_context',
+        outputContract: {
+          type: 'object',
+          required: ['is_valid'],
+          properties: {
+            is_valid: { type: 'boolean' },
+          },
+        },
+        payload: { is_valid: true },
+      }),
+    )
+
+    expect(validationResult.error).toBeUndefined()
+    expect(validationResult.data?.data?.status).toBe('PASS')
+    expect(validationResult.data?.data?.result).toBe('ALLOW')
   })
 
   it('blocks mock framework package activation when the activation checkpoint fails', async () => {

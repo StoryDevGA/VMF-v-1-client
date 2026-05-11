@@ -10,10 +10,12 @@ const updateFrameworkPackageMock = vi.fn()
 const runFrameworkPackageCheckpointMock = vi.fn()
 const validateFrameworkPackageMock = vi.fn()
 const activateFrameworkPackageMock = vi.fn()
+const validateRuntimeOperationMock = vi.fn()
 const packageIntegrityRefetchMock = vi.fn()
 const packageRefetchMock = vi.fn()
 const packageDependenciesRefetchMock = vi.fn()
 const packageCheckpointRefetchMock = vi.fn()
+const runtimeValidationHistoryRefetchMock = vi.fn()
 
 let paramsMock = {}
 let frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
@@ -81,6 +83,14 @@ let frameworkPackageAuditQueryMock = {
   },
   isLoading: false,
   error: null,
+}
+let runtimeValidationHistoryQueryMock = {
+  data: {
+    data: [],
+  },
+  isLoading: false,
+  error: null,
+  refetch: runtimeValidationHistoryRefetchMock,
 }
 
 vi.mock('react-router-dom', async () => {
@@ -173,6 +183,7 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useGetFrameworkPackageIntegrityQuery: () => frameworkPackageIntegrityQueryMock,
   useGetFrameworkPackageLatestCheckpointQuery: () => frameworkPackageLatestCheckpointQueryMock,
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
+  useGetRuntimeValidationHistoryQuery: () => runtimeValidationHistoryQueryMock,
   useListFrameworkPackagesQuery: () => ({ data: { data: [] } }),
   useListFrameworkRegistriesQuery: () => ({
     data: {
@@ -246,6 +257,7 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
   ],
   useRunFrameworkPackageCheckpointMutation: () => [runFrameworkPackageCheckpointMock, { isLoading: false }],
   useValidateFrameworkPackageMutation: () => [validateFrameworkPackageMock, { isLoading: false }],
+  useValidateRuntimeOperationMutation: () => [validateRuntimeOperationMock, { isLoading: false }],
   useUpdateFrameworkPackageMutation: () => [updateFrameworkPackageMock, { isLoading: false }],
 }))
 
@@ -345,10 +357,12 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     runFrameworkPackageCheckpointMock.mockReset()
     validateFrameworkPackageMock.mockReset()
     activateFrameworkPackageMock.mockReset()
+    validateRuntimeOperationMock.mockReset()
     packageIntegrityRefetchMock.mockReset()
     packageRefetchMock.mockReset()
     packageDependenciesRefetchMock.mockReset()
     packageCheckpointRefetchMock.mockReset()
+    runtimeValidationHistoryRefetchMock.mockReset()
     paramsMock = {}
     frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
     frameworkPackageDependenciesQueryMock = {
@@ -415,6 +429,14 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       },
       isLoading: false,
       error: null,
+    }
+    runtimeValidationHistoryQueryMock = {
+      data: {
+        data: [],
+      },
+      isLoading: false,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
     }
     uiContractRowsMock = [cloneTestRow(activeUiContractRow)]
     listUiContractsQueryArgs = []
@@ -998,10 +1020,180 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByRole('tab', { name: /^state contract$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^dependencies$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^integrity$/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^runtime validation$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^audit$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^json \/ diff$/i })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^agents$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /^skills$/i })).not.toBeInTheDocument()
+  })
+
+  it('runs a runtime validation mutation probe from the Runtime Validation tab', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    validateRuntimeOperationMock.mockReturnValue({
+      unwrap: () => Promise.resolve({
+        data: {
+          validationId: 'rvl-test',
+          status: 'PASS',
+          result: 'ALLOW',
+          mode: 'STRICT',
+          operationType: 'STATE_WRITE',
+          operation: 'WRITE',
+          runtimePath: 'framework_state.sections.customer_problem',
+          packageId: 'pkg-live-2',
+          frameworkKey: 'VMF',
+          issues: [{
+            code: 'RVL-EXECUTION-009',
+            severity: 'INFO',
+            message: 'Runtime validation passed.',
+            path: '',
+            source: 'runtime-validation-engine',
+          }],
+          summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 },
+          timestamp: '2026-05-08T12:00:00.000Z',
+        },
+      }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+    await user.click(screen.getByRole('button', { name: /run mutation probe/i }))
+
+    await waitFor(() => {
+      expect(validateRuntimeOperationMock).toHaveBeenCalledWith(expect.objectContaining({
+        operationType: 'STATE_WRITE',
+        packageId: 'pkg-live-2',
+        frameworkKey: 'VMF',
+        runtimePath: 'framework_state.sections.customer_problem',
+        skillRoleKey: 'VALIDATOR',
+        mode: 'STRICT',
+      }))
+    })
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Runtime validation passed',
+      variant: 'success',
+    }))
+    expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces blocked runtime validation probes from the Runtime Validation tab', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    validateRuntimeOperationMock.mockReturnValue({
+      unwrap: () => Promise.reject({
+        status: 422,
+        data: {
+          error: {
+            code: 'RUNTIME_VALIDATION_FAILED',
+            message: 'Runtime validation blocked this operation.',
+            validation: {
+              validationId: 'rvl-blocked-test',
+              status: 'FAIL',
+              result: 'BLOCK',
+              mode: 'STRICT',
+              operationType: 'STATE_WRITE',
+              operation: 'WRITE',
+              runtimePath: 'framework_state.sections.customer_problem',
+              packageId: 'pkg-live-2',
+              frameworkKey: 'VMF',
+              issues: [{
+                code: 'RVL-SCOPE-001',
+                severity: 'BLOCKING',
+                message: 'Runtime path is outside the write boundary.',
+                path: 'runtimePath',
+                source: 'runtime-skill-role-boundary-validator',
+              }],
+              summary: { totalChecks: 1, passed: 0, warnings: 0, failed: 1 },
+              timestamp: '2026-05-08T12:00:00.000Z',
+            },
+          },
+        },
+      }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+    await user.click(screen.getByRole('button', { name: /run mutation probe/i }))
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Runtime validation blocked',
+        variant: 'error',
+      }))
+    })
+    expect(screen.getByText(/Last Result: FAIL/i)).toBeInTheDocument()
+    expect(screen.getByText('RVL-SCOPE-001')).toBeInTheDocument()
+    expect(screen.getByText('BLOCKING')).toBeInTheDocument()
+    expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces generic runtime validation probe failures', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    validateRuntimeOperationMock.mockReturnValue({
+      unwrap: () => Promise.reject({
+        status: 503,
+        data: {
+          error: {
+            message: 'Runtime validation service unavailable.',
+          },
+        },
+      }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+    await user.click(screen.getByRole('button', { name: /run mutation probe/i }))
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Failed to run runtime validation',
+        variant: 'error',
+      }))
+    })
+    expect(screen.getByText(/Last Result: NOT RUN/i)).toBeInTheDocument()
+    expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
+  })
+
+  it('uses audit status for runtime validation history while preserving operation tokens', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    runtimeValidationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'rvl-audit-1',
+            createdAt: '2026-05-08T12:00:00.000Z',
+            status: 'FAIL',
+            result: 'BLOCK',
+            mode: 'STRICT',
+            operationType: 'STATE_WRITE',
+            runtimePath: 'framework_state.sections.customer_problem',
+            message: 'Runtime validation blocked this operation.',
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+
+    const auditTable = screen.getByRole('table', { name: /runtime validation audit history/i })
+    expect(within(auditTable).getByText('FAIL')).toBeInTheDocument()
+    expect(within(auditTable).queryByText('BLOCK')).not.toBeInTheDocument()
+    expect(within(auditTable).getByText('STATE_WRITE')).toBeInTheDocument()
+    expect(within(auditTable).queryByText('STATE WRITE')).not.toBeInTheDocument()
   })
 
   it('surfaces checkpoint evidence in the runtime release summary', async () => {

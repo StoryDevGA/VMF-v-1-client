@@ -302,6 +302,7 @@ export const baseApi = createApi({
     'RuntimeWorkflowPolicy',
     'RuntimeWorkflowPolicyDependencies',
     'RuntimeUIContract',
+    'RuntimeValidationAudit',
     'SkillRole',
     'SkillRoleDependencies',
     'ValidationRegistry',
