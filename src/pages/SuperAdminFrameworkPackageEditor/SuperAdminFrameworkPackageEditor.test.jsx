@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SuperAdminFrameworkPackageEditor from './SuperAdminFrameworkPackageEditor.jsx'
 
@@ -1075,6 +1075,29 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       title: 'Runtime validation passed',
       variant: 'success',
     }))
+    const validationSummary = screen.getByLabelText(/runtime validation summary/i)
+    expect(within(validationSummary).getByText('Current Validation State')).toBeInTheDocument()
+    expect(within(validationSummary).getByText('VALID')).toBeInTheDocument()
+    const stateHelpButton = screen.getByRole('button', { name: /runtime validation state help/i })
+    const modeHelpButton = screen.getByRole('button', { name: /runtime validation mode help/i })
+    expect(stateHelpButton.querySelector('svg')).not.toBeNull()
+    expect(modeHelpButton.querySelector('svg')).not.toBeNull()
+
+    await user.hover(modeHelpButton)
+    const modeTooltip = await screen.findByRole('tooltip')
+    expect(modeTooltip).toHaveTextContent(/STRICT blocks blocking findings/i)
+    expect(modeHelpButton).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(stateHelpButton)
+    const stateTooltip = await screen.findByRole('tooltip')
+    expect(stateTooltip).toHaveTextContent(/in-session runtime validation passed/i)
+    expect(modeHelpButton).toHaveAttribute('aria-expanded', 'false')
+    expect(stateHelpButton).toHaveAttribute('aria-expanded', 'true')
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => {
+      expect(stateHelpButton).toHaveAttribute('aria-expanded', 'false')
+    })
     expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
   })
 
@@ -1126,8 +1149,10 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       }))
     })
     expect(screen.getByText(/Last Result: FAIL/i)).toBeInTheDocument()
+    expect(screen.getByText('BLOCKED')).toBeInTheDocument()
     expect(screen.getByText('RVL-SCOPE-001')).toBeInTheDocument()
-    expect(screen.getByText('BLOCKING')).toBeInTheDocument()
+    const issueTable = screen.getByRole('table', { name: /runtime validation issue details/i })
+    expect(within(issueTable).getByText('BLOCKING')).toBeInTheDocument()
     expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
   })
 
@@ -1165,6 +1190,33 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.dependencyLock = {
+      status: 'PASS',
+      resolvedAt: '2026-05-08T12:00:00.000Z',
+      packageKey: 'vmf-core',
+      packageVersion: '2.3.1',
+      references: [
+        { collectionKey: 'RuntimePathRegistry', id: 'runtime-path-customer-problem', key: 'framework_state.sections.customer_problem' },
+      ],
+    }
+    frameworkPackageDependenciesQueryMock = {
+      ...frameworkPackageDependenciesQueryMock,
+      data: {
+        data: {
+          ...frameworkPackageDependenciesQueryMock.data.data,
+          runtimePaths: [
+            {
+              id: 'mongo-runtime-path-customer-problem',
+              stableId: 'runtime-path-customer-problem',
+              pathKey: 'framework_state.sections.customer_problem',
+              key: 'framework_state.sections.customer_problem',
+              status: 'ACTIVE',
+              issues: [],
+            },
+          ],
+        },
+      },
+    }
     runtimeValidationHistoryQueryMock = {
       data: {
         data: [
@@ -1173,10 +1225,21 @@ describe('SuperAdminFrameworkPackageEditor', () => {
             createdAt: '2026-05-08T12:00:00.000Z',
             status: 'FAIL',
             result: 'BLOCK',
+            severity: 'WARNING',
             mode: 'STRICT',
             operationType: 'STATE_WRITE',
             runtimePath: 'framework_state.sections.customer_problem',
             message: 'Runtime validation blocked this operation.',
+            actorId: 'sa-local',
+            issues: [
+              {
+                code: 'RVL-DEPENDENCY-008',
+                severity: 'ERROR',
+                message: 'Dependency lock snapshot missing.',
+                path: 'packageId',
+                source: 'runtime-dependency-validator',
+              },
+            ],
           },
         ],
       },
@@ -1192,8 +1255,179 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     const auditTable = screen.getByRole('table', { name: /runtime validation audit history/i })
     expect(within(auditTable).getByText('FAIL')).toBeInTheDocument()
     expect(within(auditTable).queryByText('BLOCK')).not.toBeInTheDocument()
+    expect(within(auditTable).getByText('ERROR')).toBeInTheDocument()
     expect(within(auditTable).getByText('STATE_WRITE')).toBeInTheDocument()
     expect(within(auditTable).queryByText('STATE WRITE')).not.toBeInTheDocument()
+    expect(screen.getByText('Runtime Validation Summary')).toBeInTheDocument()
+    const validationSummary = screen.getByLabelText(/runtime validation summary/i)
+    expect(within(validationSummary).getByText('Current Validation State')).toBeInTheDocument()
+    expect(within(validationSummary).getByText('INVALIDATED')).toBeInTheDocument()
+    expect(screen.getByText(/1 blocking \/ 0 warnings \/ 0 informational/i)).toBeInTheDocument()
+    expect(screen.getByText(/snapshot: not recorded/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /open details for RVL-DEPENDENCY-008/i }))
+    expect(screen.getByRole('dialog', { name: /runtime validation code details/i })).toBeInTheDocument()
+    expect(screen.getByText('Dependency lock snapshot missing')).toBeInTheDocument()
+    expect(screen.getByText(/runtime execution cannot proceed because the framework package does not have a frozen dependency boundary/i)).toBeInTheDocument()
+    expect(screen.getByText(/run dependency resolution and lock the package/i)).toBeInTheDocument()
+    expect(screen.getByText(/STORYLINEOS-RUNTIME-CONTROL-VERSIONING-LOCKING-STANDARD-SPEC/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^close$/i }))
+
+    await user.selectOptions(screen.getByLabelText('Severity'), 'ERROR')
+    expect(screen.getByText(/Showing 1 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Severity'), 'CRITICAL')
+    expect(screen.getByText(/Showing 0 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Severity'), 'ERROR')
+    expect(screen.getByText(/Showing 1 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Mode'), 'AUDIT_ONLY')
+    expect(screen.getByText(/Showing 0 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Mode'), '')
+    expect(screen.getByText(/Showing 1 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Result'), 'PASS')
+    expect(screen.getByText(/Showing 0 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    const runtimePathFilter = document.getElementById('runtime-validation-filter-runtime-path')
+    expect(runtimePathFilter).toBeInTheDocument()
+    await user.type(runtimePathFilter, 'customer_problem')
+    expect(screen.getByText(/Showing 1 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    await user.clear(runtimePathFilter)
+    await user.type(runtimePathFilter, 'missing_path')
+    expect(screen.getByText(/Showing 0 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-05-09' } })
+    expect(screen.getByLabelText('To')).toHaveAttribute('min', '2026-05-09')
+    expect(screen.getByText(/Showing 0 of 1 runtime validation audit rows/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-05-01' } })
+    expect(screen.getByLabelText('From')).toHaveAttribute('max', '2026-05-01')
+    expect(screen.getByRole('alert')).toHaveTextContent(/from to be on or before to/i)
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    await user.click(within(auditTable).getByRole('button', {
+      name: /open runtime path registry entry for framework_state\.sections\.customer_problem/i,
+    }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/runtime-paths/runtime-path-customer-problem/edit')
+  })
+
+  it('keeps runtime validation audit fallbacks forensic and avoids unresolved path navigation', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageDependenciesQueryMock = {
+      ...frameworkPackageDependenciesQueryMock,
+      data: {
+        data: {
+          ...frameworkPackageDependenciesQueryMock.data.data,
+          runtimePaths: [
+            {
+              id: 'runtime-path-orphan-object-id',
+              pathId: 'runtime-path-orphan-path-id',
+              stableId: '',
+              pathKey: 'framework_state.sections.orphan',
+              key: 'framework_state.sections.orphan',
+              status: 'ACTIVE',
+              issues: [],
+            },
+          ],
+        },
+      },
+    }
+    runtimeValidationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            createdAt: '2026-05-08T12:00:00.000Z',
+            status: 'WARN',
+            result: 'ALLOW',
+            severity: 'INFO',
+            mode: '',
+            operationType: 'STATE_WRITE',
+            runtimePath: 'framework_state.sections.orphan',
+            message: 'Runtime validation returned an unmapped code.',
+            issues: [
+              {
+                code: 'RVL-NEW-999',
+                severity: 'WARN',
+                message: 'New validation code.',
+                path: 'runtimePath',
+                source: 'runtime-validation-engine',
+              },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+
+    expect(screen.getByText('Unknown actor')).toBeInTheDocument()
+    expect(screen.getByText('UNKNOWN')).toBeInTheDocument()
+
+    const auditTable = screen.getByRole('table', { name: /runtime validation audit history/i })
+    expect(within(auditTable).queryByText('STRICT')).not.toBeInTheDocument()
+    expect(within(auditTable).getAllByText('--').length).toBeGreaterThan(0)
+    expect(within(auditTable).getAllByText('WARN').length).toBeGreaterThan(0)
+    expect(within(auditTable).getByText('framework_state.sections.orphan')).toBeInTheDocument()
+    expect(screen.getByTitle(/path not registered in this package's dependency graph/i)).toBeInTheDocument()
+    expect(within(auditTable).queryByRole('button', {
+      name: /open runtime path registry entry for framework_state\.sections\.orphan/i,
+    })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /open details for RVL-NEW-999/i }))
+    expect(screen.getByText(/not yet mapped to a detailed operator explanation/i)).toBeInTheDocument()
+    expect(navigateMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/super-admin/runtime-control/runtime-paths/framework_state.sections.orphan/edit'),
+    )
+  })
+
+  it('distinguishes empty runtime validation history from filtered-out rows', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    runtimeValidationHistoryQueryMock = {
+      data: { data: [] },
+      isLoading: false,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+
+    expect(screen.getByText(/No runtime validation audit rows yet. Run the mutation probe to create one./i)).toBeInTheDocument()
+    expect(screen.queryByText(/No runtime validation audit rows match the current filters./i)).not.toBeInTheDocument()
+  })
+
+  it('shows the runtime validation audit loading state without rendering the history table', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    runtimeValidationHistoryQueryMock = {
+      data: { data: [] },
+      isLoading: true,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+
+    expect(screen.getByText(/Loading runtime validation audit stream/i)).toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: /runtime validation audit history/i })).not.toBeInTheDocument()
   })
 
   it('surfaces checkpoint evidence in the runtime release summary', async () => {
