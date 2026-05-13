@@ -15,8 +15,12 @@ function SuperAdminFrameworkPackages() {
   const handleCreatePackage = useCallback(() => {
     navigate('/super-admin/runtime-control/framework-packages/new')
   }, [navigate])
-  const handleEditPackage = useCallback((pkg) => {
-    navigate(`/super-admin/runtime-control/framework-packages/${pkg.id}/edit`)
+  const handleEditPackage = useCallback((pkg, tab) => {
+    const tabQuery = tab ? `?tab=${encodeURIComponent(tab)}` : ''
+    navigate(`/super-admin/runtime-control/framework-packages/${pkg.id}/edit${tabQuery}`)
+  }, [navigate])
+  const handleClonePackage = useCallback((pkg) => {
+    navigate(`/super-admin/runtime-control/framework-packages/new?cloneFrom=${encodeURIComponent(pkg.id)}`)
   }, [navigate])
 
   return (
@@ -51,6 +55,7 @@ function SuperAdminFrameworkPackages() {
         onBackClick={handleBackClick}
         onCreatePackage={handleCreatePackage}
         onEditPackage={handleEditPackage}
+        onClonePackage={handleClonePackage}
         activatePackage={mgmt.activatePackage}
       />
     </section>

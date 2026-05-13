@@ -78,6 +78,10 @@ const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
 const VALIDATION_REGISTRY_LIST_TAG = { type: 'ValidationRegistry', id: 'LIST' }
 const RUNTIME_VALIDATION_AUDIT_LIST_TAG = { type: 'RuntimeValidationAudit', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
+const CLONEABLE_FRAMEWORK_PACKAGE_STATUSES = new Set([
+  FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
+  FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+])
 
 const RUNTIME_CONTROL_UPDATED_BY = Object.freeze({
   id: 'sa-local',
@@ -256,6 +260,11 @@ const normalizePositiveInteger = (value, fallback) => {
 
 const normalizeSearch = (value) => String(value ?? '').trim().toLowerCase()
 const normalizeFrameworkKey = (value) => String(value ?? '').trim().toUpperCase()
+const normalizeKeyToken = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+const KEY_TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/
 const normalizeStableIdList = (values) =>
   [...new Set((Array.isArray(values) ? values : [])
     .map((value) => String(value ?? '').trim())
@@ -1784,6 +1793,24 @@ const generateRuntimeId = (prefix, suffix = '') => {
     .toLowerCase()
   const randomSegment = Math.random().toString(36).slice(2, 8)
   return [prefix, safeSuffix, randomSegment].filter(Boolean).join('-')
+}
+
+const generateMockObjectId = (seed = '') => {
+  const source = String(seed || Math.random())
+  let hash = 2166136261
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index)
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+
+  return [
+    hash,
+    (hash ^ 0x9e3779b9) >>> 0,
+    (hash ^ 0x85ebca6b) >>> 0,
+  ]
+    .map((part) => part.toString(16).padStart(8, '0'))
+    .join('')
+    .slice(0, 24)
 }
 
 const findFrameworkPackageById = (packageId) =>
@@ -3624,6 +3651,116 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         return { data: buildEntityResponse(cloneFrameworkPackage(createdPackage)) }
+      },
+      invalidatesTags: [FRAMEWORK_PACKAGE_LIST_TAG],
+    }),
+
+    cloneFrameworkPackage: build.mutation({
+      queryFn: async ({ packageId, ...payload } = {}, api, extraOptions, baseQuery) => {
+        const runtimePayload = payload
+
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/clone`,
+              method: 'POST',
+              body: runtimePayload,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const sourcePackage = findFrameworkPackageById(packageId)
+        if (!sourcePackage) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        const sourceStatus = String(sourcePackage.status ?? '').trim().toUpperCase()
+        if (!CLONEABLE_FRAMEWORK_PACKAGE_STATUSES.has(sourceStatus)) {
+          return buildConflictError('Only active or validated framework packages can be cloned.', {
+            field: 'status',
+            reason: 'FRAMEWORK_PACKAGE_CLONE_SOURCE_STATUS_CONFLICT',
+          })
+        }
+
+        const version = String(runtimePayload.version ?? '').trim()
+        const packageKey = normalizeKeyToken(runtimePayload.packageKey)
+        const packageName = String(
+          runtimePayload.packageName ?? `${sourcePackage.packageName || sourcePackage.frameworkName} Clone`,
+        ).trim()
+        const description = runtimePayload.description === undefined
+          ? (sourcePackage.description ?? '')
+          : String(runtimePayload.description ?? '').trim()
+
+        if (!version || !packageKey) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            ...(!version ? { version: 'Version is required.' } : {}),
+            ...(!packageKey ? { packageKey: 'Package key is required.' } : {}),
+          })
+        }
+
+        if (!KEY_TOKEN_PATTERN.test(packageKey)) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            packageKey: 'Package key must use lowercase letters, numbers, or hyphens.',
+          })
+        }
+
+        const duplicateVersion = runtimeControlState.frameworkPackages.find(
+          (pkg) =>
+            normalizeFrameworkKey(pkg.frameworkKey) === normalizeFrameworkKey(sourcePackage.frameworkKey)
+            && String(pkg.version ?? '').trim() === version,
+        )
+
+        if (duplicateVersion) {
+          return buildConflictError('Framework key and version must be unique.', {
+            field: 'version',
+            reason: 'FRAMEWORK_PACKAGE_VERSION_CONFLICT',
+          })
+        }
+
+        const duplicatePackageKey = runtimeControlState.frameworkPackages.find(
+          (pkg) => normalizeKeyToken(pkg.packageKey) === packageKey,
+        )
+
+        if (duplicatePackageKey) {
+          return buildConflictError('Package key must be unique.', {
+            field: 'packageKey',
+            reason: 'FRAMEWORK_PACKAGE_KEY_CONFLICT',
+          })
+        }
+
+        const clonedPackage = cloneFrameworkPackage({
+          ...sourcePackage,
+          id: generateMockObjectId(`${sourcePackage.id}:${version}:${packageKey}`),
+          version,
+          packageKey,
+          packageName,
+          description,
+          status: FRAMEWORK_PACKAGE_STATUSES.DRAFT,
+          versionStatus: 'DRAFT',
+          derivedFromPackageId: sourcePackage.id,
+          isDefault: false,
+          isLocked: false,
+          lockedAt: null,
+          lockedBy: null,
+          lockedReason: '',
+          dependencyLock: null,
+          lastCheckpointStatus: null,
+          lastCheckpointAt: null,
+          lastCheckpointResult: null,
+          uiContractBinding: null,
+          activatedAt: null,
+          activatedBy: null,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          frameworkPackages: [clonedPackage, ...runtimeControlState.frameworkPackages],
+        }
+
+        return { data: buildEntityResponse(cloneFrameworkPackage(clonedPackage)) }
       },
       invalidatesTags: [FRAMEWORK_PACKAGE_LIST_TAG],
     }),
@@ -7217,6 +7354,7 @@ export const {
   useUpdateFrameworkRegistryMutation,
   useListFrameworkPackagesQuery,
   useCreateFrameworkPackageMutation,
+  useCloneFrameworkPackageMutation,
   useGetFrameworkPackageQuery,
   useGetFrameworkPackageAuditQuery,
   useGetFrameworkPackageDependenciesQuery,

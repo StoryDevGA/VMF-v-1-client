@@ -19,12 +19,28 @@ import {
 import './FrameworkPackageListView.css'
 
 function FrameworkPackageRowActionsMenu({ row, onAction }) {
-  const actionOptions = [
-    { value: 'Edit', label: 'Edit' },
-    ...(row.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
-      ? [{ value: 'Activate', label: 'Activate' }]
-      : []),
-  ]
+  const status = String(row.status ?? '').toUpperCase()
+  const actionOptions =
+    status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
+      ? [
+          { value: 'View', label: 'View' },
+          { value: 'Clone', label: 'Clone' },
+          { value: 'Dependency Snapshot', label: 'Dependency Snapshot' },
+          { value: 'Checkpoint History', label: 'Checkpoint History' },
+        ]
+      : status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+        ? [
+            { value: 'View', label: 'View' },
+            { value: 'Clone', label: 'Clone' },
+            { value: 'Activate', label: 'Activate' },
+          ]
+        : status === FRAMEWORK_PACKAGE_STATUSES.DEPRECATED
+          ? [
+              { value: 'View', label: 'View' },
+            ]
+        : [
+            { value: 'Edit', label: 'Edit' },
+          ]
 
   return (
     <div className="super-admin-framework-packages__row-actions">
@@ -112,19 +128,32 @@ export function FrameworkPackageListView({
   onBackClick,
   onCreatePackage,
   onEditPackage,
+  onClonePackage,
   activatePackage,
 }) {
   const handleRowAction = useCallback(
     (label, row) => {
-      if (label === 'Edit') {
+      if (label === 'Edit' || label === 'View') {
         onEditPackage(row)
+      }
+
+      if (label === 'Clone') {
+        onClonePackage(row)
       }
 
       if (label === 'Activate') {
         activatePackage(row)
       }
+
+      if (label === 'Dependency Snapshot') {
+        onEditPackage(row, 'dependency-snapshot')
+      }
+
+      if (label === 'Checkpoint History') {
+        onEditPackage(row, 'checkpoint-history')
+      }
     },
-    [activatePackage, onEditPackage],
+    [activatePackage, onClonePackage, onEditPackage],
   )
 
   const columns = useMemo(

@@ -13,6 +13,7 @@ import {
 const navigateMock = vi.fn()
 const addToastMock = vi.fn()
 const createFrameworkPackageMock = vi.fn()
+const cloneFrameworkPackageMock = vi.fn()
 const updateFrameworkPackageMock = vi.fn()
 const runFrameworkPackageCheckpointMock = vi.fn()
 const validateFrameworkPackageMock = vi.fn()
@@ -25,6 +26,7 @@ const packageCheckpointRefetchMock = vi.fn()
 const runtimeValidationHistoryRefetchMock = vi.fn()
 
 let paramsMock = {}
+let searchParamsMock = new URLSearchParams()
 let frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
 let frameworkPackageDependenciesQueryMock = {
   data: {
@@ -106,6 +108,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => navigateMock,
     useParams: () => paramsMock,
+    useSearchParams: () => [searchParamsMock],
   }
 })
 
@@ -184,6 +187,7 @@ let listUiContractsQueryArgs = []
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
+  useCloneFrameworkPackageMutation: () => [cloneFrameworkPackageMock, { isLoading: false }],
   useActivateFrameworkPackageMutation: () => [activateFrameworkPackageMock, { isLoading: false }],
   useGetFrameworkPackageAuditQuery: () => frameworkPackageAuditQueryMock,
   useGetFrameworkPackageDependenciesQuery: () => frameworkPackageDependenciesQueryMock,
@@ -360,6 +364,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     navigateMock.mockClear()
     addToastMock.mockClear()
     createFrameworkPackageMock.mockReset()
+    cloneFrameworkPackageMock.mockReset()
     updateFrameworkPackageMock.mockReset()
     runFrameworkPackageCheckpointMock.mockReset()
     validateFrameworkPackageMock.mockReset()
@@ -371,6 +376,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     packageCheckpointRefetchMock.mockReset()
     runtimeValidationHistoryRefetchMock.mockReset()
     paramsMock = {}
+    searchParamsMock = new URLSearchParams()
     frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
     frameworkPackageDependenciesQueryMock = {
       data: {
@@ -529,6 +535,162 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('clones a loaded package through the clone endpoint allowlist', async () => {
+    const user = userEvent.setup()
+    searchParamsMock = new URLSearchParams('cloneFrom=pkg-live-2')
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+    cloneFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-clone-241' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByRole('heading', { name: /clone framework package/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^version$/i)).toHaveValue('')
+
+    await user.type(screen.getByLabelText(/^version$/i), '2.4.1')
+    await user.click(screen.getByRole('tab', { name: /^package identity$/i }))
+    await user.type(screen.getByRole('textbox', { name: /package key/i }), 'vmf-clone-241')
+    expect(screen.getByRole('textbox', { name: /^package name$/i })).toHaveValue('VMF Core Package Clone')
+
+    await user.click(screen.getByRole('button', { name: /save clone/i }))
+
+    await waitFor(() => {
+      expect(cloneFrameworkPackageMock).toHaveBeenCalledWith({
+        packageId: 'pkg-live-2',
+        version: '2.4.1',
+        packageKey: 'vmf-clone-241',
+        packageName: 'VMF Core Package Clone',
+        description: 'Existing package.',
+      })
+    })
+    expect(createFrameworkPackageMock).not.toHaveBeenCalled()
+    expect(updateFrameworkPackageMock).not.toHaveBeenCalled()
+    expect(navigateMock).toHaveBeenCalledWith(
+      '/super-admin/runtime-control/framework-packages',
+      { state: { runtimeControlSaved: true } },
+    )
+  })
+
+  it('does not show clone unavailable while the clone source is still loading', async () => {
+    searchParamsMock = new URLSearchParams('cloneFrom=pkg-live-2')
+    frameworkPackageQueryMock = {
+      data: null,
+      isLoading: true,
+      error: null,
+      refetch: packageRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByRole('heading', { name: /clone framework package/i })).toBeInTheDocument()
+    expect(screen.getByText(/loading framework package/i)).toBeInTheDocument()
+    expect(screen.queryByText(/clone not available/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps operator clone override fields when the source package refetches', async () => {
+    const user = userEvent.setup()
+    searchParamsMock = new URLSearchParams('cloneFrom=pkg-live-2')
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+
+    const { rerender } = render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByRole('heading', { name: /clone framework package/i })).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/^version$/i), '2.4.1')
+    await user.click(screen.getByRole('tab', { name: /^package identity$/i }))
+    await user.type(screen.getByRole('textbox', { name: /package key/i }), 'vmf-clone-241')
+
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+    frameworkPackageQueryMock.data.data.packageName = 'VMF Core Package Refetched'
+    rerender(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^framework identity$/i }))
+    expect(screen.getByLabelText(/^version$/i)).toHaveValue('2.4.1')
+    await user.click(screen.getByRole('tab', { name: /^package identity$/i }))
+    expect(screen.getByRole('textbox', { name: /package key/i })).toHaveValue('vmf-clone-241')
+    expect(screen.getByRole('textbox', { name: /^package name$/i })).toHaveValue('VMF Core Package Clone')
+  })
+
+  it('blocks direct clone URLs for draft package sources', async () => {
+    searchParamsMock = new URLSearchParams('cloneFrom=pkg-live-2')
+    frameworkPackageQueryMock = buildLoadedPackage()
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByRole('heading', { name: /clone framework package/i })).toBeInTheDocument()
+    expect(screen.getByText(/clone not available/i)).toBeInTheDocument()
+    expect(screen.getByText(/only active or validated framework packages can be cloned/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save clone/i })).toBeDisabled()
+  })
+
+  it('keeps draft package editor in direct-edit mode without clone actions', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect((await screen.findAllByText(/lifecycle: draft/i)).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /clone package/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /validate package/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /activate package/i })).toBeDisabled()
+  })
+
+  it('offers clone and evidence actions instead of direct editing for active packages', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByText(/active framework packages cannot be edited directly/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /clone package/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /dependency snapshot/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /checkpoint history/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validate package/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /clone package/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages/new?cloneFrom=pkg-live-2')
+  })
+
+  it('offers clone and activation actions for validated packages while blocking direct save', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'VALIDATED'
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByText(/validated packages are locked for direct edits/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /clone package/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validate package/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /activate package/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /clone package/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages/new?cloneFrom=pkg-live-2')
+  })
+
+  it('renders deprecated packages as view-only without clone or lifecycle actions', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'DEPRECATED'
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    expect(await screen.findByText(/deprecated framework packages are retained for audit/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /clone package/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validate package/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /activate package/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
   })
 
   it('runs package validation from the editor header and surfaces checkpoint failures', async () => {

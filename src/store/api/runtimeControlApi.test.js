@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
 import {
@@ -9,6 +12,7 @@ import {
   __resetRuntimeControlApiStateForTests,
   useCreateFrameworkRegistryMutation,
   useActivateFrameworkPackageMutation,
+  useCloneFrameworkPackageMutation,
   useCreateFrameworkPackageMutation,
   useCreateRuntimeAgentMutation,
   useCreateRuntimePathMutation,
@@ -69,6 +73,28 @@ const createTestStore = () =>
     middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
   })
 
+const testDirname = path.dirname(fileURLToPath(import.meta.url))
+const runtimeControlParityContracts = JSON.parse(
+  fs.readFileSync(
+    path.resolve(testDirname, '../../../../docs/references/runtime-control/mock-api-parity-contracts.json'),
+    'utf8',
+  ),
+)
+const {
+  frameworkPackageClone: frameworkPackageCloneParity,
+  frameworkPackageCheckpoint: frameworkPackageCheckpointParity,
+  runtimeValidation: runtimeValidationParity,
+} = runtimeControlParityContracts
+
+const expectFrameworkPackageCloneReleaseFieldsCleared = (frameworkPackage) => {
+  const { clearedReleaseFields = [], clearedReleaseFieldValues = {} } = frameworkPackageCloneParity.cloneResult
+  expect(Object.keys(clearedReleaseFieldValues)).toEqual(clearedReleaseFields)
+
+  for (const field of clearedReleaseFields) {
+    expect(frameworkPackage[field]).toEqual(clearedReleaseFieldValues[field])
+  }
+}
+
 describe('runtimeControlApi', () => {
   beforeEach(() => {
     globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
@@ -82,6 +108,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkRegistry')
     expect(runtimeControlApi.endpoints).toHaveProperty('listFrameworkPackages')
     expect(runtimeControlApi.endpoints).toHaveProperty('createFrameworkPackage')
+    expect(runtimeControlApi.endpoints).toHaveProperty('cloneFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDependencies')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageIntegrity')
@@ -158,6 +185,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateFrameworkRegistryMutation).toBe('function')
     expect(typeof useUpdateFrameworkRegistryMutation).toBe('function')
     expect(typeof useCreateFrameworkPackageMutation).toBe('function')
+    expect(typeof useCloneFrameworkPackageMutation).toBe('function')
     expect(typeof useUpdateFrameworkPackageMutation).toBe('function')
     expect(typeof useActivateFrameworkPackageMutation).toBe('function')
     expect(typeof useValidateRuntimeOperationMutation).toBe('function')
@@ -191,6 +219,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.updateFrameworkRegistry.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listFrameworkPackages.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createFrameworkPackage.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.cloneFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackageDependencies.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackageIntegrity.initiate).toBe('function')
@@ -678,6 +707,132 @@ describe('runtimeControlApi', () => {
     expect(getResult.data?.data?.validationConfig).toBeUndefined()
   })
 
+  it('clones mock framework packages as editable drafts without release evidence', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-231'
+          ? {
+              ...pkg,
+              status: 'ACTIVE',
+              versionStatus: 'ACTIVE',
+              isDefault: true,
+              isLocked: true,
+              lockedAt: '2026-05-08T12:00:00.000Z',
+              lockedBy: 'sa-1',
+              lockedReason: 'Activation',
+              dependencyLock: {
+                status: 'PASS',
+                references: [{ collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointAt: '2026-05-08T12:00:00.000Z',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              uiContractBinding: { key: 'vmf-ui-contract-v1', status: 'ACTIVE' },
+              activatedAt: '2026-05-08T12:05:00.000Z',
+              activatedBy: 'sa-1',
+            }
+          : pkg,
+      ),
+    }))
+
+    const cloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneFrameworkPackage.initiate({
+        packageId: 'pkg-vmf-231',
+        version: '2.4.9',
+        packageKey: 'vmf-clone-249',
+        packageName: 'VMF Clone 2.4.9',
+        description: 'Draft clone for governed edits.',
+      }),
+    )
+
+    expect(cloneResult.error).toBeUndefined()
+    expect(cloneResult.data?.data).toEqual(expect.objectContaining({
+      id: expect.stringMatching(/^[a-f0-9]{24}$/),
+      version: '2.4.9',
+      packageKey: 'vmf-clone-249',
+      packageName: 'VMF Clone 2.4.9',
+      status: frameworkPackageCloneParity.cloneResult.status,
+      versionStatus: frameworkPackageCloneParity.cloneResult.versionStatus,
+      derivedFromPackageId: 'pkg-vmf-231',
+      isDefault: false,
+      isLocked: false,
+    }))
+    expectFrameworkPackageCloneReleaseFieldsCleared(cloneResult.data?.data)
+    expect(cloneResult.data?.data.sections.length).toBeGreaterThan(0)
+    expect(cloneResult.data?.data.uiContractKey).toBeTruthy()
+
+    const duplicateResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneFrameworkPackage.initiate({
+        packageId: 'pkg-vmf-231',
+        version: '2.4.9',
+        packageKey: 'vmf-clone-249-next',
+      }),
+    )
+
+    expect(duplicateResult.error?.status).toBe(409)
+    expect(duplicateResult.error?.data?.error?.details?.reason).toBe('FRAMEWORK_PACKAGE_VERSION_CONFLICT')
+
+    const invalidKeyResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneFrameworkPackage.initiate({
+        packageId: 'pkg-vmf-231',
+        version: '2.5.9',
+        packageKey: '"quoted-key"',
+      }),
+    )
+
+    expect(invalidKeyResult.error?.status).toBe(422)
+    expect(invalidKeyResult.error?.data?.error?.details?.packageKey).toContain('lowercase letters')
+  })
+
+  it('clones mock validated framework packages and rejects draft sources', async () => {
+    const store = createTestStore()
+    expect(frameworkPackageCloneParity.eligibleSourceStatuses).toContain('VALIDATED')
+
+    const validatedCloneResult = await store.dispatch(
+      runtimeControlApi.endpoints.cloneFrameworkPackage.initiate({
+        packageId: 'pkg-vmf-230',
+        version: '2.5.0',
+        packageKey: 'vmf-valid-clone-250',
+      }),
+    )
+
+    expect(validatedCloneResult.error).toBeUndefined()
+    expect(validatedCloneResult.data?.data).toEqual(expect.objectContaining({
+      status: frameworkPackageCloneParity.cloneResult.status,
+      versionStatus: frameworkPackageCloneParity.cloneResult.versionStatus,
+      derivedFromPackageId: 'pkg-vmf-230',
+    }))
+
+    const ineligibleSourceCases = [
+      { status: 'DRAFT', packageId: 'pkg-vmf-240', version: '2.5.1', packageKey: 'vmf-draft-clone-251' },
+      { status: 'DEPRECATED', packageId: 'pkg-rld-100', version: '1.0.1', packageKey: 'rld-deprecated-clone-101' },
+    ]
+    expect(ineligibleSourceCases.map((entry) => entry.status)).toEqual(
+      frameworkPackageCloneParity.ineligibleSourceStatuses,
+    )
+
+    for (const sourceCase of ineligibleSourceCases) {
+      const sourceCloneResult = await store.dispatch(
+        runtimeControlApi.endpoints.cloneFrameworkPackage.initiate({
+          packageId: sourceCase.packageId,
+          version: sourceCase.version,
+          packageKey: sourceCase.packageKey,
+        }),
+      )
+
+      expect(sourceCloneResult.error?.status).toBe(frameworkPackageCloneParity.sourceStatusConflict.httpStatus)
+      expect(sourceCloneResult.error?.data?.error?.code).toBe(
+        frameworkPackageCloneParity.sourceStatusConflict.errorCode,
+      )
+      expect(sourceCloneResult.error?.data?.error?.details?.reason).toBe(
+        frameworkPackageCloneParity.sourceStatusConflict.reason,
+      )
+    }
+  })
+
   it('keeps mock framework package integrity aligned with dependency issues', async () => {
     const store = createTestStore()
 
@@ -746,6 +901,23 @@ describe('runtimeControlApi', () => {
     )
     expect(latestCheckpointResult.error).toBeUndefined()
     expect(latestCheckpointResult.data?.data?.status).toBe('PASS')
+  })
+
+  it('keeps mock checkpoint invalid-mode validation aligned with the live contract', async () => {
+    const store = createTestStore()
+    const invalidModeContract = frameworkPackageCheckpointParity.invalidCheckpointMode
+
+    const checkpointResult = await store.dispatch(
+      runtimeControlApi.endpoints.runFrameworkPackageCheckpoint.initiate({
+        packageId: 'pkg-vmf-231',
+        mode: invalidModeContract.requestMode,
+        persist: invalidModeContract.persist,
+      }),
+    )
+
+    expect(checkpointResult.error?.status).toBe(invalidModeContract.httpStatus)
+    expect(checkpointResult.error?.data?.error?.code).toBe(invalidModeContract.errorCode)
+    expect(checkpointResult.error?.data?.error?.details?.[invalidModeContract.detailsField]).toBeTruthy()
   })
 
   it('reports imported mock dependency locks without checkpoint results as not run', async () => {
@@ -843,9 +1015,9 @@ describe('runtimeControlApi', () => {
     )
 
     expect(validationResult.error).toBeUndefined()
-    expect(validationResult.data?.data?.status).toBe('PASS')
-    expect(validationResult.data?.data?.result).toBe('ALLOW')
-    expect(validationResult.data?.data?.operation).toBe('WRITE')
+    expect(validationResult.data?.data?.status).toBe(runtimeValidationParity.stateWritePass.status)
+    expect(validationResult.data?.data?.result).toBe(runtimeValidationParity.stateWritePass.result)
+    expect(validationResult.data?.data?.operation).toBe(runtimeValidationParity.stateWritePass.operation)
 
     const historyResult = await store.dispatch(
       runtimeControlApi.endpoints.getRuntimeValidationHistory.initiate({ packageId }),
@@ -855,8 +1027,8 @@ describe('runtimeControlApi', () => {
     expect(historyResult.data?.data).toEqual([
       expect.objectContaining({
         operationType: 'STATE_WRITE',
-        status: 'PASS',
-        result: 'ALLOW',
+        status: runtimeValidationParity.stateWritePass.status,
+        result: runtimeValidationParity.stateWritePass.result,
         runtimePath: 'framework_state.sections.rvl_probe',
       }),
     ])
@@ -916,13 +1088,13 @@ describe('runtimeControlApi', () => {
       }),
     )
 
-    expect(validationResult.error?.status).toBe(422)
-    expect(validationResult.error?.data?.error?.code).toBe('RUNTIME_VALIDATION_FAILED')
+    expect(validationResult.error?.status).toBe(runtimeValidationParity.scopeFailure.httpStatus)
+    expect(validationResult.error?.data?.error?.code).toBe(runtimeValidationParity.scopeFailure.errorCode)
     expect(validationResult.error?.data?.error?.validation?.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: 'RVL-SCOPE-001',
-          source: 'runtime-skill-role-boundary-validator',
+          code: runtimeValidationParity.scopeFailure.issueCode,
+          source: runtimeValidationParity.scopeFailure.source,
         }),
       ]),
     )
@@ -947,12 +1119,13 @@ describe('runtimeControlApi', () => {
       }),
     )
 
-    expect(validationResult.error?.status).toBe(422)
+    expect(validationResult.error?.status).toBe(runtimeValidationParity.outputExtraFieldFailure.httpStatus)
+    expect(validationResult.error?.data?.error?.code).toBe(runtimeValidationParity.outputExtraFieldFailure.errorCode)
     expect(validationResult.error?.data?.error?.validation?.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: 'RVL-OUTPUT-003',
-          path: 'payload.unexpected',
+          code: runtimeValidationParity.outputExtraFieldFailure.issueCode,
+          path: runtimeValidationParity.outputExtraFieldFailure.path,
         }),
       ]),
     )

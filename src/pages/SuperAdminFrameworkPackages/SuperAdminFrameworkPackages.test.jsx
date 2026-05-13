@@ -227,6 +227,45 @@ describe('SuperAdminFrameworkPackages page', () => {
     })
   })
 
+  it('opens clone mode from active package row actions', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(
+      await screen.findByLabelText(/actions for vmf 2.3.1/i),
+      'Clone',
+    )
+
+    expect(await screen.findByRole('heading', { name: /clone framework package/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save clone/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^version$/i)).toHaveValue('')
+    await user.click(screen.getByRole('tab', { name: /^package identity$/i }))
+    expect(screen.getByRole('textbox', { name: /package key/i })).toHaveValue('')
+  })
+
+  it('uses read-only row actions for deprecated packages', async () => {
+    renderPage()
+
+    const actionSelect = await screen.findByLabelText(/actions for rld 1.0.0/i)
+
+    expect(within(actionSelect).getByRole('option', { name: 'View' })).toBeInTheDocument()
+    expect(within(actionSelect).queryByRole('option', { name: 'Clone' })).not.toBeInTheDocument()
+    expect(within(actionSelect).queryByRole('option', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('hides clone for draft packages and keeps clone for validated packages', async () => {
+    renderPage()
+
+    const draftActions = await screen.findByLabelText(/actions for vmf 2.4.0/i)
+    const validatedActions = await screen.findByLabelText(/actions for vmf 2.3.0/i)
+
+    expect(within(draftActions).getByRole('option', { name: 'Edit' })).toBeInTheDocument()
+    expect(within(draftActions).queryByRole('option', { name: 'Clone' })).not.toBeInTheDocument()
+    expect(within(validatedActions).getByRole('option', { name: 'View' })).toBeInTheDocument()
+    expect(within(validatedActions).getByRole('option', { name: 'Clone' })).toBeInTheDocument()
+    expect(within(validatedActions).getByRole('option', { name: 'Activate' })).toBeInTheDocument()
+  })
+
   it('activates a validated package and updates the default status in the catalogue', async () => {
     const user = userEvent.setup()
     renderPage()
