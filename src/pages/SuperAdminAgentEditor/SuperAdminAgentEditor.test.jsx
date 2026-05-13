@@ -166,8 +166,8 @@ describe('SuperAdminAgentEditor page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^agents$/i })).toBeInTheDocument()
     })
-    expect(screen.getByText('Planner')).toBeInTheDocument()
-    expect(screen.getByText('planner')).toBeInTheDocument()
+    expect(screen.getByText('Planner', { selector: '.super-admin-agents__agent-name' })).toBeInTheDocument()
+    expect(screen.getByText('planner', { selector: '.super-admin-agents__agent-key' })).toBeInTheDocument()
   })
 
   it('only offers active frameworks in the compatibility selector', async () => {
@@ -236,7 +236,7 @@ describe('SuperAdminAgentEditor page', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^agents$/i })).toBeInTheDocument()
     })
-    expect(screen.getByText('Validation Guard')).toBeInTheDocument()
+    expect(screen.getByText('Validation Guard', { selector: '.super-admin-agents__agent-name' })).toBeInTheDocument()
   })
 
   it('renders dependencies tab in edit mode', async () => {

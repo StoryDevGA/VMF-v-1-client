@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Table } from './Table'
+import { DEFAULT_TABLE_PAGE_SIZE } from './tableConstants.js'
 
 // Sample test data
 const columns = [
@@ -21,6 +22,10 @@ describe('Table Component', () => {
   // 1. BASIC RENDERING (6 tests)
   // ===========================
   describe('Basic Rendering', () => {
+    it('should expose the shared table page-size default', () => {
+      expect(DEFAULT_TABLE_PAGE_SIZE).toBe(10)
+    })
+
     it('should render table with props-based API', () => {
       render(<Table columns={columns} data={data} />)
       expect(screen.getByRole('table')).toBeInTheDocument()

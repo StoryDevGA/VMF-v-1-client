@@ -7,6 +7,7 @@ import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
+import { __mutateRuntimeControlApiStateForTests } from '../../store/api/runtimeControlApi.js'
 
 function renderPage(initialRoute = '/super-admin/runtime-control/skills') {
   return renderRuntimeControlPage({
@@ -46,6 +47,24 @@ function getSkillKeyCell(key) {
     .find((element) => element.classList.contains('super-admin-skills__skill-key'))
 }
 
+function addSkillPaginationFixtures() {
+  __mutateRuntimeControlApiStateForTests((state) => ({
+    ...state,
+    skills: [
+      ...state.skills,
+      ...Array.from({ length: 15 }, (_, index) => ({
+        ...state.skills[0],
+        id: `skill-pagination-${index + 1}`,
+        key: `pagination-skill-${index + 1}`,
+        name: `Pagination Skill ${index + 1}`,
+        description: 'Pagination coverage fixture.',
+        supportedFrameworkKeys: ['VMF'],
+        updatedAt: `2026-04-${String(index + 1).padStart(2, '0')}T09:00:00.000Z`,
+      })),
+    ],
+  }))
+}
+
 describe('SuperAdminSkills page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
@@ -77,12 +96,13 @@ describe('SuperAdminSkills page', () => {
 
   it('supports search filters and pagination for the skills catalogue', async () => {
     const user = userEvent.setup()
+    addSkillPaginationFixtures()
     renderPage()
 
-    expect(await screen.findByText(/page 1 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^last$/i }))
-    expect(await screen.findByText(/page 2 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 3 of 3/i)).toBeInTheDocument()
 
     await user.selectOptions(
       screen.getByLabelText(/^framework$/i, {

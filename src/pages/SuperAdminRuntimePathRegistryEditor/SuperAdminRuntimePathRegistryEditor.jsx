@@ -616,22 +616,24 @@ function SuperAdminRuntimePathRegistryEditor() {
                 </div>
 
                 {isLockedRecord ? (
-                  <div className="super-admin-runtime-path-registry-editor__lock-notice" role="status">
-                    <div className="super-admin-runtime-path-registry-editor__lock-copy">
-                      <strong>Locked by validated package usage.</strong>
-                      <span>Clone this runtime path to make behavior changes.</span>
-                    </div>
-                    {lockedByPackageKeys.length > 0 ? (
-                      <div className="super-admin-runtime-path-registry-editor__lock-packages" aria-label="Locked by packages">
-                        {lockedByPackageKeys.map((packageKey) => (
-                          <Badge key={packageKey} variant="neutral" size="sm" pill outline>{packageKey}</Badge>
-                        ))}
+                  <Card variant="outlined" className="super-admin-runtime-path-registry-editor__lock-notice" role="status">
+                    <Card.Body className="super-admin-runtime-path-registry-editor__lock-notice-body">
+                      <div className="super-admin-runtime-path-registry-editor__lock-copy">
+                        <strong>Locked by validated package usage.</strong>
+                        <span>Clone this runtime path to make behavior changes.</span>
                       </div>
-                    ) : null}
-                    <Button type="button" variant="primary" size="sm" onClick={handleCloneCurrent}>
-                      Clone
-                    </Button>
-                  </div>
+                      {lockedByPackageKeys.length > 0 ? (
+                        <div className="super-admin-runtime-path-registry-editor__lock-packages" aria-label="Locked by packages">
+                          {lockedByPackageKeys.map((packageKey) => (
+                            <Badge key={packageKey} variant="neutral" size="sm" pill outline>{packageKey}</Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                      <Button type="button" variant="primary" size="sm" onClick={handleCloneCurrent}>
+                        Clone
+                      </Button>
+                    </Card.Body>
+                  </Card>
                 ) : null}
 
                 <div className="super-admin-runtime-path-registry-editor__section">

@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const RUNTIME_SKILL_STATUSES = Object.freeze({
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
@@ -58,7 +60,7 @@ export const RUNTIME_SKILL_RETRY_POLICY_OPTIONS = Object.freeze([
   { value: 'RETRY_WITH_BACKOFF', label: 'Retry with backoff' },
 ])
 
-export const RUNTIME_SKILL_PAGE_SIZE = 4
+export const RUNTIME_SKILL_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const RUNTIME_SKILLS_HELP_TEXT =
   'Active skills remain selectable by framework packages and workflow policies. Set a skill inactive only after confirming live runtime bundles still have a compatible replacement.'

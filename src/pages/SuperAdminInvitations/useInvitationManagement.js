@@ -4,6 +4,7 @@ import {
   useResendInvitationMutation,
   useRevokeInvitationMutation,
 } from '../../store/api/invitationApi.js'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -38,7 +39,7 @@ export function useInvitationManagement({ isActive = true } = {}) {
     error: listError,
   } = useListInvitationsQuery({
     page,
-    pageSize: 20,
+    pageSize: DEFAULT_TABLE_PAGE_SIZE,
     q: debouncedSearch.trim(),
     status: statusFilter,
   }, { skip: !isActive })

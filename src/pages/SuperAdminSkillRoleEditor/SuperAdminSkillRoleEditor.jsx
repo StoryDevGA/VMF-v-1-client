@@ -369,19 +369,21 @@ function SuperAdminSkillRoleEditor() {
               </div>
 
               {isLocked ? (
-                <div className="super-admin-skill-role-editor__locked-banner" role="status">
-                  <Badge variant="warning" size="sm" pill>
-                    Locked
-                  </Badge>
-                  <span>Referenced by validated or active Framework Packages. Clone to make behavior changes.</span>
-                  <div className="super-admin-skill-role-editor__package-chips" aria-label="Locking packages">
-                    {(loadedRole?.lockedByPackageKeys || []).map((packageKey) => (
-                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
-                        {packageKey}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                <Card variant="outlined" className="super-admin-skill-role-editor__locked-banner" role="status">
+                  <Card.Body className="super-admin-skill-role-editor__locked-banner-body">
+                    <Badge variant="warning" size="sm" pill>
+                      Locked
+                    </Badge>
+                    <span>Referenced by validated or active Framework Packages. Clone to make behavior changes.</span>
+                    <div className="super-admin-skill-role-editor__package-chips" aria-label="Locking packages">
+                      {(loadedRole?.lockedByPackageKeys || []).map((packageKey) => (
+                        <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                          {packageKey}
+                        </Badge>
+                      ))}
+                    </div>
+                  </Card.Body>
+                </Card>
               ) : null}
 
               {isEditMode ? (

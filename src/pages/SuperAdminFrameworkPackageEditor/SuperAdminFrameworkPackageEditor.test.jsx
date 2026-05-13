@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table'
 import SuperAdminFrameworkPackageEditor from './SuperAdminFrameworkPackageEditor.jsx'
+import {
+  FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS,
+  FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS,
+  FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS,
+  FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS,
+} from '../SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 
 const navigateMock = vi.fn()
 const addToastMock = vi.fn()
@@ -610,9 +617,62 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     expect(screen.getAllByRole('button', { name: /activate package/i })[0]).toBeDisabled()
     expect(screen.getByText(/runtime-ready: not run/i)).toBeInTheDocument()
+    const readinessNotice = screen.getByRole('status', { name: /runtime readiness notice/i })
+    expect(readinessNotice).toHaveClass('card', 'card--outlined')
+    expect(within(readinessNotice).getByRole('button', { name: /view checkpoint/i })).toBeInTheDocument()
+  })
+
+  it('shows imported dependency lock evidence without treating it as a checkpoint pass', async () => {
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'DRAFT'
+    frameworkPackageQueryMock.data.data.lastCheckpointStatus = 'PASS'
+    frameworkPackageQueryMock.data.data.lastCheckpointAt = '2026-05-07T13:42:00.000Z'
+    frameworkPackageQueryMock.data.data.lastCheckpointResult = null
+    frameworkPackageQueryMock.data.data.dependencyLock = {
+      status: 'PASS',
+      packageKey: 'vmf-core',
+      packageVersion: '2.3.1',
+      references: [
+        { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
+        { collectionKey: 'UIContract', key: 'vmf-ui-contract-v1' },
+      ],
+    }
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'NOT_RUN',
+          mode: null,
+          summary: { totalChecks: 0, passed: 0, warnings: 0, failed: 0, resolvedReferences: 2 },
+          timestamp: null,
+          runBy: null,
+          dependencyLockPreview: frameworkPackageQueryMock.data.data.dependencyLock,
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    expect(within(summary).getByText(/Checkpoint: Not Run/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Status: Checkpoint: ,Not Run/i)).toHaveClass('status--warning')
+    expect(within(summary).getByText('Runs')).toBeInTheDocument()
+    expect(within(summary).getByText(/Snapshot: Locked - 2 refs/i)).toBeInTheDocument()
+    expect(within(summary).getByText(/Imported dependency snapshot evidence is available/i)).toBeInTheDocument()
+    expect(within(summary).queryByText(/Checkpoint: PASS/i)).not.toBeInTheDocument()
   })
 
   it('uses checkpoint severity in the integrity table after a failed checkpoint', async () => {
+    const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
     frameworkPackageIntegrityQueryMock = {
@@ -663,14 +723,65 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
     })
 
+    await user.click(screen.getByRole('tab', { name: /^integrity$/i }))
+
     const issueCell = screen.getByText('UI Contract is required before validation when sections are configured.')
     const row = issueCell.closest('tr')
     expect(row).not.toBeNull()
     expect(within(row).getByText('FAIL')).toBeInTheDocument()
-    expect(screen.getByText('FAIL: 1')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Failures')).getByText('1')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Passed checks')).getByText('3')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Warnings')).getByText('0')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /re-run checkpoint/i })).toHaveClass('btn--primary')
     expect(screen.getByLabelText('Checkpoint FAIL')).toHaveClass(
       'super-admin-framework-package-editor__summary-card--checkpoint-error',
     )
+  })
+
+  it('summarizes dense integrity path evidence and opens the full detail on demand', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'FAIL',
+          summary: { totalChecks: 4, passed: 3, warnings: 0, failed: 1 },
+          timestamp: '2026-05-07T13:52:07.000Z',
+          errors: [
+            {
+              code: 'SECTIONS_INTEGRITY',
+              severity: 'BLOCKING',
+              source: 'Runtime Architecture Checkpoint',
+              path: 'sections',
+              message: 'Section runtime paths must be ACTIVE, FRAMEWORK_STATE/SECTION, allow BIND, and be compatible with "VMF": framework_state.core.targeting, framework_state.core.value_drivers, framework_state.discovery.outputs.',
+            },
+          ],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Section runtime paths must be ACTIVE, FRAMEWORK_STATE/SECTION, allow BIND, and be compatible with "VMF"')).toBeInTheDocument()
+    expect(screen.getByText('3 runtime paths')).toBeInTheDocument()
+    expect(screen.queryByText(/framework_state.discovery.outputs\./)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^integrity$/i }))
+    await user.click(screen.getByRole('button', { name: /view details/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /integrity message details/i })
+    expect(within(dialog).getByText('Runtime Paths (3)')).toBeInTheDocument()
+    expect(within(dialog).getByText('framework_state.core.targeting')).toBeInTheDocument()
+    expect(within(dialog).getByText('framework_state.core.value_drivers')).toBeInTheDocument()
+    expect(within(dialog).getByText('framework_state.discovery.outputs')).toBeInTheDocument()
   })
 
   it('re-runs the checkpoint from the integrity tab without promoting the package', async () => {
@@ -849,6 +960,117 @@ describe('SuperAdminFrameworkPackageEditor', () => {
         }),
       )
     })
+  })
+
+  it('keeps package option constants aligned with backend enum and seeded package values', () => {
+    expect(FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS.map((option) => option.value)).toEqual([
+      'ON_SAVE',
+      'ON_SUBMIT',
+      'ON_VALIDATE',
+      'ON_STAGE_CHANGE',
+      'ON_PUBLISH',
+      'MANUAL',
+    ])
+
+    expect(FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS.map((option) => option.value)).toEqual([
+      'ON_CREATE',
+      'ON_SAVE',
+      'ON_RUN',
+      'ON_SUBMIT',
+      'ON_REVIEW_START',
+      'ON_STAGE_ENTER',
+      'ON_STAGE_EXIT',
+      'ON_APPROVAL',
+      'ON_APPROVE',
+      'ON_SECTION_BUILD',
+      'ON_DISCOVERY_COMPLETE',
+      'ON_POSITIONING_COMPLETE',
+      'ON_PROOF_COMPLETE',
+      'ON_ECONOMICS_COMPLETE',
+      'ON_TRAP_ANALYSIS_COMPLETE',
+      'ON_VALIDATE',
+      'ON_DEAL_MODE_REQUEST',
+      'ON_SPD_COMPILE',
+      'ON_RENDER',
+      'ON_QUERY',
+      'ON_PUBLISH',
+    ])
+
+    expect(FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS.map((option) => option.value)).toEqual([
+      'full-report',
+      'executive-summary',
+      'value-drivers',
+      'discovery',
+      'decision-context',
+      'positioning',
+      'proof-plan',
+      'economics',
+      'competitive-trap-map',
+      'deal-readiness',
+      'service-spine',
+      'integrity-audit',
+      'validation-audit',
+      'state-audit',
+    ])
+
+    expect(FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS.map((option) => option.value)).toEqual([
+      'developed-executive-technical',
+    ])
+  })
+
+  it('renders backend-supported validation and workflow dropdown values from seeded packages', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.validationBindings = [
+      {
+        bindingKey: 'required-sections-on-validate',
+        validationKey: 'required-sections-check',
+        trigger: 'ON_VALIDATE',
+        blocking: true,
+        priority: 100,
+        freshnessMinutes: null,
+        enabled: true,
+        notes: '',
+      },
+    ]
+    frameworkPackageQueryMock.data.data.workflowBindings = [
+      {
+        policyKey: 'vmf-submit-gate',
+        executionContext: 'ON_QUERY',
+        priority: 100,
+        enabled: true,
+        notes: '',
+      },
+    ]
+    frameworkPackageQueryMock.data.data.availableOutputKeys = [
+      'full-report',
+      'executive-summary',
+      'integrity-audit',
+    ]
+    frameworkPackageQueryMock.data.data.defaultOutputStyles = [
+      'developed-executive-technical',
+    ]
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^validation$/i }))
+    expect(screen.getByLabelText(/^trigger$/i)).toHaveValue('ON_VALIDATE')
+    expect(within(screen.getByLabelText(/^trigger$/i)).getByRole('option', { name: 'On validate' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^workflows$/i }))
+    expect(screen.getByLabelText(/^execution context$/i)).toHaveValue('ON_QUERY')
+    expect(within(screen.getByLabelText(/^execution context$/i)).getByRole('option', { name: 'On query' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /^outputs$/i }))
+    expect(screen.getByLabelText(/full report/i)).toBeChecked()
+    expect(screen.getByLabelText(/executive summary/i)).toBeChecked()
+    expect(screen.getByLabelText(/integrity audit/i)).toBeChecked()
+    expect(screen.getByLabelText(/developed executive \+ technical/i)).toBeChecked()
   })
 
   it('warns when legacy package config is synthesized into canonical bindings', async () => {
@@ -1088,6 +1310,11 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(modeTooltip).toHaveTextContent(/STRICT blocks blocking findings/i)
     expect(modeHelpButton).toHaveAttribute('aria-expanded', 'true')
 
+    await user.unhover(modeHelpButton)
+    await waitFor(() => {
+      expect(modeHelpButton).toHaveAttribute('aria-expanded', 'false')
+    })
+
     await user.click(stateHelpButton)
     const stateTooltip = await screen.findByRole('tooltip')
     expect(stateTooltip).toHaveTextContent(/in-session runtime validation passed/i)
@@ -1149,7 +1376,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       }))
     })
     expect(screen.getByText(/Last Result: FAIL/i)).toBeInTheDocument()
-    expect(screen.getByText('BLOCKED')).toBeInTheDocument()
+    const validationSummary = screen.getByLabelText(/runtime validation summary/i)
+    expect(within(validationSummary).getAllByText('BLOCKED').length).toBeGreaterThan(0)
     expect(screen.getByText('RVL-SCOPE-001')).toBeInTheDocument()
     const issueTable = screen.getByRole('table', { name: /runtime validation issue details/i })
     expect(within(issueTable).getByText('BLOCKING')).toBeInTheDocument()
@@ -1261,7 +1489,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByText('Runtime Validation Summary')).toBeInTheDocument()
     const validationSummary = screen.getByLabelText(/runtime validation summary/i)
     expect(within(validationSummary).getByText('Current Validation State')).toBeInTheDocument()
-    expect(within(validationSummary).getByText('INVALIDATED')).toBeInTheDocument()
+    expect(within(validationSummary).getAllByText('INVALIDATED').length).toBeGreaterThan(0)
     expect(screen.getByText(/1 blocking \/ 0 warnings \/ 0 informational/i)).toBeInTheDocument()
     expect(screen.getByText(/snapshot: not recorded/i)).toBeInTheDocument()
 
@@ -1314,6 +1542,79 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       name: /open runtime path registry entry for framework_state\.sections\.customer_problem/i,
     }))
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/runtime-paths/runtime-path-customer-problem/edit')
+  }, 10000)
+
+  it('treats historical runtime validation PASS as stale until the checkpoint has run', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.dependencyLock = {
+      status: 'PASS',
+      resolvedAt: '2026-05-08T12:00:00.000Z',
+      packageKey: 'vmf-core',
+      packageVersion: '2.3.1',
+      references: [
+        { collectionKey: 'RuntimePathRegistry', id: 'runtime-path-customer-problem', key: 'framework_state.sections.customer_problem' },
+      ],
+    }
+    frameworkPackageLatestCheckpointQueryMock = {
+      data: {
+        data: {
+          status: 'NOT_RUN',
+          mode: null,
+          summary: { totalChecks: 0, passed: 0, warnings: 0, failed: 0, resolvedReferences: 1 },
+          timestamp: null,
+          runBy: null,
+          dependencyLockPreview: frameworkPackageQueryMock.data.data.dependencyLock,
+          issues: [],
+          errors: [],
+          warnings: [],
+          passedChecks: [],
+        },
+      },
+      refetch: packageCheckpointRefetchMock,
+    }
+    runtimeValidationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'rvl-history-pass',
+            validationId: 'rvl-history-pass',
+            status: 'PASS',
+            result: 'ALLOW',
+            severity: 'INFO',
+            mode: 'STRICT',
+            operationType: 'STATE_WRITE',
+            runtimePath: 'framework_state.sections.customer_problem',
+            message: 'Runtime validation allowed this operation.',
+            issues: [],
+            createdAt: '2026-05-08T12:00:00.000Z',
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: runtimeValidationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
+
+    expect(screen.getByText(/Last Result: PASS/i)).toBeInTheDocument()
+    const validationSummary = screen.getByLabelText(/runtime validation summary/i)
+    expect(within(validationSummary).getAllByText('STALE').length).toBeGreaterThan(0)
+    expect(within(validationSummary).queryByText('VALID')).not.toBeInTheDocument()
+    expect(within(validationSummary).getByText('Rerun Required')).toBeInTheDocument()
+    expect(within(validationSummary).getByText('Last Result')).toBeInTheDocument()
+    expect(within(validationSummary).getByText('Last Outcome')).toBeInTheDocument()
+    expect(within(validationSummary).getByText('PASS')).toHaveAttribute('data-status', 'PASS')
+    expect(within(validationSummary).getByText('PASS')).toHaveAttribute('data-stale', 'true')
+    expect(within(validationSummary).getByText('ALLOW')).toHaveAttribute('data-decision', 'ALLOW')
+    expect(within(validationSummary).getByText('ALLOW')).toHaveAttribute('data-stale', 'true')
+    expect(screen.getByText(/Run the Runtime Architecture Checkpoint before treating it as current package readiness evidence/i)).toBeInTheDocument()
+    const checkpointRelationship = screen.getByLabelText(/architecture checkpoint and runtime validation relationship/i)
+    expect(within(checkpointRelationship).getByLabelText(/Status: Not Run/i)).toHaveClass('status--warning')
   })
 
   it('keeps runtime validation audit fallbacks forensic and avoids unresolved path navigation', async () => {
@@ -1380,7 +1681,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(within(auditTable).getAllByText('--').length).toBeGreaterThan(0)
     expect(within(auditTable).getAllByText('WARN').length).toBeGreaterThan(0)
     expect(within(auditTable).getByText('framework_state.sections.orphan')).toBeInTheDocument()
-    expect(screen.getByTitle(/path not registered in this package's dependency graph/i)).toBeInTheDocument()
+    expect(screen.getByTitle(/registered, but it does not expose a stable id/i)).toBeInTheDocument()
     expect(within(auditTable).queryByRole('button', {
       name: /open runtime path registry entry for framework_state\.sections\.orphan/i,
     })).not.toBeInTheDocument()
@@ -1407,6 +1708,9 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     await user.click(screen.getByRole('tab', { name: /^runtime validation$/i }))
 
+    expect(screen.getByLabelText(/Status: Last Result: ,NOT RUN/i)).toHaveClass('status--warning')
+    const validationSummary = screen.getByLabelText(/runtime validation summary/i)
+    expect(within(validationSummary).getByLabelText(/Status: Not Run/i)).toHaveClass('status--warning')
     expect(screen.getByText(/No runtime validation audit rows yet. Run the mutation probe to create one./i)).toBeInTheDocument()
     expect(screen.queryByText(/No runtime validation audit rows match the current filters./i)).not.toBeInTheDocument()
   })
@@ -1534,20 +1838,21 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     const user = userEvent.setup()
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
+    const extraRuntimePathCount = DEFAULT_TABLE_PAGE_SIZE + 1
     frameworkPackageDependenciesQueryMock = {
       data: {
         data: {
           summary: {
             agents: 0,
             skills: 0,
-            runtimePaths: 6,
+            runtimePaths: extraRuntimePathCount,
             validations: 0,
             workflowPolicies: 0,
             uiContract: 0,
           },
           agents: [],
           skills: [],
-          runtimePaths: Array.from({ length: 6 }, (_, index) => ({
+          runtimePaths: Array.from({ length: extraRuntimePathCount }, (_, index) => ({
             id: `runtime-path-${index + 1}`,
             key: `framework_state.sections.extra_${index + 1}`,
             name: `Extra Runtime Path ${index + 1}`,
@@ -1573,7 +1878,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     expect(screen.getByRole('table', { name: /framework package dependencies/i })).toBeInTheDocument()
     expect(screen.getByText('Extra Runtime Path 1')).toBeInTheDocument()
-    expect(screen.queryByText('Extra Runtime Path 6')).not.toBeInTheDocument()
+    expect(screen.queryByText(`Extra Runtime Path ${extraRuntimePathCount}`)).not.toBeInTheDocument()
 
     const pagination = screen.getByRole('navigation', {
       name: /framework package dependencies pagination/i,
@@ -1585,7 +1890,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     await user.click(within(pagination).getByRole('button', { name: /^next$/i }))
 
-    expect(screen.getByText('Extra Runtime Path 6')).toBeInTheDocument()
+    expect(screen.getByText(`Extra Runtime Path ${extraRuntimePathCount}`)).toBeInTheDocument()
     expect(within(pagination).getByText('Page 2 of 2')).toBeInTheDocument()
   })
 

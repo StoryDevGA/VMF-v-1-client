@@ -5,6 +5,7 @@ import {
   useGetPolicyHistoryQuery,
   useUpdatePolicyMetadataMutation,
 } from '../../store/api/systemVersioningApi.js'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { normalizeError } from '../../utils/errors.js'
 import { INITIAL_CREATE_FORM } from './superAdminSystemVersioning.constants.js'
@@ -36,7 +37,7 @@ export function useSystemVersioningManagement() {
     isLoading: isHistoryLoading,
     isFetching: isHistoryFetching,
     error: historyError,
-  } = useGetPolicyHistoryQuery({ page: historyPage, pageSize: 20 })
+  } = useGetPolicyHistoryQuery({ page: historyPage, pageSize: DEFAULT_TABLE_PAGE_SIZE })
 
   const [createPolicy, createPolicyResult] = useCreatePolicyMutation()
   const [updatePolicyMetadata, updatePolicyMetadataResult] =

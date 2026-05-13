@@ -17,7 +17,7 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
+import { DEFAULT_TABLE_PAGE_SIZE, Table } from '../../components/Table'
 import { Tooltip } from '../../components/Tooltip'
 import { UserSearchSelect } from '../../components/UserSearchSelect'
 import { useToaster } from '../../components/Toaster'
@@ -31,7 +31,7 @@ import { getTenantId, getTenantStatus } from './tenantUtils.js'
 import './MaintainTenants.css'
 
 const USER_FETCH_PAGE_SIZE = 100
-const LINKED_USERS_PAGE_SIZE = 20
+const LINKED_USERS_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 const LINKED_USERS_STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },

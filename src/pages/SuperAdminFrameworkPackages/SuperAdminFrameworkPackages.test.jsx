@@ -7,6 +7,7 @@ import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
+import { __mutateRuntimeControlApiStateForTests } from '../../store/api/runtimeControlApi.js'
 
 function renderPage() {
   return renderRuntimeControlPage({
@@ -26,6 +27,27 @@ function renderPage() {
       },
     ],
   })
+}
+
+function addFrameworkPackagePaginationFixtures() {
+  __mutateRuntimeControlApiStateForTests((state) => ({
+    ...state,
+    frameworkPackages: [
+      ...state.frameworkPackages,
+      ...Array.from({ length: 15 }, (_, index) => ({
+        ...state.frameworkPackages[0],
+        id: `pkg-pagination-${index + 1}`,
+        frameworkKey: 'VMF',
+        version: `9.${index}.0`,
+        packageKey: `pagination-package-${index + 1}`,
+        packageName: `Pagination Package ${index + 1}`,
+        description: 'Pagination coverage fixture.',
+        status: 'DRAFT',
+        isDefault: false,
+        updatedAt: `2026-04-${String(index + 1).padStart(2, '0')}T09:00:00.000Z`,
+      })),
+    ],
+  }))
 }
 
 describe('SuperAdminFrameworkPackages page', () => {
@@ -51,7 +73,7 @@ describe('SuperAdminFrameworkPackages page', () => {
         selector: 'input#framework-package-editor-framework-name',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^basic information$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^framework identity$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^access$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^sections$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /^runtime$/i })).toBeInTheDocument()
@@ -97,8 +119,8 @@ describe('SuperAdminFrameworkPackages page', () => {
     })
     await user.click(screen.getByRole('button', { name: /save section/i }))
     await user.click(screen.getByRole('tab', { name: /^outputs$/i }))
-    await user.click(screen.getByRole('checkbox', { name: /board summary/i }))
-    await user.click(screen.getByRole('checkbox', { name: /executive brief/i }))
+    await user.click(screen.getByRole('checkbox', { name: /full report/i }))
+    await user.click(screen.getByRole('checkbox', { name: /executive summary/i }))
 
     await user.click(screen.getByRole('button', { name: /create framework package/i }))
 
@@ -149,12 +171,13 @@ describe('SuperAdminFrameworkPackages page', () => {
 
   it('supports search filters and pagination for the framework packages catalogue', async () => {
     const user = userEvent.setup()
+    addFrameworkPackagePaginationFixtures()
     renderPage()
 
-    expect(await screen.findByText(/page 1 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^last$/i }))
-    expect(await screen.findByText(/page 2 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 3 of 3/i)).toBeInTheDocument()
 
     await user.selectOptions(
       screen.getByLabelText(/^framework$/i, {

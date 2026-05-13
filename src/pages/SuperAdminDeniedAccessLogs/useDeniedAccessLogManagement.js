@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useListDeniedAccessLogsQuery } from '../../store/api/superAdminAuditApi.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
@@ -19,7 +20,7 @@ export function useDeniedAccessLogManagement() {
     error,
   } = useListDeniedAccessLogsQuery({
     page,
-    pageSize: 20,
+    pageSize: DEFAULT_TABLE_PAGE_SIZE,
     actorUserId: filters.actorUserId.trim(),
     startDate: toStartOfDayIso(filters.startDate),
     endDate: toEndOfDayIso(filters.endDate),

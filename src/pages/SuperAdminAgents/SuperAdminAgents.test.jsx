@@ -7,6 +7,7 @@ import {
   renderRuntimeControlPage,
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
+import { __mutateRuntimeControlApiStateForTests } from '../../store/api/runtimeControlApi.js'
 
 function renderPage() {
   return renderRuntimeControlPage({
@@ -39,6 +40,24 @@ function queryAgentNameCell(name) {
   return screen
     .queryAllByText(name)
     .find((element) => element.classList.contains('super-admin-agents__agent-name')) || null
+}
+
+function addAgentPaginationFixtures() {
+  __mutateRuntimeControlApiStateForTests((state) => ({
+    ...state,
+    agents: [
+      ...state.agents,
+      ...Array.from({ length: 11 }, (_, index) => ({
+        ...state.agents[0],
+        id: `agent-pagination-${index + 1}`,
+        key: `pagination-agent-${index + 1}`,
+        name: `Pagination Agent ${index + 1}`,
+        description: 'Pagination coverage fixture.',
+        supportedFrameworkKeys: ['VMF'],
+        updatedAt: `2026-04-${String(index + 1).padStart(2, '0')}T09:00:00.000Z`,
+      })),
+    ],
+  }))
 }
 
 describe('SuperAdminAgents page', () => {
@@ -99,6 +118,7 @@ describe('SuperAdminAgents page', () => {
 
   it('supports search filters and pagination for the agents catalogue', async () => {
     const user = userEvent.setup()
+    addAgentPaginationFixtures()
     renderPage()
 
     expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument()

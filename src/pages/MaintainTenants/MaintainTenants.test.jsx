@@ -28,6 +28,7 @@ const {
   mockUseDisableTenantMutation,
   mockUseListUsersQuery,
   mockUseLazyListUsersQuery,
+  mockUseUpdateUserMutation,
 } = vi.hoisted(() => ({
   mockUseListTenantsQuery: vi.fn(),
   mockUseCreateTenantMutation: vi.fn(),
@@ -36,6 +37,7 @@ const {
   mockUseDisableTenantMutation: vi.fn(),
   mockUseListUsersQuery: vi.fn(),
   mockUseLazyListUsersQuery: vi.fn(),
+  mockUseUpdateUserMutation: vi.fn(),
 }))
 
 vi.mock('../../store/api/tenantApi.js', () => ({
@@ -49,6 +51,7 @@ vi.mock('../../store/api/tenantApi.js', () => ({
 vi.mock('../../store/api/userApi.js', () => ({
   useListUsersQuery: (...args) => mockUseListUsersQuery(...args),
   useLazyListUsersQuery: (...args) => mockUseLazyListUsersQuery(...args),
+  useUpdateUserMutation: (...args) => mockUseUpdateUserMutation(...args),
 }))
 
 beforeEach(() => {
@@ -216,7 +219,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [],
-        meta: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        meta: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
       },
       isLoading: false,
       isFetching: false,
@@ -226,6 +229,7 @@ describe('MaintainTenants page', () => {
     mockUseUpdateTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseEnableTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseDisableTenantMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    mockUseUpdateUserMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     mockUseListUsersQuery.mockReturnValue({
       data: { data: { users: [] } },
       isFetching: false,
@@ -300,7 +304,7 @@ describe('MaintainTenants page', () => {
         data: [],
         meta: {
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 0,
           totalPages: 0,
           tenantVisibility: {
@@ -336,7 +340,7 @@ describe('MaintainTenants page', () => {
         data: [],
         meta: {
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 0,
           totalPages: 0,
           tenantCapacity: {
@@ -367,7 +371,7 @@ describe('MaintainTenants page', () => {
         data: [],
         meta: {
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 0,
           totalPages: 0,
           tenantCapacity: {
@@ -421,7 +425,7 @@ describe('MaintainTenants page', () => {
         data: [],
         meta: {
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 0,
           totalPages: 0,
           tenantCapacity: {
@@ -450,7 +454,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant, defaultTenant, disabledTenant, archivedTenant],
-        meta: { page: 1, pageSize: 20, total: 4, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 4, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -503,7 +507,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant, defaultTenant, disabledTenant, archivedTenant],
-        meta: { page: 1, pageSize: 20, total: 4, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 4, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -545,7 +549,7 @@ describe('MaintainTenants page', () => {
             tenantAdmin: { id: 'user-99', name: 'Other Admin' },
           },
         ],
-        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 2, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -604,7 +608,7 @@ describe('MaintainTenants page', () => {
             tenantAdmin: { id: 'user-99', name: 'Other Admin' },
           },
         ],
-        meta: { page: 1, pageSize: 20, total: 3, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 3, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -649,7 +653,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -667,7 +671,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -690,7 +694,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant],
-        meta: { page: 2, pageSize: 20, total: 41, totalPages: 3 },
+        meta: { page: 2, pageSize: 10, total: 21, totalPages: 3 },
       },
       isLoading: false,
       isFetching: false,
@@ -703,7 +707,7 @@ describe('MaintainTenants page', () => {
     expect(screen.getByRole('button', { name: /^previous$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^last$/i })).toBeInTheDocument()
-    expect(screen.getByText(/page 2 of 3 \(41 tenants\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/page 2 of 3 \(21 tenants\)/i)).toBeInTheDocument()
   })
 
   it('uses immediate-impact lifecycle copy in disable confirmations and success toasts', async () => {
@@ -715,7 +719,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -755,7 +759,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenantWithIdOnly],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -792,7 +796,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [disabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -858,7 +862,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [disabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,
@@ -891,7 +895,7 @@ describe('MaintainTenants page', () => {
     mockUseListTenantsQuery.mockReturnValue({
       data: {
         data: [enabledTenant],
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
       },
       isLoading: false,
       isFetching: false,

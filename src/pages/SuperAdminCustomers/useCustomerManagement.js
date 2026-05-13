@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import {
@@ -42,7 +43,7 @@ export function useCustomerManagement() {
     error: listError,
   } = useListCustomersQuery({
     page,
-    pageSize: 20,
+    pageSize: DEFAULT_TABLE_PAGE_SIZE,
     q: debouncedSearch.trim(),
     status: statusFilter,
     topology: topologyFilter,

@@ -80,16 +80,19 @@
   margin-bottom: var(--spacing-md);
 }
 
-.super-admin-runtime-path-registry-editor__lock-notice {
+.super-admin-runtime-path-registry-editor__lock-notice.card {
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-runtime-path-registry-editor__lock-notice-body.card__body {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
   padding: var(--spacing-sm);
-  border: var(--border-width-thin) solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
 }
 
 .super-admin-runtime-path-registry-editor__lock-copy,
@@ -288,7 +291,7 @@
 
   .super-admin-runtime-path-registry-editor__top-actions > *,
   .super-admin-runtime-path-registry-editor__footer-actions > *,
-  .super-admin-runtime-path-registry-editor__lock-notice > *,
+  .super-admin-runtime-path-registry-editor__lock-notice-body > *,
   .super-admin-runtime-path-registry-editor__framework-controls > * {
     width: 100%;
   }

@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const RUNTIME_AGENT_STATUSES = Object.freeze({
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
@@ -62,7 +64,7 @@ export const RUNTIME_AGENT_TYPE_OPTIONS = Object.freeze([
   { value: RUNTIME_AGENT_TYPES.SPINE, label: 'Spine' },
 ])
 
-export const RUNTIME_AGENT_PAGE_SIZE = 4
+export const RUNTIME_AGENT_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const RUNTIME_AGENTS_HELP_TEXT =
   'Active agents remain selectable by framework packages and workflow policies. Set an agent inactive only after confirming another compatible agent can satisfy any live dependency.'

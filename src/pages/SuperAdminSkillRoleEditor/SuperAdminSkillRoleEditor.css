@@ -55,15 +55,18 @@
   font-size: var(--font-size-sm);
 }
 
-.super-admin-skill-role-editor__locked-banner {
+.super-admin-skill-role-editor__locked-banner.card {
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-skill-role-editor__locked-banner-body.card__body {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   flex-wrap: wrap;
   padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--color-warning-border, var(--color-border));
-  border-radius: var(--radius-md);
-  background: var(--color-warning-surface, var(--color-surface-secondary));
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
 }

@@ -17,7 +17,7 @@ import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
+import { DEFAULT_TABLE_PAGE_SIZE, Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
@@ -435,7 +435,7 @@ function MaintainVmfs() {
       status: statusFilter || '',
       lifecycleStatus: effectiveLifecycleFilter,
       page,
-      pageSize: 20,
+      pageSize: DEFAULT_TABLE_PAGE_SIZE,
     },
     { skip: !canQueryVmfs },
   )

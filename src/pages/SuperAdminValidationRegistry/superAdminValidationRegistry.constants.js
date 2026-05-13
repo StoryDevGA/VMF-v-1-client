@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const VALIDATION_REGISTRY_STATUSES = Object.freeze({
   DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
@@ -39,7 +41,7 @@ export const VALIDATION_REGISTRY_EXECUTION_MODES = Object.freeze({
   QUEUED: 'QUEUED',
 })
 
-export const VALIDATION_REGISTRY_PAGE_SIZE = 20
+export const VALIDATION_REGISTRY_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const VALIDATION_REGISTRY_FORM_ERROR_FIELDS = Object.freeze([
   'key',

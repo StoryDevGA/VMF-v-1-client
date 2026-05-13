@@ -241,7 +241,7 @@ describe('runtimeControlApi', () => {
       buildRuntimeControlListRequest({
         resourcePath: 'framework-packages',
         page: 2,
-        pageSize: 20,
+        pageSize: 10,
         q: 'vmf',
         status: 'ACTIVE',
         frameworkKey: 'vmf',
@@ -251,7 +251,7 @@ describe('runtimeControlApi', () => {
       url: '/super-admin/runtime-control/framework-packages',
       params: {
         page: 2,
-        pageSize: 20,
+        pageSize: 10,
         q: 'vmf',
         status: 'ACTIVE',
         frameworkKey: 'VMF',
@@ -358,7 +358,7 @@ describe('runtimeControlApi', () => {
       buildRuntimeControlListRequest({
         resourcePath: 'workflow-policies',
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
         q: '',
         status: '',
         frameworkKey: '',
@@ -369,7 +369,7 @@ describe('runtimeControlApi', () => {
       url: '/super-admin/runtime-control/workflow-policies',
       params: {
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
         type: 'ROUTING',
       },
     })
@@ -746,6 +746,46 @@ describe('runtimeControlApi', () => {
     )
     expect(latestCheckpointResult.error).toBeUndefined()
     expect(latestCheckpointResult.data?.data?.status).toBe('PASS')
+  })
+
+  it('reports imported mock dependency locks without checkpoint results as not run', async () => {
+    const store = createTestStore()
+    const packageId = 'pkg-imported-lock'
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: [
+        {
+          id: packageId,
+          frameworkKey: 'VMF',
+          frameworkName: 'Value Management Framework',
+          version: '2.3.1',
+          packageKey: 'vmf-imported-lock',
+          packageName: 'VMF Imported Lock',
+          status: 'DRAFT',
+          lastCheckpointStatus: 'PASS',
+          lastCheckpointAt: '2026-05-07T13:42:00.000Z',
+          lastCheckpointResult: null,
+          dependencyLock: {
+            status: 'PASS',
+            references: [
+              { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
+            ],
+          },
+        },
+        ...state.frameworkPackages,
+      ],
+    }))
+
+    const latestCheckpointResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackageLatestCheckpoint.initiate(packageId),
+    )
+
+    expect(latestCheckpointResult.error).toBeUndefined()
+    expect(latestCheckpointResult.data?.data?.status).toBe('NOT_RUN')
+    expect(latestCheckpointResult.data?.data?.timestamp).toBeNull()
+    expect(latestCheckpointResult.data?.data?.runBy).toBeNull()
+    expect(latestCheckpointResult.data?.data?.summary.resolvedReferences).toBe(1)
   })
 
   it('validates mock runtime mutations and records audit history', async () => {

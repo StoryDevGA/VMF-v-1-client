@@ -3757,15 +3757,17 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Framework package was not found.')
         }
 
+        // A status string without a full checkpoint result is treated as not-run.
+        const hasStoredCheckpoint = pkg.lastCheckpointResult && typeof pkg.lastCheckpointResult === 'object'
         return {
-          data: buildEntityResponse(pkg.lastCheckpointResult || {
+          data: buildEntityResponse(hasStoredCheckpoint ? pkg.lastCheckpointResult : {
             schemaVersion: '1',
             id: pkg.id,
             frameworkKey: pkg.frameworkKey,
             packageKey: pkg.packageKey || '',
             packageVersion: pkg.version || '',
-            mode: 'FULL',
-            status: pkg.lastCheckpointStatus || 'NOT_RUN',
+            mode: null,
+            status: 'NOT_RUN',
             errors: [],
             warnings: [],
             issues: [],
@@ -3779,8 +3781,8 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               failed: 0,
               resolvedReferences: Number(pkg.dependencyLock?.references?.length) || 0,
             },
-            timestamp: pkg.lastCheckpointAt || null,
-            runBy: pkg.lastCheckpointStatus ? { ...RUNTIME_CONTROL_UPDATED_BY } : null,
+            timestamp: null,
+            runBy: null,
           }),
         }
       },

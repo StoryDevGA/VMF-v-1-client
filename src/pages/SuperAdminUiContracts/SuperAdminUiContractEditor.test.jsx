@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminUiContractEditor from './SuperAdminUiContractEditor.jsx'
+import { WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS } from '../SuperAdminWorkflowPolicies/superAdminWorkflowPolicies.constants.js'
 
 const navigateMock = vi.fn()
 const {
@@ -153,14 +154,12 @@ describe('SuperAdminUiContractEditor', () => {
 
     const governedAction = document.querySelector('#governed-action')
     expect(governedAction).not.toBeNull()
-    const optionLabels = within(governedAction).getAllByRole('option', { hidden: true })
-      .map((option) => option.textContent)
+    const optionValues = within(governedAction).getAllByRole('option', { hidden: true })
+      .map((option) => option.getAttribute('value'))
 
-    expect(optionLabels).toEqual(expect.arrayContaining([
-      'SAVE',
-      'ARCHIVE',
-      'SUBMIT_FOR_REVIEW',
-    ]))
+    expect(optionValues).toEqual(expect.arrayContaining(
+      WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value),
+    ))
   })
 
   it('keeps JSON as read-only inspection output', async () => {

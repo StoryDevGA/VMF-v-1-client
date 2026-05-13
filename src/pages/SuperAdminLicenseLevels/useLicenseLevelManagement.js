@@ -5,6 +5,7 @@ import {
   useGetLicenseLevelQuery,
   useUpdateLicenseLevelMutation,
 } from '../../store/api/licenseLevelApi.js'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -42,7 +43,7 @@ export function useLicenseLevelManagement() {
     error: listError,
   } = useListLicenseLevelsQuery({
     page,
-    pageSize: 20,
+    pageSize: DEFAULT_TABLE_PAGE_SIZE,
     q: debouncedSearch.trim(),
     isActive: statusFilter || undefined,
   })

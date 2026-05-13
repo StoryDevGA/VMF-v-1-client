@@ -91,16 +91,19 @@
   flex-wrap: wrap;
 }
 
-.super-admin-workflow-policy-editor__lock-banner {
+.super-admin-workflow-policy-editor__lock-banner.card {
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-workflow-policy-editor__lock-banner-body.card__body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: var(--spacing-xs);
   flex-wrap: wrap;
   padding: var(--spacing-sm);
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
-  border-radius: var(--border-radius-md);
-  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
 }
 
 .super-admin-workflow-policy-editor__lock-copy,

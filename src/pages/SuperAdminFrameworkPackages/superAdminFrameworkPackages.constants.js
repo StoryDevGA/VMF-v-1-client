@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const FRAMEWORK_PACKAGE_STATUSES = Object.freeze({
   DRAFT: 'DRAFT',
   VALIDATED: 'VALIDATED',
@@ -48,6 +50,7 @@ export const FRAMEWORK_PACKAGE_RETRY_POLICY_OPTIONS = Object.freeze([
 export const FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS = Object.freeze([
   { value: 'ON_SAVE', label: 'On save' },
   { value: 'ON_SUBMIT', label: 'On submit' },
+  { value: 'ON_VALIDATE', label: 'On validate' },
   { value: 'ON_STAGE_CHANGE', label: 'On stage change' },
   { value: 'ON_PUBLISH', label: 'On publish' },
   { value: 'MANUAL', label: 'Manual' },
@@ -56,10 +59,24 @@ export const FRAMEWORK_PACKAGE_VALIDATION_TRIGGER_OPTIONS = Object.freeze([
 export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freeze([
   { value: 'ON_CREATE', label: 'On create' },
   { value: 'ON_SAVE', label: 'On save' },
+  { value: 'ON_RUN', label: 'On run' },
   { value: 'ON_SUBMIT', label: 'On submit' },
+  { value: 'ON_REVIEW_START', label: 'On review start' },
   { value: 'ON_STAGE_ENTER', label: 'On stage enter' },
   { value: 'ON_STAGE_EXIT', label: 'On stage exit' },
   { value: 'ON_APPROVAL', label: 'On approval' },
+  { value: 'ON_APPROVE', label: 'On approve' },
+  { value: 'ON_SECTION_BUILD', label: 'On section build' },
+  { value: 'ON_DISCOVERY_COMPLETE', label: 'On discovery complete' },
+  { value: 'ON_POSITIONING_COMPLETE', label: 'On positioning complete' },
+  { value: 'ON_PROOF_COMPLETE', label: 'On proof complete' },
+  { value: 'ON_ECONOMICS_COMPLETE', label: 'On economics complete' },
+  { value: 'ON_TRAP_ANALYSIS_COMPLETE', label: 'On trap analysis complete' },
+  { value: 'ON_VALIDATE', label: 'On validate' },
+  { value: 'ON_DEAL_MODE_REQUEST', label: 'On deal mode request' },
+  { value: 'ON_SPD_COMPILE', label: 'On SPD compile' },
+  { value: 'ON_RENDER', label: 'On render' },
+  { value: 'ON_QUERY', label: 'On query' },
   { value: 'ON_PUBLISH', label: 'On publish' },
 ])
 
@@ -99,15 +116,24 @@ export const FRAMEWORK_PACKAGE_EVALUATION_MODE_OPTIONS = Object.freeze([
 ])
 
 export const FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS = Object.freeze([
-  { value: 'board-summary', label: 'Board Summary' },
-  { value: 'executive-brief', label: 'Executive Brief' },
-  { value: 'review-pack', label: 'Review Pack' },
+  { value: 'full-report', label: 'Full report' },
+  { value: 'executive-summary', label: 'Executive summary' },
+  { value: 'value-drivers', label: 'Value drivers' },
+  { value: 'discovery', label: 'Discovery' },
+  { value: 'decision-context', label: 'Decision context' },
+  { value: 'positioning', label: 'Positioning' },
+  { value: 'proof-plan', label: 'Proof plan' },
+  { value: 'economics', label: 'Economics' },
+  { value: 'competitive-trap-map', label: 'Competitive trap map' },
+  { value: 'deal-readiness', label: 'Deal readiness' },
+  { value: 'service-spine', label: 'Service spine' },
+  { value: 'integrity-audit', label: 'Integrity audit' },
+  { value: 'validation-audit', label: 'Validation audit' },
+  { value: 'state-audit', label: 'State audit' },
 ])
 
 export const FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS = Object.freeze([
-  { value: 'executive-concise', label: 'Executive concise' },
-  { value: 'board-ready', label: 'Board ready' },
-  { value: 'review-detail', label: 'Review detail' },
+  { value: 'developed-executive-technical', label: 'Developed executive + technical' },
 ])
 
 export const FRAMEWORK_PACKAGE_LIFECYCLE_STAGE_OPTIONS = Object.freeze([
@@ -123,7 +149,7 @@ export const FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS = Object.freeze([
   { value: FRAMEWORK_PACKAGE_STATUSES.DEPRECATED, label: 'Deprecated' },
 ])
 
-export const FRAMEWORK_PACKAGE_PAGE_SIZE = 4
+export const FRAMEWORK_PACKAGE_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const FRAMEWORK_PACKAGES_HELP_TEXT =
   'Validated packages can be activated. The active default package for a framework becomes the authoritative binding for future framework-aware products.'

@@ -32,6 +32,8 @@
 .super-admin-framework-package-editor__runtime-validation-governance-rail,
 .super-admin-framework-package-editor__runtime-validation-filters,
 .super-admin-framework-package-editor__runtime-validation-code-section,
+.super-admin-framework-package-editor__integrity-message-cell,
+.super-admin-framework-package-editor__integrity-detail-section,
 .super-admin-framework-package-editor__selection-list,
 .super-admin-framework-package-editor__row-list,
 .super-admin-framework-package-editor__config-row,
@@ -92,26 +94,38 @@
   min-height: calc(var(--spacing-md) * 12);
 }
 
-.super-admin-framework-package-editor__legacy-warning {
+.super-admin-framework-package-editor__legacy-warning.card {
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-framework-package-editor__legacy-warning-body.card__body {
   display: grid;
   justify-items: start;
   gap: var(--spacing-xs);
   padding: var(--spacing-sm);
-  border: var(--border-width-thin) solid var(--color-warning-border);
-  border-radius: var(--border-radius-md);
-  background: color-mix(in srgb, var(--color-warning-bg) 82%, var(--color-surface));
 }
 
-.super-admin-framework-package-editor__readiness-banner {
+.super-admin-framework-package-editor__readiness-card.card {
+  border-color: color-mix(in srgb, var(--color-border) 62%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-framework-package-editor__readiness-card-body.card__body {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
   padding: var(--spacing-sm);
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning-border) 65%, var(--color-border));
-  border-radius: var(--border-radius-md);
-  background: color-mix(in srgb, var(--color-warning-bg) 70%, var(--color-surface));
+}
+
+.super-admin-framework-package-editor__readiness-card-copy {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: min(100%, calc(var(--spacing-md) * 18));
 }
 
 .super-admin-framework-package-editor__governance-summary {
@@ -336,26 +350,27 @@
   font-size: var(--font-size-xs);
 }
 
-.super-admin-framework-package-editor__lock-banner {
+.super-admin-framework-package-editor__lock-banner.card {
+  border-color: color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-framework-package-editor__lock-banner-body.card__body {
   display: flex;
   align-items: center;
   column-gap: var(--spacing-md);
   row-gap: var(--spacing-xs);
   flex-wrap: wrap;
   padding: var(--spacing-sm);
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 72%, transparent);
-  border-radius: var(--border-radius-md);
-  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
 }
 
-.super-admin-framework-package-editor__lock-banner--active {
+.super-admin-framework-package-editor__lock-banner.card.super-admin-framework-package-editor__lock-banner--active {
   border-color: color-mix(in srgb, var(--color-error) 52%, var(--color-border));
-  background: color-mix(in srgb, var(--color-error) 18%, var(--color-surface));
 }
 
-.super-admin-framework-package-editor__lock-banner--validated {
+.super-admin-framework-package-editor__lock-banner.card.super-admin-framework-package-editor__lock-banner--validated {
   border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
-  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface));
 }
 
 .super-admin-framework-package-editor__lock-banner .super-admin-framework-packages__table-note {
@@ -562,6 +577,53 @@
   flex-wrap: wrap;
 }
 
+.super-admin-framework-package-editor__integrity-header,
+.super-admin-framework-package-editor__integrity-summary,
+.super-admin-framework-package-editor__integrity-metric-grid {
+  display: grid;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.super-admin-framework-package-editor__integrity-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.super-admin-framework-package-editor__integrity-header .btn {
+  justify-self: end;
+}
+
+.super-admin-framework-package-editor__integrity-summary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--spacing-md) * 25));
+  align-items: center;
+}
+
+.super-admin-framework-package-editor__integrity-status {
+  justify-self: start;
+}
+
+.super-admin-framework-package-editor__integrity-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.super-admin-framework-package-editor__integrity-metric-card.card {
+  min-width: 0;
+  background: color-mix(in srgb, var(--color-surface) 97%, var(--color-background));
+  overflow: visible;
+}
+
+.super-admin-framework-package-editor__integrity-metric-card-body.card__body {
+  display: grid;
+  align-content: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.super-admin-framework-package-editor__integrity-metric-card-body .status {
+  justify-content: flex-start;
+}
+
 .super-admin-framework-package-editor__code-token,
 .super-admin-framework-package-editor__path-token {
   overflow-wrap: anywhere;
@@ -571,6 +633,36 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
+}
+
+.super-admin-framework-package-editor__integrity-message-cell {
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.super-admin-framework-package-editor__integrity-message-summary {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.super-admin-framework-package-editor__integrity-message-meta,
+.super-admin-framework-package-editor__integrity-message-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.super-admin-framework-package-editor__integrity-message-preview .super-admin-framework-package-editor__code-token {
+  max-width: min(100%, calc(var(--spacing-md) * 24));
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 52%, transparent);
+  border-radius: var(--border-radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-background));
+  color: var(--color-text-secondary);
 }
 
 .super-admin-framework-package-editor__json-preview {
@@ -649,7 +741,8 @@
   border-color: color-mix(in srgb, var(--color-success) 72%, transparent);
 }
 
-.super-admin-framework-package-editor__runtime-validation-state-card.card[data-status='STALE'] {
+.super-admin-framework-package-editor__runtime-validation-state-card.card[data-status='STALE'],
+.super-admin-framework-package-editor__runtime-validation-state-card.card[data-status='NOT_RUN'] {
   border-color: color-mix(in srgb, var(--color-warning) 72%, transparent);
 }
 
@@ -716,6 +809,7 @@
   grid-column: 2;
   grid-row: 1;
   justify-self: end;
+  min-width: 0;
   max-width: 100%;
   min-height: calc(var(--spacing-md) + var(--spacing-2xs));
   padding-inline: var(--spacing-xs);
@@ -725,7 +819,9 @@
 }
 
 .super-admin-framework-package-editor__runtime-validation-decision-badge .badge__label {
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .super-admin-framework-package-editor__runtime-validation-state-detail {
@@ -805,7 +901,12 @@
 }
 
 .super-admin-framework-package-editor__runtime-validation-outcome-cell strong[data-status='WARN'],
+.super-admin-framework-package-editor__runtime-validation-outcome-cell strong[data-status='NOT_RUN'],
 .super-admin-framework-package-editor__runtime-validation-outcome-cell strong[data-decision='WARN'] {
+  color: var(--color-warning);
+}
+
+.super-admin-framework-package-editor__runtime-validation-outcome-cell strong[data-stale='true'] {
   color: var(--color-warning);
 }
 
@@ -1009,7 +1110,9 @@
   color: var(--color-error);
 }
 
-.super-admin-framework-package-editor__runtime-validation-result-word[data-status='WARN'] {
+.super-admin-framework-package-editor__runtime-validation-result-word[data-status='WARN'],
+.super-admin-framework-package-editor__runtime-validation-result-word[data-status='STALE'],
+.super-admin-framework-package-editor__runtime-validation-result-word[data-status='NOT_RUN'] {
   color: var(--color-warning);
 }
 
@@ -1091,6 +1194,7 @@
 }
 
 .super-admin-framework-package-editor__runtime-validation-governance-rail .status {
+  margin-inline-start: var(--spacing-xs);
   margin-block: var(--spacing-2xs);
 }
 
@@ -1179,6 +1283,28 @@
   gap: var(--spacing-2xs);
 }
 
+.super-admin-framework-package-editor__integrity-detail-section {
+  gap: var(--spacing-xs);
+}
+
+.super-admin-framework-package-editor__integrity-path-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--spacing-md) * 18)), 1fr));
+  gap: var(--spacing-xs);
+  max-height: calc(var(--spacing-md) * 18);
+  overflow: auto;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 52%, transparent);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in srgb, var(--color-surface) 96%, var(--color-background));
+}
+
+.super-admin-framework-package-editor__integrity-path-list .super-admin-framework-package-editor__code-token {
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-left: var(--border-width-medium) solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: color-mix(in srgb, var(--color-surface-elevated) 58%, transparent);
+}
+
 .super-admin-framework-package-editor__dialog-fields {
   gap: var(--spacing-sm);
 }
@@ -1235,6 +1361,9 @@
   }
 
   .super-admin-framework-package-editor__release-bar,
+  .super-admin-framework-package-editor__integrity-header,
+  .super-admin-framework-package-editor__integrity-summary,
+  .super-admin-framework-package-editor__integrity-metric-grid,
   .super-admin-framework-package-editor__governance-summary,
   .super-admin-framework-package-editor__summary-metrics,
   .super-admin-framework-package-editor__summary-inline-metrics,
@@ -1248,6 +1377,11 @@
   .super-admin-framework-package-editor__release-state,
   .super-admin-framework-package-editor__top-actions {
     justify-content: flex-start;
+  }
+
+  .super-admin-framework-package-editor__integrity-header .btn {
+    justify-self: start;
+    width: 100%;
   }
 
   .super-admin-framework-package-editor__top-actions .btn {
@@ -1337,6 +1471,7 @@
 }
 
 @media (min-width: 768px) and (max-width: 1180px) {
+  .super-admin-framework-package-editor__integrity-summary,
   .super-admin-framework-package-editor__runtime-validation-summary-panel,
   .super-admin-framework-package-editor__runtime-validation-metric-row {
     grid-template-columns: minmax(0, 1fr);

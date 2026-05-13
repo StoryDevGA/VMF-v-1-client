@@ -9,6 +9,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../components/Table/tableConstants.js'
 import {
   useListUsersQuery,
   useListAssignableRolesQuery,
@@ -33,7 +34,7 @@ const createMissingCustomerScopeError = () => ({
 /**
  * @param {string} customerId - The customer to manage users for
  * @param {Object}  [options]
- * @param {number}  [options.pageSize=20] - Page size for list queries
+ * @param {number}  [options.pageSize=DEFAULT_TABLE_PAGE_SIZE] - Page size for list queries
  * @param {boolean} [options.skipListQuery=false] - Skip the list query and expose only mutation facades
  * @returns {{
  *   users: Array,
@@ -65,7 +66,7 @@ const createMissingCustomerScopeError = () => ({
  * }}
  */
 export function useUsers(customerId, options = {}) {
-  const { pageSize = 20, skipListQuery = false } = options
+  const { pageSize = DEFAULT_TABLE_PAGE_SIZE, skipListQuery = false } = options
 
   /* ---- Local filter / pagination state ---- */
   const [search, setSearch] = useState('')

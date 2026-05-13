@@ -109,7 +109,7 @@ describe('SuperAdminDeniedAccessLogs page', () => {
 
     await waitFor(() => {
       expect(useListDeniedAccessLogsQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 4, pageSize: 20 }),
+        expect.objectContaining({ page: 4, pageSize: 10 }),
       )
     })
     expect(screen.getByText(/page 4 of 4/i)).toBeInTheDocument()
@@ -118,7 +118,7 @@ describe('SuperAdminDeniedAccessLogs page', () => {
 
     await waitFor(() => {
       expect(useListDeniedAccessLogsQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 1, pageSize: 20 }),
+        expect.objectContaining({ page: 1, pageSize: 10 }),
       )
     })
     expect(screen.getByText(/page 1 of 4/i)).toBeInTheDocument()

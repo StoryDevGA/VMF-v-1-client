@@ -124,8 +124,8 @@ describe('SuperAdminCustomers page', () => {
     })
     useListUsersQuery.mockReturnValue({
       data: {
-        data: { users: [], page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
-        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+        data: { users: [], page: 1, pageSize: 10, total: 0, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 0, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -385,7 +385,7 @@ describe('SuperAdminCustomers page', () => {
           topology: 'SINGLE_TENANT',
           governance: { customerAdminUserId: 'admin-1' },
         }],
-        meta: { page, totalPages: 3, total: 41 },
+        meta: { page, totalPages: 3, total: 21 },
       },
       isLoading: false,
       isFetching: false,
@@ -424,7 +424,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('opens customer-level users workspace from row actions', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{
@@ -459,7 +458,7 @@ describe('SuperAdminCustomers page', () => {
         role: '',
         status: '',
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       }),
       { skip: false },
     )
@@ -506,12 +505,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 2,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 2, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -587,12 +586,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page,
-          pageSize: 20,
-          total: 41,
+          pageSize: 10,
+          total: 21,
           totalPages: 3,
           filters: {},
         },
-        meta: { page, pageSize: 20, total: 41, totalPages: 3, filters: {} },
+        meta: { page, pageSize: 10, total: 21, totalPages: 3, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -753,7 +752,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('shows backend validation guidance when customer users query returns 422', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -765,8 +763,8 @@ describe('SuperAdminCustomers page', () => {
     })
     useListUsersQuery.mockReturnValue({
       data: {
-        data: { users: [], page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
-        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+        data: { users: [], page: 1, pageSize: 10, total: 0, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 0, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1422,7 +1420,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('renders customer row actions inside a compact overflow menu', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -1444,7 +1441,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('supports keyboard access for row action menu with explicit screen-reader labels', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -1466,7 +1462,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('hides assign-admin toolbar CTA when row-level edit path is available', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -1489,12 +1484,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1535,12 +1530,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1580,7 +1575,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('keeps email immutable and shows remediation guidance in edit-user dialog', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -1603,12 +1597,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1661,12 +1655,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1722,12 +1716,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1793,12 +1787,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1870,12 +1864,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1937,12 +1931,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -1966,7 +1960,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('shows replace-admin entry in users workspace when canonical admin exists', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [
@@ -2017,12 +2010,12 @@ describe('SuperAdminCustomers page', () => {
         data: {
           users: [],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 0,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 0, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 0, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -2614,12 +2607,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -2680,12 +2673,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -2739,12 +2732,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -2807,12 +2800,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 1,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 1, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,
@@ -2837,7 +2830,6 @@ describe('SuperAdminCustomers page', () => {
   })
 
   it('status-gates lifecycle row actions in users workspace', async () => {
-    const user = userEvent.setup()
     useListCustomersQuery.mockReturnValue({
       data: {
         data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
@@ -2871,12 +2863,12 @@ describe('SuperAdminCustomers page', () => {
             },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 2,
           totalPages: 1,
           filters: {},
         },
-        meta: { page: 1, pageSize: 20, total: 2, totalPages: 1, filters: {} },
+        meta: { page: 1, pageSize: 10, total: 2, totalPages: 1, filters: {} },
       },
       isLoading: false,
       isFetching: false,

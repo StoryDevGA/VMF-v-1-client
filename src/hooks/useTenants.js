@@ -9,6 +9,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../components/Table/tableConstants.js'
 import {
   useListTenantsQuery,
   useCreateTenantMutation,
@@ -60,7 +61,7 @@ const normalizeTenantCapacity = (tenantCapacity) => {
 /**
  * @param {string} customerId - The customer to manage tenants for
  * @param {Object}  [options]
- * @param {number}  [options.pageSize=20] - Page size for list queries
+ * @param {number}  [options.pageSize=DEFAULT_TABLE_PAGE_SIZE] - Page size for list queries
  * @param {boolean} [options.skipListQuery=false] - Skip the list query and expose only mutation facades
  * @returns {{
  *   tenants: Array,
@@ -86,7 +87,7 @@ const normalizeTenantCapacity = (tenantCapacity) => {
  * }}
  */
 export function useTenants(customerId, options = {}) {
-  const { pageSize = 20, skipListQuery = false } = options
+  const { pageSize = DEFAULT_TABLE_PAGE_SIZE, skipListQuery = false } = options
   const previousCustomerIdRef = useRef(customerId ?? null)
 
   /* ---- Local filter / pagination state ---- */
@@ -109,9 +110,12 @@ export function useTenants(customerId, options = {}) {
     if (previousCustomerIdRef.current === normalizedCustomerId) return
 
     previousCustomerIdRef.current = normalizedCustomerId
+    // Reset tenant-local filters immediately when the customer scope changes.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSearchRaw('')
     setStatusFilterRaw('')
     setPage(1)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [customerId])
 
   /* ---- RTK Query: list tenants ---- */

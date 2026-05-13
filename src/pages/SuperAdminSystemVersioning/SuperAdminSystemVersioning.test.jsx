@@ -140,7 +140,7 @@ describe('SuperAdminSystemVersioning page', () => {
 
     await waitFor(() => {
       expect(useGetPolicyHistoryQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 5, pageSize: 20 }),
+        expect.objectContaining({ page: 5, pageSize: 10 }),
       )
     })
     expect(screen.getByText(/page 5 of 5/i)).toBeInTheDocument()
@@ -149,7 +149,7 @@ describe('SuperAdminSystemVersioning page', () => {
 
     await waitFor(() => {
       expect(useGetPolicyHistoryQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 1, pageSize: 20 }),
+        expect.objectContaining({ page: 1, pageSize: 10 }),
       )
     })
     expect(screen.getByText(/page 1 of 5/i)).toBeInTheDocument()

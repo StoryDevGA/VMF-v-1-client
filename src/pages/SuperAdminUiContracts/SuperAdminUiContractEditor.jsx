@@ -785,14 +785,16 @@ function SuperAdminUiContractEditor() {
               </div>
 
               {isReadOnly ? (
-                <div className="super-admin-ui-contracts__locked-banner" role="status">
-                  <Badge size="sm" variant="warning" pill outline>
-                    Locked
-                  </Badge>
-                  <p className="super-admin-ui-contracts__locked-copy">
-                    {LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE}
-                  </p>
-                </div>
+                <Card variant="outlined" className="super-admin-ui-contracts__locked-banner" role="status">
+                  <Card.Body className="super-admin-ui-contracts__locked-banner-body">
+                    <Badge size="sm" variant="warning" pill outline>
+                      Locked
+                    </Badge>
+                    <p className="super-admin-ui-contracts__locked-copy">
+                      {LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE}
+                    </p>
+                  </Card.Body>
+                </Card>
               ) : null}
 
               {(isEditMode || isCloneMode) && loaded ? (

@@ -40,7 +40,7 @@ describe('useUsers', () => {
             { _id: 'user-2', name: 'Beta' },
           ],
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 2,
           totalPages: 1,
         },
@@ -117,7 +117,7 @@ describe('useUsers', () => {
         q: undefined,
         status: undefined,
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       },
       { skip: true },
     )

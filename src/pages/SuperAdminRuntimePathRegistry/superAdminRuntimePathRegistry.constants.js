@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const RUNTIME_PATH_REGISTRY_STATUSES = Object.freeze({
   DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
@@ -71,7 +73,7 @@ export const RUNTIME_PATH_REGISTRY_UI_CONTROLS = Object.freeze({
   JSON: 'JSON',
 })
 
-export const RUNTIME_PATH_REGISTRY_PAGE_SIZE = 20
+export const RUNTIME_PATH_REGISTRY_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const LOCKED_RUNTIME_CONTROL_EDIT_MESSAGE =
   'Locked Runtime Control records cannot be edited directly. Clone the record to make behavior changes.'

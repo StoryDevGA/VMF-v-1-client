@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { useDebounce } from '../../hooks/useDebounce.js'
 import {
@@ -97,7 +98,7 @@ export function useUserManagement({ customer, onAuthLink }) {
     {
       customerId,
       page: userPage,
-      pageSize: 20,
+      pageSize: DEFAULT_TABLE_PAGE_SIZE,
       q: debouncedUserSearch.trim(),
       role: userRoleFilter,
       status: userStatusFilter,

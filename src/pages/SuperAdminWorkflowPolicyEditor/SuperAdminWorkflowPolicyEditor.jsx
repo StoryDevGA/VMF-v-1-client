@@ -3058,22 +3058,29 @@ function WorkflowPolicyEditor() {
               </div>
 
               {isLockedPolicy ? (
-                <div className="super-admin-workflow-policy-editor__lock-banner" role="status" aria-live="polite">
-                  <Badge variant="warning" size="sm" pill outline>
-                    Locked
-                  </Badge>
-                  <div className="super-admin-workflow-policy-editor__lock-copy">
-                    <strong>Locked by validated package usage.</strong>
-                    <span>Clone this workflow policy to make behavior changes.</span>
-                  </div>
-                  <div className="super-admin-workflow-policy-editor__lock-packages" aria-label="Locked by packages">
-                    {(Array.isArray(loadedPolicy?.lockedByPackageKeys) ? loadedPolicy.lockedByPackageKeys : []).map((packageKey) => (
-                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
-                        {packageKey}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                <Card
+                  variant="outlined"
+                  className="super-admin-workflow-policy-editor__lock-banner"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Card.Body className="super-admin-workflow-policy-editor__lock-banner-body">
+                    <Badge variant="warning" size="sm" pill outline>
+                      Locked
+                    </Badge>
+                    <div className="super-admin-workflow-policy-editor__lock-copy">
+                      <strong>Locked by validated package usage.</strong>
+                      <span>Clone this workflow policy to make behavior changes.</span>
+                    </div>
+                    <div className="super-admin-workflow-policy-editor__lock-packages" aria-label="Locked by packages">
+                      {(Array.isArray(loadedPolicy?.lockedByPackageKeys) ? loadedPolicy.lockedByPackageKeys : []).map((packageKey) => (
+                        <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                          {packageKey}
+                        </Badge>
+                      ))}
+                    </div>
+                  </Card.Body>
+                </Card>
               ) : null}
 
               {isEditMode ? (

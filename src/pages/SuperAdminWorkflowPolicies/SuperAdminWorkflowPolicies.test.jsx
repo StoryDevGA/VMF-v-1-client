@@ -40,6 +40,25 @@ function renderWorkflowPolicyRoutes(initialEntries = ['/super-admin/runtime-cont
   })
 }
 
+function addWorkflowPolicyPaginationFixtures() {
+  __mutateRuntimeControlApiStateForTests((state) => ({
+    ...state,
+    workflowPolicies: [
+      ...state.workflowPolicies,
+      ...Array.from({ length: 15 }, (_, index) => ({
+        ...state.workflowPolicies[0],
+        id: `policy-pagination-${index + 1}`,
+        key: `pagination-policy-${index + 1}`,
+        name: `Pagination Policy ${index + 1}`,
+        description: 'Pagination coverage fixture.',
+        policyType: 'VALIDATION',
+        frameworkKeys: ['VMF'],
+        updatedAt: `2026-04-${String(index + 1).padStart(2, '0')}T09:00:00.000Z`,
+      })),
+    ],
+  }))
+}
+
 describe('SuperAdminWorkflowPolicies page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
@@ -65,12 +84,13 @@ describe('SuperAdminWorkflowPolicies page', () => {
 
   it('supports search, type filtering, framework filtering, and pagination', async () => {
     const user = userEvent.setup()
+    addWorkflowPolicyPaginationFixtures()
     renderWorkflowPolicyRoutes()
 
-    expect(await screen.findByText(/page 1 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^last$/i }))
-    expect(await screen.findByText(/page 2 of 2/i)).toBeInTheDocument()
+    expect(await screen.findByText(/page 3 of 3/i)).toBeInTheDocument()
 
     await user.selectOptions(
       screen.getByLabelText(/^policy type$/i, {

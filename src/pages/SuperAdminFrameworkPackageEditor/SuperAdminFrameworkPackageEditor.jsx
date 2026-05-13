@@ -12,7 +12,7 @@ import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
-import { Table } from '../../components/Table'
+import { DEFAULT_TABLE_PAGE_SIZE, Table } from '../../components/Table'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { Tooltip } from '../../components/Tooltip'
@@ -115,7 +115,7 @@ const SERVER_ERROR_FIELDS = Object.freeze([
   'artifactRetentionDays',
 ])
 
-const TABLE_PAGE_SIZE = 5
+const TABLE_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 const TOKEN_PATTERN = /^[a-z][a-z0-9-]*$/
 const INITIAL_RUNTIME_VALIDATION_FILTERS = Object.freeze({
   status: '',
@@ -524,7 +524,7 @@ const getCheckStatusVariant = (status) => {
   const normalized = String(status ?? '').trim().toUpperCase()
   if (normalized === 'PASS' || normalized === 'ACTIVE' || normalized === 'ALLOW' || normalized === 'VALID') return 'success'
   if (['FAIL', 'MISSING', 'BLOCK', 'BLOCKED', 'ERROR', 'BLOCKING', 'CRITICAL', 'INVALIDATED'].includes(normalized)) return 'error'
-  if (['WARN', 'WARNING', 'PASS_WITH_WARNINGS', 'STALE'].includes(normalized)) return 'warning'
+  if (['WARN', 'WARNING', 'PASS_WITH_WARNINGS', 'STALE', 'NOT_RUN'].includes(normalized)) return 'warning'
   if (['INFO', 'AUDIT_ONLY', 'DISABLED'].includes(normalized)) return 'info'
   return 'neutral'
 }
@@ -699,6 +699,7 @@ const getRuntimeValidationAuditPersistedLabel = (validation, historyRows) => {
 const getRuntimeValidationCurrentState = ({
   validation,
   status,
+  checkpointStatus = 'NOT_RUN',
   probePath,
   dependencyLockMeta,
   isLiveProbe = false,
@@ -721,6 +722,13 @@ const getRuntimeValidationCurrentState = ({
     return {
       state: 'INVALIDATED',
       message: 'The last runtime validation returned a blocking result.',
+    }
+  }
+
+  if (String(checkpointStatus ?? '').trim().toUpperCase() === 'NOT_RUN') {
+    return {
+      state: 'STALE',
+      message: 'The runtime validation result is historical. Run the Runtime Architecture Checkpoint before treating it as current package readiness evidence.',
     }
   }
 
@@ -825,6 +833,7 @@ function RuntimeValidationHelpTrigger({ label, content, children, align = 'start
         onBlur={hideTooltip}
         onKeyDown={handleKeyDown}
         onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
       >
         {children}
         <MdInfoOutline aria-hidden="true" focusable="false" />
@@ -833,9 +842,9 @@ function RuntimeValidationHelpTrigger({ label, content, children, align = 'start
   )
 }
 
-const getRuntimePathNavigationId = (runtimePath, dependencyRows) => {
+const getRuntimePathNavigationState = (runtimePath, dependencyRows) => {
   const normalizedPath = normalizeRuntimePath(runtimePath)
-  if (!normalizedPath) return ''
+  if (!normalizedPath) return { pathId: '', title: '' }
 
   const match = (dependencyRows ?? []).find((row) =>
     row?.type === 'Runtime Path'
@@ -845,7 +854,25 @@ const getRuntimePathNavigationId = (runtimePath, dependencyRows) => {
     ].some((candidate) => normalizeRuntimePath(candidate) === normalizedPath),
   )
 
-  return String(match?.stableId ?? '').trim()
+  if (!match) {
+    return {
+      pathId: '',
+      title: "Path not registered in this package's dependency graph.",
+    }
+  }
+
+  const pathId = String(match.stableId ?? '').trim()
+  return {
+    pathId,
+    title: pathId
+      ? ''
+      : 'Runtime Path is registered, but it does not expose a stable id for navigation.',
+  }
+}
+
+const getRuntimePathNavigationId = (runtimePath, dependencyRows) => {
+  const { pathId } = getRuntimePathNavigationState(runtimePath, dependencyRows)
+  return pathId
 }
 
 const filterRuntimeValidationRows = (rows, filters) => {
@@ -924,6 +951,81 @@ const checkpointIssueToIntegrityRow = (issue, fallbackSeverity) => ({
   field: issue?.path || '',
   message: issue?.message || 'Checkpoint issue detected.',
 })
+
+const RUNTIME_PATH_TOKEN_PATTERN = /\bframework_state(?:\.[a-zA-Z0-9_*.-]+)+/g
+
+const getIntegrityMessageDigest = (message) => {
+  const text = String(message ?? '').trim()
+  const paths = Array.from(new Set(
+    (text.match(RUNTIME_PATH_TOKEN_PATTERN) ?? [])
+      .map((path) => path.replace(/[.,;:]+$/u, ''))
+      .filter(Boolean),
+  ))
+
+  if (paths.length === 0) {
+    return {
+      summary: text || 'Integrity check returned supporting detail.',
+      paths,
+      hasDenseEvidence: text.length > 160,
+    }
+  }
+
+  const firstPathIndex = text.indexOf(paths[0])
+  const summary = firstPathIndex >= 0
+    ? text.slice(0, firstPathIndex).replace(/[:,\s]+$/u, '').trim()
+    : text
+
+  return {
+    summary: summary || 'Runtime path compatibility issue.',
+    paths,
+    hasDenseEvidence: true,
+  }
+}
+
+function IntegrityMessageCell({ row, onViewDetails }) {
+  const digest = getIntegrityMessageDigest(row?.message)
+  const previewPaths = digest.paths.slice(0, 2)
+
+  if (!digest.hasDenseEvidence) {
+    return <span>{digest.summary}</span>
+  }
+
+  return (
+    <div className="super-admin-framework-package-editor__integrity-message-cell">
+      <p className="super-admin-framework-package-editor__integrity-message-summary">
+        {digest.summary}
+      </p>
+      <div className="super-admin-framework-package-editor__integrity-message-meta">
+        {digest.paths.length > 0 ? (
+          <Badge variant="neutral" size="sm" outline pill>
+            {digest.paths.length} runtime {digest.paths.length === 1 ? 'path' : 'paths'}
+          </Badge>
+        ) : (
+          <Badge variant="neutral" size="sm" outline pill>
+            Full detail
+          </Badge>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onViewDetails({ row, digest })}
+        >
+          View details
+        </Button>
+      </div>
+      {previewPaths.length > 0 ? (
+        <div className="super-admin-framework-package-editor__integrity-message-preview" aria-label="Runtime path preview">
+          {previewPaths.map((path) => (
+            <code key={path} className="super-admin-framework-package-editor__code-token">
+              {path}
+            </code>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 const checkpointPassedCheckToIntegrityRow = (check) => ({
   key: [check?.code, check?.path, check?.message].filter(Boolean).join(':') || 'checkpoint.pass',
@@ -1070,6 +1172,7 @@ function SuperAdminFrameworkPackageEditor() {
     ...INITIAL_RUNTIME_VALIDATION_FILTERS,
   })
   const [runtimeValidationCodeDetail, setRuntimeValidationCodeDetail] = useState(null)
+  const [integrityMessageDetail, setIntegrityMessageDetail] = useState(null)
   const runtimeValidationProbeRequestRef = useRef(0)
   const sectionDialogRef = useRef({
     open: false,
@@ -1115,7 +1218,7 @@ function SuperAdminFrameworkPackageEditor() {
     data: auditResponse,
     isLoading: isAuditLoading,
     error: auditError,
-  } = useGetFrameworkPackageAuditQuery({ packageId, page: 1, pageSize: 20 }, {
+  } = useGetFrameworkPackageAuditQuery({ packageId, page: 1, pageSize: DEFAULT_TABLE_PAGE_SIZE }, {
     skip: !isEditMode,
   })
 
@@ -1124,7 +1227,7 @@ function SuperAdminFrameworkPackageEditor() {
     isLoading: isRuntimeValidationHistoryLoading,
     error: runtimeValidationHistoryError,
     refetch: refetchRuntimeValidationHistory,
-  } = useGetRuntimeValidationHistoryQuery({ packageId, page: 1, pageSize: 20 }, {
+  } = useGetRuntimeValidationHistoryQuery({ packageId, page: 1, pageSize: DEFAULT_TABLE_PAGE_SIZE }, {
     skip: !isEditMode,
   })
 
@@ -1416,7 +1519,6 @@ function SuperAdminFrameworkPackageEditor() {
   const runtimeStructureLocked = activePackageLocked || validatedStructureLocked
   const latestCheckpointStatus = String(
     latestCheckpointData?.status
-    || loadedPackage?.lastCheckpointStatus
     || 'NOT_RUN',
   ).trim().toUpperCase()
   const latestCheckpointSummary = normalizeCheckpointSummary(latestCheckpointData)
@@ -1428,6 +1530,9 @@ function SuperAdminFrameworkPackageEditor() {
   const latestCheckpointTone = getCheckStatusVariant(latestCheckpointStatus)
   const latestCheckpointBadgeVariant = latestCheckpointTone === 'error' ? 'danger' : latestCheckpointTone
   const latestCheckpointMode = formatGovernanceToken(latestCheckpointData?.mode, 'Mode not recorded')
+  const checkpointHasRun = latestCheckpointStatus !== 'NOT_RUN'
+  const checkpointPrimaryMetricLabel = checkpointHasRun ? 'Passed' : 'Runs'
+  const checkpointPrimaryMetricValue = checkpointHasRun ? latestCheckpointSummary.passed : 0
   const dependencyLockMeta = getDependencyLockMeta(loadedPackage, latestCheckpointData)
   const dependencyLockEvidenceStateLabel = dependencyLockMeta.hasPersistedLock
     ? 'Locked'
@@ -1450,10 +1555,26 @@ function SuperAdminFrameworkPackageEditor() {
   const currentRuntimeValidationState = getRuntimeValidationCurrentState({
     validation: latestRuntimeValidation,
     status: latestRuntimeValidationStatus,
+    checkpointStatus: latestCheckpointStatus,
     probePath: runtimeValidationProbePath,
     dependencyLockMeta,
     isLiveProbe: Boolean(runtimeValidationResult),
   })
+  const runtimeValidationStateWord = currentRuntimeValidationState.state === 'VALID'
+    ? latestRuntimeValidationStatus
+    : currentRuntimeValidationState.state
+  const runtimeValidationIsStale = currentRuntimeValidationState.state === 'STALE'
+  const runtimeValidationDecisionTone = runtimeValidationIsStale
+    ? currentRuntimeValidationState.state
+    : latestRuntimeValidationDecision
+  const runtimeValidationDecisionLabel = runtimeValidationIsStale
+    ? 'Rerun Required'
+    : formatGovernanceToken(latestRuntimeValidationDecision, 'Not Run')
+  const runtimeValidationDecisionCopy = runtimeValidationIsStale
+    ? runtimeValidationDecisionLabel
+    : `Decision: ${runtimeValidationDecisionLabel}`
+  const runtimeValidationResultLabel = runtimeValidationIsStale ? 'Last Result' : 'Result'
+  const runtimeValidationOutcomeLabel = runtimeValidationIsStale ? 'Last Outcome' : 'Outcome'
   const latestCheckpointAllowsActivation =
     latestCheckpointStatus === 'PASS'
     || latestCheckpointStatus === 'PASS_WITH_WARNINGS'
@@ -1463,6 +1584,11 @@ function SuperAdminFrameworkPackageEditor() {
     : latestCheckpointAllowsActivation
       ? 'Checkpoint evidence certified'
       : 'Checkpoint evidence pending'
+  const checkpointRuntimeUseCopy = latestCheckpointAllowsActivation
+    ? 'Checkpoint evidence certifies architecture readiness; activation re-runs the checkpoint and relies on the locked dependency snapshot for runtime use.'
+    : dependencyLockMeta.referenceCount > 0
+      ? 'Imported dependency snapshot evidence is available; run the Runtime Architecture Checkpoint to certify architecture readiness.'
+      : 'Run the Runtime Architecture Checkpoint to certify architecture readiness and record dependency evidence.'
   const checkpointActorLabel = getCheckpointActorLabel(latestCheckpointData)
   const packageRoleLabel = loadedPackage?.isDefault ? 'Default Package' : 'Framework Package'
   const packageRoleCopy = isEditMode
@@ -1473,7 +1599,7 @@ function SuperAdminFrameworkPackageEditor() {
     isEditMode
     && form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
     && normalizeSectionKey(form.packageKey)
-    && (!Array.isArray(form.sections) || form.sections.length === 0 || normalizeSectionKey(form.uiContractKey))
+    && (!Array.isArray(form.sections) || form.sections.length === 0 || Boolean(String(form.uiContractKey ?? '').trim()))
     && latestCheckpointAllowsActivation
   )
 
@@ -1666,41 +1792,40 @@ function SuperAdminFrameworkPackageEditor() {
 
   useEffect(() => {
     runtimeValidationProbeRequestRef.current += 1
-    const resetRequestId = runtimeValidationProbeRequestRef.current
-    const timeoutId = window.setTimeout(() => {
-      if (runtimeValidationProbeRequestRef.current !== resetRequestId) return
-
-      setRuntimeValidationResult(null)
-      setRuntimeValidationFilters({ ...INITIAL_RUNTIME_VALIDATION_FILTERS })
-      setRuntimeValidationCodeDetail(null)
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
+    // Synchronous reset is intentional here: deferring it can drop a same-tick mutation probe result.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRuntimeValidationResult(null)
+    setRuntimeValidationFilters({ ...INITIAL_RUNTIME_VALIDATION_FILTERS })
+    setRuntimeValidationCodeDetail(null)
+    setIntegrityMessageDetail(null)
   }, [packageId])
 
   useEffect(() => {
-    if (!isEditMode || !loadedPackage) return undefined
-
-    const timeoutId = window.setTimeout(() => {
-      setForm(mapFrameworkPackageToForm(loadedPackage))
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
+    if (!isEditMode || !loadedPackage) return
+    // Loading the editor form synchronously avoids a blank-form paint on route changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm(mapFrameworkPackageToForm(loadedPackage))
   }, [isEditMode, loadedPackage])
 
   useEffect(() => {
     if (isEditMode || !Array.isArray(registryRows) || registryRows.length === 0) {
-      return undefined
+      return
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setForm((current) =>
-        current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
-      )
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
+    // The create form should hydrate with registry defaults before the first interactive paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((current) =>
+      current.frameworkKey ? current : buildDefaultFrameworkPackageForm(registryRows),
+    )
   }, [isEditMode, registryRows])
+
+  useEffect(() => {
+    if (!runtimeValidationResult || runtimeValidationAuditPersistedLabel !== 'YES') return
+    // Once the live probe is persisted in history, history owns the displayed state.
+    // Clearing the live result changes the persisted label back to NO, so the effect converges after one pass.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRuntimeValidationResult(null)
+  }, [runtimeValidationAuditPersistedLabel, runtimeValidationResult])
 
   const navigateToFrameworkPackages = (options) => {
     navigate('/super-admin/runtime-control/framework-packages', options)
@@ -2145,8 +2270,8 @@ function SuperAdminFrameworkPackageEditor() {
                       </div>
                       <div className="super-admin-framework-package-editor__summary-detail-grid">
                         <div className="super-admin-framework-package-editor__summary-detail-item">
-                          <span className="super-admin-framework-package-editor__summary-eyebrow">Passed</span>
-                          <strong>{latestCheckpointSummary.passed}</strong>
+                          <span className="super-admin-framework-package-editor__summary-eyebrow">{checkpointPrimaryMetricLabel}</span>
+                          <strong>{checkpointPrimaryMetricValue}</strong>
                         </div>
                         <div className="super-admin-framework-package-editor__summary-detail-item">
                           <span className="super-admin-framework-package-editor__summary-eyebrow">Checks</span>
@@ -2253,7 +2378,7 @@ function SuperAdminFrameworkPackageEditor() {
                       Mode: {latestCheckpointMode}.
                       Snapshot: {dependencySnapshotLabel}.
                       Run By: {checkpointActorLabel}.
-                      Checkpoint evidence certifies architecture readiness; activation re-runs the checkpoint and relies on the locked dependency snapshot for runtime use.
+                      {checkpointRuntimeUseCopy}
                     </p>
                   </div>
                 ) : null}
@@ -2271,52 +2396,72 @@ function SuperAdminFrameworkPackageEditor() {
                 ) : null}
 
                 {legacyContractFieldsDetected ? (
-                  <div className="super-admin-framework-package-editor__legacy-warning" role="status" aria-live="polite">
-                    <Badge variant="warning" size="sm" pill outline>
-                      Legacy Contract
-                    </Badge>
-                    <p className="super-admin-framework-package-editor__helper">
-                      This package includes deprecated package-level config. The editor is showing canonical bindings synthesized from that data, and saving will keep only the canonical package contract.
-                    </p>
-                  </div>
+                  <Card
+                    variant="outlined"
+                    className="super-admin-framework-package-editor__legacy-warning"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <Card.Body className="super-admin-framework-package-editor__legacy-warning-body">
+                      <Badge variant="warning" size="sm" pill outline>
+                        Legacy Contract
+                      </Badge>
+                      <p className="super-admin-framework-package-editor__helper">
+                        This package includes deprecated package-level config. The editor is showing canonical bindings synthesized from that data, and saving will keep only the canonical package contract.
+                      </p>
+                    </Card.Body>
+                  </Card>
                 ) : null}
 
                 {isEditMode && form.status !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE && !latestCheckpointAllowsActivation ? (
-                  <div className="super-admin-framework-package-editor__readiness-banner" role="status" aria-live="polite">
-                    <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
-                      Runtime-ready: {latestCheckpointDisplay.text}
-                    </Status>
-                    <p className="super-admin-framework-package-editor__helper">
-                      {latestCheckpointStatus === 'FAIL'
-                        ? `${Number(latestCheckpointData?.summary?.failed) || 0} blocking checkpoint issue${Number(latestCheckpointData?.summary?.failed) === 1 ? '' : 's'} must be resolved before activation.`
-                        : 'Run the Runtime Architecture Checkpoint before activation.'}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY)}
-                    >
-                      View Checkpoint
-                    </Button>
-                  </div>
+                  <Card
+                    variant="outlined"
+                    className="super-admin-framework-package-editor__readiness-card"
+                    role="status"
+                    aria-label="Runtime readiness notice"
+                    aria-live="polite"
+                  >
+                    <Card.Body className="super-admin-framework-package-editor__readiness-card-body">
+                      <div className="super-admin-framework-package-editor__readiness-card-copy">
+                        <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
+                          Runtime-ready: {latestCheckpointDisplay.text}
+                        </Status>
+                        <p className="super-admin-framework-package-editor__helper">
+                          {latestCheckpointStatus === 'FAIL'
+                            ? `${Number(latestCheckpointData?.summary?.failed) || 0} blocking checkpoint issue${Number(latestCheckpointData?.summary?.failed) === 1 ? '' : 's'} must be resolved before activation.`
+                            : 'Run the Runtime Architecture Checkpoint before activation.'}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY)}
+                      >
+                        View Checkpoint
+                      </Button>
+                    </Card.Body>
+                  </Card>
                 ) : null}
 
                 {activePackageLocked || validatedStructureLocked ? (
-                  <div
+                  <Card
+                    variant="outlined"
                     className={`super-admin-framework-package-editor__lock-banner ${activePackageLocked ? 'super-admin-framework-package-editor__lock-banner--active' : 'super-admin-framework-package-editor__lock-banner--validated'}`}
                     role="status"
                     aria-live="polite"
                   >
-                    <Status size="md" showIcon variant={activePackageLocked ? 'error' : 'warning'}>
-                      {activePackageLocked ? 'Active Locked' : 'Runtime Structure Locked'}
-                    </Status>
-                    <p className="super-admin-framework-packages__table-note">
-                      {activePackageLocked
-                        ? 'Active framework packages cannot be edited directly. Clone flow is required for changes.'
-                        : 'Validated packages lock sections, runtime paths, validation bindings, workflow bindings, UI Contract binding, and State Contract runtime fields.'}
-                    </p>
-                  </div>
+                    <Card.Body className="super-admin-framework-package-editor__lock-banner-body">
+                      <Status size="md" showIcon variant={activePackageLocked ? 'error' : 'warning'}>
+                        {activePackageLocked ? 'Active Locked' : 'Runtime Structure Locked'}
+                      </Status>
+                      <p className="super-admin-framework-packages__table-note">
+                        {activePackageLocked
+                          ? 'Active framework packages cannot be edited directly. Clone flow is required for changes.'
+                          : 'Validated packages lock sections, runtime paths, validation bindings, workflow bindings, UI Contract binding, and State Contract runtime fields.'}
+                      </p>
+                    </Card.Body>
+                  </Card>
                 ) : null}
 
                 <TabView
@@ -3185,44 +3330,77 @@ function SuperAdminFrameworkPackageEditor() {
 
                   <TabView.Tab label={renderTabLabel('Integrity')}>
                     <div className="super-admin-framework-package-editor__tab-panel">
-                      <SectionHeader
-                        title="Integrity"
-                        copy="Run the Runtime Architecture Checkpoint before validation or activation."
-                      />
+                      <div className="super-admin-framework-package-editor__integrity-header">
+                        <SectionHeader
+                          title="Integrity"
+                          copy="Run the Runtime Architecture Checkpoint before validation or activation."
+                        />
+                        {isEditMode && !integrityAppError ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            onClick={handleRunCheckpoint}
+                            loading={isRunningCheckpoint || isIntegrityFetching}
+                            disabled={isRunningCheckpoint || isValidatingPackage || isSaving || isActivatingPackage}
+                          >
+                            Re-run Checkpoint
+                          </Button>
+                        ) : null}
+                      </div>
                       {!isEditMode ? (
                         <p className="super-admin-framework-package-editor__helper">Integrity checks are available after the package is created.</p>
                       ) : integrityAppError ? (
                         <p className="super-admin-framework-package-editor__error" role="alert">{integrityAppError.message}</p>
                       ) : (
                         <>
-                          <div className="super-admin-framework-package-editor__toolbar">
-                            <Status size="sm" showIcon variant={getCheckStatusVariant(displayedIntegrityData?.status)}>
+                          <div className="super-admin-framework-package-editor__integrity-summary" aria-label="Integrity summary">
+                            <Status
+                              size="sm"
+                              showIcon
+                              variant={getCheckStatusVariant(displayedIntegrityData?.status)}
+                              className="super-admin-framework-package-editor__integrity-status"
+                            >
                               {displayedIntegrityData?.status ?? 'Not run'}
                             </Status>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={handleRunCheckpoint}
-                              loading={isRunningCheckpoint || isIntegrityFetching}
-                              disabled={isRunningCheckpoint || isValidatingPackage || isSaving || isActivatingPackage}
-                            >
-                              Re-run Checkpoint
-                            </Button>
-                          </div>
-                          <div
-                            className="super-admin-framework-packages__token-list super-admin-framework-package-editor__summary-chip-row"
-                            aria-label="Integrity summary"
-                          >
-                            <Status size="md" showIcon variant="success">
-                              PASS: {Number(displayedIntegrityData?.summary?.pass) || 0}
-                            </Status>
-                            <Status size="md" showIcon variant="warning">
-                              WARN: {Number(displayedIntegrityData?.summary?.warn) || 0}
-                            </Status>
-                            <Status size="md" showIcon variant="error">
-                              FAIL: {Number(displayedIntegrityData?.summary?.fail) || 0}
-                            </Status>
+                            <div className="super-admin-framework-package-editor__integrity-metric-grid">
+                              <Card
+                                variant="outlined"
+                                className="super-admin-framework-package-editor__integrity-metric-card"
+                                aria-label="Passed checks"
+                              >
+                                <Card.Body className="super-admin-framework-package-editor__integrity-metric-card-body">
+                                  <span className="super-admin-framework-package-editor__summary-eyebrow">Passed Checks</span>
+                                  <Status size="sm" showIcon variant="success">
+                                    {Number(displayedIntegrityData?.summary?.pass) || 0}
+                                  </Status>
+                                </Card.Body>
+                              </Card>
+                              <Card
+                                variant="outlined"
+                                className="super-admin-framework-package-editor__integrity-metric-card"
+                                aria-label="Warnings"
+                              >
+                                <Card.Body className="super-admin-framework-package-editor__integrity-metric-card-body">
+                                  <span className="super-admin-framework-package-editor__summary-eyebrow">Warnings</span>
+                                  <Status size="sm" showIcon variant="warning">
+                                    {Number(displayedIntegrityData?.summary?.warn) || 0}
+                                  </Status>
+                                </Card.Body>
+                              </Card>
+                              <Card
+                                variant="outlined"
+                                className="super-admin-framework-package-editor__integrity-metric-card"
+                                aria-label="Failures"
+                              >
+                                <Card.Body className="super-admin-framework-package-editor__integrity-metric-card-body">
+                                  <span className="super-admin-framework-package-editor__summary-eyebrow">Failures</span>
+                                  <Status size="sm" showIcon variant="error">
+                                    {Number(displayedIntegrityData?.summary?.fail) || 0}
+                                  </Status>
+                                </Card.Body>
+                              </Card>
+                            </div>
                           </div>
                           <TableSurface
                             ariaLabel="Framework package integrity checks"
@@ -3232,7 +3410,9 @@ function SuperAdminFrameworkPackageEditor() {
                                 <Status size="sm" showIcon variant={getCheckStatusVariant(value)}>{value}</Status>
                               ) },
                               { key: 'field', label: 'Field', width: '18%', render: (value) => value ? <code className="super-admin-framework-package-editor__code-token">{value}</code> : '--' },
-                              { key: 'message', label: 'Message', width: '46%' },
+                              { key: 'message', label: 'Message', width: '46%', render: (_value, row) => (
+                                <IntegrityMessageCell row={row} onViewDetails={setIntegrityMessageDetail} />
+                              ) },
                             ]}
                             data={paginatedIntegrityRows}
                             emptyMessage="No integrity checks returned yet."
@@ -3296,13 +3476,13 @@ function SuperAdminFrameworkPackageEditor() {
                                     Runtime Validation Summary
                                   </h3>
                                   <Badge
-                                    variant={getCheckStatusVariant(latestRuntimeValidationDecision) === 'error' ? 'danger' : getCheckStatusVariant(latestRuntimeValidationDecision)}
+                                    variant={getCheckStatusVariant(runtimeValidationDecisionTone) === 'error' ? 'danger' : getCheckStatusVariant(runtimeValidationDecisionTone)}
                                     size="sm"
                                     pill
                                     outline
                                     className="super-admin-framework-package-editor__runtime-validation-decision-badge"
                                   >
-                                    Decision: {formatGovernanceToken(latestRuntimeValidationDecision, 'Not Run')}
+                                    {runtimeValidationDecisionCopy}
                                   </Badge>
                                   <div className="super-admin-framework-package-editor__runtime-validation-state-stack">
                                     <span className="super-admin-framework-package-editor__summary-eyebrow">
@@ -3310,9 +3490,9 @@ function SuperAdminFrameworkPackageEditor() {
                                     </span>
                                     <strong
                                       className="super-admin-framework-package-editor__runtime-validation-result-word"
-                                      data-status={latestRuntimeValidationStatus}
+                                      data-status={runtimeValidationStateWord}
                                     >
-                                      {formatGovernanceToken(latestRuntimeValidationStatus, 'Not Run')}
+                                      {formatGovernanceToken(runtimeValidationStateWord, 'Not Run')}
                                     </strong>
                                   </div>
                                   <div className="super-admin-framework-package-editor__runtime-validation-state-detail">
@@ -3331,14 +3511,20 @@ function SuperAdminFrameworkPackageEditor() {
                                     </RuntimeValidationHelpTrigger>
                                     <div className="super-admin-framework-package-editor__runtime-validation-outcome-grid">
                                       <div className="super-admin-framework-package-editor__runtime-validation-outcome-cell">
-                                        <span className="super-admin-framework-package-editor__summary-eyebrow">Result</span>
-                                        <strong data-status={latestRuntimeValidationStatus}>
+                                        <span className="super-admin-framework-package-editor__summary-eyebrow">{runtimeValidationResultLabel}</span>
+                                        <strong
+                                          data-status={latestRuntimeValidationStatus}
+                                          data-stale={runtimeValidationIsStale ? 'true' : undefined}
+                                        >
                                           {formatGovernanceToken(latestRuntimeValidationStatus, 'Not Run')}
                                         </strong>
                                       </div>
                                       <div className="super-admin-framework-package-editor__runtime-validation-outcome-cell">
-                                        <span className="super-admin-framework-package-editor__summary-eyebrow">Outcome</span>
-                                        <strong data-decision={latestRuntimeValidationDecision}>
+                                        <span className="super-admin-framework-package-editor__summary-eyebrow">{runtimeValidationOutcomeLabel}</span>
+                                        <strong
+                                          data-decision={latestRuntimeValidationDecision}
+                                          data-stale={runtimeValidationIsStale ? 'true' : undefined}
+                                        >
                                           {formatGovernanceToken(latestRuntimeValidationDecision, 'Not Run')}
                                         </strong>
                                       </div>
@@ -3695,10 +3881,11 @@ function SuperAdminFrameworkPackageEditor() {
                                   } },
                                   { key: 'runtimePath', label: 'Runtime Path', width: '21%', render: (value) => {
                                     if (!value) return '--'
-                                    const pathId = getRuntimePathNavigationId(value, dependencyRows)
+                                    const navigationState = getRuntimePathNavigationState(value, dependencyRows)
+                                    const { pathId } = navigationState
                                     if (!pathId) {
                                       return (
-                                        <span title="Path not registered in this package's dependency graph">
+                                        <span title={navigationState.title}>
                                           <code className="super-admin-framework-package-editor__code-token">{value}</code>
                                         </span>
                                       )
@@ -3915,6 +4102,80 @@ function SuperAdminFrameworkPackageEditor() {
             variant="primary"
             size="sm"
             onClick={() => setRuntimeValidationCodeDetail(null)}
+          >
+            Close
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+      <Dialog
+        open={Boolean(integrityMessageDetail)}
+        onClose={() => setIntegrityMessageDetail(null)}
+        size="lg"
+        className="super-admin-framework-package-editor__integrity-message-dialog"
+        aria-label="Integrity message details"
+      >
+        <Dialog.Header>
+          <h2 className="dialog__title">Integrity Check Details</h2>
+          <p className="dialog__subtitle">
+            Full diagnostic evidence for the selected integrity row.
+          </p>
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="super-admin-framework-package-editor__dialog-fields">
+            <Status
+              size="md"
+              showIcon
+              variant={getCheckStatusVariant(integrityMessageDetail?.row?.severity)}
+            >
+              Result: {integrityMessageDetail?.row?.severity || '--'}
+            </Status>
+            <div className="super-admin-framework-package-editor__integrity-detail-section">
+              <span className="super-admin-framework-package-editor__summary-eyebrow">Check</span>
+              <p className="super-admin-framework-package-editor__helper">
+                {integrityMessageDetail?.row?.group || '--'}
+              </p>
+            </div>
+            <div className="super-admin-framework-package-editor__integrity-detail-section">
+              <span className="super-admin-framework-package-editor__summary-eyebrow">Field</span>
+              <code className="super-admin-framework-package-editor__code-token">
+                {integrityMessageDetail?.row?.field || '--'}
+              </code>
+            </div>
+            <div className="super-admin-framework-package-editor__integrity-detail-section">
+              <span className="super-admin-framework-package-editor__summary-eyebrow">Message</span>
+              <p className="super-admin-framework-package-editor__helper">
+                {integrityMessageDetail?.digest?.summary || integrityMessageDetail?.row?.message || '--'}
+              </p>
+            </div>
+            {(integrityMessageDetail?.digest?.paths ?? []).length > 0 ? (
+              <div className="super-admin-framework-package-editor__integrity-detail-section">
+                <span className="super-admin-framework-package-editor__summary-eyebrow">
+                  Runtime Paths ({integrityMessageDetail.digest.paths.length})
+                </span>
+                <div className="super-admin-framework-package-editor__integrity-path-list">
+                  {integrityMessageDetail.digest.paths.map((path) => (
+                    <code key={path} className="super-admin-framework-package-editor__code-token">
+                      {path}
+                    </code>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="super-admin-framework-package-editor__integrity-detail-section">
+                <span className="super-admin-framework-package-editor__summary-eyebrow">Raw Detail</span>
+                <p className="super-admin-framework-package-editor__helper">
+                  {integrityMessageDetail?.row?.message || '--'}
+                </p>
+              </div>
+            )}
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => setIntegrityMessageDetail(null)}
           >
             Close
           </Button>

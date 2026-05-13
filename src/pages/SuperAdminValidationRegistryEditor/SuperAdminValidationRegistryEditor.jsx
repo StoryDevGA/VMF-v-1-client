@@ -776,29 +776,32 @@ function SuperAdminValidationRegistryEditor() {
             </div>
 
             {isLocked ? (
-              <div
+              <Card
+                variant="outlined"
                 className="super-admin-validation-registry-editor__lock-banner"
                 role="status"
                 aria-label="Locked validation notice"
                 aria-live="polite"
               >
-                <Badge variant="warning" size="sm" pill outline>
-                  Locked
-                </Badge>
-                <div className="super-admin-validation-registry-editor__lock-copy">
-                  <strong>Locked by validated package usage.</strong>
-                  <span>Clone this validation to make behavior changes.</span>
-                </div>
-                {Array.isArray(loadedValidation?.lockedByPackageKeys) && loadedValidation.lockedByPackageKeys.length > 0 ? (
-                  <div className="super-admin-validation-registry-editor__lock-packages" aria-label="Locked by packages">
-                    {loadedValidation.lockedByPackageKeys.map((packageKey) => (
-                      <Badge key={packageKey} variant="neutral" size="sm" pill outline>
-                        {packageKey}
-                      </Badge>
-                    ))}
+                <Card.Body className="super-admin-validation-registry-editor__lock-banner-body">
+                  <Badge variant="warning" size="sm" pill outline>
+                    Locked
+                  </Badge>
+                  <div className="super-admin-validation-registry-editor__lock-copy">
+                    <strong>Locked by validated package usage.</strong>
+                    <span>Clone this validation to make behavior changes.</span>
                   </div>
-                ) : null}
-              </div>
+                  {Array.isArray(loadedValidation?.lockedByPackageKeys) && loadedValidation.lockedByPackageKeys.length > 0 ? (
+                    <div className="super-admin-validation-registry-editor__lock-packages" aria-label="Locked by packages">
+                      {loadedValidation.lockedByPackageKeys.map((packageKey) => (
+                        <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                          {packageKey}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </Card.Body>
+              </Card>
             ) : null}
 
             <fieldset className="super-admin-validation-registry-editor__edit-fieldset" disabled={isLocked}>
@@ -1069,21 +1072,28 @@ function SuperAdminValidationRegistryEditor() {
                 )}
               </div>
               {defaultAgentWarnings.length > 0 ? (
-                <div className="super-admin-validation-registry-editor__warning-panel" role="status" aria-live="polite">
-                  <div className="super-admin-validation-registry-editor__warning-header">
-                    <Badge variant="warning" size="sm" pill>Review Required</Badge>
-                    <p className="super-admin-validation-registry-editor__helper">
-                      Some selected default agents are unresolved, inactive, or framework-incompatible. Remove or replace them before resaving this field.
-                    </p>
-                  </div>
-                  <div className="super-admin-validation-registry-editor__warning-list">
-                    {defaultAgentWarnings.map((agent) => (
-                      <p key={agent.id} className="super-admin-validation-registry-editor__warning-item">
-                        <strong>{agent.label}</strong>: {agent.issues.join(' ')}
+                <Card
+                  variant="outlined"
+                  className="super-admin-validation-registry-editor__warning-panel"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Card.Body className="super-admin-validation-registry-editor__warning-panel-body">
+                    <div className="super-admin-validation-registry-editor__warning-header">
+                      <Badge variant="warning" size="sm" pill>Review Required</Badge>
+                      <p className="super-admin-validation-registry-editor__helper">
+                        Some selected default agents are unresolved, inactive, or framework-incompatible. Remove or replace them before resaving this field.
                       </p>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                    <div className="super-admin-validation-registry-editor__warning-list">
+                      {defaultAgentWarnings.map((agent) => (
+                        <p key={agent.id} className="super-admin-validation-registry-editor__warning-item">
+                          <strong>{agent.label}</strong>: {agent.issues.join(' ')}
+                        </p>
+                      ))}
+                    </div>
+                  </Card.Body>
+                </Card>
               ) : null}
             </div>
             {errors.defaultAgentIds ? (

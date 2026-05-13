@@ -118,24 +118,30 @@ export function AgentEditorErrorState({ appError, message, onBack, onClone }) {
             </Button>
           </div>
 
-          <div className="super-admin-agent-editor__lock-banner super-admin-agent-editor__lock-banner--standalone" role="status">
-            <Badge variant="warning" size="sm" pill outline>
-              Locked
-            </Badge>
-            <div className="super-admin-agent-editor__lock-copy">
-              <strong>Locked by validated package usage.</strong>
-              <span>Clone this runtime agent to make behavior changes.</span>
-            </div>
-            {packageKeys.length > 0 ? (
-              <div className="super-admin-agent-editor__lock-packages" aria-label="Locked by packages">
-                {packageKeys.map((packageKey) => (
-                  <Badge key={packageKey} variant="neutral" size="sm" pill outline>
-                    {packageKey}
-                  </Badge>
-                ))}
+          <Card
+            variant="outlined"
+            className="super-admin-agent-editor__lock-banner super-admin-agent-editor__lock-banner--standalone"
+            role="status"
+          >
+            <Card.Body className="super-admin-agent-editor__lock-banner-body">
+              <Badge variant="warning" size="sm" pill outline>
+                Locked
+              </Badge>
+              <div className="super-admin-agent-editor__lock-copy">
+                <strong>Locked by validated package usage.</strong>
+                <span>Clone this runtime agent to make behavior changes.</span>
               </div>
-            ) : null}
-          </div>
+              {packageKeys.length > 0 ? (
+                <div className="super-admin-agent-editor__lock-packages" aria-label="Locked by packages">
+                  {packageKeys.map((packageKey) => (
+                    <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                      {packageKey}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </Card.Body>
+          </Card>
 
           <p className="super-admin-agent-editor__locked-conflict-copy">
             Direct editing is blocked while package dependency locks point at this agent.
@@ -666,24 +672,26 @@ function SuperAdminAgentEditor() {
                 </div>
 
                 {isLockedAgent ? (
-                  <div className="super-admin-agent-editor__lock-banner" role="status">
-                    <Badge variant="warning" size="sm" pill outline>
-                      Locked
-                    </Badge>
-                    <div className="super-admin-agent-editor__lock-copy">
-                      <strong>Locked by validated package usage.</strong>
-                      <span>Clone this runtime agent to make behavior changes.</span>
-                    </div>
-                    {(Array.isArray(loadedAgent?.lockedByPackageKeys) ? loadedAgent.lockedByPackageKeys : []).length > 0 ? (
-                      <div className="super-admin-agent-editor__lock-packages" aria-label="Locking packages">
-                        {loadedAgent.lockedByPackageKeys.map((packageKey) => (
-                          <Badge key={packageKey} variant="neutral" size="sm" pill outline>
-                            {packageKey}
-                          </Badge>
-                        ))}
+                  <Card variant="outlined" className="super-admin-agent-editor__lock-banner" role="status">
+                    <Card.Body className="super-admin-agent-editor__lock-banner-body">
+                      <Badge variant="warning" size="sm" pill outline>
+                        Locked
+                      </Badge>
+                      <div className="super-admin-agent-editor__lock-copy">
+                        <strong>Locked by validated package usage.</strong>
+                        <span>Clone this runtime agent to make behavior changes.</span>
                       </div>
-                    ) : null}
-                  </div>
+                      {(Array.isArray(loadedAgent?.lockedByPackageKeys) ? loadedAgent.lockedByPackageKeys : []).length > 0 ? (
+                        <div className="super-admin-agent-editor__lock-packages" aria-label="Locking packages">
+                          {loadedAgent.lockedByPackageKeys.map((packageKey) => (
+                            <Badge key={packageKey} variant="neutral" size="sm" pill outline>
+                              {packageKey}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </Card.Body>
+                  </Card>
                 ) : null}
 
                 <fieldset className="super-admin-agent-editor__edit-fieldset" disabled={isLockedAgent}>

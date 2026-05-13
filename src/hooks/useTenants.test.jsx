@@ -31,7 +31,7 @@ describe('useTenants', () => {
         ],
         meta: {
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           total: 2,
           totalPages: 1,
           tenantCapacity: {
@@ -67,7 +67,7 @@ describe('useTenants', () => {
         q: undefined,
         status: undefined,
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       },
       { skip: false },
     )
@@ -101,7 +101,7 @@ describe('useTenants', () => {
         q: undefined,
         status: undefined,
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       },
       { skip: true },
     )
@@ -125,7 +125,7 @@ describe('useTenants', () => {
         q: 'Alpha',
         status: 'ENABLED',
         page: 3,
-        pageSize: 20,
+        pageSize: 10,
       },
       { skip: false },
     )
@@ -142,7 +142,7 @@ describe('useTenants', () => {
           q: undefined,
           status: undefined,
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
         },
         { skip: false },
       )

@@ -6,6 +6,7 @@ import {
   useLazyGetAuditLogsByResourceQuery,
   useVerifyAuditIntegrityMutation,
 } from '../../store/api/auditLogApi.js'
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
 import { useToaster } from '../../components/Toaster'
 import { normalizeError } from '../../utils/errors.js'
 import { parseIds } from './superAdminAuditLogs.constants.js'
@@ -48,7 +49,7 @@ export function useAuditLogManagement() {
     error: auditListError,
   } = useQueryAuditLogsQuery({
     page,
-    pageSize: 20,
+    pageSize: DEFAULT_TABLE_PAGE_SIZE,
     requestId: filters.requestId.trim(),
     action: filters.action,
     resourceType: filters.resourceType,

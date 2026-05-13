@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const SKILL_ROLE_REGISTRY_STATUSES = Object.freeze({
   DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
@@ -18,7 +20,7 @@ export const SKILL_ROLE_REGISTRY_OPERATIONS = Object.freeze({
   EXECUTE: 'EXECUTE',
 })
 
-export const SKILL_ROLE_REGISTRY_PAGE_SIZE = 20
+export const SKILL_ROLE_REGISTRY_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const SKILL_ROLE_REGISTRY_HELP_TEXT =
   'Skill Roles define the governed execution responsibilities that can be assigned to Skills across all frameworks.'

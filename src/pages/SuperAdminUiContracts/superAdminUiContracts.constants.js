@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const UI_CONTRACT_STATUSES = Object.freeze({
   DRAFT: 'DRAFT',
   ACTIVE: 'ACTIVE',
@@ -24,7 +26,7 @@ export const UI_CONTRACT_SECTION_MAPPING_STATUSES = Object.freeze({
   CUSTOM: 'CUSTOM',
 })
 
-export const UI_CONTRACT_PAGE_SIZE = 20
+export const UI_CONTRACT_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const UI_CONTRACT_STATUS_OPTIONS = Object.freeze([
   { value: '', label: 'All' },

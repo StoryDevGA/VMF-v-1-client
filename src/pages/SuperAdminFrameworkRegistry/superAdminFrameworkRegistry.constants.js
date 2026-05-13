@@ -1,3 +1,5 @@
+import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table/tableConstants.js'
+
 export const FRAMEWORK_REGISTRY_STATUSES = Object.freeze({
   ACTIVE: 'ACTIVE',
   DRAFT: 'DRAFT',
@@ -37,7 +39,7 @@ export const FRAMEWORK_REGISTRY_STRUCTURE_TYPE_OPTIONS = Object.freeze([
   { value: 'policy_based', label: 'Policy based' },
 ])
 
-export const FRAMEWORK_REGISTRY_PAGE_SIZE = 4
+export const FRAMEWORK_REGISTRY_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const FRAMEWORK_REGISTRY_HELP_TEXT =
   'Framework Registry defines the canonical framework identity used by packages, agents, skills, and workflow policies.'

@@ -156,7 +156,7 @@ describe('SuperAdminAuditLogs page', () => {
 
     await waitFor(() => {
       expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 4, pageSize: 20 }),
+        expect.objectContaining({ page: 4, pageSize: 10 }),
         expect.any(Object),
       )
     })
@@ -166,7 +166,7 @@ describe('SuperAdminAuditLogs page', () => {
 
     await waitFor(() => {
       expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 1, pageSize: 20 }),
+        expect.objectContaining({ page: 1, pageSize: 10 }),
         expect.any(Object),
       )
     })
