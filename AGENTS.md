@@ -13,6 +13,15 @@
 - Use `src/pages/SuperAdminCustomers/` as the reference implementation for layout, interaction, component decomposition, modal workflows, table behavior, responsive behavior, and regression scope unless a documented exception is explicitly approved.
 - Prefer adapting that standard over creating a new page-specific pattern.
 
+## Runtime Control Contract Quality Gate
+
+- For Runtime Control governance, audit, lifecycle, activation, validation, dependency-lock, seed, or mock/API work, apply `../docs/references/runtime-control/runtime-control-contract-quality-gate.md` before coding and again before handoff.
+- Load `front-end-developer`, `frontend-api-integration` for API/mock work, `ui-ux` for visual/layout changes, `vmf-client-test-coverage` for tests, and the client `pr-reviewer` before signoff.
+- Build a short contract map before implementation: page/component state, client constants, RTK Query endpoint shape, mock behavior, cache invalidation, backend registry/fixture source, tests, and manual QA route.
+- UI hiding is never enough. Direct routes, payload builders, and mock mutations must reject invalid lifecycle/governance operations with the same class of error as the live API.
+- Audit/registry/filter constants must align with the API and seed guard. Do not add client-only audit actions, resource types, event keys, categories, severities, or lifecycle statuses.
+- Final client handoff must state the focused Vitest/build commands, `git diff --check`, browser/manual QA status when relevant, and which quality-gate surfaces were checked.
+
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 

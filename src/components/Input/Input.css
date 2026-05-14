@@ -202,6 +202,7 @@
   position: absolute;
   top: 50%;
   right: var(--spacing-sm);
+  z-index: 1;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
@@ -215,6 +216,25 @@
   color: var(--color-text-secondary);
   background: transparent;
   cursor: pointer;
+}
+
+.input__action--native-picker {
+  width: calc(var(--spacing-md) + var(--spacing-xs));
+  height: calc(var(--spacing-md) + var(--spacing-xs));
+  padding: 0;
+  font-size: var(--font-size-base);
+}
+
+.input__action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.input__action-icon svg {
+  width: 1em;
+  height: 1em;
 }
 
 .input__action:hover:not(:disabled) {

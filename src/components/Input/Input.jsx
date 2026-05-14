@@ -5,10 +5,27 @@
  * that reduces in size and moves outside when focused or filled.
  */
 
-import { useEffect, useState, forwardRef } from 'react'
+import { useCallback, useEffect, useRef, useState, forwardRef } from 'react'
+import { MdAccessTime, MdCalendarToday } from 'react-icons/md'
 import './Input.css'
 
 const hasRenderableValue = (candidate) => String(candidate ?? '').trim().length > 0
+const NATIVE_VALUE_DISPLAY_TYPES = new Set([
+  'color',
+  'date',
+  'datetime-local',
+  'file',
+  'month',
+  'time',
+  'week',
+])
+const NATIVE_PICKER_TYPES = new Set([
+  'date',
+  'datetime-local',
+  'month',
+  'time',
+  'week',
+])
 
 /**
  * Main Input Component
@@ -38,6 +55,7 @@ export const Input = forwardRef(function Input(
   ref
 ) {
   const isControlled = value !== undefined
+  const inputRef = useRef(null)
 
   const [isFocused, setIsFocused] = useState(false)
   const [hasValue, setHasValue] = useState(
@@ -49,9 +67,25 @@ export const Input = forwardRef(function Input(
   const inputType = canTogglePassword && isPasswordVisible ? 'text' : type
   const hasLeftIcon = Boolean(leftIcon)
   const hasRightIcon = Boolean(rightIcon)
-  const hasRightAdornment = hasRightIcon || canTogglePassword
+  const hasNativePickerAction = NATIVE_PICKER_TYPES.has(inputType) && !hasRightIcon && !canTogglePassword
+  const hasRightAdornment = hasRightIcon || canTogglePassword || hasNativePickerAction
   const isFileInput = inputType === 'file'
   const resolvedPlaceholder = label ? undefined : placeholder
+  const nativePickerLabel = inputType === 'time' ? 'Open time picker' : 'Open date picker'
+  const nativePickerIcon = inputType === 'time' ? <MdAccessTime /> : <MdCalendarToday />
+  const errorId = props.id ? `${props.id}-error` : undefined
+  const helperId = props.id ? `${props.id}-helper` : undefined
+  const describedById = error ? errorId : helperText ? helperId : undefined
+
+  const setInputRef = useCallback((node) => {
+    inputRef.current = node
+
+    if (typeof ref === 'function') {
+      ref(node)
+    } else if (ref) {
+      ref.current = node
+    }
+  }, [ref])
 
   useEffect(() => {
     if (value === undefined) return
@@ -78,7 +112,25 @@ export const Input = forwardRef(function Input(
     setIsPasswordVisible((current) => !current)
   }
 
-  const isLabelFloating = isFocused || hasValue
+  const handleOpenNativePicker = () => {
+    const input = inputRef.current
+    if (!input || disabled) return
+
+    input.focus()
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker()
+        return
+      } catch {
+        // Browser refused programmatic picker; focus remains as the fallback.
+      }
+    }
+
+    input.click()
+  }
+
+  const isLabelFloating = isFocused || hasValue || NATIVE_VALUE_DISPLAY_TYPES.has(inputType)
 
   const containerClasses = [
     'input-container',
@@ -113,7 +165,7 @@ export const Input = forwardRef(function Input(
           </span>
         )}
         <input
-          ref={ref}
+          ref={setInputRef}
           type={inputType}
           className={inputClasses}
           value={value}
@@ -125,13 +177,7 @@ export const Input = forwardRef(function Input(
           onBlur={handleBlur}
           onChange={handleChange}
           aria-invalid={error ? 'true' : 'false'}
-          aria-describedby={
-            error
-              ? `${props.id}-error`
-              : helperText
-              ? `${props.id}-helper`
-              : undefined
-          }
+          aria-describedby={describedById}
           {...props}
         />
         {canTogglePassword ? (
@@ -145,6 +191,19 @@ export const Input = forwardRef(function Input(
             aria-pressed={isPasswordVisible}
           >
             {isPasswordVisible ? 'Hide' : 'Show'}
+          </button>
+        ) : hasNativePickerAction ? (
+          <button
+            type="button"
+            className="input__action input__action--native-picker"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={handleOpenNativePicker}
+            disabled={disabled}
+            aria-label={nativePickerLabel}
+          >
+            <span className="input__action-icon" aria-hidden="true">
+              {nativePickerIcon}
+            </span>
           </button>
         ) : hasRightIcon ? (
           <span className="input__icon input__icon--right" aria-hidden="true">
@@ -162,12 +221,12 @@ export const Input = forwardRef(function Input(
         )}
       </div>
       {error && (
-        <span className="input-error" id={`${props.id}-error`} role="alert">
+        <span className="input-error" id={errorId} role="alert">
           {error}
         </span>
       )}
       {helperText && !error && (
-        <span className="input-helper" id={`${props.id}-helper`}>
+        <span className="input-helper" id={helperId}>
           {helperText}
         </span>
       )}

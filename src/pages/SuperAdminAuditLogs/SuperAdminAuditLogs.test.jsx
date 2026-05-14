@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
 import SuperAdminAuditLogs from './SuperAdminAuditLogs'
@@ -61,7 +61,68 @@ describe('SuperAdminAuditLogs page', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /audit logs explorer/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /verify integrity/i })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /^query$/i })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /^governance$/i })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /^runtime package$/i })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /^component and actor$/i })).toBeInTheDocument()
+    expect(screen.getByText(/showing audit rows that match the selected query/i)).toBeInTheDocument()
+    const verifyButton = screen.getByRole('button', { name: /verify integrity/i })
+    expect(verifyButton).toBeInTheDocument()
+    expect(verifyButton.closest('.super-admin-audit-logs__verify-row')).not.toBeNull()
+  })
+
+  it('renders lookup controls and stats using available audit data', () => {
+    useGetAuditStatsQuery.mockReturnValue({
+      data: {
+        data: {
+          total: 550,
+          byAction: [{ _id: 'ACCESS_DENIED', count: 126 }],
+          byResourceType: [{ _id: 'User', count: 133 }],
+        },
+      },
+      isFetching: false,
+    })
+
+    renderPage()
+
+    expect(screen.queryByText(/^request$/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^resource$/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^matches$/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /lookup request/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /lookup resource/i })).toBeInTheDocument()
+    expect(screen.getByText(/request matches 0/i)).toBeInTheDocument()
+    expect(screen.getByText(/resource matches 0/i)).toBeInTheDocument()
+    expect(screen.getByText('550')).toBeInTheDocument()
+    expect(screen.getAllByText('ACCESS_DENIED').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('User').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByLabelText('ACCESS_DENIED 126')).toHaveAttribute('value', '126')
+    expect(screen.getByLabelText('User 133')).toHaveAttribute('value', '133')
+  })
+
+  it('uses native bounded date picker inputs for audit query and integrity ranges', async () => {
+    renderPage()
+
+    const queryStartDate = document.getElementById('audit-filter-start-date')
+    const queryEndDate = document.getElementById('audit-filter-end-date')
+    const verifyStartDate = document.getElementById('audit-verify-start-date')
+    const verifyEndDate = document.getElementById('audit-verify-end-date')
+
+    expect(queryStartDate).toHaveAttribute('type', 'date')
+    expect(queryEndDate).toHaveAttribute('type', 'date')
+    expect(verifyStartDate).toHaveAttribute('type', 'date')
+    expect(verifyEndDate).toHaveAttribute('type', 'date')
+
+    fireEvent.change(queryStartDate, { target: { value: '2026-05-01' } })
+    fireEvent.change(queryEndDate, { target: { value: '2026-05-14' } })
+    fireEvent.change(verifyStartDate, { target: { value: '2026-04-01' } })
+    fireEvent.change(verifyEndDate, { target: { value: '2026-04-30' } })
+
+    await waitFor(() => {
+      expect(queryStartDate).toHaveAttribute('max', '2026-05-14')
+      expect(queryEndDate).toHaveAttribute('min', '2026-05-01')
+      expect(verifyStartDate).toHaveAttribute('max', '2026-04-30')
+      expect(verifyEndDate).toHaveAttribute('min', '2026-04-01')
+    })
   })
 
   it('renders timestamp column using standardized two-line date/time format', () => {
@@ -129,6 +190,81 @@ describe('SuperAdminAuditLogs page', () => {
 
     expect(screen.getByText('Jane Admin granted John User <john@example.com> READ access to Alpha VMF')).toBeInTheDocument()
     expect(screen.getByText('VMF Grant Created')).toBeInTheDocument()
+  })
+
+  it('renders governance audit fields for system events', () => {
+    useQueryAuditLogsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'log-governance-1',
+            ts: '2026-05-14T08:53:39.000Z',
+            action: 'FRAMEWORK_PACKAGE_VALIDATED',
+            summary: 'Super Admin validated framework package VMF 2.3.1',
+            resourceType: 'FrameworkPackage',
+            resourceId: '69c5205f9510a816ace195e4',
+            actorUserId: { name: 'Super Admin' },
+            requestId: 'req-governance-1',
+            isSystemEvent: true,
+            systemEventType: 'PACKAGE_VALIDATED',
+            eventCategory: 'PACKAGE',
+            eventSeverity: 'HIGH',
+            frameworkKey: 'VMF',
+            frameworkVersion: '2.3.1',
+            packageKey: 'vmf-v2-3-1-standard',
+            checksum: 'checksum-123',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, totalCount: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    expect(screen.getAllByText('PACKAGE_VALIDATED').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('VMF / 2.3.1 / vmf-v2-3-1-standard')).toBeInTheDocument()
+    expect(screen.getByText('Super Admin validated framework package VMF 2.3.1')).toBeInTheDocument()
+  })
+
+  it('passes governance filters to the audit query', async () => {
+    const user = userEvent.setup()
+
+    renderPage()
+
+    await user.selectOptions(screen.getByLabelText(/audit layer/i), 'true')
+    await user.selectOptions(screen.getByLabelText(/system event type/i), 'PACKAGE_ACTIVATED')
+    await user.selectOptions(screen.getByLabelText(/event category/i), 'PACKAGE')
+    await user.selectOptions(screen.getByLabelText(/severity/i), 'CRITICAL')
+    await user.type(screen.getByLabelText(/framework key/i), 'VMF')
+    await user.type(screen.getByLabelText(/framework version/i), '2.3.1')
+    await user.type(screen.getByLabelText(/package key/i), 'vmf-v2-3-1-standard')
+    await user.type(screen.getByLabelText(/component type/i), 'SKILL')
+    await user.type(screen.getByLabelText(/component stable id/i), 'skill-vmf-required-sections-validator')
+    await user.type(screen.getByLabelText(/component version/i), '2')
+    await user.type(screen.getByLabelText(/checksum/i), 'checksum-123')
+
+    await waitFor(() => {
+      expect(useQueryAuditLogsQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          isSystemEvent: 'true',
+          systemEventType: 'PACKAGE_ACTIVATED',
+          eventCategory: 'PACKAGE',
+          eventSeverity: 'CRITICAL',
+          frameworkKey: 'VMF',
+          frameworkVersion: '2.3.1',
+          packageKey: 'vmf-v2-3-1-standard',
+          componentType: 'SKILL',
+          componentStableId: 'skill-vmf-required-sections-validator',
+          componentVersion: '2',
+          checksum: 'checksum-123',
+          pageSize: 10,
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('supports first/last pagination controls in audit log query results', async () => {

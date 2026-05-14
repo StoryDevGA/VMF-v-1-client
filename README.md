@@ -24,6 +24,7 @@ npm test         # Run tests
 ## Agent Testing Skill
 - Use `vmf-client-test-coverage` from `.git/skills/vmf-client-test-coverage/SKILL.md` for comprehensive client/frontend test planning, implementation, and review.
 - Use it for Vitest, Testing Library, RTK Query mock/live parity, Runtime Control lifecycle matrices, editor action states, cache invalidation, and no-gap regression coverage.
+- For Runtime Control governance, audit, lifecycle, activation, validation, dependency-lock, seed, or mock/API work, also apply `../docs/references/runtime-control/runtime-control-contract-quality-gate.md`; UI hiding is not enforcement, and constants/mocks must stay aligned with the API and seed guard.
 
 ## Project Structure
 

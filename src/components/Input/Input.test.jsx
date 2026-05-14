@@ -105,6 +105,16 @@ describe('Input Component', () => {
       rerender(<Input label="Email" id="email" value="test@example.com" onChange={() => {}} />)
       expect(label).toHaveClass('input-label--floating')
     })
+
+    it.each(['date', 'datetime-local', 'month', 'time', 'week'])(
+      'should float label by default for native %s inputs',
+      (type) => {
+        const { container } = render(<Input label="Date range" id={`native-${type}`} type={type} />)
+
+        expect(screen.getByLabelText('Date range')).toHaveAttribute('type', type)
+        expect(container.querySelector('.input-label')).toHaveClass('input-label--floating')
+      },
+    )
   })
 
   describe('Icons', () => {
@@ -116,6 +126,36 @@ describe('Input Component', () => {
 
     it('should render right icon', () => {
       const { container } = render(<Input rightIcon={<span data-testid="right-icon" />} />)
+      expect(container.querySelector('.input__icon--right')).toBeInTheDocument()
+      expect(screen.getByTestId('right-icon')).toBeInTheDocument()
+    })
+
+    it('should expose an explicit native date picker button for date inputs', async () => {
+      const user = userEvent.setup()
+      render(<Input label="Start Date" id="start-date" type="date" />)
+
+      const input = screen.getByLabelText('Start Date')
+      const showPicker = vi.fn()
+      input.showPicker = showPicker
+
+      await user.click(screen.getByRole('button', { name: /open date picker/i }))
+
+      expect(showPicker).toHaveBeenCalledTimes(1)
+      expect(input).toHaveFocus()
+    })
+
+    it('should expose an explicit native time picker button for time inputs', () => {
+      render(<Input label="Start Time" id="start-time" type="time" />)
+
+      expect(screen.getByRole('button', { name: /open time picker/i })).toBeInTheDocument()
+    })
+
+    it('should not replace caller-supplied right icon with native picker action', () => {
+      const { container } = render(
+        <Input label="Start Date" id="date-with-icon" type="date" rightIcon={<span data-testid="right-icon" />} />,
+      )
+
+      expect(screen.queryByRole('button', { name: /open date picker/i })).not.toBeInTheDocument()
       expect(container.querySelector('.input__icon--right')).toBeInTheDocument()
       expect(screen.getByTestId('right-icon')).toBeInTheDocument()
     })
@@ -192,6 +232,13 @@ describe('Input Component', () => {
       const input = screen.getByRole('textbox')
       expect(input).toHaveAttribute('aria-describedby', 'test-input-error')
     })
+
+    it('should not reference a generated error id when id is omitted', () => {
+      render(<Input error="Error message" />)
+      const input = screen.getByRole('textbox')
+      expect(input).not.toHaveAttribute('aria-describedby')
+      expect(screen.getByRole('alert')).not.toHaveAttribute('id')
+    })
   })
 
   // ===========================
@@ -214,6 +261,13 @@ describe('Input Component', () => {
       render(<Input helperText="Helper text" id="test-input" />)
       const input = screen.getByRole('textbox')
       expect(input).toHaveAttribute('aria-describedby', 'test-input-helper')
+    })
+
+    it('should not reference a generated helper id when id is omitted', () => {
+      render(<Input helperText="Helper text" />)
+      const input = screen.getByRole('textbox')
+      expect(input).not.toHaveAttribute('aria-describedby')
+      expect(screen.getByText('Helper text')).not.toHaveAttribute('id')
     })
   })
 
