@@ -77,7 +77,17 @@ const RUNTIME_PATH_LIST_TAG = { type: 'RuntimePath', id: 'LIST' }
 const SKILL_ROLE_LIST_TAG = { type: 'SkillRole', id: 'LIST' }
 const VALIDATION_REGISTRY_LIST_TAG = { type: 'ValidationRegistry', id: 'LIST' }
 const RUNTIME_VALIDATION_AUDIT_LIST_TAG = { type: 'RuntimeValidationAudit', id: 'LIST' }
+const RUNTIME_ACTIVATION_LIST_TAG = { type: 'RuntimeActivation', id: 'LIST' }
+const RUNTIME_DEPLOYMENT_LIST_TAG = { type: 'RuntimeDeployment', id: 'LIST' }
 const RUNTIME_CONTROL_BASE_PATH = '/super-admin/runtime-control'
+const RUNTIME_ACTIVATION_STATUSES = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  SUPERSEDED: 'SUPERSEDED',
+})
+const RUNTIME_DEPLOYMENT_STATUSES = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  SUPERSEDED: 'SUPERSEDED',
+})
 const CLONEABLE_FRAMEWORK_PACKAGE_STATUSES = new Set([
   FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
   FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
@@ -537,6 +547,8 @@ const buildInitialRuntimeControlState = () => ({
   skills: INITIAL_RUNTIME_SKILLS.map((skill) => cloneRuntimeSkill(skill)),
   workflowPolicies: INITIAL_WORKFLOW_POLICIES.map((policy) => cloneWorkflowPolicy(policy)),
   runtimeValidationAudits: [],
+  runtimeActivationSnapshots: [],
+  runtimeDeployments: [],
 })
 
 let runtimeControlState = buildInitialRuntimeControlState()
@@ -1815,6 +1827,132 @@ const generateMockObjectId = (seed = '') => {
 
 const findFrameworkPackageById = (packageId) =>
   runtimeControlState.frameworkPackages.find((pkg) => pkg.id === packageId)
+
+const getLatestRuntimeValidationVerdictForPackage = (packageId) => {
+  return findFrameworkPackageById(packageId)?.runtimeVerdict || null
+}
+
+const getActiveMockRuntimeDeployment = (frameworkKey) =>
+  (runtimeControlState.runtimeDeployments ?? [])
+    .find((deployment) =>
+      deployment.frameworkKey === frameworkKey
+      && deployment.status === RUNTIME_DEPLOYMENT_STATUSES.ACTIVE
+      && deployment.tenantScope === 'GLOBAL'
+      && deployment.deploymentMode === 'PRODUCTION')
+
+const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
+  const checkpointStatus = String(checkpoint?.status || pkg?.lastCheckpointStatus || '').trim().toUpperCase()
+  const runtimeVerdict = getLatestRuntimeValidationVerdictForPackage(pkg?.id)
+  const runtimeVerdictResult = String(runtimeVerdict?.result ?? '').trim().toUpperCase()
+  const runtimeVerdictDependencyLockState = String(runtimeVerdict?.dependencyLockState ?? '').trim().toUpperCase()
+  const runtimeVerdictAuditPersisted = runtimeVerdict?.auditPersisted === true
+  const runtimeVerdictLastValidatedAt = runtimeVerdict?.lastValidatedAt ? new Date(runtimeVerdict.lastValidatedAt) : null
+  const packageUpdatedAt = pkg?.updatedAt ? new Date(pkg.updatedAt) : null
+  const dependencyLockStatus = String(pkg?.dependencyLock?.status ?? '').trim().toUpperCase()
+  const dependencyLockResolvedAt = pkg?.dependencyLock?.resolvedAt || pkg?.dependencyLock?.lockedAt
+    ? new Date(pkg.dependencyLock.resolvedAt || pkg.dependencyLock.lockedAt)
+    : null
+  const dependencyReferences = Array.isArray(pkg?.dependencyLock?.references) ? pkg.dependencyLock.references : []
+  const activeDeployment = getActiveMockRuntimeDeployment(pkg?.frameworkKey)
+  const runtimeVerdictStale =
+    runtimeVerdictResult === 'ALLOW'
+    && runtimeVerdictLastValidatedAt instanceof Date
+    && !Number.isNaN(runtimeVerdictLastValidatedAt.getTime())
+    && (
+      (packageUpdatedAt instanceof Date && !Number.isNaN(packageUpdatedAt.getTime()) && packageUpdatedAt > runtimeVerdictLastValidatedAt)
+      || (dependencyLockResolvedAt instanceof Date && !Number.isNaN(dependencyLockResolvedAt.getTime()) && dependencyLockResolvedAt > runtimeVerdictLastValidatedAt)
+    )
+  const runtimeVerdictCertified =
+    runtimeVerdictResult === 'ALLOW'
+    && runtimeVerdictAuditPersisted
+    && runtimeVerdictDependencyLockState === 'LOCKED'
+    && runtimeVerdictLastValidatedAt instanceof Date
+    && !Number.isNaN(runtimeVerdictLastValidatedAt.getTime())
+    && !runtimeVerdictStale
+  let runtimeVerdictReason = 'RUNTIME_VERDICT_MISSING'
+  if (runtimeVerdictCertified) {
+    runtimeVerdictReason = 'RUNTIME_VERDICT_ALLOW'
+  } else if (runtimeVerdictResult && runtimeVerdictResult !== 'ALLOW') {
+    runtimeVerdictReason = 'RUNTIME_VERDICT_BLOCKED'
+  } else if (
+    runtimeVerdictResult === 'ALLOW'
+    && (!runtimeVerdictAuditPersisted || !(runtimeVerdictLastValidatedAt instanceof Date) || Number.isNaN(runtimeVerdictLastValidatedAt.getTime()))
+  ) {
+    runtimeVerdictReason = 'RUNTIME_VERDICT_NOT_CERTIFIED'
+  } else if (runtimeVerdictResult === 'ALLOW' && runtimeVerdictDependencyLockState !== 'LOCKED') {
+    runtimeVerdictReason = 'RUNTIME_VERDICT_DEPENDENCY_LOCK_NOT_CERTIFIED'
+  } else if (runtimeVerdictStale) {
+    runtimeVerdictReason = 'RUNTIME_VERDICT_STALE'
+  }
+  const requirements = [
+    {
+      key: 'packageStatus',
+      status: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED ? 'PASS' : 'FAIL',
+      reason: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+        ? 'FRAMEWORK_PACKAGE_VALIDATED'
+        : 'FRAMEWORK_PACKAGE_ACTIVATION_REQUIRES_VALIDATED',
+      message: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+        ? 'Package is validated.'
+        : 'Only validated framework packages can be activated.',
+    },
+    {
+      key: 'checkpoint',
+      status: checkpointStatus === 'PASS' || checkpointStatus === 'PASS_WITH_WARNINGS' ? 'PASS' : 'FAIL',
+      reason: checkpointStatus === 'PASS' || checkpointStatus === 'PASS_WITH_WARNINGS'
+        ? 'RUNTIME_CHECKPOINT_READY'
+        : 'RUNTIME_CHECKPOINT_NOT_READY',
+      message: checkpointStatus === 'PASS' || checkpointStatus === 'PASS_WITH_WARNINGS'
+        ? 'Checkpoint evidence allows activation.'
+        : 'Latest checkpoint must be PASS or PASS_WITH_WARNINGS before activation.',
+    },
+    {
+      key: 'runtimeVerdict',
+      status: runtimeVerdictCertified ? 'PASS' : 'FAIL',
+      reason: runtimeVerdictReason,
+      message: runtimeVerdictCertified
+        ? 'Runtime Validation verdict allows activation.'
+        : 'Latest certified Runtime Validation verdict must be ALLOW before activation.',
+    },
+    {
+      key: 'dependencyLock',
+      status: dependencyLockStatus === 'PASS' && dependencyReferences.length > 0 ? 'PASS' : 'FAIL',
+      reason: dependencyLockStatus === 'PASS' && dependencyReferences.length > 0
+        ? 'DEPENDENCY_LOCK_LOCKED'
+        : 'DEPENDENCY_LOCK_NOT_LOCKED',
+      message: dependencyLockStatus === 'PASS' && dependencyReferences.length > 0
+        ? 'Dependency lock evidence is certified.'
+        : 'A locked dependency snapshot is required before activation.',
+    },
+    {
+      key: 'activeDeployment',
+      status: activeDeployment ? 'WARN' : 'PASS',
+      reason: activeDeployment ? 'RUNTIME_DEPLOYMENT_WILL_SUPERSEDE' : 'RUNTIME_DEPLOYMENT_NO_CONFLICT',
+      message: activeDeployment
+        ? 'Existing active deployment will be superseded.'
+        : 'No active runtime deployment conflict exists.',
+    },
+  ]
+  const blockingRequirements = requirements.filter((item) => item.status === 'FAIL')
+  return {
+    ready: blockingRequirements.length === 0,
+    status: blockingRequirements.length === 0 ? 'READY' : 'BLOCKED',
+    packageStatus: String(pkg?.status ?? '').trim().toUpperCase(),
+    checkpointStatus: checkpointStatus || 'NOT_RUN',
+    runtimeVerdict: runtimeVerdict
+      ? {
+          ...runtimeVerdict,
+          dependencyLockState: runtimeVerdictDependencyLockState,
+          stale: runtimeVerdictStale,
+        }
+      : null,
+    dependencyLockState: dependencyLockStatus === 'PASS' && dependencyReferences.length > 0 ? 'LOCKED' : 'NOT_LOCKED',
+    dependencySnapshotId: pkg?.dependencyLock?.snapshotId || '',
+    dependencyReferenceCount: dependencyReferences.length,
+    supersedesDeploymentId: activeDeployment?.deploymentId || null,
+    requirements,
+    blockingReasons: blockingRequirements.map((item) => item.reason),
+  }
+}
 
 const findFrameworkRegistryById = (registryId) =>
   runtimeControlState.frameworkRegistries.find((entry) => entry.id === registryId)
@@ -3749,6 +3887,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           lastCheckpointStatus: null,
           lastCheckpointAt: null,
           lastCheckpointResult: null,
+          runtimeVerdict: null,
           uiContractBinding: null,
           activatedAt: null,
           activatedBy: null,
@@ -4234,8 +4373,62 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         if (checkpoint.status === 'FAIL') {
           return buildMockCheckpointValidationError(checkpoint)
         }
+        const readiness = buildMockRuntimeActivationReadiness(existingPackage, checkpoint)
+        if (!readiness.ready) {
+          return buildConflictError('Runtime activation readiness requirements are not met.', {
+            reason: readiness.blockingReasons[0] || 'RUNTIME_ACTIVATION_READINESS_BLOCKED',
+            readiness,
+          })
+        }
 
         const activationTime = new Date().toISOString()
+        const activationId = generateRuntimeId('activation', `${existingPackage.frameworkKey}-${existingPackage.version}`)
+        const deploymentId = `deployment-${String(existingPackage.frameworkKey ?? '').toLowerCase()}-global-production-${String(activationId).slice(-24)}`
+        const previousDeployment = getActiveMockRuntimeDeployment(existingPackage.frameworkKey)
+        const activationSnapshot = {
+          id: generateMockObjectId(activationId),
+          activationId,
+          packageId,
+          packageKey: existingPackage.packageKey || '',
+          frameworkKey: existingPackage.frameworkKey,
+          frameworkVersion: existingPackage.version,
+          packageStatusAtActivation: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+          activationStatus: RUNTIME_ACTIVATION_STATUSES.ACTIVE,
+          dependencySnapshotId: existingPackage.dependencyLock?.snapshotId || '',
+          dependencySnapshotHash: existingPackage.dependencyLock?.snapshotHash || existingPackage.dependencyLock?.hash || '',
+          checkpointId: checkpoint.checkpointId || checkpoint.id || '',
+          checkpointStatus: checkpoint.status,
+          runtimeVerdictId: existingPackage.runtimeVerdict?.validationId || existingPackage.runtimeVerdict?.auditId || '',
+          runtimeVerdictResult: existingPackage.runtimeVerdict?.result || '',
+          deploymentGraph: checkpoint.dependencyGraph || null,
+          tenantScope: 'GLOBAL',
+          deploymentMode: 'PRODUCTION',
+          activatedAt: activationTime,
+          activatedBy: RUNTIME_CONTROL_UPDATED_BY.id,
+          supersedesActivationId: previousDeployment?.activationId || null,
+          supersededByActivationId: null,
+          rollbackSourceActivationId: null,
+          failureReason: null,
+          createdAt: activationTime,
+          updatedAt: activationTime,
+        }
+        const deployment = {
+          id: generateMockObjectId(deploymentId),
+          deploymentId,
+          activationId,
+          packageId,
+          packageKey: existingPackage.packageKey || '',
+          frameworkKey: existingPackage.frameworkKey,
+          frameworkVersion: existingPackage.version,
+          status: RUNTIME_DEPLOYMENT_STATUSES.ACTIVE,
+          tenantScope: 'GLOBAL',
+          deploymentMode: 'PRODUCTION',
+          registeredAt: activationTime,
+          registeredBy: RUNTIME_CONTROL_UPDATED_BY.id,
+          isRollbackDeployment: false,
+          supersededAt: null,
+          supersededByDeploymentId: null,
+        }
         let activatedPackage = null
 
         runtimeControlState = {
@@ -4265,7 +4458,6 @@ export const runtimeControlApi = baseApi.injectEndpoints({
             ) {
               return cloneFrameworkPackage({
                 ...pkg,
-                status: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
                 isDefault: false,
                 ...buildAuditFields(activationTime),
               })
@@ -4273,18 +4465,124 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
             return pkg
           }),
+          runtimeActivationSnapshots: [
+            activationSnapshot,
+            ...(runtimeControlState.runtimeActivationSnapshots ?? []).map((snapshot) =>
+              snapshot.activationId === previousDeployment?.activationId
+                ? {
+                    ...snapshot,
+                    activationStatus: RUNTIME_ACTIVATION_STATUSES.SUPERSEDED,
+                    supersededByActivationId: activationId,
+                    updatedAt: activationTime,
+                  }
+                : snapshot,
+            ),
+          ],
+          runtimeDeployments: [
+            deployment,
+            ...(runtimeControlState.runtimeDeployments ?? []).map((row) =>
+              row.deploymentId === previousDeployment?.deploymentId
+                ? {
+                    ...row,
+                    status: 'SUPERSEDED',
+                    supersededAt: activationTime,
+                    supersededByDeploymentId: deploymentId,
+                    updatedAt: activationTime,
+                  }
+                : row,
+            ),
+          ],
         }
 
         return {
-          data: buildEntityResponse(
-            activatedPackage ? cloneFrameworkPackage(activatedPackage) : cloneFrameworkPackage(existingPackage),
-          ),
+          data: {
+            ...buildEntityResponse(
+              activatedPackage ? cloneFrameworkPackage(activatedPackage) : cloneFrameworkPackage(existingPackage),
+            ),
+            meta: {
+              runtimeActivation: {
+                readiness,
+                activationSnapshot,
+                deployment,
+                supersededDeployment: previousDeployment || null,
+              },
+            },
+          },
         }
       },
       invalidatesTags: (_result, _error, { packageId }) => [
         FRAMEWORK_PACKAGE_LIST_TAG,
         { type: 'RuntimeFrameworkPackage', id: packageId },
+        RUNTIME_ACTIVATION_LIST_TAG,
+        RUNTIME_DEPLOYMENT_LIST_TAG,
       ],
+    }),
+
+    getRuntimeActivationReadiness: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/runtime-activation/packages/${packageId}/readiness`,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingPackage = findFrameworkPackageById(packageId)
+        if (!existingPackage) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        return {
+          data: buildEntityResponse(buildMockRuntimeActivationReadiness(existingPackage)),
+        }
+      },
+      providesTags: (_result, _error, packageId) => [
+        RUNTIME_ACTIVATION_LIST_TAG,
+        { type: 'RuntimeActivation', id: packageId || 'LIST' },
+      ],
+    }),
+
+    getRuntimeActivationHistory: build.query({
+      queryFn: async (packageId, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/runtime-activation/packages/${packageId}/history`,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        const rows = (runtimeControlState.runtimeActivationSnapshots ?? [])
+          .filter((snapshot) => String(snapshot.packageId ?? '').trim() === String(packageId ?? '').trim())
+
+        return { data: buildEntityResponse(rows) }
+      },
+      providesTags: (_result, _error, packageId) => [
+        RUNTIME_ACTIVATION_LIST_TAG,
+        { type: 'RuntimeActivation', id: packageId || 'LIST' },
+      ],
+    }),
+
+    listRuntimeDeployments: build.query({
+      queryFn: async (_arg, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            {
+              url: `${RUNTIME_CONTROL_BASE_PATH}/runtime-activation/deployments`,
+            },
+            api,
+            extraOptions,
+          )
+        }
+
+        return { data: buildEntityResponse([...(runtimeControlState.runtimeDeployments ?? [])]) }
+      },
+      providesTags: [RUNTIME_DEPLOYMENT_LIST_TAG],
     }),
 
     validateRuntimeOperation: build.mutation({
@@ -4310,8 +4608,35 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const validation = validateMockRuntimeOperation(payload)
+        const shouldUpdatePackageRuntimeVerdict = payload.isPackageLevelValidation === true && validation.packageResolved !== false
+        const runtimeVerdict = shouldUpdatePackageRuntimeVerdict
+          ? {
+              validationId: validation.validationId,
+              auditId: validation.validationId,
+              status: validation.status,
+              result: validation.result,
+              mode: validation.mode,
+              lastValidatedAt: validation.timestamp,
+              auditPersisted: true,
+              dependencyLockState: validation.result === 'ALLOW' ? 'LOCKED' : 'NOT_LOCKED',
+              blockingIssues: Number(validation.summary?.failed) || 0,
+              warnings: Number(validation.summary?.warnings) || 0,
+            }
+          : null
         runtimeControlState = {
           ...runtimeControlState,
+          frameworkPackages: runtimeControlState.frameworkPackages.map((pkg) =>
+            shouldUpdatePackageRuntimeVerdict
+            && (
+              String(pkg.id ?? '').trim() === String(validation.packageId ?? '').trim()
+              || String(pkg.packageKey ?? '').trim() === String(validation.packageId ?? '').trim()
+            )
+              ? cloneFrameworkPackage({
+                  ...pkg,
+                  runtimeVerdict,
+                })
+              : pkg,
+          ),
           runtimeValidationAudits: [
             {
               id: validation.validationId,
@@ -4348,6 +4673,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, payload = {}) => [
         RUNTIME_VALIDATION_AUDIT_LIST_TAG,
         { type: 'RuntimeValidationAudit', id: payload.packageId || 'LIST' },
+        { type: 'RuntimeFrameworkPackage', id: payload.packageId || 'LIST' },
+        { type: 'RuntimeActivation', id: payload.packageId || 'LIST' },
+        RUNTIME_ACTIVATION_LIST_TAG,
       ],
     }),
 
@@ -7367,6 +7695,9 @@ export const {
   useRunFrameworkPackageCheckpointMutation,
   useValidateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
+  useGetRuntimeActivationReadinessQuery,
+  useGetRuntimeActivationHistoryQuery,
+  useListRuntimeDeploymentsQuery,
   useValidateRuntimeOperationMutation,
   useGetRuntimeValidationHistoryQuery,
   useListUiContractsQuery,

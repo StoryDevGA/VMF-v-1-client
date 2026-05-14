@@ -36,6 +36,8 @@ import {
   useValidateFrameworkPackageMutation,
   useUpdateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
+  useGetRuntimeActivationHistoryQuery,
+  useGetRuntimeActivationReadinessQuery,
   useGetRuntimeValidationHistoryQuery,
   useValidateRuntimeOperationMutation,
 } from '../../store/api/runtimeControlApi.js'
@@ -1245,6 +1247,22 @@ function SuperAdminFrameworkPackageEditor() {
     skip: !isEditMode,
   })
 
+  const {
+    data: runtimeActivationReadinessResponse,
+    isLoading: isRuntimeActivationReadinessLoading,
+    isFetching: isRuntimeActivationReadinessFetching,
+    refetch: refetchRuntimeActivationReadiness,
+  } = useGetRuntimeActivationReadinessQuery(packageId, {
+    skip: !isEditMode,
+  })
+
+  const {
+    data: runtimeActivationHistoryResponse,
+    refetch: refetchRuntimeActivationHistory,
+  } = useGetRuntimeActivationHistoryQuery(packageId, {
+    skip: !isEditMode,
+  })
+
   const { data: packageListResponse } = useListFrameworkPackagesQuery({
     page: 1,
     pageSize: 100,
@@ -1469,6 +1487,25 @@ function SuperAdminFrameworkPackageEditor() {
     () => (rawRuntimeValidationHistoryRows ?? []).map(normalizeRuntimeValidationAuditRow),
     [rawRuntimeValidationHistoryRows],
   )
+  const runtimeActivationReadiness = runtimeActivationReadinessResponse?.data ?? null
+  const runtimeActivationHistoryRows = runtimeActivationHistoryResponse?.data ?? []
+  const runtimeActivationRequirements = Array.isArray(runtimeActivationReadiness?.requirements)
+    ? runtimeActivationReadiness.requirements
+    : []
+  const runtimeActivationBlockingRequirements = runtimeActivationRequirements.filter(
+    (requirement) => requirement?.status === 'FAIL',
+  )
+  const runtimeActivationReadinessLoaded = !isRuntimeActivationReadinessLoading && Boolean(runtimeActivationReadiness)
+  const runtimeActivationReadinessReady = runtimeActivationReadiness?.ready === true
+  const runtimeActivationReadinessStatus = runtimeActivationReadinessLoaded
+    ? String(runtimeActivationReadiness?.status ?? 'BLOCKED').trim().toUpperCase()
+    : 'LOADING'
+  const runtimeActivationReadinessLabel = runtimeActivationReadinessLoaded
+    ? formatGovernanceToken(runtimeActivationReadinessStatus, 'Blocked')
+    : 'Loading'
+  const runtimeActivationReadinessVariant = runtimeActivationReadinessLoaded
+    ? getCheckStatusVariant(runtimeActivationReadinessReady ? 'PASS' : 'FAIL')
+    : 'neutral'
   const runtimeValidationProbePath = useMemo(
     () => normalizeRuntimePath((form.sections ?? []).find((section) => normalizeRuntimePath(section.runtimePath))?.runtimePath),
     [form.sections],
@@ -1601,6 +1638,33 @@ function SuperAdminFrameworkPackageEditor() {
   const latestCheckpointAllowsActivation =
     latestCheckpointStatus === 'PASS'
     || latestCheckpointStatus === 'PASS_WITH_WARNINGS'
+  const activationCheckpointBlockingRequirement = latestCheckpointAllowsActivation
+    ? null
+    : {
+        key: 'checkpoint',
+        status: 'FAIL',
+        reason: latestCheckpointStatus === 'FAIL' ? 'RUNTIME_CHECKPOINT_FAILED' : 'RUNTIME_CHECKPOINT_NOT_READY',
+        message: latestCheckpointStatus === 'FAIL'
+          ? `${Number(latestCheckpointData?.summary?.failed) || 0} blocking checkpoint issue${Number(latestCheckpointData?.summary?.failed) === 1 ? '' : 's'} must be resolved before activation.`
+          : 'Run the Runtime Architecture Checkpoint before activation.',
+      }
+  const runtimeActivationEffectiveReady = runtimeActivationReadinessReady && !activationCheckpointBlockingRequirement
+  const runtimeActivationEffectiveLabel = activationCheckpointBlockingRequirement
+    ? latestCheckpointDisplay.text
+    : runtimeActivationReadinessLabel
+  const runtimeActivationEffectiveVariant = activationCheckpointBlockingRequirement
+    ? getCheckStatusVariant(latestCheckpointStatus)
+    : runtimeActivationReadinessVariant
+  const runtimeActivationEffectiveBlockingRequirements = activationCheckpointBlockingRequirement
+    ? [activationCheckpointBlockingRequirement]
+    : runtimeActivationBlockingRequirements
+  const runtimeActivationEffectivePrimaryBlockingRequirement =
+    runtimeActivationEffectiveBlockingRequirements[0] ?? null
+  const runtimeActivationReadinessCopy = runtimeActivationReadinessLoaded
+    ? runtimeActivationEffectiveReady
+      ? 'Activation readiness is complete. The engine will register an immutable deployment snapshot.'
+      : runtimeActivationEffectivePrimaryBlockingRequirement?.message || 'Activation readiness requirements are not met.'
+    : 'Loading activation readiness.'
   const dependencySnapshotLabel = `${dependencyLockMeta.hasPersistedLock ? 'Locked' : dependencyLockMeta.referenceCount > 0 ? 'Preview' : 'Not Locked'} - ${dependencyLockMeta.referenceCount} refs`
   const checkpointRuntimeUse = latestCheckpointStatus === 'FAIL'
     ? 'Checkpoint issue review required'
@@ -1627,6 +1691,9 @@ function SuperAdminFrameworkPackageEditor() {
     && normalizeSectionKey(form.packageKey)
     && (!Array.isArray(form.sections) || form.sections.length === 0 || Boolean(String(form.uiContractKey ?? '').trim()))
     && latestCheckpointAllowsActivation
+    && runtimeActivationReadinessLoaded
+    && runtimeActivationReadinessReady
+    && !isRuntimeActivationReadinessFetching
   )
 
   const closeSectionDialog = () => {
@@ -2031,6 +2098,8 @@ function SuperAdminFrameworkPackageEditor() {
     refetchIntegrity?.()
     refetchLatestCheckpoint?.()
     refetchRuntimeValidationHistory?.()
+    refetchRuntimeActivationReadiness?.()
+    refetchRuntimeActivationHistory?.()
   }
 
   const handleRunRuntimeValidationProbe = async () => {
@@ -2054,6 +2123,7 @@ function SuperAdminFrameworkPackageEditor() {
       runtimePath: runtimeValidationProbePath,
       skillRoleKey: 'VALIDATOR',
       mode: 'STRICT',
+      isPackageLevelValidation: true,
       beforeState: {},
       afterState: { probe: true },
     }
@@ -2063,6 +2133,7 @@ function SuperAdminFrameworkPackageEditor() {
       if (runtimeValidationProbeRequestRef.current !== probeRequestId) return
       const validation = result?.data ?? result ?? null
       setRuntimeValidationResult(validation)
+      refreshRuntimePackageReadiness()
       const validationBlocked = validation?.result === 'BLOCK'
       addToast({
         title: validationBlocked ? 'Runtime validation blocked' : 'Runtime validation passed',
@@ -2076,6 +2147,7 @@ function SuperAdminFrameworkPackageEditor() {
       const validation = getRuntimeValidationFromMutationError(err)
       if (validation) {
         setRuntimeValidationResult(validation)
+        refreshRuntimePackageReadiness()
         addToast({
           title: 'Runtime validation blocked',
           description: 'Review the Runtime Validation tab for behavioral governance issues.',
@@ -2563,7 +2635,7 @@ function SuperAdminFrameworkPackageEditor() {
                   </Card>
                 ) : null}
 
-                {isEditMode && form.status !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE && !latestCheckpointAllowsActivation ? (
+                {isEditMode && form.status !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE && runtimeActivationReadinessLoaded && !runtimeActivationEffectiveReady ? (
                   <Card
                     variant="outlined"
                     className="super-admin-framework-package-editor__readiness-card"
@@ -2573,22 +2645,26 @@ function SuperAdminFrameworkPackageEditor() {
                   >
                     <Card.Body className="super-admin-framework-package-editor__readiness-card-body">
                       <div className="super-admin-framework-package-editor__readiness-card-copy">
-                        <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
-                          Runtime-ready: {latestCheckpointDisplay.text}
+                        <Status size="md" showIcon variant={runtimeActivationEffectiveVariant}>
+                          Activation Readiness: {runtimeActivationEffectiveLabel}
                         </Status>
                         <p className="super-admin-framework-package-editor__helper">
-                          {latestCheckpointStatus === 'FAIL'
-                            ? `${Number(latestCheckpointData?.summary?.failed) || 0} blocking checkpoint issue${Number(latestCheckpointData?.summary?.failed) === 1 ? '' : 's'} must be resolved before activation.`
-                            : 'Run the Runtime Architecture Checkpoint before activation.'}
+                          {runtimeActivationReadinessCopy}
                         </p>
                       </div>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setActiveTab(FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY)}
+                        onClick={() => setActiveTab(
+                          runtimeActivationEffectivePrimaryBlockingRequirement?.key === 'runtimeVerdict'
+                            ? FRAMEWORK_PACKAGE_EDITOR_TABS.VALIDATION
+                            : FRAMEWORK_PACKAGE_EDITOR_TABS.INTEGRITY,
+                        )}
                       >
-                        View Checkpoint
+                        {runtimeActivationEffectivePrimaryBlockingRequirement?.key === 'runtimeVerdict'
+                          ? 'View Runtime Validation'
+                          : 'View Checkpoint'}
                       </Button>
                     </Card.Body>
                   </Card>
@@ -4198,11 +4274,42 @@ function SuperAdminFrameworkPackageEditor() {
               Package: {form.packageName || form.packageKey || `${form.frameworkKey} ${form.version}`}
             </p>
             <p className="super-admin-framework-package-editor__helper">
+              Framework Key: {form.frameworkKey || 'Not selected'}
+            </p>
+            <p className="super-admin-framework-package-editor__helper">
               UI Contract: {form.uiContractKey || 'No UI Contract selected'}
             </p>
             <Status size="md" showIcon variant={getCheckStatusVariant(latestCheckpointStatus)}>
               Checkpoint Status: {latestCheckpointDisplay.text}
             </Status>
+            <Status size="md" showIcon variant={runtimeActivationEffectiveVariant}>
+              Activation Readiness: {runtimeActivationEffectiveLabel}
+            </Status>
+            <Status size="sm" showIcon variant={getCheckStatusVariant(latestRuntimeValidationDecision)}>
+              Runtime Validation: {formatGovernanceToken(latestRuntimeValidationDecision, 'Not Run')}
+            </Status>
+            <p className="super-admin-framework-package-editor__helper">
+              Dependency Lock: {runtimeActivationReadiness?.dependencyLockState || dependencyLockEvidenceStateLabel}
+              {' - '}
+              {runtimeActivationReadiness?.dependencyReferenceCount ?? dependencyLockMeta.referenceCount} refs
+            </p>
+            {runtimeActivationHistoryRows.length > 0 ? (
+              <p className="super-admin-framework-package-editor__helper">
+                Activation Snapshots: {runtimeActivationHistoryRows.length}
+              </p>
+            ) : null}
+            {!runtimeActivationEffectiveReady && runtimeActivationEffectiveBlockingRequirements.length > 0 ? (
+              <div className="super-admin-framework-package-editor__runtime-validation-issue-list">
+                {runtimeActivationEffectiveBlockingRequirements.map((requirement) => (
+                  <p
+                    key={requirement.key || requirement.reason}
+                    className="super-admin-framework-package-editor__runtime-validation-issue-row"
+                  >
+                    {requirement.message || requirement.reason}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             <p className="super-admin-framework-package-editor__helper">
               Once activated, direct editing is locked and future changes require cloning a new version.
             </p>

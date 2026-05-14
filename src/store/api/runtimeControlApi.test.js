@@ -31,6 +31,8 @@ import {
   useGetFrameworkPackageDiffQuery,
   useGetFrameworkPackageIntegrityQuery,
   useGetFrameworkPackageQuery,
+  useGetRuntimeActivationHistoryQuery,
+  useGetRuntimeActivationReadinessQuery,
   useGetRuntimeValidationHistoryQuery,
   useGetRuntimeAgentQuery,
   useGetRuntimePathDependenciesQuery,
@@ -44,6 +46,7 @@ import {
   useListFrameworkRegistriesQuery,
   useListFrameworkPackagesQuery,
   useListRuntimeAgentsQuery,
+  useListRuntimeDeploymentsQuery,
   useListRuntimePathsQuery,
   useListRuntimeSkillsQuery,
   useListUiContractsQuery,
@@ -84,6 +87,7 @@ const {
   frameworkPackageClone: frameworkPackageCloneParity,
   frameworkPackageCheckpoint: frameworkPackageCheckpointParity,
   runtimeValidation: runtimeValidationParity,
+  runtimeActivation: runtimeActivationParity,
 } = runtimeControlParityContracts
 
 const expectFrameworkPackageCloneReleaseFieldsCleared = (frameworkPackage) => {
@@ -116,6 +120,9 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDiff')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('activateFrameworkPackage')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeActivationReadiness')
+    expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeActivationHistory')
+    expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeDeployments')
     expect(runtimeControlApi.endpoints).toHaveProperty('validateRuntimeOperation')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeValidationHistory')
     expect(runtimeControlApi.endpoints).toHaveProperty('listRuntimeAgents')
@@ -163,6 +170,9 @@ describe('runtimeControlApi', () => {
     expect(typeof useGetFrameworkPackageIntegrityQuery).toBe('function')
     expect(typeof useGetFrameworkPackageAuditQuery).toBe('function')
     expect(typeof useGetFrameworkPackageDiffQuery).toBe('function')
+    expect(typeof useGetRuntimeActivationReadinessQuery).toBe('function')
+    expect(typeof useGetRuntimeActivationHistoryQuery).toBe('function')
+    expect(typeof useListRuntimeDeploymentsQuery).toBe('function')
     expect(typeof useGetRuntimeValidationHistoryQuery).toBe('function')
     expect(typeof useListRuntimeAgentsQuery).toBe('function')
     expect(typeof useGetRuntimeAgentQuery).toBe('function')
@@ -227,6 +237,9 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackageDiff.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.activateFrameworkPackage.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.listRuntimeDeployments.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.listRuntimeAgents.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.createRuntimeAgent.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeAgent.initiate).toBe('function')
@@ -1032,6 +1045,33 @@ describe('runtimeControlApi', () => {
         runtimePath: 'framework_state.sections.rvl_probe',
       }),
     ])
+
+    const packageAfterCustomerValidation = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate(packageId),
+    )
+    expect(packageAfterCustomerValidation.data?.data?.runtimeVerdict ?? null).toBeNull()
+
+    const packageLevelValidationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'STATE_WRITE',
+        packageId,
+        frameworkKey: 'VMF',
+        runtimePath: 'framework_state.sections.rvl_probe',
+        skillRoleKey: 'VALIDATOR',
+        isPackageLevelValidation: true,
+      }),
+    )
+
+    expect(packageLevelValidationResult.error).toBeUndefined()
+
+    const packageAfterPackageValidation = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate(packageId, { forceRefetch: true }),
+    )
+    expect(packageAfterPackageValidation.data?.data?.runtimeVerdict).toEqual(expect.objectContaining({
+      result: runtimeValidationParity.stateWritePass.result,
+      auditPersisted: true,
+      dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
+    }))
   })
 
   it('blocks mock runtime mutations outside the skill role boundary', async () => {
@@ -1085,6 +1125,7 @@ describe('runtimeControlApi', () => {
         frameworkKey: 'VMF',
         runtimePath: 'framework_state.sections.rvl_blocked',
         skillRoleKey: 'VALIDATOR',
+        isPackageLevelValidation: true,
       }),
     )
 
@@ -1098,6 +1139,14 @@ describe('runtimeControlApi', () => {
         }),
       ]),
     )
+
+    const packageAfterBlockedValidation = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate(packageId, { forceRefetch: true }),
+    )
+    expect(packageAfterBlockedValidation.data?.data?.runtimeVerdict).toEqual(expect.objectContaining({
+      result: 'BLOCK',
+      dependencyLockState: 'NOT_LOCKED',
+    }))
   })
 
   it('blocks mock runtime outputs with forbidden extra fields', async () => {
@@ -1188,6 +1237,442 @@ describe('runtimeControlApi', () => {
     expect(activateResult.error?.status).toBe(422)
     expect(activateResult.error?.data?.error?.checkpoint?.status).toBe('FAIL')
     expect(activateResult.error?.data?.error?.details?.validationBindings).toContain('missing-validation-check')
+  })
+
+  it('keeps mock runtime activation readiness and deployment registration aligned with the live contract', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              isDefault: false,
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS_WITH_WARNINGS',
+              lastCheckpointResult: { status: 'PASS_WITH_WARNINGS', summary: { totalChecks: 1, passed: 1, warnings: 1, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230',
+                auditId: 'rvl-vmf-230',
+                status: 'PASS',
+                result: runtimeActivationParity.readinessReady.runtimeVerdictResult,
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: true,
+                dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230'),
+    )
+
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data).toEqual(expect.objectContaining({
+      ready: true,
+      status: runtimeActivationParity.readinessReady.status,
+      dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
+      checkpointStatus: 'PASS_WITH_WARNINGS',
+    }))
+    expect(readinessResult.data?.data?.runtimeVerdict).toEqual(expect.objectContaining({
+      result: runtimeActivationParity.readinessReady.runtimeVerdictResult,
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error).toBeUndefined()
+    expect(activateResult.data?.data?.status).toBe('ACTIVE')
+    expect(activateResult.data?.meta?.runtimeActivation?.activationSnapshot).toEqual(expect.objectContaining({
+      activationStatus: runtimeActivationParity.activationResult.activationStatus,
+      tenantScope: runtimeActivationParity.activationResult.tenantScope,
+      deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
+    }))
+    expect(activateResult.data?.meta?.runtimeActivation?.deployment).toEqual(expect.objectContaining({
+      status: runtimeActivationParity.activationResult.deploymentStatus,
+      tenantScope: runtimeActivationParity.activationResult.tenantScope,
+      deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
+    }))
+
+    const deploymentsResult = await store.dispatch(runtimeControlApi.endpoints.listRuntimeDeployments.initiate())
+    expect(deploymentsResult.error).toBeUndefined()
+    expect(deploymentsResult.data?.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        packageId: 'pkg-vmf-230',
+        status: runtimeActivationParity.activationResult.deploymentStatus,
+      }),
+    ]))
+
+    const historyResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate('pkg-vmf-230'),
+    )
+    expect(historyResult.error).toBeUndefined()
+    expect(historyResult.data?.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        packageId: 'pkg-vmf-230',
+        activationStatus: runtimeActivationParity.activationResult.activationStatus,
+      }),
+    ]))
+  })
+
+  it('blocks mock runtime activation when the Runtime Validation verdict is missing', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: null,
+            }
+          : pkg,
+      ),
+    }))
+
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230'),
+    )
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data?.ready).toBe(false)
+    expect(readinessResult.data?.data?.blockingReasons).toContain(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictMissing.reason,
+    )
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedRuntimeVerdictMissing.httpStatus)
+    expect(activateResult.error?.data?.error?.code).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictMissing.errorCode,
+    )
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictMissing.reason,
+    )
+  })
+
+  it('blocks mock runtime activation when the Runtime Validation verdict blocks', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230-blocked',
+                auditId: 'rvl-vmf-230-blocked',
+                status: 'FAIL',
+                result: 'BLOCK',
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: true,
+                dependencyLockState: 'LOCKED',
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedRuntimeVerdictBlocked.httpStatus)
+    expect(activateResult.error?.data?.error?.code).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictBlocked.errorCode,
+    )
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictBlocked.reason,
+    )
+  })
+
+  it('blocks mock runtime activation when the Runtime Validation verdict is not certified', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230',
+                auditId: 'rvl-vmf-230',
+                status: 'PASS',
+                result: 'ALLOW',
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: false,
+                dependencyLockState: 'LOCKED',
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedRuntimeVerdictNotCertified.httpStatus)
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictNotCertified.reason,
+    )
+  })
+
+  it('blocks mock runtime activation when the Runtime Validation verdict is stale', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              updatedAt: '2026-05-08T13:00:00.000Z',
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230',
+                auditId: 'rvl-vmf-230',
+                status: 'PASS',
+                result: 'ALLOW',
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: true,
+                dependencyLockState: 'LOCKED',
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedRuntimeVerdictStale.httpStatus)
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      runtimeActivationParity.readinessBlockedRuntimeVerdictStale.reason,
+    )
+  })
+
+  it('blocks mock runtime activation when dependency lock evidence is missing', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              dependencyLock: null,
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230',
+                auditId: 'rvl-vmf-230',
+                status: 'PASS',
+                result: 'ALLOW',
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: true,
+                dependencyLockState: 'LOCKED',
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230'),
+    )
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data?.dependencyLockState).toBe(
+      runtimeActivationParity.readinessBlockedDependencyLockMissing.dependencyLockState,
+    )
+    expect(readinessResult.data?.data?.blockingReasons).toContain(
+      runtimeActivationParity.readinessBlockedDependencyLockMissing.reason,
+    )
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedDependencyLockMissing.httpStatus)
+    expect(activateResult.error?.data?.error?.code).toBe(
+      runtimeActivationParity.readinessBlockedDependencyLockMissing.errorCode,
+    )
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      runtimeActivationParity.readinessBlockedDependencyLockMissing.reason,
+    )
+  })
+
+  it('supersedes the previous mock runtime deployment when activation registers a new deployment', async () => {
+    const store = createTestStore()
+
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
+      runtimeDeployments: [
+        {
+          id: 'deployment-previous-id',
+          deploymentId: 'deployment-vmf-global-production-previous',
+          activationId: 'activation-vmf-2-3-0-previous',
+          packageId: 'pkg-vmf-231',
+          frameworkKey: 'VMF',
+          frameworkVersion: '2.3.0',
+          status: 'ACTIVE',
+          tenantScope: runtimeActivationParity.activationResult.tenantScope,
+          deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
+          registeredAt: '2026-05-01T12:00:00.000Z',
+          registeredBy: 'sa-1',
+        },
+      ],
+      runtimeActivationSnapshots: [
+        {
+          id: 'activation-previous-id',
+          activationId: 'activation-vmf-2-3-0-previous',
+          packageId: 'pkg-vmf-231',
+          packageKey: 'vmf-2-3-0',
+          frameworkKey: 'VMF',
+          frameworkVersion: '2.3.0',
+          activationStatus: 'ACTIVE',
+          tenantScope: runtimeActivationParity.activationResult.tenantScope,
+          deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
+        },
+      ],
+      frameworkPackages: state.frameworkPackages.map((pkg) =>
+        pkg.id === 'pkg-vmf-230'
+          ? {
+              ...pkg,
+              status: 'VALIDATED',
+              versionStatus: 'VALIDATED',
+              dependencyLock: {
+                status: 'PASS',
+                snapshotId: 'dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+              },
+              lastCheckpointStatus: 'PASS',
+              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+              runtimeVerdict: {
+                validationId: 'rvl-vmf-230',
+                auditId: 'rvl-vmf-230',
+                status: 'PASS',
+                result: runtimeActivationParity.readinessReady.runtimeVerdictResult,
+                mode: 'STRICT',
+                lastValidatedAt: '2026-05-08T12:00:00.000Z',
+                auditPersisted: true,
+                dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
+              },
+            }
+          : pkg,
+      ),
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+
+    expect(activateResult.error).toBeUndefined()
+    expect(activateResult.data?.meta?.runtimeActivation?.readiness?.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'activeDeployment',
+        status: 'WARN',
+        reason: runtimeActivationParity.supersession.readinessReason,
+      }),
+    ]))
+    expect(activateResult.data?.meta?.runtimeActivation?.deployment?.deploymentId).not.toBe(
+      'deployment-vmf-global-production-previous',
+    )
+    expect(activateResult.data?.meta?.runtimeActivation?.supersededDeployment).toEqual(expect.objectContaining({
+      deploymentId: 'deployment-vmf-global-production-previous',
+    }))
+
+    const deploymentsResult = await store.dispatch(runtimeControlApi.endpoints.listRuntimeDeployments.initiate())
+    expect(deploymentsResult.data?.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        deploymentId: 'deployment-vmf-global-production-previous',
+        status: runtimeActivationParity.supersession.previousDeploymentStatus,
+      }),
+      expect.objectContaining({
+        packageId: 'pkg-vmf-230',
+        status: runtimeActivationParity.activationResult.deploymentStatus,
+      }),
+    ]))
+
+    const previousPackageResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate('pkg-vmf-231', { forceRefetch: true }),
+    )
+    expect(previousPackageResult.data?.data).toEqual(expect.objectContaining({
+      id: 'pkg-vmf-231',
+      status: 'ACTIVE',
+      isDefault: false,
+    }))
+
+    const previousHistoryResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate('pkg-vmf-231'),
+    )
+    expect(previousHistoryResult.data?.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        activationId: 'activation-vmf-2-3-0-previous',
+        activationStatus: runtimeActivationParity.supersession.previousActivationStatus,
+      }),
+    ]))
   })
 
   it('round-trips mock Runtime Path Registry CRUD, clone, dependencies, and lifecycle', async () => {

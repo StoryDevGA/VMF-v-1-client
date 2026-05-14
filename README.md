@@ -21,6 +21,10 @@ npm run lint     # Run ESLint
 npm test         # Run tests
 ```
 
+## Agent Testing Skill
+- Use `vmf-client-test-coverage` from `.git/skills/vmf-client-test-coverage/SKILL.md` for comprehensive client/frontend test planning, implementation, and review.
+- Use it for Vitest, Testing Library, RTK Query mock/live parity, Runtime Control lifecycle matrices, editor action states, cache invalidation, and no-gap regression coverage.
+
 ## Project Structure
 
 ```

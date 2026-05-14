@@ -24,6 +24,8 @@ const packageRefetchMock = vi.fn()
 const packageDependenciesRefetchMock = vi.fn()
 const packageCheckpointRefetchMock = vi.fn()
 const runtimeValidationHistoryRefetchMock = vi.fn()
+const runtimeActivationReadinessRefetchMock = vi.fn()
+const runtimeActivationHistoryRefetchMock = vi.fn()
 
 let paramsMock = {}
 let searchParamsMock = new URLSearchParams()
@@ -100,6 +102,38 @@ let runtimeValidationHistoryQueryMock = {
   isLoading: false,
   error: null,
   refetch: runtimeValidationHistoryRefetchMock,
+}
+let runtimeActivationReadinessQueryMock = {
+  data: {
+    data: {
+      ready: true,
+      status: 'READY',
+      dependencyLockState: 'LOCKED',
+      dependencyReferenceCount: 1,
+      runtimeVerdict: {
+        status: 'PASS',
+        result: 'ALLOW',
+        mode: 'STRICT',
+        auditPersisted: true,
+      },
+      requirements: [
+        { key: 'packageStatus', status: 'PASS', reason: 'FRAMEWORK_PACKAGE_VALIDATED', message: 'Package is validated.' },
+        { key: 'checkpoint', status: 'PASS', reason: 'RUNTIME_CHECKPOINT_READY', message: 'Checkpoint evidence allows activation.' },
+        { key: 'runtimeVerdict', status: 'PASS', reason: 'RUNTIME_VERDICT_ALLOW', message: 'Runtime Validation verdict allows activation.' },
+        { key: 'dependencyLock', status: 'PASS', reason: 'DEPENDENCY_LOCK_LOCKED', message: 'Dependency lock evidence is certified.' },
+      ],
+      blockingReasons: [],
+    },
+  },
+  isLoading: false,
+  isFetching: false,
+  refetch: runtimeActivationReadinessRefetchMock,
+}
+let runtimeActivationHistoryQueryMock = {
+  data: {
+    data: [],
+  },
+  refetch: runtimeActivationHistoryRefetchMock,
 }
 
 vi.mock('react-router-dom', async () => {
@@ -194,6 +228,8 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useGetFrameworkPackageIntegrityQuery: () => frameworkPackageIntegrityQueryMock,
   useGetFrameworkPackageLatestCheckpointQuery: () => frameworkPackageLatestCheckpointQueryMock,
   useGetFrameworkPackageQuery: () => frameworkPackageQueryMock,
+  useGetRuntimeActivationReadinessQuery: () => runtimeActivationReadinessQueryMock,
+  useGetRuntimeActivationHistoryQuery: () => runtimeActivationHistoryQueryMock,
   useGetRuntimeValidationHistoryQuery: () => runtimeValidationHistoryQueryMock,
   useListFrameworkPackagesQuery: () => ({ data: { data: [] } }),
   useListFrameworkRegistriesQuery: () => ({
@@ -375,6 +411,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     packageDependenciesRefetchMock.mockReset()
     packageCheckpointRefetchMock.mockReset()
     runtimeValidationHistoryRefetchMock.mockReset()
+    runtimeActivationReadinessRefetchMock.mockReset()
+    runtimeActivationHistoryRefetchMock.mockReset()
     paramsMock = {}
     searchParamsMock = new URLSearchParams()
     frameworkPackageQueryMock = { data: null, isLoading: false, error: null, refetch: packageRefetchMock }
@@ -450,6 +488,38 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       isLoading: false,
       error: null,
       refetch: runtimeValidationHistoryRefetchMock,
+    }
+    runtimeActivationReadinessQueryMock = {
+      data: {
+        data: {
+          ready: true,
+          status: 'READY',
+          dependencyLockState: 'LOCKED',
+          dependencyReferenceCount: 1,
+          runtimeVerdict: {
+            status: 'PASS',
+            result: 'ALLOW',
+            mode: 'STRICT',
+            auditPersisted: true,
+          },
+          requirements: [
+            { key: 'packageStatus', status: 'PASS', reason: 'FRAMEWORK_PACKAGE_VALIDATED', message: 'Package is validated.' },
+            { key: 'checkpoint', status: 'PASS', reason: 'RUNTIME_CHECKPOINT_READY', message: 'Checkpoint evidence allows activation.' },
+            { key: 'runtimeVerdict', status: 'PASS', reason: 'RUNTIME_VERDICT_ALLOW', message: 'Runtime Validation verdict allows activation.' },
+            { key: 'dependencyLock', status: 'PASS', reason: 'DEPENDENCY_LOCK_LOCKED', message: 'Dependency lock evidence is certified.' },
+          ],
+          blockingReasons: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: runtimeActivationReadinessRefetchMock,
+    }
+    runtimeActivationHistoryQueryMock = {
+      data: {
+        data: [],
+      },
+      refetch: runtimeActivationHistoryRefetchMock,
     }
     uiContractRowsMock = [cloneTestRow(activeUiContractRow)]
     listUiContractsQueryArgs = []
@@ -749,7 +819,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       title: 'Checkpoint failed',
       variant: 'error',
     }))
-    expect(screen.getByText(/runtime-ready: fail/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/activation readiness: fail/i).length).toBeGreaterThan(0)
   })
 
   it('keeps activation disabled until a positive checkpoint has run', async () => {
@@ -778,7 +848,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     })
 
     expect(screen.getAllByRole('button', { name: /activate package/i })[0]).toBeDisabled()
-    expect(screen.getByText(/runtime-ready: not run/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/activation readiness: not run/i).length).toBeGreaterThan(0)
     const readinessNotice = screen.getByRole('status', { name: /runtime readiness notice/i })
     expect(readinessNotice).toHaveClass('card', 'card--outlined')
     expect(within(readinessNotice).getByRole('button', { name: /view checkpoint/i })).toBeInTheDocument()
@@ -1024,6 +1094,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     await user.click(screen.getAllByRole('button', { name: /activate package/i })[0])
 
     const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/framework key:\s*VMF/i)).toBeInTheDocument()
     expect(within(dialog).getByText(/once activated, direct editing is locked/i)).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: /^activate package$/i }))
 
@@ -1453,8 +1524,10 @@ describe('SuperAdminFrameworkPackageEditor', () => {
         runtimePath: 'framework_state.sections.customer_problem',
         skillRoleKey: 'VALIDATOR',
         mode: 'STRICT',
+        isPackageLevelValidation: true,
       }))
     })
+    expect(runtimeActivationReadinessRefetchMock).toHaveBeenCalled()
     expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Runtime validation passed',
       variant: 'success',
@@ -1487,7 +1560,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     await waitFor(() => {
       expect(stateHelpButton).toHaveAttribute('aria-expanded', 'false')
     })
-    expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
+    expect(runtimeValidationHistoryRefetchMock).toHaveBeenCalled()
   })
 
   it('surfaces blocked runtime validation probes from the Runtime Validation tab', async () => {
@@ -1543,7 +1616,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByText('RVL-SCOPE-001')).toBeInTheDocument()
     const issueTable = screen.getByRole('table', { name: /runtime validation issue details/i })
     expect(within(issueTable).getByText('BLOCKING')).toBeInTheDocument()
-    expect(runtimeValidationHistoryRefetchMock).not.toHaveBeenCalled()
+    expect(runtimeValidationHistoryRefetchMock).toHaveBeenCalled()
   })
 
   it('surfaces generic runtime validation probe failures', async () => {
