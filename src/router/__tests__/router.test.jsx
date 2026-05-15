@@ -300,7 +300,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin workspace$/i },
+          { name: /^customer governance$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -330,7 +330,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin workspace$/i },
+          { name: /^customer governance$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -731,7 +731,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin workspace$/i },
+          { name: /^customer governance$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -759,7 +759,7 @@ describe('Router', () => {
       expect(
         await screen.findByRole(
           'heading',
-          { name: /^super admin workspace$/i },
+          { name: /^customer governance$/i },
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
@@ -854,7 +854,7 @@ describe('Router', () => {
 
       renderWithProviders(<RouterProvider router={testRouter} />, { store })
 
-      await screen.findByRole('navigation')
+      await screen.findByRole('navigation', { name: /main navigation/i })
 
       expect(screen.getByRole('button', { name: /customer governance/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /runtime control/i })).toBeInTheDocument()
@@ -883,7 +883,7 @@ describe('Router', () => {
       })
 
       renderWithProviders(<RouterProvider router={testRouter} />, { store })
-      await screen.findByRole('navigation')
+      await screen.findByRole('navigation', { name: /main navigation/i })
 
       expect(screen.queryByRole('combobox', { name: /select customer/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('combobox', { name: /switch tenant/i })).not.toBeInTheDocument()
