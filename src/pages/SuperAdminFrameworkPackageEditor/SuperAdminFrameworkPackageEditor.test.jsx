@@ -1969,7 +1969,22 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.queryByRole('table', { name: /runtime validation audit history/i })).not.toBeInTheDocument()
   })
 
-  it('surfaces checkpoint evidence in the runtime release summary', async () => {
+  it('surfaces copyable activation evidence identifiers in the runtime release summary', async () => {
+    const user = userEvent.setup()
+    const originalClipboard = navigator.clipboard
+    const originalExecCommand = document.execCommand
+    const writeText = vi.fn().mockResolvedValue()
+    const execCommand = vi.fn(() => true)
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    })
+
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
     frameworkPackageQueryMock.data.data.status = 'ACTIVE'
@@ -1981,6 +1996,22 @@ describe('SuperAdminFrameworkPackageEditor', () => {
         { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
         { collectionKey: 'UIContract', key: 'vmf-ui-contract-v1' },
       ],
+    }
+    runtimeActivationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'runtime-activation-snapshot-1',
+            activationId: 'activation-vmf-2-3-1-20260514085339-fcdd4b7e',
+            deploymentId: 'deployment-vmf-global-production--20260514085339-fcdd4b7e',
+            dependencySnapshotId: 'dep-lock-vmf-2-3-1',
+            dependencySnapshotHash: 'sha256-dep-lock-vmf-2-3-1',
+            activationStatus: 'ACTIVE',
+            activatedAt: '2026-05-07T13:42:00.000Z',
+          },
+        ],
+      },
+      refetch: runtimeActivationHistoryRefetchMock,
     }
     frameworkPackageLatestCheckpointQueryMock = {
       data: {
@@ -2021,6 +2052,212 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(within(summary).getByText(/Run By: Super Admin/i)).toBeInTheDocument()
     expect(within(summary).getAllByText(/Default Package/i).length).toBeGreaterThan(0)
     expect(within(summary).getByText(/checkpoint evidence certifies architecture readiness/i)).toBeInTheDocument()
+    const evidenceIdentifiers = within(summary).getByLabelText(/runtime evidence identifiers/i)
+    const evidenceToggle = within(evidenceIdentifiers).getByRole('button', {
+      name: /runtime evidence identifiers/i,
+    })
+    const runtimeEvidenceRows = [
+      ['Activation ID', 'activation-vmf-2-3-1-20260514085339-fcdd4b7e'],
+      ['Deployment ID', 'deployment-vmf-global-production--20260514085339-fcdd4b7e'],
+      ['Dependency Snapshot', 'dep-lock-vmf-2-3-1'],
+      ['Dependency Hash', 'sha256-dep-lock-vmf-2-3-1'],
+    ]
+
+    expect(evidenceToggle).toHaveAttribute('aria-expanded', 'false')
+    for (const [, value] of runtimeEvidenceRows) {
+      expect(within(evidenceIdentifiers).queryByText(value)).not.toBeInTheDocument()
+    }
+
+    await user.click(evidenceToggle)
+    expect(evidenceToggle).toHaveAttribute('aria-expanded', 'true')
+
+    for (const [label, value] of runtimeEvidenceRows) {
+      expect(within(evidenceIdentifiers).getByText(label)).toBeInTheDocument()
+      expect(within(evidenceIdentifiers).getByText(value)).toBeInTheDocument()
+      await user.click(within(evidenceIdentifiers).getByRole('button', {
+        name: new RegExp(`^Copy ${label}$`, 'i'),
+      }))
+
+      expect(writeText).toHaveBeenLastCalledWith(value)
+      expect(addToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: `${label} copied`,
+        variant: 'success',
+      }))
+    }
+
+    expect(execCommand).not.toHaveBeenCalled()
+
+    const dependencyHash = 'sha256-dep-lock-vmf-2-3-1'
+    const setData = vi.fn()
+
+    execCommand.mockImplementation(() => {
+      const copyEvent = new Event('copy', { bubbles: true, cancelable: true })
+
+      Object.defineProperty(copyEvent, 'clipboardData', {
+        configurable: true,
+        value: { setData },
+      })
+      document.dispatchEvent(copyEvent)
+      return true
+    })
+    writeText.mockRejectedValueOnce(new Error('Clipboard blocked'))
+
+    await user.click(within(evidenceIdentifiers).getByRole('button', {
+      name: /^Copy Dependency Hash$/i,
+    }))
+
+    expect(setData).toHaveBeenCalledWith('text/plain', dependencyHash)
+    expect(addToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'Dependency Hash copied',
+      variant: 'success',
+    }))
+
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: originalExecCommand,
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    })
+  })
+
+  it('omits activation dependency evidence rows when older snapshots do not carry those identifiers', async () => {
+    const user = userEvent.setup()
+
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isDefault = true
+    frameworkPackageQueryMock.data.data.dependencyLock = {
+      status: 'PASS',
+      snapshotId: 'dep-lock-current-not-activation',
+      snapshotHash: 'sha256-current-not-activation',
+      resolvedAt: '2026-05-07T13:42:00.000Z',
+      references: [
+        { collectionKey: 'RuntimePathRegistry', key: 'framework_state.sections.customer_problem' },
+      ],
+    }
+    runtimeActivationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'runtime-activation-snapshot-legacy',
+            activationId: 'activation-vmf-2-3-1-legacy',
+            deploymentId: 'deployment-vmf-global-production-legacy',
+            activationStatus: 'ACTIVE',
+            activatedAt: '2026-05-07T13:42:00.000Z',
+          },
+        ],
+      },
+      refetch: runtimeActivationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    const evidenceIdentifiers = within(summary).getByLabelText(/runtime evidence identifiers/i)
+    const evidenceToggle = within(evidenceIdentifiers).getByRole('button', {
+      name: /runtime evidence identifiers/i,
+    })
+
+    expect(within(evidenceToggle).getByText('2 IDs')).toBeInTheDocument()
+    await user.click(evidenceToggle)
+
+    expect(within(evidenceIdentifiers).getByText('Activation ID')).toBeInTheDocument()
+    expect(within(evidenceIdentifiers).getByText('Deployment ID')).toBeInTheDocument()
+    expect(within(evidenceIdentifiers).queryByText('Dependency Snapshot')).not.toBeInTheDocument()
+    expect(within(evidenceIdentifiers).queryByText('Dependency Hash')).not.toBeInTheDocument()
+    expect(within(evidenceIdentifiers).queryByText('dep-lock-current-not-activation')).not.toBeInTheDocument()
+    expect(within(evidenceIdentifiers).queryByText('sha256-current-not-activation')).not.toBeInTheDocument()
+  })
+
+  it('cleans up clipboard fallback listeners and textarea when execCommand throws', async () => {
+    const user = userEvent.setup()
+    const originalClipboard = navigator.clipboard
+    const originalExecCommand = document.execCommand
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard blocked'))
+    const execCommand = vi.fn(() => {
+      throw new Error('execCommand blocked')
+    })
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    })
+
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isDefault = true
+    runtimeActivationHistoryQueryMock = {
+      data: {
+        data: [
+          {
+            id: 'runtime-activation-snapshot-1',
+            activationId: 'activation-vmf-2-3-1-20260514085339-fcdd4b7e',
+            deploymentId: 'deployment-vmf-global-production--20260514085339-fcdd4b7e',
+            dependencySnapshotId: 'dep-lock-vmf-2-3-1',
+            dependencySnapshotHash: 'sha256-dep-lock-vmf-2-3-1',
+            activationStatus: 'ACTIVE',
+          },
+        ],
+      },
+      refetch: runtimeActivationHistoryRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    const summary = screen.getByLabelText(/runtime release summary/i)
+    const evidenceIdentifiers = within(summary).getByLabelText(/runtime evidence identifiers/i)
+    await user.click(within(evidenceIdentifiers).getByRole('button', {
+      name: /runtime evidence identifiers/i,
+    }))
+
+    const textareaCountBefore = document.body.querySelectorAll('textarea').length
+    await user.click(within(evidenceIdentifiers).getByRole('button', {
+      name: /^Copy Activation ID$/i,
+    }))
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: 'Unable to copy identifier',
+        variant: 'error',
+      }))
+    })
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(textareaCountBefore)
+
+    const setData = vi.fn()
+    const copyEvent = new Event('copy', { bubbles: true, cancelable: true })
+    Object.defineProperty(copyEvent, 'clipboardData', {
+      configurable: true,
+      value: { setData },
+    })
+    document.dispatchEvent(copyEvent)
+
+    expect(setData).not.toHaveBeenCalled()
+    expect(copyEvent.defaultPrevented).toBe(false)
+
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: originalExecCommand,
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    })
   })
 
   it('surfaces preview dependency snapshots before validation locks them', async () => {

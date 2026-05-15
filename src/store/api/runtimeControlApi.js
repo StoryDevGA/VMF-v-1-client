@@ -4388,6 +4388,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         const activationSnapshot = {
           id: generateMockObjectId(activationId),
           activationId,
+          deploymentId,
           packageId,
           packageKey: existingPackage.packageKey || '',
           frameworkKey: existingPackage.frameworkKey,

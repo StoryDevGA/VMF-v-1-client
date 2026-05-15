@@ -1255,6 +1255,7 @@ describe('runtimeControlApi', () => {
               dependencyLock: {
                 status: 'PASS',
                 snapshotId: 'dep-lock-vmf-230',
+                snapshotHash: 'sha256-dep-lock-vmf-230',
                 references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
               },
               lastCheckpointStatus: 'PASS_WITH_WARNINGS',
@@ -1295,16 +1296,25 @@ describe('runtimeControlApi', () => {
 
     expect(activateResult.error).toBeUndefined()
     expect(activateResult.data?.data?.status).toBe('ACTIVE')
-    expect(activateResult.data?.meta?.runtimeActivation?.activationSnapshot).toEqual(expect.objectContaining({
+    const activationSnapshot = activateResult.data?.meta?.runtimeActivation?.activationSnapshot
+    const deployment = activateResult.data?.meta?.runtimeActivation?.deployment
+    expect(activationSnapshot).toEqual(expect.objectContaining({
       activationStatus: runtimeActivationParity.activationResult.activationStatus,
       tenantScope: runtimeActivationParity.activationResult.tenantScope,
       deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
     }))
-    expect(activateResult.data?.meta?.runtimeActivation?.deployment).toEqual(expect.objectContaining({
+    expect(deployment).toEqual(expect.objectContaining({
       status: runtimeActivationParity.activationResult.deploymentStatus,
       tenantScope: runtimeActivationParity.activationResult.tenantScope,
       deploymentMode: runtimeActivationParity.activationResult.deploymentMode,
     }))
+    for (const field of runtimeActivationParity.activationResult.evidenceIdentifierFields) {
+      expect(activationSnapshot?.[field]).toEqual(expect.any(String))
+      expect(activationSnapshot?.[field]).not.toHaveLength(0)
+    }
+    expect(activationSnapshot?.deploymentId).toBe(deployment?.deploymentId)
+    expect(activationSnapshot?.dependencySnapshotId).toBe('dep-lock-vmf-230')
+    expect(activationSnapshot?.dependencySnapshotHash).toBe('sha256-dep-lock-vmf-230')
 
     const deploymentsResult = await store.dispatch(runtimeControlApi.endpoints.listRuntimeDeployments.initiate())
     expect(deploymentsResult.error).toBeUndefined()
@@ -1322,6 +1332,8 @@ describe('runtimeControlApi', () => {
     expect(historyResult.data?.data).toEqual(expect.arrayContaining([
       expect.objectContaining({
         packageId: 'pkg-vmf-230',
+        deploymentId: deployment?.deploymentId,
+        dependencySnapshotHash: 'sha256-dep-lock-vmf-230',
         activationStatus: runtimeActivationParity.activationResult.activationStatus,
       }),
     ]))

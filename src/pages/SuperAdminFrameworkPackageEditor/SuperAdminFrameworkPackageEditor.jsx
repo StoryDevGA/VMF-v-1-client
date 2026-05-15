@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { MdInfoOutline } from 'react-icons/md'
+import { MdContentCopy, MdExpandMore, MdInfoOutline } from 'react-icons/md'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
@@ -676,12 +676,91 @@ const getDependencyLockMeta = (pkg, checkpoint) => {
       ?? lock?.id
       ?? '',
     ).trim(),
+    snapshotHash: String(lock?.snapshotHash ?? lock?.hash ?? '').trim(),
     createdAt: lock?.createdAt
       ?? lock?.resolvedAt
       ?? lock?.lockedAt
       ?? getCheckpointTimestamp(checkpoint, pkg),
     sourceLabel: [packageKey, packageVersion].filter(Boolean).join(' ') || '--',
     referenceCount,
+  }
+}
+
+const getEvidenceIdentifierValue = (...values) =>
+  values
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean) || ''
+
+const clearTextSelection = () => {
+  if (typeof window === 'undefined' || !window.getSelection) return
+  window.getSelection()?.removeAllRanges()
+}
+
+const copyTextWithTextareaFallback = (value) => {
+  if (typeof document === 'undefined' || !document.body) {
+    throw new Error('Clipboard fallback unavailable')
+  }
+
+  let handledCopyEvent = false
+  const handleCopy = (event) => {
+    if (!event.clipboardData?.setData) return
+
+    event.clipboardData.setData('text/plain', value)
+    event.preventDefault()
+    handledCopyEvent = true
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, value.length)
+
+  document.addEventListener('copy', handleCopy, { once: true })
+  try {
+    const didCopy = document.execCommand?.('copy')
+
+    if (!didCopy && !handledCopyEvent) {
+      throw new Error('Clipboard fallback failed')
+    }
+  } finally {
+    document.removeEventListener('copy', handleCopy)
+    textarea.remove()
+  }
+}
+
+const copyRuntimeEvidenceValue = async (value) => {
+  let didCopy = false
+  let clipboardError = null
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      didCopy = true
+    } catch (error) {
+      clipboardError = clipboardError ?? error
+    }
+  }
+
+  if (!didCopy) {
+    try {
+      copyTextWithTextareaFallback(value)
+      didCopy = true
+    } catch (error) {
+      clipboardError = clipboardError ?? error
+    }
+  }
+
+  if (!didCopy) {
+    throw clipboardError ?? new Error('Clipboard copy failed')
   }
 }
 
@@ -1188,6 +1267,8 @@ function SuperAdminFrameworkPackageEditor() {
   })
   const [runtimeValidationCodeDetail, setRuntimeValidationCodeDetail] = useState(null)
   const [integrityMessageDetail, setIntegrityMessageDetail] = useState(null)
+  const [runtimeEvidenceIdentifiersOpen, setRuntimeEvidenceIdentifiersOpen] = useState(false)
+  const runtimeEvidenceIdentifiersPanelId = useId()
   const runtimeValidationProbeRequestRef = useRef(0)
   const cloneHydratedSourceRef = useRef('')
   const sectionDialogRef = useRef({
@@ -1488,7 +1569,11 @@ function SuperAdminFrameworkPackageEditor() {
     [rawRuntimeValidationHistoryRows],
   )
   const runtimeActivationReadiness = runtimeActivationReadinessResponse?.data ?? null
-  const runtimeActivationHistoryRows = runtimeActivationHistoryResponse?.data ?? []
+  const rawRuntimeActivationHistoryRows = runtimeActivationHistoryResponse?.data
+  const runtimeActivationHistoryRows = useMemo(
+    () => rawRuntimeActivationHistoryRows ?? [],
+    [rawRuntimeActivationHistoryRows],
+  )
   const runtimeActivationRequirements = Array.isArray(runtimeActivationReadiness?.requirements)
     ? runtimeActivationReadiness.requirements
     : []
@@ -1594,6 +1679,45 @@ function SuperAdminFrameworkPackageEditor() {
   const checkpointPrimaryMetricLabel = checkpointHasRun ? 'Passed' : 'Runs'
   const checkpointPrimaryMetricValue = checkpointHasRun ? latestCheckpointSummary.passed : 0
   const dependencyLockMeta = getDependencyLockMeta(loadedPackage, latestCheckpointData)
+  const latestRuntimeActivationSnapshot = useMemo(() => {
+    const rows = Array.isArray(runtimeActivationHistoryRows) ? runtimeActivationHistoryRows : []
+    return rows.find((row) =>
+      String(row?.activationStatus ?? '').trim().toUpperCase() === 'ACTIVE')
+      ?? rows[0]
+      ?? null
+  }, [runtimeActivationHistoryRows])
+  const runtimeEvidenceIdentifierRows = useMemo(() => {
+    if (!activePackageLocked || !latestRuntimeActivationSnapshot) return []
+
+    return [
+      {
+        key: 'activationId',
+        label: 'Activation ID',
+        value: getEvidenceIdentifierValue(
+          latestRuntimeActivationSnapshot.activationId,
+          latestRuntimeActivationSnapshot.id,
+        ),
+      },
+      {
+        key: 'deploymentId',
+        label: 'Deployment ID',
+        value: getEvidenceIdentifierValue(latestRuntimeActivationSnapshot.deploymentId),
+      },
+      {
+        key: 'dependencySnapshotId',
+        label: 'Dependency Snapshot',
+        value: getEvidenceIdentifierValue(latestRuntimeActivationSnapshot.dependencySnapshotId),
+      },
+      {
+        key: 'dependencySnapshotHash',
+        label: 'Dependency Hash',
+        value: getEvidenceIdentifierValue(latestRuntimeActivationSnapshot.dependencySnapshotHash),
+      },
+    ].filter((row) => row.value)
+  }, [
+    activePackageLocked,
+    latestRuntimeActivationSnapshot,
+  ])
   const dependencyLockEvidenceStateLabel = dependencyLockMeta.hasPersistedLock
     ? 'Locked'
     : dependencyLockMeta.referenceCount > 0
@@ -1695,6 +1819,27 @@ function SuperAdminFrameworkPackageEditor() {
     && runtimeActivationReadinessReady
     && !isRuntimeActivationReadinessFetching
   )
+
+  const handleCopyRuntimeEvidenceIdentifier = async (label, value) => {
+    const normalizedValue = String(value ?? '').trim()
+    if (!normalizedValue) return
+
+    try {
+      clearTextSelection()
+      await copyRuntimeEvidenceValue(normalizedValue)
+      addToast({
+        title: `${label} copied`,
+        description: 'Runtime evidence identifier copied to clipboard.',
+        variant: 'success',
+      })
+    } catch {
+      addToast({
+        title: 'Unable to copy identifier',
+        description: `${label} could not be copied. Select the value manually.`,
+        variant: 'error',
+      })
+    }
+  }
 
   const closeSectionDialog = () => {
     const nextDialog = {
@@ -2573,6 +2718,79 @@ function SuperAdminFrameworkPackageEditor() {
                             <strong className="super-admin-framework-package-editor__summary-metric-value">{checkpointRuntimeUse}</strong>
                           </div>
                         </div>
+                        {runtimeEvidenceIdentifierRows.length > 0 ? (
+                          <div
+                            className="super-admin-framework-package-editor__summary-evidence-identifiers"
+                            role="group"
+                            aria-label="Runtime evidence identifiers"
+                          >
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="super-admin-framework-package-editor__summary-evidence-toggle"
+                              aria-expanded={runtimeEvidenceIdentifiersOpen}
+                              aria-controls={runtimeEvidenceIdentifiersPanelId}
+                              rightIcon={(
+                                <MdExpandMore
+                                  aria-hidden="true"
+                                  className="super-admin-framework-package-editor__summary-evidence-toggle-icon"
+                                />
+                              )}
+                              onClick={() => {
+                                setRuntimeEvidenceIdentifiersOpen((isOpen) => !isOpen)
+                              }}
+                            >
+                              <span>Runtime evidence identifiers</span>
+                              <Badge variant="neutral" size="sm" pill outline>
+                                {runtimeEvidenceIdentifierRows.length} IDs
+                              </Badge>
+                            </Button>
+                            {runtimeEvidenceIdentifiersOpen ? (
+                              <div
+                                id={runtimeEvidenceIdentifiersPanelId}
+                                className="super-admin-framework-package-editor__summary-evidence-identifier-list"
+                              >
+                                {runtimeEvidenceIdentifierRows.map((row) => (
+                                  <div
+                                    className="super-admin-framework-package-editor__summary-evidence-identifier-row"
+                                    key={row.key}
+                                  >
+                                    <span className="super-admin-framework-package-editor__summary-eyebrow">
+                                      {row.label}
+                                    </span>
+                                    <div className="super-admin-framework-package-editor__summary-evidence-identifier-control">
+                                      <code className="super-admin-framework-package-editor__summary-evidence-identifier-value">
+                                        {row.value}
+                                      </code>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        leftIcon={<MdContentCopy aria-hidden="true" />}
+                                        data-clipboard-label={row.label}
+                                        data-clipboard-value={row.value}
+                                        onMouseDown={(event) => {
+                                          event.stopPropagation()
+                                          clearTextSelection()
+                                        }}
+                                        onClick={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          handleCopyRuntimeEvidenceIdentifier(row.label, row.value)
+                                        }}
+                                        aria-label={`Copy ${row.label}`}
+                                        className="super-admin-framework-package-editor__summary-evidence-copy-button"
+                                      >
+                                        Copy
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </section>
                       <div className="super-admin-framework-package-editor__summary-card super-admin-framework-package-editor__summary-card--metric">
                         <div className="super-admin-framework-package-editor__summary-card-header">
