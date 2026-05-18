@@ -335,12 +335,12 @@
 
 @media (min-width: 768px) {
   .table--hoverable .table__body .table__row:hover {
-    background-color: color-mix(in srgb, var(--color-primary-50) 30%, var(--color-surface));
+    background-color: color-mix(in srgb, var(--color-primary-50) 10%, var(--color-surface));
     cursor: pointer;
   }
 
   .table--hoverable.table--striped .table__body .table__row:nth-child(even):hover {
-    background-color: color-mix(in srgb, var(--color-primary-50) 30%, var(--color-background-secondary));
+    background-color: color-mix(in srgb, var(--color-primary-50) 10%, var(--color-background-secondary));
   }
 }
 

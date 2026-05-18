@@ -24,18 +24,22 @@
   width: 100%;
 }
 
+.maintain-vmfs__fieldset,
+.maintain-vmfs__card {
+  height: 100%;
+}
+
 .maintain-vmfs__card-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
+  display: grid;
+  gap: var(--spacing-sm);
 }
 
 .maintain-vmfs__card-body--compact {
-  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
 }
 
 .maintain-vmfs__card-body--state {
-  align-items: flex-start;
+  align-items: start;
 }
 
 .maintain-vmfs__state-message {
@@ -50,7 +54,7 @@
   gap: var(--spacing-xs);
 }
 
-.maintain-vmfs__catalogue-actions-row {
+.maintain-vmfs__catalogue-buttons {
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -59,32 +63,117 @@
 }
 
 .maintain-vmfs__capacity-status {
-  align-self: flex-end;
+  margin-right: var(--spacing-2xs);
 }
 
 .maintain-vmfs__capacity-status .status__text {
   white-space: nowrap;
-  padding-top: var(--spacing-sm, 0.5rem);
-  padding-right: var(--spacing-sm, 0.5rem);
-}
-
-.maintain-vmfs__capacity-status .status__indicator {
-  display: none;
 }
 
 .maintain-vmfs__toolbar {
   display: grid;
   align-items: end;
-  gap: var(--spacing-md);
-  grid-template-columns: minmax(220px, 1fr) minmax(170px, 220px) minmax(170px, 220px);
+  gap: var(--spacing-sm);
+  grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
 }
 
 .maintain-vmfs__table-wrap {
   width: 100%;
+  margin-top: 0;
+}
+
+.maintain-vmfs__table {
+  min-width: 1100px;
 }
 
 .maintain-vmfs__row-actions {
-  min-width: 9rem;
+  min-width: 120px;
+}
+
+.maintain-vmfs__vmf-summary,
+.maintain-vmfs__framework-summary {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.maintain-vmfs__vmf-summary-header {
+  display: grid;
+  align-items: start;
+  justify-items: start;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.maintain-vmfs__vmf-name,
+.maintain-vmfs__summary-value {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.maintain-vmfs__vmf-name {
+  max-width: 100%;
+}
+
+.maintain-vmfs__vmf-description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.maintain-vmfs__summary-pair {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.maintain-vmfs__summary-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.maintain-vmfs__runtime-accordion {
+  width: 100%;
+  min-width: 0;
+}
+
+.maintain-vmfs__runtime-accordion .accordion__item {
+  border: none;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.maintain-vmfs__runtime-accordion-header {
+  padding: 0;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  gap: var(--spacing-2xs);
+  letter-spacing: 0;
+  line-height: var(--line-height-tight);
+  text-transform: none;
+}
+
+.maintain-vmfs__runtime-accordion-header:hover {
+  background: transparent;
+}
+
+.maintain-vmfs__runtime-accordion-header .accordion__header-text {
+  min-width: 0;
+  width: 100%;
+}
+
+.maintain-vmfs__runtime-accordion-header .accordion__icon {
+  margin-left: var(--spacing-2xs);
+}
+
+.maintain-vmfs__runtime-accordion-content .accordion__content-inner {
+  padding: var(--spacing-2xs) 0 var(--spacing-xs);
 }
 
 .maintain-vmfs__table-note {
@@ -104,7 +193,8 @@
 .maintain-vmfs__pagination-controls {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .maintain-vmfs__pagination-info {
@@ -182,31 +272,47 @@
 
 @media (max-width: 1024px) {
   .maintain-vmfs__toolbar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .maintain-vmfs__table .table__header,
+  .maintain-vmfs__table .table__cell {
+    padding-inline: var(--spacing-sm);
   }
 }
 
 @media (max-width: 768px) {
-  .maintain-vmfs__toolbar {
-    grid-template-columns: 1fr;
+  .maintain-vmfs__card-body--compact {
+    padding: var(--spacing-sm);
   }
 
   .maintain-vmfs__catalogue-actions {
     align-items: stretch;
   }
 
-  .maintain-vmfs__catalogue-actions-row {
+  .maintain-vmfs__catalogue-buttons {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
   }
 
-  .maintain-vmfs__catalogue-actions .btn {
+  .maintain-vmfs__catalogue-buttons > * {
     width: 100%;
   }
 
   .maintain-vmfs__capacity-status {
-    align-self: flex-end;
+    margin-right: 0;
+    justify-content: center;
+  }
+
+  .maintain-vmfs__table {
+    min-width: 0;
+  }
+
+  .maintain-vmfs__table-wrap {
+    overflow: visible;
   }
 
   .maintain-vmfs__pagination {
@@ -215,7 +321,12 @@
   }
 
   .maintain-vmfs__pagination-controls {
-    justify-content: space-between;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .maintain-vmfs__pagination-controls > * {
+    flex: 1 1 calc(50% - var(--spacing-sm));
   }
 
   .maintain-vmfs__form-actions {

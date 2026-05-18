@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { MdInfoOutline } from 'react-icons/md'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -263,6 +264,7 @@ export function EditUsersListView({
   hasCanonicalAdmin,
   isRowActionMutationLoading,
 }) {
+  const navigate = useNavigate()
   const rowActions = useMemo(
     () => [
       {
@@ -374,6 +376,9 @@ export function EditUsersListView({
     [handleRowAction, onEditUserClick, rowActions],
   )
   const selectedCount = selectedRows?.size ?? 0
+  const handleBackClick = useCallback(() => {
+    navigate('/app/dashboard')
+  }, [navigate])
 
   return (
     <>
@@ -389,6 +394,14 @@ export function EditUsersListView({
         <Card variant="elevated" className="edit-users__card">
           <Card.Body className="edit-users__card-body edit-users__card-body--compact">
             <div className="edit-users__catalogue-actions">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBackClick}
+              >
+                Back
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -416,23 +429,29 @@ export function EditUsersListView({
             ) : null}
 
             <div className="edit-users__note-grid">
-              <div
-                className="edit-users__governance-note"
+              <Card
+                variant="outlined"
+                className="edit-users__note-card"
                 role="note"
                 aria-label="Customer Admin governance guidance"
               >
-                <p className="edit-users__governance-title">Customer Admin governance</p>
-                <p className="edit-users__governance-text">{governanceNote}</p>
-              </div>
+                <Card.Body className="edit-users__note-body">
+                  <p className="edit-users__note-title">Customer Admin governance</p>
+                  <p className="edit-users__note-text">{governanceNote}</p>
+                </Card.Body>
+              </Card>
 
-              <div
-                className="edit-users__lifecycle-note"
+              <Card
+                variant="outlined"
+                className="edit-users__note-card"
                 role="note"
                 aria-label="User lifecycle and invitation guidance"
               >
-                <p className="edit-users__lifecycle-title">User lifecycle and invitations</p>
-                <p className="edit-users__lifecycle-text">{lifecycleNote}</p>
-              </div>
+                <Card.Body className="edit-users__note-body">
+                  <p className="edit-users__note-title">User lifecycle and invitations</p>
+                  <p className="edit-users__note-text">{lifecycleNote}</p>
+                </Card.Body>
+              </Card>
             </div>
 
             <div className="edit-users__toolbar">

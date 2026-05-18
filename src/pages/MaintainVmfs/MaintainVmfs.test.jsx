@@ -252,6 +252,38 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled()
   })
 
+  it('renders Back, capacity, and Create in the compact catalogue action bar', () => {
+    listQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 4,
+            currentCount: 2,
+            remainingCount: 2,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
+
+    expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
+    expect(within(actionBar).getByRole('status', { name: /^vmf capacity/i })).toHaveTextContent('2 of 4 left')
+    expect(within(actionBar).getByRole('button', { name: /^create$/i })).toBeEnabled()
+    expect(actionBar).toHaveTextContent(/BackCreate.*2 of 4 left/)
+  })
+
   it('resets workspace filters and dialogs when the tenant context changes', async () => {
     const user = userEvent.setup()
     let currentTenantContext = {
@@ -477,7 +509,8 @@ describe('MaintainVmfs', () => {
     expect(within(actions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
   })
 
-  it('renders compact row-action menus with only the allowed actions per row state', () => {
+  it('renders compact row-action menus with only the allowed actions per row state', async () => {
+    const user = userEvent.setup()
     listQueryResponse = {
       data: {
         data: [
@@ -510,6 +543,40 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(screen.getByText(/use the actions menu to view details, edit vmfs, or schedule a soft-delete/i)).toBeInTheDocument()
+
+    const table = screen.getByRole('table', { name: /vmf catalogue/i })
+
+    expect(within(table).getByRole('columnheader', { name: /^vmf$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^description$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^status$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^lifecycle$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^framework$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^runtime state$/i })).toBeInTheDocument()
+    expect(within(table).queryByRole('columnheader', { name: /^completion$/i })).not.toBeInTheDocument()
+    expect(within(table).getByText('Current active framework')).toBeInTheDocument()
+    expect(within(table).getByText('CANONISED')).toBeInTheDocument()
+    expect(within(table).getByText('PUBLISHED')).toBeInTheDocument()
+    expect(within(table).getAllByText('Version').length).toBeGreaterThan(0)
+    expect(within(table).getAllByRole('button', { name: /completion runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /validation runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /lock runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /snapshot runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /migration runtime evidence/i })).toHaveLength(2)
+    const runtimeEvidenceButtons = within(table).getAllByRole('button', {
+      name: /completion runtime evidence/i,
+    })
+    const activeRuntimePanel = document.getElementById(
+      runtimeEvidenceButtons[0].getAttribute('aria-controls'),
+    )
+    expect(runtimeEvidenceButtons).toHaveLength(2)
+    expect(runtimeEvidenceButtons[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(activeRuntimePanel).toHaveAttribute('aria-hidden', 'true')
+
+    await user.click(runtimeEvidenceButtons[0])
+
+    expect(runtimeEvidenceButtons[0]).toHaveAttribute('aria-expanded', 'true')
+    expect(activeRuntimePanel).toHaveAttribute('aria-hidden', 'false')
+    expect(activeRuntimePanel).toHaveTextContent('NOT_TRACKED')
 
     const activeActions = screen.getByRole('combobox', { name: /actions for active vmf/i })
     expect(within(activeActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()

@@ -1,25 +1,46 @@
 /**
  * Dashboard Page
  *
- * Customer-app home surface with role-aware workflow tiles.
+ * Customer runtime operating surface with tenant, role, and work context.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  MdOutlineDashboardCustomize,
+  MdAddCircleOutline,
+  MdAssignmentTurnedIn,
+  MdFilterList,
   MdOutlineAssessment,
+  MdOutlineDashboardCustomize,
   MdOutlineInsights,
+  MdOutlinePeopleAlt,
+  MdOutlinePlayCircle,
+  MdOutlineWarningAmber,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
 import { Card } from '../../components/Card'
 import { CustomerSelector } from '../../components/CustomerSelector'
+import { CustomSelect } from '../../components/CustomSelect'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Link } from '../../components/Link'
+import { Status } from '../../components/Status'
+import { Table } from '../../components/Table'
 import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import { getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './Dashboard.css'
+
+const WORK_TYPE_OPTIONS = [
+  { value: 'ALL', label: 'All Work' },
+  { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
+  { value: 'DEAL_ANALYSIS', label: 'Deal Analysis' },
+  { value: 'BUSINESS_CASE', label: 'Business Cases' },
+  { value: 'ACCOUNT_PLAN', label: 'Account Plans' },
+]
+
+const ENABLE_RUNTIME_WORKSPACE_SCAFFOLD =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_RUNTIME_WORKSPACE_SCAFFOLD === 'true'
 
 const normalizeFeatureKeys = (features) =>
   Array.isArray(features)
@@ -28,7 +49,246 @@ const normalizeFeatureKeys = (features) =>
       .filter(Boolean)
     : []
 
+const normalizeRoleKeys = (roles) =>
+  Array.isArray(roles)
+    ? roles.map((role) => String(role ?? '').trim().toUpperCase()).filter(Boolean)
+    : []
+
+const hasRole = (roles, role) => normalizeRoleKeys(roles).includes(role)
+
+const getMembershipCustomerId = (membership) =>
+  membership?.customerId
+  ?? membership?.customer?.id
+  ?? membership?.customer?._id
+
+const findCustomerMembership = (user, customerId, role) => {
+  if (!customerId || !Array.isArray(user?.memberships)) return null
+  const normalizedCustomerId = String(customerId)
+
+  return user.memberships.find((membership) => {
+    const membershipCustomerId = getMembershipCustomerId(membership)
+    return membershipCustomerId !== null
+      && membershipCustomerId !== undefined
+      && String(membershipCustomerId) === normalizedCustomerId
+      && (!role || hasRole(membership?.roles, role))
+  }) ?? null
+}
+
+const findTenantMembership = (user, customerId, tenantId, role) => {
+  if (!customerId || !tenantId || !Array.isArray(user?.tenantMemberships)) return null
+  const normalizedCustomerId = String(customerId)
+  const normalizedTenantId = String(tenantId)
+
+  return user.tenantMemberships.find((membership) =>
+    String(getMembershipCustomerId(membership) ?? '') === normalizedCustomerId
+    && String(membership?.tenantId ?? '') === normalizedTenantId
+    && (!role || hasRole(membership?.roles, role))) ?? null
+}
+
+const findTenantMembershipByCustomer = (user, customerId, role) => {
+  if (!customerId || !Array.isArray(user?.tenantMemberships)) return null
+  const normalizedCustomerId = String(customerId)
+
+  return user.tenantMemberships.find((membership) =>
+    String(getMembershipCustomerId(membership) ?? '') === normalizedCustomerId
+    && (!role || hasRole(membership?.roles, role))) ?? null
+}
+
+const formatTokenLabel = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+
+function DashboardHeroMetric({ label, value, children, control = false }) {
+  const metricClassName = [
+    'dashboard__hero-metric',
+    control ? 'dashboard__hero-metric--control' : '',
+  ].filter(Boolean).join(' ')
+
+  return (
+    <div className={metricClassName}>
+      <dt>{label}</dt>
+      <dd>{children ?? value}</dd>
+    </div>
+  )
+}
+
+function DashboardSectionCard({
+  badge,
+  children,
+  description,
+  icon,
+  modifier,
+  panelAs = 'div',
+  panelLabel,
+  status,
+  title,
+}) {
+  const SectionIcon = icon
+  const PanelElement = panelAs
+  const cardClassName = [
+    'dashboard__section-card',
+    modifier ? `dashboard__section-card--${modifier}` : '',
+  ].filter(Boolean).join(' ')
+  const panelProps = panelAs === 'nav'
+    ? { 'aria-label': panelLabel }
+    : { 'aria-label': panelLabel, role: 'region' }
+
+  return (
+    <Card variant="default" className={cardClassName} role="listitem">
+      <Card.Body className="dashboard__section-body">
+        <div className="dashboard__section-summary">
+          <div className="dashboard__section-meta">
+            <span className="dashboard__section-icon" aria-hidden="true">
+              <SectionIcon />
+            </span>
+            {badge ? (
+              <Badge variant={badge.variant ?? 'info'} size="sm" pill outline>
+                {badge.label}
+              </Badge>
+            ) : null}
+            {status ? (
+              <Status variant={status.variant ?? 'neutral'} size="sm" showIcon>
+                {status.label}
+              </Status>
+            ) : null}
+          </div>
+          <div className="dashboard__section-copy">
+            <h2 className="dashboard__section-title">{title}</h2>
+            <p className="dashboard__section-description">{description}</p>
+          </div>
+        </div>
+        <PanelElement className="dashboard__section-panel" {...panelProps}>
+          {children}
+        </PanelElement>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function RuntimeActionCard({ action }) {
+  const Icon = action.icon
+
+  return (
+    <li
+      className={[
+        'dashboard__launch-item',
+        'dashboard__launch-item--action',
+        action.priority === 'HIGH' ? 'dashboard__action-card--priority' : '',
+        action.disabled ? 'dashboard__action-card--disabled' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <Link
+        to={action.to}
+        disabled={action.disabled}
+        className="dashboard__launch-link dashboard__launch-link--action"
+        variant="subtle"
+        underline="none"
+      >
+        <span className="dashboard__launch-topline">
+          <span className="dashboard__launch-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <Badge
+            variant={action.priority === 'HIGH' ? 'warning' : 'neutral'}
+            size="sm"
+            pill
+            outline
+          >
+            {action.priority}
+          </Badge>
+        </span>
+        <span className="dashboard__launch-copy">
+          <span className="dashboard__launch-label">{action.title}</span>
+          <span className="dashboard__launch-meta">{action.meta}</span>
+          <span className="dashboard__launch-description">{action.description}</span>
+          <span className="dashboard__launch-command">{action.label}</span>
+        </span>
+      </Link>
+    </li>
+  )
+}
+
+function CreateWorkCard({ item }) {
+  const Icon = item.icon
+
+  return (
+    <li
+      className={[
+        'dashboard__launch-item',
+        'dashboard__launch-item--create',
+        item.disabled ? 'dashboard__create-card--disabled' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <Link
+        to={item.to}
+        disabled={item.disabled}
+        className="dashboard__launch-link dashboard__launch-link--create"
+        variant="subtle"
+        underline="none"
+      >
+        <span className="dashboard__launch-topline">
+          <span className="dashboard__launch-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <Badge variant={item.disabled ? 'neutral' : 'success'} size="sm" pill outline>
+            {item.label}
+          </Badge>
+        </span>
+        <span className="dashboard__launch-copy">
+          <span className="dashboard__launch-label">{item.title}</span>
+          <span className="dashboard__launch-meta">{item.description}</span>
+          <span className="dashboard__launch-description">{item.reason}</span>
+        </span>
+      </Link>
+    </li>
+  )
+}
+
+function SecondaryNavigationLink({ item }) {
+  const Icon = item.icon
+  const badge = item.badge
+
+  return (
+    <li
+      className={[
+        'dashboard__launch-item',
+        'dashboard__launch-item--secondary',
+        item.disabled ? 'dashboard__secondary-card--disabled' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <Link
+        to={item.to}
+        disabled={item.disabled}
+        className="dashboard__launch-link dashboard__launch-link--secondary"
+        variant="subtle"
+        underline="none"
+      >
+        <span className="dashboard__launch-topline">
+          <span className="dashboard__launch-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          {badge ? (
+            <Badge variant={badge.variant ?? 'neutral'} size="sm" pill outline>
+              {badge.label}
+            </Badge>
+          ) : null}
+        </span>
+        <span className="dashboard__launch-copy">
+          <span className="dashboard__launch-label">{item.title}</span>
+          <span className="dashboard__launch-meta">{item.meta}</span>
+        </span>
+      </Link>
+    </li>
+  )
+}
+
 function Dashboard() {
+  const [workTypeFilter, setWorkTypeFilter] = useState('ALL')
   const authorization = useAuthorization()
   const {
     user,
@@ -38,11 +298,10 @@ function Dashboard() {
     hasCustomerPermission,
     hasTenantPermission,
   } = authorization
-  const { getFeatureEntitlements, getEntitlementSource } = authorization
+  const { getFeatureEntitlements } = authorization
   const {
     customerId,
     tenantId,
-    selectedTenant,
     tenants,
     selectableTenants,
     canViewTenants,
@@ -55,6 +314,7 @@ function Dashboard() {
     setTenantId,
   } = useTenantContext()
   const { data: customerDetails } = useGetCustomerQuery(customerId, { skip: !customerId })
+
   const selectableTenantRows = useMemo(
     () => (Array.isArray(selectableTenants) ? selectableTenants : []),
     [selectableTenants],
@@ -63,31 +323,8 @@ function Dashboard() {
   const customerScopeValue = useMemo(() => {
     if (!customerId) return 'Not selected'
 
-    const normalizedCustomerId = String(customerId)
-    const isMatchingCustomerScope = (membershipCustomerId) =>
-      membershipCustomerId !== null
-      && membershipCustomerId !== undefined
-      && String(membershipCustomerId) === normalizedCustomerId
-
-    const customerMembership = Array.isArray(user?.memberships)
-      ? user.memberships.find((membership) => {
-        const membershipCustomerId =
-          membership?.customerId
-          ?? membership?.customer?.id
-          ?? membership?.customer?._id
-        return isMatchingCustomerScope(membershipCustomerId)
-      })
-      : null
-
-    const tenantMembership = Array.isArray(user?.tenantMemberships)
-      ? user.tenantMemberships.find((membership) => {
-        const membershipCustomerId =
-          membership?.customerId
-          ?? membership?.customer?.id
-          ?? membership?.customer?._id
-        return isMatchingCustomerScope(membershipCustomerId)
-      })
-      : null
+    const customerMembership = findCustomerMembership(user, customerId)
+    const tenantMembership = findTenantMembershipByCustomer(user, customerId)
 
     const customerNameCandidates = [
       customerName,
@@ -126,7 +363,7 @@ function Dashboard() {
     )
 
     const hasTenantMembershipAdmin = Array.isArray(user?.tenantMemberships)
-      && user.tenantMemberships.some((membership) => membership?.roles?.includes('TENANT_ADMIN'))
+      && user.tenantMemberships.some((membership) => hasRole(membership?.roles, 'TENANT_ADMIN'))
 
     return hasCustomerScopedTenantAdmin || hasTenantMembershipAdmin
   }, [accessibleCustomerIds, hasCustomerRole, user])
@@ -145,12 +382,7 @@ function Dashboard() {
     () =>
       Boolean(
         customerId
-          && Array.isArray(user?.tenantMemberships)
-          && user.tenantMemberships.some(
-            (membership) =>
-              String(membership?.customerId ?? '') === String(customerId)
-              && (membership?.roles ?? []).includes('TENANT_ADMIN'),
-          ),
+          && findTenantMembershipByCustomer(user, customerId, 'TENANT_ADMIN'),
       ),
     [customerId, user],
   )
@@ -160,10 +392,32 @@ function Dashboard() {
     [hasCustomerScopedTenantAdmin, hasSelectedCustomerTenantMembershipAdmin],
   )
 
+  const hasSelectedSalesManagerRole = useMemo(
+    () =>
+      Boolean(
+        findCustomerMembership(user, customerId, 'SALES_MANAGER')
+        || findTenantMembership(user, customerId, tenantId, 'SALES_MANAGER'),
+      ),
+    [customerId, tenantId, user],
+  )
+
+  const hasSelectedSalesExecutionRole = useMemo(
+    () =>
+      Boolean(
+        findCustomerMembership(user, customerId, 'SALES')
+        || findCustomerMembership(user, customerId, 'SALES_USER')
+        || findTenantMembership(user, customerId, tenantId, 'SALES')
+        || findTenantMembership(user, customerId, tenantId, 'SALES_USER'),
+      ),
+    [customerId, tenantId, user],
+  )
+
   const canOpenVmfWorkspace = useMemo(() => {
     if (!customerId) return false
     if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_VIEW')) return true
-    if (tenantId && typeof hasTenantPermission === 'function') return hasTenantPermission(customerId, tenantId, 'VMF_VIEW')
+    if (tenantId && typeof hasTenantPermission === 'function') {
+      return hasTenantPermission(customerId, tenantId, 'VMF_VIEW')
+    }
     return false
   }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
 
@@ -179,6 +433,8 @@ function Dashboard() {
 
   const primaryRole = useMemo(() => {
     if (isSuperAdmin) return 'Super Administrator'
+    if (hasSelectedSalesManagerRole) return 'Sales Manager'
+    if (hasSelectedSalesExecutionRole) return 'Sales User'
     if (customerId) {
       if (hasSelectedCustomerAdminAccess) return 'Customer Administrator'
       if (hasSelectedCustomerTenantAdminAccess) return 'Tenant Administrator'
@@ -193,32 +449,9 @@ function Dashboard() {
     hasAnyTenantAdminAccess,
     hasSelectedCustomerAdminAccess,
     hasSelectedCustomerTenantAdminAccess,
+    hasSelectedSalesExecutionRole,
+    hasSelectedSalesManagerRole,
     isSuperAdmin,
-  ])
-
-  const topologyLabel = useMemo(() => {
-    // Standard users with exactly one accessible tenant behave like a single-tenant scope
-    // in the dashboard summary, even when the customer itself is multi-tenant.
-    if (
-      supportsTenantManagement
-      && canViewTenants
-      && !hasSelectedCustomerAdminAccess
-      && !hasSelectedCustomerTenantAdminAccess
-      && tenantRowsForSwitcher.length === 1
-    ) {
-      return 'Single-tenant'
-    }
-
-    if (selectedCustomerTopology === 'MULTI_TENANT') return 'Multi-tenant'
-    if (selectedCustomerTopology === 'SINGLE_TENANT') return 'Single-tenant'
-    return 'Not available'
-  }, [
-    canViewTenants,
-    hasSelectedCustomerAdminAccess,
-    hasSelectedCustomerTenantAdminAccess,
-    selectedCustomerTopology,
-    supportsTenantManagement,
-    tenantRowsForSwitcher.length,
   ])
 
   const tenantScopeValue = useMemo(() => {
@@ -230,7 +463,7 @@ function Dashboard() {
     }
     if (resolvedTenantName) return resolvedTenantName
     if (tenantId) return tenantId
-    if (customerId && supportsTenantManagement) return 'All tenants'
+    if (customerId && supportsTenantManagement) return 'Not selected'
     return 'Not selected'
   }, [
     customerId,
@@ -248,28 +481,6 @@ function Dashboard() {
         : [],
     [customerId, getFeatureEntitlements],
   )
-
-  const licensedFeaturesValue = useMemo(() => {
-    if (!customerId) return 'Not selected'
-
-    if (featureEntitlements.length === 0) {
-      return 'Not available'
-    }
-
-    const source = String(
-      typeof getEntitlementSource === 'function'
-        ? getEntitlementSource(customerId)
-        : '',
-    ).trim().toUpperCase()
-    const sourceLabel = {
-      LICENSE_LEVEL: 'Licence level',
-      CUSTOMER_OVERRIDE: 'Customer override',
-      LEGACY_UNRESTRICTED: 'Legacy unrestricted',
-    }[source]
-
-    const featureListLabel = featureEntitlements.join(', ')
-    return sourceLabel ? `${featureListLabel} (${sourceLabel})` : featureListLabel
-  }, [customerId, featureEntitlements, getEntitlementSource])
 
   const showCustomerSelector = hasAnyCustomerAdminAccess && accessibleCustomerIds.length > 1
   const showAccessibleTenantSwitcher = Boolean(
@@ -300,210 +511,400 @@ function Dashboard() {
     tenantRowsForSwitcher,
   ])
 
-  const summaryItems = useMemo(
-    () => [
-      { label: 'Access level', value: primaryRole },
-      { label: 'Customer scope', value: customerScopeValue },
-      { label: 'Tenant scope', value: tenantScopeValue },
-      { label: 'Topology', value: topologyLabel },
-      { label: 'Licensed features', value: licensedFeaturesValue },
-    ],
-    [customerScopeValue, licensedFeaturesValue, primaryRole, tenantScopeValue, topologyLabel],
+  const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
+  const hasVmfFeature = featureEntitlements.includes('VMF')
+  const hasDealFeature =
+    featureEntitlements.includes('DEALS')
+    || featureEntitlements.includes('DEAL_ANALYSIS')
+  const hasActiveVmfAnchor = Boolean(contextReady && hasVmfFeature && canOpenVmfWorkspace)
+  const canCreateValueNarrative = hasActiveVmfAnchor
+  const canCreateDealAnalysis = Boolean(
+    hasActiveVmfAnchor && hasDealFeature && hasSelectedSalesExecutionRole,
   )
 
-  const vmfTile = useMemo(() => {
+  const runtimeActions = useMemo(() => {
     if (!customerId) {
-      return {
-        badgeLabel: 'Needs scope',
-        badgeVariant: 'warning',
-        description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
-        disabled: true,
-        icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-        key: 'vmf',
-        linkLabel: 'Value Message Framework unavailable',
-        reason: 'Select a customer before opening the Value Message Framework workspace.',
-        title: 'Value Message Framework',
-        to: '/app/dashboard',
-      }
-    }
-
-    if (!featureEntitlements.includes('VMF')) {
-      return {
-        badgeLabel: 'Not licensed',
-        badgeVariant: 'warning',
-        description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
-        disabled: true,
-        icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-        key: 'vmf',
-        linkLabel: 'Value Message Framework unavailable',
-        reason: 'VMF is not enabled for the selected customer.',
-        title: 'Value Message Framework',
-        to: '/app/dashboard',
-      }
-    }
-
-    if (!canOpenVmfWorkspace) {
-      return {
-        badgeLabel: 'Role gated',
-        badgeVariant: 'warning',
-        description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
-        disabled: true,
-        icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-        key: 'vmf',
-        linkLabel: 'Value Message Framework unavailable',
-        reason: supportsTenantManagement
-          ? 'Available when the selected tenant is within your VMF workspace scope.'
-          : 'Available when the selected customer scope includes VMF workspace access.',
-        title: 'Value Message Framework',
-        to: '/app/dashboard',
-      }
+      return [
+        {
+          actionKey: 'SELECT_CUSTOMER',
+          description: 'Select a customer before opening runtime work.',
+          disabled: true,
+          icon: MdOutlineWarningAmber,
+          label: 'Customer required',
+          meta: 'Runtime context is incomplete',
+          priority: 'HIGH',
+          runtimeInstanceId: null,
+          title: 'Select a customer to continue',
+          to: '/app/dashboard',
+        },
+      ]
     }
 
     if (supportsTenantManagement && !tenantId) {
-      if (!hasTenantSelectionAccess) {
-        return {
-          badgeLabel: 'Scope gated',
-          badgeVariant: 'warning',
-          description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
+      return [
+        {
+          actionKey: 'SELECT_TENANT',
+          description: 'Tenant context is required before runtime actions can run.',
           disabled: true,
-          icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-          key: 'vmf',
-          linkLabel: 'Value Message Framework unavailable',
-          reason: 'Available when the current scope includes tenant visibility and a selected tenant.',
-          title: 'Value Message Framework',
+          icon: MdOutlineWarningAmber,
+          label: 'Tenant required',
+          meta: `${customerScopeValue} / No tenant selected`,
+          priority: 'HIGH',
+          runtimeInstanceId: null,
+          title: 'Select a tenant to continue your work',
           to: '/app/dashboard',
-        }
-      }
-
-      return {
-        badgeLabel: 'Select tenant',
-        badgeVariant: 'warning',
-        description: 'Open the Value Message Framework workspace for the selected customer and tenant.',
-        disabled: true,
-        icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-        key: 'vmf',
-        linkLabel: 'Value Message Framework unavailable',
-        reason: 'Select a tenant to open the VMF workspace for a multi-tenant customer.',
-        title: 'Value Message Framework',
-        to: '/app/dashboard',
-      }
+        },
+      ]
     }
 
-    return {
-      badgeLabel: 'Live',
-      badgeVariant: 'success',
-      description: 'Create, maintain, and review Value Message Framework content for the current scope.',
-      disabled: false,
-      icon: <MdOutlineDashboardCustomize aria-hidden="true" />,
-      key: 'vmf',
-      linkLabel: 'Open Value Message Framework',
-      reason: supportsTenantManagement
-        ? 'Uses the currently selected tenant and customer context.'
-        : 'Uses the current customer scope and default tenant context.',
-      title: 'Value Message Framework',
-      to: '/app/workspaces/vmf',
+    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
+
+    // SCAFFOLD DATA — context is ready but no Runtime Execution Engine API exists yet.
+    // These items represent what the Runtime Action Queue API will return once the
+    // Runtime Execution Engine (Phase 2) is integrated. Each action resolves to a
+    // runtimeInstanceId and an actionKey that will be sent to the runtime action endpoint.
+    //
+    // Replace this entire block with a real RTK Query call when the endpoint exists.
+    // Expected endpoint: GET /api/v1/runtime/actions?customerId=&tenantId=
+    // Expected response shape: { data: RuntimeAction[] }
+    // where RuntimeAction has: { runtimeInstanceId, actionKey, title, description, meta,
+    //   label, priority, disabled, to }
+    //
+    // The priority field drives badge colour and sort order. 'HIGH' = warning badge,
+    // any other value = neutral badge. The runtimeInstanceId links the action to the
+    // matching row in the Work In Progress table.
+    const tenantLabel = tenantScopeValue || 'Current tenant'
+    const scaffoldActions = [
+      {
+        actionKey: 'CONTINUE',
+        description: 'Resume the current draft and complete the next required VMF section.',
+        disabled: !canOpenVmfWorkspace,
+        icon: MdOutlinePlayCircle,
+        label: canOpenVmfWorkspace ? 'Continue' : 'Unavailable',
+        meta: `${tenantLabel} / Draft`,
+        priority: 'HIGH',
+        runtimeInstanceId: 'rt-acme-value-narrative',
+        title: 'Continue Acme Value Narrative',
+        to: '/app/workspaces/vmf',
+      },
+      {
+        actionKey: 'RUN_VALIDATION',
+        description: 'Resolve validation blockers before the business case can move forward.',
+        disabled: !hasActiveVmfAnchor,
+        icon: MdAssignmentTurnedIn,
+        label: hasActiveVmfAnchor ? 'Review issues' : 'VMF anchor required',
+        meta: `${tenantLabel} / 2 blocking issues`,
+        priority: 'HIGH',
+        runtimeInstanceId: 'rt-globex-business-case',
+        title: 'Fix validation issues in Globex Business Case',
+        to: '/app/workspaces/vmf',
+      },
+    ]
+
+    if (hasSelectedSalesManagerRole) {
+      // SCAFFOLD DATA — Sales Manager gets an additional review action for team-owned work.
+      // This will be driven by the manager-scoped runtime visibility contract once the
+      // Runtime Execution Engine supplies team instance data.
+      scaffoldActions.push({
+        actionKey: 'REVIEW',
+        description: 'Review the deal analysis submitted by a reporting sales user.',
+        disabled: !hasActiveVmfAnchor,
+        icon: MdOutlinePeopleAlt,
+        label: hasActiveVmfAnchor ? 'Review deal' : 'VMF anchor required',
+        meta: `${tenantLabel} / Manager review`,
+        priority: 'MEDIUM',
+        runtimeInstanceId: 'rt-beta-deal-analysis',
+        title: 'Review Beta Deal Analysis',
+        to: '/app/workspaces/vmf',
+      })
     }
+
+    return scaffoldActions
   }, [
     canOpenVmfWorkspace,
     customerId,
-    featureEntitlements,
-    hasTenantSelectionAccess,
+    customerScopeValue,
+    hasActiveVmfAnchor,
+    hasSelectedSalesManagerRole,
     supportsTenantManagement,
     tenantId,
+    tenantScopeValue,
   ])
 
-  const workflowTiles = useMemo(
-    () => [
-      vmfTile,
+  const runtimeInstances = useMemo(() => {
+    if (!contextReady) return []
+    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
+
+    // SCAFFOLD DATA — these rows represent what the Work In Progress API will return
+    // once the Runtime Execution Engine (Phase 2) is integrated. The data shape here
+    // documents the expected runtime instance contract so the table and filter logic
+    // can be tested end-to-end before the backend endpoint exists.
+    //
+    // Replace this entire block with a real RTK Query call when the endpoint exists.
+    // Expected endpoint: GET /api/v1/runtime/instances?customerId=&tenantId=
+    // Expected response shape: { data: RuntimeInstance[] }
+    // where RuntimeInstance has: { id, work, workType, workTypeLabel, tenant, owner,
+    //   stage, status, lastActivity, nextAction }
+    //
+    // The workType field must match one of the WORK_TYPE_OPTIONS values so the filter
+    // works correctly. status drives the formatted label in the Progress column.
+    const tenantLabel = tenantScopeValue || 'Current tenant'
+    const rows = [
       {
-        badgeLabel: 'Planned',
-        badgeVariant: 'info',
-        description: 'Analyse pipeline quality, progress, and decision quality from the home surface.',
-        disabled: true,
-        icon: <MdOutlineAssessment aria-hidden="true" />,
-        key: 'deal-making',
-        linkLabel: 'Deal Making coming soon',
-        reason: 'Customer-app route is not yet available in the current frontend build.',
-        title: 'Deal Making',
-        to: '/app/dashboard',
+        id: 'rt-acme-value-narrative',
+        work: 'Acme Value Narrative',
+        workType: 'VALUE_NARRATIVE',
+        workTypeLabel: 'Value Narrative',
+        tenant: tenantLabel,
+        owner: 'You',
+        stage: 'Draft',
+        status: 'NEEDS_INPUT',
+        lastActivity: 'Today',
+        nextAction: 'Continue',
       },
       {
-        badgeLabel: 'Planned',
-        badgeVariant: 'info',
-        description: 'Review data, outcomes, and future reporting signals from the same landing surface.',
-        disabled: true,
-        icon: <MdOutlineInsights aria-hidden="true" />,
-        key: 'views',
-        linkLabel: 'Views coming soon',
-        reason: 'Customer-app route is not yet available in the current frontend build.',
-        title: 'Views',
-        to: '/app/dashboard',
+        id: 'rt-globex-business-case',
+        work: 'Globex Business Case',
+        workType: 'BUSINESS_CASE',
+        workTypeLabel: 'Business Case',
+        tenant: tenantLabel,
+        // SCAFFOLD DATA — manager sees team member's name; Sales User sees 'You'.
+        // This distinction will be driven by the manager-scoped visibility contract.
+        owner: hasSelectedSalesManagerRole ? 'Jordan Lee' : 'You',
+        stage: 'Validation',
+        status: 'BLOCKED',
+        lastActivity: 'Yesterday',
+        nextAction: 'Fix issues',
       },
-    ],
-    [vmfTile],
-  )
+    ]
 
-  const tenantSelectionState = useMemo(() => {
-    if (!supportsTenantManagement || !customerId || !hasTenantSelectionAccess) return null
-
-    if (hasInvalidTenantContext) {
-      return {
-        description: 'The previously selected tenant is no longer available in the current scope.',
-        label: 'Selection needs review',
-        tone: 'warning',
-        value: 'Choose another tenant',
-      }
+    if (hasSelectedSalesExecutionRole || hasSelectedSalesManagerRole) {
+      // SCAFFOLD DATA — Deal Analysis row is only visible to Sales and Manager roles.
+      // The real endpoint will apply this filtering server-side based on the role
+      // scope contract. The owner and stage differ by role to reflect the manager
+      // review vs. user draft distinction.
+      rows.push({
+        id: 'rt-beta-deal-analysis',
+        work: 'Beta Deal Analysis',
+        workType: 'DEAL_ANALYSIS',
+        workTypeLabel: 'Deal Analysis',
+        tenant: tenantLabel,
+        owner: hasSelectedSalesManagerRole ? 'Amelia Hart' : 'You',
+        stage: hasSelectedSalesManagerRole ? 'Review' : 'Draft',
+        status: hasSelectedSalesManagerRole ? 'REVIEW_READY' : 'DRAFT',
+        lastActivity: hasSelectedSalesManagerRole ? '2h ago' : 'Today',
+        nextAction: hasSelectedSalesManagerRole ? 'Review' : 'Continue',
+      })
     }
 
-    if (resolvedTenantName) {
-      return {
-        description: 'This tenant will be reused when you open tenant-scoped workflows from the dashboard.',
-        label: 'Selected tenant',
-        tone: 'success',
-        value: resolvedTenantName,
-      }
+    return rows
+  }, [contextReady, hasSelectedSalesExecutionRole, hasSelectedSalesManagerRole, tenantScopeValue])
+
+  const filteredRuntimeInstances = useMemo(() => {
+    if (workTypeFilter === 'ALL') return runtimeInstances
+    return runtimeInstances.filter((instance) => instance.workType === workTypeFilter)
+  }, [runtimeInstances, workTypeFilter])
+
+  const createWorkItems = useMemo(() => [
+    {
+      description: 'Create a governed Value Narrative from the active VMF deployment.',
+      disabled: !canCreateValueNarrative,
+      icon: MdOutlineDashboardCustomize,
+      label: canCreateValueNarrative ? 'Create' : 'Unavailable',
+      reason: canCreateValueNarrative
+        ? 'Active VMF runtime context is available.'
+        : 'Value Narrative unavailable - no active VMF framework is available for this tenant.',
+      title: 'Create Value Narrative',
+      to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
+    },
+    {
+      description: 'Create Deal Analysis anchored to a locked VMF runtime instance.',
+      disabled: !canCreateDealAnalysis,
+      icon: MdOutlineAssessment,
+      label: canCreateDealAnalysis ? 'Create' : 'Unavailable',
+      reason: canCreateDealAnalysis
+        ? 'Deal Analysis will inherit the current VMF runtime anchor.'
+        : 'Deal Analysis unavailable - no active VMF framework is available for this tenant.',
+      title: 'Create Deal Analysis',
+      to: canCreateDealAnalysis ? '/app/workspaces/vmf' : '/app/dashboard',
+    },
+    {
+      description: 'Prepare governed outputs from completed runtime work.',
+      disabled: true,
+      icon: MdOutlineInsights,
+      label: 'Planned',
+      reason: 'Output generation will be enabled after Runtime Execution integration.',
+      title: 'Generate Output',
+      to: '/app/dashboard',
+    },
+  ], [canCreateDealAnalysis, canCreateValueNarrative])
+
+  const alerts = useMemo(() => {
+    if (!contextReady) {
+      return [
+        {
+          id: 'context-required',
+          label: 'Runtime context required',
+          description: 'Select a tenant before runtime work and governed actions are enabled.',
+          variant: 'warning',
+        },
+      ]
     }
 
-    if (isLoadingTenants) {
-      return {
-        description: 'Tenant options are loading for the current customer scope.',
-        label: 'Tenant context',
-        tone: 'info',
-        value: 'Loading available tenants',
-      }
+    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
+
+    // SCAFFOLD DATA — these signals represent what the Runtime Observability Layer
+    // (Phase 2+) will surface once validation events, output state, and review-ready
+    // state are tracked in the backend. Until then these fixed items demonstrate the
+    // alert card shape and role-based visibility logic to QA testers.
+    //
+    // Replace this entire block with a real RTK Query call when the endpoint exists.
+    // Expected endpoint: GET /api/v1/runtime/signals?customerId=&tenantId=
+    // Expected response shape: { data: RuntimeSignal[] }
+    // where RuntimeSignal has: { id, label, description, variant }
+    //
+    // variant maps to the Status component variants: 'success', 'warning', 'info', 'error'.
+    const scaffoldAlerts = [
+      {
+        id: 'validation-blocked',
+        label: '2 runtime validations need attention',
+        description: 'Validation blockers are preventing one business case from moving forward.',
+        variant: 'warning',
+      },
+      {
+        id: 'outputs-stale',
+        label: '2 outputs require regeneration',
+        description: 'Generated outputs will need refresh after the related runtime work changes.',
+        variant: 'info',
+      },
+    ]
+
+    if (hasSelectedSalesManagerRole) {
+      // SCAFFOLD DATA — manager-scoped signal surfaces when a team member's work
+      // reaches REVIEW_READY state. The real signal will be emitted by the runtime
+      // governance event system when the review-ready transition fires.
+      scaffoldAlerts.unshift({
+        id: 'manager-review',
+        label: '1 team deal analysis is ready for review',
+        description: 'Review is scoped to reporting users in the selected tenant.',
+        variant: 'success',
+      })
     }
 
-    if (selectableTenantRows.length === 0) {
-      return {
-        description: 'No selectable tenant is currently available for this customer context.',
-        label: 'Tenant context',
-        tone: 'warning',
-        value: 'No tenant available',
-      }
-    }
+    return scaffoldAlerts
+  }, [contextReady, hasSelectedSalesManagerRole])
 
-    return {
-      description: 'Choose a tenant before opening tenant-scoped workflows from the dashboard.',
-      label: 'Tenant context',
-      tone: 'warning',
-      value: 'No tenant selected',
-    }
-  }, [
-    customerId,
-    hasInvalidTenantContext,
-    hasTenantSelectionAccess,
-    isLoadingTenants,
-    resolvedTenantName,
-    selectableTenantRows.length,
-    supportsTenantManagement,
+  const secondaryNavigationItems = useMemo(() => [
+    {
+      badge: {
+        label: canOpenVmfWorkspace ? 'Current' : 'Unavailable',
+        variant: canOpenVmfWorkspace ? 'success' : 'neutral',
+      },
+      disabled: !canOpenVmfWorkspace,
+      icon: MdOutlineDashboardCustomize,
+      meta: canOpenVmfWorkspace ? 'Current VMF runtime workspace' : 'VMF workspace unavailable',
+      title: 'Value Narrative Workspace',
+      to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
+    },
+    {
+      badge: { label: 'Planned', variant: 'neutral' },
+      disabled: true,
+      icon: MdOutlineAssessment,
+      meta: 'Output workspace is planned',
+      title: 'Outputs',
+      to: '/app/dashboard',
+    },
+    {
+      badge: { label: 'Planned', variant: 'neutral' },
+      disabled: true,
+      icon: MdOutlineInsights,
+      meta: 'Insights workspace is planned',
+      title: 'Insights',
+      to: '/app/dashboard',
+    },
+    {
+      badge: {
+        label: hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess ? 'Admin' : 'Unavailable',
+        variant: hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess ? 'info' : 'neutral',
+      },
+      disabled: !hasSelectedCustomerAdminAccess && !hasSelectedCustomerTenantAdminAccess,
+      icon: MdOutlinePeopleAlt,
+      meta: 'Tenant and user administration',
+      title: 'Tenant Administration',
+      to: '/app/administration/maintain-tenants',
+    },
+  ], [
+    canOpenVmfWorkspace,
+    hasSelectedCustomerAdminAccess,
+    hasSelectedCustomerTenantAdminAccess,
   ])
+
+  const runtimeActionGridClassName = [
+    'dashboard__launch-grid',
+    'dashboard__launch-grid--actions',
+    runtimeActions.length === 1 ? 'dashboard__launch-grid--single' : '',
+  ].filter(Boolean).join(' ')
+
+  const runtimeInstanceEmptyMessage = !contextReady
+    ? 'Select a tenant to show runtime work.'
+    : workTypeFilter === 'ALL'
+      ? 'No runtime instances are available for this tenant yet.'
+      : 'No runtime instances match the selected work type.'
+
+  const tableColumns = useMemo(() => [
+    {
+      key: 'work',
+      label: 'Work',
+      render: (value, row) => (
+        <div className="dashboard__work-cell">
+          <span className="dashboard__work-heading">
+            <span className="dashboard__work-title">{value}</span>
+            <Badge variant="neutral" size="sm" pill outline>{row.workTypeLabel}</Badge>
+          </span>
+          <span className="dashboard__work-id">{row.id}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'tenant',
+      label: 'Scope',
+      render: (value, row) => (
+        <div className="dashboard__stacked-cell">
+          <span>{value}</span>
+          <span>{row.owner}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'stage',
+      label: 'Progress',
+      render: (value, row) => (
+        <div className="dashboard__stacked-cell">
+          <span>{value}</span>
+          <span>{formatTokenLabel(row.status)}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'lastActivity',
+      label: 'Next',
+      render: (value, row) => (
+        <div className="dashboard__next-cell">
+          <span>{value}</span>
+          <Link to="/app/workspaces/vmf" variant="primary" underline="none">
+            {row.nextAction}
+          </Link>
+        </div>
+      ),
+    },
+  ], [])
 
   return (
-    <section className="dashboard container" aria-label="Dashboard landing page">
-      <Card variant="elevated" className="dashboard__hero">
+    <section className="dashboard container" aria-label="Customer runtime home">
+      <Card variant="default" className="dashboard__hero">
         <Card.Body className="dashboard__hero-body">
           <div className="dashboard__hero-copy">
-            <div className="dashboard__eyebrow">
+            <div className="dashboard__hero-heading">
               <Badge
                 variant="info"
                 size="sm"
@@ -511,133 +912,160 @@ function Dashboard() {
                 outline
                 icon={<MdOutlineDashboardCustomize aria-hidden="true" />}
               >
-                Home Page
+                Runtime Home
               </Badge>
-              <Badge variant="neutral" size="sm" pill outline>
-                {primaryRole}
-              </Badge>
-            </div>
-            <h1 className="dashboard__title">Dashboard</h1>
-            <p className="dashboard__subtitle">
-              Move from customer context into the right StoryLineOS workflow. The dashboard keeps
-              the active scope visible so operators know exactly where they are working before they
-              open a tool.
-            </p>
-            {user?.name ? (
-              <p className="dashboard__signed-in">
-                Signed in as <strong>{user.name}</strong>
+              <h1 className="dashboard__hero-title">Customer Workspace</h1>
+              <p className="dashboard__hero-description">
+                Continue governed runtime work inside the selected customer, tenant, and role context.
               </p>
-            ) : null}
-          </div>
-
-          <div className="dashboard__hero-note" role="note" aria-label="Current dashboard scope">
-            <h2 className="dashboard__panel-title">Current scope</h2>
-            <p className="dashboard__panel-subtitle">
-              The selected customer and tenant carry into workflow tools opened from this page.
-            </p>
-            <dl className="dashboard__context-list">
-              {summaryItems.map((item) => (
-                <div key={item.label} className="dashboard__context-item">
-                  <dt>{item.label}</dt>
-                  <dd>{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </Card.Body>
-      </Card>
-
-      <Card
-        variant="filled"
-        className="dashboard__section dashboard__section--workflow"
-      >
-        <Card.Header className="dashboard__section-header">
-          <h2 className="dashboard__section-title">Workflow Tiles</h2>
-          <p className="dashboard__section-subtitle">
-            Entry points stay visible across roles. Unavailable workflows remain explicit instead
-            of disappearing from the home surface.
-          </p>
-        </Card.Header>
-        <Card.Body className="dashboard__section-body">
-          {showCustomerSelector || showAccessibleTenantSwitcher || tenantSelectionState ? (
-            <div className="dashboard__context-controls">
-              {tenantSelectionState ? (
-                <div
-                  className={[
-                    'dashboard__tenant-summary',
-                    `dashboard__tenant-summary--${tenantSelectionState.tone}`,
-                  ].join(' ')}
-                  role="status"
-                  aria-label="Tenant context summary"
-                >
-                  <p className="dashboard__tenant-label">{tenantSelectionState.label}</p>
-                  <p className="dashboard__tenant-value">{tenantSelectionState.value}</p>
-                  <p className="dashboard__tenant-description">{tenantSelectionState.description}</p>
-                </div>
-              ) : null}
-              {showCustomerSelector ? (
-                <CustomerSelector className="dashboard__control" />
-              ) : null}
-              {showAccessibleTenantSwitcher ? (
-                <TenantSwitcher className="dashboard__control" />
-              ) : null}
             </div>
-          ) : null}
-
-          <p className="dashboard__hint">
-            Use the current scope summary above before opening a workflow. Tiles that are not yet
-            live or not available in the current role remain visible with an explicit reason.
-          </p>
-
-          <div className="dashboard__tiles" role="list" aria-label="Dashboard workflows">
-            {workflowTiles.map((tile) => (
-              <Card
-                key={tile.key}
-                variant={tile.disabled ? 'default' : 'elevated'}
-                hoverable={!tile.disabled}
-                className={[
-                  'dashboard__tile',
-                  tile.disabled ? 'dashboard__tile--disabled' : '',
-                ].filter(Boolean).join(' ')}
-                role="listitem"
-              >
-                <Card.Header className="dashboard__tile-header">
-                  <div className="dashboard__tile-title-row">
-                    <span className="dashboard__tile-icon">{tile.icon}</span>
-                    <div className="dashboard__tile-copy">
-                      <h3 className="dashboard__tile-title">{tile.title}</h3>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={tile.badgeVariant}
-                    size="sm"
-                    pill
-                    outline
-                    className="dashboard__tile-badge"
-                  >
-                    {tile.badgeLabel}
-                  </Badge>
-                </Card.Header>
-                <Card.Body className="dashboard__tile-body">
-                  <p className="dashboard__tile-description">{tile.description}</p>
-                  <p className="dashboard__tile-reason">{tile.reason}</p>
-                </Card.Body>
-                <Card.Footer className="dashboard__tile-footer">
-                  <Link
-                    to={tile.to}
-                    disabled={tile.disabled}
-                    className="dashboard__tile-link"
-                    variant="primary"
-                    underline="none"
-                  >
-                    {tile.linkLabel}
-                  </Link>
-                </Card.Footer>
-              </Card>
-            ))}
           </div>
+
+          <dl className="dashboard__hero-metrics" aria-label="Runtime context summary">
+            <DashboardHeroMetric label="Customer" control={showCustomerSelector}>
+              {showCustomerSelector ? (
+                <CustomerSelector className="dashboard__context-selector" />
+              ) : (
+                <span className="dashboard__context-value">{customerScopeValue}</span>
+              )}
+            </DashboardHeroMetric>
+            <DashboardHeroMetric label="Tenant" control={showAccessibleTenantSwitcher}>
+              {showAccessibleTenantSwitcher ? (
+                <TenantSwitcher className="dashboard__context-selector" />
+              ) : (
+                <span className="dashboard__context-value">{tenantScopeValue}</span>
+              )}
+            </DashboardHeroMetric>
+            <DashboardHeroMetric label="Work Type" control>
+              <CustomSelect
+                value={workTypeFilter}
+                onChange={setWorkTypeFilter}
+                options={WORK_TYPE_OPTIONS}
+                placeholder="All Work"
+                icon={<MdFilterList size={18} />}
+                ariaLabel="Work Type"
+                className="dashboard__context-selector"
+              />
+            </DashboardHeroMetric>
+            <DashboardHeroMetric label="Role">
+              <span className="dashboard__context-value">{primaryRole}</span>
+            </DashboardHeroMetric>
+          </dl>
         </Card.Body>
       </Card>
+
+      <div className="dashboard__sections" role="list" aria-label="Customer runtime workspace groups">
+        <DashboardSectionCard
+          badge={{ label: `${runtimeActions.length} available`, variant: 'info' }}
+          description="Action items resolve to runtime instances and governed action keys."
+          icon={MdOutlinePlayCircle}
+          modifier="actions"
+          panelAs="nav"
+          panelLabel="Runtime action queue panel"
+          status={{ label: contextReady ? 'Context ready' : 'Tenant required', variant: contextReady ? 'success' : 'warning' }}
+          title="What should I do now?"
+        >
+          <ul className={runtimeActionGridClassName} aria-label="Runtime action queue">
+            {runtimeActions.length > 0 ? (
+              runtimeActions.map((action) => (
+                <RuntimeActionCard
+                  key={`${action.runtimeInstanceId ?? 'context'}-${action.actionKey}`}
+                  action={action}
+                />
+              ))
+            ) : (
+              <li className="dashboard__empty-item">
+                <Status variant="info" size="sm" showIcon>
+                  No runtime actions
+                </Status>
+                <p>Runtime actions will appear here once runtime instances exist for this tenant.</p>
+              </li>
+            )}
+          </ul>
+        </DashboardSectionCard>
+
+        <DashboardSectionCard
+          badge={{ label: `${filteredRuntimeInstances.length} visible`, variant: 'neutral' }}
+          description="Runtime instances are first-class work objects. The selected work type filters this list."
+          icon={MdFilterList}
+          modifier="work"
+          panelLabel="Work in progress runtime instances panel"
+          status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatTokenLabel(workTypeFilter), variant: 'info' }}
+          title="Work In Progress"
+        >
+          <HorizontalScroll
+            className="dashboard__table-wrap"
+            ariaLabel="Work in progress runtime instances table"
+            gap="sm"
+          >
+            <Table
+              columns={tableColumns}
+              data={filteredRuntimeInstances}
+              variant="striped"
+              hoverable
+              ariaLabel="Work in progress runtime instances"
+              emptyMessage={runtimeInstanceEmptyMessage}
+              className="dashboard__work-table"
+            />
+          </HorizontalScroll>
+        </DashboardSectionCard>
+
+        <DashboardSectionCard
+          badge={{ label: `${createWorkItems.length} options`, variant: 'info' }}
+          description="Create options are driven by active deployments, tenant entitlement, role, and runtime anchors."
+          icon={MdAddCircleOutline}
+          modifier="create"
+          panelAs="nav"
+          panelLabel="Create new work panel"
+          status={{ label: canCreateValueNarrative || canCreateDealAnalysis ? 'Available now' : 'Limited', variant: canCreateValueNarrative || canCreateDealAnalysis ? 'success' : 'warning' }}
+          title="Create New Work"
+        >
+          <ul className="dashboard__launch-grid dashboard__launch-grid--create" aria-label="Create new work">
+            {createWorkItems.map((item) => (
+              <CreateWorkCard key={item.title} item={item} />
+            ))}
+          </ul>
+        </DashboardSectionCard>
+
+        <DashboardSectionCard
+          badge={{ label: `${alerts.length} signals`, variant: 'info' }}
+          description="Runtime signals stay tied to actions, validation, output state, and supporting workspace areas."
+          icon={MdOutlineInsights}
+          modifier="signals"
+          panelLabel="Runtime alerts and navigation"
+          status={{ label: 'Current', variant: 'success' }}
+          title="Alerts & Recommendations"
+        >
+          <div className="dashboard__signals-grid">
+            <ul className="dashboard__alert-list" aria-label="Runtime alerts">
+              {alerts.length > 0 ? (
+                alerts.map((alert) => (
+                  <li key={alert.id} className="dashboard__alert-item">
+                    <Status variant={alert.variant} size="sm" showIcon>
+                      {alert.label}
+                    </Status>
+                    <p>{alert.description}</p>
+                  </li>
+                ))
+              ) : (
+                <li className="dashboard__empty-item">
+                  <Status variant="success" size="sm" showIcon>
+                    No runtime signals
+                  </Status>
+                  <p>Validation, output, and review signals will appear here when runtime work exists.</p>
+                </li>
+              )}
+            </ul>
+            <nav className="dashboard__secondary-nav" aria-label="Customer workspace secondary navigation">
+              <ul className="dashboard__launch-grid dashboard__launch-grid--secondary">
+                {secondaryNavigationItems.map((item) => (
+                  <SecondaryNavigationLink key={item.title} item={item} />
+                ))}
+              </ul>
+            </nav>
+          </div>
+        </DashboardSectionCard>
+      </div>
     </section>
   )
 }

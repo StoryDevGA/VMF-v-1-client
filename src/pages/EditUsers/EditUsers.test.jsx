@@ -256,6 +256,7 @@ function renderEditUsers(store) {
               path="/app/administration/edit-users"
               element={<EditUsers />}
             />
+            <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
           </Routes>
         </MemoryRouter>
       </ToasterProvider>
@@ -297,18 +298,21 @@ describe('EditUsers page', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders the Create User button', () => {
+  it('renders the compact action bar with Back, Bulk Create, and Create', () => {
     renderEditUsers()
-    expect(
-      screen.getByRole('button', { name: /create user/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toHaveClass('btn--sm')
+    expect(screen.getByRole('button', { name: /bulk create/i })).toHaveClass('btn--sm')
+    expect(screen.getByRole('button', { name: /^create$/i })).toHaveClass('btn--sm')
   })
 
-  it('renders the Bulk Create button', () => {
+  it('returns to the dashboard when back is clicked', async () => {
+    const user = userEvent.setup()
+
     renderEditUsers()
-    expect(
-      screen.getByRole('button', { name: /bulk create/i }),
-    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(screen.getByText('Dashboard Route')).toBeInTheDocument()
   })
 
   it('renders the search input', () => {
@@ -365,7 +369,7 @@ describe('EditUsers page', () => {
       screen.getByText(/user-management actions are unavailable until a super admin reactivates the customer/i),
     ).toBeInTheDocument()
     expect(screen.getByText(/\(Ref: req-inactive-users-1\)/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /create user/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/users table/i)).not.toBeInTheDocument()
   })
 
@@ -529,7 +533,7 @@ describe('EditUsers page', () => {
     const user = userEvent.setup()
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(
@@ -549,7 +553,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
     await user.type(screen.getByLabelText(/full name/i), 'New Analyst')
     await user.type(screen.getByLabelText(/email address/i), 'new.analyst@example.com')
     await user.click(screen.getByRole('button', { name: /next/i }))
@@ -577,7 +581,7 @@ describe('EditUsers page', () => {
 
     renderEditUsers()
 
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
     await user.type(screen.getByLabelText(/full name/i), 'Creator User')
     await user.type(screen.getByLabelText(/email address/i), 'creator.user@example.com')
     await user.click(screen.getByRole('button', { name: /next/i }))
@@ -727,7 +731,7 @@ describe('EditUsers page', () => {
     renderEditUsers(store)
 
     await user.type(screen.getByLabelText(/search/i), 'alice')
-    await user.click(screen.getByRole('button', { name: /create user/i }))
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
       expect(

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -157,6 +158,13 @@ const getFrameworkPackageDetail = (vmf, key) => {
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
 
+const normalizeAccordionId = (value) =>
+  String(value ?? 'vmf')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'vmf'
+
 const getVmfCapacityCountLabel = (countMode) => {
   const normalizedCountMode = String(countMode ?? '').trim().toUpperCase()
   if (normalizedCountMode === 'NON_ARCHIVED') return 'non-archived'
@@ -245,6 +253,111 @@ const getLifecycleOptionsForCurrentState = (value) => {
   return VMF_MUTATION_LIFECYCLE_OPTIONS.filter((option) => allowed.includes(option.value))
 }
 
+function renderVmfSummary(_value, row) {
+  const name = String(row?.name ?? '').trim() || '--'
+
+  return (
+    <div className="maintain-vmfs__vmf-summary">
+      <div className="maintain-vmfs__vmf-summary-header">
+        <span className="maintain-vmfs__vmf-name">{name}</span>
+      </div>
+    </div>
+  )
+}
+
+function renderDescriptionSummary(value) {
+  const description = String(value ?? '').trim()
+  if (!description) return '--'
+  return <span className="maintain-vmfs__vmf-description">{description}</span>
+}
+
+function renderFrameworkSummary(_value, row) {
+  const version = String(row?.frameworkVersion ?? '').trim() || '--'
+  const packageLabel = getFrameworkPackageLabel(row)
+
+  return (
+    <div className="maintain-vmfs__framework-summary">
+      <div className="maintain-vmfs__summary-pair">
+        <span className="maintain-vmfs__summary-label">Version</span>
+        <span className="maintain-vmfs__summary-value">{version}</span>
+      </div>
+      <div className="maintain-vmfs__summary-pair">
+        <span className="maintain-vmfs__summary-label">Package</span>
+        <span className="maintain-vmfs__summary-value">{packageLabel}</span>
+      </div>
+    </div>
+  )
+}
+
+function renderRuntimeSummary(_value, row) {
+  const completion = String(row?.completionState ?? '').trim().toUpperCase() || 'NOT_TRACKED'
+  const validation = String(row?.validationStatus ?? '').trim().toUpperCase() || 'NOT_RUN'
+  const lockStatus = String(row?.lockStatus ?? '').trim().toUpperCase() || 'UNLOCKED'
+  const snapshotStatus = String(row?.snapshotStatus ?? '').trim().toUpperCase() || 'UNBOUND'
+  const migration = formatBooleanLabel(row?.migrationAvailable)
+  const runtimeItems = [
+    {
+      label: 'Completion',
+      value: completion,
+      variant: getRuntimeStateVariant(completion),
+    },
+    {
+      label: 'Validation',
+      value: validation,
+      variant: getRuntimeStateVariant(validation),
+    },
+    {
+      label: 'Lock',
+      value: lockStatus,
+      variant: lockStatus === 'LOCKED' ? 'warning' : getRuntimeStateVariant(lockStatus),
+    },
+    {
+      label: 'Snapshot',
+      value: snapshotStatus,
+      variant: getRuntimeStateVariant(snapshotStatus),
+    },
+    {
+      label: 'Migration',
+      value: migration,
+      variant: row?.migrationAvailable === true ? 'success' : row?.migrationAvailable === false ? 'neutral' : 'info',
+    },
+  ]
+  const baseId = `runtime-${normalizeAccordionId(getVmfId(row) || row?.name || 'vmf')}`
+  const rowLabel = String(row?.name ?? getVmfId(row) ?? 'VMF').trim() || 'VMF'
+
+  return (
+    <Accordion
+      variant="default"
+      rounded={false}
+      className="maintain-vmfs__runtime-accordion"
+    >
+      {runtimeItems.map((item) => {
+        const itemId = `${baseId}-${normalizeAccordionId(item.label)}`
+
+        return (
+          <Accordion.Item id={itemId} key={item.label}>
+            <Accordion.Header
+              itemId={itemId}
+              className="maintain-vmfs__runtime-accordion-header"
+              aria-label={`${item.label} runtime evidence for ${rowLabel}`}
+            >
+              {item.label}
+            </Accordion.Header>
+            <Accordion.Content
+              itemId={itemId}
+              className="maintain-vmfs__runtime-accordion-content"
+            >
+              <Badge size="sm" variant={item.variant} pill>
+                {item.value}
+              </Badge>
+            </Accordion.Content>
+          </Accordion.Item>
+        )
+      })}
+    </Accordion>
+  )
+}
+
 const formatSoftDeleteMessage = (payload) => {
   const retentionDays = Number(payload?.retentionDays)
   const purgeAfter = payload?.purgeAfter ? new Date(payload.purgeAfter) : null
@@ -314,7 +427,11 @@ function MaintainVmfsBoundaryState({ message, onBack }) {
         <Fieldset.Legend className="sr-only">VMF workspace state</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--state">
-            <div className="maintain-vmfs__catalogue-actions">
+            <div
+              className="maintain-vmfs__catalogue-actions"
+              role="group"
+              aria-label="VMF workspace actions"
+            >
               <Button
                 type="button"
                 variant="outline"
@@ -616,20 +733,25 @@ function MaintainVmfs() {
 
   const columns = useMemo(
     () => [
-      { key: 'name', label: 'Name' },
+      {
+        key: 'vmfSummary',
+        label: 'VMF',
+        mobileLabel: 'VMF',
+        width: '15%',
+        render: renderVmfSummary,
+      },
       {
         key: 'description',
         label: 'Description',
-        render: (value) => {
-          const trimmed = String(value ?? '').trim()
-          if (!trimmed) return '--'
-          if (trimmed.length <= 80) return trimmed
-          return `${trimmed.slice(0, 80)}...`
-        },
+        mobileLabel: 'Description',
+        width: '20%',
+        render: renderDescriptionSummary,
       },
       {
         key: 'status',
         label: 'Status',
+        mobileLabel: 'Status',
+        width: '9%',
         render: (value) => {
           const status = String(value ?? '').trim().toUpperCase() || 'UNKNOWN'
           return (
@@ -642,6 +764,8 @@ function MaintainVmfs() {
       {
         key: 'lifecycleStatus',
         label: 'Lifecycle',
+        mobileLabel: 'Lifecycle',
+        width: '10%',
         render: (value) => {
           const lifecycle = String(value ?? '').trim().toUpperCase() || 'DRAFT'
           return (
@@ -652,81 +776,24 @@ function MaintainVmfs() {
         },
       },
       {
-        key: 'frameworkVersion',
-        label: 'Framework Version',
-        render: (value) => String(value ?? '').trim() || '--',
+        key: 'frameworkSummary',
+        label: 'Framework',
+        mobileLabel: 'Framework',
+        width: '15%',
+        render: renderFrameworkSummary,
       },
       {
-        key: 'frameworkPackage',
-        label: 'Framework Package',
-        render: (_value, row) => getFrameworkPackageLabel(row),
-      },
-      {
-        key: 'completionState',
-        label: 'Completion',
-        render: (value) => {
-          const completion = String(value ?? '').trim().toUpperCase() || 'NOT_TRACKED'
-          return (
-            <Badge size="sm" variant={getRuntimeStateVariant(completion)} pill>
-              {completion}
-            </Badge>
-          )
-        },
-      },
-      {
-        key: 'validationStatus',
-        label: 'Validation',
-        render: (value) => {
-          const validation = String(value ?? '').trim().toUpperCase() || 'NOT_RUN'
-          return (
-            <Badge size="sm" variant={getRuntimeStateVariant(validation)} pill>
-              {validation}
-            </Badge>
-          )
-        },
-      },
-      {
-        key: 'lockStatus',
-        label: 'Lock',
-        render: (value) => {
-          const lockStatus = String(value ?? '').trim().toUpperCase() || 'UNLOCKED'
-          const variant = lockStatus === 'LOCKED' ? 'warning' : getRuntimeStateVariant(lockStatus)
-          return (
-            <Badge size="sm" variant={variant} pill>
-              {lockStatus}
-            </Badge>
-          )
-        },
-      },
-      {
-        key: 'snapshotStatus',
-        label: 'Snapshot',
-        render: (value) => {
-          const snapshotStatus = String(value ?? '').trim().toUpperCase() || 'UNBOUND'
-          return (
-            <Badge size="sm" variant={getRuntimeStateVariant(snapshotStatus)} pill>
-              {snapshotStatus}
-            </Badge>
-          )
-        },
-      },
-      {
-        key: 'migrationAvailable',
-        label: 'Migration',
-        render: (value) => (
-          <Badge
-            size="sm"
-            variant={value === true ? 'success' : value === false ? 'neutral' : 'info'}
-            pill
-          >
-            {formatBooleanLabel(value)}
-          </Badge>
-        ),
+        key: 'runtimeSummary',
+        label: 'Runtime State',
+        mobileLabel: 'Runtime State',
+        width: '14%',
+        render: renderRuntimeSummary,
       },
       {
         key: 'updatedAt',
         label: 'Updated',
-        width: '156px',
+        mobileLabel: 'Updated',
+        width: '9%',
         render: (value) => <TableDateTime value={value} />,
       },
       ...(showRowActionsColumn
@@ -734,8 +801,9 @@ function MaintainVmfs() {
           {
             key: 'rowActions',
             label: 'Actions',
+            mobileLabel: 'Actions',
             align: 'center',
-            width: '168px',
+            width: '10%',
             render: (_value, row) => (
               <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
             ),
@@ -998,10 +1066,14 @@ function MaintainVmfs() {
 
       <Fieldset className="maintain-vmfs__fieldset">
         <Fieldset.Legend className="sr-only">VMF catalogue</Fieldset.Legend>
-          <Card variant="elevated" className="maintain-vmfs__card">
+        <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
-            <div className="maintain-vmfs__catalogue-actions">
-              <div className="maintain-vmfs__catalogue-actions-row">
+            <div
+              className="maintain-vmfs__catalogue-actions"
+              role="group"
+              aria-label="VMF catalogue actions"
+            >
+              <div className="maintain-vmfs__catalogue-buttons">
                 <Button
                   type="button"
                   variant="outline"
@@ -1026,6 +1098,7 @@ function MaintainVmfs() {
                 <Status
                   variant={vmfCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
                   size="sm"
+                  showIcon
                   className="maintain-vmfs__capacity-status"
                   aria-label={vmfCapacityGuidance.ariaLabel}
                 >

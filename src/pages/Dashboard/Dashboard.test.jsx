@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
 
@@ -39,6 +40,11 @@ function renderDashboard() {
   )
 }
 
+const getMockMembershipCustomerId = (membership) =>
+  membership?.customerId
+  ?? membership?.customer?.id
+  ?? membership?.customer?._id
+
 function mockRole({
   isSuperAdmin = false,
   isCustomerAdmin = false,
@@ -50,36 +56,34 @@ function mockRole({
   entitlementSource = 'LICENSE_LEVEL',
 } = {}) {
   const customerIds = accessibleCustomerIds ?? (isCustomerAdmin ? ['cust-1'] : [])
-  const getAccessibleTenants = vi.fn((customerId) =>
-    (tenantMemberships ?? [])
-      .filter((membership) => String(membership?.customerId ?? '') === String(customerId ?? ''))
-      .map((membership) => String(membership?.tenantId ?? ''))
-      .filter(Boolean))
   const hasCustomerRole = vi.fn((customerId, role) => {
-    if (!isCustomerAdmin) return false
-    return customerIds.includes(customerId) && role === 'CUSTOMER_ADMIN'
+    if (isCustomerAdmin && customerIds.includes(customerId) && role === 'CUSTOMER_ADMIN') {
+      return true
+    }
+
+    return customerIds.includes(customerId) && memberships.some((membership) =>
+      String(getMockMembershipCustomerId(membership) ?? '') === String(customerId ?? '')
+      && (membership?.roles ?? []).includes(role))
   })
 
-  if (!isCustomerAdmin) {
-    hasCustomerRole.mockImplementation((customerId, role) =>
-      customerIds.includes(customerId) && memberships.some((membership) =>
-        String(membership?.customerId ?? '') === String(customerId ?? '')
-        && (membership?.roles ?? []).includes(role)))
-  }
-
-  const hasCustomerPermission = vi.fn((customerId, _permission) => {
+  const hasCustomerPermission = vi.fn((customerId, permission) => {
     if (!customerId) return false
     if (isSuperAdmin) return true
-    return isCustomerAdmin && customerIds.includes(customerId)
+    if (isCustomerAdmin && customerIds.includes(customerId)) return true
+    return memberships.some((membership) =>
+      String(getMockMembershipCustomerId(membership) ?? '') === String(customerId)
+      && (membership?.permissions ?? []).includes(permission))
   })
 
-  const hasTenantPermission = vi.fn((customerId, tenantId, _permission) => {
+  const hasTenantPermission = vi.fn((customerId, tenantId, permission) => {
     if (!customerId || !tenantId) return false
     if (isSuperAdmin) return true
+    if (isCustomerAdmin && customerIds.includes(customerId)) return true
     return (tenantMemberships ?? []).some(
       (membership) =>
-        String(membership?.customerId ?? '') === String(customerId ?? '')
-        && String(membership?.tenantId ?? '') === String(tenantId ?? ''),
+        String(getMockMembershipCustomerId(membership) ?? '') === String(customerId ?? '')
+        && String(membership?.tenantId ?? '') === String(tenantId ?? '')
+        && (membership?.permissions ?? []).includes(permission),
     )
   })
 
@@ -90,18 +94,15 @@ function mockRole({
     hasCustomerRole,
     hasCustomerPermission,
     hasTenantPermission,
-    getAccessibleTenants,
     getFeatureEntitlements: vi.fn(() => featureEntitlements),
     getEntitlementSource: vi.fn(() => entitlementSource),
   })
 }
 
-beforeEach(() => {
-  vi.clearAllMocks()
-
+function mockTenantContext(overrides = {}) {
   useTenantContext.mockReturnValue({
     customerId: 'cust-1',
-    tenantId: null,
+    tenantId: 'ten-1',
     tenants: [
       { id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true },
       { id: 'ten-2', name: 'Beta Tenant', status: 'ENABLED', isSelectable: true },
@@ -111,97 +112,77 @@ beforeEach(() => {
       { id: 'ten-2', name: 'Beta Tenant', status: 'ENABLED', isSelectable: true },
     ],
     canViewTenants: true,
-    resolvedTenantName: null,
+    customerName: null,
+    resolvedTenantName: 'Alpha Tenant',
     supportsTenantManagement: true,
     selectedCustomerTopology: 'MULTI_TENANT',
     isLoadingTenants: false,
     hasInvalidTenantContext: false,
     setTenantId: vi.fn(),
+    ...overrides,
   })
-  useGetCustomerQuery.mockReturnValue({ data: undefined })
+}
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockTenantContext()
+  useGetCustomerQuery.mockReturnValue({ data: undefined })
   mockRole({ isCustomerAdmin: true })
 })
 
 describe('Dashboard page', () => {
-  it('renders workflow tiles instead of the holding page for customer admins', () => {
+  it('renders the customer runtime workspace surface instead of workflow tiles', () => {
     renderDashboard()
 
-    expect(screen.getByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument()
-    expect(screen.getByText(/home page/i)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /workflow tiles/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /value message framework/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /deal making/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^views$/i })).toBeInTheDocument()
-    expect(screen.queryByText(/future modules in progress/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^customer workspace$/i })).toBeInTheDocument()
+    expect(screen.getByText(/runtime home/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /what should i do now/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /work in progress/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /create new work/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /runtime action queue panel/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /create new work panel/i })).toBeInTheDocument()
+    const signalsPanel = screen.getByRole('region', { name: /runtime alerts and navigation/i })
+    const alertsList = within(signalsPanel).getByRole('list', { name: /^runtime alerts$/i })
+    const secondaryNavigation = within(signalsPanel).getByRole(
+      'navigation',
+      { name: /customer workspace secondary navigation/i },
+    )
+
+    // Scaffold alerts are shown for a context-ready customer admin
+    expect(alertsList.querySelectorAll('.dashboard__alert-item')).toHaveLength(2)
+    expect(within(alertsList).getByText(/2 runtime validations need attention/i)).toBeInTheDocument()
+    expect(within(alertsList).getByText(/2 outputs require regeneration/i)).toBeInTheDocument()
+    expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(4)
+    const valueNarrativeLink = within(secondaryNavigation).getByRole(
+      'link',
+      { name: /value narrative workspace/i },
+    )
+
+    expect(valueNarrativeLink).toHaveClass('dashboard__launch-link--secondary')
+    expect(within(valueNarrativeLink).getByText('Current')).toBeInTheDocument()
+    expect(valueNarrativeLink.querySelector('.dashboard__launch-topline .dashboard__launch-icon'))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /workflow tiles/i })).not.toBeInTheDocument()
   })
 
-  it('shows the signed-in user name and current role', () => {
-    mockRole({ userName: 'Alice Wonderland', isCustomerAdmin: true })
+  it('keeps customer, tenant, work type, and role context visible', () => {
     renderDashboard()
 
-    expect(screen.getByText('Alice Wonderland')).toBeInTheDocument()
-    expect(screen.getAllByText('Customer Administrator').length).toBeGreaterThanOrEqual(1)
-  })
+    const context = screen.getByLabelText(/runtime context summary/i)
+    expect(within(context).getByText('Customer')).toBeInTheDocument()
+    expect(within(context).getByText('Current customer')).toBeInTheDocument()
+    expect(within(context).getByText('Tenant')).toBeInTheDocument()
+    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
+    const workTypeControl = screen.getByRole('combobox', { name: /work type/i })
 
-  it('renders licensed feature summary from customerScopes metadata', () => {
-    renderDashboard()
-
-    expect(screen.getByText('VMF, DEALS (Licence level)')).toBeInTheDocument()
-  })
-
-  it('renders customer scope using customer display name when available', () => {
-    mockRole({
-      isCustomerAdmin: true,
-      memberships: [
-        {
-          customerId: 'cust-1',
-          roles: ['CUSTOMER_ADMIN'],
-          customer: { name: 'Orbit Services' },
-        },
-      ],
-    })
-
-    renderDashboard()
-
-    expect(screen.getByText('Orbit Services')).toBeInTheDocument()
-  })
-
-  it('falls back to a readable label when no customer display name is available', () => {
-    mockRole({
-      isCustomerAdmin: true,
-      memberships: [{ customerId: 'cust-1', roles: ['CUSTOMER_ADMIN'] }],
-    })
-
-    renderDashboard()
-
-    expect(screen.getByText('Current customer')).toBeInTheDocument()
-  })
-
-  it('does not reuse the tenant label as the customer scope fallback', () => {
-    mockRole({
-      isSuperAdmin: false,
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: 'Aldi',
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getByText('Current customer')).toBeInTheDocument()
+    expect(workTypeControl).toHaveTextContent('All Work')
+    expect(workTypeControl.closest('.dashboard__hero-metric'))
+      .toHaveClass('dashboard__hero-metric--control')
+    expect(workTypeControl.closest('.custom-select')).toHaveClass('dashboard__context-selector')
+    expect(within(context).getAllByText(/^Work Type$/i)).toHaveLength(1)
+    const roleMetric = within(context).getByText('Role').closest('.dashboard__hero-metric')
+    expect(within(roleMetric).getByText('Customer Administrator')).toHaveClass('dashboard__context-value')
+    expect(roleMetric.querySelector('.status__indicator')).not.toBeInTheDocument()
   })
 
   it('uses customer details API name when membership has no embedded customer name', () => {
@@ -220,17 +201,19 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    expect(screen.getByText('Northwind Logistics')).toBeInTheDocument()
+    expect(screen.getAllByText('Northwind Logistics').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('shows only the tenant switcher for a single-customer multi-tenant admin', () => {
+  it('shows customer and tenant context controls when the admin can switch customers and tenants', () => {
+    mockRole({ isCustomerAdmin: true, accessibleCustomerIds: ['cust-1', 'cust-2'] })
+
     renderDashboard()
 
-    expect(screen.queryByTestId('customer-selector')).not.toBeInTheDocument()
+    expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
     expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
   })
 
-  it('hides the tenant switcher and auto-selects the only accessible tenant for a standard user', async () => {
+  it('auto-selects the only selectable tenant for a multi-tenant user', async () => {
     const setTenantId = vi.fn()
     mockRole({
       isCustomerAdmin: false,
@@ -238,477 +221,205 @@ describe('Dashboard page', () => {
       memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
       tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
     })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
+    mockTenantContext({
       tenantId: null,
-      tenants: [
-        { id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true },
-        { id: 'ten-2', name: 'Secondary Tenant', status: 'ENABLED', isSelectable: true },
-      ],
-      selectableTenants: [
-        { id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true },
-      ],
-      canViewTenants: true,
       resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
+      selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
       setTenantId,
     })
 
     renderDashboard()
-
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getByText('Single-tenant')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Only Tenant')
     })
   })
 
-  it('shows customer and tenant scope controls when the admin can switch customers', () => {
-    mockRole({ isCustomerAdmin: true, accessibleCustomerIds: ['cust-1', 'cust-2'] })
-    renderDashboard()
-
-    expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
-    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
-  })
-
-  it('suppresses the tenant switcher for single-tenant context', () => {
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: false,
-      selectedCustomerTopology: 'SINGLE_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getByText('Single-tenant customer')).toBeInTheDocument()
-  })
-
-  it('renders the selected tenant name for single-tenant scope when available', () => {
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: 'ten-1',
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: 'My Tenant',
-      supportsTenantManagement: false,
-      selectedCustomerTopology: 'SINGLE_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getAllByText('My Tenant').length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('keeps the VMF tile disabled for a multi-tenant USER without tenant scope', () => {
-    mockRole({
-      isSuperAdmin: false,
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-    })
-    renderDashboard()
-
-    expect(screen.getByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/^user$/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.queryByTestId('customer-selector')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /value message framework unavailable/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(
-      screen.getByText(/available when the selected tenant is within your vmf workspace scope/i),
-    ).toBeInTheDocument()
-  })
-
-  it('renders live VMF tile for USER with single-tenant customer context and VMF_VIEW permission', () => {
-    mockRole({
-      isSuperAdmin: false,
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: 'ten-1',
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: 'Default Tenant',
-      supportsTenantManagement: false,
-      selectedCustomerTopology: 'SINGLE_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getByRole('link', { name: /open value message framework/i })).toHaveAttribute(
-      'href',
-      '/app/workspaces/vmf',
-    )
-  })
-
-  it('renders role-gated VMF tile for USER with no customer membership', () => {
-    mockRole({
-      isSuperAdmin: false,
-      isCustomerAdmin: false,
-      accessibleCustomerIds: [],
-      memberships: [],
-      tenantMemberships: [],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: false,
-      selectedCustomerTopology: null,
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getByRole('link', { name: /value message framework unavailable/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(
-      screen.getByText(/available when the selected customer scope includes vmf workspace access/i),
-    ).toBeInTheDocument()
-  })
-
-  it('shows Tenant Administrator label for customer-scoped TENANT_ADMIN', () => {
-    mockRole({
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN'] }],
-    })
-
-    renderDashboard()
-
-    expect(screen.getAllByText('Tenant Administrator').length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('keeps the current-scope role at User when tenant-admin access exists only in another customer', () => {
-    mockRole({
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1', 'cust-2'],
-      memberships: [
-        { customerId: 'cust-1', roles: ['USER'] },
-        { customerId: 'cust-2', roles: ['TENANT_ADMIN'] },
-      ],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getAllByText(/^user$/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.queryByText('Tenant Administrator')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-  })
-
-  it('keeps the current-scope role at User when customer-admin access exists only in another customer', () => {
-    mockRole({
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1', 'cust-2'],
-      memberships: [
-        { customerId: 'cust-1', roles: ['USER'] },
-        { customerId: 'cust-2', roles: ['CUSTOMER_ADMIN'] },
-      ],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getAllByText(/^user$/i).length).toBeGreaterThanOrEqual(1)
-    expect(screen.queryByText('Customer Administrator')).not.toBeInTheDocument()
-    expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-  })
-
-  it('does not auto-select tenant context for a multi-tenant USER without tenant access', () => {
+  it('does not auto-select a tenant when the user cannot access tenant selection', () => {
     const setTenantId = vi.fn()
     mockRole({
       isCustomerAdmin: false,
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] }],
     })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
+    mockTenantContext({
       canViewTenants: false,
+      tenantId: null,
       resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
+      selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
       setTenantId,
     })
 
     renderDashboard()
 
     expect(setTenantId).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getByText('Not selected')).toBeInTheDocument()
+    expect(screen.getByText(/select a tenant to continue your work/i)).toBeInTheDocument()
   })
 
-  it('shows tenant administrator role when tenant membership is present', () => {
-    mockRole({
-      isCustomerAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['TENANT_ADMIN'] }],
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: 'ten-1',
-      tenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
-      canViewTenants: true,
-      resolvedTenantName: 'North Tenant',
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
+  it('blocks runtime actions until a tenant is selected for multi-tenant customers', () => {
+    mockTenantContext({
+      tenantId: null,
+      resolvedTenantName: null,
     })
 
     renderDashboard()
 
-    expect(screen.getAllByText('Tenant Administrator').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('link', { name: /open value message framework/i })).toHaveAttribute(
-      'href',
-      '/app/workspaces/vmf',
-    )
+    expect(screen.getByText(/select a tenant to continue your work/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /tenant required/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(/select a tenant to show runtime work/i)).toBeInTheDocument()
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+
+    expect(actionQueue).toHaveClass('dashboard__launch-grid--single')
+    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(1)
   })
 
-  it('shows the tenant switcher for multi-tenant users with tenant memberships', () => {
+  it('renders scaffold runtime action items when context is ready', () => {
+    renderDashboard()
+
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+
+    expect(screen.getByText(/continue acme value narrative/i)).toBeInTheDocument()
+    expect(screen.getByText(/fix validation issues in globex business case/i)).toBeInTheDocument()
+    expect(actionQueue).toHaveClass('dashboard__launch-grid--actions')
+    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(2)
+    expect(screen.getByText('2 available')).toBeInTheDocument()
+    const continueLink = within(actionQueue).getByRole('link', { name: /continue acme value narrative/i })
+    expect(continueLink).toHaveAttribute('href', '/app/workspaces/vmf')
+  })
+
+  it('renders scaffold work-in-progress instances and filters by work type', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+
+    const tableRegion = screen.getByRole('region', { name: /work in progress runtime instances table/i })
+    const workTable = within(tableRegion).getByRole('table', { name: /work in progress runtime instances/i })
+
+    expect(workTable).toBeInTheDocument()
+    expect(workTable).toHaveClass('table--striped')
+    expect(workTable).toHaveClass('table--hoverable')
+    // Scaffold instances are present for a context-ready customer admin
+    expect(screen.getByText('Acme Value Narrative')).toBeInTheDocument()
+    expect(screen.getByText('Globex Business Case')).toBeInTheDocument()
+    expect(screen.getByText('2 visible')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: /work type/i }))
+    expect(screen.getAllByRole('option')).toHaveLength(5)
+    await user.click(screen.getByRole('option', { name: 'Business Cases' }))
+
+    expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
+    expect(screen.getByText('Globex Business Case')).toBeInTheDocument()
+    expect(screen.getByText('1 visible')).toBeInTheDocument()
+  })
+
+  it('shows Sales Manager scoped scaffold team work and review action', () => {
     mockRole({
-      isCustomerAdmin: false,
       accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['SALES_MANAGER'] }],
       tenantMemberships: [
-        { customerId: 'cust-1', tenantId: 'ten-1', roles: ['USER'] },
-        { customerId: 'cust-1', tenantId: 'ten-2', roles: ['USER'] },
+        { customerId: 'cust-1', tenantId: 'ten-1', roles: ['SALES_MANAGER'], permissions: ['VMF_VIEW'] },
       ],
     })
 
     renderDashboard()
 
-    expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
-    expect(screen.getByText(/no tenant selected/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Sales Manager').length).toBeGreaterThanOrEqual(1)
+    // Scaffold: manager sees team-scoped review action and team member work
+    expect(screen.getByText(/review beta deal analysis/i)).toBeInTheDocument()
+    expect(screen.getByText('Amelia Hart')).toBeInTheDocument()
+    expect(screen.getByText(/review is scoped to reporting users in the selected tenant/i)).toBeInTheDocument()
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(3)
+    expect(screen.getByText('3 available')).toBeInTheDocument()
   })
 
-  it('hides tenant selection for a tenant admin when TENANT_VIEW is removed', () => {
+  it('shows Sales User scaffold deal work and enables Deal Analysis when VMF anchor exists', () => {
     mockRole({
-      isCustomerAdmin: false,
       accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['TENANT_ADMIN', 'USER'] }],
-      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['TENANT_ADMIN'] }],
+      memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
+      tenantMemberships: [
+        { customerId: 'cust-1', tenantId: 'ten-1', roles: ['SALES'], permissions: ['VMF_VIEW'] },
+      ],
     })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [{ id: 'ten-1', name: 'North Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [],
+
+    renderDashboard()
+
+    expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
+    // Scaffold: Sales User sees their own Deal Analysis work
+    expect(screen.getByText('Beta Deal Analysis')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /create deal analysis/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /create value narrative/i })).toBeInTheDocument()
+    expect(screen.getByText(/deal analysis will inherit the current vmf runtime anchor/i)).toBeInTheDocument()
+    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    const createGrid = within(createPanel).getByRole('list', { name: /^create new work$/i })
+    const dealAnalysisLink = within(createGrid).getByRole('link', { name: /create deal analysis/i })
+    const dealTopline = within(dealAnalysisLink).getByText('Create').closest('.dashboard__launch-topline')
+
+    expect(createGrid).toHaveClass('dashboard__launch-grid--create')
+    expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(3)
+    expect(dealAnalysisLink).toHaveClass('dashboard__launch-link--create')
+    expect(dealTopline).toBeInTheDocument()
+    expect(dealTopline?.querySelector('.dashboard__launch-icon')).toBeInTheDocument()
+  })
+
+  it('shows the Deal Analysis anchor unavailable reason when VMF is not active for the tenant', () => {
+    mockRole({
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
+      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['SALES'] }],
+      featureEntitlements: ['DEALS'],
+    })
+
+    renderDashboard()
+
+    expect(
+      screen.getAllByText(/deal analysis unavailable - no active vmf framework is available for this tenant/i)
+        .length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('link', { name: /unavailable/i }).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('resolves tenant memberships that use nested customer references', () => {
+    mockRole({
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [],
+      tenantMemberships: [
+        {
+          customer: { id: 'cust-1', name: 'Nested Customer' },
+          tenantId: 'ten-1',
+          roles: ['SALES'],
+          permissions: ['VMF_VIEW'],
+        },
+      ],
+    })
+
+    renderDashboard()
+
+    expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Nested Customer').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('link', { name: /create deal analysis/i })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('preserves single-tenant context without rendering tenant switcher', () => {
+    mockTenantContext({
+      tenantId: 'ten-default',
+      resolvedTenantName: 'Default Tenant',
+      supportsTenantManagement: false,
+      selectedCustomerTopology: 'SINGLE_TENANT',
       canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
+      selectableTenants: [],
     })
 
     renderDashboard()
 
     expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getByText('Not selected')).toBeInTheDocument()
-  })
-
-  it('does not ask a user to select a tenant when VMF view exists but tenant selection is unavailable', () => {
-    useAuthorization.mockReturnValue({
-      user: {
-        id: 'u-1',
-        name: 'Gus G',
-        memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
-        tenantMemberships: [],
-      },
-      isSuperAdmin: false,
-      accessibleCustomerIds: ['cust-1'],
-      hasCustomerRole: vi.fn(() => false),
-      hasCustomerPermission: vi.fn((_customerId, permission) => permission === 'VMF_VIEW'),
-      hasTenantPermission: vi.fn(() => false),
-      getFeatureEntitlements: vi.fn(() => ['VMF', 'DEALS', 'VIEWS']),
-      getEntitlementSource: vi.fn(() => 'LICENSE_LEVEL'),
-    })
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [],
-      selectableTenants: [],
-      canViewTenants: false,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getByRole('link', { name: /value message framework unavailable/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(screen.queryByText(/select a tenant to open the vmf workspace/i)).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/available when the current scope includes tenant visibility and a selected tenant/i),
-    ).toBeInTheDocument()
-  })
-
-  it('auto-selects the only selectable tenant on the dashboard', async () => {
-    const setTenantId = vi.fn()
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: null,
-      tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
-      canViewTenants: true,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: false,
-      setTenantId,
-    })
-
-    renderDashboard()
-
-    await waitFor(() => {
-      expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Only Tenant')
-    })
-  })
-
-  it('recovers invalid persisted tenant context when only one selectable tenant remains', async () => {
-    const setTenantId = vi.fn()
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: 'ghost-tenant',
-      tenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [{ id: 'ten-1', name: 'Only Tenant', status: 'ENABLED', isSelectable: true }],
-      canViewTenants: true,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: true,
-      setTenantId,
-    })
-
-    renderDashboard()
-
-    expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getByText('Selection needs review')).toBeInTheDocument()
-    expect(screen.getByText('Choose another tenant')).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(setTenantId).toHaveBeenCalledWith('ten-1', 'Only Tenant')
-    })
-  })
-
-  it('keeps the VMF tile disabled for customer admins until a tenant is selected in multi-tenant mode', () => {
-    renderDashboard()
-
-    expect(screen.getByRole('link', { name: /value message framework unavailable/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(screen.getByText(/select a tenant to open the vmf workspace/i)).toBeInTheDocument()
-  })
-
-  it('marks deal making and views as planned while routes are unavailable', () => {
-    renderDashboard()
-
-    expect(screen.getByRole('link', { name: /deal making coming soon/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(screen.getByRole('link', { name: /views coming soon/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
-    expect(
-      screen.getAllByText(/customer-app route is not yet available in the current frontend build/i),
-    ).toHaveLength(2)
-  })
-
-  it('surfaces invalid tenant context in the dashboard summary', () => {
-    useTenantContext.mockReturnValue({
-      customerId: 'cust-1',
-      tenantId: 'ghost-tenant',
-      tenants: [{ id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true }],
-      selectableTenants: [{ id: 'ten-1', name: 'Alpha Tenant', status: 'ENABLED', isSelectable: true }],
-      canViewTenants: true,
-      resolvedTenantName: null,
-      supportsTenantManagement: true,
-      selectedCustomerTopology: 'MULTI_TENANT',
-      isLoadingTenants: false,
-      hasInvalidTenantContext: true,
-      setTenantId: vi.fn(),
-    })
-
-    renderDashboard()
-
-    expect(screen.getByText(/selection needs review/i)).toBeInTheDocument()
-    expect(screen.getByText(/choose another tenant/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Default Tenant').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/context ready/i)).toBeInTheDocument()
   })
 })
