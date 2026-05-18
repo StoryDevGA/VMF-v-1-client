@@ -429,6 +429,8 @@ describe('MaintainVmfs', () => {
     const dialog = screen.getByRole('dialog', { name: /viewer vmf details/i })
     expect(dialog).toBeInTheDocument()
     expect(within(dialog).getByText('VMF Package 2.2')).toBeInTheDocument()
+    expect(within(dialog).getByText('Readiness pending')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not Started')).toBeInTheDocument()
     expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
   })
 
@@ -617,6 +619,8 @@ describe('MaintainVmfs', () => {
     expect(within(table).getByText('PUBLISHED')).toBeInTheDocument()
     expect(within(table).getAllByText('Version').length).toBeGreaterThan(0)
     expect(within(table).getAllByRole('button', { name: /completion runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /readiness runtime evidence/i })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /execution runtime evidence/i })).toHaveLength(2)
     expect(within(table).getAllByRole('button', { name: /validation runtime evidence/i })).toHaveLength(2)
     expect(within(table).getAllByRole('button', { name: /lock runtime evidence/i })).toHaveLength(2)
     expect(within(table).getAllByRole('button', { name: /snapshot runtime evidence/i })).toHaveLength(2)

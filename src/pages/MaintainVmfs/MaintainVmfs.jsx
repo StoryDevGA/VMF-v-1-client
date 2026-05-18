@@ -41,6 +41,13 @@ import {
   isLicenseFeatureNotEnabledError,
   normalizeError,
 } from '../../utils/errors.js'
+import {
+  formatRuntimeTokenLabel,
+  getExecutionStateVariant,
+  getRuntimeExecutionState,
+  getRuntimeReadinessLabel,
+  getRuntimeReadinessVariant,
+} from '../../utils/runtimeWorkspace.js'
 import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './MaintainVmfs.css'
 
@@ -309,7 +316,19 @@ function renderRuntimeSummary(_value, row) {
   const lockStatus = String(row?.lockStatus ?? '').trim().toUpperCase() || 'UNLOCKED'
   const snapshotStatus = String(row?.snapshotStatus ?? '').trim().toUpperCase() || 'UNBOUND'
   const migration = formatBooleanLabel(row?.migrationAvailable)
+  const executionState = getRuntimeExecutionState(row)
+  const readiness = getRuntimeReadinessLabel(row)
   const runtimeItems = [
+    {
+      label: 'Readiness',
+      value: readiness,
+      variant: getRuntimeReadinessVariant(readiness),
+    },
+    {
+      label: 'Execution',
+      value: formatRuntimeTokenLabel(executionState),
+      variant: getExecutionStateVariant(executionState),
+    },
     {
       label: 'Completion',
       value: completion,
@@ -1053,6 +1072,9 @@ function MaintainVmfs() {
     navigate('/app/dashboard')
   }, [navigate])
 
+  const detailsRuntimeReadiness = getRuntimeReadinessLabel(detailsTarget)
+  const detailsExecutionState = getRuntimeExecutionState(detailsTarget)
+
   if (!customerId) {
     return (
       <MaintainVmfsBoundaryState
@@ -1458,6 +1480,24 @@ function MaintainVmfs() {
               {getFrameworkPackageDetail(detailsTarget, 'version')
                 || getFrameworkPackageDetail(detailsTarget, 'frameworkVersion')
                 || '--'}
+            </VmfDetailField>
+            <VmfDetailField label="Runtime Readiness">
+              <Badge
+                size="sm"
+                variant={getRuntimeReadinessVariant(detailsRuntimeReadiness)}
+                pill
+              >
+                {detailsRuntimeReadiness}
+              </Badge>
+            </VmfDetailField>
+            <VmfDetailField label="Execution State">
+              <Badge
+                size="sm"
+                variant={getExecutionStateVariant(detailsExecutionState)}
+                pill
+              >
+                {formatRuntimeTokenLabel(detailsExecutionState)}
+              </Badge>
             </VmfDetailField>
             <VmfDetailField label="Completion State">
               <Badge

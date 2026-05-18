@@ -28,6 +28,15 @@ import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import { useListVmfsQuery } from '../../store/api/vmfApi.js'
+import {
+  formatRuntimeTokenLabel,
+  getExecutionStateVariant,
+  getRuntimeExecutionState,
+  getRuntimeInstanceDisplayId,
+  getRuntimeLifecycleStatus,
+  getRuntimeReadinessLabel,
+  getRuntimeStatusVariant,
+} from '../../utils/runtimeWorkspace.js'
 import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './Dashboard.css'
 
@@ -38,6 +47,11 @@ const WORK_TYPE_OPTIONS = [
   { value: 'BUSINESS_CASE', label: 'Business Cases' },
   { value: 'ACCOUNT_PLAN', label: 'Account Plans' },
 ]
+
+const EMPTY_RUNTIME_ROWS = Object.freeze([])
+
+// TODO: replace with runtime activity events once the Runtime Execution Engine emits them.
+const EMPTY_RUNTIME_ACTIVITY = Object.freeze([])
 
 const normalizeFeatureKeys = (features) =>
   Array.isArray(features)
@@ -90,15 +104,6 @@ const findTenantMembershipByCustomer = (user, customerId, role) => {
     String(getMembershipCustomerId(membership) ?? '') === normalizedCustomerId
     && (!role || hasRole(membership?.roles, role))) ?? null
 }
-
-const formatTokenLabel = (value) =>
-  String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
 
@@ -644,10 +649,7 @@ function Dashboard() {
   const canCreateDealAnalysis = Boolean(
     hasActiveVmfAnchor && hasDealFeature && hasSelectedSalesExecutionRole,
   )
-  const activeVmfRows = useMemo(
-    () => (Array.isArray(vmfListResponse?.data) ? vmfListResponse.data : []),
-    [vmfListResponse?.data],
-  )
+  const activeVmfRows = Array.isArray(vmfListResponse?.data) ? vmfListResponse.data : EMPTY_RUNTIME_ROWS
   const isLoadingRuntimeVmfs = Boolean(isLoadingVmfs || isFetchingVmfs)
 
   const runtimeActions = useMemo(() => {
@@ -719,19 +721,22 @@ function Dashboard() {
       const vmfName = getVmfName(vmf)
       const packageLabel = getFrameworkPackageLabel(vmf)
       const packageVersion = getFrameworkPackageVersion(vmf)
-      const lifecycleStatus = String(vmf?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase() || 'DRAFT'
-      const runtimeStatus = String(vmf?.validationStatus ?? vmf?.status ?? lifecycleStatus).trim().toUpperCase()
+      const workType = 'VALUE_NARRATIVE'
+      const runtimeStatus = getRuntimeLifecycleStatus(vmf)
+      const executionState = getRuntimeExecutionState(vmf)
 
       return {
         id: getVmfId(vmf) || vmfName,
+        runtimeDisplayId: getRuntimeInstanceDisplayId(vmf, workType),
         work: vmfName,
         // TODO: replace with vmf.workType once the API returns it.
-        workType: 'VALUE_NARRATIVE',
+        workType,
         workTypeLabel: 'Value Narrative',
         tenant: tenantScopeValue,
         packageSummary: `Package: ${packageLabel}`,
-        stage: lifecycleStatus,
         status: runtimeStatus,
+        executionState,
+        readiness: getRuntimeReadinessLabel(vmf),
         lastActivity: formatUpdatedLabel(vmf?.updatedAt),
         nextAction: `Open ${packageVersion}`,
       }
@@ -854,24 +859,31 @@ function Dashboard() {
   const runtimeActionEmptyMessage = isLoadingRuntimeVmfs
     ? 'Checking for active VMF runtime work in this tenant.'
     : 'Runtime actions will appear here once runtime instances exist for this tenant.'
+  const runtimeActivityItems = EMPTY_RUNTIME_ACTIVITY
 
   const tableColumns = useMemo(() => [
     {
-      key: 'work',
-      label: 'Work',
+      key: 'runtimeDisplayId',
+      label: 'Runtime ID',
       render: (value, row) => (
         <div className="dashboard__work-cell">
           <span className="dashboard__work-heading">
             <span className="dashboard__work-title">{value}</span>
-            <Badge variant="neutral" size="sm" pill outline>{row.workTypeLabel}</Badge>
           </span>
-          <span className="dashboard__work-id">{row.id}</span>
+          <span className="dashboard__work-id">{row.work}</span>
         </div>
       ),
     },
     {
+      key: 'workTypeLabel',
+      label: 'Work Type',
+      render: (value) => (
+        <Badge variant="neutral" size="sm" pill outline>{value}</Badge>
+      ),
+    },
+    {
       key: 'tenant',
-      label: 'Scope',
+      label: 'Tenant Scope',
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
           <span>{value}</span>
@@ -880,23 +892,37 @@ function Dashboard() {
       ),
     },
     {
-      key: 'stage',
-      label: 'Progress',
+      key: 'status',
+      label: 'Runtime Status',
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
-          <span>{value}</span>
-          <span>{formatTokenLabel(row.status)}</span>
+          <Status variant={getRuntimeStatusVariant(value)} size="sm" showIcon>
+            {formatRuntimeTokenLabel(value)}
+          </Status>
+          <span>{row.readiness}</span>
         </div>
       ),
     },
     {
+      key: 'executionState',
+      label: 'Execution State',
+      render: (value) => (
+        <Status variant={getExecutionStateVariant(value)} size="sm">
+          {formatRuntimeTokenLabel(value)}
+        </Status>
+      ),
+    },
+    {
       key: 'lastActivity',
-      label: 'Next',
-      render: (value, row) => (
+      label: 'Updated',
+    },
+    {
+      key: 'nextAction',
+      label: 'Next Action',
+      render: (value) => (
         <div className="dashboard__next-cell">
-          <span>{value}</span>
           <Link to="/app/workspaces/vmf" variant="primary" underline="none">
-            {row.nextAction}
+            {value}
           </Link>
         </div>
       ),
@@ -999,7 +1025,7 @@ function Dashboard() {
           icon={MdFilterList}
           modifier="work"
           panelLabel="Work in progress runtime instances panel"
-          status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatTokenLabel(workTypeFilter), variant: 'info' }}
+          status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatRuntimeTokenLabel(workTypeFilter), variant: 'info' }}
           title="Work In Progress"
         >
           <HorizontalScroll
@@ -1017,6 +1043,36 @@ function Dashboard() {
               className="dashboard__work-table"
             />
           </HorizontalScroll>
+        </DashboardSectionCard>
+
+        <DashboardSectionCard
+          badge={{ label: `${runtimeActivityItems.length} events`, variant: 'neutral' }}
+          description="Runtime activity will show execution, review, validation, and state-transition events when the Runtime Execution Engine emits them."
+          icon={MdOutlineInsights}
+          modifier="activity"
+          panelLabel="Recent runtime activity panel"
+          status={{ label: 'No activity yet', variant: 'neutral' }}
+          title="Recent Runtime Activity"
+        >
+          <ul className="dashboard__activity-list" aria-label="Recent runtime activity">
+            {runtimeActivityItems.length > 0 ? (
+              runtimeActivityItems.map((activity) => (
+                <li key={activity.id} className="dashboard__activity-item">
+                  <Status variant={activity.variant} size="sm" showIcon>
+                    {activity.label}
+                  </Status>
+                  <p>{activity.description}</p>
+                </li>
+              ))
+            ) : (
+              <li className="dashboard__empty-item">
+                <Status variant="info" size="sm" showIcon>
+                  No runtime activity yet
+                </Status>
+                <p>Activity will appear here when runtime instances emit execution, review, or validation events.</p>
+              </li>
+            )}
+          </ul>
         </DashboardSectionCard>
 
         <DashboardSectionCard
