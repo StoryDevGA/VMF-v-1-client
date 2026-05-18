@@ -7,7 +7,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   MdAddCircleOutline,
-  MdAssignmentTurnedIn,
   MdFilterList,
   MdOutlineAssessment,
   MdOutlineDashboardCustomize,
@@ -38,9 +37,6 @@ const WORK_TYPE_OPTIONS = [
   { value: 'BUSINESS_CASE', label: 'Business Cases' },
   { value: 'ACCOUNT_PLAN', label: 'Account Plans' },
 ]
-
-const ENABLE_RUNTIME_WORKSPACE_SCAFFOLD =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_RUNTIME_WORKSPACE_SCAFFOLD === 'true'
 
 const normalizeFeatureKeys = (features) =>
   Array.isArray(features)
@@ -490,6 +486,37 @@ function Dashboard() {
       && tenantRowsForSwitcher.length > 1,
   )
 
+  const tenantScopeSummary = useMemo(() => {
+    if (!customerId) return 'Select a customer to view runtime context.'
+    if (!supportsTenantManagement) {
+      return `${customerScopeValue} uses a single tenant. Runtime work opens in that tenant context.`
+    }
+
+    const tenantNames = tenantRowsForSwitcher
+      .map((tenant) => String(tenant?.name ?? '').trim())
+      .filter(Boolean)
+    const tenantCount = tenantRowsForSwitcher.length
+    const tenantLabel = tenantCount === 1 ? 'tenant' : 'tenants'
+
+    if (tenantId) {
+      return `Viewing runtime workspace for ${tenantScopeValue} under ${customerScopeValue}.`
+    }
+
+    if (tenantCount > 0) {
+      const tenantList = tenantNames.length > 0 ? `: ${tenantNames.join(', ')}` : ''
+      return `${customerScopeValue} has ${tenantCount} ${tenantLabel}${tenantList}. Select a tenant to view runtime work and VMF availability.`
+    }
+
+    return `${customerScopeValue} has no tenants available for this account.`
+  }, [
+    customerId,
+    customerScopeValue,
+    supportsTenantManagement,
+    tenantId,
+    tenantRowsForSwitcher,
+    tenantScopeValue,
+  ])
+
   useEffect(() => {
     if (!supportsTenantManagement || !customerId || isLoadingTenants || !hasTenantSelectionAccess) return
     if (tenantRowsForSwitcher.length !== 1) return
@@ -557,148 +584,18 @@ function Dashboard() {
       ]
     }
 
-    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
-
-    // SCAFFOLD DATA — context is ready but no Runtime Execution Engine API exists yet.
-    // These items represent what the Runtime Action Queue API will return once the
-    // Runtime Execution Engine (Phase 2) is integrated. Each action resolves to a
-    // runtimeInstanceId and an actionKey that will be sent to the runtime action endpoint.
-    //
-    // Replace this entire block with a real RTK Query call when the endpoint exists.
-    // Expected endpoint: GET /api/v1/runtime/actions?customerId=&tenantId=
-    // Expected response shape: { data: RuntimeAction[] }
-    // where RuntimeAction has: { runtimeInstanceId, actionKey, title, description, meta,
-    //   label, priority, disabled, to }
-    //
-    // The priority field drives badge colour and sort order. 'HIGH' = warning badge,
-    // any other value = neutral badge. The runtimeInstanceId links the action to the
-    // matching row in the Work In Progress table.
-    const tenantLabel = tenantScopeValue || 'Current tenant'
-    const scaffoldActions = [
-      {
-        actionKey: 'CONTINUE',
-        description: 'Resume the current draft and complete the next required VMF section.',
-        disabled: !canOpenVmfWorkspace,
-        icon: MdOutlinePlayCircle,
-        label: canOpenVmfWorkspace ? 'Continue' : 'Unavailable',
-        meta: `${tenantLabel} / Draft`,
-        priority: 'HIGH',
-        runtimeInstanceId: 'rt-acme-value-narrative',
-        title: 'Continue Acme Value Narrative',
-        to: '/app/workspaces/vmf',
-      },
-      {
-        actionKey: 'RUN_VALIDATION',
-        description: 'Resolve validation blockers before the business case can move forward.',
-        disabled: !hasActiveVmfAnchor,
-        icon: MdAssignmentTurnedIn,
-        label: hasActiveVmfAnchor ? 'Review issues' : 'VMF anchor required',
-        meta: `${tenantLabel} / 2 blocking issues`,
-        priority: 'HIGH',
-        runtimeInstanceId: 'rt-globex-business-case',
-        title: 'Fix validation issues in Globex Business Case',
-        to: '/app/workspaces/vmf',
-      },
-    ]
-
-    if (hasSelectedSalesManagerRole) {
-      // SCAFFOLD DATA — Sales Manager gets an additional review action for team-owned work.
-      // This will be driven by the manager-scoped runtime visibility contract once the
-      // Runtime Execution Engine supplies team instance data.
-      scaffoldActions.push({
-        actionKey: 'REVIEW',
-        description: 'Review the deal analysis submitted by a reporting sales user.',
-        disabled: !hasActiveVmfAnchor,
-        icon: MdOutlinePeopleAlt,
-        label: hasActiveVmfAnchor ? 'Review deal' : 'VMF anchor required',
-        meta: `${tenantLabel} / Manager review`,
-        priority: 'MEDIUM',
-        runtimeInstanceId: 'rt-beta-deal-analysis',
-        title: 'Review Beta Deal Analysis',
-        to: '/app/workspaces/vmf',
-      })
-    }
-
-    return scaffoldActions
+    return []
   }, [
-    canOpenVmfWorkspace,
     customerId,
     customerScopeValue,
-    hasActiveVmfAnchor,
-    hasSelectedSalesManagerRole,
     supportsTenantManagement,
     tenantId,
-    tenantScopeValue,
   ])
 
   const runtimeInstances = useMemo(() => {
     if (!contextReady) return []
-    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
-
-    // SCAFFOLD DATA — these rows represent what the Work In Progress API will return
-    // once the Runtime Execution Engine (Phase 2) is integrated. The data shape here
-    // documents the expected runtime instance contract so the table and filter logic
-    // can be tested end-to-end before the backend endpoint exists.
-    //
-    // Replace this entire block with a real RTK Query call when the endpoint exists.
-    // Expected endpoint: GET /api/v1/runtime/instances?customerId=&tenantId=
-    // Expected response shape: { data: RuntimeInstance[] }
-    // where RuntimeInstance has: { id, work, workType, workTypeLabel, tenant, owner,
-    //   stage, status, lastActivity, nextAction }
-    //
-    // The workType field must match one of the WORK_TYPE_OPTIONS values so the filter
-    // works correctly. status drives the formatted label in the Progress column.
-    const tenantLabel = tenantScopeValue || 'Current tenant'
-    const rows = [
-      {
-        id: 'rt-acme-value-narrative',
-        work: 'Acme Value Narrative',
-        workType: 'VALUE_NARRATIVE',
-        workTypeLabel: 'Value Narrative',
-        tenant: tenantLabel,
-        owner: 'You',
-        stage: 'Draft',
-        status: 'NEEDS_INPUT',
-        lastActivity: 'Today',
-        nextAction: 'Continue',
-      },
-      {
-        id: 'rt-globex-business-case',
-        work: 'Globex Business Case',
-        workType: 'BUSINESS_CASE',
-        workTypeLabel: 'Business Case',
-        tenant: tenantLabel,
-        // SCAFFOLD DATA — manager sees team member's name; Sales User sees 'You'.
-        // This distinction will be driven by the manager-scoped visibility contract.
-        owner: hasSelectedSalesManagerRole ? 'Jordan Lee' : 'You',
-        stage: 'Validation',
-        status: 'BLOCKED',
-        lastActivity: 'Yesterday',
-        nextAction: 'Fix issues',
-      },
-    ]
-
-    if (hasSelectedSalesExecutionRole || hasSelectedSalesManagerRole) {
-      // SCAFFOLD DATA — Deal Analysis row is only visible to Sales and Manager roles.
-      // The real endpoint will apply this filtering server-side based on the role
-      // scope contract. The owner and stage differ by role to reflect the manager
-      // review vs. user draft distinction.
-      rows.push({
-        id: 'rt-beta-deal-analysis',
-        work: 'Beta Deal Analysis',
-        workType: 'DEAL_ANALYSIS',
-        workTypeLabel: 'Deal Analysis',
-        tenant: tenantLabel,
-        owner: hasSelectedSalesManagerRole ? 'Amelia Hart' : 'You',
-        stage: hasSelectedSalesManagerRole ? 'Review' : 'Draft',
-        status: hasSelectedSalesManagerRole ? 'REVIEW_READY' : 'DRAFT',
-        lastActivity: hasSelectedSalesManagerRole ? '2h ago' : 'Today',
-        nextAction: hasSelectedSalesManagerRole ? 'Review' : 'Continue',
-      })
-    }
-
-    return rows
-  }, [contextReady, hasSelectedSalesExecutionRole, hasSelectedSalesManagerRole, tenantScopeValue])
+    return []
+  }, [contextReady])
 
   const filteredRuntimeInstances = useMemo(() => {
     if (workTypeFilter === 'ALL') return runtimeInstances
@@ -751,48 +648,8 @@ function Dashboard() {
       ]
     }
 
-    if (!ENABLE_RUNTIME_WORKSPACE_SCAFFOLD) return []
-
-    // SCAFFOLD DATA — these signals represent what the Runtime Observability Layer
-    // (Phase 2+) will surface once validation events, output state, and review-ready
-    // state are tracked in the backend. Until then these fixed items demonstrate the
-    // alert card shape and role-based visibility logic to QA testers.
-    //
-    // Replace this entire block with a real RTK Query call when the endpoint exists.
-    // Expected endpoint: GET /api/v1/runtime/signals?customerId=&tenantId=
-    // Expected response shape: { data: RuntimeSignal[] }
-    // where RuntimeSignal has: { id, label, description, variant }
-    //
-    // variant maps to the Status component variants: 'success', 'warning', 'info', 'error'.
-    const scaffoldAlerts = [
-      {
-        id: 'validation-blocked',
-        label: '2 runtime validations need attention',
-        description: 'Validation blockers are preventing one business case from moving forward.',
-        variant: 'warning',
-      },
-      {
-        id: 'outputs-stale',
-        label: '2 outputs require regeneration',
-        description: 'Generated outputs will need refresh after the related runtime work changes.',
-        variant: 'info',
-      },
-    ]
-
-    if (hasSelectedSalesManagerRole) {
-      // SCAFFOLD DATA — manager-scoped signal surfaces when a team member's work
-      // reaches REVIEW_READY state. The real signal will be emitted by the runtime
-      // governance event system when the review-ready transition fires.
-      scaffoldAlerts.unshift({
-        id: 'manager-review',
-        label: '1 team deal analysis is ready for review',
-        description: 'Review is scoped to reporting users in the selected tenant.',
-        variant: 'success',
-      })
-    }
-
-    return scaffoldAlerts
-  }, [contextReady, hasSelectedSalesManagerRole])
+    return []
+  }, [contextReady])
 
   const secondaryNavigationItems = useMemo(() => [
     {
@@ -918,6 +775,7 @@ function Dashboard() {
               <p className="dashboard__hero-description">
                 Continue governed runtime work inside the selected customer, tenant, and role context.
               </p>
+              <p className="dashboard__scope-feedback">{tenantScopeSummary}</p>
             </div>
           </div>
 
@@ -931,7 +789,11 @@ function Dashboard() {
             </DashboardHeroMetric>
             <DashboardHeroMetric label="Tenant" control={showAccessibleTenantSwitcher}>
               {showAccessibleTenantSwitcher ? (
-                <TenantSwitcher className="dashboard__context-selector" />
+                <TenantSwitcher
+                  className="dashboard__context-selector"
+                  includeAllTenants={false}
+                  placeholder="Select tenant"
+                />
               ) : (
                 <span className="dashboard__context-value">{tenantScopeValue}</span>
               )}

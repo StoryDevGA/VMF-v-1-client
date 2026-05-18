@@ -75,6 +75,18 @@ describe('TenantSwitcher', () => {
     expect(screen.getByRole('option', { name: /all tenants/i })).toBeInTheDocument()
   })
 
+  it('can require a concrete tenant selection', async () => {
+    mockHook()
+    render(<TenantSwitcher includeAllTenants={false} placeholder="Select tenant" />)
+
+    expect(screen.getByRole('combobox', { name: /switch tenant/i })).toHaveTextContent('Select tenant')
+
+    await userEvent.click(screen.getByRole('combobox', { name: /switch tenant/i }))
+
+    expect(screen.queryByRole('option', { name: /all tenants/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Alpha' })).toBeInTheDocument()
+  })
+
   it('renders ENABLED tenants only', async () => {
     mockHook({ tenants: mixedTenants })
     render(<TenantSwitcher />)

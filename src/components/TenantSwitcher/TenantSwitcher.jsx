@@ -18,8 +18,16 @@ const ALL_TENANTS_VALUE = ''
 /**
  * @param {Object}  props
  * @param {string}  [props.className=''] — additional CSS class(es)
+ * @param {boolean} [props.includeAllTenants=true] — whether to include the all-tenant scope option
+ * @param {string}  [props.placeholder='All Tenants'] — placeholder shown when no tenant is selected
+ * @param {string}  [props.ariaLabel='Switch tenant'] — accessible label for the combobox
  */
-export function TenantSwitcher({ className = '' }) {
+export function TenantSwitcher({
+  className = '',
+  includeAllTenants = true,
+  placeholder = 'All Tenants',
+  ariaLabel = 'Switch tenant',
+}) {
   const {
     customerId,
     canViewTenants,
@@ -37,7 +45,7 @@ export function TenantSwitcher({ className = '' }) {
 
   const handleChange = useCallback(
     (value) => {
-      if (value === ALL_TENANTS_VALUE) {
+      if (includeAllTenants && value === ALL_TENANTS_VALUE) {
         setTenantId(null, null)
       } else {
         const tenantPool = selectableTenantRows.length > 0 ? selectableTenantRows : tenants
@@ -45,7 +53,7 @@ export function TenantSwitcher({ className = '' }) {
         setTenantId(value, tenant?.name ?? null)
       }
     },
-    [selectableTenantRows, setTenantId, tenants],
+    [includeAllTenants, selectableTenantRows, setTenantId, tenants],
   )
 
   // Don't render if there's no customer context
@@ -54,7 +62,7 @@ export function TenantSwitcher({ className = '' }) {
   const enabledTenants = tenants.filter((t) => t.status === 'ENABLED')
   const tenantOptionsSource = selectableTenantRows.length > 0 ? selectableTenantRows : enabledTenants
   const options = [
-    { value: ALL_TENANTS_VALUE, label: 'All Tenants' },
+    includeAllTenants ? { value: ALL_TENANTS_VALUE, label: 'All Tenants' } : null,
     ...tenantOptionsSource
       .map((tenant) => {
         const resolvedTenantId = getTenantId(tenant)
@@ -63,16 +71,16 @@ export function TenantSwitcher({ className = '' }) {
         return { value: resolvedTenantId, label: resolvedTenantName }
       })
       .filter(Boolean),
-  ]
+  ].filter(Boolean)
 
   return (
     <CustomSelect
       value={tenantId ?? ALL_TENANTS_VALUE}
       onChange={handleChange}
       options={options}
-      placeholder="All Tenants"
+      placeholder={placeholder}
       icon={<MdBusiness size={18} />}
-      ariaLabel="Switch tenant"
+      ariaLabel={ariaLabel}
       disabled={isLoadingTenants}
       className={className}
     />

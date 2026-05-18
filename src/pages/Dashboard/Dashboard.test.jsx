@@ -25,7 +25,9 @@ vi.mock('../../components/CustomerSelector', () => ({
 }))
 
 vi.mock('../../components/TenantSwitcher', () => ({
-  TenantSwitcher: () => <div data-testid="tenant-switcher">Tenant Switcher</div>,
+  TenantSwitcher: ({ placeholder = 'Tenant Switcher' }) => (
+    <div data-testid="tenant-switcher">{placeholder}</div>
+  ),
 }))
 
 import { useAuthorization } from '../../hooks/useAuthorization.js'
@@ -136,6 +138,8 @@ describe('Dashboard page', () => {
 
     expect(screen.getByRole('heading', { name: /^customer workspace$/i })).toBeInTheDocument()
     expect(screen.getByText(/runtime home/i)).toBeInTheDocument()
+    expect(screen.getByText(/viewing runtime workspace for alpha tenant under current customer/i))
+      .toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /what should i do now/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /work in progress/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /create new work/i })).toBeInTheDocument()
@@ -148,10 +152,8 @@ describe('Dashboard page', () => {
       { name: /customer workspace secondary navigation/i },
     )
 
-    // Scaffold alerts are shown for a context-ready customer admin
-    expect(alertsList.querySelectorAll('.dashboard__alert-item')).toHaveLength(2)
-    expect(within(alertsList).getByText(/2 runtime validations need attention/i)).toBeInTheDocument()
-    expect(within(alertsList).getByText(/2 outputs require regeneration/i)).toBeInTheDocument()
+    expect(alertsList.querySelectorAll('.dashboard__alert-item')).toHaveLength(0)
+    expect(within(alertsList).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(4)
     const valueNarrativeLink = within(secondaryNavigation).getByRole(
       'link',
@@ -173,6 +175,7 @@ describe('Dashboard page', () => {
     expect(within(context).getByText('Current customer')).toBeInTheDocument()
     expect(within(context).getByText('Tenant')).toBeInTheDocument()
     expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
+    expect(screen.getByTestId('tenant-switcher')).toHaveTextContent('Select tenant')
     const workTypeControl = screen.getByRole('combobox', { name: /work type/i })
 
     expect(workTypeControl).toHaveTextContent('All Work')
@@ -202,6 +205,8 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.getAllByText('Northwind Logistics').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/viewing runtime workspace for alpha tenant under northwind logistics/i))
+      .toBeInTheDocument()
   })
 
   it('shows customer and tenant context controls when the admin can switch customers and tenants', () => {
@@ -211,6 +216,21 @@ describe('Dashboard page', () => {
 
     expect(screen.getByTestId('customer-selector')).toBeInTheDocument()
     expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
+  })
+
+  it('explains multi-tenant customer scope before a tenant is selected', () => {
+    mockTenantContext({
+      tenantId: null,
+      resolvedTenantName: null,
+    })
+
+    renderDashboard()
+
+    expect(screen.getByTestId('tenant-switcher')).toHaveTextContent('Select tenant')
+    expect(
+      screen.getByText(/current customer has 2 tenants: alpha tenant, beta tenant/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/select a tenant to continue your work/i)).toBeInTheDocument()
   })
 
   it('auto-selects the only selectable tenant for a multi-tenant user', async () => {
@@ -275,22 +295,23 @@ describe('Dashboard page', () => {
     expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(1)
   })
 
-  it('renders scaffold runtime action items when context is ready', () => {
+  it('does not render placeholder runtime action items when no runtime data is loaded', () => {
     renderDashboard()
 
     const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
     const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
 
-    expect(screen.getByText(/continue acme value narrative/i)).toBeInTheDocument()
-    expect(screen.getByText(/fix validation issues in globex business case/i)).toBeInTheDocument()
+    expect(screen.queryByText(/continue acme value narrative/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/fix validation issues in globex business case/i)).not.toBeInTheDocument()
+    expect(within(actionQueue).getByText(/no runtime actions/i)).toBeInTheDocument()
+    expect(within(actionQueue).getByText(/runtime actions will appear here once runtime instances exist/i))
+      .toBeInTheDocument()
     expect(actionQueue).toHaveClass('dashboard__launch-grid--actions')
-    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(2)
-    expect(screen.getByText('2 available')).toBeInTheDocument()
-    const continueLink = within(actionQueue).getByRole('link', { name: /continue acme value narrative/i })
-    expect(continueLink).toHaveAttribute('href', '/app/workspaces/vmf')
+    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(0)
+    expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('renders scaffold work-in-progress instances and filters by work type', async () => {
+  it('renders an honest empty work-in-progress table until runtime instances are API-backed', async () => {
     const user = userEvent.setup()
     renderDashboard()
 
@@ -300,21 +321,23 @@ describe('Dashboard page', () => {
     expect(workTable).toBeInTheDocument()
     expect(workTable).toHaveClass('table--striped')
     expect(workTable).toHaveClass('table--hoverable')
-    // Scaffold instances are present for a context-ready customer admin
-    expect(screen.getByText('Acme Value Narrative')).toBeInTheDocument()
-    expect(screen.getByText('Globex Business Case')).toBeInTheDocument()
-    expect(screen.getByText('2 visible')).toBeInTheDocument()
+    expect(workTable).not.toHaveClass('table--bordered')
+    expect(workTable).not.toHaveClass('table--compact')
+    expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
+    expect(screen.queryByText('Globex Business Case')).not.toBeInTheDocument()
+    expect(screen.getByText(/no runtime instances are available for this tenant yet/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: /work type/i }))
     expect(screen.getAllByRole('option')).toHaveLength(5)
     await user.click(screen.getByRole('option', { name: 'Business Cases' }))
 
     expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
-    expect(screen.getByText('Globex Business Case')).toBeInTheDocument()
-    expect(screen.getByText('1 visible')).toBeInTheDocument()
+    expect(screen.queryByText('Globex Business Case')).not.toBeInTheDocument()
+    expect(screen.getByText(/no runtime instances match the selected work type/i)).toBeInTheDocument()
+    expect(screen.getByText('0 visible')).toBeInTheDocument()
   })
 
-  it('shows Sales Manager scoped scaffold team work and review action', () => {
+  it('shows Sales Manager scoped role without placeholder team work', () => {
     mockRole({
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['SALES_MANAGER'] }],
@@ -326,17 +349,16 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.getAllByText('Sales Manager').length).toBeGreaterThanOrEqual(1)
-    // Scaffold: manager sees team-scoped review action and team member work
-    expect(screen.getByText(/review beta deal analysis/i)).toBeInTheDocument()
-    expect(screen.getByText('Amelia Hart')).toBeInTheDocument()
-    expect(screen.getByText(/review is scoped to reporting users in the selected tenant/i)).toBeInTheDocument()
+    expect(screen.queryByText(/review beta deal analysis/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Amelia Hart')).not.toBeInTheDocument()
+    expect(screen.getByText(/no runtime actions/i)).toBeInTheDocument()
     const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
     const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
-    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(3)
-    expect(screen.getByText('3 available')).toBeInTheDocument()
+    expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(0)
+    expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('shows Sales User scaffold deal work and enables Deal Analysis when VMF anchor exists', () => {
+  it('shows Sales User deal work creation without placeholder runtime rows', () => {
     mockRole({
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
@@ -348,8 +370,7 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
-    // Scaffold: Sales User sees their own Deal Analysis work
-    expect(screen.getByText('Beta Deal Analysis')).toBeInTheDocument()
+    expect(screen.queryByText('Beta Deal Analysis')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /create deal analysis/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /create value narrative/i })).toBeInTheDocument()
     expect(screen.getByText(/deal analysis will inherit the current vmf runtime anchor/i)).toBeInTheDocument()
@@ -420,6 +441,7 @@ describe('Dashboard page', () => {
 
     expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
     expect(screen.getAllByText('Default Tenant').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/current customer uses a single tenant/i)).toBeInTheDocument()
     expect(screen.getByText(/context ready/i)).toBeInTheDocument()
   })
 })
