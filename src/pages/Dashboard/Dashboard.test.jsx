@@ -20,6 +20,10 @@ vi.mock('../../store/api/customerApi.js', () => ({
   useGetCustomerQuery: vi.fn(),
 }))
 
+vi.mock('../../store/api/vmfApi.js', () => ({
+  useListVmfsQuery: vi.fn(),
+}))
+
 vi.mock('../../components/CustomerSelector', () => ({
   CustomerSelector: () => <div data-testid="customer-selector">Customer Selector</div>,
 }))
@@ -33,6 +37,7 @@ vi.mock('../../components/TenantSwitcher', () => ({
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
+import { useListVmfsQuery } from '../../store/api/vmfApi.js'
 
 function renderDashboard() {
   return render(
@@ -129,6 +134,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockTenantContext()
   useGetCustomerQuery.mockReturnValue({ data: undefined })
+  useListVmfsQuery.mockReturnValue({
+    data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+  })
   mockRole({ isCustomerAdmin: true })
 })
 
@@ -311,6 +322,53 @@ describe('Dashboard page', () => {
     expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
+  it('links active VMF runtime work back to the VMF workspace', () => {
+    useListVmfsQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'vmf-new-package',
+            name: 'New Package',
+            status: 'ACTIVE',
+            lifecycleStatus: 'DRAFT',
+            frameworkVersion: '2.3.569357',
+            frameworkPackage: {
+              id: '6a06e86458a5e0613e859907',
+              packageName: 'Latest Package',
+              version: '2.3.569357',
+            },
+            validationStatus: 'NOT_RUN',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    expect(useListVmfsQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'ten-1',
+        status: 'ACTIVE',
+        pageSize: 5,
+      }),
+      { skip: false },
+    )
+    expect(screen.getByRole('link', { name: /continue new package/i }))
+      .toHaveAttribute('href', '/app/workspaces/vmf')
+    expect(screen.getByRole('link', { name: /latest package \/ 2\.3\.569357/i }))
+      .toHaveAttribute('href', '/app/workspaces/vmf')
+    expect(screen.getByText('New Package')).toBeInTheDocument()
+    expect(screen.getByText('Package: Latest Package')).toBeInTheDocument()
+    expect(screen.getByText('1 available')).toBeInTheDocument()
+    expect(screen.getByText('1 visible')).toBeInTheDocument()
+  })
+
   it('renders an honest empty work-in-progress table until runtime instances are API-backed', async () => {
     const user = userEvent.setup()
     renderDashboard()
@@ -430,6 +488,7 @@ describe('Dashboard page', () => {
   it('preserves single-tenant context without rendering tenant switcher', () => {
     mockTenantContext({
       tenantId: 'ten-default',
+      customerName: 'Person 2 Person',
       resolvedTenantName: 'Default Tenant',
       supportsTenantManagement: false,
       selectedCustomerTopology: 'SINGLE_TENANT',
@@ -440,8 +499,9 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.queryByTestId('tenant-switcher')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Default Tenant').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText(/current customer uses a single tenant/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Person 2 Person').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('Default Tenant')).not.toBeInTheDocument()
+    expect(screen.getByText(/person 2 person uses a single tenant/i)).toBeInTheDocument()
     expect(screen.getByText(/context ready/i)).toBeInTheDocument()
   })
 })

@@ -31,6 +31,29 @@ export const getTenantId = (tenant) => {
   return raw ? String(raw).trim() : null
 }
 
+export const GENERIC_SINGLE_TENANT_NAMES = new Set([
+  'default tenant',
+  'single-tenant customer',
+  'single tenant',
+])
+
+export const isGenericSingleTenantName = (name) => {
+  const normalized = String(name ?? '').trim().toLowerCase()
+  return !normalized || GENERIC_SINGLE_TENANT_NAMES.has(normalized)
+}
+
+export const getSingleTenantDisplayName = (
+  tenantName,
+  customerName,
+  fallback = 'the customer',
+) => {
+  const normalizedTenantName = String(tenantName ?? '').trim()
+  if (!isGenericSingleTenantName(normalizedTenantName)) return normalizedTenantName
+
+  const normalizedCustomerName = String(customerName ?? '').trim()
+  return normalizedCustomerName || fallback
+}
+
 export const getTenantCapacityCountLabel = (countMode) =>
   countMode === 'NON_ARCHIVED' ? 'non-archived' : 'active'
 

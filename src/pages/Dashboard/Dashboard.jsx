@@ -27,7 +27,8 @@ import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
-import { getTenantId } from '../MaintainTenants/tenantUtils.js'
+import { useListVmfsQuery } from '../../store/api/vmfApi.js'
+import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './Dashboard.css'
 
 const WORK_TYPE_OPTIONS = [
@@ -98,6 +99,80 @@ const formatTokenLabel = (value) =>
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+
+const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
+
+const getVmfName = (vmf) => {
+  const candidate = vmf?.name ?? vmf?.title ?? vmf?.label ?? getVmfId(vmf)
+  return String(candidate || 'Value Narrative').trim()
+}
+
+const getFrameworkPackageLabel = (vmf) => {
+  const frameworkPackage = vmf?.frameworkPackage
+
+  if (typeof frameworkPackage === 'string') {
+    const trimmed = frameworkPackage.trim()
+    if (trimmed) return trimmed
+  } else if (frameworkPackage && typeof frameworkPackage === 'object') {
+    const candidates = [
+      frameworkPackage.packageName,
+      frameworkPackage.frameworkPackageName,
+      frameworkPackage.name,
+      frameworkPackage.label,
+      frameworkPackage.packageKey,
+      frameworkPackage.key,
+      frameworkPackage.code,
+      frameworkPackage.id,
+    ]
+
+    for (const candidate of candidates) {
+      const trimmed = String(candidate ?? '').trim()
+      if (trimmed) return trimmed
+    }
+  }
+
+  const fallbackCandidates = [
+    vmf?.frameworkPackageName,
+    vmf?.packageName,
+    vmf?.packageLabel,
+    vmf?.frameworkPackageId,
+  ]
+
+  for (const candidate of fallbackCandidates) {
+    const trimmed = String(candidate ?? '').trim()
+    if (trimmed) return trimmed
+  }
+
+  return '--'
+}
+
+const getFrameworkPackageVersion = (vmf) => {
+  const frameworkPackage = vmf?.frameworkPackage
+  const candidates = [
+    frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.version : '',
+    frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.frameworkVersion : '',
+    vmf?.frameworkVersion,
+  ]
+
+  for (const candidate of candidates) {
+    const trimmed = String(candidate ?? '').trim()
+    if (trimmed) return trimmed
+  }
+
+  return '--'
+}
+
+const formatUpdatedLabel = (value) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return 'Open workspace'
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return 'Recently updated'
+  return `Updated ${date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })}`
+}
 
 function DashboardHeroMetric({ label, value, children, control = false }) {
   const metricClassName = [
@@ -417,6 +492,23 @@ function Dashboard() {
     return false
   }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
 
+  const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
+
+  const {
+    data: vmfListResponse,
+    isLoading: isLoadingVmfs,
+    isFetching: isFetchingVmfs,
+  } = useListVmfsQuery(
+    {
+      customerId,
+      tenantId,
+      status: 'ACTIVE',
+      page: 1,
+      pageSize: 5,
+    },
+    { skip: !contextReady || !canOpenVmfWorkspace },
+  )
+
   const tenantRowsForSwitcher = useMemo(
     () => selectableTenantRows,
     [selectableTenantRows],
@@ -452,7 +544,11 @@ function Dashboard() {
 
   const tenantScopeValue = useMemo(() => {
     if (selectedCustomerTopology === 'SINGLE_TENANT') {
-      return resolvedTenantName || 'Single-tenant customer'
+      return getSingleTenantDisplayName(
+        resolvedTenantName,
+        customerScopeValue,
+        'Single-tenant customer',
+      )
     }
     if (supportsTenantManagement && !hasTenantSelectionAccess) {
       return 'Not selected'
@@ -463,6 +559,7 @@ function Dashboard() {
     return 'Not selected'
   }, [
     customerId,
+    customerScopeValue,
     hasTenantSelectionAccess,
     resolvedTenantName,
     selectedCustomerTopology,
@@ -538,7 +635,6 @@ function Dashboard() {
     tenantRowsForSwitcher,
   ])
 
-  const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
   const hasVmfFeature = featureEntitlements.includes('VMF')
   const hasDealFeature =
     featureEntitlements.includes('DEALS')
@@ -548,6 +644,11 @@ function Dashboard() {
   const canCreateDealAnalysis = Boolean(
     hasActiveVmfAnchor && hasDealFeature && hasSelectedSalesExecutionRole,
   )
+  const activeVmfRows = useMemo(
+    () => (Array.isArray(vmfListResponse?.data) ? vmfListResponse.data : []),
+    [vmfListResponse?.data],
+  )
+  const isLoadingRuntimeVmfs = Boolean(isLoadingVmfs || isFetchingVmfs)
 
   const runtimeActions = useMemo(() => {
     if (!customerId) {
@@ -584,18 +685,58 @@ function Dashboard() {
       ]
     }
 
-    return []
+    return activeVmfRows.map((vmf) => {
+      const vmfName = getVmfName(vmf)
+      const packageLabel = getFrameworkPackageLabel(vmf)
+      const packageVersion = getFrameworkPackageVersion(vmf)
+
+      return {
+        actionKey: 'OPEN_VMF_WORKSPACE',
+        description: `Open the active VMF workspace backed by ${packageLabel}.`,
+        disabled: !canOpenVmfWorkspace,
+        icon: MdOutlinePlayCircle,
+        label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
+        meta: `${tenantScopeValue} / ${packageLabel} / ${packageVersion}`,
+        priority: 'MEDIUM',
+        runtimeInstanceId: getVmfId(vmf) || vmfName,
+        title: `Continue ${vmfName}`,
+        to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
+      }
+    })
   }, [
+    activeVmfRows,
+    canOpenVmfWorkspace,
     customerId,
     customerScopeValue,
     supportsTenantManagement,
     tenantId,
+    tenantScopeValue,
   ])
 
   const runtimeInstances = useMemo(() => {
     if (!contextReady) return []
-    return []
-  }, [contextReady])
+    return activeVmfRows.map((vmf) => {
+      const vmfName = getVmfName(vmf)
+      const packageLabel = getFrameworkPackageLabel(vmf)
+      const packageVersion = getFrameworkPackageVersion(vmf)
+      const lifecycleStatus = String(vmf?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase() || 'DRAFT'
+      const runtimeStatus = String(vmf?.validationStatus ?? vmf?.status ?? lifecycleStatus).trim().toUpperCase()
+
+      return {
+        id: getVmfId(vmf) || vmfName,
+        work: vmfName,
+        // TODO: replace with vmf.workType once the API returns it.
+        workType: 'VALUE_NARRATIVE',
+        workTypeLabel: 'Value Narrative',
+        tenant: tenantScopeValue,
+        packageSummary: `Package: ${packageLabel}`,
+        stage: lifecycleStatus,
+        status: runtimeStatus,
+        lastActivity: formatUpdatedLabel(vmf?.updatedAt),
+        nextAction: `Open ${packageVersion}`,
+      }
+    })
+  }, [activeVmfRows, contextReady, tenantScopeValue])
 
   const filteredRuntimeInstances = useMemo(() => {
     if (workTypeFilter === 'ALL') return runtimeInstances
@@ -704,9 +845,15 @@ function Dashboard() {
 
   const runtimeInstanceEmptyMessage = !contextReady
     ? 'Select a tenant to show runtime work.'
+    : isLoadingRuntimeVmfs
+      ? 'Loading runtime work...'
     : workTypeFilter === 'ALL'
       ? 'No runtime instances are available for this tenant yet.'
       : 'No runtime instances match the selected work type.'
+  const runtimeActionEmptyLabel = isLoadingRuntimeVmfs ? 'Loading runtime actions' : 'No runtime actions'
+  const runtimeActionEmptyMessage = isLoadingRuntimeVmfs
+    ? 'Checking for active VMF runtime work in this tenant.'
+    : 'Runtime actions will appear here once runtime instances exist for this tenant.'
 
   const tableColumns = useMemo(() => [
     {
@@ -728,7 +875,7 @@ function Dashboard() {
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
           <span>{value}</span>
-          <span>{row.owner}</span>
+          <span>{row.packageSummary}</span>
         </div>
       ),
     },
@@ -838,9 +985,9 @@ function Dashboard() {
             ) : (
               <li className="dashboard__empty-item">
                 <Status variant="info" size="sm" showIcon>
-                  No runtime actions
+                  {runtimeActionEmptyLabel}
                 </Status>
-                <p>Runtime actions will appear here once runtime instances exist for this tenant.</p>
+                <p>{runtimeActionEmptyMessage}</p>
               </li>
             )}
           </ul>

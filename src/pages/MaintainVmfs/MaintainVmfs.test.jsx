@@ -70,6 +70,7 @@ describe('MaintainVmfs', () => {
     useTenantContext.mockReturnValue({
       customerId: 'cust-1',
       tenantId: 'tenant-1',
+      customerName: null,
       resolvedTenantName: 'Orbit Core',
       supportsTenantManagement: true,
       selectableTenants: [],
@@ -88,6 +89,7 @@ describe('MaintainVmfs', () => {
       data: {
         data: {
           _id: 'cust-1',
+          name: 'Orbit Services',
           governance: { maxVmfsPerTenant: 4 },
         },
       },
@@ -159,6 +161,24 @@ describe('MaintainVmfs', () => {
     expect(
       screen.getByText(/vmf access is available, but the workspace could not resolve its tenant context/i),
     ).toBeInTheDocument()
+  })
+
+  it('uses the customer name instead of a generic default tenant label for single-tenant workspaces', () => {
+    useTenantContext.mockReturnValue({
+      customerId: 'cust-1',
+      tenantId: 'tenant-1',
+      customerName: 'Person 2 Person',
+      resolvedTenantName: 'Default Tenant',
+      supportsTenantManagement: false,
+      selectableTenants: [],
+      isLoadingTenants: false,
+      setTenantId: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(screen.getByText(/workspace scope for Person 2 Person\./i)).toBeInTheDocument()
+    expect(screen.queryByText(/workspace scope for Default Tenant\./i)).not.toBeInTheDocument()
   })
 
   it('submits create payload with optional description against customer-tenant scoped route', async () => {
@@ -410,6 +430,45 @@ describe('MaintainVmfs', () => {
     expect(dialog).toBeInTheDocument()
     expect(within(dialog).getByText('VMF Package 2.2')).toBeInTheDocument()
     expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
+  })
+
+  it('prefers framework package names over package ids in the catalogue', () => {
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-package-name',
+            name: 'Package-backed VMF',
+            description: 'Uses packageName from the expanded framework package.',
+            status: 'ACTIVE',
+            lifecycleStatus: 'DRAFT',
+            frameworkVersion: '2.3.569357',
+            frameworkPackageId: '6a06e86458a5e0613e859907',
+            frameworkPackage: {
+              id: '6a06e86458a5e0613e859907',
+              packageName: 'Latest Package',
+              version: '2.3.569357',
+            },
+            completionState: 'NOT_TRACKED',
+            validationStatus: 'NOT_RUN',
+            lockStatus: 'UNLOCKED',
+            snapshotStatus: 'PACKAGE_BOUND',
+            migrationAvailable: false,
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(screen.getByText('Package-backed VMF')).toBeInTheDocument()
+    expect(screen.getByText('Latest Package')).toBeInTheDocument()
+    expect(screen.queryByText('6a06e86458a5e0613e859907')).not.toBeInTheDocument()
   })
 
   it('denies the VMF workspace when VMF_CREATE and VMF_UPDATE exist without VMF_VIEW', () => {

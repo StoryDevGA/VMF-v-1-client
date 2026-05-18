@@ -41,7 +41,7 @@ import {
   isLicenseFeatureNotEnabledError,
   normalizeError,
 } from '../../utils/errors.js'
-import { getTenantId } from '../MaintainTenants/tenantUtils.js'
+import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './MaintainVmfs.css'
 
 const VMF_STATUS_OPTIONS = [
@@ -133,8 +133,11 @@ const getFrameworkPackageLabel = (vmf) => {
     if (trimmed) return trimmed
   } else if (frameworkPackage && typeof frameworkPackage === 'object') {
     const candidates = [
+      frameworkPackage.packageName,
+      frameworkPackage.frameworkPackageName,
       frameworkPackage.name,
       frameworkPackage.label,
+      frameworkPackage.packageKey,
       frameworkPackage.key,
       frameworkPackage.code,
       frameworkPackage.id,
@@ -146,8 +149,19 @@ const getFrameworkPackageLabel = (vmf) => {
     }
   }
 
-  const packageId = String(vmf?.frameworkPackageId ?? '').trim()
-  return packageId || '--'
+  const fallbackCandidates = [
+    vmf?.frameworkPackageName,
+    vmf?.packageName,
+    vmf?.packageLabel,
+    vmf?.frameworkPackageId,
+  ]
+
+  for (const candidate of fallbackCandidates) {
+    const trimmed = String(candidate ?? '').trim()
+    if (trimmed) return trimmed
+  }
+
+  return '--'
 }
 
 const getFrameworkPackageDetail = (vmf, key) => {
@@ -455,6 +469,7 @@ function MaintainVmfs() {
   const {
     customerId,
     tenantId,
+    customerName,
     resolvedTenantName,
     supportsTenantManagement,
     selectableTenants,
@@ -596,6 +611,30 @@ function MaintainVmfs() {
 
     return null
   }, [customerDetails])
+
+  const workspaceScopeName = useMemo(() => {
+    const customerNameCandidates = [
+      customerName,
+      customerDetails?.data?.name,
+      customerDetails?.data?.companyName,
+      customerDetails?.name,
+      customerDetails?.companyName,
+    ]
+
+    const resolvedCustomerName = customerNameCandidates
+      .map((candidate) => String(candidate ?? '').trim())
+      .find(Boolean)
+
+    if (!supportsTenantManagement) {
+      return getSingleTenantDisplayName(
+        resolvedTenantName,
+        resolvedCustomerName,
+        'the selected tenant',
+      )
+    }
+
+    return String(resolvedTenantName ?? '').trim() || 'the selected tenant'
+  }, [customerDetails, customerName, resolvedTenantName, supportsTenantManagement])
 
   const vmfCapacity = useMemo(() => {
     if (!canCreateVmfs) return null
@@ -1060,7 +1099,7 @@ function MaintainVmfs() {
         <h1 className="maintain-vmfs__title">VMF Workspace</h1>
         <p className="maintain-vmfs__subtitle">
           {canMutateVmfs ? 'Manage' : 'Review'} VMF lifecycle, version snapshot metadata, and
-          workspace scope for{` ${resolvedTenantName || 'the selected tenant'}.`}
+          workspace scope for{` ${workspaceScopeName}.`}
         </p>
       </header>
 
