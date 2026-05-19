@@ -20,8 +20,8 @@ vi.mock('../../store/api/customerApi.js', () => ({
   useGetCustomerQuery: vi.fn(),
 }))
 
-vi.mock('../../store/api/vmfApi.js', () => ({
-  useListVmfsQuery: vi.fn(),
+vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useListRuntimeInstancesQuery: vi.fn(),
 }))
 
 vi.mock('../../components/CustomerSelector', () => ({
@@ -37,7 +37,7 @@ vi.mock('../../components/TenantSwitcher', () => ({
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
-import { useListVmfsQuery } from '../../store/api/vmfApi.js'
+import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
 
 function renderDashboard() {
   return render(
@@ -134,7 +134,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockTenantContext()
   useGetCustomerQuery.mockReturnValue({ data: undefined })
-  useListVmfsQuery.mockReturnValue({
+  useListRuntimeInstancesQuery.mockReturnValue({
     data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
     isLoading: false,
     isFetching: false,
@@ -326,22 +326,19 @@ describe('Dashboard page', () => {
     expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('links active VMF runtime work back to the VMF workspace', () => {
-    useListVmfsQuery.mockReturnValue({
+  it('links runtime instance work back to the VMF workspace', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
       data: {
         data: [
           {
-            id: 'vmf-new-package',
+            id: 'runtime-new-package',
+            runtimeInstanceKey: 'value-narrative-859907',
+            runtimeType: 'VALUE_NARRATIVE',
             name: 'New Package',
             status: 'ACTIVE',
-            lifecycleStatus: 'DRAFT',
-            frameworkVersion: '2.3.569357',
-            frameworkPackage: {
-              id: '6a06e86458a5e0613e859907',
-              packageName: 'Latest Package',
-              version: '2.3.569357',
-            },
-            validationStatus: 'NOT_RUN',
+            executionStatus: 'IDLE',
+            packageKey: 'latest-package',
+            packageVersion: '2.3.569357',
             updatedAt: '2026-05-18T11:13:00.000Z',
           },
         ],
@@ -354,26 +351,59 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    expect(useListVmfsQuery).toHaveBeenLastCalledWith(
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'cust-1',
         tenantId: 'ten-1',
-        status: 'ACTIVE',
+        runtimeType: 'VALUE_NARRATIVE',
         pageSize: 5,
       }),
       { skip: false },
     )
     expect(screen.getByRole('link', { name: /continue new package/i }))
-      .toHaveAttribute('href', '/app/workspaces/vmf')
-    expect(screen.getByRole('link', { name: /latest package \/ 2\.3\.569357/i }))
-      .toHaveAttribute('href', '/app/workspaces/vmf')
+      .toHaveAttribute('href', '/app/workspaces/vmf?runtimeInstanceId=value-narrative-859907')
+    expect(screen.getByRole('link', { name: /open 2\.3\.569357/i }))
+      .toHaveAttribute('href', '/app/workspaces/vmf?runtimeInstanceId=value-narrative-859907')
     expect(screen.getByText('New Package')).toBeInTheDocument()
-    expect(screen.getByText('VN - Pending runtime ID')).toBeInTheDocument()
-    expect(screen.getByText('Package: Latest Package')).toBeInTheDocument()
-    expect(screen.getByText('Not Started')).toBeInTheDocument()
-    expect(screen.getByText('Readiness pending')).toBeInTheDocument()
+    expect(screen.getByText('value-narrative-859907')).toBeInTheDocument()
+    expect(screen.getByText('Package: latest-package')).toBeInTheDocument()
+    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
     expect(screen.getByText('1 available')).toBeInTheDocument()
     expect(screen.getByText('1 visible')).toBeInTheDocument()
+  })
+
+  it('surfaces runtime instance API failures instead of showing an empty runtime state', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      error: {
+        status: 503,
+        data: {
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Runtime instance service unavailable.',
+            requestId: 'rt-load-1',
+          },
+        },
+      },
+    })
+
+    renderDashboard()
+
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+
+    expect(within(actionQueue).getByRole('link', { name: /runtime work unavailable/i }))
+      .toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getAllByText(/runtime instance service unavailable/i).length)
+      .toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/unable to load runtime instances/i)).toBeInTheDocument()
+    expect(within(actionQueue).queryByText(/no runtime actions/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no runtime instances are available for this tenant yet/i))
+      .not.toBeInTheDocument()
+    expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
   it('renders an honest empty work-in-progress table until runtime instances are API-backed', async () => {
@@ -430,7 +460,7 @@ describe('Dashboard page', () => {
     expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('shows Sales User deal work creation without placeholder runtime rows', () => {
+  it('keeps Sales User Deal Analysis creation unavailable until a locked VMF runtime anchor exists', () => {
     mockRole({
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
@@ -445,14 +475,17 @@ describe('Dashboard page', () => {
     expect(screen.queryByText('Beta Deal Analysis')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /create deal analysis/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /create value narrative/i })).toBeInTheDocument()
-    expect(screen.getByText(/deal analysis will inherit the current vmf runtime anchor/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/deal analysis unavailable - locked vmf runtime anchor creation is not available yet/i),
+    ).toBeInTheDocument()
     const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
     const createGrid = within(createPanel).getByRole('list', { name: /^create new work$/i })
     const dealAnalysisLink = within(createGrid).getByRole('link', { name: /create deal analysis/i })
-    const dealTopline = within(dealAnalysisLink).getByText('Create').closest('.dashboard__launch-topline')
+    const dealTopline = within(dealAnalysisLink).getByText('Unavailable').closest('.dashboard__launch-topline')
 
     expect(createGrid).toHaveClass('dashboard__launch-grid--create')
     expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(3)
+    expect(dealAnalysisLink).toHaveAttribute('aria-disabled', 'true')
     expect(dealAnalysisLink).toHaveClass('dashboard__launch-link--create')
     expect(dealTopline).toBeInTheDocument()
     expect(dealTopline?.querySelector('.dashboard__launch-icon')).toBeInTheDocument()
@@ -469,7 +502,7 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(
-      screen.getAllByText(/deal analysis unavailable - no active vmf framework is available for this tenant/i)
+      screen.getAllByText(/deal analysis unavailable - vmf entitlement is required before a locked runtime anchor can be created/i)
         .length,
     ).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByRole('link', { name: /unavailable/i }).length).toBeGreaterThanOrEqual(1)
@@ -493,7 +526,7 @@ describe('Dashboard page', () => {
 
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Nested Customer').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('link', { name: /create deal analysis/i })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: /create deal analysis/i })).toHaveAttribute(
       'aria-disabled',
       'true',
     )

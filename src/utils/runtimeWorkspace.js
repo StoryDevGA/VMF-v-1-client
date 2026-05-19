@@ -17,11 +17,18 @@ export const RUNTIME_STATUS_VARIANTS = Object.freeze({
 })
 
 export const EXECUTION_STATE_VARIANTS = Object.freeze({
+  IDLE: 'neutral',
   NOT_STARTED: 'neutral',
   QUEUED: 'info',
+  RUNNING: 'success',
+  VALIDATING: 'info',
   EXECUTING: 'success',
+  WAITING_APPROVAL: 'warning',
+  BLOCKED: 'danger',
   PAUSED: 'warning',
+  ERROR: 'danger',
   FAILED: 'danger',
+  COMPLETE: 'success',
   FINISHED: 'success',
 })
 
@@ -65,6 +72,7 @@ export const getRuntimeInstanceDisplayId = (
 ) => {
   const candidates = [
     runtimeRecord?.runtimeInstanceId,
+    runtimeRecord?.runtimeInstanceKey,
     runtimeRecord?.runtimeId,
     runtimeRecord?.instanceId,
   ]
@@ -93,6 +101,7 @@ export const getRuntimeLifecycleStatus = (runtimeRecord, fallback = 'DRAFT') => 
 export const getRuntimeExecutionState = (runtimeRecord, fallback = 'NOT_STARTED') => {
   const state = normalizeRuntimeToken(
     runtimeRecord?.executionState
+      ?? runtimeRecord?.executionStatus
       ?? runtimeRecord?.runtimeExecutionState
       ?? fallback,
   )

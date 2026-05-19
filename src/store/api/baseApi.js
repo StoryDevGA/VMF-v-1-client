@@ -305,6 +305,7 @@ export const baseApi = createApi({
     'RuntimeValidationAudit',
     'RuntimeActivation',
     'RuntimeDeployment',
+    'RuntimeInstance',
     'SkillRole',
     'SkillRoleDependencies',
     'ValidationRegistry',

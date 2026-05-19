@@ -27,7 +27,8 @@ import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
-import { useListVmfsQuery } from '../../store/api/vmfApi.js'
+import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
+import { normalizeError } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
   getExecutionStateVariant,
@@ -105,7 +106,25 @@ const findTenantMembershipByCustomer = (user, customerId, role) => {
     && (!role || hasRole(membership?.roles, role))) ?? null
 }
 
-const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
+const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? vmf?.runtimeInstanceKey ?? '').trim()
+
+const getRuntimeInstanceRouteId = (runtimeInstance) =>
+  String(
+    runtimeInstance?.runtimeInstanceKey
+      ?? runtimeInstance?.runtimeInstanceId
+      ?? runtimeInstance?.runtimeId
+      ?? runtimeInstance?.id
+      ?? runtimeInstance?._id
+      ?? '',
+  ).trim()
+
+const getRuntimeWorkspaceTo = (runtimeInstanceId) => {
+  const normalizedRuntimeInstanceId = String(runtimeInstanceId ?? '').trim()
+  if (!normalizedRuntimeInstanceId) return '/app/workspaces/vmf'
+
+  const params = new URLSearchParams({ runtimeInstanceId: normalizedRuntimeInstanceId })
+  return `/app/workspaces/vmf?${params.toString()}`
+}
 
 const getVmfName = (vmf) => {
   const candidate = vmf?.name ?? vmf?.title ?? vmf?.label ?? getVmfId(vmf)
@@ -140,6 +159,7 @@ const getFrameworkPackageLabel = (vmf) => {
     vmf?.frameworkPackageName,
     vmf?.packageName,
     vmf?.packageLabel,
+    vmf?.packageKey,
     vmf?.frameworkPackageId,
   ]
 
@@ -156,6 +176,7 @@ const getFrameworkPackageVersion = (vmf) => {
   const candidates = [
     frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.version : '',
     frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.frameworkVersion : '',
+    vmf?.packageVersion,
     vmf?.frameworkVersion,
   ]
 
@@ -497,21 +518,35 @@ function Dashboard() {
     return false
   }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
 
+  const featureEntitlements = useMemo(
+    () =>
+      customerId && typeof getFeatureEntitlements === 'function'
+        ? normalizeFeatureKeys(getFeatureEntitlements(customerId))
+        : [],
+    [customerId, getFeatureEntitlements],
+  )
+
+  const hasVmfFeature = featureEntitlements.includes('VMF')
+  const hasDealFeature =
+    featureEntitlements.includes('DEALS')
+    || featureEntitlements.includes('DEAL_ANALYSIS')
+
   const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
 
   const {
-    data: vmfListResponse,
-    isLoading: isLoadingVmfs,
-    isFetching: isFetchingVmfs,
-  } = useListVmfsQuery(
+    data: runtimeInstanceListResponse,
+    isLoading: isLoadingRuntimeInstances,
+    isFetching: isFetchingRuntimeInstances,
+    error: runtimeInstanceError,
+  } = useListRuntimeInstancesQuery(
     {
       customerId,
       tenantId,
-      status: 'ACTIVE',
+      runtimeType: 'VALUE_NARRATIVE',
       page: 1,
       pageSize: 5,
     },
-    { skip: !contextReady || !canOpenVmfWorkspace },
+    { skip: !contextReady || !canOpenVmfWorkspace || !hasVmfFeature },
   )
 
   const tenantRowsForSwitcher = useMemo(
@@ -571,14 +606,6 @@ function Dashboard() {
     supportsTenantManagement,
     tenantId,
   ])
-
-  const featureEntitlements = useMemo(
-    () =>
-      customerId && typeof getFeatureEntitlements === 'function'
-        ? normalizeFeatureKeys(getFeatureEntitlements(customerId))
-        : [],
-    [customerId, getFeatureEntitlements],
-  )
 
   const showCustomerSelector = hasAnyCustomerAdminAccess && accessibleCustomerIds.length > 1
   const showAccessibleTenantSwitcher = Boolean(
@@ -640,17 +667,22 @@ function Dashboard() {
     tenantRowsForSwitcher,
   ])
 
-  const hasVmfFeature = featureEntitlements.includes('VMF')
-  const hasDealFeature =
-    featureEntitlements.includes('DEALS')
-    || featureEntitlements.includes('DEAL_ANALYSIS')
-  const hasActiveVmfAnchor = Boolean(contextReady && hasVmfFeature && canOpenVmfWorkspace)
-  const canCreateValueNarrative = hasActiveVmfAnchor
-  const canCreateDealAnalysis = Boolean(
-    hasActiveVmfAnchor && hasDealFeature && hasSelectedSalesExecutionRole,
-  )
-  const activeVmfRows = Array.isArray(vmfListResponse?.data) ? vmfListResponse.data : EMPTY_RUNTIME_ROWS
-  const isLoadingRuntimeVmfs = Boolean(isLoadingVmfs || isFetchingVmfs)
+  const canCreateVmfRuntime = useMemo(() => {
+    if (!customerId) return false
+    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_CREATE')) return true
+    if (tenantId && typeof hasTenantPermission === 'function') {
+      return hasTenantPermission(customerId, tenantId, 'VMF_CREATE')
+    }
+    return false
+  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
+  const canCreateValueNarrative = Boolean(contextReady && hasVmfFeature && canCreateVmfRuntime)
+  // Deal Analysis creation remains backend-blocked until a locked VMF runtime anchor contract exists.
+  const canCreateDealAnalysis = false
+  const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
+  const runtimeInstanceRows = !runtimeInstanceAppError && Array.isArray(runtimeInstanceListResponse?.data)
+    ? runtimeInstanceListResponse.data
+    : EMPTY_RUNTIME_ROWS
+  const isLoadingRuntimeVmfs = Boolean(isLoadingRuntimeInstances || isFetchingRuntimeInstances)
 
   const runtimeActions = useMemo(() => {
     if (!customerId) {
@@ -687,29 +719,49 @@ function Dashboard() {
       ]
     }
 
-    return activeVmfRows.map((vmf) => {
-      const vmfName = getVmfName(vmf)
-      const packageLabel = getFrameworkPackageLabel(vmf)
-      const packageVersion = getFrameworkPackageVersion(vmf)
+    if (runtimeInstanceAppError) {
+      return [
+        {
+          actionKey: 'RUNTIME_INSTANCE_LOAD_FAILED',
+          description: runtimeInstanceAppError.message,
+          disabled: true,
+          icon: MdOutlineWarningAmber,
+          label: 'Unavailable',
+          meta: `${tenantScopeValue} / Runtime instances unavailable`,
+          priority: 'HIGH',
+          runtimeInstanceId: 'load-failed',
+          title: 'Runtime work unavailable',
+          to: '/app/dashboard',
+        },
+      ]
+    }
+
+    return runtimeInstanceRows.map((runtimeInstance) => {
+      const runtimeName = getVmfName(runtimeInstance)
+      const packageLabel = getFrameworkPackageLabel(runtimeInstance)
+      const packageVersion = getFrameworkPackageVersion(runtimeInstance)
+      const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
+      const runtimeWorkspaceTo = getRuntimeWorkspaceTo(runtimeInstanceId)
 
       return {
-        actionKey: 'OPEN_VMF_WORKSPACE',
-        description: `Open the active VMF workspace backed by ${packageLabel}.`,
+        actionKey: 'OPEN_RUNTIME_INSTANCE',
+        description: `Open the Value Narrative runtime work backed by ${packageLabel}.`,
         disabled: !canOpenVmfWorkspace,
         icon: MdOutlinePlayCircle,
         label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
         meta: `${tenantScopeValue} / ${packageLabel} / ${packageVersion}`,
         priority: 'MEDIUM',
-        runtimeInstanceId: getVmfId(vmf) || vmfName,
-        title: `Continue ${vmfName}`,
-        to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
+        runtimeInstanceId,
+        title: `Continue ${runtimeName}`,
+        to: canOpenVmfWorkspace ? runtimeWorkspaceTo : '/app/dashboard',
       }
     })
   }, [
-    activeVmfRows,
     canOpenVmfWorkspace,
     customerId,
     customerScopeValue,
+    runtimeInstanceAppError,
+    runtimeInstanceRows,
     supportsTenantManagement,
     tenantId,
     tenantScopeValue,
@@ -717,31 +769,32 @@ function Dashboard() {
 
   const runtimeInstances = useMemo(() => {
     if (!contextReady) return []
-    return activeVmfRows.map((vmf) => {
-      const vmfName = getVmfName(vmf)
-      const packageLabel = getFrameworkPackageLabel(vmf)
-      const packageVersion = getFrameworkPackageVersion(vmf)
-      const workType = 'VALUE_NARRATIVE'
-      const runtimeStatus = getRuntimeLifecycleStatus(vmf)
-      const executionState = getRuntimeExecutionState(vmf)
+    return runtimeInstanceRows.map((runtimeInstance) => {
+      const runtimeName = getVmfName(runtimeInstance)
+      const packageLabel = getFrameworkPackageLabel(runtimeInstance)
+      const packageVersion = getFrameworkPackageVersion(runtimeInstance)
+      const workType = String(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE').trim() || 'VALUE_NARRATIVE'
+      const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
+      const executionState = getRuntimeExecutionState(runtimeInstance)
+      const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
 
       return {
-        id: getVmfId(vmf) || vmfName,
-        runtimeDisplayId: getRuntimeInstanceDisplayId(vmf, workType),
-        work: vmfName,
-        // TODO: replace with vmf.workType once the API returns it.
+        id: runtimeInstanceId,
+        runtimeDisplayId: getRuntimeInstanceDisplayId(runtimeInstance, workType),
+        work: runtimeName,
         workType,
-        workTypeLabel: 'Value Narrative',
+        workTypeLabel: formatRuntimeTokenLabel(workType),
         tenant: tenantScopeValue,
         packageSummary: `Package: ${packageLabel}`,
         status: runtimeStatus,
         executionState,
-        readiness: getRuntimeReadinessLabel(vmf),
-        lastActivity: formatUpdatedLabel(vmf?.updatedAt),
+        readiness: getRuntimeReadinessLabel(runtimeInstance),
+        lastActivity: formatUpdatedLabel(runtimeInstance?.updatedAt),
         nextAction: `Open ${packageVersion}`,
+        to: getRuntimeWorkspaceTo(runtimeInstanceId),
       }
     })
-  }, [activeVmfRows, contextReady, tenantScopeValue])
+  }, [contextReady, runtimeInstanceRows, tenantScopeValue])
 
   const filteredRuntimeInstances = useMemo(() => {
     if (workTypeFilter === 'ALL') return runtimeInstances
@@ -750,13 +803,13 @@ function Dashboard() {
 
   const createWorkItems = useMemo(() => [
     {
-      description: 'Create a governed Value Narrative from the active VMF deployment.',
+      description: 'Create a governed Value Narrative from an active VMF package.',
       disabled: !canCreateValueNarrative,
       icon: MdOutlineDashboardCustomize,
       label: canCreateValueNarrative ? 'Create' : 'Unavailable',
       reason: canCreateValueNarrative
-        ? 'Active VMF runtime context is available.'
-        : 'Value Narrative unavailable - no active VMF framework is available for this tenant.',
+        ? 'Select one active package in the VMF workspace to create runtime work.'
+        : 'Value Narrative unavailable - VMF_CREATE permission and VMF entitlement are required.',
       title: 'Create Value Narrative',
       to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
     },
@@ -767,7 +820,11 @@ function Dashboard() {
       label: canCreateDealAnalysis ? 'Create' : 'Unavailable',
       reason: canCreateDealAnalysis
         ? 'Deal Analysis will inherit the current VMF runtime anchor.'
-        : 'Deal Analysis unavailable - no active VMF framework is available for this tenant.',
+        : !hasVmfFeature
+          ? 'Deal Analysis unavailable - VMF entitlement is required before a locked runtime anchor can be created.'
+          : hasDealFeature && hasSelectedSalesExecutionRole
+          ? 'Deal Analysis unavailable - locked VMF runtime anchor creation is not available yet.'
+          : 'Deal Analysis unavailable - Deals entitlement and Sales runtime role are required.',
       title: 'Create Deal Analysis',
       to: canCreateDealAnalysis ? '/app/workspaces/vmf' : '/app/dashboard',
     },
@@ -780,7 +837,13 @@ function Dashboard() {
       title: 'Generate Output',
       to: '/app/dashboard',
     },
-  ], [canCreateDealAnalysis, canCreateValueNarrative])
+  ], [
+    canCreateDealAnalysis,
+    canCreateValueNarrative,
+    hasDealFeature,
+    hasSelectedSalesExecutionRole,
+    hasVmfFeature,
+  ])
 
   const alerts = useMemo(() => {
     if (!contextReady) {
@@ -847,9 +910,12 @@ function Dashboard() {
     'dashboard__launch-grid--actions',
     runtimeActions.length === 1 ? 'dashboard__launch-grid--single' : '',
   ].filter(Boolean).join(' ')
+  const runtimeActionAvailableCount = runtimeActions.filter((action) => !action.disabled).length
 
   const runtimeInstanceEmptyMessage = !contextReady
     ? 'Select a tenant to show runtime work.'
+    : runtimeInstanceAppError
+      ? `Unable to load runtime instances. ${runtimeInstanceAppError.message}`
     : isLoadingRuntimeVmfs
       ? 'Loading runtime work...'
     : workTypeFilter === 'ALL'
@@ -919,9 +985,9 @@ function Dashboard() {
     {
       key: 'nextAction',
       label: 'Next Action',
-      render: (value) => (
+      render: (value, row) => (
         <div className="dashboard__next-cell">
-          <Link to="/app/workspaces/vmf" variant="primary" underline="none">
+          <Link to={row.to ?? '/app/workspaces/vmf'} variant="primary" underline="none">
             {value}
           </Link>
         </div>
@@ -991,7 +1057,7 @@ function Dashboard() {
 
       <div className="dashboard__sections" role="list" aria-label="Customer runtime workspace groups">
         <DashboardSectionCard
-          badge={{ label: `${runtimeActions.length} available`, variant: 'info' }}
+          badge={{ label: `${runtimeActionAvailableCount} available`, variant: 'info' }}
           description="Action items resolve to runtime instances and governed action keys."
           icon={MdOutlinePlayCircle}
           modifier="actions"

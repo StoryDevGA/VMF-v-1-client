@@ -20,27 +20,35 @@ vi.mock('../../store/api/customerApi.js', () => ({
 vi.mock('../../store/api/vmfApi.js', () => ({
   useListVmfsQuery: vi.fn(),
   useListVmfFrameworkPackagesQuery: vi.fn(),
-  useCreateVmfMutation: vi.fn(),
   useUpdateVmfMutation: vi.fn(),
   useDeleteVmfMutation: vi.fn(),
+}))
+
+vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useCreateRuntimeInstanceMutation: vi.fn(),
+  useListRuntimeInstancesQuery: vi.fn(),
 }))
 
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
-  useCreateVmfMutation,
   useDeleteVmfMutation,
   useListVmfFrameworkPackagesQuery,
   useListVmfsQuery,
   useUpdateVmfMutation,
 } from '../../store/api/vmfApi.js'
+import {
+  useCreateRuntimeInstanceMutation,
+  useListRuntimeInstancesQuery,
+} from '../../store/api/runtimeInstanceApi.js'
 
-const createVmfMock = vi.fn()
+const createRuntimeInstanceMock = vi.fn()
 const updateVmfMock = vi.fn()
 const deleteVmfMock = vi.fn()
 
 let listQueryResponse
+let runtimeInstanceQueryResponse
 let frameworkPackageQueryResponse
 
 function getPageTree(initialEntry = '/app/workspaces/vmf') {
@@ -106,6 +114,14 @@ describe('MaintainVmfs', () => {
     }
     useListVmfsQuery.mockImplementation(() => listQueryResponse)
 
+    runtimeInstanceQueryResponse = {
+      data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    useListRuntimeInstancesQuery.mockImplementation(() => runtimeInstanceQueryResponse)
+
     frameworkPackageQueryResponse = {
       data: {
         data: [
@@ -126,11 +142,20 @@ describe('MaintainVmfs', () => {
     }
     useListVmfFrameworkPackagesQuery.mockImplementation(() => frameworkPackageQueryResponse)
 
-    createVmfMock.mockReset()
-    createVmfMock.mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({ data: { name: 'Northwind', frameworkVersion: '2.2' } }),
+    createRuntimeInstanceMock.mockReset()
+    createRuntimeInstanceMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          name: 'Northwind',
+          packageVersion: '2.3.1',
+          runtimeInstanceKey: 'value-narrative-001',
+        },
+      }),
     })
-    useCreateVmfMutation.mockReturnValue([createVmfMock, { isLoading: false }])
+    useCreateRuntimeInstanceMutation.mockReturnValue([
+      createRuntimeInstanceMock,
+      { isLoading: false },
+    ])
 
     updateVmfMock.mockReset()
     updateVmfMock.mockReturnValue({
@@ -204,11 +229,134 @@ describe('MaintainVmfs', () => {
     expect(screen.queryByText(/workspace scope for Default Tenant\./i)).not.toBeInTheDocument()
   })
 
-  it('submits create payload with optional description against customer-tenant scoped route', async () => {
+  it('hides the Value Narrative runtime table when no runtime instances exist', () => {
+    renderPage()
+
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        runtimeType: 'VALUE_NARRATIVE',
+        pageSize: 10,
+      }),
+      { skip: false },
+    )
+    expect(screen.queryByRole('heading', { name: /my value narratives/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: /value narrative runtime instances/i }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeInTheDocument()
+  })
+
+  it('lists Value Narrative runtime instances from the runtime instance API', () => {
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'runtime-1',
+            runtimeInstanceKey: 'value-narrative-001',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Northwind Value Narrative',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: /my value narratives/i })).toBeInTheDocument()
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        runtimeType: 'VALUE_NARRATIVE',
+        pageSize: 10,
+      }),
+      { skip: false },
+    )
+    expect(screen.getByRole('table', { name: /value narrative runtime instances/i }))
+      .toBeInTheDocument()
+    expect(screen.getByText('Northwind Value Narrative')).toBeInTheDocument()
+    expect(screen.getByText('value-narrative-001')).toBeInTheDocument()
+    expect(screen.getByText('vmf-runtime-package')).toBeInTheDocument()
+    expect(screen.getByText('Idle')).toBeInTheDocument()
+  })
+
+  it('paginates Value Narrative runtime instances without silently truncating after the first page', async () => {
+    const user = userEvent.setup()
+
+    useListRuntimeInstancesQuery.mockImplementation((args) => ({
+      data: {
+        data: [
+          {
+            id: `runtime-page-${args.page}`,
+            runtimeInstanceKey: `value-narrative-page-${args.page}`,
+            runtimeType: 'VALUE_NARRATIVE',
+            name: `Page ${args.page} Value Narrative`,
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: args.page, totalPages: 3, total: 25 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+
+    const pagination = screen.getByRole('navigation', {
+      name: /value narrative runtime pagination/i,
+    })
+
+    expect(screen.getByText('Page 1 Value Narrative')).toBeInTheDocument()
+    expect(within(pagination).getByText('Page 1 of 3 (25 runtime instances)')).toBeInTheDocument()
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        runtimeType: 'VALUE_NARRATIVE',
+        page: 1,
+        pageSize: 10,
+      }),
+      { skip: false },
+    )
+
+    await user.click(within(pagination).getByRole('button', { name: /^next$/i }))
+
+    await waitFor(() => {
+      expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          tenantId: 'tenant-1',
+          runtimeType: 'VALUE_NARRATIVE',
+          page: 2,
+          pageSize: 10,
+        }),
+        { skip: false },
+      )
+    })
+    expect(screen.getByText('Page 2 Value Narrative')).toBeInTheDocument()
+    expect(within(pagination).getByText('Page 2 of 3 (25 runtime instances)')).toBeInTheDocument()
+  })
+
+  it('submits create payload with optional description to the runtime instance API', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
     const dialog = screen.getByRole('dialog')
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
@@ -225,13 +373,15 @@ describe('MaintainVmfs', () => {
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(createVmfMock).toHaveBeenCalledTimes(1)
+      expect(createRuntimeInstanceMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(createVmfMock).toHaveBeenCalledWith({
-      customerId: 'cust-1',
-      tenantId: 'tenant-1',
+    expect(createRuntimeInstanceMock).toHaveBeenCalledWith({
       body: {
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        frameworkKey: 'VMF',
+        runtimeType: 'VALUE_NARRATIVE',
         name: 'Northwind',
         frameworkPackageId: 'pkg-1',
         description: 'Launch planning workspace',
@@ -270,7 +420,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
     const dialog = screen.getByRole('dialog')
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
@@ -283,13 +433,15 @@ describe('MaintainVmfs', () => {
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(createVmfMock).toHaveBeenCalledTimes(1)
+      expect(createRuntimeInstanceMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(createVmfMock).toHaveBeenCalledWith({
-      customerId: 'cust-1',
-      tenantId: 'tenant-1',
+    expect(createRuntimeInstanceMock).toHaveBeenCalledWith({
       body: {
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        frameworkKey: 'VMF',
+        runtimeType: 'VALUE_NARRATIVE',
         name: 'Northwind',
         frameworkPackageId: 'pkg-1',
       },
@@ -327,7 +479,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
     const dialog = screen.getByRole('dialog')
     await user.selectOptions(
       within(dialog).getByRole('combobox', { name: /framework package/i }),
@@ -340,13 +492,15 @@ describe('MaintainVmfs', () => {
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     await waitFor(() => {
-      expect(createVmfMock).toHaveBeenCalledTimes(1)
+      expect(createRuntimeInstanceMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(createVmfMock).toHaveBeenCalledWith({
-      customerId: 'cust-1',
-      tenantId: 'tenant-1',
+    expect(createRuntimeInstanceMock).toHaveBeenCalledWith({
       body: {
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        frameworkKey: 'VMF',
+        runtimeType: 'VALUE_NARRATIVE',
         name: 'Northwind',
         frameworkPackageId: 'pkg-2',
       },
@@ -383,7 +537,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
     const dialog = screen.getByRole('dialog')
 
     await user.type(
@@ -393,10 +547,10 @@ describe('MaintainVmfs', () => {
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     expect(await within(dialog).findByText(/framework package is required/i)).toBeInTheDocument()
-    expect(createVmfMock).not.toHaveBeenCalled()
+    expect(createRuntimeInstanceMock).not.toHaveBeenCalled()
   })
 
-  it('shows VMF capacity guidance and disables create when the tenant is at capacity', () => {
+  it('shows VMF capacity guidance without blocking runtime instance creation', () => {
     listQueryResponse = {
       data: {
         data: [],
@@ -423,7 +577,7 @@ describe('MaintainVmfs', () => {
     const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity reached/i })
 
     expect(capacityGuidance).toHaveTextContent(/0 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
   })
 
   it('shows compact VMF usage guidance when capacity remains', () => {
@@ -453,10 +607,10 @@ describe('MaintainVmfs', () => {
     const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity/i })
 
     expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
   })
 
-  it('renders Back, capacity, and Create in the compact catalogue action bar', () => {
+  it('renders Back, capacity, and Create Value Narrative in the compact catalogue action bar', () => {
     listQueryResponse = {
       data: {
         data: [],
@@ -484,8 +638,8 @@ describe('MaintainVmfs', () => {
 
     expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
     expect(within(actionBar).getByRole('status', { name: /^vmf capacity/i })).toHaveTextContent('2 of 4 left')
-    expect(within(actionBar).getByRole('button', { name: /^create$/i })).toBeEnabled()
-    expect(actionBar).toHaveTextContent(/BackCreate.*2 of 4 left/)
+    expect(within(actionBar).getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
+    expect(actionBar).toHaveTextContent(/BackCreate Value Narrative.*2 of 4 left/)
   })
 
   it('resets workspace filters and dialogs when the tenant context changes', async () => {
@@ -508,7 +662,7 @@ describe('MaintainVmfs', () => {
       screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
       'ARCHIVED',
     )
-    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')
@@ -591,7 +745,7 @@ describe('MaintainVmfs', () => {
       }),
       { skip: false },
     )
-    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
     expect(
       screen.getByText(/linked tenant members can review published vmfs only/i),
     ).toBeInTheDocument()
@@ -670,7 +824,7 @@ describe('MaintainVmfs', () => {
     expect(
       screen.getByText(/you do not have permission to manage vmfs for this tenant/i),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
     expect(useListVmfsQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true })
   })
 
@@ -705,7 +859,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /^create$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
     expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
 
     const actions = screen.getByRole('combobox', { name: /actions for editable vmf/i })
