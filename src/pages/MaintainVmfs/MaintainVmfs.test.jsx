@@ -19,6 +19,7 @@ vi.mock('../../store/api/customerApi.js', () => ({
 
 vi.mock('../../store/api/vmfApi.js', () => ({
   useListVmfsQuery: vi.fn(),
+  useListVmfFrameworkPackagesQuery: vi.fn(),
   useCreateVmfMutation: vi.fn(),
   useUpdateVmfMutation: vi.fn(),
   useDeleteVmfMutation: vi.fn(),
@@ -30,6 +31,7 @@ import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
   useCreateVmfMutation,
   useDeleteVmfMutation,
+  useListVmfFrameworkPackagesQuery,
   useListVmfsQuery,
   useUpdateVmfMutation,
 } from '../../store/api/vmfApi.js'
@@ -39,6 +41,7 @@ const updateVmfMock = vi.fn()
 const deleteVmfMock = vi.fn()
 
 let listQueryResponse
+let frameworkPackageQueryResponse
 
 function getPageTree(initialEntry = '/app/workspaces/vmf') {
   return (
@@ -102,6 +105,26 @@ describe('MaintainVmfs', () => {
       error: null,
     }
     useListVmfsQuery.mockImplementation(() => listQueryResponse)
+
+    frameworkPackageQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'pkg-1',
+            frameworkKey: 'VMF',
+            packageName: 'VMF Runtime Package',
+            packageKey: 'vmf-runtime-package',
+            version: '2.3.1',
+            status: 'ACTIVE',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    useListVmfFrameworkPackagesQuery.mockImplementation(() => frameworkPackageQueryResponse)
 
     createVmfMock.mockReset()
     createVmfMock.mockReturnValue({
@@ -188,6 +211,9 @@ describe('MaintainVmfs', () => {
     await user.click(screen.getByRole('button', { name: /^create$/i }))
     const dialog = screen.getByRole('dialog')
 
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
+      .toHaveDisplayValue('VMF Runtime Package / 2.3.1')
+
     await user.type(
       within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
       'Northwind',
@@ -207,9 +233,167 @@ describe('MaintainVmfs', () => {
       tenantId: 'tenant-1',
       body: {
         name: 'Northwind',
+        frameworkPackageId: 'pkg-1',
         description: 'Launch planning workspace',
       },
     })
+  })
+
+  it('defaults to the default framework package when more than one package is available', async () => {
+    const user = userEvent.setup()
+
+    frameworkPackageQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'pkg-1',
+            packageName: 'VMF Runtime Package',
+            packageKey: 'vmf-runtime-package',
+            version: '2.3.1',
+            status: 'ACTIVE',
+            isDefault: true,
+          },
+          {
+            id: 'pkg-2',
+            packageName: 'VMF Enterprise Package',
+            packageKey: 'vmf-enterprise-package',
+            version: '2.4.0',
+            status: 'ACTIVE',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 2 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    const dialog = screen.getByRole('dialog')
+
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
+      .toHaveDisplayValue('VMF Runtime Package / 2.3.1')
+
+    await user.type(
+      within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
+      'Northwind',
+    )
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(createVmfMock).toHaveBeenCalledTimes(1)
+    })
+
+    expect(createVmfMock).toHaveBeenCalledWith({
+      customerId: 'cust-1',
+      tenantId: 'tenant-1',
+      body: {
+        name: 'Northwind',
+        frameworkPackageId: 'pkg-1',
+      },
+    })
+  })
+
+  it('allows the user to override the default framework package selection', async () => {
+    const user = userEvent.setup()
+
+    frameworkPackageQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'pkg-1',
+            packageName: 'VMF Runtime Package',
+            packageKey: 'vmf-runtime-package',
+            version: '2.3.1',
+            status: 'ACTIVE',
+            isDefault: true,
+          },
+          {
+            id: 'pkg-2',
+            packageName: 'VMF Enterprise Package',
+            packageKey: 'vmf-enterprise-package',
+            version: '2.4.0',
+            status: 'ACTIVE',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 2 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    const dialog = screen.getByRole('dialog')
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: /framework package/i }),
+      'pkg-2',
+    )
+    await user.type(
+      within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
+      'Northwind',
+    )
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(createVmfMock).toHaveBeenCalledTimes(1)
+    })
+
+    expect(createVmfMock).toHaveBeenCalledWith({
+      customerId: 'cust-1',
+      tenantId: 'tenant-1',
+      body: {
+        name: 'Northwind',
+        frameworkPackageId: 'pkg-2',
+      },
+    })
+  })
+
+  it('requires a selected framework package when multiple packages are available without a default', async () => {
+    const user = userEvent.setup()
+
+    frameworkPackageQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'pkg-1',
+            packageName: 'VMF Runtime Package',
+            packageKey: 'vmf-runtime-package',
+            version: '2.3.1',
+            status: 'ACTIVE',
+          },
+          {
+            id: 'pkg-2',
+            packageName: 'VMF Enterprise Package',
+            packageKey: 'vmf-enterprise-package',
+            version: '2.4.0',
+            status: 'ACTIVE',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 2 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    const dialog = screen.getByRole('dialog')
+
+    await user.type(
+      within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
+      'Northwind',
+    )
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
+
+    expect(await within(dialog).findByText(/framework package is required/i)).toBeInTheDocument()
+    expect(createVmfMock).not.toHaveBeenCalled()
   })
 
   it('shows VMF capacity guidance and disables create when the tenant is at capacity', () => {

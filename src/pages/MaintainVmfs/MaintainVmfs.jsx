@@ -29,6 +29,7 @@ import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
   useCreateVmfMutation,
   useDeleteVmfMutation,
+  useListVmfFrameworkPackagesQuery,
   useListVmfsQuery,
   useUpdateVmfMutation,
 } from '../../store/api/vmfApi.js'
@@ -175,6 +176,15 @@ const getFrameworkPackageDetail = (vmf, key) => {
   const frameworkPackage = vmf?.frameworkPackage
   if (!frameworkPackage || typeof frameworkPackage !== 'object') return ''
   return String(frameworkPackage?.[key] ?? '').trim()
+}
+
+const getFrameworkPackageId = (frameworkPackage) =>
+  String(frameworkPackage?.id ?? frameworkPackage?._id ?? '').trim()
+
+const getFrameworkPackageOptionLabel = (frameworkPackage) => {
+  const label = getFrameworkPackageLabel({ frameworkPackage })
+  const version = String(frameworkPackage?.version ?? '').trim()
+  return version && label !== '--' ? `${label} / ${version}` : label
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
@@ -507,7 +517,7 @@ function MaintainVmfs() {
   const [page, setPage] = useState(1)
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: '', description: '' })
+  const [createForm, setCreateForm] = useState({ name: '', description: '', frameworkPackageId: '' })
   const [createErrors, setCreateErrors] = useState({})
 
   const [editOpen, setEditOpen] = useState(false)
@@ -591,6 +601,21 @@ function MaintainVmfs() {
     { skip: !canQueryVmfs },
   )
 
+  const {
+    data: frameworkPackageResponse,
+    isLoading: isLoadingFrameworkPackages,
+    isFetching: isFetchingFrameworkPackages,
+    error: frameworkPackageError,
+  } = useListVmfFrameworkPackagesQuery(
+    {
+      customerId,
+      tenantId,
+      page: 1,
+      pageSize: 100,
+    },
+    { skip: !customerId || !tenantId || !canCreateVmfs || !hasVmfEntitlement },
+  )
+
   const [createVmf, createResult] = useCreateVmfMutation()
   const [updateVmf, updateResult] = useUpdateVmfMutation()
   const [deleteVmf, deleteResult] = useDeleteVmfMutation()
@@ -602,6 +627,7 @@ function MaintainVmfs() {
   const totalCount = Number(meta.total) || 0
 
   const listAppError = listError ? normalizeError(listError) : null
+  const frameworkPackageAppError = frameworkPackageError ? normalizeError(frameworkPackageError) : null
   const inactiveCustomerAppError = isCustomerInactiveError(listAppError) ? listAppError : null
   const licenceAppError = isLicenseFeatureNotEnabledError(listAppError) ? listAppError : null
 
@@ -616,6 +642,31 @@ function MaintainVmfs() {
 
   const isMutationLoading =
     createResult.isLoading || updateResult.isLoading || deleteResult.isLoading
+
+  const availableFrameworkPackages = useMemo(
+    () => (Array.isArray(frameworkPackageResponse?.data) ? frameworkPackageResponse.data : []),
+    [frameworkPackageResponse],
+  )
+
+  const frameworkPackageOptions = useMemo(
+    () =>
+      availableFrameworkPackages
+        .map((frameworkPackage) => ({
+          value: getFrameworkPackageId(frameworkPackage),
+          label: getFrameworkPackageOptionLabel(frameworkPackage),
+          isDefault: frameworkPackage?.isDefault === true,
+        }))
+        .filter((option) => option.value),
+    [availableFrameworkPackages],
+  )
+
+  const defaultFrameworkPackageOption = useMemo(
+    () => frameworkPackageOptions.find((option) => option.isDefault) ?? null,
+    [frameworkPackageOptions],
+  )
+
+  const isFrameworkPackageSelectionLoading =
+    isLoadingFrameworkPackages || isFetchingFrameworkPackages
 
   const maxVmfsPerTenant = useMemo(() => {
     const candidateValues = [
@@ -696,12 +747,18 @@ function MaintainVmfs() {
   const openCreateDialog = useCallback(() => {
     if (!canCreateVmfs) return
     setCreateErrors({})
+    setCreateForm((current) => ({
+      ...current,
+      frameworkPackageId:
+        defaultFrameworkPackageOption?.value
+        || (frameworkPackageOptions.length === 1 ? frameworkPackageOptions[0].value : ''),
+    }))
     setCreateOpen(true)
-  }, [canCreateVmfs])
+  }, [canCreateVmfs, defaultFrameworkPackageOption, frameworkPackageOptions])
 
   const closeCreateDialog = useCallback(() => {
     setCreateOpen(false)
-    setCreateForm({ name: '', description: '' })
+    setCreateForm({ name: '', description: '', frameworkPackageId: '' })
     setCreateErrors({})
   }, [])
 
@@ -753,6 +810,21 @@ function MaintainVmfs() {
     closeDetailsDialog()
     setDeleteTarget(null)
   }, [canMutateVmfs, closeCreateDialog, closeDetailsDialog, closeEditDialog])
+
+  useEffect(() => {
+    if (!createOpen || createForm.frameworkPackageId) return
+
+    const nextFrameworkPackageId =
+      defaultFrameworkPackageOption?.value
+      || (frameworkPackageOptions.length === 1 ? frameworkPackageOptions[0].value : '')
+
+    if (!nextFrameworkPackageId) return
+
+    setCreateForm((current) => ({
+      ...current,
+      frameworkPackageId: nextFrameworkPackageId,
+    }))
+  }, [createForm.frameworkPackageId, createOpen, defaultFrameworkPackageOption, frameworkPackageOptions])
 
   const rowActions = useMemo(
     () =>
@@ -876,12 +948,18 @@ function MaintainVmfs() {
       event.preventDefault()
       const name = String(createForm.name ?? '').trim()
       const description = String(createForm.description ?? '').trim()
+      const frameworkPackageId = String(createForm.frameworkPackageId ?? '').trim()
       const nextErrors = {}
 
       if (!name) nextErrors.name = 'Name is required.'
       if (name.length > 255) nextErrors.name = 'Name must be 255 characters or fewer.'
       if (description.length > 1000) {
         nextErrors.description = 'Description must be 1000 characters or fewer.'
+      }
+      if (!frameworkPackageId) {
+        nextErrors.frameworkPackageId = 'Framework package is required.'
+      } else if (!frameworkPackageOptions.some((option) => option.value === frameworkPackageId)) {
+        nextErrors.frameworkPackageId = 'Select an available framework package.'
       }
 
       if (Object.keys(nextErrors).length > 0) {
@@ -895,6 +973,7 @@ function MaintainVmfs() {
           tenantId,
           body: {
             name,
+            frameworkPackageId,
             ...(description ? { description } : {}),
           },
         }).unwrap()
@@ -935,6 +1014,9 @@ function MaintainVmfs() {
           if (typeof details.description === 'string' && details.description.trim()) {
             fieldErrors.description = details.description
           }
+          if (typeof details.frameworkPackageId === 'string' && details.frameworkPackageId.trim()) {
+            fieldErrors.frameworkPackageId = details.frameworkPackageId
+          }
           if (Object.keys(fieldErrors).length > 0) {
             setCreateErrors(fieldErrors)
             return
@@ -948,7 +1030,17 @@ function MaintainVmfs() {
         })
       }
     },
-    [addToast, closeCreateDialog, createForm.description, createForm.name, createVmf, customerId, tenantId],
+    [
+      addToast,
+      closeCreateDialog,
+      createForm.description,
+      createForm.frameworkPackageId,
+      createForm.name,
+      createVmf,
+      customerId,
+      frameworkPackageOptions,
+      tenantId,
+    ],
   )
 
   const handleEditSubmit = useCallback(async () => {
@@ -1304,6 +1396,40 @@ function MaintainVmfs() {
               required
               fullWidth
             />
+            <Select
+              id="vmf-create-framework-package"
+              label="Framework Package"
+              value={createForm.frameworkPackageId}
+              placeholder={
+                isFrameworkPackageSelectionLoading
+                  ? 'Loading framework packages...'
+                  : 'Select a framework package'
+              }
+              options={frameworkPackageOptions}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  frameworkPackageId: event.target.value,
+                }))
+              }
+              error={createErrors.frameworkPackageId}
+              helperText={
+                frameworkPackageOptions.length > 0
+                  ? 'Select the active package this VMF workspace will snapshot at creation.'
+                  : 'No active VMF framework packages are available for this customer.'
+              }
+              disabled={
+                isFrameworkPackageSelectionLoading
+                || Boolean(frameworkPackageAppError)
+                || frameworkPackageOptions.length === 0
+              }
+              required
+            />
+            {frameworkPackageAppError ? (
+              <p className="maintain-vmfs__error" role="alert">
+                {frameworkPackageAppError.message}
+              </p>
+            ) : null}
             <Textarea
               id="vmf-create-description"
               label="Description (Optional)"
@@ -1319,8 +1445,8 @@ function MaintainVmfs() {
               fullWidth
             />
             <p className="maintain-vmfs__muted">
-              New VMFs start as <strong>DRAFT</strong>. Framework version is snapshotted from
-              active policy at creation.
+              New VMFs start as <strong>DRAFT</strong>. Framework package and version are
+              snapshotted from the selected active package at creation.
             </p>
             <div className="maintain-vmfs__form-actions">
               <Button
@@ -1331,7 +1457,16 @@ function MaintainVmfs() {
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" loading={createResult.isLoading}>
+              <Button
+                type="submit"
+                variant="primary"
+                loading={createResult.isLoading}
+                disabled={
+                  isFrameworkPackageSelectionLoading
+                  || Boolean(frameworkPackageAppError)
+                  || frameworkPackageOptions.length === 0
+                }
+              >
                 Create
               </Button>
             </div>

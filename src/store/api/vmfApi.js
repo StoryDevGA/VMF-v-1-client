@@ -54,6 +54,22 @@ export const vmfApi = baseApi.injectEndpoints({
           : [vmfListTag],
     }),
 
+    listVmfFrameworkPackages: build.query({
+      query: ({
+        customerId,
+        tenantId,
+        page = 1,
+        pageSize = 100,
+      }) => {
+        const params = new URLSearchParams()
+        params.set('page', String(page))
+        params.set('pageSize', String(pageSize))
+
+        return `/customers/${customerId}/tenants/${tenantId}/vmfs/framework-packages?${params.toString()}`
+      },
+      providesTags: [{ type: 'RuntimeFrameworkPackage', id: 'VMF_AVAILABLE_LIST' }],
+    }),
+
     createVmf: build.mutation({
       query: ({ customerId, tenantId, body }) => ({
         url: `/customers/${customerId}/tenants/${tenantId}/vmfs`,
@@ -96,9 +112,9 @@ export const vmfApi = baseApi.injectEndpoints({
 
 export const {
   useListVmfsQuery,
+  useListVmfFrameworkPackagesQuery,
   useCreateVmfMutation,
   useGetVmfQuery,
   useUpdateVmfMutation,
   useDeleteVmfMutation,
 } = vmfApi
-
