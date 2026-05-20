@@ -2355,7 +2355,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     const pagination = screen.getByRole('navigation', {
       name: /framework package dependencies pagination/i,
     })
-    expect(screen.getByLabelText(/dependency summary/i)).toHaveClass(
+    expect(screen.getByRole('group', { name: /dependency filters/i })).toHaveClass(
       'super-admin-framework-package-editor__summary-chip-row',
     )
     expect(within(pagination).getByText('Page 1 of 2')).toBeInTheDocument()
@@ -2364,6 +2364,121 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     expect(screen.getByText(`Extra Runtime Path ${extraRuntimePathCount}`)).toBeInTheDocument()
     expect(within(pagination).getByText('Page 2 of 2')).toBeInTheDocument()
+  })
+
+  it('filters resolved dependencies by summary chip and opens dependency records', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageDependenciesQueryMock = {
+      data: {
+        data: {
+          summary: {
+            agents: 2,
+            skills: 1,
+            runtimePaths: 1,
+            validations: 1,
+            workflowPolicies: 1,
+            uiContract: 1,
+          },
+          agents: [
+            { id: 'agent-reviewer', key: 'agent-reviewer', name: 'Reviewer Agent', status: 'ACTIVE', issues: [] },
+            {
+              id: '',
+              key: 'agent-missing',
+              name: 'Missing Agent',
+              status: 'MISSING',
+              issues: ['Agent not found'],
+            },
+          ],
+          skills: [
+            { id: 'skill-observe', key: 'skill-observe', name: 'ODDF Observe', status: 'ACTIVE', issues: [] },
+          ],
+          runtimePaths: [
+            {
+              id: 'runtime-path-section',
+              key: 'framework_state.sections.summary',
+              name: 'Section Summary',
+              status: 'ACTIVE',
+              issues: [],
+            },
+          ],
+          validations: [
+            {
+              id: 'validation-required-sections',
+              key: 'required-sections-check',
+              name: 'Required Sections',
+              status: 'ACTIVE',
+              issues: [],
+            },
+          ],
+          workflowPolicies: [
+            { id: 'policy-submit-gate', key: 'vmf-submit-gate', name: 'VMF Submit Gate', status: 'ACTIVE', issues: [] },
+          ],
+          uiContract: {
+            id: 'ui-contract-vmf',
+            key: 'vmf-ui-contract-v1',
+            name: 'VMF UI Contract',
+            status: 'ACTIVE',
+            issues: [],
+          },
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: packageDependenciesRefetchMock,
+    }
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('2.3.1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: /^dependencies$/i }))
+
+    expect(screen.getByRole('group', { name: /dependency filters/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all dependencies: 7/i })).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(screen.getByRole('button', { name: /resolved skills: 1/i }))
+
+    expect(screen.getByRole('button', { name: /resolved skills: 1/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('ODDF Observe')).toBeInTheDocument()
+    expect(screen.queryByText('Reviewer Agent')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /open skill oddf observe/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/skills/skill-observe')
+
+    navigateMock.mockClear()
+    await user.click(screen.getByRole('button', { name: /resolved agents: 2/i }))
+    expect(screen.getByText('Reviewer Agent')).toBeInTheDocument()
+    expect(screen.getByText('Missing Agent')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /open agent reviewer agent/i }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/agents/agent-reviewer')
+    navigateMock.mockClear()
+    expect(screen.queryByRole('button', { name: /open agent missing agent/i })).not.toBeInTheDocument()
+    expect(screen.getByText('agent-missing')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /validations: 1/i }))
+    await user.click(screen.getByRole('button', { name: /open validation required sections/i }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/validation-registry/validation-required-sections')
+    navigateMock.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /workflow policies: 1/i }))
+    await user.click(screen.getByRole('button', { name: /open workflow policy vmf submit gate/i }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/workflow-policies/policy-submit-gate/edit')
+    navigateMock.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /ui contract: 1/i }))
+    await user.click(screen.getByRole('button', { name: /open ui contract vmf ui contract/i }))
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/ui-contract-vmf')
+    navigateMock.mockClear()
+
+    await user.click(screen.getByRole('button', { name: /runtime paths: 1/i }))
+    await user.click(screen.getByRole('button', { name: /open runtime path section summary/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/runtime-paths/runtime-path-section/edit')
   })
 
   it('requires external state contracts to provide a key and version', async () => {

@@ -115,7 +115,22 @@ describe('MaintainVmfs', () => {
     useListVmfsQuery.mockImplementation(() => listQueryResponse)
 
     runtimeInstanceQueryResponse = {
-      data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
+            currentCount: 2,
+            remainingCount: 2,
+            isAtCapacity: false,
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
+          },
+        },
+      },
       isLoading: false,
       isFetching: false,
       error: null,
@@ -551,20 +566,21 @@ describe('MaintainVmfs', () => {
     expect(createRuntimeInstanceMock).not.toHaveBeenCalled()
   })
 
-  it('shows VMF capacity guidance without blocking runtime instance creation', () => {
-    listQueryResponse = {
+  it('shows Value Narrative capacity guidance and blocks creation when runtime capacity is reached', () => {
+    runtimeInstanceQueryResponse = {
       data: {
         data: [],
         meta: {
           page: 1,
           totalPages: 1,
           total: 0,
-          vmfCapacity: {
-            maxVmfs: 4,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
             currentCount: 4,
             remainingCount: 0,
             isAtCapacity: true,
-            countMode: 'ACTIVE',
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
           },
         },
       },
@@ -575,26 +591,29 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity reached/i })
+    const capacityGuidance = screen.getByRole('status', {
+      name: /^value narrative capacity reached/i,
+    })
 
     expect(capacityGuidance).toHaveTextContent(/0 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
   })
 
-  it('shows compact VMF usage guidance when capacity remains', () => {
-    listQueryResponse = {
+  it('shows compact Value Narrative usage guidance when runtime capacity remains', () => {
+    runtimeInstanceQueryResponse = {
       data: {
         data: [],
         meta: {
           page: 1,
           totalPages: 1,
           total: 0,
-          vmfCapacity: {
-            maxVmfs: 4,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
             currentCount: 2,
             remainingCount: 2,
             isAtCapacity: false,
-            countMode: 'ACTIVE',
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
           },
         },
       },
@@ -605,15 +624,63 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    const capacityGuidance = screen.getByRole('status', { name: /^vmf capacity/i })
+    const capacityGuidance = screen.getByRole('status', { name: /^value narrative capacity/i })
 
     expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
     expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
   })
 
-  it('explains when tenant capacity exists but no runtime-ready package is available', async () => {
-    const user = userEvent.setup()
+  it('uses runtime instance capacity instead of stale VMF catalogue capacity', () => {
+    listQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 3,
+            currentCount: 2,
+            remainingCount: 1,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 3,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 3,
+            currentCount: 3,
+            remainingCount: 0,
+            isAtCapacity: true,
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
 
+    renderPage()
+
+    expect(screen.getByRole('status', { name: /^value narrative capacity reached/i }))
+      .toHaveTextContent(/0 of 3 left/i)
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+  })
+
+  it('fails closed when runtime instance capacity cannot be loaded', () => {
     listQueryResponse = {
       data: {
         data: [],
@@ -623,10 +690,83 @@ describe('MaintainVmfs', () => {
           total: 0,
           vmfCapacity: {
             maxVmfs: 4,
+            currentCount: 1,
+            remainingCount: 3,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    runtimeInstanceQueryResponse = {
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: { status: 503, data: { error: { message: 'Runtime capacity unavailable' } } },
+    }
+
+    renderPage()
+
+    expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
+      .toHaveTextContent(/capacity unavailable/i)
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+  })
+
+  it('fails closed when runtime instance metadata omits runtime capacity', () => {
+    listQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 4,
+            currentCount: 1,
+            remainingCount: 3,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    runtimeInstanceQueryResponse = {
+      data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
+      .toHaveTextContent(/capacity unavailable/i)
+    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+  })
+
+  it('explains when tenant capacity exists but no runtime-ready package is available', async () => {
+    const user = userEvent.setup()
+
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
             currentCount: 2,
             remainingCount: 2,
             isAtCapacity: false,
-            countMode: 'ACTIVE',
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
           },
         },
       },
@@ -645,12 +785,12 @@ describe('MaintainVmfs', () => {
 
     const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
 
-    expect(screen.getByRole('status', { name: /^vmf capacity/i }))
+    expect(screen.getByRole('status', { name: /^value narrative capacity/i }))
       .toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('status', { name: /runtime-ready package required/i }))
-      .toHaveTextContent(/no runtime-ready package/i)
+    expect(screen.getByRole('status', { name: /eligible framework package required/i }))
+      .toHaveTextContent(/no eligible package/i)
     expect(actionBar).toHaveTextContent(
-      /No runtime-ready package\s*Back\s*Create Value Narrative\s*2 of 4 left/i,
+      /No eligible package\s*Back\s*Create Value Narrative\s*2 of 4 left/i,
     )
 
     await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
@@ -658,27 +798,32 @@ describe('MaintainVmfs', () => {
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toBeDisabled()
-    expect(within(dialog).getByText(/capacity and package readiness are checked separately/i))
+    expect(within(dialog).getByText(/assigned or published for this customer/i))
       .toBeInTheDocument()
-    expect(within(dialog).getByText(/certified dependency lock, active deployment, active activation/i))
+    expect(within(dialog).getByText(/available to this customer and runtime-ready/i))
+      .toBeInTheDocument()
+    expect(within(dialog).getByText(/assign or publish a package with active deployment evidence/i))
+      .toBeInTheDocument()
+    expect(within(dialog).getByText(/certified dependency lock, active activation, active deployment/i))
       .toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: /^create$/i })).toBeDisabled()
   })
 
   it('renders Back, capacity, and Create Value Narrative in the compact catalogue action bar', () => {
-    listQueryResponse = {
+    runtimeInstanceQueryResponse = {
       data: {
         data: [],
         meta: {
           page: 1,
           totalPages: 1,
           total: 0,
-          vmfCapacity: {
-            maxVmfs: 4,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
             currentCount: 2,
             remainingCount: 2,
             isAtCapacity: false,
-            countMode: 'ACTIVE',
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
           },
         },
       },
@@ -692,7 +837,7 @@ describe('MaintainVmfs', () => {
     const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
 
     expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
-    expect(within(actionBar).getByRole('status', { name: /^vmf capacity/i })).toHaveTextContent('2 of 4 left')
+    expect(within(actionBar).getByRole('status', { name: /^value narrative capacity/i })).toHaveTextContent('2 of 4 left')
     expect(within(actionBar).getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
     expect(actionBar).toHaveTextContent(/BackCreate Value Narrative.*2 of 4 left/)
   })

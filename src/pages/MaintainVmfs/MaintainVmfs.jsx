@@ -101,10 +101,10 @@ const VMF_READ_ONLY_NOTE =
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER =
-  'No runtime-ready package is available. Capacity and package readiness are checked separately.'
+  'No eligible VMF package is assigned or published for this customer.'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_MESSAGE =
-  'The capacity badge only shows tenant VMF slots. Creation also requires a runtime-ready VMF framework package, and none are currently available for this customer. A package must have a certified dependency lock, active deployment, active activation, and matching snapshot evidence before it can be selected.'
+  'The capacity badge shows tenant Value Narrative runtime slots. Creation also requires a VMF framework package that is both available to this customer and runtime-ready. Ask a Super Admin to assign or publish a package with active deployment evidence, or complete the package evidence chain: certified dependency lock, active activation, active deployment, and matching snapshot/hash evidence.'
 
 const getLifecycleVariant = (value) => {
   if (value === 'PUBLISHED') return 'success'
@@ -211,8 +211,9 @@ const normalizeAccordionId = (value) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '') || 'vmf'
 
-const getVmfCapacityCountLabel = (countMode) => {
+const getRuntimeCapacityCountLabel = (countMode) => {
   const normalizedCountMode = String(countMode ?? '').trim().toUpperCase()
+  if (normalizedCountMode === 'ACTIVE_RUNTIME_INSTANCES') return 'active Value Narrative'
   if (normalizedCountMode === 'NON_ARCHIVED') return 'non-archived'
   return 'active'
 }
@@ -223,9 +224,10 @@ const parsePositiveInteger = (value) => {
   return parsed
 }
 
-const normalizeVmfCapacity = (rawCapacity, fallbackMaxVmfsPerTenant = null) => {
-  const maxVmfs = parsePositiveInteger(
-    rawCapacity?.maxVmfs
+const normalizeRuntimeCapacity = (rawCapacity, fallbackMaxVmfsPerTenant = null) => {
+  const maxRuntimeInstances = parsePositiveInteger(
+    rawCapacity?.maxRuntimeInstances
+    ?? rawCapacity?.maxVmfs
     ?? rawCapacity?.maxVmfsPerTenant
     ?? rawCapacity?.limit
     ?? fallbackMaxVmfsPerTenant,
@@ -235,40 +237,55 @@ const normalizeVmfCapacity = (rawCapacity, fallbackMaxVmfsPerTenant = null) => {
   const currentCount = Number.isFinite(currentCountValue) ? currentCountValue : null
   const remainingCount = Number.isFinite(remainingCountValue)
     ? remainingCountValue
-    : Number.isFinite(maxVmfs) && Number.isFinite(currentCount)
-      ? Math.max(maxVmfs - currentCount, 0)
+    : Number.isFinite(maxRuntimeInstances) && Number.isFinite(currentCount)
+      ? Math.max(maxRuntimeInstances - currentCount, 0)
       : null
 
   return {
-    maxVmfs,
+    maxRuntimeInstances,
     currentCount,
     remainingCount,
     isAtCapacity:
       rawCapacity?.isAtCapacity === true
-      || (Number.isFinite(maxVmfs) && Number.isFinite(currentCount) && currentCount >= maxVmfs),
+      || (
+        Number.isFinite(maxRuntimeInstances)
+        && Number.isFinite(currentCount)
+        && currentCount >= maxRuntimeInstances
+      ),
     countMode: String(rawCapacity?.countMode ?? '').trim().toUpperCase() || 'ACTIVE',
   }
 }
 
-const getVmfCapacityGuidance = (vmfCapacity, { isLoading = false } = {}) => {
-  if (!vmfCapacity && !isLoading) return null
+const getRuntimeCapacityGuidance = (
+  runtimeCapacity,
+  { isLoading = false, isUnavailable = false } = {},
+) => {
+  if (!runtimeCapacity && !isLoading && !isUnavailable) return null
 
-  if (!vmfCapacity && isLoading) {
+  if (!runtimeCapacity && isLoading) {
     return {
       tone: 'info',
-      ariaLabel: 'Checking VMF capacity',
+      ariaLabel: 'Checking Value Narrative capacity',
       displayValue: 'Checking...',
     }
   }
 
-  const currentCount = vmfCapacity?.currentCount
-  const remainingCount = vmfCapacity?.remainingCount
-  const maxVmfs = vmfCapacity?.maxVmfs
-  const countLabel = getVmfCapacityCountLabel(vmfCapacity?.countMode)
+  if (!runtimeCapacity && isUnavailable) {
+    return {
+      tone: 'warning',
+      ariaLabel: 'Value Narrative capacity unavailable',
+      displayValue: 'Capacity unavailable',
+    }
+  }
+
+  const currentCount = runtimeCapacity?.currentCount
+  const remainingCount = runtimeCapacity?.remainingCount
+  const maxRuntimeInstances = runtimeCapacity?.maxRuntimeInstances
+  const countLabel = getRuntimeCapacityCountLabel(runtimeCapacity?.countMode)
   const displayCount = Number.isFinite(remainingCount) ? Math.max(remainingCount, 0) : null
-  const capacityNoun = `${countLabel} VMF slot${maxVmfs === 1 ? '' : 's'}`
-  const visibleValue = displayCount !== null && maxVmfs !== null
-    ? `${displayCount} of ${maxVmfs} left`
+  const capacityNoun = `${countLabel} runtime slot${maxRuntimeInstances === 1 ? '' : 's'}`
+  const visibleValue = displayCount !== null && maxRuntimeInstances !== null
+    ? `${displayCount} of ${maxRuntimeInstances} left`
     : null
 
   const buildGuidance = (tone, label) => ({
@@ -277,16 +294,16 @@ const getVmfCapacityGuidance = (vmfCapacity, { isLoading = false } = {}) => {
     displayValue: visibleValue,
   })
 
-  if (vmfCapacity?.isAtCapacity && currentCount !== null && maxVmfs !== null) {
-    return buildGuidance('warning', 'VMF capacity reached')
+  if (runtimeCapacity?.isAtCapacity && currentCount !== null && maxRuntimeInstances !== null) {
+    return buildGuidance('warning', 'Value Narrative capacity reached')
   }
 
-  if (remainingCount === 1 && currentCount !== null && maxVmfs !== null) {
-    return buildGuidance('warning', 'Final VMF slot')
+  if (remainingCount === 1 && currentCount !== null && maxRuntimeInstances !== null) {
+    return buildGuidance('warning', 'Final Value Narrative slot')
   }
 
-  if (currentCount !== null && remainingCount !== null && maxVmfs !== null) {
-    return buildGuidance('info', 'VMF capacity')
+  if (currentCount !== null && remainingCount !== null && maxRuntimeInstances !== null) {
+    return buildGuidance('info', 'Value Narrative capacity')
   }
 
   return null
@@ -796,21 +813,41 @@ function MaintainVmfs() {
     return String(resolvedTenantName ?? '').trim() || 'the selected tenant'
   }, [customerDetails, customerName, resolvedTenantName, supportsTenantManagement])
 
-  const vmfCapacity = useMemo(() => {
+  const hasRuntimeCapacityMeta = Boolean(
+    runtimeInstanceMeta?.runtimeCapacity
+    && typeof runtimeInstanceMeta.runtimeCapacity === 'object',
+  )
+  const isRuntimeCapacityUnavailable = Boolean(
+    canCreateVmfs
+    && canQueryVmfs
+    && !isLoadingRuntimeInstances
+    && (
+      runtimeInstanceError
+      || !hasRuntimeCapacityMeta
+    ),
+  )
+
+  const runtimeCapacity = useMemo(() => {
     if (!canCreateVmfs) return null
 
-    const metaCapacity = meta?.vmfCapacity
+    const metaCapacity = runtimeInstanceMeta?.runtimeCapacity
     if (metaCapacity && typeof metaCapacity === 'object') {
-      return normalizeVmfCapacity(metaCapacity, maxVmfsPerTenant)
+      return normalizeRuntimeCapacity(metaCapacity, maxVmfsPerTenant)
     }
 
     return null
-  }, [canCreateVmfs, maxVmfsPerTenant, meta?.vmfCapacity])
+  }, [canCreateVmfs, maxVmfsPerTenant, runtimeInstanceMeta?.runtimeCapacity])
 
-  const vmfCapacityGuidance = useMemo(
-    () => getVmfCapacityGuidance(vmfCapacity, { isLoading: isFetching && canCreateVmfs }),
-    [canCreateVmfs, isFetching, vmfCapacity],
+  const runtimeCapacityGuidance = useMemo(
+    () => getRuntimeCapacityGuidance(runtimeCapacity, {
+      isLoading: isLoadingRuntimeInstances && canCreateVmfs,
+      isUnavailable: isRuntimeCapacityUnavailable,
+    }),
+    [canCreateVmfs, isLoadingRuntimeInstances, isRuntimeCapacityUnavailable, runtimeCapacity],
   )
+  const isRuntimeCapacityReached = Boolean(runtimeCapacity?.isAtCapacity)
+  const isRuntimeCapacityLoading = Boolean(canCreateVmfs && isLoadingRuntimeInstances && !runtimeCapacity)
+  const isRuntimeCapacityRefreshing = Boolean(canCreateVmfs && isFetchingRuntimeInstances)
   const workspaceTableNote = canMutateVmfs ? VMF_LIFECYCLE_NOTE : VMF_READ_ONLY_NOTE
 
   const canManageVmfRow = useCallback(
@@ -834,7 +871,13 @@ function MaintainVmfs() {
   }, [])
 
   const openCreateDialog = useCallback(() => {
-    if (!canCreateVmfs) return
+    if (
+      !canCreateVmfs
+      || isRuntimeCapacityReached
+      || isRuntimeCapacityLoading
+      || isRuntimeCapacityRefreshing
+      || isRuntimeCapacityUnavailable
+    ) return
     setCreateErrors({})
     setCreateForm((current) => ({
       ...current,
@@ -843,7 +886,15 @@ function MaintainVmfs() {
         || (frameworkPackageOptions.length === 1 ? frameworkPackageOptions[0].value : ''),
     }))
     setCreateOpen(true)
-  }, [canCreateVmfs, defaultFrameworkPackageOption, frameworkPackageOptions])
+  }, [
+    canCreateVmfs,
+    defaultFrameworkPackageOption,
+    frameworkPackageOptions,
+    isRuntimeCapacityLoading,
+    isRuntimeCapacityUnavailable,
+    isRuntimeCapacityRefreshing,
+    isRuntimeCapacityReached,
+  ])
 
   const closeCreateDialog = useCallback(() => {
     setCreateOpen(false)
@@ -1108,6 +1159,9 @@ function MaintainVmfs() {
       if (description.length > 1000) {
         nextErrors.description = 'Description must be 1000 characters or fewer.'
       }
+      if (isRuntimeCapacityReached) {
+        nextErrors.form = 'No Value Narrative runtime slots are available for this tenant.'
+      }
       if (!frameworkPackageId) {
         nextErrors.frameworkPackageId = 'Framework package is required.'
       } else if (!frameworkPackageOptions.some((option) => option.value === frameworkPackageId)) {
@@ -1152,7 +1206,7 @@ function MaintainVmfs() {
 
         if (isGovernanceLimitConflictError(appError, 'VMF_LIMIT_REACHED')) {
           addToast({
-            title: 'VMF capacity reached',
+            title: 'Value Narrative capacity reached',
             description: getGovernanceLimitConflictMessage(appError),
             variant: 'warning',
           })
@@ -1194,6 +1248,7 @@ function MaintainVmfs() {
       createForm.name,
       customerId,
       frameworkPackageOptions,
+      isRuntimeCapacityReached,
       tenantId,
     ],
   )
@@ -1479,9 +1534,9 @@ function MaintainVmfs() {
                   size="sm"
                   showIcon
                   className="maintain-vmfs__package-status"
-                  aria-label="Runtime-ready package required"
+                  aria-label="Eligible framework package required"
                 >
-                  No runtime-ready package
+                  No eligible package
                 </Status>
               ) : null}
               <div className="maintain-vmfs__catalogue-buttons">
@@ -1499,21 +1554,27 @@ function MaintainVmfs() {
                     variant="primary"
                     size="sm"
                     onClick={openCreateDialog}
-                    disabled={isMutationLoading}
+                    disabled={
+                      isMutationLoading
+                      || isRuntimeCapacityReached
+                      || isRuntimeCapacityLoading
+                      || isRuntimeCapacityRefreshing
+                      || isRuntimeCapacityUnavailable
+                    }
                   >
                     Create Value Narrative
                   </Button>
                 ) : null}
               </div>
-              {canCreateVmfs && vmfCapacityGuidance ? (
+              {canCreateVmfs && runtimeCapacityGuidance ? (
                 <Status
-                  variant={vmfCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
+                  variant={runtimeCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
                   size="sm"
                   showIcon
                   className="maintain-vmfs__capacity-status"
-                  aria-label={vmfCapacityGuidance.ariaLabel}
+                  aria-label={runtimeCapacityGuidance.ariaLabel}
                 >
-                  {vmfCapacityGuidance.displayValue}
+                  {runtimeCapacityGuidance.displayValue}
                 </Status>
               ) : null}
             </div>
@@ -1643,6 +1704,11 @@ function MaintainVmfs() {
         </Dialog.Header>
         <Dialog.Body className="maintain-vmfs__dialog-body">
           <form className="maintain-vmfs__form" onSubmit={handleCreateSubmit} noValidate>
+            {createErrors.form ? (
+              <p className="maintain-vmfs__error" role="alert">
+                {createErrors.form}
+              </p>
+            ) : null}
             <Input
               id="vmf-create-name"
               label="Name"
@@ -1729,6 +1795,9 @@ function MaintainVmfs() {
                   isFrameworkPackageSelectionLoading
                   || Boolean(frameworkPackageAppError)
                   || frameworkPackageOptions.length === 0
+                  || isRuntimeCapacityReached
+                  || isRuntimeCapacityLoading
+                  || isRuntimeCapacityRefreshing
                 }
               >
                 Create

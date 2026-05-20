@@ -129,6 +129,15 @@ const INITIAL_RUNTIME_VALIDATION_FILTERS = Object.freeze({
   dateFrom: '',
   dateTo: '',
 })
+const DEPENDENCY_TYPE_FILTERS = Object.freeze([
+  { value: '', label: 'All Dependencies' },
+  { value: 'Agent', label: 'Resolved Agents' },
+  { value: 'Skill', label: 'Resolved Skills' },
+  { value: 'Runtime Path', label: 'Runtime Paths' },
+  { value: 'Validation', label: 'Validations' },
+  { value: 'Workflow Policy', label: 'Workflow Policies' },
+  { value: 'UI Contract', label: 'UI Contract' },
+])
 const RUNTIME_VALIDATION_BLOCKING_SEVERITIES = Object.freeze(['CRITICAL', 'ERROR', 'BLOCKING'])
 const RUNTIME_VALIDATION_WARNING_SEVERITIES = Object.freeze(['WARN', 'WARNING'])
 const RUNTIME_VALIDATION_MODE_HELP =
@@ -956,6 +965,32 @@ const getRuntimePathNavigationId = (runtimePath, dependencyRows) => {
   return pathId
 }
 
+const getDependencyNavigationTarget = (row) => {
+  const status = String(row?.status ?? '').trim().toUpperCase()
+  const issues = Array.isArray(row?.issues) ? row.issues : []
+  if (status === 'MISSING' || issues.some((issue) => /not found/i.test(String(issue)))) return ''
+
+  const rowId = String(row?.stableId ?? row?.pathId ?? row?.id ?? row?.key ?? '').trim()
+  if (!rowId) return ''
+
+  switch (row?.type) {
+    case 'Agent':
+      return `/super-admin/runtime-control/agents/${encodeURIComponent(rowId)}`
+    case 'Skill':
+      return `/super-admin/runtime-control/skills/${encodeURIComponent(rowId)}`
+    case 'Runtime Path':
+      return `/super-admin/runtime-control/runtime-paths/${encodeURIComponent(rowId)}/edit`
+    case 'Validation':
+      return `/super-admin/runtime-control/validation-registry/${encodeURIComponent(rowId)}`
+    case 'Workflow Policy':
+      return `/super-admin/runtime-control/workflow-policies/${encodeURIComponent(rowId)}/edit`
+    case 'UI Contract':
+      return `/super-admin/runtime-control/ui-contracts/${encodeURIComponent(rowId)}`
+    default:
+      return ''
+  }
+}
+
 const filterRuntimeValidationRows = (rows, filters) => {
   const normalizedStatus = String(filters.status ?? '').trim().toUpperCase()
   const normalizedSeverity = String(filters.severity ?? '').trim().toUpperCase()
@@ -1265,6 +1300,7 @@ function SuperAdminFrameworkPackageEditor() {
   const [runtimeValidationFilters, setRuntimeValidationFilters] = useState({
     ...INITIAL_RUNTIME_VALIDATION_FILTERS,
   })
+  const [dependencyTypeFilter, setDependencyTypeFilter] = useState('')
   const [runtimeValidationCodeDetail, setRuntimeValidationCodeDetail] = useState(null)
   const [integrityMessageDetail, setIntegrityMessageDetail] = useState(null)
   const [runtimeEvidenceIdentifiersOpen, setRuntimeEvidenceIdentifiersOpen] = useState(false)
@@ -1650,6 +1686,21 @@ function SuperAdminFrameworkPackageEditor() {
     ...(dependencyData?.workflowPolicies ?? []).map((row) => ({ ...row, type: 'Workflow Policy' })),
     ...(dependencyData?.uiContract ? [{ ...dependencyData.uiContract, type: 'UI Contract' }] : []),
   ], [dependencyData])
+  const dependencyFilterOptions = useMemo(() =>
+    DEPENDENCY_TYPE_FILTERS.map((filter) => ({
+      ...filter,
+      count: filter.value
+        ? dependencyRows.filter((row) => row.type === filter.value).length
+        : dependencyRows.length,
+    })),
+  [dependencyRows])
+  const filteredDependencyRows = useMemo(() => {
+    if (!dependencyTypeFilter) return dependencyRows
+    return dependencyRows.filter((row) => row.type === dependencyTypeFilter)
+  }, [dependencyRows, dependencyTypeFilter])
+  const dependencyEmptyMessage = dependencyTypeFilter
+    ? `No ${dependencyTypeFilter.toLowerCase()} dependencies resolved for this package.`
+    : 'No runtime dependencies resolved for this package.'
   const integrityRows = displayedIntegrityData?.checks ?? []
   const activePackageLocked = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
   const validatedStructureLocked = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
@@ -2135,10 +2186,24 @@ function SuperAdminFrameworkPackageEditor() {
     }))
   }
 
+  const updateDependencyTypeFilter = (value) => {
+    setDependencyTypeFilter(value)
+    setTablePages((current) => ({
+      ...current,
+      dependencies: 1,
+    }))
+  }
+
   const handleRuntimePathClickthrough = (runtimePath) => {
     const pathId = getRuntimePathNavigationId(runtimePath, dependencyRows)
     if (!pathId) return
     navigate(`/super-admin/runtime-control/runtime-paths/${encodeURIComponent(pathId)}/edit`)
+  }
+
+  const handleDependencyClickthrough = (row) => {
+    const target = getDependencyNavigationTarget(row)
+    if (!target) return
+    navigate(target)
   }
 
   const executeSave = async (payload) => {
@@ -2447,9 +2512,9 @@ function SuperAdminFrameworkPackageEditor() {
   const sectionTablePage = getClampedPage(tablePages.sections, sectionTableTotalPages)
   const paginatedSectionRows = getPaginatedRows(sectionRows, sectionTablePage)
 
-  const dependencyTableTotalPages = getTableTotalPages(dependencyRows.length)
+  const dependencyTableTotalPages = getTableTotalPages(filteredDependencyRows.length)
   const dependencyTablePage = getClampedPage(tablePages.dependencies, dependencyTableTotalPages)
-  const paginatedDependencyRows = getPaginatedRows(dependencyRows, dependencyTablePage)
+  const paginatedDependencyRows = getPaginatedRows(filteredDependencyRows, dependencyTablePage)
 
   const integrityTableTotalPages = getTableTotalPages(integrityRows.length)
   const integrityTablePage = getClampedPage(tablePages.integrity, integrityTableTotalPages)
@@ -3750,32 +3815,43 @@ function SuperAdminFrameworkPackageEditor() {
                         <>
                           <div
                             className="super-admin-framework-packages__token-list super-admin-framework-package-editor__summary-chip-row"
-                            aria-label="Dependency summary"
+                            role="group"
+                            aria-label="Dependency filters"
                           >
-                            <Badge variant="neutral" size="md" pill outline>
-                              Resolved Agents: {Number(dependencyData?.summary?.agents) || 0}
-                            </Badge>
-                            <Badge variant="neutral" size="md" pill outline>
-                              Resolved Skills: {Number(dependencyData?.summary?.skills) || 0}
-                            </Badge>
-                            <Badge variant="neutral" size="md" pill outline>
-                              Runtime Paths: {Number(dependencyData?.summary?.runtimePaths) || 0}
-                            </Badge>
-                            <Badge variant="neutral" size="md" pill outline>
-                              Validations: {Number(dependencyData?.summary?.validations) || 0}
-                            </Badge>
-                            <Badge variant="neutral" size="md" pill outline>
-                              Workflow Policies: {Number(dependencyData?.summary?.workflowPolicies) || 0}
-                            </Badge>
-                            <Badge variant="neutral" size="md" pill outline>
-                              UI Contract: {Number(dependencyData?.summary?.uiContract) || 0}
-                            </Badge>
+                            {dependencyFilterOptions.map((filter) => (
+                              <button
+                                key={filter.value || 'all'}
+                                type="button"
+                                className="super-admin-framework-package-editor__dependency-filter"
+                                data-active={dependencyTypeFilter === filter.value ? 'true' : 'false'}
+                                aria-pressed={dependencyTypeFilter === filter.value}
+                                onClick={() => updateDependencyTypeFilter(filter.value)}
+                              >
+                                {filter.label}: {filter.count}
+                              </button>
+                            ))}
                           </div>
                           <TableSurface
                             ariaLabel="Framework package dependencies"
                             columns={[
                               { key: 'type', label: 'Type', width: '16%' },
-                              { key: 'key', label: 'Key', width: '26%', render: (value) => <code className="super-admin-framework-package-editor__code-token">{value}</code> },
+                              { key: 'key', label: 'Key', width: '26%', render: (value, row) => {
+                                const target = getDependencyNavigationTarget(row)
+                                if (!target) {
+                                  return <code className="super-admin-framework-package-editor__code-token">{value}</code>
+                                }
+
+                                return (
+                                  <button
+                                    type="button"
+                                    className="super-admin-framework-package-editor__dependency-link"
+                                    onClick={() => handleDependencyClickthrough(row)}
+                                    aria-label={`Open ${row.type} ${row.name || value}`}
+                                  >
+                                    <code className="super-admin-framework-package-editor__code-token">{value}</code>
+                                  </button>
+                                )
+                              } },
                               { key: 'name', label: 'Name', width: '24%' },
                               { key: 'status', label: 'Status', width: '14%', render: (value) => (
                                 <Status size="sm" showIcon variant={getCheckStatusVariant(value)}>{value}</Status>
@@ -3783,7 +3859,7 @@ function SuperAdminFrameworkPackageEditor() {
                               { key: 'issues', label: 'Issues', width: '20%', render: formatIssueList },
                             ]}
                             data={paginatedDependencyRows}
-                            emptyMessage="No runtime dependencies resolved for this package."
+                            emptyMessage={dependencyEmptyMessage}
                             paginationLabel="Framework package dependencies pagination"
                             currentPage={dependencyTablePage}
                             totalPages={dependencyTableTotalPages}

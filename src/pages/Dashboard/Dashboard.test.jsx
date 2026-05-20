@@ -550,5 +550,46 @@ describe('Dashboard page', () => {
     expect(screen.queryByText('Default Tenant')).not.toBeInTheDocument()
     expect(screen.getByText(/person 2 person uses a single tenant/i)).toBeInTheDocument()
     expect(screen.getByText(/context ready/i)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tenant administration/i })).not.toBeInTheDocument()
+  })
+
+  it('shows tenant administration only for multi-tenant customer or tenant admins', () => {
+    mockRole({
+      isCustomerAdmin: false,
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [
+        {
+          customerId: 'cust-1',
+          tenantId: 'ten-1',
+          roles: ['TENANT_ADMIN'],
+          permissions: ['VMF_VIEW'],
+        },
+      ],
+    })
+
+    renderDashboard()
+
+    expect(screen.getByRole('link', { name: /tenant administration/i })).toBeInTheDocument()
+  })
+
+  it('hides tenant administration for multi-tenant users without admin scope', () => {
+    mockRole({
+      isCustomerAdmin: false,
+      accessibleCustomerIds: ['cust-1'],
+      memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+      tenantMemberships: [
+        {
+          customerId: 'cust-1',
+          tenantId: 'ten-1',
+          roles: ['USER'],
+          permissions: ['VMF_VIEW'],
+        },
+      ],
+    })
+
+    renderDashboard()
+
+    expect(screen.queryByRole('link', { name: /tenant administration/i })).not.toBeInTheDocument()
   })
 })

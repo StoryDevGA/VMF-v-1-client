@@ -780,11 +780,66 @@
 }
 
 .super-admin-framework-package-editor__summary-chip-row > .badge,
-.super-admin-framework-package-editor__summary-chip-row > .status {
+.super-admin-framework-package-editor__summary-chip-row > .status,
+.super-admin-framework-package-editor__summary-chip-row > .super-admin-framework-package-editor__dependency-filter {
   justify-content: center;
   width: 100%;
   min-width: 0;
   text-align: center;
+}
+
+.super-admin-framework-package-editor__dependency-filter {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--spacing-md) + var(--spacing-sm));
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  border-radius: var(--border-radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.super-admin-framework-package-editor__dependency-filter:hover,
+.super-admin-framework-package-editor__dependency-filter:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary-300) 72%, var(--color-border));
+  color: var(--color-text-primary);
+}
+
+.super-admin-framework-package-editor__dependency-filter[data-active='true'] {
+  border-color: var(--color-primary-300);
+  background: color-mix(in srgb, var(--color-primary-300) 18%, transparent);
+  color: var(--color-text-primary);
+}
+
+.super-admin-framework-package-editor__dependency-link {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.super-admin-framework-package-editor__dependency-link .super-admin-framework-package-editor__code-token {
+  text-decoration: underline;
+  text-decoration-thickness: var(--border-width-thin);
+  text-underline-offset: var(--spacing-2xs);
+}
+
+.super-admin-framework-package-editor__dependency-link:hover .super-admin-framework-package-editor__code-token,
+.super-admin-framework-package-editor__dependency-link:focus-visible .super-admin-framework-package-editor__code-token {
+  color: var(--color-primary-300);
 }
 
 .super-admin-framework-package-editor__runtime-validation-summary-panel,

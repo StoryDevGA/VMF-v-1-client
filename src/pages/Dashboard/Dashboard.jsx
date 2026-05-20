@@ -844,49 +844,54 @@ function Dashboard() {
     return []
   }, [contextReady])
 
-  const secondaryNavigationItems = useMemo(() => [
-    {
-      badge: {
-        label: canOpenVmfWorkspace ? 'Current' : 'Unavailable',
-        variant: canOpenVmfWorkspace ? 'success' : 'neutral',
+  const secondaryNavigationItems = useMemo(() => {
+    const items = [
+      {
+        badge: {
+          label: canOpenVmfWorkspace ? 'Current' : 'Unavailable',
+          variant: canOpenVmfWorkspace ? 'success' : 'neutral',
+        },
+        disabled: !canOpenVmfWorkspace,
+        icon: MdOutlineDashboardCustomize,
+        meta: canOpenVmfWorkspace ? 'Current VMF runtime workspace' : 'VMF workspace unavailable',
+        title: 'Value Narrative Workspace',
+        to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
       },
-      disabled: !canOpenVmfWorkspace,
-      icon: MdOutlineDashboardCustomize,
-      meta: canOpenVmfWorkspace ? 'Current VMF runtime workspace' : 'VMF workspace unavailable',
-      title: 'Value Narrative Workspace',
-      to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
-    },
-    {
-      badge: { label: 'Planned', variant: 'neutral' },
-      disabled: true,
-      icon: MdOutlineAssessment,
-      meta: 'Output workspace is planned',
-      title: 'Outputs',
-      to: '/app/dashboard',
-    },
-    {
-      badge: { label: 'Planned', variant: 'neutral' },
-      disabled: true,
-      icon: MdOutlineInsights,
-      meta: 'Insights workspace is planned',
-      title: 'Insights',
-      to: '/app/dashboard',
-    },
-    {
-      badge: {
-        label: hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess ? 'Admin' : 'Unavailable',
-        variant: hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess ? 'info' : 'neutral',
+      {
+        badge: { label: 'Planned', variant: 'neutral' },
+        disabled: true,
+        icon: MdOutlineAssessment,
+        meta: 'Output workspace is planned',
+        title: 'Outputs',
+        to: '/app/dashboard',
       },
-      disabled: !hasSelectedCustomerAdminAccess && !hasSelectedCustomerTenantAdminAccess,
-      icon: MdOutlinePeopleAlt,
-      meta: 'Tenant and user administration',
-      title: 'Tenant Administration',
-      to: '/app/administration/maintain-tenants',
-    },
-  ], [
+      {
+        badge: { label: 'Planned', variant: 'neutral' },
+        disabled: true,
+        icon: MdOutlineInsights,
+        meta: 'Insights workspace is planned',
+        title: 'Insights',
+        to: '/app/dashboard',
+      },
+    ]
+
+    if (supportsTenantManagement && (hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess)) {
+      items.push({
+        badge: { label: 'Admin', variant: 'info' },
+        disabled: false,
+        icon: MdOutlinePeopleAlt,
+        meta: 'Tenant and user administration',
+        title: 'Tenant Administration',
+        to: '/app/administration/maintain-tenants',
+      })
+    }
+
+    return items
+  }, [
     canOpenVmfWorkspace,
     hasSelectedCustomerAdminAccess,
     hasSelectedCustomerTenantAdminAccess,
+    supportsTenantManagement,
   ])
 
   const runtimeActionGridClassName = [
