@@ -34,9 +34,11 @@ import {
   getExecutionStateVariant,
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
+  getRuntimeInstanceRouteId,
   getRuntimeLifecycleStatus,
   getRuntimeReadinessLabel,
   getRuntimeStatusVariant,
+  getRuntimeWorkspaceRoute,
 } from '../../utils/runtimeWorkspace.js'
 import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './Dashboard.css'
@@ -107,24 +109,6 @@ const findTenantMembershipByCustomer = (user, customerId, role) => {
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? vmf?.runtimeInstanceKey ?? '').trim()
-
-const getRuntimeInstanceRouteId = (runtimeInstance) =>
-  String(
-    runtimeInstance?.runtimeInstanceKey
-      ?? runtimeInstance?.runtimeInstanceId
-      ?? runtimeInstance?.runtimeId
-      ?? runtimeInstance?.id
-      ?? runtimeInstance?._id
-      ?? '',
-  ).trim()
-
-const getRuntimeWorkspaceTo = (runtimeInstanceId) => {
-  const normalizedRuntimeInstanceId = String(runtimeInstanceId ?? '').trim()
-  if (!normalizedRuntimeInstanceId) return '/app/workspaces/vmf'
-
-  const params = new URLSearchParams({ runtimeInstanceId: normalizedRuntimeInstanceId })
-  return `/app/workspaces/vmf?${params.toString()}`
-}
 
 const getVmfName = (vmf) => {
   const candidate = vmf?.name ?? vmf?.title ?? vmf?.label ?? getVmfId(vmf)
@@ -741,7 +725,7 @@ function Dashboard() {
       const packageLabel = getFrameworkPackageLabel(runtimeInstance)
       const packageVersion = getFrameworkPackageVersion(runtimeInstance)
       const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
-      const runtimeWorkspaceTo = getRuntimeWorkspaceTo(runtimeInstanceId)
+      const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
 
       return {
         actionKey: 'OPEN_RUNTIME_INSTANCE',
@@ -791,7 +775,7 @@ function Dashboard() {
         readiness: getRuntimeReadinessLabel(runtimeInstance),
         lastActivity: formatUpdatedLabel(runtimeInstance?.updatedAt),
         nextAction: `Open ${packageVersion}`,
-        to: getRuntimeWorkspaceTo(runtimeInstanceId),
+        to: getRuntimeWorkspaceRoute(runtimeInstanceId),
       }
     })
   }, [contextReady, runtimeInstanceRows, tenantScopeValue])

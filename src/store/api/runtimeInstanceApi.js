@@ -16,6 +16,18 @@ export const runtimeInstanceListTag = (runtimeType = 'ALL') => ({
 export const getRuntimeInstanceId = (runtimeInstance) =>
   runtimeInstance?.id ?? runtimeInstance?._id ?? runtimeInstance?.runtimeInstanceKey
 
+export const getRuntimeInstanceCacheIds = (runtimeInstance) => [
+  runtimeInstance?.id,
+  runtimeInstance?._id,
+  runtimeInstance?.runtimeInstanceKey,
+]
+  .map((value) => String(value ?? '').trim())
+  .filter(Boolean)
+  .filter((value, index, values) => values.indexOf(value) === index)
+
+const buildRuntimeInstanceTags = (ids) =>
+  ids.map((id) => ({ type: 'RuntimeInstance', id }))
+
 const appendParam = (params, key, value) => {
   const trimmed = String(value ?? '').trim()
   if (trimmed) params.set(key, trimmed)
@@ -44,8 +56,8 @@ export const getRuntimeInstanceListTags = (result, _error, { runtimeType }) =>
   result?.data
     ? [
         ...result.data
-          .map((runtimeInstance) => getRuntimeInstanceId(runtimeInstance))
-          .filter(Boolean)
+          .flatMap(getRuntimeInstanceCacheIds)
+          .filter((id, index, ids) => ids.indexOf(id) === index)
           .map((id) => ({ type: 'RuntimeInstance', id })),
         runtimeInstanceListTag(runtimeType),
       ]
@@ -64,9 +76,25 @@ export const getCreateRuntimeInstanceInvalidationTags = (_result, _error, { body
 export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}`
 
-export const getRuntimeInstanceDetailTags = (_result, _error, { runtimeInstanceId }) => [
-  { type: 'RuntimeInstance', id: runtimeInstanceId },
-]
+export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
+
+export const getRuntimeInstanceDetailTags = (result, _error, { runtimeInstanceId }) =>
+  buildRuntimeInstanceTags([
+    String(runtimeInstanceId ?? '').trim(),
+    ...getRuntimeInstanceCacheIds(result?.data ?? result),
+  ].filter(Boolean).filter((id, index, ids) => ids.indexOf(id) === index))
+
+export const getRuntimeRendererTags = (result, _error, { runtimeInstanceId }) => {
+  const runtimeInstance = result?.data?.runtimeInstance
+    ?? result?.runtimeInstance
+    ?? null
+
+  return buildRuntimeInstanceTags([
+    String(runtimeInstanceId ?? '').trim(),
+    ...getRuntimeInstanceCacheIds(runtimeInstance),
+  ].filter(Boolean).filter((id, index, ids) => ids.indexOf(id) === index))
+}
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -84,6 +112,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildRuntimeInstanceDetailQuery,
       providesTags: getRuntimeInstanceDetailTags,
     }),
+
+    getRuntimeRenderer: build.query({
+      query: buildRuntimeRendererQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
   }),
   overrideExisting: false,
 })
@@ -92,4 +125,5 @@ export const {
   useListRuntimeInstancesQuery,
   useCreateRuntimeInstanceMutation,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeRendererQuery,
 } = runtimeInstanceApi

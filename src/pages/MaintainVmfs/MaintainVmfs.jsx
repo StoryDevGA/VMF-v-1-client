@@ -16,6 +16,7 @@ import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { Link } from '../../components/Link'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { DEFAULT_TABLE_PAGE_SIZE, Table } from '../../components/Table'
@@ -54,6 +55,7 @@ import {
   getRuntimeReadinessLabel,
   getRuntimeReadinessVariant,
   getRuntimeStatusVariant,
+  getRuntimeWorkspaceRoute,
 } from '../../utils/runtimeWorkspace.js'
 import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
 import './MaintainVmfs.css'
@@ -306,11 +308,19 @@ function renderVmfSummary(_value, row) {
 function renderRuntimeInstanceSummary(_value, row) {
   const name = String(row?.name ?? '').trim() || 'Value Narrative'
   const displayId = getRuntimeInstanceDisplayId(row, row?.runtimeType || 'VALUE_NARRATIVE')
+  const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(row)
 
   return (
     <div className="maintain-vmfs__vmf-summary">
       <div className="maintain-vmfs__vmf-summary-header">
-        <span className="maintain-vmfs__vmf-name">{name}</span>
+        <Link
+          to={runtimeWorkspaceTo}
+          className="maintain-vmfs__vmf-name"
+          variant="primary"
+          underline="hover"
+        >
+          {name}
+        </Link>
         <span className="maintain-vmfs__vmf-description">{displayId}</span>
       </div>
     </div>

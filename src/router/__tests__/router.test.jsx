@@ -75,6 +75,10 @@ vi.mock('../../pages/MaintainVmfs', () => ({
   default: () => <h1>VMF Workspace</h1>,
 }))
 
+vi.mock('../../pages/RuntimeWorkspace', () => ({
+  default: () => <h1>Runtime Workspace</h1>,
+}))
+
 vi.mock('../../pages/Dashboard', () => ({
   default: () => <h1>Dashboard</h1>,
 }))
@@ -262,6 +266,45 @@ describe('Router', () => {
       expect(vmfGuardRoute?.element?.props?.unauthorizedRedirect).toBe('/app/dashboard')
       expect(vmfRoute?.path).toBe('vmf')
     })
+
+    it('should route runtime workspaces without hard-coding VMF_VIEW before runtime type resolution', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
+      const customerAppRoute = appRoute?.children?.[0]
+      const runtimeRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'runtime/:runtimeInstanceId',
+      )
+
+      expect(runtimeRoute?.path).toBe('runtime/:runtimeInstanceId')
+      expect(runtimeRoute?.element?.props?.requiredSelectedScopePermission).toBeUndefined()
+      expect(runtimeRoute?.children).toBeUndefined()
+    })
+
+    it('should render the runtime workspace route for authenticated customer users', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/runtime/value-narrative-001'],
+      })
+
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'customer-user-1',
+            name: 'Customer User',
+            email: 'customer@example.com',
+            memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(
+        await screen.findByRole('heading', { name: /^runtime workspace$/i }, { timeout: 10000 }),
+      ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
 
     it('should redirect the legacy manage-vmfs route to the VMF workspace route', () => {
       const rootRoute = router.routes.find((route) => route.path === '/')

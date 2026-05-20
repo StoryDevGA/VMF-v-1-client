@@ -4,10 +4,12 @@ import {
   getExecutionStateVariant,
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
+  getRuntimeInstanceRouteId,
   getRuntimeLifecycleStatus,
   getRuntimeReadinessLabel,
   getRuntimeReadinessVariant,
   getRuntimeStatusVariant,
+  getRuntimeWorkspaceRoute,
   getRuntimeWorkTypePrefix,
 } from './runtimeWorkspace.js'
 
@@ -31,6 +33,16 @@ describe('runtimeWorkspace utilities', () => {
       .toBe('DA-2026-000021')
     expect(getRuntimeInstanceDisplayId({ id: 'vmf-123' }, 'VALUE_NARRATIVE'))
       .toBe('VN - Pending runtime ID')
+    expect(getRuntimeInstanceRouteId({ runtimeInstanceKey: 'value-narrative-001', id: 'runtime-1' }))
+      .toBe('value-narrative-001')
+    expect(getRuntimeInstanceRouteId({ id: 'runtime-1' }))
+      .toBe('runtime-1')
+    expect(getRuntimeWorkspaceRoute({ runtimeInstanceKey: 'value-narrative-001' }))
+      .toBe('/app/runtime/value-narrative-001')
+    expect(getRuntimeWorkspaceRoute('value narrative/001'))
+      .toBe('/app/runtime/value%20narrative%2F001')
+    expect(getRuntimeWorkspaceRoute({}))
+      .toBe('/app/workspaces/vmf')
   })
 
   it('maps runtime lifecycle and execution state variants separately', () => {

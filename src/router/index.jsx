@@ -107,6 +107,9 @@ const MaintainTenants = lazy(
 const MaintainVmfs = lazy(
   () => import('../pages/MaintainVmfs'),
 )
+const RuntimeWorkspace = lazy(
+  () => import('../pages/RuntimeWorkspace'),
+)
 const TenantLinkedUsersWorkspace = lazy(
   () => import('../pages/MaintainTenants/TenantLinkedUsersWorkspace'),
 )
@@ -190,6 +193,10 @@ export const router = createBrowserRouter([
                     ],
                   },
                 ],
+              },
+              {
+                path: 'runtime/:runtimeInstanceId',
+                element: <RuntimeWorkspace />,
               },
               {
                 path: 'administration',

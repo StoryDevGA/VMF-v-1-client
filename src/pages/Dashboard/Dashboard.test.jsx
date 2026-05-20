@@ -326,7 +326,7 @@ describe('Dashboard page', () => {
     expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('links runtime instance work back to the VMF workspace', () => {
+  it('links runtime instance work to the runtime renderer workspace', () => {
     useListRuntimeInstancesQuery.mockReturnValue({
       data: {
         data: [
@@ -361,9 +361,9 @@ describe('Dashboard page', () => {
       { skip: false },
     )
     expect(screen.getByRole('link', { name: /continue new package/i }))
-      .toHaveAttribute('href', '/app/workspaces/vmf?runtimeInstanceId=value-narrative-859907')
+      .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
     expect(screen.getByRole('link', { name: /open 2\.3\.569357/i }))
-      .toHaveAttribute('href', '/app/workspaces/vmf?runtimeInstanceId=value-narrative-859907')
+      .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
     expect(screen.getByText('New Package')).toBeInTheDocument()
     expect(screen.getByText('value-narrative-859907')).toBeInTheDocument()
     expect(screen.getByText('Package: latest-package')).toBeInTheDocument()

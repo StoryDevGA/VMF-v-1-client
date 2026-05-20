@@ -86,6 +86,26 @@ export const getRuntimeInstanceDisplayId = (
   return `${prefix} - ${fallback}`
 }
 
+export const getRuntimeInstanceRouteId = (runtimeRecord) =>
+  String(
+    runtimeRecord?.runtimeInstanceKey
+      ?? runtimeRecord?.runtimeInstanceId
+      ?? runtimeRecord?.runtimeId
+      ?? runtimeRecord?.id
+      ?? runtimeRecord?._id
+      ?? '',
+  ).trim()
+
+export const getRuntimeWorkspaceRoute = (runtimeRecordOrId) => {
+  const runtimeInstanceId = typeof runtimeRecordOrId === 'object' && runtimeRecordOrId !== null
+    ? getRuntimeInstanceRouteId(runtimeRecordOrId)
+    : String(runtimeRecordOrId ?? '').trim()
+
+  if (!runtimeInstanceId) return '/app/workspaces/vmf'
+
+  return `/app/runtime/${encodeURIComponent(runtimeInstanceId)}`
+}
+
 export const getRuntimeLifecycleStatus = (runtimeRecord, fallback = 'DRAFT') => {
   const status = normalizeRuntimeToken(
     runtimeRecord?.runtimeStatus
