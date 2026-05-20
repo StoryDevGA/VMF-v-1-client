@@ -611,6 +611,60 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
   })
 
+  it('explains when tenant capacity exists but no runtime-ready package is available', async () => {
+    const user = userEvent.setup()
+
+    listQueryResponse = {
+      data: {
+        data: [],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          vmfCapacity: {
+            maxVmfs: 4,
+            currentCount: 2,
+            remainingCount: 2,
+            isAtCapacity: false,
+            countMode: 'ACTIVE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    frameworkPackageQueryResponse = {
+      data: { data: [], meta: { page: 1, totalPages: 1, total: 0 } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
+
+    expect(screen.getByRole('status', { name: /^vmf capacity/i }))
+      .toHaveTextContent(/2 of 4 left/i)
+    expect(screen.getByRole('status', { name: /runtime-ready package required/i }))
+      .toHaveTextContent(/no runtime-ready package/i)
+    expect(actionBar).toHaveTextContent(
+      /No runtime-ready package\s*Back\s*Create Value Narrative\s*2 of 4 left/i,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    const dialog = screen.getByRole('dialog')
+
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
+      .toBeDisabled()
+    expect(within(dialog).getByText(/capacity and package readiness are checked separately/i))
+      .toBeInTheDocument()
+    expect(within(dialog).getByText(/certified dependency lock, active deployment, active activation/i))
+      .toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /^create$/i })).toBeDisabled()
+  })
+
   it('renders Back, capacity, and Create Value Narrative in the compact catalogue action bar', () => {
     listQueryResponse = {
       data: {

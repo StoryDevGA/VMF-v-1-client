@@ -100,6 +100,12 @@ const VMF_READ_ONLY_NOTE =
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
+const VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER =
+  'No runtime-ready package is available. Capacity and package readiness are checked separately.'
+
+const VMF_RUNTIME_PACKAGE_UNAVAILABLE_MESSAGE =
+  'The capacity badge only shows tenant VMF slots. Creation also requires a runtime-ready VMF framework package, and none are currently available for this customer. A package must have a certified dependency lock, active deployment, active activation, and matching snapshot evidence before it can be selected.'
+
 const getLifecycleVariant = (value) => {
   if (value === 'PUBLISHED') return 'success'
   if (value === 'CANONISED') return 'info'
@@ -747,6 +753,10 @@ function MaintainVmfs() {
 
   const isFrameworkPackageSelectionLoading =
     isLoadingFrameworkPackages || isFetchingFrameworkPackages
+  const hasNoRuntimeReadyFrameworkPackages =
+    !isFrameworkPackageSelectionLoading
+    && !frameworkPackageAppError
+    && frameworkPackageOptions.length === 0
 
   const maxVmfsPerTenant = useMemo(() => {
     const candidateValues = [
@@ -1463,6 +1473,17 @@ function MaintainVmfs() {
               role="group"
               aria-label="VMF catalogue actions"
             >
+              {canCreateVmfs && hasNoRuntimeReadyFrameworkPackages ? (
+                <Status
+                  variant="warning"
+                  size="sm"
+                  showIcon
+                  className="maintain-vmfs__package-status"
+                  aria-label="Runtime-ready package required"
+                >
+                  No runtime-ready package
+                </Status>
+              ) : null}
               <div className="maintain-vmfs__catalogue-buttons">
                 <Button
                   type="button"
@@ -1653,7 +1674,7 @@ function MaintainVmfs() {
               helperText={
                 frameworkPackageOptions.length > 0
                   ? 'Select the active runtime-ready package this instance will snapshot at creation.'
-                  : 'No runtime-ready VMF framework packages are available for this customer.'
+                  : VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER
               }
               disabled={
                 isFrameworkPackageSelectionLoading
@@ -1665,6 +1686,11 @@ function MaintainVmfs() {
             {frameworkPackageAppError ? (
               <p className="maintain-vmfs__error" role="alert">
                 {frameworkPackageAppError.message}
+              </p>
+            ) : null}
+            {hasNoRuntimeReadyFrameworkPackages ? (
+              <p className="maintain-vmfs__runtime-package-note">
+                {VMF_RUNTIME_PACKAGE_UNAVAILABLE_MESSAGE}
               </p>
             ) : null}
             <Textarea
