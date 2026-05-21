@@ -16,6 +16,7 @@ import { Input } from '../../components/Input'
 import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
 import {
+  useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -31,9 +32,34 @@ import {
 import './RuntimeWorkspace.css'
 
 const EMPTY_ARRAY = Object.freeze([])
-const ACTION_PREVIEW_NOTE_ID = 'runtime-action-preview-note'
 
 const getRendererPayload = (response) => response?.data ?? null
+
+const TOKEN_STATUS_VARIANTS = Object.freeze({
+  BLOCKED: 'error',
+  DRAFT: 'neutral',
+  FAILED: 'error',
+  IN_REVIEW: 'info',
+  PASSED: 'success',
+  READY: 'success',
+  UNKNOWN: 'neutral',
+  VALIDATED: 'success',
+})
+
+const normalizeRuntimeActionToken = (value) => String(value ?? '').trim().toUpperCase()
+
+const getDefaultConfirmationMessage = (action) => {
+  const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'this runtime action').trim()
+  return `Confirm ${label}?`
+}
+
+const getTokenStatusVariant = (value, fallback = 'neutral') =>
+  TOKEN_STATUS_VARIANTS[normalizeRuntimeActionToken(value)] ?? fallback
+
+const getSummaryValueClassName = (variant = 'neutral') => [
+  'runtime-workspace__summary-value',
+  variant !== 'neutral' && `runtime-workspace__summary-value--${variant}`,
+].filter(Boolean).join(' ')
 
 const stringifyValue = (value) => {
   if (value === null || value === undefined) return ''
@@ -131,6 +157,19 @@ const getSectionControlId = (section) => {
     .replace(/^-+|-+$/g, '')
     .toLowerCase()
   return `runtime-field-${rawId || 'section'}`
+}
+
+function RuntimeSummaryTile({
+  label,
+  value,
+  variant = 'neutral',
+}) {
+  return (
+    <li className="runtime-workspace__summary-card">
+      <span className="runtime-workspace__summary-label">{label}</span>
+      <strong className={getSummaryValueClassName(variant)}>{value}</strong>
+    </li>
+  )
 }
 
 function RuntimeValueControl({
@@ -274,84 +313,106 @@ function RuntimeSection({
   }
 
   return (
-    <Card variant="default" className="runtime-workspace__section-card" role="listitem">
-      <Card.Body className="runtime-workspace__section-body">
-        <form className="runtime-workspace__section-form" onSubmit={handleSubmit}>
-        <div className="runtime-workspace__section-heading">
-          <div>
-            <h2>{section.label}</h2>
-            <p>{section.runtimePath}</p>
-          </div>
-          <div className="runtime-workspace__section-badges">
-            {section.required ? (
-              <Badge variant="warning" size="sm" pill outline>Required</Badge>
+    <li className="runtime-workspace__section-item">
+      <Card variant="default" className="runtime-workspace__section-card">
+        <Card.Body className="runtime-workspace__section-body">
+          <form className="runtime-workspace__section-form" onSubmit={handleSubmit}>
+            <div className="runtime-workspace__section-heading">
+              <div>
+                <h2>{section.label}</h2>
+                <p>{section.runtimePath}</p>
+              </div>
+              <div className="runtime-workspace__section-badges">
+                {section.required ? (
+                  <Badge variant="warning" size="sm" pill outline>Required</Badge>
+                ) : null}
+                <Badge variant={editable ? 'success' : 'neutral'} size="sm" pill outline>
+                  {editable ? 'Editable' : 'Read only preview'}
+                </Badge>
+              </div>
+            </div>
+            <RuntimeValueControl
+              section={section}
+              value={draftValue}
+              editable={editable}
+              disabled={isSaving}
+              onChange={handleChange}
+            />
+            {resolvedFeedback ? (
+              <Status
+                variant={resolvedFeedback.variant}
+                size="sm"
+                showIcon
+              >
+                {resolvedFeedback.message}
+              </Status>
             ) : null}
-            <Badge variant={editable ? 'success' : 'neutral'} size="sm" pill outline>
-              {editable ? 'Editable' : 'Read only preview'}
-            </Badge>
-          </div>
-        </div>
-        <RuntimeValueControl
-          section={section}
-          value={draftValue}
-          editable={editable}
-          disabled={isSaving}
-          onChange={handleChange}
-        />
-        {resolvedFeedback ? (
-          <Status
-            variant={resolvedFeedback.variant}
-            size="sm"
-            showIcon
-          >
-            {resolvedFeedback.message}
-          </Status>
-        ) : null}
-        <div className="runtime-workspace__section-actions">
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            disabled={!canSave}
-            leftIcon={<MdSave aria-hidden="true" />}
-          >
-            {isSaving ? 'Saving' : 'Save'}
-          </Button>
-        </div>
-        {validationMessages.length > 0 ? (
-          <ul className="runtime-workspace__validation-list" aria-label={`${section.label} validation messages`}>
-            {validationMessages.map((message, index) => (
-              <li key={`${message.validationKey ?? section.key}-${index}`}>
-                <Status
-                  variant={String(message.severity ?? '').toUpperCase() === 'ERROR' ? 'error' : 'warning'}
-                  size="sm"
-                  showIcon
-                >
-                  {message.message}
-                </Status>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        </form>
-      </Card.Body>
-    </Card>
+            <div className="runtime-workspace__section-actions">
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={!canSave}
+                leftIcon={<MdSave aria-hidden="true" />}
+              >
+                {isSaving ? 'Saving' : 'Save'}
+              </Button>
+            </div>
+            {validationMessages.length > 0 ? (
+              <ul className="runtime-workspace__validation-list" aria-label={`${section.label} validation messages`}>
+                {validationMessages.map((message, index) => (
+                  <li key={`${message.validationKey ?? section.key}-${index}`}>
+                    <Status
+                      variant={String(message.severity ?? '').toUpperCase() === 'ERROR' ? 'error' : 'warning'}
+                      size="sm"
+                      showIcon
+                    >
+                      {message.message}
+                    </Status>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </form>
+        </Card.Body>
+      </Card>
+    </li>
   )
 }
 
-function RuntimeActionButton({ action }) {
+function RuntimeActionButton({
+  action,
+  disabled = false,
+  executing = false,
+  onExecute,
+}) {
+  const enabled = Boolean(action?.enabled)
+  const disabledReason = String(action?.disabledReason ?? '').trim()
+  const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey || 'runtime-action')
+  const reasonId = disabledReason
+    ? `runtime-action-disabled-${actionKey.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`
+    : undefined
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled
-      aria-describedby={ACTION_PREVIEW_NOTE_ID}
-      title={action.enabled ? 'Runtime Execution action execution is not live yet.' : action.disabledReason}
-      leftIcon={<MdBolt aria-hidden="true" />}
-    >
-      {action.buttonLabel}
-    </Button>
+    <div className="runtime-workspace__action-item">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!enabled || disabled}
+        loading={executing}
+        aria-describedby={!enabled && disabledReason ? reasonId : undefined}
+        onClick={() => onExecute?.(action)}
+        leftIcon={<MdBolt aria-hidden="true" />}
+      >
+        {action.buttonLabel}
+      </Button>
+      {!enabled && disabledReason ? (
+        <p id={reasonId} className="runtime-workspace__action-disabled-reason">
+          {disabledReason}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -369,7 +430,10 @@ function RuntimeWorkspace() {
     { skip: !runtimeInstanceId },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
+  const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
+  const [executingActionKey, setExecutingActionKey] = useState('')
+  const [actionFeedback, setActionFeedback] = useState(null)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
 
   const renderer = getRendererPayload(rendererResponse)
@@ -393,6 +457,44 @@ function RuntimeWorkspace() {
   const packageKey = String(renderer?.package?.packageKey ?? runtimeInstance?.packageKey ?? '').trim()
   const packageVersion = String(renderer?.package?.frameworkVersion ?? runtimeInstance?.packageVersion ?? '').trim()
   const packageSummary = [packageName || packageKey, packageVersion].filter(Boolean).join(' / ') || '--'
+  const validationState = renderer?.validation?.state ?? 'UNKNOWN'
+  const readinessState = renderer?.readiness?.state ?? 'DRAFT'
+  const summaryItems = [
+    {
+      key: 'runtime-status',
+      label: 'Runtime Status',
+      value: formatRuntimeTokenLabel(runtimeStatus),
+      variant: getRuntimeStatusVariant(runtimeStatus),
+    },
+    {
+      key: 'execution',
+      label: 'Execution',
+      value: formatRuntimeTokenLabel(executionState),
+      variant: getExecutionStateVariant(executionState),
+    },
+    {
+      key: 'lifecycle-stage',
+      label: 'Lifecycle Stage',
+      value: formatRuntimeTokenLabel(renderer?.lifecycle?.stage ?? 'DRAFT'),
+    },
+    {
+      key: 'validation',
+      label: 'Validation',
+      value: formatRuntimeTokenLabel(validationState),
+      variant: getTokenStatusVariant(validationState),
+    },
+    {
+      key: 'readiness',
+      label: 'Readiness',
+      value: formatRuntimeTokenLabel(readinessState),
+      variant: getTokenStatusVariant(readinessState),
+    },
+    {
+      key: 'package',
+      label: 'Package',
+      value: packageSummary,
+    },
+  ]
 
   const handleBack = () => {
     navigate('/app/dashboard')
@@ -444,6 +546,50 @@ function RuntimeWorkspace() {
       })
     } finally {
       setSavingRuntimePath('')
+    }
+  }
+
+  const handleExecuteAction = async (action) => {
+    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+    if (!actionKey || !action?.enabled) return
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setActionFeedback({
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return
+    }
+
+    const confirmationMessage = String(action?.confirmationMessage ?? '').trim()
+      || getDefaultConfirmationMessage(action)
+    if (action?.requiresConfirmation && !window.confirm(confirmationMessage)) {
+      return
+    }
+
+    setExecutingActionKey(actionKey)
+    setActionFeedback(null)
+
+    try {
+      await executeRuntimeAction({
+        runtimeInstanceId,
+        actionKey,
+        body: { expectedUpdatedAt },
+      }).unwrap()
+      setActionFeedback({
+        variant: 'success',
+        message: action?.successMessage || 'Runtime action completed.',
+      })
+      await refetch()
+    } catch (actionError) {
+      const normalizedError = normalizeError(actionError)
+      setActionFeedback({
+        variant: 'error',
+        message: normalizedError.message,
+      })
+    } finally {
+      setExecutingActionKey('')
     }
   }
 
@@ -499,32 +645,16 @@ function RuntimeWorkspace() {
             <h1>{runtimeInstance?.name || 'Runtime Workspace'}</h1>
             <p>{runtimeDisplayId}</p>
           </div>
-          <dl className="runtime-workspace__summary-grid" aria-label="Runtime workspace summary">
-            <div>
-              <dt>Runtime Status</dt>
-              <dd>
-                <Status variant={getRuntimeStatusVariant(runtimeStatus)} size="sm" showIcon>
-                  {formatRuntimeTokenLabel(runtimeStatus)}
-                </Status>
-              </dd>
-            </div>
-            <div>
-              <dt>Execution</dt>
-              <dd>
-                <Status variant={getExecutionStateVariant(executionState)} size="sm" showIcon>
-                  {formatRuntimeTokenLabel(executionState)}
-                </Status>
-              </dd>
-            </div>
-            <div>
-              <dt>Lifecycle Stage</dt>
-              <dd>{formatRuntimeTokenLabel(renderer?.lifecycle?.stage ?? 'DRAFT')}</dd>
-            </div>
-            <div>
-              <dt>Package</dt>
-              <dd>{packageSummary}</dd>
-            </div>
-          </dl>
+          <ul className="runtime-workspace__summary-grid" aria-label="Runtime workspace summary">
+            {summaryItems.map((item) => (
+              <RuntimeSummaryTile
+                key={item.key}
+                label={item.label}
+                value={item.value}
+                variant={item.variant}
+              />
+            ))}
+          </ul>
         </Card.Body>
       </Card>
 
@@ -535,7 +665,7 @@ function RuntimeWorkspace() {
             <Badge variant="neutral" size="sm" pill outline>{sections.length} visible</Badge>
           </div>
           {sections.length > 0 ? (
-            <div className="runtime-workspace__section-list" role="list">
+            <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
               {sections.map((section) => (
                 <RuntimeSection
                   key={`${section.key ?? section.runtimePath}-${stringifyValue(section.value)}`}
@@ -545,7 +675,7 @@ function RuntimeWorkspace() {
                   onSave={handleSaveSection}
                 />
               ))}
-            </div>
+            </ul>
           ) : (
             <Card variant="default" className="runtime-workspace__state-card">
               <Card.Body>
@@ -562,10 +692,10 @@ function RuntimeWorkspace() {
                 <MdBolt aria-hidden="true" />
                 <h2>Actions</h2>
               </div>
-              {actions.length > 0 ? (
-                <p id={ACTION_PREVIEW_NOTE_ID} className="runtime-workspace__feedback">
-                  Runtime action execution is not live in this preview.
-                </p>
+              {actionFeedback ? (
+                <Status variant={actionFeedback.variant} size="sm" showIcon>
+                  {actionFeedback.message}
+                </Status>
               ) : null}
               {actions.length > 0 ? (
                 <div className="runtime-workspace__action-list">
@@ -573,6 +703,9 @@ function RuntimeWorkspace() {
                     <RuntimeActionButton
                       key={action.actionKey}
                       action={action}
+                      disabled={Boolean(executingActionKey)}
+                      executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
+                      onExecute={handleExecuteAction}
                     />
                   ))}
                 </div>

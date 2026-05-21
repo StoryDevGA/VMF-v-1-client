@@ -7,6 +7,7 @@ import {
   cloneWorkflowPolicy,
   INITIAL_WORKFLOW_POLICY_FORM,
   mapWorkflowPolicyToForm,
+  WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS,
   WORKFLOW_POLICY_EXECUTION_TYPES,
   WORKFLOW_POLICY_STEP_TYPES,
   validateWorkflowPolicyForm,
@@ -80,6 +81,18 @@ describe('SuperAdminWorkflowPolicies page', () => {
         selector: 'input#workflow-policy-editor-key',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('keeps the governed action registry aligned with Sprint 2 runtime actions', () => {
+    const optionValues = WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value)
+
+    expect(optionValues).toEqual(expect.arrayContaining([
+      'SAVE_DRAFT',
+      'RUN_VALIDATION',
+      'MARK_READY',
+      'SUBMIT_FOR_REVIEW',
+      'RETURN_TO_DRAFT',
+    ]))
   })
 
   it('supports search, type filtering, framework filtering, and pagination', async () => {

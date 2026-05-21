@@ -11,7 +11,7 @@ export const RUNTIME_STATUS_VARIANTS = Object.freeze({
   ACTIVE: 'success',
   WAITING: 'warning',
   REVIEW: 'info',
-  BLOCKED: 'danger',
+  BLOCKED: 'error',
   COMPLETED: 'success',
   ARCHIVED: 'neutral',
 })
@@ -24,10 +24,10 @@ export const EXECUTION_STATE_VARIANTS = Object.freeze({
   VALIDATING: 'info',
   EXECUTING: 'success',
   WAITING_APPROVAL: 'warning',
-  BLOCKED: 'danger',
+  BLOCKED: 'error',
   PAUSED: 'warning',
-  ERROR: 'danger',
-  FAILED: 'danger',
+  ERROR: 'error',
+  FAILED: 'error',
   COMPLETE: 'success',
   FINISHED: 'success',
 })
@@ -60,7 +60,7 @@ export const getExecutionStateVariant = (executionState, fallback = 'neutral') =
 
 export const getRuntimeReadinessVariant = (readinessLabel) => {
   if (readinessLabel === 'Execution ready') return 'success'
-  if (readinessLabel === 'Execution blocked') return 'danger'
+  if (readinessLabel === 'Execution blocked') return 'error'
   if (readinessLabel === 'Readiness pending') return 'warning'
   return 'info'
 }

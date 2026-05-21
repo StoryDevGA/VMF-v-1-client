@@ -87,6 +87,14 @@ export const buildMutateRuntimeStateQuery = ({ runtimeInstanceId, body }) => ({
   body,
 })
 
+export const buildExecuteRuntimeActionQuery = ({ runtimeInstanceId, actionKey, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/actions/${
+    encodeURIComponent(String(actionKey ?? '').trim())
+  }`,
+  method: 'POST',
+  body,
+})
+
 export const getRuntimeInstanceDetailTags = (result, _error, { runtimeInstanceId }) =>
   buildRuntimeInstanceTags([
     String(runtimeInstanceId ?? '').trim(),
@@ -121,6 +129,8 @@ export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeI
   ]
 }
 
+export const getExecuteRuntimeActionInvalidationTags = getMutateRuntimeStateInvalidationTags
+
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     listRuntimeInstances: build.query({
@@ -147,6 +157,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildMutateRuntimeStateQuery,
       invalidatesTags: getMutateRuntimeStateInvalidationTags,
     }),
+
+    executeRuntimeAction: build.mutation({
+      query: buildExecuteRuntimeActionQuery,
+      invalidatesTags: getExecuteRuntimeActionInvalidationTags,
+    }),
   }),
   overrideExisting: false,
 })
@@ -157,4 +172,5 @@ export const {
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useExecuteRuntimeActionMutation,
 } = runtimeInstanceApi

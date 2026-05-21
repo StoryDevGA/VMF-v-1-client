@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCreateRuntimeInstanceQuery,
+  buildExecuteRuntimeActionQuery,
   buildMutateRuntimeStateQuery,
   buildRuntimeInstanceDetailQuery,
   buildRuntimeInstanceListQuery,
   buildRuntimeRendererQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
   getCreateRuntimeInstanceInvalidationTags,
+  getExecuteRuntimeActionInvalidationTags,
   getMutateRuntimeStateInvalidationTags,
   getRuntimeInstanceDetailTags,
   getRuntimeInstanceListTags,
@@ -14,6 +16,7 @@ import {
   runtimeInstanceApi,
   runtimeInstanceListTag,
   useCreateRuntimeInstanceMutation,
+  useExecuteRuntimeActionMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
   useListRuntimeInstancesQuery,
@@ -27,6 +30,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('executeRuntimeAction')
   })
 
   it('exports runtime instance hooks', () => {
@@ -35,6 +39,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
     expect(typeof useMutateRuntimeStateMutation).toBe('function')
+    expect(typeof useExecuteRuntimeActionMutation).toBe('function')
   })
 
   it('exposes endpoint initiate functions', () => {
@@ -43,6 +48,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.executeRuntimeAction.initiate).toBe('function')
   })
 
   it('builds the list query with the required runtime instance filters', () => {
@@ -99,6 +105,19 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildExecuteRuntimeActionQuery({
+      runtimeInstanceId: 'value narrative/001',
+      actionKey: 'SUBMIT_FOR_REVIEW',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/actions/SUBMIT_FOR_REVIEW',
+      method: 'POST',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
   })
 
   it('provides and invalidates runtime instance cache tags by runtime type and id', () => {
@@ -141,6 +160,19 @@ describe('runtimeInstanceApi', () => {
       { type: 'RuntimeInstance', id: 'value-narrative-001' },
     ])
     expect(getMutateRuntimeStateInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getExecuteRuntimeActionInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',
