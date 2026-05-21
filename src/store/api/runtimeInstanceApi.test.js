@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCreateRuntimeInstanceQuery,
+  buildMutateRuntimeStateQuery,
   buildRuntimeInstanceDetailQuery,
   buildRuntimeInstanceListQuery,
   buildRuntimeRendererQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
   getCreateRuntimeInstanceInvalidationTags,
+  getMutateRuntimeStateInvalidationTags,
   getRuntimeInstanceDetailTags,
   getRuntimeInstanceListTags,
   getRuntimeRendererTags,
@@ -15,6 +17,7 @@ import {
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
   useListRuntimeInstancesQuery,
+  useMutateRuntimeStateMutation,
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
@@ -23,6 +26,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
   })
 
   it('exports runtime instance hooks', () => {
@@ -30,6 +34,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
+    expect(typeof useMutateRuntimeStateMutation).toBe('function')
   })
 
   it('exposes endpoint initiate functions', () => {
@@ -37,6 +42,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
   })
 
   it('builds the list query with the required runtime instance filters', () => {
@@ -75,6 +81,24 @@ describe('runtimeInstanceApi', () => {
       .toBe('/runtime-instances/value-narrative-001/renderer')
     expect(buildRuntimeRendererQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/renderer')
+    expect(buildMutateRuntimeStateQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'Updated problem',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/data',
+      method: 'PATCH',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'Updated problem',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
   })
 
   it('provides and invalidates runtime instance cache tags by runtime type and id', () => {
@@ -115,6 +139,19 @@ describe('runtimeInstanceApi', () => {
     }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
       { type: 'RuntimeInstance', id: 'runtime-1' },
       { type: 'RuntimeInstance', id: 'value-narrative-001' },
+    ])
+    expect(getMutateRuntimeStateInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
   })
 })

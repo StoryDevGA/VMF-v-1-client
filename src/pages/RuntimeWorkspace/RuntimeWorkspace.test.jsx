@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
-import { useGetRuntimeRendererQuery } from '../../store/api/runtimeInstanceApi.js'
+import {
+  useGetRuntimeRendererQuery,
+  useMutateRuntimeStateMutation,
+} from '../../store/api/runtimeInstanceApi.js'
 import RuntimeWorkspace from './RuntimeWorkspace'
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeRendererQuery: vi.fn(),
+  useMutateRuntimeStateMutation: vi.fn(),
 }))
+
+const refetchRenderer = vi.fn()
+const mutateRuntimeState = vi.fn()
+const unwrapMutation = vi.fn()
 
 const rendererPayload = {
   runtimeInstance: {
@@ -19,6 +28,7 @@ const rendererPayload = {
     name: 'Acme Value Narrative',
     packageKey: 'vmf-standard-2-3-1',
     packageVersion: '2.3.1',
+    updatedAt: '2026-05-19T08:00:00.000Z',
   },
   package: {
     packageName: 'VMF Standard',
@@ -79,11 +89,18 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
 
 describe('RuntimeWorkspace', () => {
   beforeEach(() => {
+    refetchRenderer.mockReset()
+    mutateRuntimeState.mockReset()
+    unwrapMutation.mockReset()
+    unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
+    mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
+    useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useGetRuntimeRendererQuery.mockReturnValue({
       data: { data: rendererPayload },
       isLoading: false,
       isFetching: false,
       error: null,
+      refetch: refetchRenderer,
     })
   })
 
@@ -107,7 +124,7 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByLabelText(/customer problem/i)).toHaveValue('Proposal creation is slow.')
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
     expect(screen.getByText('Required')).toBeInTheDocument()
-    expect(screen.getByText('Read only preview')).toBeInTheDocument()
+    expect(screen.getByText('Editable')).toBeInTheDocument()
 
     const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
     expect(within(sidePanel).getByText(/runtime action execution is not live in this preview/i)).toBeInTheDocument()
@@ -123,10 +140,359 @@ describe('RuntimeWorkspace', () => {
       isLoading: true,
       isFetching: false,
       error: null,
+      refetch: refetchRenderer,
     })
 
     renderRuntimeWorkspace()
 
     expect(screen.getByText(/loading runtime workspace/i)).toBeInTheDocument()
+  })
+
+  it('saves editable section changes through the runtime state mutation endpoint and refetches the renderer', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText(/customer problem/i)
+    await user.clear(field)
+    await user.type(field, 'Proposal teams lack a shared story.')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'Proposal teams lack a shared story.',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(unwrapMutation).toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/section saved/i)).toBeInTheDocument()
+  })
+
+  it('blocks invalid JSON values before calling the mutation endpoint', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'section_1_executive_summary',
+              runtimePath: 'framework_state.sections.section_1_executive_summary',
+              label: 'Section Executive Summary',
+              control: 'JSON',
+              dataType: 'OBJECT',
+              required: true,
+              placeholder: 'Enter section executive summary...',
+              value: {},
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText('Section Executive Summary')
+    await user.clear(field)
+    await user.type(field, 'not valid JSON')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(/enter valid json before saving/i)).toBeInTheDocument()
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
+  it('coerces number section values before saving', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'confidence_score',
+              runtimePath: 'framework_state.sections.confidence_score',
+              label: 'Confidence Score',
+              control: 'NUMBER',
+              dataType: 'NUMBER',
+              value: 12,
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText('Confidence Score')
+    await user.clear(field)
+    await user.type(field, '42.5')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.confidence_score',
+        operation: 'WRITE',
+        value: 42.5,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+  })
+
+  it('blocks invalid number values before saving', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'confidence_score',
+              runtimePath: 'framework_state.sections.confidence_score',
+              label: 'Confidence Score',
+              control: 'TEXT',
+              dataType: 'NUMBER',
+              value: 12,
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText('Confidence Score')
+    await user.clear(field)
+    await user.type(field, 'not numeric')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(/enter a valid number before saving/i)).toBeInTheDocument()
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
+  })
+
+  it('saves checkbox boolean section values', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'priority_confirmed',
+              runtimePath: 'framework_state.sections.priority_confirmed',
+              label: 'Priority Confirmed',
+              control: 'CHECKBOX',
+              dataType: 'BOOLEAN',
+              value: false,
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('checkbox', { name: /priority confirmed/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.priority_confirmed',
+        operation: 'WRITE',
+        value: true,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+  })
+
+  it('saves select enum section values', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'narrative_status',
+              runtimePath: 'framework_state.sections.narrative_status',
+              label: 'Narrative Status',
+              control: 'SELECT',
+              dataType: 'ENUM',
+              allowedValues: ['DRAFT', 'READY'],
+              allowedValueLabels: {
+                DRAFT: 'Draft',
+                READY: 'Ready',
+              },
+              value: 'DRAFT',
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.selectOptions(screen.getByLabelText('Narrative Status'), 'READY')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.narrative_status',
+        operation: 'WRITE',
+        value: 'READY',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+  })
+
+  it('blocks saving when the renderer projection is missing updatedAt', async () => {
+    const user = userEvent.setup()
+    const { updatedAt: _updatedAt, ...runtimeWithoutUpdatedAt } = rendererPayload.runtimeInstance
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: runtimeWithoutUpdatedAt,
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText(/customer problem/i)
+    await user.clear(field)
+    await user.type(field, 'Updated value without marker.')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(/runtime projection is missing its concurrency marker/i)).toBeInTheDocument()
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
+  it('renders mutation rejection feedback without refetching', async () => {
+    const user = userEvent.setup()
+    unwrapMutation.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'Runtime instance has changed since the renderer projection was loaded.',
+          details: {
+            reason: 'RUNTIME_MUTATION_STALE',
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+
+    const field = screen.getByLabelText(/customer problem/i)
+    await user.clear(field)
+    await user.type(field, 'Proposal teams lack a shared story.')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(/runtime instance has changed since the renderer projection was loaded/i)).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
+  it('shows a relevant example placeholder for JSON-backed empty sections', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'section_1_executive_summary',
+              runtimePath: 'framework_state.sections.section_1_executive_summary',
+              label: 'Section Executive Summary',
+              control: 'JSON',
+              dataType: 'OBJECT',
+              required: true,
+              placeholder: 'Enter section executive summary...',
+              value: {},
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByLabelText('Section Executive Summary')).toHaveAttribute(
+      'placeholder',
+      '{\n  "summary": "Summarise the customer situation, priority, and recommended value narrative focus."\n}',
+    )
+  })
+
+  it('keeps renderer read-only sections from submitting mutations', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: rendererPayload.sections.map((section) => ({
+            ...section,
+            editable: false,
+          })),
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByText('Read only preview')).toBeInTheDocument()
+    expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
   })
 })

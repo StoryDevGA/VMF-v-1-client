@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'

@@ -133,6 +133,11 @@
   padding: var(--spacing-md);
 }
 
+.runtime-workspace__section-form {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
 .runtime-workspace__section-heading {
   display: grid;
   gap: var(--spacing-sm);
@@ -196,6 +201,12 @@
   gap: var(--spacing-sm);
 }
 
+.runtime-workspace__section-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
 .runtime-workspace__feedback {
   margin: 0;
   color: var(--color-text-secondary);
@@ -247,7 +258,7 @@
   color: var(--color-text-primary);
 }
 
-.runtime-workspace__json-field pre {
+.runtime-workspace__json-field textarea {
   overflow: auto;
   max-height: calc((var(--spacing-3xl) * 4) + var(--spacing-xl));
   margin: 0;
@@ -259,6 +270,11 @@
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
   white-space: pre-wrap;
+  resize: vertical;
+}
+
+.runtime-workspace__json-field textarea::placeholder {
+  color: var(--color-text-tertiary);
 }
 
 @media (min-width: 48rem) {

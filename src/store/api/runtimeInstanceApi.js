@@ -81,6 +81,12 @@ export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
 
+export const buildMutateRuntimeStateQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/data`,
+  method: 'PATCH',
+  body,
+})
+
 export const getRuntimeInstanceDetailTags = (result, _error, { runtimeInstanceId }) =>
   buildRuntimeInstanceTags([
     String(runtimeInstanceId ?? '').trim(),
@@ -96,6 +102,23 @@ export const getRuntimeRendererTags = (result, _error, { runtimeInstanceId }) =>
     String(runtimeInstanceId ?? '').trim(),
     ...getRuntimeInstanceCacheIds(runtimeInstance),
   ].filter(Boolean).filter((id, index, ids) => ids.indexOf(id) === index))
+}
+
+export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeInstanceId, body } = {}) => {
+  const runtimeInstance = result?.data?.runtimeInstance
+    ?? result?.runtimeInstance
+    ?? null
+  const runtimeType = runtimeInstance?.runtimeType
+    ?? body?.runtimeType
+    ?? DEFAULT_RUNTIME_INSTANCE_TYPE
+
+  return [
+    ...buildRuntimeInstanceTags([
+      String(runtimeInstanceId ?? '').trim(),
+      ...getRuntimeInstanceCacheIds(runtimeInstance),
+    ].filter(Boolean).filter((id, index, ids) => ids.indexOf(id) === index)),
+    runtimeInstanceListTag(runtimeType),
+  ]
 }
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
@@ -119,6 +142,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildRuntimeRendererQuery,
       providesTags: getRuntimeRendererTags,
     }),
+
+    mutateRuntimeState: build.mutation({
+      query: buildMutateRuntimeStateQuery,
+      invalidatesTags: getMutateRuntimeStateInvalidationTags,
+    }),
   }),
   overrideExisting: false,
 })
@@ -128,4 +156,5 @@ export const {
   useCreateRuntimeInstanceMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
+  useMutateRuntimeStateMutation,
 } = runtimeInstanceApi
