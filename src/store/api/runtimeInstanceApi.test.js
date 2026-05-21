@@ -44,11 +44,12 @@ describe('runtimeInstanceApi', () => {
       customerId: 'cust-1',
       tenantId: 'tenant-1',
       runtimeType: 'VALUE_NARRATIVE',
+      q: 'Northwind',
       status: 'ACTIVE',
       page: 2,
       pageSize: 25,
     })).toBe(
-      '/runtime-instances?customerId=cust-1&tenantId=tenant-1&runtimeType=VALUE_NARRATIVE&status=ACTIVE&page=2&pageSize=25',
+      '/runtime-instances?customerId=cust-1&tenantId=tenant-1&runtimeType=VALUE_NARRATIVE&q=Northwind&status=ACTIVE&page=2&pageSize=25',
     )
   })
 

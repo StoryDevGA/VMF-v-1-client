@@ -37,6 +37,7 @@ export const buildRuntimeInstanceListQuery = ({
   customerId,
   tenantId,
   runtimeType,
+  q = '',
   status = '',
   page = 1,
   pageSize = 20,
@@ -45,6 +46,7 @@ export const buildRuntimeInstanceListQuery = ({
   appendParam(params, 'customerId', customerId)
   appendParam(params, 'tenantId', tenantId)
   appendParam(params, 'runtimeType', runtimeType)
+  appendParam(params, 'q', q)
   appendParam(params, 'status', status)
   params.set('page', String(page))
   params.set('pageSize', String(pageSize))

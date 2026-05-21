@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
@@ -57,6 +57,7 @@ function getPageTree(initialEntry = '/app/workspaces/vmf') {
       <ToasterProvider>
         <Routes>
           <Route path="/app/workspaces/vmf" element={<MaintainVmfs />} />
+          <Route path="/app/runtime/:runtimeInstanceId" element={<div>Runtime Route</div>} />
           <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
         </Routes>
       </ToasterProvider>
@@ -244,7 +245,7 @@ describe('MaintainVmfs', () => {
     expect(screen.queryByText(/workspace scope for Default Tenant\./i)).not.toBeInTheDocument()
   })
 
-  it('hides the Value Narrative runtime table when no runtime instances exist', () => {
+  it('renders one Value Narrative register when no runtime instances exist', () => {
     renderPage()
 
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
@@ -259,10 +260,16 @@ describe('MaintainVmfs', () => {
     expect(screen.queryByRole('heading', { name: /my value narratives/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('table', { name: /value narrative runtime instances/i }))
       .not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /value narratives/i })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: /value narrative work register/i }))
+      .toBeInTheDocument()
+    expect(screen.getByText(/no value narratives found/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeInTheDocument()
   })
 
-  it('lists Value Narrative runtime instances from the runtime instance API', () => {
+  it('lists Value Narrative runtime instances from the runtime instance API', async () => {
+    const user = userEvent.setup()
+
     runtimeInstanceQueryResponse = {
       data: {
         data: [
@@ -287,7 +294,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByRole('heading', { name: /my value narratives/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /value narratives/i })).toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'cust-1',
@@ -297,13 +304,101 @@ describe('MaintainVmfs', () => {
       }),
       { skip: false },
     )
-    expect(screen.getByRole('table', { name: /value narrative runtime instances/i }))
+    const table = screen.getByRole('table', { name: /value narrative work register/i })
+
+    expect(table)
       .toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /northwind value narrative/i }))
+    expect(within(table).getByRole('link', { name: /^northwind value narrative$/i }))
       .toHaveAttribute('href', '/app/runtime/value-narrative-001')
-    expect(screen.getByText('value-narrative-001')).toBeInTheDocument()
-    expect(screen.getByText('vmf-runtime-package')).toBeInTheDocument()
-    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(within(table).getAllByText('value-narrative-001').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('vmf-runtime-package').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Idle').length).toBeGreaterThan(0)
+    const runtimeActions = within(table).getByRole('combobox', {
+      name: /runtime actions for northwind value narrative/i,
+    })
+    expect(within(runtimeActions).getByRole('option', { name: /^open$/i })).toBeInTheDocument()
+    expect(within(runtimeActions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
+    expect(within(runtimeActions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/value narrative register counts/i))
+      .toHaveTextContent(/1 runtime object\s*\|\s*0 VMF bridge records/i)
+
+    await user.selectOptions(runtimeActions, 'Open')
+
+    expect(screen.getByText('Runtime Route')).toBeInTheDocument()
+  })
+
+  it('does not send VMF-only disabled status to the runtime instance API', async () => {
+    const user = userEvent.setup()
+
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'runtime-1',
+            runtimeInstanceKey: 'value-narrative-001',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Active Runtime Narrative',
+            packageKey: 'vmf-runtime-package',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: {
+          page: 1,
+          totalPages: 1,
+          total: 1,
+          runtimeCapacity: {
+            runtimeType: 'VALUE_NARRATIVE',
+            maxRuntimeInstances: 4,
+            currentCount: 1,
+            remainingCount: 3,
+            isAtCapacity: false,
+            countMode: 'ACTIVE_RUNTIME_INSTANCES',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-disabled',
+            name: 'Disabled Bridge VMF',
+            status: 'DISABLED',
+            lifecycleStatus: 'PUBLISHED',
+            updatedAt: '2026-05-17T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    await user.selectOptions(
+      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      'DISABLED',
+    )
+
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        runtimeType: 'VALUE_NARRATIVE',
+        q: '',
+        status: '',
+      }),
+      { skip: false },
+    )
+    expect(screen.queryByText('Active Runtime Narrative')).not.toBeInTheDocument()
+    expect(screen.getByText('Disabled Bridge VMF')).toBeInTheDocument()
   })
 
   it('paginates Value Narrative runtime instances without silently truncating after the first page', async () => {
@@ -338,7 +433,7 @@ describe('MaintainVmfs', () => {
     })
 
     expect(screen.getByText('Page 1 Value Narrative')).toBeInTheDocument()
-    expect(within(pagination).getByText('Page 1 of 3 (25 runtime instances)')).toBeInTheDocument()
+    expect(within(pagination).getByText('Runtime objects page 1 of 3 (25 runtime objects)')).toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'cust-1',
@@ -365,7 +460,7 @@ describe('MaintainVmfs', () => {
       )
     })
     expect(screen.getByText('Page 2 Value Narrative')).toBeInTheDocument()
-    expect(within(pagination).getByText('Page 2 of 3 (25 runtime instances)')).toBeInTheDocument()
+    expect(within(pagination).getByText('Runtime objects page 2 of 3 (25 runtime objects)')).toBeInTheDocument()
   })
 
   it('submits create payload with optional description to the runtime instance API', async () => {
@@ -750,6 +845,34 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
   })
 
+  it('blocks create submission when runtime capacity becomes unavailable after the dialog opens', async () => {
+    const user = userEvent.setup()
+
+    const view = renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    runtimeInstanceQueryResponse = {
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: { status: 503, data: { error: { message: 'Runtime capacity unavailable' } } },
+    }
+
+    view.rerender(getPageTree())
+
+    const dialog = screen.getByRole('dialog')
+    const createButton = within(dialog).getByRole('button', { name: /^create$/i })
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/capacity is unavailable/i)
+    expect(createButton).toBeDisabled()
+
+    fireEvent.submit(createButton.closest('form'))
+
+    expect(createRuntimeInstanceMock).not.toHaveBeenCalled()
+  })
+
   it('explains when tenant capacity exists but no runtime-ready package is available', async () => {
     const user = userEvent.setup()
 
@@ -783,7 +906,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
+    const actionBar = screen.getByRole('group', { name: /value narrative workspace actions/i })
 
     expect(screen.getByRole('status', { name: /^value narrative capacity/i }))
       .toHaveTextContent(/2 of 4 left/i)
@@ -809,7 +932,7 @@ describe('MaintainVmfs', () => {
     expect(within(dialog).getByRole('button', { name: /^create$/i })).toBeDisabled()
   })
 
-  it('renders Back, capacity, and Create Value Narrative in the compact catalogue action bar', () => {
+  it('renders Back, capacity, and Create Value Narrative in the compact workspace action bar', () => {
     runtimeInstanceQueryResponse = {
       data: {
         data: [],
@@ -834,7 +957,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    const actionBar = screen.getByRole('group', { name: /vmf catalogue actions/i })
+    const actionBar = screen.getByRole('group', { name: /value narrative workspace actions/i })
 
     expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
     expect(within(actionBar).getByRole('status', { name: /^value narrative capacity/i })).toHaveTextContent('2 of 4 left')
@@ -947,7 +1070,7 @@ describe('MaintainVmfs', () => {
     )
     expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/linked tenant members can review published vmfs only/i),
+      screen.getByText(/linked tenant members can review published vmf bridge records and published runtime lifecycle rows only/i),
     ).toBeInTheDocument()
     expect(screen.getByText('Viewer VMF')).toBeInTheDocument()
     const actions = screen.getByRole('combobox', { name: /actions for viewer vmf/i })
@@ -970,6 +1093,66 @@ describe('MaintainVmfs', () => {
     expect(within(dialog).getByText('Readiness pending')).toBeInTheDocument()
     expect(within(dialog).getByText('Not Started')).toBeInTheDocument()
     expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
+  })
+
+  it('applies the read-only published lifecycle filter to runtime instance rows', () => {
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => true,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) => permission === 'VMF_VIEW',
+      hasVmfPermission: () => false,
+      hasVmfWorkspaceManagementAccess: () => false,
+    })
+
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'runtime-draft',
+            runtimeInstanceKey: 'value-narrative-draft',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Draft Runtime Narrative',
+            packageKey: 'vmf-runtime-package',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            framework_state: { lifecycle: { stage: 'DRAFT' } },
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    listQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'vmf-read-only',
+            name: 'Published Bridge VMF',
+            description: 'Visible in read-only mode',
+            status: 'ACTIVE',
+            lifecycleStatus: 'PUBLISHED',
+            frameworkVersion: '2.2',
+            updatedAt: '2026-03-24T21:08:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    expect(useListVmfsQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lifecycleStatus: 'PUBLISHED' }),
+      { skip: false },
+    )
+    expect(screen.getByText('Published Bridge VMF')).toBeInTheDocument()
+    expect(screen.queryByText('Draft Runtime Narrative')).not.toBeInTheDocument()
   })
 
   it('prefers framework package names over package ids in the catalogue', () => {
@@ -1007,7 +1190,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(screen.getByText('Package-backed VMF')).toBeInTheDocument()
-    expect(screen.getByText('Latest Package')).toBeInTheDocument()
+    expect(screen.getAllByText('Latest Package').length).toBeGreaterThan(0)
     expect(screen.queryByText('6a06e86458a5e0613e859907')).not.toBeInTheDocument()
   })
 
@@ -1141,43 +1324,43 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByText(/use the actions menu to view details, edit vmfs, or schedule a soft-delete/i)).toBeInTheDocument()
+    expect(screen.getByText(/runtime objects are shown alongside transitional vmf bridge records/i)).toBeInTheDocument()
 
-    const table = screen.getByRole('table', { name: /vmf catalogue/i })
+    const table = screen.getByRole('table', { name: /value narrative work register/i })
 
-    expect(within(table).getByRole('columnheader', { name: /^vmf$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^value narrative$/i })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /^description$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^status$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^lifecycle$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^framework$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^runtime state$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^state$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^stage \/ health$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^framework \/ package$/i })).toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: /^completion$/i })).not.toBeInTheDocument()
     expect(within(table).getByText('Current active framework')).toBeInTheDocument()
-    expect(within(table).getByText('CANONISED')).toBeInTheDocument()
-    expect(within(table).getByText('PUBLISHED')).toBeInTheDocument()
-    expect(within(table).getAllByText('Version').length).toBeGreaterThan(0)
-    expect(within(table).getAllByRole('button', { name: /completion runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /readiness runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /execution runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /validation runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /lock runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /snapshot runtime evidence/i })).toHaveLength(2)
-    expect(within(table).getAllByRole('button', { name: /migration runtime evidence/i })).toHaveLength(2)
-    const runtimeEvidenceButtons = within(table).getAllByRole('button', {
-      name: /completion runtime evidence/i,
+    expect(within(table).getAllByText('CANONISED').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('PUBLISHED').length).toBeGreaterThan(0)
+    expect(within(table).getByText('Version 2.2')).toBeInTheDocument()
+    expect(within(table).getByText('Version 2.0')).toBeInTheDocument()
+
+    const activeCompletionAccordion = within(table).getByRole('button', {
+      name: /completion for active vmf/i,
     })
-    const activeRuntimePanel = document.getElementById(
-      runtimeEvidenceButtons[0].getAttribute('aria-controls'),
-    )
-    expect(runtimeEvidenceButtons).toHaveLength(2)
-    expect(runtimeEvidenceButtons[0]).toHaveAttribute('aria-expanded', 'false')
-    expect(activeRuntimePanel).toHaveAttribute('aria-hidden', 'true')
+    const activeVmfIdAccordion = within(table).getByRole('button', {
+      name: /vmf id for active vmf/i,
+    })
 
-    await user.click(runtimeEvidenceButtons[0])
+    expect(activeCompletionAccordion).toHaveAttribute('aria-expanded', 'false')
+    expect(activeVmfIdAccordion).toHaveAttribute('aria-expanded', 'false')
 
-    expect(runtimeEvidenceButtons[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(activeRuntimePanel).toHaveAttribute('aria-hidden', 'false')
-    expect(activeRuntimePanel).toHaveTextContent('NOT_TRACKED')
+    await user.click(activeCompletionAccordion)
+
+    expect(activeCompletionAccordion).toHaveAttribute('aria-expanded', 'true')
+    const completionValue = within(table).getAllByText('NOT_TRACKED')[0]
+    expect(completionValue.closest('.badge')).toHaveClass('badge--info')
+
+    await user.click(activeVmfIdAccordion)
+
+    expect(activeVmfIdAccordion).toHaveAttribute('aria-expanded', 'true')
+    expect(within(table).getAllByText('VMF ID').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('vmf-active').length).toBeGreaterThan(0)
 
     const activeActions = screen.getByRole('combobox', { name: /actions for active vmf/i })
     expect(within(activeActions).getByRole('option', { name: /view details/i })).toBeInTheDocument()

@@ -67,6 +67,15 @@ const VMF_STATUS_OPTIONS = [
   { value: 'ARCHIVED', label: 'Archived' },
 ]
 
+const RUNTIME_INSTANCE_STATUS_FILTER_VALUES = new Set([
+  'DRAFT',
+  'ACTIVE',
+  'LOCKED',
+  'COMPLETED',
+  'ARCHIVED',
+  'FAILED',
+])
+
 const VMF_LIFECYCLE_OPTIONS = [
   { value: '', label: 'All lifecycle states' },
   { value: 'DRAFT', label: 'Draft' },
@@ -93,10 +102,10 @@ const VMF_LICENCE_MESSAGE =
   'This customer licence does not include VMF. Contact your Super Admin to update entitlements.'
 
 const VMF_LIFECYCLE_NOTE =
-  'Use the Actions menu to view details, edit VMFs, or schedule a soft-delete. Active VMFs must be disabled before deletion.'
+  'Runtime objects are shown alongside transitional VMF bridge records. Open the compact row accordions for runtime state and package lineage fields; use Actions for bridge-record details, edits, or soft-delete where permitted. Active VMFs must be disabled before deletion.'
 
 const VMF_READ_ONLY_NOTE =
-  "This workspace is read-only for your current access level. Use the Actions menu to view details; standard users and linked tenant members can review published VMFs only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
+  "This workspace is read-only for your current access level. Open the compact row accordions for package lineage and use Actions to view details; standard users and linked tenant members can review published VMF bridge records and published runtime lifecycle rows only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
@@ -309,6 +318,27 @@ const getRuntimeCapacityGuidance = (
   return null
 }
 
+const getRuntimeCapacityBlockMessage = ({
+  isReached = false,
+  isLoading = false,
+  isRefreshing = false,
+  isUnavailable = false,
+} = {}) => {
+  if (isReached) {
+    return 'No Value Narrative runtime slots are available for this tenant.'
+  }
+
+  if (isUnavailable) {
+    return 'Value Narrative capacity is unavailable. Creation is blocked until runtime capacity can be loaded.'
+  }
+
+  if (isLoading || isRefreshing) {
+    return 'Value Narrative capacity is still being checked. Creation is blocked until capacity is confirmed.'
+  }
+
+  return ''
+}
+
 const getLifecycleOptionsForCurrentState = (value) => {
   const current = String(value ?? 'DRAFT').trim().toUpperCase()
   const allowed = VMF_LIFECYCLE_TRANSITIONS[current] ?? [current]
@@ -316,83 +346,7 @@ const getLifecycleOptionsForCurrentState = (value) => {
   return VMF_MUTATION_LIFECYCLE_OPTIONS.filter((option) => allowed.includes(option.value))
 }
 
-function renderVmfSummary(_value, row) {
-  const name = String(row?.name ?? '').trim() || '--'
-
-  return (
-    <div className="maintain-vmfs__vmf-summary">
-      <div className="maintain-vmfs__vmf-summary-header">
-        <span className="maintain-vmfs__vmf-name">{name}</span>
-      </div>
-    </div>
-  )
-}
-
-function renderRuntimeInstanceSummary(_value, row) {
-  const name = String(row?.name ?? '').trim() || 'Value Narrative'
-  const displayId = getRuntimeInstanceDisplayId(row, row?.runtimeType || 'VALUE_NARRATIVE')
-  const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(row)
-
-  return (
-    <div className="maintain-vmfs__vmf-summary">
-      <div className="maintain-vmfs__vmf-summary-header">
-        <Link
-          to={runtimeWorkspaceTo}
-          className="maintain-vmfs__vmf-name"
-          variant="primary"
-          underline="hover"
-        >
-          {name}
-        </Link>
-        <span className="maintain-vmfs__vmf-description">{displayId}</span>
-      </div>
-    </div>
-  )
-}
-
-function renderRuntimePackageSummary(_value, row) {
-  const packageLabel = getFrameworkPackageLabel(row)
-  const packageVersion = String(row?.packageVersion ?? row?.frameworkVersion ?? '').trim() || '--'
-
-  return (
-    <div className="maintain-vmfs__framework-summary">
-      <div className="maintain-vmfs__summary-pair">
-        <span className="maintain-vmfs__summary-label">Package</span>
-        <span className="maintain-vmfs__summary-value">{packageLabel}</span>
-      </div>
-      <div className="maintain-vmfs__summary-pair">
-        <span className="maintain-vmfs__summary-label">Version</span>
-        <span className="maintain-vmfs__summary-value">{packageVersion}</span>
-      </div>
-    </div>
-  )
-}
-
-function renderDescriptionSummary(value) {
-  const description = String(value ?? '').trim()
-  if (!description) return '--'
-  return <span className="maintain-vmfs__vmf-description">{description}</span>
-}
-
-function renderFrameworkSummary(_value, row) {
-  const version = String(row?.frameworkVersion ?? '').trim() || '--'
-  const packageLabel = getFrameworkPackageLabel(row)
-
-  return (
-    <div className="maintain-vmfs__framework-summary">
-      <div className="maintain-vmfs__summary-pair">
-        <span className="maintain-vmfs__summary-label">Version</span>
-        <span className="maintain-vmfs__summary-value">{version}</span>
-      </div>
-      <div className="maintain-vmfs__summary-pair">
-        <span className="maintain-vmfs__summary-label">Package</span>
-        <span className="maintain-vmfs__summary-value">{packageLabel}</span>
-      </div>
-    </div>
-  )
-}
-
-function renderRuntimeSummary(_value, row) {
+const getRuntimeEvidenceItems = (row) => {
   const completion = String(row?.completionState ?? '').trim().toUpperCase() || 'NOT_TRACKED'
   const validation = String(row?.validationStatus ?? '').trim().toUpperCase() || 'NOT_RUN'
   const lockStatus = String(row?.lockStatus ?? '').trim().toUpperCase() || 'UNLOCKED'
@@ -400,7 +354,8 @@ function renderRuntimeSummary(_value, row) {
   const migration = formatBooleanLabel(row?.migrationAvailable)
   const executionState = getRuntimeExecutionState(row)
   const readiness = getRuntimeReadinessLabel(row)
-  const runtimeItems = [
+
+  return [
     {
       label: 'Readiness',
       value: readiness,
@@ -437,34 +392,253 @@ function renderRuntimeSummary(_value, row) {
       variant: row?.migrationAvailable === true ? 'success' : row?.migrationAvailable === false ? 'neutral' : 'info',
     },
   ]
-  const baseId = `runtime-${normalizeAccordionId(getVmfId(row) || row?.name || 'vmf')}`
-  const rowLabel = String(row?.name ?? getVmfId(row) ?? 'VMF').trim() || 'VMF'
+}
+
+const getPackageVersion = (row) =>
+  String(
+    row?.packageVersion
+      ?? row?.frameworkVersion
+      ?? getFrameworkPackageDetail(row, 'version')
+      ?? getFrameworkPackageDetail(row, 'frameworkVersion')
+      ?? '',
+  ).trim() || '--'
+
+const getFrameworkLabel = (row, fallback = 'Value Narrative') => {
+  const candidates = [
+    row?.frameworkName,
+    row?.frameworkLabel,
+    row?.frameworkKey,
+    row?.runtimeType,
+  ]
+
+  for (const candidate of candidates) {
+    const trimmed = String(candidate ?? '').trim()
+    if (trimmed) return trimmed === 'VMF' ? 'Value Narrative' : formatRuntimeTokenLabel(trimmed)
+  }
+
+  return fallback
+}
+
+const getRuntimeFrameworkLifecycleStage = (row, fallback = 'DRAFT') => {
+  const frameworkState = row?.framework_state ?? row?.frameworkState ?? {}
+  const lifecycle = frameworkState?.lifecycle ?? {}
+  const candidates = [
+    typeof lifecycle === 'string' ? lifecycle : lifecycle?.stage,
+    lifecycle?.status,
+    row?.frameworkLifecycleStage,
+    row?.frameworkLifecycleStatus,
+    row?.lifecycleStatus,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = String(candidate ?? '').trim().toUpperCase()
+    if (normalized) return normalized
+  }
+
+  return fallback
+}
+
+const getUpdatedTimestamp = (row) => {
+  const updatedAt = row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt
+  const parsed = Date.parse(String(updatedAt ?? ''))
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const buildSearchText = (values) =>
+  values
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+const buildRuntimeInstanceRegisterRow = (row) => {
+  const runtimeType = String(row?.runtimeType ?? 'VALUE_NARRATIVE').trim() || 'VALUE_NARRATIVE'
+  const displayId = getRuntimeInstanceDisplayId(row, runtimeType)
+  const status = getRuntimeLifecycleStatus(row)
+  const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(row)
+  const executionState = getRuntimeExecutionState(row)
+  const packageLabel = getFrameworkPackageLabel(row)
+  const packageVersion = getPackageVersion(row)
+  const name = String(row?.name ?? '').trim() || 'Value Narrative'
+  const description = String(row?.description ?? row?.summary ?? '').trim()
+  const key = `runtime:${displayId || row?.id || row?._id || name}`
+
+  return {
+    key,
+    source: 'runtime',
+    sourceLabel: 'Runtime object',
+    original: row,
+    name,
+    description,
+    displayId,
+    frameworkLabel: getFrameworkLabel(row),
+    packageLabel,
+    packageVersion,
+    status,
+    statusLabel: formatRuntimeTokenLabel(status),
+    statusVariant: getRuntimeStatusVariant(status),
+    lifecycle: frameworkLifecycle,
+    lifecycleLabel: formatRuntimeTokenLabel(frameworkLifecycle),
+    lifecycleVariant: getLifecycleVariant(frameworkLifecycle),
+    executionState,
+    executionLabel: formatRuntimeTokenLabel(executionState),
+    executionVariant: getExecutionStateVariant(executionState),
+    stageLabel: formatRuntimeTokenLabel(executionState),
+    stageHelper: 'Execution state',
+    stageVariant: getExecutionStateVariant(executionState),
+    updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
+    updatedTime: getUpdatedTimestamp(row),
+    route: getRuntimeWorkspaceRoute(row),
+    evidenceItems: getRuntimeEvidenceItems(row),
+    lineageItems: [
+      ['Framework', getFrameworkLabel(row)],
+      ['Package', packageLabel],
+      ['Version', packageVersion],
+      ['Framework Lifecycle', frameworkLifecycle],
+      ['Work Type', formatRuntimeTokenLabel(runtimeType)],
+      ['Runtime ID', displayId],
+    ],
+    searchText: buildSearchText([
+      name,
+      description,
+      displayId,
+      packageLabel,
+      packageVersion,
+      runtimeType,
+      status,
+      frameworkLifecycle,
+      executionState,
+    ]),
+  }
+}
+
+const buildVmfRegisterRow = (row) => {
+  const vmfId = getVmfId(row)
+  const name = String(row?.name ?? '').trim() || '--'
+  const description = String(row?.description ?? '').trim()
+  const status = String(row?.status ?? '').trim().toUpperCase() || 'UNKNOWN'
+  const lifecycle = String(row?.lifecycleStatus ?? '').trim().toUpperCase() || 'DRAFT'
+  const readiness = getRuntimeReadinessLabel(row)
+  const executionState = getRuntimeExecutionState(row)
+  const packageLabel = getFrameworkPackageLabel(row)
+  const packageVersion = getPackageVersion(row)
+  const key = `vmf:${vmfId || name}`
+
+  return {
+    key,
+    source: 'vmf',
+    sourceLabel: 'VMF bridge',
+    original: row,
+    name,
+    description,
+    displayId: vmfId || '--',
+    frameworkLabel: getFrameworkLabel(row),
+    packageLabel,
+    packageVersion,
+    status,
+    statusLabel: formatRuntimeTokenLabel(status),
+    statusVariant: getOperationalStatusVariant(status),
+    lifecycle,
+    lifecycleLabel: lifecycle,
+    lifecycleVariant: getLifecycleVariant(lifecycle),
+    executionState,
+    executionLabel: formatRuntimeTokenLabel(executionState),
+    executionVariant: getExecutionStateVariant(executionState),
+    stageLabel: readiness,
+    stageHelper: `Validation ${String(row?.validationStatus ?? 'NOT_RUN').trim().toUpperCase() || 'NOT_RUN'}`,
+    stageVariant: getRuntimeReadinessVariant(readiness),
+    updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
+    updatedTime: getUpdatedTimestamp(row),
+    evidenceItems: getRuntimeEvidenceItems(row),
+    lineageItems: [
+      ['Framework', getFrameworkLabel(row)],
+      ['Package', packageLabel],
+      ['Version', packageVersion],
+      ['Lifecycle', lifecycle],
+      ['Package Status', getFrameworkPackageDetail(row, 'status') || '--'],
+      ['VMF ID', vmfId || '--'],
+    ],
+    searchText: buildSearchText([
+      name,
+      description,
+      vmfId,
+      packageLabel,
+      packageVersion,
+      status,
+      lifecycle,
+      readiness,
+      executionState,
+    ]),
+  }
+}
+
+function RuntimeEvidenceAccordionCell({ row }) {
+  const baseId = `runtime-evidence-${normalizeAccordionId(row.key)}`
 
   return (
     <Accordion
       variant="default"
       rounded={false}
-      className="maintain-vmfs__runtime-accordion"
+      className="maintain-vmfs__cell-accordion"
     >
-      {runtimeItems.map((item) => {
+      {row.evidenceItems.map((item) => {
         const itemId = `${baseId}-${normalizeAccordionId(item.label)}`
 
         return (
           <Accordion.Item id={itemId} key={item.label}>
             <Accordion.Header
               itemId={itemId}
-              className="maintain-vmfs__runtime-accordion-header"
-              aria-label={`${item.label} runtime evidence for ${rowLabel}`}
+              className="maintain-vmfs__cell-accordion-header"
+              aria-label={`${item.label} for ${row.name}`}
             >
               {item.label}
             </Accordion.Header>
             <Accordion.Content
               itemId={itemId}
-              className="maintain-vmfs__runtime-accordion-content"
+              className="maintain-vmfs__cell-accordion-content"
             >
-              <Badge size="sm" variant={item.variant} pill>
+              <Badge
+                size="sm"
+                variant={item.variant}
+                pill
+                className="maintain-vmfs__cell-accordion-badge"
+              >
                 {item.value}
               </Badge>
+            </Accordion.Content>
+          </Accordion.Item>
+        )
+      })}
+    </Accordion>
+  )
+}
+
+function PackageLineageAccordionCell({ row }) {
+  const baseId = `package-lineage-${normalizeAccordionId(row.key)}`
+
+  return (
+    <Accordion
+      variant="default"
+      rounded={false}
+      className="maintain-vmfs__cell-accordion"
+    >
+      {row.lineageItems.map(([label, value]) => {
+        const itemId = `${baseId}-${normalizeAccordionId(label)}`
+
+        return (
+          <Accordion.Item id={itemId} key={`${row.key}-${label}`}>
+            <Accordion.Header
+              itemId={itemId}
+              className="maintain-vmfs__cell-accordion-header"
+              aria-label={`${label} for ${row.name}`}
+            >
+              {label}
+            </Accordion.Header>
+            <Accordion.Content
+              itemId={itemId}
+              className="maintain-vmfs__cell-accordion-content"
+            >
+              <code className="maintain-vmfs__cell-accordion-value">{value}</code>
             </Accordion.Content>
           </Accordion.Item>
         )
@@ -518,6 +692,26 @@ function VmfRowActionsMenu({ row, actions, onAction }) {
           if (label) onAction(label, row)
         }}
         aria-label={`Actions for ${rowName}`}
+      />
+    </div>
+  )
+}
+
+function RuntimeRowActionsMenu({ row, onOpen }) {
+  const rowName = row?.name || row?.displayId || 'runtime row'
+  const options = [{ value: 'Open', label: 'Open' }]
+
+  return (
+    <div className="maintain-vmfs__row-actions">
+      <Select
+        size="sm"
+        value=""
+        placeholder="Actions"
+        options={options}
+        onChange={(event) => {
+          if (event.target.value === 'Open') onOpen(row)
+        }}
+        aria-label={`Runtime actions for ${rowName}`}
       />
     </div>
   )
@@ -655,6 +849,9 @@ function MaintainVmfs() {
   const effectiveLifecycleFilter = isReadOnlyVmfViewer
     ? READ_ONLY_VMF_LIFECYCLE
     : lifecycleFilter || ''
+  const runtimeStatusFilter = RUNTIME_INSTANCE_STATUS_FILTER_VALUES.has(statusFilter)
+    ? statusFilter
+    : ''
 
   const {
     data: listResponse,
@@ -684,6 +881,8 @@ function MaintainVmfs() {
       customerId,
       tenantId,
       runtimeType: 'VALUE_NARRATIVE',
+      q: querySearch,
+      status: runtimeStatusFilter,
       page: runtimePage,
       pageSize: DEFAULT_TABLE_PAGE_SIZE,
     },
@@ -709,28 +908,26 @@ function MaintainVmfs() {
   const [updateVmf, updateResult] = useUpdateVmfMutation()
   const [deleteVmf, deleteResult] = useDeleteVmfMutation()
 
-  const rows = listResponse?.data ?? []
-  const runtimeInstanceRows = Array.isArray(runtimeInstanceResponse?.data)
-    ? runtimeInstanceResponse.data
-    : []
+  const rows = useMemo(
+    () => (Array.isArray(listResponse?.data) ? listResponse.data : []),
+    [listResponse?.data],
+  )
+  const runtimeInstanceRows = useMemo(
+    () => (Array.isArray(runtimeInstanceResponse?.data) ? runtimeInstanceResponse.data : []),
+    [runtimeInstanceResponse?.data],
+  )
   const meta = listResponse?.meta ?? {}
   const currentPage = Number(meta.page) || page
   const totalPages = Number(meta.totalPages) || 1
-  const totalCount = Number(meta.total) || 0
+  const totalCount = Number(meta.total) || rows.length
   const runtimeInstanceMeta = runtimeInstanceResponse?.meta ?? {}
   const runtimeCurrentPage = Number(runtimeInstanceMeta.page) || runtimePage
   const runtimeTotalPages = Number(runtimeInstanceMeta.totalPages) || 1
-  const runtimeTotalCount = Number(runtimeInstanceMeta.total) || 0
+  const runtimeTotalCount = Number(runtimeInstanceMeta.total) || runtimeInstanceRows.length
 
   const listAppError = listError ? normalizeError(listError) : null
   const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
   const frameworkPackageAppError = frameworkPackageError ? normalizeError(frameworkPackageError) : null
-  const shouldShowRuntimeInstancesSection = Boolean(
-    isLoadingRuntimeInstances
-    || runtimeInstanceAppError
-    || runtimeInstanceRows.length > 0
-    || runtimeTotalPages > 1,
-  )
   const inactiveCustomerAppError = isCustomerInactiveError(listAppError) ? listAppError : null
   const licenceAppError = isLicenseFeatureNotEnabledError(listAppError) ? listAppError : null
 
@@ -848,6 +1045,13 @@ function MaintainVmfs() {
   const isRuntimeCapacityReached = Boolean(runtimeCapacity?.isAtCapacity)
   const isRuntimeCapacityLoading = Boolean(canCreateVmfs && isLoadingRuntimeInstances && !runtimeCapacity)
   const isRuntimeCapacityRefreshing = Boolean(canCreateVmfs && isFetchingRuntimeInstances)
+  const runtimeCapacityBlockMessage = getRuntimeCapacityBlockMessage({
+    isReached: isRuntimeCapacityReached,
+    isLoading: isRuntimeCapacityLoading,
+    isRefreshing: isRuntimeCapacityRefreshing,
+    isUnavailable: isRuntimeCapacityUnavailable,
+  })
+  const isCreateRuntimeCapacityBlocked = Boolean(runtimeCapacityBlockMessage)
   const workspaceTableNote = canMutateVmfs ? VMF_LIFECYCLE_NOTE : VMF_READ_ONLY_NOTE
 
   const canManageVmfRow = useCallback(
@@ -873,10 +1077,7 @@ function MaintainVmfs() {
   const openCreateDialog = useCallback(() => {
     if (
       !canCreateVmfs
-      || isRuntimeCapacityReached
-      || isRuntimeCapacityLoading
-      || isRuntimeCapacityRefreshing
-      || isRuntimeCapacityUnavailable
+      || isCreateRuntimeCapacityBlocked
     ) return
     setCreateErrors({})
     setCreateForm((current) => ({
@@ -890,10 +1091,7 @@ function MaintainVmfs() {
     canCreateVmfs,
     defaultFrameworkPackageOption,
     frameworkPackageOptions,
-    isRuntimeCapacityLoading,
-    isRuntimeCapacityUnavailable,
-    isRuntimeCapacityRefreshing,
-    isRuntimeCapacityReached,
+    isCreateRuntimeCapacityBlocked,
   ])
 
   const closeCreateDialog = useCallback(() => {
@@ -1002,149 +1200,47 @@ function MaintainVmfs() {
     [canManageVmfRow, openDetailsDialog, openEditDialog],
   )
 
-  const columns = useMemo(
-    () => [
-      {
-        key: 'vmfSummary',
-        label: 'VMF',
-        mobileLabel: 'VMF',
-        width: '15%',
-        render: renderVmfSummary,
-      },
-      {
-        key: 'description',
-        label: 'Description',
-        mobileLabel: 'Description',
-        width: '20%',
-        render: renderDescriptionSummary,
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        mobileLabel: 'Status',
-        width: '9%',
-        render: (value) => {
-          const status = String(value ?? '').trim().toUpperCase() || 'UNKNOWN'
-          return (
-            <Status size="sm" showIcon variant={getOperationalStatusVariant(status)}>
-              {status.toLowerCase()}
-            </Status>
-          )
-        },
-      },
-      {
-        key: 'lifecycleStatus',
-        label: 'Lifecycle',
-        mobileLabel: 'Lifecycle',
-        width: '10%',
-        render: (value) => {
-          const lifecycle = String(value ?? '').trim().toUpperCase() || 'DRAFT'
-          return (
-            <Badge size="sm" variant={getLifecycleVariant(lifecycle)} pill>
-              {lifecycle}
-            </Badge>
-          )
-        },
-      },
-      {
-        key: 'frameworkSummary',
-        label: 'Framework',
-        mobileLabel: 'Framework',
-        width: '15%',
-        render: renderFrameworkSummary,
-      },
-      {
-        key: 'runtimeSummary',
-        label: 'Runtime State',
-        mobileLabel: 'Runtime State',
-        width: '14%',
-        render: renderRuntimeSummary,
-      },
-      {
-        key: 'updatedAt',
-        label: 'Updated',
-        mobileLabel: 'Updated',
-        width: '9%',
-        render: (value) => <TableDateTime value={value} />,
-      },
-      ...(showRowActionsColumn
-        ? [
-          {
-            key: 'rowActions',
-            label: 'Actions',
-            mobileLabel: 'Actions',
-            align: 'center',
-            width: '10%',
-            render: (_value, row) => (
-              <VmfRowActionsMenu row={row} actions={rowActions} onAction={handleRowAction} />
-            ),
-          },
-        ]
-        : []),
-    ],
-    [handleRowAction, rowActions, showRowActionsColumn],
+  const handleRuntimeRowOpen = useCallback(
+    (row) => {
+      const route = String(row?.route ?? '').trim()
+      if (route) navigate(route)
+    },
+    [navigate],
   )
 
-  const runtimeInstanceColumns = useMemo(
-    () => [
-      {
-        key: 'runtimeInstanceSummary',
-        label: 'Runtime Work',
-        mobileLabel: 'Runtime Work',
-        width: '24%',
-        render: renderRuntimeInstanceSummary,
-      },
-      {
-        key: 'runtimeType',
-        label: 'Work Type',
-        mobileLabel: 'Work Type',
-        width: '14%',
-        render: (value) => formatRuntimeTokenLabel(value || 'VALUE_NARRATIVE'),
-      },
-      {
-        key: 'packageSummary',
-        label: 'Package',
-        mobileLabel: 'Package',
-        width: '22%',
-        render: renderRuntimePackageSummary,
-      },
-      {
-        key: 'status',
-        label: 'Runtime Status',
-        mobileLabel: 'Runtime Status',
-        width: '14%',
-        render: (_value, row) => {
-          const status = getRuntimeLifecycleStatus(row)
-          return (
-            <Status size="sm" showIcon variant={getRuntimeStatusVariant(status)}>
-              {formatRuntimeTokenLabel(status)}
-            </Status>
-          )
-        },
-      },
-      {
-        key: 'executionStatus',
-        label: 'Execution',
-        mobileLabel: 'Execution',
-        width: '14%',
-        render: (_value, row) => {
-          const executionState = getRuntimeExecutionState(row)
-          return (
-            <Status size="sm" showIcon variant={getExecutionStateVariant(executionState)}>
-              {formatRuntimeTokenLabel(executionState)}
-            </Status>
-          )
-        },
-      },
-      {
-        key: 'updatedAt',
-        label: 'Updated',
-        mobileLabel: 'Updated',
-        width: '12%',
-        render: (value) => <TableDateTime value={value} />,
-      },
-    ],
-    [],
+  const runtimeRegisterRows = useMemo(() => {
+    const normalizedSearch = querySearch.toLowerCase()
+
+    return runtimeInstanceRows
+      .map(buildRuntimeInstanceRegisterRow)
+      .filter((row) => {
+        const matchesSearch = !normalizedSearch || row.searchText.includes(normalizedSearch)
+        const matchesStatus = !statusFilter || row.status === statusFilter
+        const matchesLifecycle = !effectiveLifecycleFilter || row.lifecycle === effectiveLifecycleFilter
+        return matchesSearch && matchesStatus && matchesLifecycle
+      })
+  }, [effectiveLifecycleFilter, querySearch, runtimeInstanceRows, statusFilter])
+
+  const vmfRegisterRows = useMemo(
+    () => rows.map(buildVmfRegisterRow),
+    [rows],
+  )
+
+  const registerRows = useMemo(
+    () =>
+      [...runtimeRegisterRows, ...vmfRegisterRows]
+        .sort((left, right) => right.updatedTime - left.updatedTime),
+    [runtimeRegisterRows, vmfRegisterRows],
+  )
+
+  const registerShownCount = registerRows.length
+  const registerCountLabel = `${registerShownCount} shown`
+  const registerSourceCountLabel = `${runtimeTotalCount} ${
+    runtimeTotalCount === 1 ? 'runtime object' : 'runtime objects'
+  } | ${totalCount} ${totalCount === 1 ? 'VMF bridge record' : 'VMF bridge records'}`
+  const isRegisterLoading = isLoading || isLoadingRuntimeInstances
+  const isRegisterRefreshing = Boolean(
+    (isFetching && !isLoading) || (isFetchingRuntimeInstances && !isLoadingRuntimeInstances),
   )
   const handleCreateSubmit = useCallback(
     async (event) => {
@@ -1159,8 +1255,8 @@ function MaintainVmfs() {
       if (description.length > 1000) {
         nextErrors.description = 'Description must be 1000 characters or fewer.'
       }
-      if (isRuntimeCapacityReached) {
-        nextErrors.form = 'No Value Narrative runtime slots are available for this tenant.'
+      if (runtimeCapacityBlockMessage) {
+        nextErrors.form = runtimeCapacityBlockMessage
       }
       if (!frameworkPackageId) {
         nextErrors.frameworkPackageId = 'Framework package is required.'
@@ -1248,7 +1344,7 @@ function MaintainVmfs() {
       createForm.name,
       customerId,
       frameworkPackageOptions,
-      isRuntimeCapacityReached,
+      runtimeCapacityBlockMessage,
       tenantId,
     ],
   )
@@ -1418,178 +1514,95 @@ function MaintainVmfs() {
   }
 
   return (
-    <section className="maintain-vmfs container" aria-label="VMF workspace">
+    <section className="maintain-vmfs container" aria-label="Value Narrative workspace">
       <header className="maintain-vmfs__header">
-        <h1 className="maintain-vmfs__title">VMF Workspace</h1>
+        <h1 className="maintain-vmfs__title">Value Narrative Workspace</h1>
         <p className="maintain-vmfs__subtitle">
-          {canMutateVmfs ? 'Create and review' : 'Review'} Value Narrative runtime work, VMF package metadata, and
-          workspace scope for{` ${workspaceScopeName}.`}
+          {canMutateVmfs ? 'Create and review' : 'Review'} Value Narrative runtime work,
+          package lineage, and workspace scope for{` ${workspaceScopeName}.`}
         </p>
       </header>
 
-      {shouldShowRuntimeInstancesSection ? (
-        <Fieldset className="maintain-vmfs__fieldset">
-          <Fieldset.Legend className="sr-only">Value Narrative runtime work</Fieldset.Legend>
-          <Card variant="elevated" className="maintain-vmfs__card">
-            <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
-              <div className="maintain-vmfs__section-header">
-                <div className="maintain-vmfs__section-copy">
-                  <h2 className="maintain-vmfs__section-title">My Value Narratives</h2>
-                  <p className="maintain-vmfs__section-description">
-                    Runtime instances created from active VMF packages for this tenant.
-                  </p>
-                </div>
-              </div>
-
-              {runtimeInstanceAppError ? (
-                <ErrorSupportPanel error={runtimeInstanceAppError} context="maintain-vmfs-runtime-instances" />
-              ) : null}
-
-              <HorizontalScroll
-                className="maintain-vmfs__table-wrap"
-                ariaLabel="Value Narrative runtime instances table"
-                gap="sm"
-              >
-                <Table
-                  className="maintain-vmfs__runtime-table"
-                  columns={runtimeInstanceColumns}
-                  data={runtimeInstanceRows}
-                  loading={isLoadingRuntimeInstances}
-                  hoverable
-                  variant="striped"
-                  emptyMessage="No Value Narrative runtime instances found."
-                  ariaLabel="Value Narrative runtime instances"
-                />
-              </HorizontalScroll>
-
-              {isFetchingRuntimeInstances && !isLoadingRuntimeInstances ? (
-                <p className="maintain-vmfs__muted">Refreshing runtime work...</p>
-              ) : null}
-
-              {runtimeTotalPages > 1 ? (
-                <div
-                  className="maintain-vmfs__pagination"
-                  role="navigation"
-                  aria-label="Value Narrative runtime pagination"
-                >
-                  <div className="maintain-vmfs__pagination-controls">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={runtimeCurrentPage <= 1 || isFetchingRuntimeInstances}
-                      onClick={() => setRuntimePage(1)}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={runtimeCurrentPage <= 1 || isFetchingRuntimeInstances}
-                      onClick={() => setRuntimePage((value) => Math.max(1, value - 1))}
-                    >
-                      Previous
-                    </Button>
-                  </div>
-                  <p className="maintain-vmfs__pagination-info">
-                    Page {runtimeCurrentPage} of {runtimeTotalPages}
-                    {runtimeTotalCount > 0 ? ` (${runtimeTotalCount} runtime instances)` : ''}
-                  </p>
-                  <div className="maintain-vmfs__pagination-controls">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={runtimeCurrentPage >= runtimeTotalPages || isFetchingRuntimeInstances}
-                      onClick={() => setRuntimePage((value) => Math.min(runtimeTotalPages, value + 1))}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={runtimeCurrentPage >= runtimeTotalPages || isFetchingRuntimeInstances}
-                      onClick={() => setRuntimePage(runtimeTotalPages)}
-                    >
-                      Last
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </Card.Body>
-          </Card>
-        </Fieldset>
-      ) : null}
-
       <Fieldset className="maintain-vmfs__fieldset">
-        <Fieldset.Legend className="sr-only">VMF catalogue</Fieldset.Legend>
+        <Fieldset.Legend className="sr-only">Value Narrative work register</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
-            <div
-              className="maintain-vmfs__catalogue-actions"
-              role="group"
-              aria-label="VMF catalogue actions"
-            >
-              {canCreateVmfs && hasNoRuntimeReadyFrameworkPackages ? (
-                <Status
-                  variant="warning"
-                  size="sm"
-                  showIcon
-                  className="maintain-vmfs__package-status"
-                  aria-label="Eligible framework package required"
-                >
-                  No eligible package
-                </Status>
-              ) : null}
-              <div className="maintain-vmfs__catalogue-buttons">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleBackToHome}
-                >
-                  Back
-                </Button>
-                {canCreateVmfs ? (
+            <div className="maintain-vmfs__register-header">
+              <div className="maintain-vmfs__section-copy">
+                <h2 className="maintain-vmfs__section-title">Value Narratives</h2>
+                <p className="maintain-vmfs__section-description">
+                  Runtime objects are shown with transitional VMF bridge records for this
+                  tenant. Runtime state and package lineage fields are available inside
+                  row accordions.
+                </p>
+              </div>
+
+              <div
+                className="maintain-vmfs__catalogue-actions"
+                role="group"
+                aria-label="Value Narrative workspace actions"
+              >
+                {canCreateVmfs && hasNoRuntimeReadyFrameworkPackages ? (
+                  <Status
+                    variant="warning"
+                    size="sm"
+                    showIcon
+                    className="maintain-vmfs__package-status"
+                    aria-label="Eligible framework package required"
+                  >
+                    No eligible package
+                  </Status>
+                ) : null}
+                <div className="maintain-vmfs__catalogue-buttons">
                   <Button
                     type="button"
-                    variant="primary"
+                    variant="outline"
                     size="sm"
-                    onClick={openCreateDialog}
-                    disabled={
-                      isMutationLoading
-                      || isRuntimeCapacityReached
-                      || isRuntimeCapacityLoading
-                      || isRuntimeCapacityRefreshing
-                      || isRuntimeCapacityUnavailable
-                    }
+                    onClick={handleBackToHome}
                   >
-                    Create Value Narrative
+                    Back
                   </Button>
+                  {canCreateVmfs ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={openCreateDialog}
+                      disabled={
+                        isMutationLoading
+                        || isCreateRuntimeCapacityBlocked
+                      }
+                    >
+                      Create Value Narrative
+                    </Button>
+                  ) : null}
+                </div>
+                {canCreateVmfs && runtimeCapacityGuidance ? (
+                  <Status
+                    variant={runtimeCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
+                    size="sm"
+                    showIcon
+                    className="maintain-vmfs__capacity-status"
+                    aria-label={runtimeCapacityGuidance.ariaLabel}
+                  >
+                    {runtimeCapacityGuidance.displayValue}
+                  </Status>
                 ) : null}
               </div>
-              {canCreateVmfs && runtimeCapacityGuidance ? (
-                <Status
-                  variant={runtimeCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
-                  size="sm"
-                  showIcon
-                  className="maintain-vmfs__capacity-status"
-                  aria-label={runtimeCapacityGuidance.ariaLabel}
-                >
-                  {runtimeCapacityGuidance.displayValue}
-                </Status>
-              ) : null}
             </div>
 
             <div className="maintain-vmfs__toolbar">
               <Input
                 id="vmf-search"
-                label="Search"
+                label="Search runtime name, description, ID, or package"
                 size="sm"
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value)
                   setPage(1)
+                  setRuntimePage(1)
                 }}
-                placeholder="Search by name or description"
+                placeholder="Search Value Narratives"
                 fullWidth
               />
               <Select
@@ -1601,6 +1614,7 @@ function MaintainVmfs() {
                 onChange={(event) => {
                   setStatusFilter(event.target.value)
                   setPage(1)
+                  setRuntimePage(1)
                 }}
               />
               <Select
@@ -1623,75 +1637,274 @@ function MaintainVmfs() {
               />
             </div>
 
+            {runtimeInstanceAppError ? (
+              <ErrorSupportPanel error={runtimeInstanceAppError} context="maintain-vmfs-runtime-instances" />
+            ) : null}
+
             {listAppError && !inactiveCustomerAppError && !licenceAppError ? (
               <ErrorSupportPanel error={listAppError} context="maintain-vmfs-list" />
             ) : null}
 
-            <p className="maintain-vmfs__table-note">{workspaceTableNote}</p>
+            <div className="maintain-vmfs__register-meta">
+              <p className="maintain-vmfs__table-note">{workspaceTableNote}</p>
+              <div className="maintain-vmfs__register-counts" aria-label="Value Narrative register counts">
+                <Badge size="sm" variant="neutral" pill>{registerCountLabel}</Badge>
+                <Badge size="sm" variant="info" pill>{registerSourceCountLabel}</Badge>
+              </div>
+            </div>
 
             <HorizontalScroll
               className="maintain-vmfs__table-wrap"
-              ariaLabel="VMF table"
+              ariaLabel="Value Narrative work register table"
               gap="sm"
             >
               <Table
-                className="maintain-vmfs__table"
-                columns={columns}
-                data={rows}
-                loading={isLoading}
+                className="maintain-vmfs__table maintain-vmfs__register-table"
                 hoverable
                 variant="striped"
-                emptyMessage="No VMFs found."
-                ariaLabel="VMF catalogue"
-              />
+                ariaLabel="Value Narrative work register"
+              >
+                <Table.Head>
+                  <Table.Row>
+                    <Table.Header width="300px">Value Narrative</Table.Header>
+                    <Table.Header width="300px">Description</Table.Header>
+                    <Table.Header width="140px">State</Table.Header>
+                    <Table.Header width="168px">Stage / Health</Table.Header>
+                    <Table.Header width="212px">Framework / Package</Table.Header>
+                    <Table.Header width="156px">Updated</Table.Header>
+                    <Table.Header width="164px" align="center">Actions</Table.Header>
+                  </Table.Row>
+                </Table.Head>
+                <Table.Body>
+                  {isRegisterLoading ? (
+                    <Table.Row className="table__row--loading">
+                      <Table.Cell colSpan={7} className="table__cell--empty">
+                        <p className="table__empty-message">Loading Value Narrative work...</p>
+                      </Table.Cell>
+                    </Table.Row>
+                  ) : registerRows.length === 0 ? (
+                    <Table.Row className="table__row--empty">
+                      <Table.Cell colSpan={7} className="table__cell--empty">
+                        <p className="table__empty-message">No Value Narratives found.</p>
+                      </Table.Cell>
+                    </Table.Row>
+                  ) : (
+                    registerRows.map((registerRow) => (
+                      <Table.Row
+                        key={registerRow.key}
+                        rowId={registerRow.key}
+                        className="maintain-vmfs__register-row"
+                      >
+                        <Table.Cell
+                          dataLabel="Value Narrative"
+                          className="maintain-vmfs__register-identity-cell"
+                        >
+                          <div className="maintain-vmfs__vmf-summary">
+                            <div className="maintain-vmfs__vmf-summary-header">
+                              {registerRow.route ? (
+                                <Link
+                                  to={registerRow.route}
+                                  className="maintain-vmfs__vmf-name"
+                                  variant="primary"
+                                  underline="hover"
+                                >
+                                  {registerRow.name}
+                                </Link>
+                              ) : (
+                                <span className="maintain-vmfs__vmf-name">
+                                  {registerRow.name}
+                                </span>
+                              )}
+                              <span className="maintain-vmfs__vmf-description">
+                                {registerRow.displayId}
+                              </span>
+                              <Badge size="sm" variant="neutral" pill>
+                                {registerRow.sourceLabel}
+                              </Badge>
+                            </div>
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell dataLabel="Description">
+                          {registerRow.description ? (
+                            <span className="maintain-vmfs__vmf-description">
+                              {registerRow.description}
+                            </span>
+                          ) : (
+                            <span className="maintain-vmfs__muted">No description recorded</span>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell dataLabel="State">
+                          <div className="maintain-vmfs__state-stack">
+                            <Status
+                              size="sm"
+                              showIcon
+                              variant={registerRow.statusVariant === 'danger' ? 'error' : registerRow.statusVariant}
+                            >
+                              {registerRow.statusLabel}
+                            </Status>
+                            <Badge
+                              size="sm"
+                              variant={registerRow.lifecycleVariant}
+                              pill
+                            >
+                              {registerRow.lifecycleLabel}
+                            </Badge>
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell dataLabel="Stage / Health">
+                          <div className="maintain-vmfs__state-stack">
+                            <Badge size="sm" variant={registerRow.stageVariant} pill>
+                              {registerRow.stageLabel}
+                            </Badge>
+                            <span className="maintain-vmfs__summary-label">
+                              {registerRow.stageHelper}
+                            </span>
+                            <RuntimeEvidenceAccordionCell row={registerRow} />
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell dataLabel="Framework / Package">
+                          <div className="maintain-vmfs__framework-summary">
+                            <div className="maintain-vmfs__summary-pair">
+                              <span className="maintain-vmfs__summary-label">
+                                {registerRow.frameworkLabel}
+                              </span>
+                              <span className="maintain-vmfs__summary-value">
+                                {registerRow.packageLabel}
+                              </span>
+                            </div>
+                            <span className="maintain-vmfs__vmf-description">
+                              Version {registerRow.packageVersion}
+                            </span>
+                            <PackageLineageAccordionCell row={registerRow} />
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell dataLabel="Updated">
+                          <TableDateTime value={registerRow.updatedAt} />
+                        </Table.Cell>
+                        <Table.Cell
+                          dataLabel="Actions"
+                          align="center"
+                          className="maintain-vmfs__register-actions-cell"
+                        >
+                          {registerRow.source === 'runtime' ? (
+                            <RuntimeRowActionsMenu
+                              row={registerRow}
+                              onOpen={handleRuntimeRowOpen}
+                            />
+                          ) : (
+                            <VmfRowActionsMenu
+                              row={registerRow.original}
+                              actions={rowActions}
+                              onAction={handleRowAction}
+                            />
+                          )}
+                        </Table.Cell>
+                      </Table.Row>
+                    ))
+                  )}
+                </Table.Body>
+              </Table>
             </HorizontalScroll>
 
-            {isFetching && !isLoading ? (
-              <p className="maintain-vmfs__muted">Refreshing list...</p>
+            {isRegisterRefreshing ? (
+              <p className="maintain-vmfs__muted">Refreshing Value Narrative work...</p>
             ) : null}
 
-            {totalPages > 1 ? (
-              <div className="maintain-vmfs__pagination" role="navigation" aria-label="VMF pagination">
-                <div className="maintain-vmfs__pagination-controls">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage <= 1 || isFetching}
-                    onClick={() => setPage(1)}
+            {runtimeTotalPages > 1 || totalPages > 1 ? (
+              <div className="maintain-vmfs__pagination-stack">
+                {runtimeTotalPages > 1 ? (
+                  <div
+                    className="maintain-vmfs__pagination"
+                    role="navigation"
+                    aria-label="Value Narrative runtime pagination"
                   >
-                    First
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage <= 1 || isFetching}
-                    onClick={() => setPage((value) => Math.max(1, value - 1))}
-                  >
-                    Previous
-                  </Button>
-                </div>
-                <p className="maintain-vmfs__pagination-info">
-                  Page {currentPage} of {totalPages}
-                  {totalCount > 0 ? ` (${totalCount} VMFs)` : ''}
-                </p>
-                <div className="maintain-vmfs__pagination-controls">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= totalPages || isFetching}
-                    onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-                  >
-                    Next
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= totalPages || isFetching}
-                    onClick={() => setPage(totalPages)}
-                  >
-                    Last
-                  </Button>
-                </div>
+                    <div className="maintain-vmfs__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={runtimeCurrentPage <= 1 || isFetchingRuntimeInstances}
+                        onClick={() => setRuntimePage(1)}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={runtimeCurrentPage <= 1 || isFetchingRuntimeInstances}
+                        onClick={() => setRuntimePage((value) => Math.max(1, value - 1))}
+                      >
+                        Previous
+                      </Button>
+                    </div>
+                    <p className="maintain-vmfs__pagination-info">
+                      Runtime objects page {runtimeCurrentPage} of {runtimeTotalPages}
+                      {runtimeTotalCount > 0 ? ` (${runtimeTotalCount} runtime objects)` : ''}
+                    </p>
+                    <div className="maintain-vmfs__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={runtimeCurrentPage >= runtimeTotalPages || isFetchingRuntimeInstances}
+                        onClick={() => setRuntimePage((value) => Math.min(runtimeTotalPages, value + 1))}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={runtimeCurrentPage >= runtimeTotalPages || isFetchingRuntimeInstances}
+                        onClick={() => setRuntimePage(runtimeTotalPages)}
+                      >
+                        Last
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {totalPages > 1 ? (
+                  <div className="maintain-vmfs__pagination" role="navigation" aria-label="VMF bridge record pagination">
+                    <div className="maintain-vmfs__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1 || isFetching}
+                        onClick={() => setPage(1)}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1 || isFetching}
+                        onClick={() => setPage((value) => Math.max(1, value - 1))}
+                      >
+                        Previous
+                      </Button>
+                    </div>
+                    <p className="maintain-vmfs__pagination-info">
+                      VMF bridge records page {currentPage} of {totalPages}
+                      {totalCount > 0 ? ` (${totalCount} VMF bridge records)` : ''}
+                    </p>
+                    <div className="maintain-vmfs__pagination-controls">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages || isFetching}
+                        onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages || isFetching}
+                        onClick={() => setPage(totalPages)}
+                      >
+                        Last
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </Card.Body>
@@ -1707,6 +1920,11 @@ function MaintainVmfs() {
             {createErrors.form ? (
               <p className="maintain-vmfs__error" role="alert">
                 {createErrors.form}
+              </p>
+            ) : null}
+            {!createErrors.form && runtimeCapacityBlockMessage ? (
+              <p className="maintain-vmfs__error" role="alert">
+                {runtimeCapacityBlockMessage}
               </p>
             ) : null}
             <Input
@@ -1795,9 +2013,7 @@ function MaintainVmfs() {
                   isFrameworkPackageSelectionLoading
                   || Boolean(frameworkPackageAppError)
                   || frameworkPackageOptions.length === 0
-                  || isRuntimeCapacityReached
-                  || isRuntimeCapacityLoading
-                  || isRuntimeCapacityRefreshing
+                  || isCreateRuntimeCapacityBlocked
                 }
               >
                 Create

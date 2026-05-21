@@ -86,6 +86,29 @@
   font-size: var(--font-size-sm);
 }
 
+.maintain-vmfs__register-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-md);
+  align-items: start;
+}
+
+.maintain-vmfs__register-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.maintain-vmfs__register-counts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-2xs);
+  flex-wrap: wrap;
+}
+
 .maintain-vmfs__capacity-status {
   margin-right: var(--spacing-2xs);
 }
@@ -111,8 +134,8 @@
   min-width: 1100px;
 }
 
-.maintain-vmfs__runtime-table {
-  min-width: 980px;
+.maintain-vmfs__register-table {
+  min-width: 1440px;
 }
 
 .maintain-vmfs__row-actions {
@@ -164,45 +187,70 @@
   text-transform: uppercase;
 }
 
-.maintain-vmfs__runtime-accordion {
-  width: 100%;
+.maintain-vmfs__register-identity-cell {
+  vertical-align: top;
+}
+
+.maintain-vmfs__state-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
   min-width: 0;
 }
 
-.maintain-vmfs__runtime-accordion .accordion__item {
+.maintain-vmfs__register-actions-cell {
+  white-space: nowrap;
+}
+
+.maintain-vmfs__cell-accordion {
+  width: 100%;
+}
+
+.maintain-vmfs__cell-accordion .accordion__item {
   border: none;
   border-bottom: 0;
   background: transparent;
 }
 
-.maintain-vmfs__runtime-accordion-header {
+.maintain-vmfs__cell-accordion-header {
   padding: 0;
-  width: fit-content;
-  max-width: 100%;
-  color: var(--color-text-primary);
+  text-transform: none;
+  letter-spacing: normal;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  gap: var(--spacing-2xs);
-  letter-spacing: 0;
+  color: var(--color-text-primary);
   line-height: var(--line-height-tight);
-  text-transform: none;
 }
 
-.maintain-vmfs__runtime-accordion-header:hover {
+.maintain-vmfs__cell-accordion-header:hover {
   background: transparent;
 }
 
-.maintain-vmfs__runtime-accordion-header .accordion__header-text {
-  min-width: 0;
-  width: 100%;
-}
-
-.maintain-vmfs__runtime-accordion-header .accordion__icon {
+.maintain-vmfs__cell-accordion-header .accordion__icon {
   margin-left: var(--spacing-2xs);
 }
 
-.maintain-vmfs__runtime-accordion-content .accordion__content-inner {
-  padding: var(--spacing-2xs) 0 var(--spacing-xs);
+.maintain-vmfs__cell-accordion-content .accordion__content-inner {
+  padding: var(--spacing-2xs) 0 0;
+  line-height: var(--line-height-tight);
+}
+
+.maintain-vmfs__cell-accordion-value {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  line-height: var(--line-height-tight);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.maintain-vmfs__cell-accordion-badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .maintain-vmfs__table-note {
@@ -230,6 +278,11 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.maintain-vmfs__pagination-stack {
+  display: grid;
+  gap: var(--spacing-sm);
 }
 
 .maintain-vmfs__muted {
@@ -307,16 +360,30 @@
 }
 
 @media (max-width: 1024px) {
+  .maintain-vmfs__register-header {
+    grid-template-columns: 1fr;
+  }
+
   .maintain-vmfs__toolbar {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (min-width: 768px) {
   .maintain-vmfs__table .table__header,
   .maintain-vmfs__table .table__cell {
-    padding-inline: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-sm);
   }
+
+  .maintain-vmfs__table .table__cell {
+    vertical-align: top;
+  }
+
+  .maintain-vmfs__register-actions-cell {
+    vertical-align: middle;
+  }
+
 }
 
 @media (max-width: 768px) {
@@ -344,6 +411,10 @@
   }
 
   .maintain-vmfs__table {
+    min-width: 0;
+  }
+
+  .maintain-vmfs__register-table {
     min-width: 0;
   }
 
