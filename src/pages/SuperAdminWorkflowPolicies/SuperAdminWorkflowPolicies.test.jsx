@@ -87,15 +87,38 @@ describe('SuperAdminWorkflowPolicies page', () => {
   it('keeps the governed action registry aligned with runtime action sprints', () => {
     const optionValues = WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value)
 
-    expect(optionValues).toEqual(expect.arrayContaining([
+    expect(optionValues).toEqual([
+      'SAVE',
       'SAVE_DRAFT',
-      'RUN_VALIDATION',
+      'INITIALISE_STATE',
       'MARK_READY',
       'SUBMIT_FOR_REVIEW',
+      'START_REVIEW',
+      'APPROVE',
+      'REJECT',
       'RETURN_TO_DRAFT',
+      'PUBLISH',
+      'BUILD_SECTIONS',
+      'COMPLETE_DISCOVERY',
+      'COMPLETE_POSITIONING',
+      'COMPLETE_PROOF',
+      'COMPLETE_ECONOMICS',
+      'COMPLETE_RISK',
+      'RUN_INTEGRITY',
+      'CHECK_DEAL_READINESS',
+      'COMPILE_SERVICE_SPINE',
+      'RENDER_OUTPUT',
+      'QUERY_FRAMEWORK_STATE',
+      'RUN_VALIDATION',
+      'QUERY_STATE',
       'GENERATE_SECTION',
       'REGENERATE_SECTION',
-    ]))
+      'GENERATE_ARTEFACT',
+      'RUN_ANALYSIS',
+      'LOCK_RECORD',
+      'UNLOCK_RECORD',
+      'ARCHIVE',
+    ])
   })
 
   it('keeps trigger event options aligned with section generation events', () => {
@@ -104,6 +127,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
     expect(optionValues).toEqual(expect.arrayContaining([
       'ON_SECTION_GENERATE',
       'ON_SECTION_REGENERATE',
+      'ON_LOCK',
     ]))
   })
 

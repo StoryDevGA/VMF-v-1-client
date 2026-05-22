@@ -42,8 +42,13 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
   DRAFT: 'neutral',
   FAILED: 'error',
   IN_REVIEW: 'info',
+  APPROVED: 'success',
+  PUBLISHED: 'success',
+  LOCKED: 'success',
   PASSED: 'success',
   READY: 'success',
+  UNPUBLISHED: 'neutral',
+  UNLOCKED: 'neutral',
   UNKNOWN: 'neutral',
   VALIDATED: 'success',
 })
@@ -563,7 +568,7 @@ function RuntimeActionButton({
         onClick={() => onExecute?.(action)}
         leftIcon={<MdBolt aria-hidden="true" />}
       >
-        {action.buttonLabel}
+        {getRuntimeActionLabel(action, actionKey)}
       </Button>
       {!enabled && disabledReason ? (
         <p id={reasonId} className="runtime-workspace__action-disabled-reason">
@@ -627,6 +632,8 @@ function RuntimeWorkspace() {
   const packageSummary = [packageName || packageKey, packageVersion].filter(Boolean).join(' / ') || '--'
   const validationState = renderer?.validation?.state ?? 'UNKNOWN'
   const readinessState = renderer?.readiness?.state ?? 'DRAFT'
+  const publishState = renderer?.publish?.state ?? 'UNKNOWN'
+  const lockState = renderer?.lock?.state ?? 'UNKNOWN'
   const summaryItems = [
     {
       key: 'runtime-status',
@@ -656,6 +663,18 @@ function RuntimeWorkspace() {
       label: 'Readiness',
       value: formatRuntimeTokenLabel(readinessState),
       variant: getTokenStatusVariant(readinessState),
+    },
+    {
+      key: 'publish',
+      label: 'Publish',
+      value: formatRuntimeTokenLabel(publishState),
+      variant: getTokenStatusVariant(publishState),
+    },
+    {
+      key: 'lock',
+      label: 'Lock',
+      value: formatRuntimeTokenLabel(lockState),
+      variant: getTokenStatusVariant(lockState),
     },
     {
       key: 'package',

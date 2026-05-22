@@ -51,6 +51,15 @@ const rendererPayload = {
     ready: false,
     submittedForReview: false,
   },
+  publish: {
+    state: 'UNPUBLISHED',
+    published: false,
+    outputEligible: false,
+  },
+  lock: {
+    state: 'UNLOCKED',
+    locked: false,
+  },
   sections: [
     {
       key: 'customer_problem',
@@ -149,12 +158,14 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Unknown')).toBeInTheDocument()
     const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
     const summaryItems = within(summary).getAllByRole('listitem')
-    expect(summaryItems).toHaveLength(6)
+    expect(summaryItems).toHaveLength(8)
     expect(within(summary).getByText('Runtime Status')).toBeInTheDocument()
     expect(within(summary).getByText('Execution')).toBeInTheDocument()
     expect(within(summary).getByText('Lifecycle Stage')).toBeInTheDocument()
     expect(within(summary).getByText('Validation')).toBeInTheDocument()
     expect(within(summary).getByText('Readiness')).toBeInTheDocument()
+    expect(within(summary).getByText('Publish')).toBeInTheDocument()
+    expect(within(summary).getByText('Lock')).toBeInTheDocument()
     expect(within(summary).queryByRole('status')).not.toBeInTheDocument()
     expect(summary.querySelector('dl, dt, dd')).toBeNull()
     summaryItems.forEach((item) => {
@@ -183,6 +194,49 @@ describe('RuntimeWorkspace', () => {
     expect(within(sidePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
+  })
+
+  it('uses the server-projected action label when buttonLabel is absent', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              ...rendererPayload.actions[0],
+              buttonLabel: '',
+              label: 'Send to Review',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    expect(within(sidePanel).getByRole('button', { name: /send to review/i })).toBeEnabled()
+  })
+
+  it('shows missing publish and lock projections as unknown', () => {
+    const { publish: _publish, lock: _lock, ...rendererWithoutPublishLock } = rendererPayload
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: rendererWithoutPublishLock },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
+    const unknownSummaryValues = within(summary).getAllByText('Unknown')
+    expect(unknownSummaryValues.length).toBeGreaterThanOrEqual(3)
   })
 
   it('shows a loading state before the renderer projection arrives', () => {
@@ -712,6 +766,72 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getAllByText('Current role or permissions do not allow runtime section generation.')).toHaveLength(2)
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
+  })
+
+  it('presents published and locked runtime truth as read-only', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            status: 'LOCKED',
+            executionStatus: 'COMPLETE',
+            lockedAt: '2026-05-22T10:00:00.000Z',
+          },
+          lifecycle: {
+            stage: 'LOCKED',
+          },
+          readiness: {
+            state: 'LOCKED',
+            ready: true,
+            locked: true,
+          },
+          publish: {
+            state: 'PUBLISHED',
+            published: true,
+            outputEligible: true,
+          },
+          lock: {
+            state: 'LOCKED',
+            locked: true,
+            lockedAt: '2026-05-22T10:00:00.000Z',
+          },
+          sections: rendererPayload.sections.map((section) => ({
+            ...section,
+            editable: false,
+            readonlyReason: 'Runtime is locked and cannot be mutated.',
+          })),
+          actions: [
+            {
+              actionKey: 'RUN_VALIDATION',
+              governedAction: 'RUN_VALIDATION',
+              buttonLabel: 'Run Validation',
+              enabled: false,
+              disabledReason: 'Runtime is locked and cannot be mutated or actioned.',
+              requiresConfirmation: false,
+              policyKey: 'run-validation-policy',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
+    expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
+    expect(within(summary).getByText('Published')).toBeInTheDocument()
+    expect(screen.getByText('Read only preview')).toBeInTheDocument()
+    expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+    const runValidationButton = screen.getByRole('button', { name: /run validation/i })
+    expect(runValidationButton).toBeDisabled()
+    expect(runValidationButton).toHaveAccessibleDescription('Runtime is locked and cannot be mutated or actioned.')
   })
 
   it('executes section generation actions with the section target and keeps them out of the side panel', async () => {

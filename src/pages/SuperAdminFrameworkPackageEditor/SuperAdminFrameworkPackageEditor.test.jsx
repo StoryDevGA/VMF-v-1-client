@@ -1229,6 +1229,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       'ON_RENDER',
       'ON_QUERY',
       'ON_PUBLISH',
+      'ON_LOCK',
     ])
 
     expect(FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS.map((option) => option.value)).toEqual([

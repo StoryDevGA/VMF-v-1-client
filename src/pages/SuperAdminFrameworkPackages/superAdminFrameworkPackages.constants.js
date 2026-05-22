@@ -80,6 +80,7 @@ export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freez
   { value: 'ON_RENDER', label: 'On render' },
   { value: 'ON_QUERY', label: 'On query' },
   { value: 'ON_PUBLISH', label: 'On publish' },
+  { value: 'ON_LOCK', label: 'On lock' },
 ])
 
 export const FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS = Object.freeze([
