@@ -37,6 +37,13 @@ const EMPTY_ARRAY = Object.freeze([])
 
 const getRendererPayload = (response) => response?.data ?? null
 
+const RENDERER_WARNING_SEVERITY_VARIANTS = Object.freeze({
+  INFO: 'info',
+  WARNING: 'warning',
+  ERROR: 'danger',
+  BLOCKER: 'danger',
+})
+
 const TOKEN_STATUS_VARIANTS = Object.freeze({
   BLOCKED: 'error',
   DRAFT: 'neutral',
@@ -95,10 +102,35 @@ const getSummaryValueClassName = (variant = 'neutral') => [
   variant !== 'neutral' && `runtime-workspace__summary-value--${variant}`,
 ].filter(Boolean).join(' ')
 
+const normalizeWarningSeverity = (value) => {
+  const severity = String(value ?? '').trim().toUpperCase()
+  if (severity === 'INFO' || severity === 'WARNING' || severity === 'ERROR' || severity === 'BLOCKER') {
+    return severity
+  }
+  return 'WARNING'
+}
+
+const getWarningSeverityVariant = (severity) =>
+  RENDERER_WARNING_SEVERITY_VARIANTS[normalizeWarningSeverity(severity)] ?? 'warning'
+
+const isEmptyStructuredValue = (value) => {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.length === 0
+  return Object.keys(value).length === 0
+}
+
+const hasRuntimeValue = (value) => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (isEmptyStructuredValue(value)) return false
+  return true
+}
+
 const stringifyValue = (value) => {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (isEmptyStructuredValue(value)) return ''
   return JSON.stringify(value, null, 2)
 }
 
@@ -197,6 +229,15 @@ const getSectionControlId = (section) => {
     .replace(/^-+|-+$/g, '')
     .toLowerCase()
   return `runtime-field-${rawId || 'section'}`
+}
+
+const getSectionDomId = (section, index = 0) => {
+  const rawId = String(section?.key ?? section?.sectionKey ?? `section-${index + 1}`)
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+  return `runtime-section-${rawId || index + 1}`
 }
 
 function RuntimeSummaryTile({
@@ -317,9 +358,11 @@ function RuntimeSection({
   executingActionKey = '',
   feedback = null,
   generationActions = {},
+  id,
   onExecuteSectionAction,
   onSave,
   section,
+  showRuntimePath = false,
 }) {
   const validationMessages = Array.isArray(section?.validationMessages)
     ? section.validationMessages
@@ -381,14 +424,16 @@ function RuntimeSection({
   }
 
   return (
-    <li className="runtime-workspace__section-item">
+    <li id={id} className="runtime-workspace__section-item">
       <Card variant="default" className="runtime-workspace__section-card">
         <Card.Body className="runtime-workspace__section-body">
           <form className="runtime-workspace__section-form" onSubmit={handleSubmit}>
             <div className="runtime-workspace__section-heading">
               <div>
                 <h2>{section.label}</h2>
-                <p>{section.runtimePath}</p>
+                {showRuntimePath ? (
+                  <p>{section.runtimePath}</p>
+                ) : null}
               </div>
               <div className="runtime-workspace__section-badges">
                 {section.required ? (
@@ -413,11 +458,11 @@ function RuntimeSection({
             >
               <section className="runtime-workspace__section-panel" aria-label="Input panel">
                 <h3>Input</h3>
-                <p>{currentValue || 'No input yet'}</p>
+                <p>{currentValue || 'Input required'}</p>
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Generated panel">
                 <h3>Generated</h3>
-                <p>{generatedContent || 'No generated content yet'}</p>
+                <p>{generatedContent || 'Awaiting generation'}</p>
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Review panel">
                 <h3>Review</h3>
@@ -445,7 +490,7 @@ function RuntimeSection({
                 </section>
                 <section>
                   <h3>Current</h3>
-                  <p>{generatedContent || 'No generated content yet'}</p>
+                  <p>{generatedContent || 'Awaiting generation'}</p>
                 </section>
               </div>
             ) : null}
@@ -579,6 +624,96 @@ function RuntimeActionButton({
   )
 }
 
+function RuntimeProgressSummary({
+  configWarnings = EMPTY_ARRAY,
+  sections = EMPTY_ARRAY,
+}) {
+  const requiredSections = sections.filter((section) => section?.required)
+  const requiredCompleteCount = requiredSections.filter((section) => hasRuntimeValue(section?.value)).length
+  const requiredTotal = requiredSections.length
+  const generatedCount = sections.filter((section) => hasRuntimeValue(section?.generated?.content ?? section?.generated)).length
+  const warningCounts = configWarnings.reduce((acc, warning) => {
+    const severity = normalizeWarningSeverity(warning?.severity)
+    acc[severity] = (acc[severity] || 0) + 1
+    return acc
+  }, {})
+  const hasRequiredInput = requiredTotal > 0
+  const requiredPercent = hasRequiredInput
+    ? Math.round((requiredCompleteCount / requiredTotal) * 100)
+    : 0
+  const requiredPercentLabel = hasRequiredInput ? `${requiredPercent}%` : 'N/A'
+  const completionLabel = hasRequiredInput
+    ? `${requiredCompleteCount} of ${requiredTotal} required sections have input`
+    : 'No required input to measure'
+  const warningSummary = [
+    warningCounts.BLOCKER ? `${warningCounts.BLOCKER} blocker${warningCounts.BLOCKER === 1 ? '' : 's'}` : '',
+    warningCounts.ERROR ? `${warningCounts.ERROR} error${warningCounts.ERROR === 1 ? '' : 's'}` : '',
+    warningCounts.WARNING ? `${warningCounts.WARNING} warning${warningCounts.WARNING === 1 ? '' : 's'}` : '',
+    warningCounts.INFO ? `${warningCounts.INFO} info` : '',
+  ].filter(Boolean).join(' / ') || 'No renderer warnings'
+
+  return (
+    <div className="runtime-workspace__progress-summary" aria-label="Runtime progress summary">
+      <div className="runtime-workspace__progress-row">
+        <span>Required input</span>
+        <strong>{requiredPercentLabel}</strong>
+      </div>
+      <progress
+        className="runtime-workspace__progress-bar"
+        max="100"
+        value={requiredPercent}
+        aria-label={completionLabel}
+      />
+      <ul className="runtime-workspace__metric-list" aria-label="Runtime workspace metrics">
+        <li>
+          <span>Required</span>
+          <strong>{hasRequiredInput ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}</strong>
+        </li>
+        <li>
+          <span>Generated</span>
+          <strong>{generatedCount}/{sections.length}</strong>
+        </li>
+        <li>
+          <span>Warnings</span>
+          <strong>{warningSummary}</strong>
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+function RuntimeSectionNavigation({
+  sections = EMPTY_ARRAY,
+}) {
+  if (sections.length === 0) {
+    return (
+      <Status variant="neutral" size="sm" showIcon>No section navigation available</Status>
+    )
+  }
+
+  return (
+    <nav className="runtime-workspace__section-nav" aria-label="Runtime section navigation">
+      <ol>
+        {sections.map((section, index) => {
+          const label = section?.shortLabel || section?.label || section?.sectionKey || `Section ${index + 1}`
+          const hasInput = hasRuntimeValue(section?.value)
+          const hasGenerated = hasRuntimeValue(section?.generated?.content ?? section?.generated)
+          const targetId = getSectionDomId(section, index)
+          return (
+            <li key={`${section?.sectionKey ?? section?.key ?? targetId}-nav`}>
+              <a href={`#${targetId}`}>
+                <span>{index + 1}</span>
+                <strong>{label}</strong>
+                <small>{hasGenerated ? 'Generated' : hasInput ? 'Input captured' : 'Input required'}</small>
+              </a>
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
+  )
+}
+
 function RuntimeWorkspace() {
   const navigate = useNavigate()
   const { runtimeInstanceId = '' } = useParams()
@@ -618,6 +753,8 @@ function RuntimeWorkspace() {
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
     : EMPTY_ARRAY
+  const showRuntimePaths = Boolean(renderer?.diagnostics?.debug?.showRuntimePaths)
+    || String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
   const appError = error ? normalizeError(error) : null
 
   const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
@@ -838,6 +975,7 @@ function RuntimeWorkspace() {
             </Badge>
             <h1>{runtimeInstance?.name || 'Runtime Workspace'}</h1>
             <p>{runtimeDisplayId}</p>
+            <RuntimeProgressSummary sections={sections} configWarnings={configWarnings} />
           </div>
           <ul className="runtime-workspace__summary-grid" aria-label="Runtime workspace summary">
             {summaryItems.map((item) => (
@@ -860,9 +998,10 @@ function RuntimeWorkspace() {
           </div>
           {sections.length > 0 ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
-              {sections.map((section) => (
+              {sections.map((section, index) => (
                 <RuntimeSection
                   key={`${section.key ?? section.runtimePath}-${stringifyValue(section.value)}`}
+                  id={getSectionDomId(section, index)}
                   section={section}
                   disabled={savingRuntimePath === section.runtimePath}
                   executingActionKey={executingActionKey}
@@ -870,6 +1009,7 @@ function RuntimeWorkspace() {
                   generationActions={sectionActionByKey}
                   onExecuteSectionAction={handleExecuteSectionAction}
                   onSave={handleSaveSection}
+                  showRuntimePath={showRuntimePaths}
                 />
               ))}
             </ul>
@@ -883,6 +1023,16 @@ function RuntimeWorkspace() {
         </main>
 
         <aside className="runtime-workspace__aside" aria-label="Runtime renderer side panel">
+          <Card variant="default" className="runtime-workspace__panel">
+            <Card.Body className="runtime-workspace__panel-body">
+              <div className="runtime-workspace__panel-heading">
+                <MdOutlineRoute aria-hidden="true" />
+                <h2>Sections</h2>
+              </div>
+              <RuntimeSectionNavigation sections={sections} />
+            </Card.Body>
+          </Card>
+
           <Card variant="default" className="runtime-workspace__panel">
             <Card.Body className="runtime-workspace__panel-body">
               <div className="runtime-workspace__panel-heading">
@@ -958,7 +1108,17 @@ function RuntimeWorkspace() {
                 <ul className="runtime-workspace__plain-list">
                   {configWarnings.map((warning, index) => (
                     <li key={`${warning.code}-${index}`}>
-                      <strong>{warning.code}</strong>
+                      <div className="runtime-workspace__warning-heading">
+                        <Badge
+                          variant={getWarningSeverityVariant(warning.severity)}
+                          size="sm"
+                          pill
+                          outline
+                        >
+                          {normalizeWarningSeverity(warning.severity)}
+                        </Badge>
+                        <strong>{warning.code}</strong>
+                      </div>
                       <span>{warning.message}</span>
                     </li>
                   ))}

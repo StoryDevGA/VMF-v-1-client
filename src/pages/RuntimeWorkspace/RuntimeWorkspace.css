@@ -33,10 +33,12 @@
 }
 
 .runtime-workspace__hero-copy h1 {
+  min-width: 0;
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-2xl);
   line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
 }
 
 .runtime-workspace__hero-copy p {
@@ -45,6 +47,80 @@
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
   overflow-wrap: anywhere;
+}
+
+.runtime-workspace__progress-summary {
+  display: grid;
+  gap: var(--spacing-xs);
+  width: 100%;
+  max-width: min(100%, calc(var(--spacing-3xl) * 8));
+  min-width: 0;
+}
+
+.runtime-workspace__progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__progress-row strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.runtime-workspace__progress-bar {
+  width: 100%;
+  min-width: 0;
+  height: var(--spacing-sm);
+  overflow: hidden;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-pill);
+  background-color: var(--color-background);
+}
+
+.runtime-workspace__progress-bar::-webkit-progress-bar {
+  background-color: var(--color-background);
+}
+
+.runtime-workspace__progress-bar::-webkit-progress-value {
+  border-radius: var(--border-radius-pill);
+  background-color: var(--color-action-primary);
+}
+
+.runtime-workspace__progress-bar::-moz-progress-bar {
+  border-radius: var(--border-radius-pill);
+  background-color: var(--color-action-primary);
+}
+
+.runtime-workspace__metric-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-workspace__metric-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.runtime-workspace__metric-list strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .runtime-workspace__summary-grid {
@@ -141,6 +217,7 @@
 
 .runtime-workspace__section-item {
   min-width: 0;
+  scroll-margin-top: var(--spacing-md);
 }
 
 .runtime-workspace__section-card,
@@ -222,6 +299,70 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
+}
+
+.runtime-workspace__section-nav ol {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-workspace__section-nav a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--spacing-2xs) var(--spacing-sm);
+  align-items: center;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.runtime-workspace__section-nav a:hover,
+.runtime-workspace__section-nav a:focus-visible {
+  border-color: var(--color-border-hover);
+  background-color: var(--color-surface);
+}
+
+.runtime-workspace__section-nav a > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-row: span 2;
+  width: calc(var(--spacing-md) + var(--spacing-sm));
+  height: calc(var(--spacing-md) + var(--spacing-sm));
+  border-radius: var(--border-radius-full);
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runtime-workspace__section-nav strong,
+.runtime-workspace__section-nav small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-workspace__section-nav strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__section-nav small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
 }
 
 .runtime-workspace__action-item {
@@ -309,6 +450,14 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__warning-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .runtime-workspace__checkbox,

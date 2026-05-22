@@ -100,6 +100,7 @@ const rendererPayload = {
     configWarnings: [
       {
         code: 'UI_CONTRACT_SECTION_MISSING',
+        severity: 'WARNING',
         message: 'Fallback presentation was applied.',
       },
     ],
@@ -180,20 +181,112 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionList).getAllByRole('listitem')).toHaveLength(1)
     expect(within(sections).getByRole('heading', { name: /customer problem/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveValue('Proposal creation is slow.')
-    expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
-    expect(screen.getByText('Required')).toBeInTheDocument()
-    expect(screen.getByText('Editable')).toBeInTheDocument()
+    expect(screen.queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
+    const sectionCard = within(sectionList).getByRole('listitem')
+    expect(within(sectionCard).getByText('Required')).toBeInTheDocument()
+    expect(within(sectionCard).getByText('Editable')).toBeInTheDocument()
+    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    expect(within(progressSummary).getByRole('progressbar', { name: /1 of 1 required sections have input/i })).toHaveAttribute('value', '100')
+    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    expect(within(metrics).getByText('Required')).toBeInTheDocument()
+    expect(within(metrics).getByText('1/1')).toBeInTheDocument()
+    expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
     const sectionObject = screen.getByRole('region', { name: /section object/i })
     expect(sectionObject).toBeInTheDocument()
     expect(within(sectionObject).getByRole('region', { name: /input panel/i })).toHaveTextContent('Proposal creation is slow.')
-    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent('No generated content yet')
+    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent('Awaiting generation')
 
     const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    const sectionNav = within(sidePanel).getByRole('navigation', { name: /runtime section navigation/i })
+    expect(within(sectionNav).getByRole('link', { name: /1 customer problem input captured/i })).toHaveAttribute(
+      'href',
+      '#runtime-section-customer_problem',
+    )
     expect(within(sidePanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
     expect(within(sidePanel).getByRole('button', { name: /submit for review/i })).toBeEnabled()
     expect(within(sidePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
+    expect(within(sidePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('shows raw runtime paths only when renderer diagnostics explicitly allow it', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          diagnostics: {
+            ...rendererPayload.diagnostics,
+            runtimePathVisibility: 'VISIBLE',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
+  })
+
+  it('shows neutral progress when no runtime sections are projected', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
+    expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
+    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    expect(within(metrics).getByText('None')).toBeInTheDocument()
+    expect(within(metrics).getByText('0/0')).toBeInTheDocument()
+    expect(screen.getByText(/no runtime sections available/i)).toBeInTheDocument()
+    expect(screen.getByText(/no section navigation available/i)).toBeInTheDocument()
+  })
+
+  it('shows neutral progress when projected sections have no required input', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: rendererPayload.sections.map((section) => ({
+            ...section,
+            required: false,
+            value: 'Optional context only.',
+          })),
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
+    expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
+    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    expect(within(metrics).getByText('None')).toBeInTheDocument()
+    expect(within(metrics).getByText('0/1')).toBeInTheDocument()
+    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    const sectionNav = within(sidePanel).getByRole('navigation', { name: /runtime section navigation/i })
+    expect(within(sectionNav).getByRole('link', { name: /1 customer problem input captured/i })).toBeInTheDocument()
   })
 
   it('uses the server-projected action label when buttonLabel is absent', () => {
@@ -717,6 +810,8 @@ describe('RuntimeWorkspace', () => {
       'placeholder',
       '{\n  "summary": "Summarise the customer situation, priority, and recommended value narrative focus."\n}',
     )
+    const sectionObject = screen.getByRole('region', { name: /section object/i })
+    expect(within(sectionObject).getByRole('region', { name: /input panel/i })).toHaveTextContent('Input required')
   })
 
   it('keeps renderer read-only sections from submitting mutations', () => {
