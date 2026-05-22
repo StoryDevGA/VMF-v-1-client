@@ -67,6 +67,8 @@ export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freez
   { value: 'ON_APPROVAL', label: 'On approval' },
   { value: 'ON_APPROVE', label: 'On approve' },
   { value: 'ON_SECTION_BUILD', label: 'On section build' },
+  { value: 'ON_SECTION_GENERATE', label: 'On section generate' },
+  { value: 'ON_SECTION_REGENERATE', label: 'On section regenerate' },
   { value: 'ON_DISCOVERY_COMPLETE', label: 'On discovery complete' },
   { value: 'ON_POSITIONING_COMPLETE', label: 'On positioning complete' },
   { value: 'ON_PROOF_COMPLETE', label: 'On proof complete' },

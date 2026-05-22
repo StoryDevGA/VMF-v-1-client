@@ -10,6 +10,7 @@ import {
   WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS,
   WORKFLOW_POLICY_EXECUTION_TYPES,
   WORKFLOW_POLICY_STEP_TYPES,
+  WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS,
   validateWorkflowPolicyForm,
 } from './superAdminWorkflowPolicies.constants.js'
 import {
@@ -83,7 +84,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
     ).toBeInTheDocument()
   })
 
-  it('keeps the governed action registry aligned with Sprint 2 runtime actions', () => {
+  it('keeps the governed action registry aligned with runtime action sprints', () => {
     const optionValues = WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value)
 
     expect(optionValues).toEqual(expect.arrayContaining([
@@ -92,6 +93,17 @@ describe('SuperAdminWorkflowPolicies page', () => {
       'MARK_READY',
       'SUBMIT_FOR_REVIEW',
       'RETURN_TO_DRAFT',
+      'GENERATE_SECTION',
+      'REGENERATE_SECTION',
+    ]))
+  })
+
+  it('keeps trigger event options aligned with section generation events', () => {
+    const optionValues = WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS.map((option) => option.value)
+
+    expect(optionValues).toEqual(expect.arrayContaining([
+      'ON_SECTION_GENERATE',
+      'ON_SECTION_REGENERATE',
     ]))
   })
 

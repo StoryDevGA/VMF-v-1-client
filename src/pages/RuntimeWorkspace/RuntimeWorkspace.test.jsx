@@ -61,6 +61,14 @@ const rendererPayload = {
       helpText: 'Describe the core problem.',
       placeholder: 'Example: Proposal creation is slow.',
       value: 'Proposal creation is slow.',
+      generated: null,
+      review: {},
+      state: {
+        status: 'DRAFT',
+        revisionCount: 0,
+      },
+      lineage: {},
+      revisions: [],
       editable: true,
       validationKeys: ['required-sections-check'],
       validationMessages: [],
@@ -164,6 +172,10 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
     expect(screen.getByText('Required')).toBeInTheDocument()
     expect(screen.getByText('Editable')).toBeInTheDocument()
+    const sectionObject = screen.getByRole('region', { name: /section object/i })
+    expect(sectionObject).toBeInTheDocument()
+    expect(within(sectionObject).getByRole('region', { name: /input panel/i })).toHaveTextContent('Proposal creation is slow.')
+    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent('No generated content yet')
 
     const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
     expect(within(sidePanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
@@ -658,6 +670,25 @@ describe('RuntimeWorkspace', () => {
       data: {
         data: {
           ...rendererPayload,
+          actions: [
+            ...rendererPayload.actions,
+            {
+              actionKey: 'GENERATE_SECTION',
+              governedAction: 'GENERATE_SECTION',
+              buttonLabel: 'Generate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'generate-section-policy',
+            },
+            {
+              actionKey: 'REGENERATE_SECTION',
+              governedAction: 'REGENERATE_SECTION',
+              buttonLabel: 'Regenerate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'regenerate-section-policy',
+            },
+          ],
           sections: rendererPayload.sections.map((section) => ({
             ...section,
             editable: false,
@@ -674,7 +705,135 @@ describe('RuntimeWorkspace', () => {
 
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
+    const generateButton = screen.getByRole('button', { name: /^generate section$/i })
+    const regenerateButton = screen.getByRole('button', { name: /^regenerate section$/i })
+    expect(generateButton).toBeDisabled()
+    expect(regenerateButton).toBeDisabled()
+    expect(screen.getAllByText('Current role or permissions do not allow runtime section generation.')).toHaveLength(2)
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
+  })
+
+  it('executes section generation actions with the section target and keeps them out of the side panel', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            ...rendererPayload.actions,
+            {
+              actionKey: 'GENERATE_SECTION',
+              governedAction: 'GENERATE_SECTION',
+              buttonLabel: 'Generate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'generate-section-policy',
+            },
+            {
+              actionKey: 'REGENERATE_SECTION',
+              governedAction: 'REGENERATE_SECTION',
+              buttonLabel: 'Regenerate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'regenerate-section-policy',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sections = screen.getByRole('main', { name: /runtime sections/i })
+    const sectionCard = within(sections).getByRole('listitem')
+    expect(within(sectionCard).getByRole('button', { name: /^generate section$/i })).toBeEnabled()
+    expect(within(sectionCard).getByRole('button', { name: /^regenerate section$/i })).toBeDisabled()
+    expect(within(sectionCard).getByText('Generate this section before regenerating it.')).toBeInTheDocument()
+    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    expect(within(sidePanel).queryByRole('button', { name: /generate section/i })).not.toBeInTheDocument()
+
+    await user.click(within(sectionCard).getByRole('button', { name: /^generate section$/i }))
+
+    expect(executeRuntimeAction).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      actionKey: 'GENERATE_SECTION',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+  })
+
+  it('renders generated content revisions and toggles the compare view', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-22T09:10:00.000Z',
+              },
+              review: {
+                status: 'PENDING_REVIEW',
+              },
+              state: {
+                status: 'REGENERATED',
+                revisionCount: 1,
+              },
+              revisions: [
+                {
+                  revisionNumber: 1,
+                  generated: {
+                    content: 'Customer Problem: Older generated content.',
+                    generatedAt: '2026-05-22T09:00:00.000Z',
+                  },
+                  replacedAt: '2026-05-22T09:10:00.000Z',
+                },
+              ],
+            },
+          ],
+          actions: [
+            {
+              actionKey: 'REGENERATE_SECTION',
+              governedAction: 'REGENERATE_SECTION',
+              buttonLabel: 'Regenerate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'regenerate-section-policy',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sectionObject = screen.getByRole('region', { name: /section object/i })
+    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent(
+      'Customer Problem: Proposal creation is slow.',
+    )
+    expect(within(sectionObject).getByRole('region', { name: /review panel/i })).toHaveTextContent('Pending Review')
+    expect(within(sectionObject).getByRole('region', { name: /state panel/i })).toHaveTextContent('Regenerated, 1 revision')
+
+    await user.click(screen.getByRole('button', { name: /^compare$/i }))
+
+    const compareRegion = screen.getByRole('region', { name: /generated comparison/i })
+    expect(compareRegion).toHaveTextContent('Customer Problem: Older generated content.')
+    expect(compareRegion).toHaveTextContent('Customer Problem: Proposal creation is slow.')
   })
 })

@@ -240,8 +240,54 @@
 
 .runtime-workspace__section-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--spacing-xs);
+}
+
+.runtime-workspace__section-panels,
+.runtime-workspace__compare {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-sm);
+}
+
+.runtime-workspace__section-panel,
+.runtime-workspace__compare section {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm);
+  background-color: var(--color-surface-muted);
+}
+
+.runtime-workspace__section-panel h3,
+.runtime-workspace__compare h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+}
+
+.runtime-workspace__section-panel p,
+.runtime-workspace__compare p {
+  overflow: auto;
+  max-height: calc(var(--spacing-3xl) * 4);
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.runtime-workspace__compare {
+  border-left: var(--border-width-thick) solid var(--color-action-primary);
+  padding-left: var(--spacing-sm);
 }
 
 .runtime-workspace__feedback {
@@ -333,6 +379,14 @@
   .runtime-workspace__section-heading {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
+  }
+
+  .runtime-workspace__section-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .runtime-workspace__compare {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

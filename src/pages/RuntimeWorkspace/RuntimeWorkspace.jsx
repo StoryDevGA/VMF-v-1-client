@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
+  MdCompareArrows,
   MdInfoOutline,
   MdOutlineHistory,
   MdOutlineRoute,
+  MdRefresh,
   MdSave,
   MdOutlineWarningAmber,
 } from 'react-icons/md'
@@ -48,6 +50,33 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
 
 const normalizeRuntimeActionToken = (value) => String(value ?? '').trim().toUpperCase()
 
+const SECTION_ACTION_KEYS = Object.freeze({
+  GENERATE_SECTION: 'GENERATE_SECTION',
+  REGENERATE_SECTION: 'REGENERATE_SECTION',
+})
+
+const SECTION_ACTION_KEY_SET = new Set(Object.values(SECTION_ACTION_KEYS))
+
+const getRuntimeActionLabel = (action, fallback) =>
+  action?.buttonLabel || action?.label || fallback
+
+const getSectionActionDisabledReason = ({
+  action,
+  actionKey,
+  editable,
+  executingActionKey,
+  generatedContent,
+}) => {
+  if (!action) return ''
+  if (!action.enabled && action.disabledReason) return action.disabledReason
+  if (!editable) return 'Current role or permissions do not allow runtime section generation.'
+  if (executingActionKey) return 'Another runtime section action is already in progress.'
+  if (actionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION && !generatedContent) {
+    return 'Generate this section before regenerating it.'
+  }
+  return ''
+}
+
 const getDefaultConfirmationMessage = (action) => {
   const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'this runtime action').trim()
   return `Confirm ${label}?`
@@ -66,6 +95,12 @@ const stringifyValue = (value) => {
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value, null, 2)
+}
+
+const stringifyGeneratedContent = (generated) => {
+  if (!generated) return ''
+  if (typeof generated.content === 'string') return generated.content
+  return stringifyValue(generated.content ?? generated)
 }
 
 const getSectionPlaceholder = (section) => {
@@ -274,7 +309,10 @@ function RuntimeValueControl({
 
 function RuntimeSection({
   disabled = false,
+  executingActionKey = '',
   feedback = null,
+  generationActions = {},
+  onExecuteSectionAction,
   onSave,
   section,
 }) {
@@ -284,10 +322,35 @@ function RuntimeSection({
   const currentValue = stringifyValue(section?.value)
   const [draftValue, setDraftValue] = useState(currentValue)
   const [localError, setLocalError] = useState('')
+  const [showCompare, setShowCompare] = useState(false)
   const editable = Boolean(section?.editable)
   const isDirty = draftValue !== currentValue
   const isSaving = Boolean(disabled)
   const canSave = editable && isDirty && !isSaving
+  const generatedContent = stringifyGeneratedContent(section?.generated)
+  const revisions = Array.isArray(section?.revisions) ? section.revisions : []
+  const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null
+  const previousGeneratedContent = stringifyGeneratedContent(latestRevision?.generated)
+  const generateAction = generationActions[SECTION_ACTION_KEYS.GENERATE_SECTION] || null
+  const regenerateAction = generationActions[SECTION_ACTION_KEYS.REGENERATE_SECTION] || null
+  const generateLabel = getRuntimeActionLabel(generateAction, 'Generate')
+  const regenerateLabel = getRuntimeActionLabel(regenerateAction, 'Regenerate')
+  const generateDisabledReason = getSectionActionDisabledReason({
+    action: generateAction,
+    actionKey: SECTION_ACTION_KEYS.GENERATE_SECTION,
+    editable,
+    executingActionKey,
+    generatedContent,
+  })
+  const regenerateDisabledReason = getSectionActionDisabledReason({
+    action: regenerateAction,
+    actionKey: SECTION_ACTION_KEYS.REGENERATE_SECTION,
+    editable,
+    executingActionKey,
+    generatedContent,
+  })
+  const generateReasonId = `${section.key}-generate-section-reason`
+  const regenerateReasonId = `${section.key}-regenerate-section-reason`
   const resolvedFeedback = localError
     ? { variant: 'error', message: localError }
     : feedback
@@ -338,6 +401,49 @@ function RuntimeSection({
               disabled={isSaving}
               onChange={handleChange}
             />
+            <div
+              className="runtime-workspace__section-panels"
+              role="region"
+              aria-label="Section object"
+            >
+              <section className="runtime-workspace__section-panel" aria-label="Input panel">
+                <h3>Input</h3>
+                <p>{currentValue || 'No input yet'}</p>
+              </section>
+              <section className="runtime-workspace__section-panel" aria-label="Generated panel">
+                <h3>Generated</h3>
+                <p>{generatedContent || 'No generated content yet'}</p>
+              </section>
+              <section className="runtime-workspace__section-panel" aria-label="Review panel">
+                <h3>Review</h3>
+                <p>{formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}</p>
+              </section>
+              <section className="runtime-workspace__section-panel" aria-label="State panel">
+                <h3>State</h3>
+                <p>
+                  {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
+                  {Number(section?.state?.revisionCount || 0) > 0
+                    ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
+                    : ''}
+                </p>
+              </section>
+            </div>
+            {showCompare ? (
+              <div
+                className="runtime-workspace__compare"
+                role="region"
+                aria-label="Generated comparison"
+              >
+                <section>
+                  <h3>Previous</h3>
+                  <p>{previousGeneratedContent || 'No previous generated revision'}</p>
+                </section>
+                <section>
+                  <h3>Current</h3>
+                  <p>{generatedContent || 'No generated content yet'}</p>
+                </section>
+              </div>
+            ) : null}
             {resolvedFeedback ? (
               <Status
                 variant={resolvedFeedback.variant}
@@ -348,6 +454,44 @@ function RuntimeSection({
               </Status>
             ) : null}
             <div className="runtime-workspace__section-actions">
+              {generateAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(generateDisabledReason)}
+                  loading={executingActionKey === SECTION_ACTION_KEYS.GENERATE_SECTION}
+                  aria-describedby={generateDisabledReason ? generateReasonId : undefined}
+                  leftIcon={<MdBolt aria-hidden="true" />}
+                  onClick={() => onExecuteSectionAction?.({ action: generateAction, section })}
+                >
+                  {generateLabel}
+                </Button>
+              ) : null}
+              {regenerateAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(regenerateDisabledReason)}
+                  loading={executingActionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION}
+                  aria-describedby={regenerateDisabledReason ? regenerateReasonId : undefined}
+                  leftIcon={<MdRefresh aria-hidden="true" />}
+                  onClick={() => onExecuteSectionAction?.({ action: regenerateAction, section })}
+                >
+                  {regenerateLabel}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={!generatedContent}
+                leftIcon={<MdCompareArrows aria-hidden="true" />}
+                onClick={() => setShowCompare((current) => !current)}
+              >
+                Compare
+              </Button>
               <Button
                 type="submit"
                 variant="primary"
@@ -358,6 +502,20 @@ function RuntimeSection({
                 {isSaving ? 'Saving' : 'Save'}
               </Button>
             </div>
+            {[
+              { action: generateAction, id: generateReasonId, reason: generateDisabledReason },
+              { action: regenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
+            ].map(({ action, id, reason }) => (
+              action && reason ? (
+                <p
+                  key={id}
+                  id={id}
+                  className="runtime-workspace__action-disabled-reason"
+                >
+                  {reason}
+                </p>
+              ) : null
+            ))}
             {validationMessages.length > 0 ? (
               <ul className="runtime-workspace__validation-list" aria-label={`${section.label} validation messages`}>
                 {validationMessages.map((message, index) => (
@@ -440,6 +598,16 @@ function RuntimeWorkspace() {
   const runtimeInstance = renderer?.runtimeInstance ?? {}
   const sections = Array.isArray(renderer?.sections) ? renderer.sections : EMPTY_ARRAY
   const actions = Array.isArray(renderer?.actions) ? renderer.actions : EMPTY_ARRAY
+  const sectionActionByKey = actions.reduce((acc, action) => {
+    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+    if (SECTION_ACTION_KEY_SET.has(actionKey)) {
+      acc[actionKey] = action
+    }
+    return acc
+  }, {})
+  const sidePanelActions = actions.filter((action) =>
+    !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
+  )
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
@@ -549,7 +717,7 @@ function RuntimeWorkspace() {
     }
   }
 
-  const handleExecuteAction = async (action) => {
+  const handleExecuteAction = async (action, actionBody = {}) => {
     const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
     if (!actionKey || !action?.enabled) return
 
@@ -575,7 +743,7 @@ function RuntimeWorkspace() {
       await executeRuntimeAction({
         runtimeInstanceId,
         actionKey,
-        body: { expectedUpdatedAt },
+        body: { expectedUpdatedAt, ...actionBody },
       }).unwrap()
       setActionFeedback({
         variant: 'success',
@@ -591,6 +759,13 @@ function RuntimeWorkspace() {
     } finally {
       setExecutingActionKey('')
     }
+  }
+
+  const handleExecuteSectionAction = async ({ action, section }) => {
+    await handleExecuteAction(action, {
+      runtimePath: section?.runtimePath,
+      sectionKey: section?.sectionKey || section?.key,
+    })
   }
 
   if (isLoading) {
@@ -671,7 +846,10 @@ function RuntimeWorkspace() {
                   key={`${section.key ?? section.runtimePath}-${stringifyValue(section.value)}`}
                   section={section}
                   disabled={savingRuntimePath === section.runtimePath}
+                  executingActionKey={executingActionKey}
                   feedback={sectionFeedbackByPath[section.runtimePath]}
+                  generationActions={sectionActionByKey}
+                  onExecuteSectionAction={handleExecuteSectionAction}
                   onSave={handleSaveSection}
                 />
               ))}
@@ -697,9 +875,9 @@ function RuntimeWorkspace() {
                   {actionFeedback.message}
                 </Status>
               ) : null}
-              {actions.length > 0 ? (
+              {sidePanelActions.length > 0 ? (
                 <div className="runtime-workspace__action-list">
-                  {actions.map((action) => (
+                  {sidePanelActions.map((action) => (
                     <RuntimeActionButton
                       key={action.actionKey}
                       action={action}

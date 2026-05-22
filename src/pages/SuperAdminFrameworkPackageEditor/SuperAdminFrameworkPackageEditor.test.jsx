@@ -1216,6 +1216,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       'ON_APPROVAL',
       'ON_APPROVE',
       'ON_SECTION_BUILD',
+      'ON_SECTION_GENERATE',
+      'ON_SECTION_REGENERATE',
       'ON_DISCOVERY_COMPLETE',
       'ON_POSITIONING_COMPLETE',
       'ON_PROOF_COMPLETE',
