@@ -309,29 +309,37 @@
   list-style: none;
 }
 
-.runtime-workspace__section-nav a {
+.runtime-workspace__section-nav-button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--spacing-2xs) var(--spacing-sm);
   align-items: center;
+  width: 100%;
   border: var(--border-width-thin) solid var(--color-border);
   border-radius: var(--border-radius-md);
   padding: var(--spacing-xs) var(--spacing-sm);
   background-color: var(--color-background);
   color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
   text-decoration: none;
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast);
 }
 
-.runtime-workspace__section-nav a:hover,
-.runtime-workspace__section-nav a:focus-visible {
+.runtime-workspace__section-nav-button:hover,
+.runtime-workspace__section-nav-button:focus-visible {
   border-color: var(--color-border-hover);
   background-color: var(--color-surface);
 }
 
-.runtime-workspace__section-nav a > span {
+.runtime-workspace__section-nav-button--active {
+  border-color: var(--color-border-focus);
+  background-color: var(--color-surface-elevated);
+}
+
+.runtime-workspace__section-nav-button > span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -345,21 +353,21 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.runtime-workspace__section-nav strong,
-.runtime-workspace__section-nav small {
+.runtime-workspace__section-nav-button strong,
+.runtime-workspace__section-nav-button small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.runtime-workspace__section-nav strong {
+.runtime-workspace__section-nav-button strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-tight);
 }
 
-.runtime-workspace__section-nav small {
+.runtime-workspace__section-nav-button small {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-tight);
@@ -384,6 +392,13 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--spacing-xs);
+}
+
+.runtime-workspace__section-state-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
 }
 
 .runtime-workspace__section-panels,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
@@ -119,6 +119,12 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
   )
 }
 
+async function openGuidedSection(name = /customer problem/i) {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name }))
+  return user
+}
+
 describe('RuntimeWorkspace', () => {
   beforeEach(() => {
     refetchRenderer.mockReset()
@@ -142,22 +148,23 @@ describe('RuntimeWorkspace', () => {
     })
   })
 
-  it('renders server-projected runtime sections, actions, signals, activity, and diagnostics', () => {
+  it('renders server-projected runtime sections, actions, signals, activity, and diagnostics', async () => {
     renderRuntimeWorkspace()
 
     expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )
-    const actionBar = screen.getByRole('group', { name: /runtime workspace actions/i })
+    const actionBar = screen.getByRole('group', { name: /execution workspace actions/i })
     const backButton = within(actionBar).getByRole('button', { name: /^back$/i })
     expect(backButton).toHaveClass('btn--outline', 'btn--sm')
+    expect(screen.getByText('Execution Workspace')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Acme Value Narrative' })).toBeInTheDocument()
     expect(screen.getByText('value-narrative-001')).toBeInTheDocument()
     expect(screen.getByText('VMF Standard / 2.3.1')).toBeInTheDocument()
     expect(screen.getAllByText('Draft').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Unknown')).toBeInTheDocument()
-    const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
+    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     const summaryItems = within(summary).getAllByRole('listitem')
     expect(summaryItems).toHaveLength(8)
     expect(within(summary).getByText('Runtime Status')).toBeInTheDocument()
@@ -174,7 +181,10 @@ describe('RuntimeWorkspace', () => {
       expect(item.querySelector('.runtime-workspace__summary-value')).toBeInTheDocument()
     })
 
-    const sections = screen.getByRole('main', { name: /runtime sections/i })
+    const sections = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(sections).getByRole('heading', { name: /^discovery$/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /guided section navigation/i })).toBeInTheDocument()
+    await openGuidedSection()
     const sectionList = within(sections).getByRole('list', { name: /runtime section cards/i })
     expect(sectionList.tagName).toBe('UL')
     expect(sectionList).not.toHaveAttribute('role')
@@ -185,32 +195,32 @@ describe('RuntimeWorkspace', () => {
     const sectionCard = within(sectionList).getByRole('listitem')
     expect(within(sectionCard).getByText('Required')).toBeInTheDocument()
     expect(within(sectionCard).getByText('Editable')).toBeInTheDocument()
-    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByRole('progressbar', { name: /1 of 1 required sections have input/i })).toHaveAttribute('value', '100')
-    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('Required')).toBeInTheDocument()
     expect(within(metrics).getByText('1/1')).toBeInTheDocument()
     expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
-    const sectionObject = screen.getByRole('region', { name: /section object/i })
+    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
     expect(sectionObject).toBeInTheDocument()
-    expect(within(sectionObject).getByRole('region', { name: /input panel/i })).toHaveTextContent('Proposal creation is slow.')
-    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent('Awaiting generation')
+    expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Customer Problem')
+    expect(within(sectionObject).getByRole('region', { name: /generated section/i })).toHaveTextContent('Awaiting generation')
+    expect(within(sectionObject).getByRole('region', { name: /accepted final/i })).toHaveTextContent('No accepted final truth')
 
-    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
-    const sectionNav = within(sidePanel).getByRole('navigation', { name: /runtime section navigation/i })
-    expect(within(sectionNav).getByRole('link', { name: /1 customer problem input captured/i })).toHaveAttribute(
-      'href',
-      '#runtime-section-customer_problem',
-    )
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    const sectionNav = within(sidePanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
     expect(within(sidePanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
     expect(within(sidePanel).getByRole('button', { name: /submit for review/i })).toBeEnabled()
     expect(within(sidePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
+    expect(within(sidePanel).getByRole('heading', { name: /workspace warnings/i })).toBeInTheDocument()
     expect(within(sidePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
     expect(within(sidePanel).getByText('WARNING')).toBeInTheDocument()
   })
 
-  it('shows raw runtime paths only when renderer diagnostics explicitly allow it', () => {
+  it('shows raw runtime paths only when renderer diagnostics explicitly allow it', async () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -228,6 +238,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await openGuidedSection()
 
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
   })
@@ -248,17 +259,17 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
     expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
-    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/0')).toBeInTheDocument()
-    expect(screen.getByText(/no runtime sections available/i)).toBeInTheDocument()
-    expect(screen.getByText(/no section navigation available/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^discovery$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
   })
 
-  it('shows neutral progress when projected sections have no required input', () => {
+  it('shows neutral progress when projected sections have no required input', async () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -278,15 +289,15 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const progressSummary = screen.getByLabelText(/runtime progress summary/i)
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
     expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
-    const metrics = within(progressSummary).getByRole('list', { name: /runtime workspace metrics/i })
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/1')).toBeInTheDocument()
-    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
-    const sectionNav = within(sidePanel).getByRole('navigation', { name: /runtime section navigation/i })
-    expect(within(sectionNav).getByRole('link', { name: /1 customer problem input captured/i })).toBeInTheDocument()
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    const sectionNav = within(sidePanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toBeInTheDocument()
   })
 
   it('uses the server-projected action label when buttonLabel is absent', () => {
@@ -311,7 +322,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     expect(within(sidePanel).getByRole('button', { name: /send to review/i })).toBeEnabled()
   })
 
@@ -327,7 +338,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
+    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     const unknownSummaryValues = within(summary).getAllByText('Unknown')
     expect(unknownSummaryValues.length).toBeGreaterThanOrEqual(3)
   })
@@ -343,13 +354,14 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    expect(screen.getByText(/loading runtime workspace/i)).toBeInTheDocument()
+    expect(screen.getByText(/loading execution workspace/i)).toBeInTheDocument()
   })
 
   it('saves editable section changes through the runtime state mutation endpoint and refetches the renderer', async () => {
     const user = userEvent.setup()
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     const field = screen.getByLabelText(/customer problem/i)
     await user.clear(field)
@@ -370,7 +382,56 @@ describe('RuntimeWorkspace', () => {
     expect(await screen.findByText(/section saved/i)).toBeInTheDocument()
   })
 
-  it('blocks invalid JSON values before calling the mutation endpoint', async () => {
+  it('saves the active section before advancing to the next guided section', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            rendererPayload.sections[0],
+            {
+              key: 'value_drivers',
+              runtimePath: 'framework_state.sections.value_drivers',
+              label: 'Value Drivers',
+              control: 'TEXTAREA',
+              required: true,
+              value: '',
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    const field = screen.getByLabelText(/customer problem/i)
+    await user.clear(field)
+    await user.type(field, 'Proposal teams need a shared governed narrative.')
+    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'Proposal teams need a shared governed narrative.',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Value Drivers' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /2 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('accepts natural text for JSON-backed object sections by wrapping it as summary context', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -399,10 +460,61 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
 
     const field = screen.getByLabelText('Section Executive Summary')
     await user.clear(field)
-    await user.type(field, 'not valid JSON')
+    await user.type(field, 'Customer needs a clearer executive narrative.')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.section_1_executive_summary',
+        operation: 'WRITE',
+        value: {
+          summary: 'Customer needs a clearer executive narrative.',
+        },
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+  })
+
+  it('blocks malformed JSON-shaped values before calling the mutation endpoint', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              key: 'section_1_executive_summary',
+              runtimePath: 'framework_state.sections.section_1_executive_summary',
+              label: 'Section Executive Summary',
+              control: 'JSON',
+              dataType: 'OBJECT',
+              required: true,
+              placeholder: 'Enter section executive summary...',
+              value: {},
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
+
+    const field = screen.getByLabelText('Section Executive Summary')
+    await user.clear(field)
+    fireEvent.change(field, { target: { value: '{"summary":' } })
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(await screen.findByText(/enter valid json before saving/i)).toBeInTheDocument()
@@ -437,6 +549,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /confidence score/i }))
 
     const field = screen.getByLabelText('Confidence Score')
     await user.clear(field)
@@ -481,6 +594,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /confidence score/i }))
 
     const field = screen.getByLabelText('Confidence Score')
     await user.clear(field)
@@ -518,6 +632,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /priority confirmed/i }))
 
     await user.click(screen.getByRole('checkbox', { name: /priority confirmed/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -565,6 +680,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /narrative status/i }))
 
     await user.selectOptions(screen.getByLabelText('Narrative Status'), 'READY')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -597,6 +713,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     const field = screen.getByLabelText(/customer problem/i)
     await user.clear(field)
@@ -624,6 +741,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     const field = screen.getByLabelText(/customer problem/i)
     await user.clear(field)
@@ -777,7 +895,8 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
-  it('shows a relevant example placeholder for JSON-backed empty sections', () => {
+  it('shows a relevant natural-language placeholder for JSON-backed empty sections', async () => {
+    const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -805,16 +924,18 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
 
     expect(screen.getByLabelText('Section Executive Summary')).toHaveAttribute(
       'placeholder',
-      '{\n  "summary": "Summarise the customer situation, priority, and recommended value narrative focus."\n}',
+      'Summarise the customer situation, priority, and recommended value narrative focus.',
     )
-    const sectionObject = screen.getByRole('region', { name: /section object/i })
-    expect(within(sectionObject).getByRole('region', { name: /input panel/i })).toHaveTextContent('Input required')
+    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
+    expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Section Executive Summary')
   })
 
-  it('keeps renderer read-only sections from submitting mutations', () => {
+  it('keeps renderer read-only sections from submitting mutations', async () => {
+    const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -851,6 +972,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
@@ -863,7 +985,8 @@ describe('RuntimeWorkspace', () => {
     expect(mutateRuntimeState).not.toHaveBeenCalled()
   })
 
-  it('presents published and locked runtime truth as read-only', () => {
+  it('presents published and locked runtime truth as read-only', async () => {
+    const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -917,8 +1040,9 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const summary = screen.getByRole('list', { name: /runtime workspace summary/i })
+    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
     expect(within(summary).getByText('Published')).toBeInTheDocument()
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
@@ -963,13 +1087,14 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const sections = screen.getByRole('main', { name: /runtime sections/i })
+    const sections = screen.getByRole('main', { name: /guided execution sections/i })
     const sectionCard = within(sections).getByRole('listitem')
     expect(within(sectionCard).getByRole('button', { name: /^generate section$/i })).toBeEnabled()
     expect(within(sectionCard).getByRole('button', { name: /^regenerate section$/i })).toBeDisabled()
     expect(within(sectionCard).getByText('Generate this section before regenerating it.')).toBeInTheDocument()
-    const sidePanel = screen.getByRole('complementary', { name: /runtime renderer side panel/i })
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     expect(within(sidePanel).queryByRole('button', { name: /generate section/i })).not.toBeInTheDocument()
 
     await user.click(within(sectionCard).getByRole('button', { name: /^generate section$/i }))
@@ -1037,13 +1162,14 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const sectionObject = screen.getByRole('region', { name: /section object/i })
-    expect(within(sectionObject).getByRole('region', { name: /generated panel/i })).toHaveTextContent(
+    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
+    expect(within(sectionObject).getByRole('region', { name: /generated section/i })).toHaveTextContent(
       'Customer Problem: Proposal creation is slow.',
     )
-    expect(within(sectionObject).getByRole('region', { name: /review panel/i })).toHaveTextContent('Pending Review')
-    expect(within(sectionObject).getByRole('region', { name: /state panel/i })).toHaveTextContent('Regenerated, 1 revision')
+    expect(screen.getByText('Pending Review')).toBeInTheDocument()
+    expect(screen.getByText('Regenerated, 1 revision')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^compare$/i }))
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
@@ -68,6 +68,8 @@ const SECTION_ACTION_KEYS = Object.freeze({
 })
 
 const SECTION_ACTION_KEY_SET = new Set(Object.values(SECTION_ACTION_KEYS))
+
+const DISCOVERY_NAV_KEY = 'discovery'
 
 const getRuntimeActionLabel = (action, fallback) =>
   action?.buttonLabel || action?.label || fallback
@@ -140,6 +142,32 @@ const stringifyGeneratedContent = (generated) => {
   return stringifyValue(generated.content ?? generated)
 }
 
+const stringifyAcceptedContent = (accepted) => {
+  if (!accepted) return ''
+  if (typeof accepted.content === 'string') return accepted.content
+  return stringifyValue(accepted.content ?? accepted)
+}
+
+const getDiscoveryProjection = (renderer) =>
+  renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
+
+const getDiscoveryState = (renderer) => {
+  const discovery = getDiscoveryProjection(renderer)
+  const explicitStatus = String(discovery?.state?.status ?? discovery?.status ?? '').trim()
+  if (explicitStatus) return formatRuntimeTokenLabel(explicitStatus)
+  if (hasRuntimeValue(discovery?.scopedViews) || hasRuntimeValue(discovery?.scoped_views)) return 'Evidence Ready'
+  if (hasRuntimeValue(discovery)) return 'Input Captured'
+  return 'Evidence Not Ready'
+}
+
+const getSectionNavigationStatus = (section) => {
+  const stateStatus = String(section?.state?.status ?? '').trim()
+  if (stateStatus) return formatRuntimeTokenLabel(stateStatus)
+  const hasInput = hasRuntimeValue(section?.value)
+  const hasGenerated = hasRuntimeValue(section?.generated?.content ?? section?.generated)
+  return hasGenerated ? 'Generated' : hasInput ? 'Input Captured' : 'Input Required'
+}
+
 const getSectionPlaceholder = (section) => {
   const explicitPlaceholder = String(section?.placeholder ?? '').trim()
   const control = String(section?.control ?? 'TEXT').trim().toUpperCase()
@@ -155,18 +183,29 @@ const getSectionPlaceholder = (section) => {
   if (explicitPlaceholder && (!isStructuredField || !isGenericPlaceholder)) return explicitPlaceholder
 
   if (dataType === 'ARRAY') {
-    return '[\n  "Add one relevant point for this section."\n]'
+    return 'Add one relevant point per line for this section.'
   }
 
   if (control === 'JSON' || dataType === 'OBJECT') {
     if (label === 'executive summary') {
-      return '{\n  "summary": "Summarise the customer situation, priority, and recommended value narrative focus."\n}'
+      return 'Summarise the customer situation, priority, and recommended value narrative focus.'
     }
 
-    return `{\n  "summary": "Add a concise ${label} note for this value narrative."\n}`
+    return `Add a concise ${label} note for this value narrative.`
   }
 
   return `Add ${label} details here.`
+}
+
+const stringifyDraftValue = (value) => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const keys = Object.keys(value)
+    if (keys.length === 1 && typeof value.summary === 'string') {
+      return value.summary
+    }
+  }
+
+  return stringifyValue(value)
 }
 
 const parseDraftValue = (section, draftValue) => {
@@ -194,7 +233,18 @@ const parseDraftValue = (section, draftValue) => {
     try {
       return JSON.parse(normalizedValue)
     } catch {
-      throw new Error('Enter valid JSON before saving.')
+      if (normalizedValue.startsWith('{') || normalizedValue.startsWith('[')) {
+        throw new Error('Enter valid JSON before saving.')
+      }
+
+      if (dataType === 'ARRAY') {
+        return normalizedValue
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+      }
+
+      return { summary: normalizedValue }
     }
   }
 
@@ -361,13 +411,14 @@ function RuntimeSection({
   id,
   onExecuteSectionAction,
   onSave,
+  onSaveAndNext,
   section,
   showRuntimePath = false,
 }) {
   const validationMessages = Array.isArray(section?.validationMessages)
     ? section.validationMessages
     : []
-  const currentValue = stringifyValue(section?.value)
+  const currentValue = stringifyDraftValue(section?.value)
   const [draftValue, setDraftValue] = useState(currentValue)
   const [localError, setLocalError] = useState('')
   const [showCompare, setShowCompare] = useState(false)
@@ -376,6 +427,7 @@ function RuntimeSection({
   const isSaving = Boolean(disabled)
   const canSave = editable && isDirty && !isSaving
   const generatedContent = stringifyGeneratedContent(section?.generated)
+  const acceptedContent = stringifyAcceptedContent(section?.accepted)
   const revisions = Array.isArray(section?.revisions) ? section.revisions : []
   const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null
   const previousGeneratedContent = stringifyGeneratedContent(latestRevision?.generated)
@@ -408,19 +460,30 @@ function RuntimeSection({
     setDraftValue(event.target.value)
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const parseCurrentDraftValue = () => {
     if (!canSave) return
 
-    let value
     try {
-      value = parseDraftValue(section, draftValue)
+      return parseDraftValue(section, draftValue)
     } catch (parseError) {
       setLocalError(parseError.message)
-      return
+      return undefined
     }
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    const value = parseCurrentDraftValue()
+    if (value === undefined) return
 
     await onSave?.({ section, value })
+  }
+
+  const handleSaveAndNext = async () => {
+    const value = parseCurrentDraftValue()
+    if (value === undefined) return
+
+    await onSaveAndNext?.({ section, value })
   }
 
   return (
@@ -444,39 +507,46 @@ function RuntimeSection({
                 </Badge>
               </div>
             </div>
-            <RuntimeValueControl
-              section={section}
-              value={draftValue}
-              editable={editable}
-              disabled={isSaving}
-              onChange={handleChange}
-            />
             <div
               className="runtime-workspace__section-panels"
               role="region"
-              aria-label="Section object"
+              aria-label="Section ownership zones"
             >
-              <section className="runtime-workspace__section-panel" aria-label="Input panel">
-                <h3>Input</h3>
-                <p>{currentValue || 'Input required'}</p>
+              <section className="runtime-workspace__section-panel" aria-label="Suggested from Discovery">
+                <h3>Suggested From Discovery</h3>
+                <p>No discovery evidence is projected for this section yet.</p>
               </section>
-              <section className="runtime-workspace__section-panel" aria-label="Generated panel">
-                <h3>Generated</h3>
+              <section className="runtime-workspace__section-panel" aria-label="Your Additional Context">
+                <h3>Your Additional Context</h3>
+                <RuntimeValueControl
+                  section={section}
+                  value={draftValue}
+                  editable={editable}
+                  disabled={isSaving}
+                  onChange={handleChange}
+                />
+              </section>
+              <section className="runtime-workspace__section-panel" aria-label="Generated Section">
+                <h3>Generated Section</h3>
                 <p>{generatedContent || 'Awaiting generation'}</p>
               </section>
-              <section className="runtime-workspace__section-panel" aria-label="Review panel">
-                <h3>Review</h3>
-                <p>{formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}</p>
-              </section>
-              <section className="runtime-workspace__section-panel" aria-label="State panel">
-                <h3>State</h3>
+              <section className="runtime-workspace__section-panel" aria-label="Accepted Final">
+                <h3>Accepted / Final</h3>
                 <p>
-                  {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
-                  {Number(section?.state?.revisionCount || 0) > 0
-                    ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
-                    : ''}
+                  {acceptedContent || 'No accepted final truth has been projected for this section.'}
                 </p>
               </section>
+            </div>
+            <div className="runtime-workspace__section-state-row" aria-label="Section state and review">
+              <Status variant={getTokenStatusVariant(section?.state?.status)} size="sm" showIcon>
+                {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
+                {Number(section?.state?.revisionCount || 0) > 0
+                  ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
+                  : ''}
+              </Status>
+              <Status variant={getTokenStatusVariant(section?.review?.status)} size="sm" showIcon>
+                {formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}
+              </Status>
             </div>
             {showCompare ? (
               <div
@@ -550,6 +620,16 @@ function RuntimeSection({
                 leftIcon={<MdSave aria-hidden="true" />}
               >
                 {isSaving ? 'Saving' : 'Save'}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={!canSave}
+                leftIcon={<MdSave aria-hidden="true" />}
+                onClick={handleSaveAndNext}
+              >
+                Save & Next
               </Button>
             </div>
             {[
@@ -650,10 +730,10 @@ function RuntimeProgressSummary({
     warningCounts.ERROR ? `${warningCounts.ERROR} error${warningCounts.ERROR === 1 ? '' : 's'}` : '',
     warningCounts.WARNING ? `${warningCounts.WARNING} warning${warningCounts.WARNING === 1 ? '' : 's'}` : '',
     warningCounts.INFO ? `${warningCounts.INFO} info` : '',
-  ].filter(Boolean).join(' / ') || 'No renderer warnings'
+  ].filter(Boolean).join(' / ') || 'No workspace warnings'
 
   return (
-    <div className="runtime-workspace__progress-summary" aria-label="Runtime progress summary">
+    <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
       <div className="runtime-workspace__progress-row">
         <span>Required input</span>
         <strong>{requiredPercentLabel}</strong>
@@ -664,7 +744,7 @@ function RuntimeProgressSummary({
         value={requiredPercent}
         aria-label={completionLabel}
       />
-      <ul className="runtime-workspace__metric-list" aria-label="Runtime workspace metrics">
+      <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
           <span>Required</span>
           <strong>{hasRequiredInput ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}</strong>
@@ -683,34 +763,96 @@ function RuntimeProgressSummary({
 }
 
 function RuntimeSectionNavigation({
+  activeKey = DISCOVERY_NAV_KEY,
+  discoveryState = 'Evidence Not Ready',
+  onSelectDiscovery,
+  onSelectSection,
   sections = EMPTY_ARRAY,
 }) {
-  if (sections.length === 0) {
-    return (
-      <Status variant="neutral" size="sm" showIcon>No section navigation available</Status>
-    )
-  }
-
   return (
-    <nav className="runtime-workspace__section-nav" aria-label="Runtime section navigation">
+    <nav className="runtime-workspace__section-nav" aria-label="Guided section navigation">
       <ol>
+        <li>
+          <button
+            type="button"
+            className={[
+              'runtime-workspace__section-nav-button',
+              activeKey === DISCOVERY_NAV_KEY && 'runtime-workspace__section-nav-button--active',
+            ].filter(Boolean).join(' ')}
+            aria-current={activeKey === DISCOVERY_NAV_KEY ? 'step' : undefined}
+            onClick={onSelectDiscovery}
+          >
+            <span>0</span>
+            <strong>Discovery</strong>
+            <small>{discoveryState}</small>
+          </button>
+        </li>
         {sections.map((section, index) => {
           const label = section?.shortLabel || section?.label || section?.sectionKey || `Section ${index + 1}`
-          const hasInput = hasRuntimeValue(section?.value)
-          const hasGenerated = hasRuntimeValue(section?.generated?.content ?? section?.generated)
-          const targetId = getSectionDomId(section, index)
+          const status = getSectionNavigationStatus(section)
+          const sectionKey = section?.sectionKey || section?.key || getSectionDomId(section, index)
+          const isActive = activeKey === sectionKey
           return (
-            <li key={`${section?.sectionKey ?? section?.key ?? targetId}-nav`}>
-              <a href={`#${targetId}`}>
+            <li key={`${sectionKey}-nav`}>
+              <button
+                type="button"
+                className={[
+                  'runtime-workspace__section-nav-button',
+                  isActive && 'runtime-workspace__section-nav-button--active',
+                ].filter(Boolean).join(' ')}
+                aria-current={isActive ? 'step' : undefined}
+                onClick={() => onSelectSection?.(index)}
+              >
                 <span>{index + 1}</span>
                 <strong>{label}</strong>
-                <small>{hasGenerated ? 'Generated' : hasInput ? 'Input captured' : 'Input required'}</small>
-              </a>
+                <small>{status}</small>
+              </button>
             </li>
           )
         })}
       </ol>
     </nav>
+  )
+}
+
+function DiscoverySection({ discoveryState = 'Evidence Not Ready' }) {
+  return (
+    <Card variant="default" className="runtime-workspace__section-card">
+      <Card.Body className="runtime-workspace__section-body">
+        <div className="runtime-workspace__section-heading">
+          <div>
+            <h2>Discovery</h2>
+            <p>Section 0 evidence layer for downstream guided execution.</p>
+          </div>
+          <div className="runtime-workspace__section-badges">
+            <Badge variant="info" size="sm" pill outline>Section 0</Badge>
+            <Badge variant="neutral" size="sm" pill outline>{discoveryState}</Badge>
+          </div>
+        </div>
+        <div
+          className="runtime-workspace__section-panels"
+          role="region"
+          aria-label="Discovery state"
+        >
+          <section className="runtime-workspace__section-panel" aria-label="Discovery inputs">
+            <h3>Discovery Inputs</h3>
+            <p>No discovery input projection is available yet.</p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
+            <h3>Evidence Pack</h3>
+            <p>No discovery evidence pack is projected for this runtime yet.</p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
+            <h3>Scoped Evidence Views</h3>
+            <p>Section-scoped evidence will appear here when the backend projects it.</p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Discovery acceptance">
+            <h3>Acceptance</h3>
+            <p>Discovery has not been accepted for governed downstream generation.</p>
+          </section>
+        </div>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -733,6 +875,7 @@ function RuntimeWorkspace() {
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [actionFeedback, setActionFeedback] = useState(null)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
+  const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
 
   const renderer = getRendererPayload(rendererResponse)
   const runtimeInstance = renderer?.runtimeInstance ?? {}
@@ -750,11 +893,11 @@ function RuntimeWorkspace() {
   )
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
+  const discoveryState = getDiscoveryState(renderer)
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
     : EMPTY_ARRAY
-  const showRuntimePaths = Boolean(renderer?.diagnostics?.debug?.showRuntimePaths)
-    || String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
+  const showRuntimePaths = String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
   const appError = error ? normalizeError(error) : null
 
   const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
@@ -819,6 +962,23 @@ function RuntimeWorkspace() {
       value: packageSummary,
     },
   ]
+  const matchedActiveSectionIndex = sections.findIndex((section) =>
+    (section?.sectionKey || section?.key) === activeWorkspaceKey,
+  )
+  const activeSectionIndex = matchedActiveSectionIndex >= 0 ? matchedActiveSectionIndex : 0
+  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY
+    ? null
+    : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
+
+  useEffect(() => {
+    if (activeWorkspaceKey === DISCOVERY_NAV_KEY) return
+    const hasActiveSection = sections.some((section) =>
+      (section?.sectionKey || section?.key) === activeWorkspaceKey,
+    )
+    if (!hasActiveSection) {
+      setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
+    }
+  }, [activeWorkspaceKey, sections])
 
   const handleBack = () => {
     navigate('/app/dashboard')
@@ -833,7 +993,7 @@ function RuntimeWorkspace() {
 
   const handleSaveSection = async ({ section, value }) => {
     const runtimePath = section?.runtimePath
-    if (!runtimePath) return
+    if (!runtimePath) return false
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
@@ -841,7 +1001,7 @@ function RuntimeWorkspace() {
         variant: 'error',
         message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
       })
-      return
+      return false
     }
 
     setSavingRuntimePath(runtimePath)
@@ -862,15 +1022,38 @@ function RuntimeWorkspace() {
         message: 'Section saved.',
       })
       await refetch()
+      return true
     } catch (mutationError) {
       const normalizedError = normalizeError(mutationError)
       setSectionFeedback(runtimePath, {
         variant: 'error',
         message: normalizedError.message,
       })
+      return false
     } finally {
       setSavingRuntimePath('')
     }
+  }
+
+  const handleSaveSectionAndNext = async ({ section, value }) => {
+    const saved = await handleSaveSection({ section, value })
+    if (!saved) return
+
+    const currentIndex = sections.findIndex((candidate) =>
+      (candidate?.sectionKey || candidate?.key) === (section?.sectionKey || section?.key),
+    )
+    const nextSection = sections[currentIndex + 1]
+    if (nextSection) {
+      setActiveWorkspaceKey(nextSection.sectionKey || nextSection.key)
+      return
+    }
+    setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
+  }
+
+  const handleSelectSection = (index) => {
+    const section = sections[index]
+    if (!section) return
+    setActiveWorkspaceKey(section.sectionKey || section.key)
   }
 
   const handleExecuteAction = async (action, actionBody = {}) => {
@@ -926,10 +1109,10 @@ function RuntimeWorkspace() {
 
   if (isLoading) {
     return (
-      <section className="runtime-workspace container" aria-label="Runtime workspace">
+      <section className="runtime-workspace container" aria-label="Execution workspace">
         <Card variant="default" className="runtime-workspace__state-card">
           <Card.Body>
-            <Status variant="info" size="sm" showIcon>Loading runtime workspace</Status>
+            <Status variant="info" size="sm" showIcon>Loading execution workspace</Status>
           </Card.Body>
         </Card>
       </section>
@@ -938,11 +1121,11 @@ function RuntimeWorkspace() {
 
   if (appError) {
     return (
-      <section className="runtime-workspace container" aria-label="Runtime workspace">
+      <section className="runtime-workspace container" aria-label="Execution workspace">
         <div
           className="runtime-workspace__actions"
           role="group"
-          aria-label="Runtime workspace actions"
+          aria-label="Execution workspace actions"
         >
           <Button type="button" variant="outline" size="sm" onClick={handleBack}>
             Back
@@ -954,13 +1137,13 @@ function RuntimeWorkspace() {
   }
 
   return (
-    <section className="runtime-workspace container" aria-label="Runtime workspace">
+    <section className="runtime-workspace container" aria-label="Execution workspace">
       <Card variant="default" className="runtime-workspace__hero">
         <Card.Body className="runtime-workspace__hero-body">
           <div
             className="runtime-workspace__actions"
             role="group"
-            aria-label="Runtime workspace actions"
+            aria-label="Execution workspace actions"
           >
             <Button type="button" variant="outline" size="sm" onClick={handleBack}>
               Back
@@ -971,13 +1154,13 @@ function RuntimeWorkspace() {
           </div>
           <div className="runtime-workspace__hero-copy">
             <Badge variant="info" size="sm" pill outline icon={<MdOutlineRoute aria-hidden="true" />}>
-              Runtime Workspace
+              Execution Workspace
             </Badge>
-            <h1>{runtimeInstance?.name || 'Runtime Workspace'}</h1>
+            <h1>{runtimeInstance?.name || 'Execution Workspace'}</h1>
             <p>{runtimeDisplayId}</p>
             <RuntimeProgressSummary sections={sections} configWarnings={configWarnings} />
           </div>
-          <ul className="runtime-workspace__summary-grid" aria-label="Runtime workspace summary">
+          <ul className="runtime-workspace__summary-grid" aria-label="Execution workspace summary">
             {summaryItems.map((item) => (
               <RuntimeSummaryTile
                 key={item.key}
@@ -991,45 +1174,66 @@ function RuntimeWorkspace() {
       </Card>
 
       <div className="runtime-workspace__layout">
-        <main className="runtime-workspace__main" aria-label="Runtime sections">
+        <main className="runtime-workspace__main" aria-label="Guided execution sections">
           <div className="runtime-workspace__section-title-row">
-            <h2>Runtime Sections</h2>
-            <Badge variant="neutral" size="sm" pill outline>{sections.length} visible</Badge>
+            <h2>Guided Sections</h2>
+            <Badge variant="neutral" size="sm" pill outline>
+              {activeWorkspaceKey === DISCOVERY_NAV_KEY ? 'Discovery active' : '1 active'}
+            </Badge>
           </div>
-          {sections.length > 0 ? (
+          {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
+            <DiscoverySection discoveryState={discoveryState} />
+          ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
-              {sections.map((section, index) => (
-                <RuntimeSection
-                  key={`${section.key ?? section.runtimePath}-${stringifyValue(section.value)}`}
-                  id={getSectionDomId(section, index)}
-                  section={section}
-                  disabled={savingRuntimePath === section.runtimePath}
-                  executingActionKey={executingActionKey}
-                  feedback={sectionFeedbackByPath[section.runtimePath]}
-                  generationActions={sectionActionByKey}
-                  onExecuteSectionAction={handleExecuteSectionAction}
-                  onSave={handleSaveSection}
-                  showRuntimePath={showRuntimePaths}
-                />
-              ))}
+              <RuntimeSection
+                key={`${activeSection.key ?? activeSection.runtimePath}-${stringifyValue(activeSection.value)}`}
+                id={getSectionDomId(activeSection, activeSectionIndex)}
+                section={activeSection}
+                disabled={savingRuntimePath === activeSection.runtimePath}
+                executingActionKey={executingActionKey}
+                feedback={sectionFeedbackByPath[activeSection.runtimePath]}
+                generationActions={sectionActionByKey}
+                onExecuteSectionAction={handleExecuteSectionAction}
+                onSave={handleSaveSection}
+                onSaveAndNext={handleSaveSectionAndNext}
+                showRuntimePath={showRuntimePaths}
+              />
             </ul>
           ) : (
             <Card variant="default" className="runtime-workspace__state-card">
               <Card.Body>
-                <Status variant="warning" size="sm" showIcon>No runtime sections available</Status>
+                <Status variant="warning" size="sm" showIcon>No guided sections available</Status>
               </Card.Body>
             </Card>
           )}
         </main>
 
-        <aside className="runtime-workspace__aside" aria-label="Runtime renderer side panel">
+        <aside className="runtime-workspace__aside" aria-label="Execution intelligence side panel">
           <Card variant="default" className="runtime-workspace__panel">
             <Card.Body className="runtime-workspace__panel-body">
               <div className="runtime-workspace__panel-heading">
                 <MdOutlineRoute aria-hidden="true" />
-                <h2>Sections</h2>
+                <h2>Guided Sections</h2>
               </div>
-              <RuntimeSectionNavigation sections={sections} />
+              <RuntimeSectionNavigation
+                activeKey={activeWorkspaceKey}
+                discoveryState={discoveryState}
+                onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
+                onSelectSection={handleSelectSection}
+                sections={sections}
+              />
+            </Card.Body>
+          </Card>
+
+          <Card variant="default" className="runtime-workspace__panel">
+            <Card.Body className="runtime-workspace__panel-body">
+              <div className="runtime-workspace__panel-heading">
+                <MdInfoOutline aria-hidden="true" />
+                <h2>Discovery State</h2>
+              </div>
+              <Status variant={discoveryState === 'Evidence Ready' ? 'success' : 'neutral'} size="sm" showIcon>
+                {discoveryState}
+              </Status>
             </Card.Body>
           </Card>
 
@@ -1103,7 +1307,7 @@ function RuntimeWorkspace() {
               <Card.Body className="runtime-workspace__panel-body">
                 <div className="runtime-workspace__panel-heading">
                   <MdInfoOutline aria-hidden="true" />
-                  <h2>Renderer Warnings</h2>
+                  <h2>Workspace Warnings</h2>
                 </div>
                 <ul className="runtime-workspace__plain-list">
                   {configWarnings.map((warning, index) => (
