@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
+  useAcceptRuntimeSectionMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
@@ -14,6 +15,7 @@ import RuntimeWorkspace from './RuntimeWorkspace'
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
+  useAcceptRuntimeSectionMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
@@ -29,6 +31,8 @@ const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
 const unwrapAcceptDiscovery = vi.fn()
+const acceptRuntimeSection = vi.fn()
+const unwrapAcceptSection = vi.fn()
 
 const rendererPayload = {
   runtimeInstance: {
@@ -144,6 +148,8 @@ describe('RuntimeWorkspace', () => {
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
     unwrapAcceptDiscovery.mockReset()
+    acceptRuntimeSection.mockReset()
+    unwrapAcceptSection.mockReset()
     window.confirm = vi.fn(() => true)
     unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
@@ -153,7 +159,10 @@ describe('RuntimeWorkspace', () => {
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
     acceptRuntimeDiscovery.mockReturnValue({ unwrap: unwrapAcceptDiscovery })
+    unwrapAcceptSection.mockResolvedValue({ data: { section: { accepted: { content: 'Accepted final.' } } } })
+    acceptRuntimeSection.mockReturnValue({ unwrap: unwrapAcceptSection })
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
+    useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
@@ -735,6 +744,145 @@ describe('RuntimeWorkspace', () => {
     expect(unwrapMutation).toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section saved/i)).toBeInTheDocument()
+  })
+
+  it('accepts generated section content through the section acceptance endpoint', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                format: 'TEXT',
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              accepted: null,
+              state: {
+                status: 'GENERATED',
+                revisionCount: 0,
+              },
+              review: {
+                status: 'PENDING_REVIEW',
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    await user.click(screen.getByRole('button', { name: /accept final/i }))
+
+    expect(acceptRuntimeSection).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/section accepted as final/i)).toBeInTheDocument()
+  })
+
+  it('keeps section acceptance disabled without generated content', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+  })
+
+  it('keeps section acceptance disabled when current generated content is already accepted', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              accepted: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                sourceGeneratedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              state: {
+                status: 'ACCEPTED',
+                revisionCount: 0,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getByRole('region', { name: /accepted final/i })).toHaveTextContent(
+      'Customer Problem: Proposal creation is slow.',
+    )
+    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+  })
+
+  it('shows normalized feedback when section acceptance is rejected', async () => {
+    const user = userEvent.setup()
+    unwrapAcceptSection.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'Runtime section cannot be accepted before generated content exists.',
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    await user.click(screen.getByRole('button', { name: /accept final/i }))
+
+    expect(await screen.findByText(/runtime section cannot be accepted/i)).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
   it('saves the active section before advancing to the next guided section', async () => {
@@ -1386,6 +1534,11 @@ describe('RuntimeWorkspace', () => {
           sections: rendererPayload.sections.map((section) => ({
             ...section,
             editable: false,
+            generated: {
+              content: 'Customer Problem: Proposal creation is slow.',
+              generatedAt: '2026-05-19T08:01:00.000Z',
+              inputHash: 'hash-1',
+            },
           })),
         },
       },
@@ -1405,8 +1558,12 @@ describe('RuntimeWorkspace', () => {
     expect(generateButton).toBeDisabled()
     expect(regenerateButton).toBeDisabled()
     expect(screen.getAllByText('Current role or permissions do not allow runtime section generation.')).toHaveLength(2)
+    const acceptFinalButton = screen.getByRole('button', { name: /^accept final$/i })
+    expect(acceptFinalButton).toBeDisabled()
+    expect(acceptFinalButton).toHaveAccessibleDescription('Current role or permissions do not allow accepting this section.')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
+    expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
   it('presents published and locked runtime truth as read-only', async () => {

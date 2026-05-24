@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAcceptRuntimeDiscoveryQuery,
+  buildAcceptRuntimeSectionQuery,
   buildCreateRuntimeInstanceQuery,
   buildExecuteRuntimeActionQuery,
   buildMutateRuntimeStateQuery,
@@ -10,6 +11,7 @@ import {
   buildUpdateRuntimeDiscoveryInputsQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
   getAcceptRuntimeDiscoveryInvalidationTags,
+  getAcceptRuntimeSectionInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getExecuteRuntimeActionInvalidationTags,
   getMutateRuntimeStateInvalidationTags,
@@ -20,6 +22,7 @@ import {
   runtimeInstanceApi,
   runtimeInstanceListTag,
   useAcceptRuntimeDiscoveryMutation,
+  useAcceptRuntimeSectionMutation,
   useCreateRuntimeInstanceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeInstanceQuery,
@@ -38,6 +41,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeDiscoveryInputs')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeDiscovery')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeSection')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('executeRuntimeAction')
   })
 
@@ -49,6 +53,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useMutateRuntimeStateMutation).toBe('function')
     expect(typeof useUpdateRuntimeDiscoveryInputsMutation).toBe('function')
     expect(typeof useAcceptRuntimeDiscoveryMutation).toBe('function')
+    expect(typeof useAcceptRuntimeSectionMutation).toBe('function')
     expect(typeof useExecuteRuntimeActionMutation).toBe('function')
   })
 
@@ -60,6 +65,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeDiscoveryInputs.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeDiscovery.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeSection.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.executeRuntimeAction.initiate).toBe('function')
   })
 
@@ -160,6 +166,22 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildAcceptRuntimeSectionQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/section-acceptance',
+      method: 'PATCH',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
   })
 
   it('provides and invalidates runtime instance cache tags by runtime type and id', () => {
@@ -241,6 +263,19 @@ describe('runtimeInstanceApi', () => {
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
     expect(getAcceptRuntimeDiscoveryInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getAcceptRuntimeSectionInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',

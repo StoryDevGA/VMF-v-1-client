@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
+  MdCheckCircle,
   MdCompareArrows,
   MdInfoOutline,
   MdOutlineHistory,
@@ -20,6 +21,7 @@ import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
 import {
   useAcceptRuntimeDiscoveryMutation,
+  useAcceptRuntimeSectionMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
@@ -102,6 +104,25 @@ const getSectionActionDisabledReason = ({
   return ''
 }
 
+const getAcceptSectionDisabledReason = ({
+  acceptedIsCurrent,
+  editable,
+  executingActionKey,
+  generatedContent,
+  isAcceptingSection,
+  isSaving,
+  section,
+}) => {
+  if (!generatedContent) return 'Generate this section before accepting it as final.'
+  if (acceptedIsCurrent) return 'Current generated content is already accepted as final.'
+  if (!editable) {
+    return section?.readonlyReason || 'Current role or permissions do not allow accepting this section.'
+  }
+  if (isSaving || isAcceptingSection) return 'Wait for the current section update to finish.'
+  if (executingActionKey) return 'Another runtime section action is already in progress.'
+  return ''
+}
+
 const getDefaultConfirmationMessage = (action) => {
   const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'this runtime action').trim()
   return `Confirm ${label}?`
@@ -158,6 +179,18 @@ const stringifyAcceptedContent = (accepted) => {
   if (typeof accepted.content === 'string') return accepted.content
   return stringifyValue(accepted.content ?? accepted)
 }
+
+const isAcceptedGeneratedCurrent = ({ accepted, generated }) =>
+  Boolean(
+    accepted
+    && generated
+    && accepted.sourceGeneratedAt
+    && generated.generatedAt
+    && accepted.sourceGeneratedAt === generated.generatedAt
+    && accepted.inputHash
+    && generated.inputHash
+    && accepted.inputHash === generated.inputHash,
+  )
 
 const getDiscoveryProjection = (renderer) =>
   renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
@@ -435,12 +468,14 @@ function RuntimeValueControl({
 }
 
 function RuntimeSection({
+  acceptingRuntimePath = '',
   disabled = false,
   executingActionKey = '',
   feedback = null,
   generationActions = {},
   id,
   onExecuteSectionAction,
+  onAcceptSection,
   onSave,
   onSaveAndNext,
   section,
@@ -459,6 +494,11 @@ function RuntimeSection({
   const canSave = editable && isDirty && !isSaving
   const generatedContent = stringifyGeneratedContent(section?.generated)
   const acceptedContent = stringifyAcceptedContent(section?.accepted)
+  const acceptedIsCurrent = isAcceptedGeneratedCurrent({
+    accepted: section?.accepted,
+    generated: section?.generated,
+  })
+  const isAcceptingSection = acceptingRuntimePath === section?.runtimePath
   const revisions = Array.isArray(section?.revisions) ? section.revisions : []
   const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null
   const previousGeneratedContent = stringifyGeneratedContent(latestRevision?.generated)
@@ -484,6 +524,16 @@ function RuntimeSection({
   })
   const generateReasonId = `${section.key}-generate-section-reason`
   const regenerateReasonId = `${section.key}-regenerate-section-reason`
+  const acceptReasonId = `${section.key}-accept-section-reason`
+  const acceptDisabledReason = getAcceptSectionDisabledReason({
+    acceptedIsCurrent,
+    editable,
+    executingActionKey,
+    generatedContent,
+    isAcceptingSection,
+    isSaving,
+    section,
+  })
   const resolvedFeedback = localError
     ? { variant: 'error', message: localError }
     : feedback
@@ -646,6 +696,18 @@ function RuntimeSection({
                 Compare
               </Button>
               <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={Boolean(acceptDisabledReason)}
+                loading={isAcceptingSection}
+                aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
+                leftIcon={<MdCheckCircle aria-hidden="true" />}
+                onClick={() => onAcceptSection?.({ section })}
+              >
+                Accept Final
+              </Button>
+              <Button
                 type="submit"
                 variant="primary"
                 size="sm"
@@ -668,6 +730,7 @@ function RuntimeSection({
             {[
               { action: generateAction, id: generateReasonId, reason: generateDisabledReason },
               { action: regenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
+              { action: true, id: acceptReasonId, reason: acceptDisabledReason },
             ].map(({ action, id, reason }) => (
               action && reason ? (
                 <p
@@ -1032,9 +1095,11 @@ function RuntimeWorkspace() {
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
+  const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
   const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
+  const [acceptingRuntimePath, setAcceptingRuntimePath] = useState('')
   const [savingDiscovery, setSavingDiscovery] = useState(false)
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [actionFeedback, setActionFeedback] = useState(null)
@@ -1304,6 +1369,49 @@ function RuntimeWorkspace() {
     setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
   }
 
+  const handleAcceptSection = async ({ section }) => {
+    const runtimePath = section?.runtimePath
+    if (!runtimePath) return false
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    setAcceptingRuntimePath(runtimePath)
+    setSectionFeedback(runtimePath, null)
+
+    try {
+      await acceptRuntimeSection({
+        runtimeInstanceId,
+        body: {
+          runtimePath,
+          sectionKey: section?.sectionKey || section?.key,
+          expectedUpdatedAt,
+        },
+      }).unwrap()
+      setSectionFeedback(runtimePath, {
+        variant: 'success',
+        message: 'Section accepted as final.',
+      })
+      await refetch()
+      return true
+    } catch (acceptanceError) {
+      const normalizedError = normalizeError(acceptanceError)
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      setAcceptingRuntimePath('')
+    }
+  }
+
   const handleSelectSection = (index) => {
     const section = sections[index]
     if (!section) return
@@ -1451,11 +1559,13 @@ function RuntimeWorkspace() {
               <RuntimeSection
                 key={`${activeSection.key ?? activeSection.runtimePath}-${stringifyValue(activeSection.value)}`}
                 id={getSectionDomId(activeSection, activeSectionIndex)}
+                acceptingRuntimePath={acceptingRuntimePath}
                 section={activeSection}
                 disabled={savingRuntimePath === activeSection.runtimePath}
                 executingActionKey={executingActionKey}
                 feedback={sectionFeedbackByPath[activeSection.runtimePath]}
                 generationActions={sectionActionByKey}
+                onAcceptSection={handleAcceptSection}
                 onExecuteSectionAction={handleExecuteSectionAction}
                 onSave={handleSaveSection}
                 onSaveAndNext={handleSaveSectionAndNext}
