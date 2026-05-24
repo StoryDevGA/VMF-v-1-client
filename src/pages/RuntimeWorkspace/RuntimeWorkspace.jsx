@@ -19,6 +19,7 @@ import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
 import {
+  useAcceptRuntimeDiscoveryMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
@@ -852,7 +853,9 @@ function DiscoverySection({
   discoveryState = 'Evidence Not Ready',
   disabled = false,
   feedback = null,
+  onAcceptDiscovery,
   onRefreshEvidence,
+  saving = false,
 }) {
   const scopedViews = getDiscoveryScopedViews(discovery)
   const scopedViewKeys = Object.keys(scopedViews)
@@ -875,7 +878,13 @@ function DiscoverySection({
     ? evidenceSummaryKeys.slice(0, 4).join(', ') + (evidenceSummaryKeys.length > 4 ? `, +${evidenceSummaryKeys.length - 4} more` : '')
     : formatProjectionSummary(discovery?.evidence)
   const isAccepted = discovery?.accepted === true
+  const needsRefresh = discovery?.needsRefresh === true
   const hasEvidence = discovery?.evidenceReady === true || Boolean(evidenceSummary)
+  const canAcceptDiscovery = discovery?.inputComplete === true
+    && discovery?.evidenceReady === true
+    && !isAccepted
+    && !needsRefresh
+    && !disabled
 
   const handleInputChange = (field) => (event) => {
     setDraftInputs((current) => ({
@@ -887,6 +896,10 @@ function DiscoverySection({
   const handleRefreshEvidence = async (event) => {
     event.preventDefault()
     await onRefreshEvidence?.({ inputs: draftInputs })
+  }
+
+  const handleAcceptDiscovery = async () => {
+    await onAcceptDiscovery?.()
   }
 
   return (
@@ -987,6 +1000,16 @@ function DiscoverySection({
             <Button type="submit" variant="primary" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} disabled={disabled}>
               Refresh Evidence
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!canAcceptDiscovery}
+              loading={saving}
+              onClick={handleAcceptDiscovery}
+            >
+              Accept Discovery
+            </Button>
           </div>
         </form>
       </Card.Body>
@@ -1008,6 +1031,7 @@ function RuntimeWorkspace() {
     { skip: !runtimeInstanceId },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
+  const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
@@ -1157,6 +1181,44 @@ function RuntimeWorkspace() {
       setDiscoveryFeedback({
         variant: 'success',
         message: 'Discovery evidence refreshed.',
+      })
+      await refetch()
+      return true
+    } catch (discoveryError) {
+      const normalizedError = normalizeError(discoveryError)
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      setSavingDiscovery(false)
+    }
+  }
+
+  const handleAcceptDiscovery = async () => {
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    setSavingDiscovery(true)
+    setDiscoveryFeedback(null)
+
+    try {
+      await acceptRuntimeDiscovery({
+        runtimeInstanceId,
+        body: {
+          expectedUpdatedAt,
+        },
+      }).unwrap()
+      setDiscoveryFeedback({
+        variant: 'success',
+        message: 'Discovery accepted.',
       })
       await refetch()
       return true
@@ -1380,7 +1442,9 @@ function RuntimeWorkspace() {
               discoveryState={discoveryState}
               disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}
               feedback={discoveryFeedback}
+              onAcceptDiscovery={handleAcceptDiscovery}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
+              saving={savingDiscovery}
             />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">

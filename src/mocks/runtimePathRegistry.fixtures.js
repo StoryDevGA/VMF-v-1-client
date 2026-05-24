@@ -723,6 +723,26 @@ export const INITIAL_RUNTIME_PATH_REGISTRY = Object.freeze([
     updatedAt: '2026-04-17T10:00:00.000Z',
     updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
   }),
+  Object.freeze({
+    pathKey: 'framework_state.evidence_pack',
+    label: 'Discovery Evidence Pack',
+    description: 'Governed Discovery evidence pack used by Execution Workspace Section 0.',
+    status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
+    frameworkKeys: Object.freeze(['VMF']),
+    scope: 'FRAMEWORK_STATE',
+    allowedOperations: Object.freeze([
+      RUNTIME_PATH_REGISTRY_OPERATIONS.READ,
+      RUNTIME_PATH_REGISTRY_OPERATIONS.WRITE,
+    ]),
+    dataType: 'OBJECT',
+    category: 'STATE',
+    sourceType: 'RUNTIME_STATE',
+    isProtected: false,
+    isSystem: true,
+    introducedInVersion: '2.3.1',
+    updatedAt: '2026-05-24T00:00:00.000Z',
+    updatedBy: Object.freeze({ id: 'sa-1', name: 'Super Admin' }),
+  }),
 ].map(withDerivedRuntimePathRegistryId))
 
 export const INITIAL_RUNTIME_PATH_REGISTRY_STAGED = Object.freeze([

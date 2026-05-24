@@ -93,6 +93,12 @@ export const buildUpdateRuntimeDiscoveryInputsQuery = ({ runtimeInstanceId, body
   body,
 })
 
+export const buildAcceptRuntimeDiscoveryQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-acceptance`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildExecuteRuntimeActionQuery = ({ runtimeInstanceId, actionKey, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/actions/${
     encodeURIComponent(String(actionKey ?? '').trim())
@@ -137,6 +143,7 @@ export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeI
 
 export const getExecuteRuntimeActionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeDiscoveryInputsInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getAcceptRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -170,6 +177,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getUpdateRuntimeDiscoveryInputsInvalidationTags,
     }),
 
+    acceptRuntimeDiscovery: build.mutation({
+      query: buildAcceptRuntimeDiscoveryQuery,
+      invalidatesTags: getAcceptRuntimeDiscoveryInvalidationTags,
+    }),
+
     executeRuntimeAction: build.mutation({
       query: buildExecuteRuntimeActionQuery,
       invalidatesTags: getExecuteRuntimeActionInvalidationTags,
@@ -184,6 +196,7 @@ export const {
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useAcceptRuntimeDiscoveryMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
   useExecuteRuntimeActionMutation,
 } = runtimeInstanceApi

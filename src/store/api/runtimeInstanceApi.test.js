@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAcceptRuntimeDiscoveryQuery,
   buildCreateRuntimeInstanceQuery,
   buildExecuteRuntimeActionQuery,
   buildMutateRuntimeStateQuery,
@@ -8,6 +9,7 @@ import {
   buildRuntimeRendererQuery,
   buildUpdateRuntimeDiscoveryInputsQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
+  getAcceptRuntimeDiscoveryInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getExecuteRuntimeActionInvalidationTags,
   getMutateRuntimeStateInvalidationTags,
@@ -17,6 +19,7 @@ import {
   getUpdateRuntimeDiscoveryInputsInvalidationTags,
   runtimeInstanceApi,
   runtimeInstanceListTag,
+  useAcceptRuntimeDiscoveryMutation,
   useCreateRuntimeInstanceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeInstanceQuery,
@@ -34,6 +37,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeDiscoveryInputs')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeDiscovery')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('executeRuntimeAction')
   })
 
@@ -44,6 +48,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
     expect(typeof useMutateRuntimeStateMutation).toBe('function')
     expect(typeof useUpdateRuntimeDiscoveryInputsMutation).toBe('function')
+    expect(typeof useAcceptRuntimeDiscoveryMutation).toBe('function')
     expect(typeof useExecuteRuntimeActionMutation).toBe('function')
   })
 
@@ -54,6 +59,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeDiscoveryInputs.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeDiscovery.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.executeRuntimeAction.initiate).toBe('function')
   })
 
@@ -142,6 +148,18 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildAcceptRuntimeDiscoveryQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/discovery-acceptance',
+      method: 'PATCH',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
   })
 
   it('provides and invalidates runtime instance cache tags by runtime type and id', () => {
@@ -210,6 +228,19 @@ describe('runtimeInstanceApi', () => {
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
     expect(getUpdateRuntimeDiscoveryInputsInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getAcceptRuntimeDiscoveryInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',

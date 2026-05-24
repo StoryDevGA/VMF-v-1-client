@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import {
+  useAcceptRuntimeDiscoveryMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
@@ -12,6 +13,7 @@ import {
 import RuntimeWorkspace from './RuntimeWorkspace'
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
@@ -25,6 +27,8 @@ const executeRuntimeAction = vi.fn()
 const unwrapAction = vi.fn()
 const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
+const acceptRuntimeDiscovery = vi.fn()
+const unwrapAcceptDiscovery = vi.fn()
 
 const rendererPayload = {
   runtimeInstance: {
@@ -138,6 +142,8 @@ describe('RuntimeWorkspace', () => {
     unwrapAction.mockReset()
     updateRuntimeDiscoveryInputs.mockReset()
     unwrapDiscoveryInputs.mockReset()
+    acceptRuntimeDiscovery.mockReset()
+    unwrapAcceptDiscovery.mockReset()
     window.confirm = vi.fn(() => true)
     unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
@@ -145,6 +151,9 @@ describe('RuntimeWorkspace', () => {
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
     unwrapDiscoveryInputs.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
+    unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
+    acceptRuntimeDiscovery.mockReturnValue({ unwrap: unwrapAcceptDiscovery })
+    useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
@@ -352,6 +361,163 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/discovery evidence refreshed/i)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: /status: discovery evidence refreshed/i })).toBeInTheDocument()
+  })
+
+  it('accepts ready discovery evidence through the discovery acceptance endpoint', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /accept discovery/i }))
+
+    expect(acceptRuntimeDiscovery).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/discovery accepted/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: discovery accepted/i })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['evidence is not ready', { evidenceReady: false, accepted: false, needsRefresh: false }],
+    ['input is incomplete', { inputComplete: false, evidenceReady: true, accepted: false, needsRefresh: false }],
+    ['evidence needs refresh', { evidenceReady: true, accepted: false, needsRefresh: true }],
+    ['evidence is already accepted', { evidenceReady: true, accepted: true, needsRefresh: false }],
+  ])('disables discovery acceptance when %s', (_caseName, discoveryState) => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: discoveryState.inputComplete ?? discoveryState.evidenceReady,
+            ...discoveryState,
+            inputValues: {},
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('button', { name: /accept discovery/i })).toBeDisabled()
+  })
+
+  it('shows normalized error feedback when discovery acceptance is rejected', async () => {
+    const user = userEvent.setup()
+    unwrapAcceptDiscovery.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'Discovery evidence is incomplete and must be refreshed before acceptance.',
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /accept discovery/i }))
+
+    expect(await screen.findByText(/discovery evidence is incomplete/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: discovery evidence is incomplete/i })).toBeInTheDocument()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
+  it('uses the shared loading state while discovery acceptance is pending', async () => {
+    const user = userEvent.setup()
+    unwrapAcceptDiscovery.mockReturnValueOnce(new Promise(() => {}))
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const acceptButton = screen.getByRole('button', { name: /accept discovery/i })
+    await user.click(acceptButton)
+
+    await waitFor(() => {
+      expect(acceptButton).toHaveAttribute('aria-busy', 'true')
+    })
   })
 
   it('allows first-use discovery input capture when the renderer projects empty editable input values', async () => {
