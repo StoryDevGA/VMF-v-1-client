@@ -81,6 +81,9 @@ export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
 
+export const buildRuntimeEvidenceQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/evidence`
+
 export const buildMutateRuntimeStateQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/data`,
   method: 'PATCH',
@@ -174,6 +177,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeRendererTags,
     }),
 
+    getRuntimeEvidence: build.query({
+      query: buildRuntimeEvidenceQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
     mutateRuntimeState: build.mutation({
       query: buildMutateRuntimeStateQuery,
       invalidatesTags: getMutateRuntimeStateInvalidationTags,
@@ -206,6 +214,7 @@ export const {
   useListRuntimeInstancesQuery,
   useCreateRuntimeInstanceMutation,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
   useAcceptRuntimeDiscoveryMutation,

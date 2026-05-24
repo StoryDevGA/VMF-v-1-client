@@ -23,6 +23,7 @@ import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useExecuteRuntimeActionMutation,
+  useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
@@ -95,7 +96,7 @@ const getSectionActionDisabledReason = ({
   if (actionKey === SECTION_ACTION_KEYS.GENERATE_SECTION) {
     const eligibility = section?.generationEligibility ?? null
     if (eligibility && eligibility.canGenerate === false) {
-      return eligibility.reason || 'Add discovery evidence or section context before generating this section.'
+      return eligibility.reason || 'Accept discovery evidence before generating this section.'
     }
   }
   if (actionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION && !generatedContent) {
@@ -180,17 +181,23 @@ const stringifyAcceptedContent = (accepted) => {
   return stringifyValue(accepted.content ?? accepted)
 }
 
-const isAcceptedGeneratedCurrent = ({ accepted, generated }) =>
-  Boolean(
-    accepted
-    && generated
-    && accepted.sourceGeneratedAt
-    && generated.generatedAt
-    && accepted.sourceGeneratedAt === generated.generatedAt
-    && accepted.inputHash
-    && generated.inputHash
-    && accepted.inputHash === generated.inputHash,
-  )
+const isAcceptedGeneratedCurrent = ({ accepted, generated }) => {
+  if (!accepted || !generated) return false
+
+  const acceptedGeneratedAt = String(accepted.sourceGeneratedAt || '').trim()
+  const generatedAt = String(generated.generatedAt || '').trim()
+  const acceptedInputHash = String(accepted.inputHash || '').trim()
+  const generatedInputHash = String(generated.inputHash || '').trim()
+
+  if (acceptedGeneratedAt && generatedAt && acceptedGeneratedAt !== generatedAt) return false
+  if (acceptedInputHash && generatedInputHash && acceptedInputHash !== generatedInputHash) return false
+
+  if (acceptedGeneratedAt && generatedAt && acceptedInputHash && generatedInputHash) {
+    return true
+  }
+
+  return stringifyAcceptedContent(accepted) === stringifyGeneratedContent(generated)
+}
 
 const getDiscoveryProjection = (renderer) =>
   renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
@@ -915,10 +922,15 @@ function DiscoverySection({
   discovery = null,
   discoveryState = 'Evidence Not Ready',
   disabled = false,
+  evidenceDetail = null,
+  evidenceDetailError = null,
+  evidenceDetailLoading = false,
   feedback = null,
   onAcceptDiscovery,
   onRefreshEvidence,
+  onToggleSources,
   saving = false,
+  showSources = false,
 }) {
   const scopedViews = getDiscoveryScopedViews(discovery)
   const scopedViewKeys = Object.keys(scopedViews)
@@ -940,9 +952,17 @@ function DiscoverySection({
   const evidenceSummary = evidenceSummaryKeys.length > 0
     ? evidenceSummaryKeys.slice(0, 4).join(', ') + (evidenceSummaryKeys.length > 4 ? `, +${evidenceSummaryKeys.length - 4} more` : '')
     : formatProjectionSummary(discovery?.evidence)
+  const sourceCount = Number(discovery?.lineageSummary?.sourceCount || 0)
+  const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
+  const evidenceSources = Array.isArray(evidenceDetail?.lineage?.sources)
+    ? evidenceDetail.lineage.sources
+    : []
   const isAccepted = discovery?.accepted === true
   const needsRefresh = discovery?.needsRefresh === true
   const hasEvidence = discovery?.evidenceReady === true || Boolean(evidenceSummary)
+  const buildButtonLabel = hasEvidence ? 'Refresh Evidence Pack' : 'Build Evidence Pack'
+  const sourcesReasonId = 'discovery-sources-disabled-reason'
+  const sourcesDisabledReason = hasEvidence ? '' : 'Build an evidence pack before viewing sources.'
   const canAcceptDiscovery = discovery?.inputComplete === true
     && discovery?.evidenceReady === true
     && !isAccepted
@@ -1031,6 +1051,11 @@ function DiscoverySection({
                 ? evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
                 : 'No discovery evidence pack is projected for this runtime yet.'}
             </p>
+            <p>
+              {sourceCount > 0
+                ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${builderMode}` : ''}.`
+                : 'No source lineage is recorded for this runtime yet.'}
+            </p>
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
             <h3>Scoped Evidence Views</h3>
@@ -1061,7 +1086,17 @@ function DiscoverySection({
           ) : null}
           <div className="runtime-workspace__section-actions" aria-label="Discovery actions">
             <Button type="submit" variant="primary" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} disabled={disabled}>
-              Refresh Evidence
+              {buildButtonLabel}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!hasEvidence}
+              aria-describedby={sourcesDisabledReason ? sourcesReasonId : undefined}
+              onClick={onToggleSources}
+            >
+              {showSources ? 'Hide Sources' : 'View Sources'}
             </Button>
             <Button
               type="button"
@@ -1071,9 +1106,35 @@ function DiscoverySection({
               loading={saving}
               onClick={handleAcceptDiscovery}
             >
-              Accept Discovery
+              Accept Evidence
             </Button>
           </div>
+          {sourcesDisabledReason ? (
+            <p id={sourcesReasonId} className="runtime-workspace__action-reason">
+              {sourcesDisabledReason}
+            </p>
+          ) : null}
+          {showSources ? (
+            <section className="runtime-workspace__section-panel" aria-label="Evidence sources">
+              <h3>Evidence Sources</h3>
+              {evidenceDetailLoading ? (
+                <Status variant="info" size="sm" showIcon>Loading sources</Status>
+              ) : evidenceDetailError ? (
+                <Status variant="error" size="sm" showIcon>{evidenceDetailError.message}</Status>
+              ) : evidenceSources.length > 0 ? (
+                <ul className="runtime-workspace__plain-list">
+                  {evidenceSources.map((source) => (
+                    <li key={source.sourceId || source.fieldKey || source.valueHash}>
+                      <strong>{source.fieldKey || source.sourceId || 'Source'}</strong>
+                      <span>{[source.type, source.status, source.url].filter(Boolean).join(' / ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No source lineage is available for this evidence pack.</p>
+              )}
+            </section>
+          ) : null}
         </form>
       </Card.Body>
     </Card>
@@ -1104,6 +1165,7 @@ function RuntimeWorkspace() {
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [actionFeedback, setActionFeedback] = useState(null)
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
+  const [showEvidenceSources, setShowEvidenceSources] = useState(false)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
 
@@ -1125,6 +1187,16 @@ function RuntimeWorkspace() {
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
   const discovery = getDiscoveryProjection(renderer)
   const discoveryState = getDiscoveryState(renderer)
+  const {
+    data: evidenceResponse,
+    isFetching: isFetchingEvidence,
+    error: evidenceError,
+  } = useGetRuntimeEvidenceQuery(
+    { runtimeInstanceId },
+    { skip: !runtimeInstanceId || !showEvidenceSources },
+  )
+  const evidenceDetail = evidenceResponse?.data?.discovery ?? evidenceResponse?.discovery ?? null
+  const evidenceDetailError = evidenceError ? normalizeError(evidenceError) : null
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
     : EMPTY_ARRAY
@@ -1549,10 +1621,15 @@ function RuntimeWorkspace() {
               discovery={discovery}
               discoveryState={discoveryState}
               disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}
+              evidenceDetail={evidenceDetail}
+              evidenceDetailError={evidenceDetailError}
+              evidenceDetailLoading={isFetchingEvidence}
               feedback={discoveryFeedback}
               onAcceptDiscovery={handleAcceptDiscovery}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
+              onToggleSources={() => setShowEvidenceSources((current) => !current)}
               saving={savingDiscovery}
+              showSources={showEvidenceSources}
             />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">

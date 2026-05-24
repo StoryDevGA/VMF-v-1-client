@@ -7,6 +7,7 @@ import {
   buildMutateRuntimeStateQuery,
   buildRuntimeInstanceDetailQuery,
   buildRuntimeInstanceListQuery,
+  buildRuntimeEvidenceQuery,
   buildRuntimeRendererQuery,
   buildUpdateRuntimeDiscoveryInputsQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
@@ -25,6 +26,7 @@ import {
   useAcceptRuntimeSectionMutation,
   useCreateRuntimeInstanceMutation,
   useExecuteRuntimeActionMutation,
+  useGetRuntimeEvidenceQuery,
   useGetRuntimeInstanceQuery,
   useGetRuntimeRendererQuery,
   useListRuntimeInstancesQuery,
@@ -37,6 +39,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('listRuntimeInstances')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeDiscoveryInputs')
@@ -49,6 +52,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useListRuntimeInstancesQuery).toBe('function')
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
+    expect(typeof useGetRuntimeEvidenceQuery).toBe('function')
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
     expect(typeof useMutateRuntimeStateMutation).toBe('function')
     expect(typeof useUpdateRuntimeDiscoveryInputsMutation).toBe('function')
@@ -61,6 +65,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.listRuntimeInstances.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeDiscoveryInputs.initiate).toBe('function')
@@ -105,6 +110,8 @@ describe('runtimeInstanceApi', () => {
       .toBe('/runtime-instances/value-narrative-001/renderer')
     expect(buildRuntimeRendererQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/renderer')
+    expect(buildRuntimeEvidenceQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/evidence')
     expect(buildMutateRuntimeStateQuery({
       runtimeInstanceId: 'value narrative/001',
       body: {

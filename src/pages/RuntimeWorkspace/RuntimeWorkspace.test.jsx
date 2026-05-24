@@ -7,6 +7,7 @@ import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useExecuteRuntimeActionMutation,
+  useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
@@ -17,6 +18,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
+  useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
@@ -164,6 +166,11 @@ describe('RuntimeWorkspace', () => {
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
+    useGetRuntimeEvidenceQuery.mockReturnValue({
+      data: null,
+      isFetching: false,
+      error: null,
+    })
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -356,6 +363,114 @@ describe('RuntimeWorkspace', () => {
     expect(within(sidePanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
   })
 
+  it('loads evidence source lineage on demand without rendering fake source data', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          discovery: {
+            lineage: {
+              sources: [
+                {
+                  sourceId: 'input_companyWebsite',
+                  type: 'USER_PROVIDED_WEBSITE',
+                  fieldKey: 'companyWebsite',
+                  url: 'https://acme.example',
+                  status: 'USER_PROVIDED',
+                },
+              ],
+            },
+          },
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 1,
+              builderMode: 'DETERMINISTIC',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    expect(useGetRuntimeEvidenceQuery).toHaveBeenLastCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    const sourceRegion = screen.getByRole('region', { name: /evidence sources/i })
+    expect(within(sourceRegion).getByText('companyWebsite')).toBeInTheDocument()
+    expect(within(sourceRegion).getByText(/USER_PROVIDED_WEBSITE \/ USER_PROVIDED \/ https:\/\/acme\.example/)).toBeInTheDocument()
+    expect(within(sourceRegion).queryByText(/competitor/i)).not.toBeInTheDocument()
+  })
+
+  it('explains why evidence sources are disabled before an evidence pack exists', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputSummary: {
+              keys: [],
+              count: 0,
+            },
+            evidenceSummary: {
+              keys: [],
+              count: 0,
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const viewSources = screen.getByRole('button', { name: /view sources/i })
+    const reason = screen.getByText(/build an evidence pack before viewing sources/i)
+    expect(viewSources).toBeDisabled()
+    expect(viewSources).toHaveAttribute('aria-describedby', reason.id)
+  })
+
   it('refreshes discovery evidence through the discovery inputs endpoint', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -389,7 +504,7 @@ describe('RuntimeWorkspace', () => {
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
     await user.type(screen.getByLabelText('Optional Notes'), 'Prioritize governed evidence reuse.')
-    await user.click(screen.getByRole('button', { name: /refresh evidence/i }))
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
 
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -442,7 +557,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    await user.click(screen.getByRole('button', { name: /accept discovery/i }))
+    await user.click(screen.getByRole('button', { name: /accept evidence/i }))
 
     expect(acceptRuntimeDiscovery).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -484,7 +599,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    expect(screen.getByRole('button', { name: /accept discovery/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /accept evidence/i })).toBeDisabled()
   })
 
   it('shows normalized error feedback when discovery acceptance is rejected', async () => {
@@ -523,7 +638,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    await user.click(screen.getByRole('button', { name: /accept discovery/i }))
+    await user.click(screen.getByRole('button', { name: /accept evidence/i }))
 
     expect(await screen.findByText(/discovery evidence is incomplete/i)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: /status: discovery evidence is incomplete/i })).toBeInTheDocument()
@@ -558,7 +673,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const acceptButton = screen.getByRole('button', { name: /accept discovery/i })
+    const acceptButton = screen.getByRole('button', { name: /accept evidence/i })
     await user.click(acceptButton)
 
     await waitFor(() => {
@@ -593,7 +708,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const refreshButton = screen.getByRole('button', { name: /refresh evidence/i })
+    const refreshButton = screen.getByRole('button', { name: /build evidence pack/i })
     expect(refreshButton).toBeEnabled()
     await user.type(screen.getByLabelText('Company Name'), 'Acme')
     await user.click(refreshButton)
@@ -879,6 +994,44 @@ describe('RuntimeWorkspace', () => {
       'Customer Problem: Proposal creation is slow.',
     )
     expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+  })
+
+  it('keeps section acceptance disabled for legacy accepted content without generated metadata', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              accepted: {
+                content: 'Customer Problem: Proposal creation is slow.',
+              },
+              state: {
+                status: 'ACCEPTED',
+                revisionCount: 0,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+    expect(screen.getByText(/current generated content is already accepted as final/i)).toBeInTheDocument()
   })
 
   it('shows normalized feedback when section acceptance is rejected', async () => {
@@ -1751,7 +1904,7 @@ describe('RuntimeWorkspace', () => {
               value: '',
               generationEligibility: {
                 canGenerate: false,
-                reason: 'Add discovery evidence or section context before generating this section.',
+                reason: 'Accept discovery evidence before generating this section.',
                 sources: [],
               },
             },
@@ -1769,7 +1922,7 @@ describe('RuntimeWorkspace', () => {
 
     const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     expect(generateButton).toBeDisabled()
-    expect(generateButton).toHaveAccessibleDescription('Add discovery evidence or section context before generating this section.')
+    expect(generateButton).toHaveAccessibleDescription('Accept discovery evidence before generating this section.')
     await user.click(generateButton)
 
     expect(executeRuntimeAction).not.toHaveBeenCalled()
