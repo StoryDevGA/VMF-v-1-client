@@ -22,6 +22,7 @@ import {
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
 } from '../../store/api/runtimeInstanceApi.js'
+import { formatDateOnly } from '../../utils/dateTime.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
@@ -80,11 +81,18 @@ const getSectionActionDisabledReason = ({
   editable,
   executingActionKey,
   generatedContent,
+  section,
 }) => {
   if (!action) return ''
   if (!action.enabled && action.disabledReason) return action.disabledReason
   if (!editable) return 'Current role or permissions do not allow runtime section generation.'
   if (executingActionKey) return 'Another runtime section action is already in progress.'
+  if (actionKey === SECTION_ACTION_KEYS.GENERATE_SECTION) {
+    const eligibility = section?.generationEligibility ?? null
+    if (eligibility && eligibility.canGenerate === false) {
+      return eligibility.reason || 'Add discovery evidence or section context before generating this section.'
+    }
+  }
   if (actionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION && !generatedContent) {
     return 'Generate this section before regenerating it.'
   }
@@ -158,6 +166,26 @@ const getDiscoveryState = (renderer) => {
   if (hasRuntimeValue(discovery?.scopedViews) || hasRuntimeValue(discovery?.scoped_views)) return 'Evidence Ready'
   if (hasRuntimeValue(discovery)) return 'Input Captured'
   return 'Evidence Not Ready'
+}
+
+const getDiscoveryScopedViews = (discovery) => {
+  const scopedViews = discovery?.scopedViews ?? discovery?.scoped_views ?? {}
+  return scopedViews && typeof scopedViews === 'object' && !Array.isArray(scopedViews)
+    ? scopedViews
+    : {}
+}
+
+const formatProjectionSummary = (value) => {
+  if (!hasRuntimeValue(value)) return ''
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'} projected`
+  if (typeof value === 'object') {
+    const keys = Object.keys(value)
+    return keys.length > 0
+      ? keys.slice(0, 4).join(', ') + (keys.length > 4 ? `, +${keys.length - 4} more` : '')
+      : ''
+  }
+  return String(value)
 }
 
 const getSectionNavigationStatus = (section) => {
@@ -441,6 +469,7 @@ function RuntimeSection({
     editable,
     executingActionKey,
     generatedContent,
+    section,
   })
   const regenerateDisabledReason = getSectionActionDisabledReason({
     action: regenerateAction,
@@ -448,6 +477,7 @@ function RuntimeSection({
     editable,
     executingActionKey,
     generatedContent,
+    section,
   })
   const generateReasonId = `${section.key}-generate-section-reason`
   const regenerateReasonId = `${section.key}-regenerate-section-reason`
@@ -815,7 +845,23 @@ function RuntimeSectionNavigation({
   )
 }
 
-function DiscoverySection({ discoveryState = 'Evidence Not Ready' }) {
+function DiscoverySection({
+  discovery = null,
+  discoveryState = 'Evidence Not Ready',
+}) {
+  const scopedViews = getDiscoveryScopedViews(discovery)
+  const scopedViewKeys = Object.keys(scopedViews)
+  const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
+  const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
+  const inputsSummary = inputSummaryKeys.length > 0
+    ? inputSummaryKeys.slice(0, 4).join(', ') + (inputSummaryKeys.length > 4 ? `, +${inputSummaryKeys.length - 4} more` : '')
+    : formatProjectionSummary(discovery?.inputs)
+  const evidenceSummary = evidenceSummaryKeys.length > 0
+    ? evidenceSummaryKeys.slice(0, 4).join(', ') + (evidenceSummaryKeys.length > 4 ? `, +${evidenceSummaryKeys.length - 4} more` : '')
+    : formatProjectionSummary(discovery?.evidence)
+  const isAccepted = discovery?.accepted === true
+  const hasEvidence = discovery?.evidenceReady === true || Boolean(evidenceSummary)
+
   return (
     <Card variant="default" className="runtime-workspace__section-card">
       <Card.Body className="runtime-workspace__section-body">
@@ -836,19 +882,31 @@ function DiscoverySection({ discoveryState = 'Evidence Not Ready' }) {
         >
           <section className="runtime-workspace__section-panel" aria-label="Discovery inputs">
             <h3>Discovery Inputs</h3>
-            <p>No discovery input projection is available yet.</p>
+            <p>{inputsSummary || 'No discovery input projection is available yet.'}</p>
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
             <h3>Evidence Pack</h3>
-            <p>No discovery evidence pack is projected for this runtime yet.</p>
+            <p>
+              {hasEvidence
+                ? evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
+                : 'No discovery evidence pack is projected for this runtime yet.'}
+            </p>
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
             <h3>Scoped Evidence Views</h3>
-            <p>Section-scoped evidence will appear here when the backend projects it.</p>
+            <p>
+              {scopedViewKeys.length > 0
+                ? `${scopedViewKeys.length} scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected: ${scopedViewKeys.slice(0, 4).join(', ')}${scopedViewKeys.length > 4 ? `, +${scopedViewKeys.length - 4} more` : ''}`
+                : 'Section-scoped evidence will appear here when the backend projects it.'}
+            </p>
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Discovery acceptance">
             <h3>Acceptance</h3>
-            <p>Discovery has not been accepted for governed downstream generation.</p>
+            <p>
+              {isAccepted
+                ? `Discovery accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
+                : 'Discovery has not been accepted for governed downstream generation.'}
+            </p>
           </section>
         </div>
       </Card.Body>
@@ -893,6 +951,7 @@ function RuntimeWorkspace() {
   )
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
+  const discovery = getDiscoveryProjection(renderer)
   const discoveryState = getDiscoveryState(renderer)
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
@@ -1182,7 +1241,7 @@ function RuntimeWorkspace() {
             </Badge>
           </div>
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
-            <DiscoverySection discoveryState={discoveryState} />
+            <DiscoverySection discovery={discovery} discoveryState={discoveryState} />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
               <RuntimeSection

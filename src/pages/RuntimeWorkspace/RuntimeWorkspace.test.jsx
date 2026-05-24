@@ -243,6 +243,87 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
   })
 
+  it('renders server-projected discovery state without inventing evidence content', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            evidenceSummary: {
+              keys: ['priorities'],
+              count: 1,
+            },
+            scopedViews: {
+              customer_problem: {
+                summary: 'Proposal teams need a shared governed narrative.',
+              },
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(discoverySection).getByText('Evidence Ready')).toBeInTheDocument()
+    expect(within(discoverySection).getByRole('region', { name: /discovery inputs/i })).toHaveTextContent('source')
+    expect(within(discoverySection).getByRole('region', { name: /evidence pack/i })).toHaveTextContent('priorities')
+    expect(within(discoverySection).getByRole('region', { name: /scoped evidence views/i })).toHaveTextContent('customer_problem')
+    expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
+      'Discovery has not been accepted',
+    )
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(sidePanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
+  })
+
+  it('formats accepted discovery dates with the shared date helper', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: true,
+            needsRefresh: false,
+            acceptedAt: '2026-05-24T09:00:00.000Z',
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
+      'Discovery accepted on 2026-05-24.',
+    )
+  })
+
   it('shows neutral progress when no runtime sections are projected', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -1109,6 +1190,53 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
+  })
+
+  it('disables section generation from server-projected eligibility when no context exists', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              actionKey: 'GENERATE_SECTION',
+              governedAction: 'GENERATE_SECTION',
+              buttonLabel: 'Generate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'generate-section-policy',
+            },
+          ],
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              value: '',
+              generationEligibility: {
+                canGenerate: false,
+                reason: 'Add discovery evidence or section context before generating this section.',
+                sources: [],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    const generateButton = screen.getByRole('button', { name: /^generate section$/i })
+    expect(generateButton).toBeDisabled()
+    expect(generateButton).toHaveAccessibleDescription('Add discovery evidence or section context before generating this section.')
+    await user.click(generateButton)
+
+    expect(executeRuntimeAction).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
   it('renders generated content revisions and toggles the compare view', async () => {
