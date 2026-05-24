@@ -1050,7 +1050,7 @@ function RuntimeWorkspace() {
     }))
   }
 
-  const handleSaveSection = async ({ section, value }) => {
+  const handleSaveSection = async ({ section, value, saveAndNext = false }) => {
     const runtimePath = section?.runtimePath
     if (!runtimePath) return false
 
@@ -1067,13 +1067,14 @@ function RuntimeWorkspace() {
     setSectionFeedback(runtimePath, null)
 
     try {
-      await mutateRuntimeState({
+      const mutationResponse = await mutateRuntimeState({
         runtimeInstanceId,
         body: {
           runtimePath,
           operation: 'WRITE',
           value,
           expectedUpdatedAt,
+          ...(saveAndNext ? { saveAndNext: true } : {}),
         },
       }).unwrap()
       setSectionFeedback(runtimePath, {
@@ -1081,7 +1082,7 @@ function RuntimeWorkspace() {
         message: 'Section saved.',
       })
       await refetch()
-      return true
+      return mutationResponse?.data || mutationResponse || true
     } catch (mutationError) {
       const normalizedError = normalizeError(mutationError)
       setSectionFeedback(runtimePath, {
@@ -1095,8 +1096,18 @@ function RuntimeWorkspace() {
   }
 
   const handleSaveSectionAndNext = async ({ section, value }) => {
-    const saved = await handleSaveSection({ section, value })
-    if (!saved) return
+    const mutationResult = await handleSaveSection({ section, value, saveAndNext: true })
+    if (!mutationResult) return
+
+    const serverAdvance = mutationResult?.advance
+    if (serverAdvance?.requested) {
+      if (serverAdvance.hasNext && serverAdvance.nextSectionKey) {
+        setActiveWorkspaceKey(serverAdvance.nextSectionKey)
+        return
+      }
+      setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
+      return
+    }
 
     const currentIndex = sections.findIndex((candidate) =>
       (candidate?.sectionKey || candidate?.key) === (section?.sectionKey || section?.key),

@@ -465,12 +465,38 @@ describe('RuntimeWorkspace', () => {
 
   it('saves the active section before advancing to the next guided section', async () => {
     const user = userEvent.setup()
+    unwrapMutation.mockResolvedValueOnce({
+      data: {
+        mutation: {
+          runtimePath: 'framework_state.sections.customer_problem',
+        },
+        advance: {
+          requested: true,
+          hasNext: true,
+          currentRuntimePath: 'framework_state.sections.customer_problem',
+          currentSectionKey: 'customer_problem',
+          nextRuntimePath: 'framework_state.sections.value_drivers',
+          nextSectionKey: 'value_drivers',
+          reason: '',
+        },
+      },
+    })
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
           ...rendererPayload,
           sections: [
             rendererPayload.sections[0],
+            {
+              key: 'interim_section',
+              runtimePath: 'framework_state.sections.interim_section',
+              label: 'Interim Section',
+              control: 'TEXTAREA',
+              required: true,
+              value: '',
+              editable: true,
+              validationMessages: [],
+            },
             {
               key: 'value_drivers',
               runtimePath: 'framework_state.sections.value_drivers',
@@ -505,11 +531,54 @@ describe('RuntimeWorkspace', () => {
         operation: 'WRITE',
         value: 'Proposal teams need a shared governed narrative.',
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        saveAndNext: true,
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'Value Drivers' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /2 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('button', { name: /3 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('returns to Discovery when the server-owned advance projection has no next section', async () => {
+    const user = userEvent.setup()
+    unwrapMutation.mockResolvedValueOnce({
+      data: {
+        mutation: {
+          runtimePath: 'framework_state.sections.customer_problem',
+        },
+        advance: {
+          requested: true,
+          hasNext: false,
+          currentRuntimePath: 'framework_state.sections.customer_problem',
+          currentSectionKey: 'customer_problem',
+          nextRuntimePath: '',
+          nextSectionKey: '',
+          reason: 'END_OF_GUIDED_SECTIONS',
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    const field = screen.getByLabelText(/customer problem/i)
+    await user.clear(field)
+    await user.type(field, 'Final section update.')
+    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'Final section update.',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        saveAndNext: true,
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Discovery' })).toBeInTheDocument()
+    expect(screen.getByText('Discovery active')).toBeInTheDocument()
   })
 
   it('accepts natural text for JSON-backed object sections by wrapping it as summary context', async () => {
