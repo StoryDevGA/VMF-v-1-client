@@ -15,12 +15,14 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { Input } from '../../components/Input'
+import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
 import {
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import { formatDateOnly } from '../../utils/dateTime.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -848,9 +850,22 @@ function RuntimeSectionNavigation({
 function DiscoverySection({
   discovery = null,
   discoveryState = 'Evidence Not Ready',
+  disabled = false,
+  feedback = null,
+  onRefreshEvidence,
 }) {
   const scopedViews = getDiscoveryScopedViews(discovery)
   const scopedViewKeys = Object.keys(scopedViews)
+  const inputValues = discovery?.inputValues && typeof discovery.inputValues === 'object'
+    ? discovery.inputValues
+    : {}
+  const [draftInputs, setDraftInputs] = useState({
+    companyWebsite: inputValues.companyWebsite || '',
+    companyName: inputValues.companyName || '',
+    marketRegion: inputValues.marketRegion || '',
+    targetOffer: inputValues.targetOffer || '',
+    notes: inputValues.notes || '',
+  })
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
   const inputsSummary = inputSummaryKeys.length > 0
@@ -862,10 +877,23 @@ function DiscoverySection({
   const isAccepted = discovery?.accepted === true
   const hasEvidence = discovery?.evidenceReady === true || Boolean(evidenceSummary)
 
+  const handleInputChange = (field) => (event) => {
+    setDraftInputs((current) => ({
+      ...current,
+      [field]: event.target.value,
+    }))
+  }
+
+  const handleRefreshEvidence = async (event) => {
+    event.preventDefault()
+    await onRefreshEvidence?.({ inputs: draftInputs })
+  }
+
   return (
     <Card variant="default" className="runtime-workspace__section-card">
       <Card.Body className="runtime-workspace__section-body">
-        <div className="runtime-workspace__section-heading">
+        <form className="runtime-workspace__section-form" onSubmit={handleRefreshEvidence}>
+          <div className="runtime-workspace__section-heading">
           <div>
             <h2>Discovery</h2>
             <p>Section 0 evidence layer for downstream guided execution.</p>
@@ -874,16 +902,52 @@ function DiscoverySection({
             <Badge variant="info" size="sm" pill outline>Section 0</Badge>
             <Badge variant="neutral" size="sm" pill outline>{discoveryState}</Badge>
           </div>
-        </div>
-        <div
-          className="runtime-workspace__section-panels"
-          role="region"
-          aria-label="Discovery state"
-        >
-          <section className="runtime-workspace__section-panel" aria-label="Discovery inputs">
-            <h3>Discovery Inputs</h3>
-            <p>{inputsSummary || 'No discovery input projection is available yet.'}</p>
-          </section>
+          </div>
+          <div
+            className="runtime-workspace__section-panels"
+            role="region"
+            aria-label="Discovery state"
+          >
+            <section className="runtime-workspace__section-panel" aria-label="Discovery inputs">
+              <h3>Discovery Inputs</h3>
+              <Input
+                id="runtime-discovery-company-website"
+                label="Company Website"
+                value={draftInputs.companyWebsite}
+                onChange={handleInputChange('companyWebsite')}
+                disabled={disabled}
+              />
+              <Input
+                id="runtime-discovery-company-name"
+                label="Company Name"
+                value={draftInputs.companyName}
+                onChange={handleInputChange('companyName')}
+                disabled={disabled}
+              />
+              <Input
+                id="runtime-discovery-market-region"
+                label="Market / Region"
+                value={draftInputs.marketRegion}
+                onChange={handleInputChange('marketRegion')}
+                disabled={disabled}
+              />
+              <Input
+                id="runtime-discovery-target-offer"
+                label="Target Product or Offer"
+                value={draftInputs.targetOffer}
+                onChange={handleInputChange('targetOffer')}
+                disabled={disabled}
+              />
+              <Textarea
+                id="runtime-discovery-notes"
+                label="Optional Notes"
+                value={draftInputs.notes}
+                onChange={handleInputChange('notes')}
+                disabled={disabled}
+                rows={4}
+              />
+              <p>{inputsSummary || 'No discovery input projection is available yet.'}</p>
+            </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
             <h3>Evidence Pack</h3>
             <p>
@@ -908,7 +972,23 @@ function DiscoverySection({
                 : 'Discovery has not been accepted for governed downstream generation.'}
             </p>
           </section>
-        </div>
+          </div>
+          {feedback?.message ? (
+            <Status
+              variant={feedback.variant === 'error' ? 'error' : feedback.variant === 'success' ? 'success' : 'info'}
+              size="sm"
+              showIcon
+              className="runtime-workspace__section-feedback"
+            >
+              {feedback.message}
+            </Status>
+          ) : null}
+          <div className="runtime-workspace__section-actions" aria-label="Discovery actions">
+            <Button type="submit" variant="primary" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} disabled={disabled}>
+              Refresh Evidence
+            </Button>
+          </div>
+        </form>
       </Card.Body>
     </Card>
   )
@@ -928,10 +1008,13 @@ function RuntimeWorkspace() {
     { skip: !runtimeInstanceId },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
+  const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
+  const [savingDiscovery, setSavingDiscovery] = useState(false)
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [actionFeedback, setActionFeedback] = useState(null)
+  const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
 
@@ -1048,6 +1131,45 @@ function RuntimeWorkspace() {
       ...current,
       [runtimePath]: feedback,
     }))
+  }
+
+  const handleRefreshDiscoveryEvidence = async ({ inputs }) => {
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    setSavingDiscovery(true)
+    setDiscoveryFeedback(null)
+
+    try {
+      await updateRuntimeDiscoveryInputs({
+        runtimeInstanceId,
+        body: {
+          inputs,
+          expectedUpdatedAt,
+        },
+      }).unwrap()
+      setDiscoveryFeedback({
+        variant: 'success',
+        message: 'Discovery evidence refreshed.',
+      })
+      await refetch()
+      return true
+    } catch (discoveryError) {
+      const normalizedError = normalizeError(discoveryError)
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      setSavingDiscovery(false)
+    }
   }
 
   const handleSaveSection = async ({ section, value, saveAndNext = false }) => {
@@ -1182,7 +1304,7 @@ function RuntimeWorkspace() {
       <section className="runtime-workspace container" aria-label="Execution workspace">
         <Card variant="default" className="runtime-workspace__state-card">
           <Card.Body>
-            <Status variant="info" size="sm" showIcon>Loading execution workspace</Status>
+            <Spinner size="lg" aria-label="Loading execution workspace" />
           </Card.Body>
         </Card>
       </section>
@@ -1252,7 +1374,14 @@ function RuntimeWorkspace() {
             </Badge>
           </div>
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
-            <DiscoverySection discovery={discovery} discoveryState={discoveryState} />
+            <DiscoverySection
+              key={`discovery-${JSON.stringify(discovery?.inputValues || {})}`}
+              discovery={discovery}
+              discoveryState={discoveryState}
+              disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}
+              feedback={discoveryFeedback}
+              onRefreshEvidence={handleRefreshDiscoveryEvidence}
+            />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
               <RuntimeSection

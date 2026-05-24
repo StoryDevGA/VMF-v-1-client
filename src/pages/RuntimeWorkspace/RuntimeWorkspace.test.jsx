@@ -7,6 +7,7 @@ import {
   useExecuteRuntimeActionMutation,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import RuntimeWorkspace from './RuntimeWorkspace'
 
@@ -14,6 +15,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useExecuteRuntimeActionMutation: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
+  useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
 
 const refetchRenderer = vi.fn()
@@ -21,6 +23,8 @@ const mutateRuntimeState = vi.fn()
 const unwrapMutation = vi.fn()
 const executeRuntimeAction = vi.fn()
 const unwrapAction = vi.fn()
+const updateRuntimeDiscoveryInputs = vi.fn()
+const unwrapDiscoveryInputs = vi.fn()
 
 const rendererPayload = {
   runtimeInstance: {
@@ -132,13 +136,18 @@ describe('RuntimeWorkspace', () => {
     unwrapMutation.mockReset()
     executeRuntimeAction.mockReset()
     unwrapAction.mockReset()
+    updateRuntimeDiscoveryInputs.mockReset()
+    unwrapDiscoveryInputs.mockReset()
     window.confirm = vi.fn(() => true)
     unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
     unwrapAction.mockResolvedValue({ data: { action: { actionKey: 'SUBMIT_FOR_REVIEW' } } })
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
+    unwrapDiscoveryInputs.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
+    updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
+    useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
     useGetRuntimeRendererQuery.mockReturnValue({
       data: { data: rendererPayload },
       isLoading: false,
@@ -292,6 +301,103 @@ describe('RuntimeWorkspace', () => {
     expect(within(sidePanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
   })
 
+  it('refreshes discovery evidence through the discovery inputs endpoint', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    await user.type(screen.getByLabelText('Optional Notes'), 'Prioritize governed evidence reuse.')
+    await user.click(screen.getByRole('button', { name: /refresh evidence/i }))
+
+    expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        inputs: {
+          companyWebsite: 'https://acme.example',
+          companyName: 'Acme',
+          marketRegion: 'UK enterprise',
+          targetOffer: 'Managed proposal platform',
+          notes: 'Prioritize governed evidence reuse.',
+        },
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/discovery evidence refreshed/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: discovery evidence refreshed/i })).toBeInTheDocument()
+  })
+
+  it('allows first-use discovery input capture when the renderer projects empty editable input values', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_NOT_READY',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const refreshButton = screen.getByRole('button', { name: /refresh evidence/i })
+    expect(refreshButton).toBeEnabled()
+    await user.type(screen.getByLabelText('Company Name'), 'Acme')
+    await user.click(refreshButton)
+
+    expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeInstanceId: 'value-narrative-001',
+      body: expect.objectContaining({
+        inputs: expect.objectContaining({
+          companyName: 'Acme',
+        }),
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      }),
+    }))
+    expect(updateRuntimeDiscoveryInputs.mock.calls[0][0].body).not.toHaveProperty('refreshEvidence')
+  })
+
   it('formats accepted discovery dates with the shared date helper', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -435,7 +541,9 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    expect(screen.getByText(/loading execution workspace/i)).toBeInTheDocument()
+    const loadingStatus = screen.getByRole('status', { name: /loading/i })
+    expect(loadingStatus).toHaveClass('spinner', 'spinner--lg')
+    expect(screen.queryByText(/loading execution workspace/i)).not.toBeInTheDocument()
   })
 
   it('saves editable section changes through the runtime state mutation endpoint and refetches the renderer', async () => {
