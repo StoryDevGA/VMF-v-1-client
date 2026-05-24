@@ -270,6 +270,43 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('framework_state.sections.customer_problem')).toBeInTheDocument()
   })
 
+  it('renders server-projected runtime activity without raw audit payloads', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          activity: [
+            {
+              eventId: 'activity-1',
+              action: 'RUNTIME_STATE_MUTATED',
+              summary: 'Customer Problem saved.',
+              occurredAt: '2026-05-19T08:04:00.000Z',
+              actorLabel: 'Jill Faithful',
+              diff: {
+                after: {
+                  'framework_state.sections.customer_problem.input': 'Proposal creation is slow.',
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(sidePanel).getByRole('heading', { name: /activity/i })).toBeInTheDocument()
+    expect(within(sidePanel).getByText('Customer Problem saved.')).toBeInTheDocument()
+    expect(within(sidePanel).queryByText(/framework_state.sections.customer_problem.input/i)).not.toBeInTheDocument()
+    expect(within(sidePanel).queryByText(/proposal creation is slow/i)).not.toBeInTheDocument()
+    expect(within(sidePanel).queryByText(/no runtime activity/i)).not.toBeInTheDocument()
+  })
+
   it('renders server-projected discovery state without inventing evidence content', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
