@@ -76,6 +76,15 @@ const SECTION_ACTION_KEYS = Object.freeze({
 
 const SECTION_ACTION_KEY_SET = new Set(Object.values(SECTION_ACTION_KEYS))
 
+const DISCOVERY_ACTION_KEYS = Object.freeze({
+  SAVE_DISCOVERY_INPUTS: 'SAVE_DISCOVERY_INPUTS',
+  BUILD_EVIDENCE_PACK: 'BUILD_EVIDENCE_PACK',
+  REFRESH_EVIDENCE_PACK: 'REFRESH_EVIDENCE_PACK',
+  ACCEPT_EVIDENCE: 'ACCEPT_EVIDENCE',
+})
+
+const DISCOVERY_ACTION_KEY_SET = new Set(Object.values(DISCOVERY_ACTION_KEYS))
+
 const DISCOVERY_NAV_KEY = 'discovery'
 
 const getRuntimeActionLabel = (action, fallback) =>
@@ -216,6 +225,28 @@ const getDiscoveryScopedViews = (discovery) => {
   return scopedViews && typeof scopedViews === 'object' && !Array.isArray(scopedViews)
     ? scopedViews
     : {}
+}
+
+const getSectionScopedEvidenceView = ({ discovery, section }) => {
+  const scopedViews = getDiscoveryScopedViews(discovery)
+  const runtimePathTail = String(section?.runtimePath || '').split('.').filter(Boolean).pop()
+  const candidates = [
+    section?.sectionKey,
+    section?.key,
+    section?.runtimePath,
+    runtimePathTail,
+    runtimePathTail?.replace(/_/g, '-'),
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+
+  for (const candidate of candidates) {
+    if (Object.prototype.hasOwnProperty.call(scopedViews, candidate)) {
+      return scopedViews[candidate]
+    }
+  }
+
+  return null
 }
 
 const formatProjectionSummary = (value) => {
@@ -477,6 +508,7 @@ function RuntimeValueControl({
 function RuntimeSection({
   acceptingRuntimePath = '',
   disabled = false,
+  discovery = null,
   executingActionKey = '',
   feedback = null,
   generationActions = {},
@@ -501,6 +533,9 @@ function RuntimeSection({
   const canSave = editable && isDirty && !isSaving
   const generatedContent = stringifyGeneratedContent(section?.generated)
   const acceptedContent = stringifyAcceptedContent(section?.accepted)
+  const scopedEvidenceView = getSectionScopedEvidenceView({ discovery, section })
+  const scopedEvidenceSummary = scopedEvidenceView?.summary
+    || formatProjectionSummary(scopedEvidenceView)
   const acceptedIsCurrent = isAcceptedGeneratedCurrent({
     accepted: section?.accepted,
     generated: section?.generated,
@@ -604,7 +639,21 @@ function RuntimeSection({
             >
               <section className="runtime-workspace__section-panel" aria-label="Suggested from Discovery">
                 <h3>Suggested From Discovery</h3>
-                <p>No discovery evidence is projected for this section yet.</p>
+                {hasRuntimeValue(scopedEvidenceView) ? (
+                  <>
+                    <p>{scopedEvidenceSummary}</p>
+                    {Array.isArray(scopedEvidenceView?.inputKeys) && scopedEvidenceView.inputKeys.length > 0 ? (
+                      <p>
+                        Inputs: {scopedEvidenceView.inputKeys.slice(0, 5).join(', ')}
+                        {scopedEvidenceView.inputKeys.length > 5
+                          ? `, +${scopedEvidenceView.inputKeys.length - 5} more`
+                          : ''}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p>No discovery evidence is projected for this section yet.</p>
+                )}
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Your Additional Context">
                 <h3>Your Additional Context</h3>
@@ -926,6 +975,8 @@ function DiscoverySection({
   evidenceDetailError = null,
   evidenceDetailLoading = false,
   feedback = null,
+  discoveryActions = {},
+  executingActionKey = '',
   onAcceptDiscovery,
   onRefreshEvidence,
   onToggleSources,
@@ -960,7 +1011,18 @@ function DiscoverySection({
   const isAccepted = discovery?.accepted === true
   const needsRefresh = discovery?.needsRefresh === true
   const hasEvidence = discovery?.evidenceReady === true || Boolean(evidenceSummary)
+  const buildActionKey = hasEvidence
+    ? DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK
+    : DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK
+  const buildAction = discoveryActions[buildActionKey]
+    || discoveryActions[DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS]
+    || null
+  const acceptAction = discoveryActions[DISCOVERY_ACTION_KEYS.ACCEPT_EVIDENCE] || null
   const buildButtonLabel = hasEvidence ? 'Refresh Evidence Pack' : 'Build Evidence Pack'
+  const buildDisabledReason = buildAction && !buildAction.enabled
+    ? buildAction.disabledReason || 'Discovery evidence action is currently unavailable.'
+    : ''
+  const buildReasonId = 'discovery-build-disabled-reason'
   const sourcesReasonId = 'discovery-sources-disabled-reason'
   const sourcesDisabledReason = hasEvidence ? '' : 'Build an evidence pack before viewing sources.'
   const canAcceptDiscovery = discovery?.inputComplete === true
@@ -968,6 +1030,15 @@ function DiscoverySection({
     && !isAccepted
     && !needsRefresh
     && !disabled
+    && (!acceptAction || acceptAction.enabled)
+  const acceptDisabledReason = acceptAction && !acceptAction.enabled
+    ? acceptAction.disabledReason || 'Evidence acceptance is currently unavailable.'
+    : ''
+  const acceptReasonId = 'discovery-accept-disabled-reason'
+  const buildExecutingActionKey = normalizeRuntimeActionToken(buildAction?.governedAction || buildAction?.actionKey)
+  const acceptExecutingActionKey = normalizeRuntimeActionToken(acceptAction?.governedAction || acceptAction?.actionKey)
+  const isBuildExecuting = Boolean(buildExecutingActionKey && executingActionKey === buildExecutingActionKey)
+  const isAcceptExecuting = Boolean(acceptExecutingActionKey && executingActionKey === acceptExecutingActionKey)
 
   const handleInputChange = (field) => (event) => {
     setDraftInputs((current) => ({
@@ -1085,7 +1156,15 @@ function DiscoverySection({
             </Status>
           ) : null}
           <div className="runtime-workspace__section-actions" aria-label="Discovery actions">
-            <Button type="submit" variant="primary" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} disabled={disabled}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              leftIcon={<MdRefresh aria-hidden="true" />}
+              disabled={disabled || Boolean(buildDisabledReason)}
+              loading={saving || isBuildExecuting}
+              aria-describedby={buildDisabledReason ? buildReasonId : undefined}
+            >
               {buildButtonLabel}
             </Button>
             <Button
@@ -1103,15 +1182,26 @@ function DiscoverySection({
               variant="secondary"
               size="sm"
               disabled={!canAcceptDiscovery}
-              loading={saving}
+              loading={saving || isAcceptExecuting}
+              aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
               onClick={handleAcceptDiscovery}
             >
               Accept Evidence
             </Button>
           </div>
+          {buildDisabledReason ? (
+            <p id={buildReasonId} className="runtime-workspace__action-disabled-reason">
+              {buildDisabledReason}
+            </p>
+          ) : null}
           {sourcesDisabledReason ? (
-            <p id={sourcesReasonId} className="runtime-workspace__action-reason">
+            <p id={sourcesReasonId} className="runtime-workspace__action-disabled-reason">
               {sourcesDisabledReason}
+            </p>
+          ) : null}
+          {acceptDisabledReason ? (
+            <p id={acceptReasonId} className="runtime-workspace__action-disabled-reason">
+              {acceptDisabledReason}
             </p>
           ) : null}
           {showSources ? (
@@ -1180,8 +1270,16 @@ function RuntimeWorkspace() {
     }
     return acc
   }, {})
+  const discoveryActionByKey = actions.reduce((acc, action) => {
+    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+    if (DISCOVERY_ACTION_KEY_SET.has(actionKey)) {
+      acc[actionKey] = action
+    }
+    return acc
+  }, {})
   const sidePanelActions = actions.filter((action) =>
-    !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
+    !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey))
+    && !DISCOVERY_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
   )
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
@@ -1308,13 +1406,39 @@ function RuntimeWorkspace() {
     setDiscoveryFeedback(null)
 
     try {
-      await updateRuntimeDiscoveryInputs({
-        runtimeInstanceId,
-        body: {
-          inputs,
-          expectedUpdatedAt,
-        },
-      }).unwrap()
+      const currentDiscovery = getDiscoveryProjection(renderer)
+      const hasCurrentEvidence = currentDiscovery?.evidenceReady === true
+        || currentDiscovery?.state?.evidenceReady === true
+      const actionKey = hasCurrentEvidence
+        ? DISCOVERY_ACTION_KEYS.REFRESH_EVIDENCE_PACK
+        : DISCOVERY_ACTION_KEYS.BUILD_EVIDENCE_PACK
+      const discoveryAction = discoveryActionByKey[actionKey]
+        || discoveryActionByKey[DISCOVERY_ACTION_KEYS.SAVE_DISCOVERY_INPUTS]
+        || null
+
+      if (discoveryAction) {
+        if (!discoveryAction.enabled) {
+          throw new Error(discoveryAction.disabledReason || 'Discovery evidence action is currently unavailable.')
+        }
+        const resolvedActionKey = normalizeRuntimeActionToken(discoveryAction.governedAction || discoveryAction.actionKey)
+        setExecutingActionKey(resolvedActionKey)
+        await executeRuntimeAction({
+          runtimeInstanceId,
+          actionKey: resolvedActionKey,
+          body: {
+            inputs,
+            expectedUpdatedAt,
+          },
+        }).unwrap()
+      } else {
+        await updateRuntimeDiscoveryInputs({
+          runtimeInstanceId,
+          body: {
+            inputs,
+            expectedUpdatedAt,
+          },
+        }).unwrap()
+      }
       setDiscoveryFeedback({
         variant: 'success',
         message: 'Discovery evidence refreshed.',
@@ -1330,6 +1454,7 @@ function RuntimeWorkspace() {
       return false
     } finally {
       setSavingDiscovery(false)
+      setExecutingActionKey('')
     }
   }
 
@@ -1347,12 +1472,28 @@ function RuntimeWorkspace() {
     setDiscoveryFeedback(null)
 
     try {
-      await acceptRuntimeDiscovery({
-        runtimeInstanceId,
-        body: {
-          expectedUpdatedAt,
-        },
-      }).unwrap()
+      const discoveryAction = discoveryActionByKey[DISCOVERY_ACTION_KEYS.ACCEPT_EVIDENCE] || null
+      if (discoveryAction) {
+        if (!discoveryAction.enabled) {
+          throw new Error(discoveryAction.disabledReason || 'Evidence acceptance is currently unavailable.')
+        }
+        const resolvedActionKey = normalizeRuntimeActionToken(discoveryAction.governedAction || discoveryAction.actionKey)
+        setExecutingActionKey(resolvedActionKey)
+        await executeRuntimeAction({
+          runtimeInstanceId,
+          actionKey: resolvedActionKey,
+          body: {
+            expectedUpdatedAt,
+          },
+        }).unwrap()
+      } else {
+        await acceptRuntimeDiscovery({
+          runtimeInstanceId,
+          body: {
+            expectedUpdatedAt,
+          },
+        }).unwrap()
+      }
       setDiscoveryFeedback({
         variant: 'success',
         message: 'Discovery accepted.',
@@ -1368,6 +1509,7 @@ function RuntimeWorkspace() {
       return false
     } finally {
       setSavingDiscovery(false)
+      setExecutingActionKey('')
     }
   }
 
@@ -1621,9 +1763,11 @@ function RuntimeWorkspace() {
               discovery={discovery}
               discoveryState={discoveryState}
               disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}
+              discoveryActions={discoveryActionByKey}
               evidenceDetail={evidenceDetail}
               evidenceDetailError={evidenceDetailError}
               evidenceDetailLoading={isFetchingEvidence}
+              executingActionKey={executingActionKey}
               feedback={discoveryFeedback}
               onAcceptDiscovery={handleAcceptDiscovery}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
@@ -1638,6 +1782,7 @@ function RuntimeWorkspace() {
                 id={getSectionDomId(activeSection, activeSectionIndex)}
                 acceptingRuntimePath={acceptingRuntimePath}
                 section={activeSection}
+                discovery={discovery}
                 disabled={savingRuntimePath === activeSection.runtimePath}
                 executingActionKey={executingActionKey}
                 feedback={sectionFeedbackByPath[activeSection.runtimePath]}

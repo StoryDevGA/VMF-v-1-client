@@ -363,6 +363,41 @@ describe('RuntimeWorkspace', () => {
     expect(within(sidePanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
   })
 
+  it('renders section-scoped discovery evidence in the active section ownership zone', async () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            accepted: true,
+            inputComplete: true,
+            evidenceReady: true,
+            scopedViews: {
+              customer_problem: {
+                summary: 'Customer-provided discovery inputs are available for this section.',
+                inputKeys: ['companyWebsite', 'companyName', 'marketRegion', 'targetOffer'],
+              },
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await openGuidedSection()
+
+    const suggestedRegion = screen.getByRole('region', { name: /suggested from discovery/i })
+    expect(suggestedRegion).toHaveTextContent('Customer-provided discovery inputs are available for this section.')
+    expect(suggestedRegion).toHaveTextContent('companyWebsite, companyName, marketRegion, targetOffer')
+  })
+
   it('loads evidence source lineage on demand without rendering fake source data', async () => {
     const user = userEvent.setup()
     useGetRuntimeEvidenceQuery.mockReturnValue({
@@ -524,6 +559,67 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByRole('status', { name: /status: discovery evidence refreshed/i })).toBeInTheDocument()
   })
 
+  it('builds discovery evidence through a governed runtime action when projected', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              actionKey: 'BUILD_EVIDENCE_PACK',
+              governedAction: 'BUILD_EVIDENCE_PACK',
+              buttonLabel: 'Build Evidence Pack',
+              enabled: true,
+              successMessage: 'Evidence pack built.',
+            },
+          ],
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+
+    expect(executeRuntimeAction).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      actionKey: 'BUILD_EVIDENCE_PACK',
+      body: {
+        inputs: {
+          companyWebsite: 'https://acme.example',
+          companyName: 'Acme',
+          marketRegion: 'UK enterprise',
+          targetOffer: 'Managed proposal platform',
+          notes: '',
+        },
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+  })
+
   it('accepts ready discovery evidence through the discovery acceptance endpoint', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -568,6 +664,61 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/discovery accepted/i)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: /status: discovery accepted/i })).toBeInTheDocument()
+  })
+
+  it('accepts ready discovery evidence through a governed runtime action when projected', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              actionKey: 'ACCEPT_EVIDENCE',
+              governedAction: 'ACCEPT_EVIDENCE',
+              buttonLabel: 'Accept Evidence',
+              enabled: true,
+              successMessage: 'Evidence accepted.',
+            },
+          ],
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /accept evidence/i }))
+
+    expect(executeRuntimeAction).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      actionKey: 'ACCEPT_EVIDENCE',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(acceptRuntimeDiscovery).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
   })
 
   it.each([

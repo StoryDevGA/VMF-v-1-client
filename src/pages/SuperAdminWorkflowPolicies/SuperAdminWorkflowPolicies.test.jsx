@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import path from 'node:path'
+import process from 'node:process'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -18,6 +22,27 @@ import {
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
 import { __mutateRuntimeControlApiStateForTests } from '../../store/api/runtimeControlApi.js'
+
+const testDirname = path.dirname(fileURLToPath(import.meta.url))
+const workspaceRoot = path.resolve(testDirname, '../../../..')
+const apiWorkflowPolicyModelPath = path.join(
+  workspaceRoot,
+  'VMF-v-1-api/src/models/WorkflowPolicy.js',
+)
+
+const loadBackendGovernedActions = () => {
+  const script = `
+const workflowPolicyModel = await import(${JSON.stringify(pathToFileURL(apiWorkflowPolicyModelPath).href)})
+process.stdout.write(JSON.stringify(Object.values(workflowPolicyModel.WORKFLOW_POLICY_GOVERNED_ACTIONS)))
+`
+
+  return JSON.parse(
+    execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+  )
+}
 
 function renderWorkflowPolicyRoutes(initialEntries = ['/super-admin/runtime-control/workflow-policies']) {
   return renderRuntimeControlPage({
@@ -87,38 +112,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
   it('keeps the governed action registry aligned with runtime action sprints', () => {
     const optionValues = WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value)
 
-    expect(optionValues).toEqual([
-      'SAVE',
-      'SAVE_DRAFT',
-      'INITIALISE_STATE',
-      'MARK_READY',
-      'SUBMIT_FOR_REVIEW',
-      'START_REVIEW',
-      'APPROVE',
-      'REJECT',
-      'RETURN_TO_DRAFT',
-      'PUBLISH',
-      'BUILD_SECTIONS',
-      'COMPLETE_DISCOVERY',
-      'COMPLETE_POSITIONING',
-      'COMPLETE_PROOF',
-      'COMPLETE_ECONOMICS',
-      'COMPLETE_RISK',
-      'RUN_INTEGRITY',
-      'CHECK_DEAL_READINESS',
-      'COMPILE_SERVICE_SPINE',
-      'RENDER_OUTPUT',
-      'QUERY_FRAMEWORK_STATE',
-      'RUN_VALIDATION',
-      'QUERY_STATE',
-      'GENERATE_SECTION',
-      'REGENERATE_SECTION',
-      'GENERATE_ARTEFACT',
-      'RUN_ANALYSIS',
-      'LOCK_RECORD',
-      'UNLOCK_RECORD',
-      'ARCHIVE',
-    ])
+    expect(optionValues).toEqual(loadBackendGovernedActions())
   })
 
   it('keeps trigger event options aligned with section generation events', () => {
