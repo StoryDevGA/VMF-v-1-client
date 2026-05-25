@@ -64,6 +64,23 @@ const rendererPayload = {
     state: 'DRAFT',
     ready: false,
     submittedForReview: false,
+    sectionTruth: {
+      state: 'SECTION_TRUTH_BLOCKED',
+      publishEligible: false,
+      lockEligible: false,
+      requiredSectionCount: 1,
+      readySectionCount: 0,
+      blockingSectionCount: 1,
+      readySectionKeys: [],
+      blockers: [
+        {
+          sectionKey: 'customer_problem',
+          state: 'ACCEPTED_TRUTH_MISSING',
+          reason: 'Accepted section truth is missing.',
+        },
+      ],
+      reason: 'Accepted section truth is missing.',
+    },
   },
   publish: {
     state: 'UNPUBLISHED',
@@ -95,6 +112,32 @@ const rendererPayload = {
       editable: true,
       validationKeys: ['required-sections-check'],
       validationMessages: [],
+      intelligence: {
+        confidence: {
+          level: 'LOW',
+          score: 15,
+          reasons: ['ADDITIONAL_CONTEXT'],
+        },
+        dependency: {
+          state: 'NO_SECTION_DEPENDENCIES',
+          requiredSectionKeys: [],
+          satisfiedSectionKeys: [],
+          missingSectionKeys: [],
+        },
+        compare: {
+          state: 'NO_GENERATED_CONTENT',
+          summary: 'No generated content is available for comparison.',
+          currentGeneratedAccepted: false,
+          hasGenerated: false,
+          hasAccepted: false,
+        },
+        readiness: {
+          state: 'DRAFT_INPUT_NEEDED',
+          publishEligible: false,
+          reason: 'Section needs generated and accepted truth before publish or lock.',
+          blockingValidationCount: 0,
+        },
+      },
     },
   ],
   actions: [
@@ -200,12 +243,13 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Unknown')).toBeInTheDocument()
     const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     const summaryItems = within(summary).getAllByRole('listitem')
-    expect(summaryItems).toHaveLength(8)
+    expect(summaryItems).toHaveLength(9)
     expect(within(summary).getByText('Runtime Status')).toBeInTheDocument()
     expect(within(summary).getByText('Execution')).toBeInTheDocument()
     expect(within(summary).getByText('Lifecycle Stage')).toBeInTheDocument()
     expect(within(summary).getByText('Validation')).toBeInTheDocument()
     expect(within(summary).getByText('Readiness')).toBeInTheDocument()
+    expect(within(summary).getByText('Section Truth')).toBeInTheDocument()
     expect(within(summary).getByText('Publish')).toBeInTheDocument()
     expect(within(summary).getByText('Lock')).toBeInTheDocument()
     expect(within(summary).queryByRole('status')).not.toBeInTheDocument()
@@ -235,11 +279,17 @@ describe('RuntimeWorkspace', () => {
     expect(within(metrics).getByText('Required')).toBeInTheDocument()
     expect(within(metrics).getByText('1/1')).toBeInTheDocument()
     expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
-    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
+    const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
     expect(sectionObject).toBeInTheDocument()
     expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Customer Problem')
-    expect(within(sectionObject).getByRole('region', { name: /generated section/i })).toHaveTextContent('Awaiting generation')
-    expect(within(sectionObject).getByRole('region', { name: /accepted final/i })).toHaveTextContent('No accepted final truth')
+    expect(within(sectionObject).getByRole('region', { name: /generated content/i })).toHaveTextContent('Awaiting generation')
+    expect(within(sectionObject).getByRole('region', { name: /accepted truth/i })).toHaveTextContent('No accepted governed truth')
+    const governedIntelligence = screen.getByRole('region', { name: /governed intelligence/i })
+    expect(within(governedIntelligence).getByText('Confidence')).toHaveClass('runtime-workspace__section-intelligence-label')
+    const truthReadiness = within(governedIntelligence).getByText(/section needs generated and accepted truth/i)
+    expect(truthReadiness).toBeInTheDocument()
+    expect(truthReadiness).not.toHaveClass('runtime-workspace__section-intelligence-label')
+    expect(truthReadiness.closest('.status')).toHaveClass('status--warning')
 
     const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     const sectionNav = within(sidePanel).getByRole('navigation', { name: /guided section navigation/i })
@@ -247,6 +297,8 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
     expect(within(sidePanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
     expect(within(sidePanel).getByRole('button', { name: /submit for review/i })).toBeEnabled()
+    expect(within(sidePanel).getByRole('heading', { name: /governed intelligence/i })).toBeInTheDocument()
+    expect(within(sidePanel).getByText(/no generated content is available for comparison/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(within(sidePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
     expect(within(sidePanel).getByRole('heading', { name: /workspace warnings/i })).toBeInTheDocument()
@@ -1084,7 +1136,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
-    await user.click(screen.getByRole('button', { name: /accept final/i }))
+    await user.click(screen.getByRole('button', { name: /accept truth/i }))
 
     expect(acceptRuntimeSection).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -1095,14 +1147,14 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/section accepted as final/i)).toBeInTheDocument()
+    expect(await screen.findByText(/section accepted as governed truth/i)).toBeInTheDocument()
   })
 
   it('keeps section acceptance disabled without generated content', async () => {
     const user = userEvent.setup()
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
-    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
   })
 
   it('keeps section acceptance disabled when current generated content is already accepted', async () => {
@@ -1141,10 +1193,10 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    expect(screen.getByRole('region', { name: /accepted final/i })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: /accepted truth/i })).toHaveTextContent(
       'Customer Problem: Proposal creation is slow.',
     )
-    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
   })
 
   it('keeps section acceptance disabled for legacy accepted content without generated metadata', async () => {
@@ -1181,8 +1233,181 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    expect(screen.getByRole('button', { name: /accept final/i })).toBeDisabled()
-    expect(screen.getByText(/current generated content is already accepted as final/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
+    expect(screen.getByText(/current generated content is already accepted as governed truth/i)).toBeInTheDocument()
+  })
+
+  it('shows regeneration-required intelligence when accepted truth is stale against section input', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-before-input-change',
+              },
+              accepted: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                sourceGeneratedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-before-input-change',
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                compare: {
+                  state: 'GENERATED_STALE_AGAINST_INPUT',
+                  summary: 'Section input changed after generation. Regenerate before accepting or publishing truth.',
+                  currentGeneratedAccepted: false,
+                  generatedStaleAgainstInput: true,
+                  hasGenerated: true,
+                  hasAccepted: true,
+                },
+                readiness: {
+                  state: 'REGENERATION_REQUIRED',
+                  publishEligible: false,
+                  reason: 'Section input changed after generation. Regenerate before accepting or publishing truth.',
+                  blockingValidationCount: 0,
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getAllByText(/section input changed after generation/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Generated Stale Against Input')).toBeInTheDocument()
+  })
+
+  it('shows regeneration-required intelligence when upstream accepted truth invalidates a section', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+              },
+              accepted: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                sourceGeneratedAt: '2026-05-19T08:01:00.000Z',
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                dependency: {
+                  state: 'DEPENDENCY_CONTEXT_INVALIDATED',
+                  requiredSectionKeys: ['executive_summary'],
+                  satisfiedSectionKeys: ['executive_summary'],
+                  missingSectionKeys: [],
+                  acceptedSectionKeys: ['executive_summary'],
+                  missingAcceptedTruthSectionKeys: [],
+                  invalidatedSectionKeys: ['executive_summary'],
+                },
+                compare: {
+                  state: 'GENERATED_MATCHES_ACCEPTED_TRUTH',
+                  summary: 'Generated content matches the accepted truth metadata.',
+                  currentGeneratedAccepted: true,
+                  generatedStaleAgainstInput: false,
+                  hasGenerated: true,
+                  hasAccepted: true,
+                },
+                readiness: {
+                  state: 'REGENERATION_REQUIRED',
+                  publishEligible: false,
+                  reason: 'Accepted upstream section truth changed. Regenerate this section before publish or lock.',
+                  blockingValidationCount: 0,
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getAllByText(/accepted upstream section truth changed/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/1 upstream accepted truth changed/i).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows dependency feedback when upstream accepted truth is missing', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+              },
+              accepted: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                sourceGeneratedAt: '2026-05-19T08:01:00.000Z',
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                dependency: {
+                  state: 'MISSING_ACCEPTED_TRUTH',
+                  requiredSectionKeys: ['executive_summary'],
+                  satisfiedSectionKeys: ['executive_summary'],
+                  missingSectionKeys: [],
+                  acceptedSectionKeys: [],
+                  missingAcceptedTruthSectionKeys: ['executive_summary'],
+                  invalidatedSectionKeys: [],
+                },
+                compare: {
+                  state: 'GENERATED_MATCHES_ACCEPTED_TRUTH',
+                  summary: 'Generated content matches the accepted truth metadata.',
+                  currentGeneratedAccepted: true,
+                  generatedStaleAgainstInput: false,
+                  hasGenerated: true,
+                  hasAccepted: true,
+                },
+                readiness: {
+                  state: 'DEPENDENCY_ACCEPTED_TRUTH_MISSING',
+                  publishEligible: false,
+                  reason: 'Required upstream accepted truth is missing.',
+                  blockingValidationCount: 0,
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getAllByText(/required upstream accepted truth is missing/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/1 upstream accepted truth is missing/i).length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows normalized feedback when section acceptance is rejected', async () => {
@@ -1220,7 +1445,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
-    await user.click(screen.getByRole('button', { name: /accept final/i }))
+    await user.click(screen.getByRole('button', { name: /accept truth/i }))
 
     expect(await screen.findByText(/runtime section cannot be accepted/i)).toBeInTheDocument()
     expect(refetchRenderer).not.toHaveBeenCalled()
@@ -1373,9 +1598,9 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
+    await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
-    const field = screen.getByLabelText('Section Executive Summary')
+    const field = screen.getByLabelText('Executive Summary')
     await user.clear(field)
     await user.type(field, 'Customer needs a clearer executive narrative.')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -1423,9 +1648,9 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
+    await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
-    const field = screen.getByLabelText('Section Executive Summary')
+    const field = screen.getByLabelText('Executive Summary')
     await user.clear(field)
     fireEvent.change(field, { target: { value: '{"summary":' } })
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -1837,14 +2062,16 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    await user.click(screen.getByRole('button', { name: /section executive summary/i }))
+    await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
-    expect(screen.getByLabelText('Section Executive Summary')).toHaveAttribute(
+    expect(screen.getByLabelText('Executive Summary')).toHaveAttribute(
       'placeholder',
       'Summarise the customer situation, priority, and recommended value narrative focus.',
     )
-    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
-    expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Section Executive Summary')
+    const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
+    expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Executive Summary')
+    expect(screen.queryByRole('heading', { name: 'Section Executive Summary' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /section executive summary/i })).not.toBeInTheDocument()
   })
 
   it('keeps renderer read-only sections from submitting mutations', async () => {
@@ -1899,9 +2126,9 @@ describe('RuntimeWorkspace', () => {
     expect(generateButton).toBeDisabled()
     expect(regenerateButton).toBeDisabled()
     expect(screen.getAllByText('Current role or permissions do not allow runtime section generation.')).toHaveLength(2)
-    const acceptFinalButton = screen.getByRole('button', { name: /^accept final$/i })
-    expect(acceptFinalButton).toBeDisabled()
-    expect(acceptFinalButton).toHaveAccessibleDescription('Current role or permissions do not allow accepting this section.')
+    const acceptTruthButton = screen.getByRole('button', { name: /^accept truth$/i })
+    expect(acceptTruthButton).toBeDisabled()
+    expect(acceptTruthButton).toHaveAccessibleDescription('Current role or permissions do not allow accepting this section.')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
     expect(acceptRuntimeSection).not.toHaveBeenCalled()
@@ -2093,6 +2320,21 @@ describe('RuntimeWorkspace', () => {
                 content: 'Customer Problem: Proposal creation is slow.',
                 generatedAt: '2026-05-22T09:10:00.000Z',
               },
+              accepted: {
+                content: 'Accepted customer problem truth.',
+                acceptedAt: '2026-05-22T09:12:00.000Z',
+                sourceGeneratedAt: '2026-05-22T09:10:00.000Z',
+                revisions: [
+                  {
+                    revisionNumber: 1,
+                    accepted: {
+                      content: 'Earlier accepted customer problem truth.',
+                    },
+                    replacedAt: '2026-05-22T09:12:00.000Z',
+                    reason: 'ACCEPTED_TRUTH_REPLACED',
+                  },
+                ],
+              },
               review: {
                 status: 'PENDING_REVIEW',
               },
@@ -2108,6 +2350,16 @@ describe('RuntimeWorkspace', () => {
                     generatedAt: '2026-05-22T09:00:00.000Z',
                   },
                   replacedAt: '2026-05-22T09:10:00.000Z',
+                },
+              ],
+              acceptedRevisions: [
+                {
+                  revisionNumber: 1,
+                  accepted: {
+                    content: 'Earlier accepted customer problem truth.',
+                  },
+                  replacedAt: '2026-05-22T09:12:00.000Z',
+                  reason: 'ACCEPTED_TRUTH_REPLACED',
                 },
               ],
             },
@@ -2133,8 +2385,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const sectionObject = screen.getByRole('region', { name: /section ownership zones/i })
-    expect(within(sectionObject).getByRole('region', { name: /generated section/i })).toHaveTextContent(
+    const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
+    expect(within(sectionObject).getByRole('region', { name: /generated content/i })).toHaveTextContent(
       'Customer Problem: Proposal creation is slow.',
     )
     expect(screen.getByText('Pending Review')).toBeInTheDocument()
@@ -2142,8 +2394,12 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /^compare$/i }))
 
-    const compareRegion = screen.getByRole('region', { name: /generated comparison/i })
+    const compareRegion = screen.getByRole('region', { name: /section truth comparison/i })
+    expect(compareRegion).toHaveTextContent('Generated Section')
+    expect(compareRegion).toHaveTextContent('Accepted Truth')
     expect(compareRegion).toHaveTextContent('Customer Problem: Older generated content.')
     expect(compareRegion).toHaveTextContent('Customer Problem: Proposal creation is slow.')
+    expect(compareRegion).toHaveTextContent('Accepted customer problem truth.')
+    expect(compareRegion).toHaveTextContent('Earlier accepted customer problem truth.')
   })
 })

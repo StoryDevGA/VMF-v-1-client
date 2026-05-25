@@ -53,18 +53,43 @@ const RENDERER_WARNING_SEVERITY_VARIANTS = Object.freeze({
 
 const TOKEN_STATUS_VARIANTS = Object.freeze({
   BLOCKED: 'error',
+  ACCEPTED_TRUTH_READY: 'success',
+  ACCEPTED_TRUTH_REVIEW_NEEDED: 'warning',
   DRAFT: 'neutral',
+  DRAFT_INPUT_NEEDED: 'warning',
+  DEPENDENCY_ACCEPTED_TRUTH_MISSING: 'warning',
+  DEPENDENCY_CONTEXT_MISSING: 'warning',
+  DEPENDENCY_CONTEXT_INVALIDATED: 'warning',
   FAILED: 'error',
+  GENERATED_DIFFERS_FROM_ACCEPTED_TRUTH: 'warning',
+  GENERATED_MATCHES_ACCEPTED_TRUTH: 'success',
+  GENERATED_REVIEW_NEEDED: 'warning',
+  GENERATED_STALE_AGAINST_INPUT: 'warning',
   IN_REVIEW: 'info',
+  MISSING_CONTEXT: 'warning',
+  MISSING_ACCEPTED_TRUTH: 'warning',
   APPROVED: 'success',
   PUBLISHED: 'success',
   LOCKED: 'success',
+  LOW: 'warning',
+  MEDIUM: 'info',
+  HIGH: 'success',
+  NONE: 'neutral',
+  NO_GENERATED_CONTENT: 'neutral',
+  NO_SECTION_DEPENDENCIES: 'neutral',
   PASSED: 'success',
   READY: 'success',
+  REGENERATION_REQUIRED: 'warning',
+  SATISFIED: 'success',
+  SECTION_TRUTH_BLOCKED: 'warning',
+  SECTION_TRUTH_NOT_CONFIGURED: 'warning',
+  SECTION_TRUTH_READY: 'success',
   UNPUBLISHED: 'neutral',
   UNLOCKED: 'neutral',
+  UNACCEPTED_GENERATED_CONTENT: 'warning',
   UNKNOWN: 'neutral',
   VALIDATED: 'success',
+  VALIDATION_BLOCKED: 'error',
 })
 
 const normalizeRuntimeActionToken = (value) => String(value ?? '').trim().toUpperCase()
@@ -123,8 +148,8 @@ const getAcceptSectionDisabledReason = ({
   isSaving,
   section,
 }) => {
-  if (!generatedContent) return 'Generate this section before accepting it as final.'
-  if (acceptedIsCurrent) return 'Current generated content is already accepted as final.'
+  if (!generatedContent) return 'Generate this section before accepting it as governed truth.'
+  if (acceptedIsCurrent) return 'Current generated content is already accepted as governed truth.'
   if (!editable) {
     return section?.readonlyReason || 'Current role or permissions do not allow accepting this section.'
   }
@@ -140,6 +165,37 @@ const getDefaultConfirmationMessage = (action) => {
 
 const getTokenStatusVariant = (value, fallback = 'neutral') =>
   TOKEN_STATUS_VARIANTS[normalizeRuntimeActionToken(value)] ?? fallback
+
+const getSectionIntelligence = (section) => ({
+  ownershipZones: section?.intelligence?.ownershipZones ?? {},
+  confidence: section?.intelligence?.confidence ?? section?.confidence ?? null,
+  dependency: section?.intelligence?.dependency ?? section?.dependency ?? null,
+  compare: section?.intelligence?.compare ?? section?.compare ?? null,
+  readiness: section?.intelligence?.readiness ?? section?.readiness ?? null,
+  generationControls: section?.intelligence?.generationControls ?? {},
+})
+
+const getDependencySummary = (dependency) => {
+  const required = Array.isArray(dependency?.requiredSectionKeys) ? dependency.requiredSectionKeys : []
+  const missing = Array.isArray(dependency?.missingSectionKeys) ? dependency.missingSectionKeys : []
+  const missingAcceptedTruth = Array.isArray(dependency?.missingAcceptedTruthSectionKeys)
+    ? dependency.missingAcceptedTruthSectionKeys
+    : []
+  const invalidated = Array.isArray(dependency?.invalidatedSectionKeys) ? dependency.invalidatedSectionKeys : []
+  if (required.length === 0) return 'No upstream dependencies'
+  if (missing.length > 0) return `${missing.length} dependency ${missing.length === 1 ? 'is' : 'are'} missing context`
+  if (missingAcceptedTruth.length > 0) {
+    return `${missingAcceptedTruth.length} upstream accepted truth ${missingAcceptedTruth.length === 1 ? 'is' : 'items are'} missing`
+  }
+  if (invalidated.length > 0) {
+    return `${invalidated.length} upstream accepted truth ${invalidated.length === 1 ? 'changed' : 'items changed'}`
+  }
+  if (missing.length === 0) return `${required.length} dependency${required.length === 1 ? '' : 'ies'} satisfied`
+  return `${missing.length} dependency ${missing.length === 1 ? 'is' : 'are'} missing context`
+}
+
+const getTruthReadinessSummary = (readiness) =>
+  readiness?.reason || formatRuntimeTokenLabel(readiness?.state || 'UNKNOWN')
 
 const getSummaryValueClassName = (variant = 'neutral') => [
   'runtime-workspace__summary-value',
@@ -208,6 +264,14 @@ const isAcceptedGeneratedCurrent = ({ accepted, generated }) => {
   return stringifyAcceptedContent(accepted) === stringifyGeneratedContent(generated)
 }
 
+const getLatestRevisionValue = (revisions, key) => {
+  if (!Array.isArray(revisions)) return null
+  for (let index = revisions.length - 1; index >= 0; index -= 1) {
+    if (revisions[index]?.[key]) return revisions[index]
+  }
+  return null
+}
+
 const getDiscoveryProjection = (renderer) =>
   renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
 
@@ -270,14 +334,23 @@ const getSectionNavigationStatus = (section) => {
   return hasGenerated ? 'Generated' : hasInput ? 'Input Captured' : 'Input Required'
 }
 
+const getSectionDisplayLabel = (section, fallback = 'Runtime field') => {
+  const rawLabel = String(
+    section?.shortLabel
+    || section?.label
+    || section?.sectionKey
+    || section?.key
+    || fallback,
+  ).trim()
+
+  return rawLabel.replace(/^Section\s+/i, '').trim() || fallback
+}
+
 const getSectionPlaceholder = (section) => {
   const explicitPlaceholder = String(section?.placeholder ?? '').trim()
   const control = String(section?.control ?? 'TEXT').trim().toUpperCase()
   const dataType = String(section?.dataType ?? '').trim().toUpperCase()
-  const label = String(section?.label ?? section?.key ?? 'this section')
-    .replace(/^Section\s+/i, '')
-    .trim()
-    .toLowerCase()
+  const label = getSectionDisplayLabel(section, 'this section').toLowerCase()
     || 'this section'
   const isStructuredField = control === 'JSON' || dataType === 'OBJECT' || dataType === 'ARRAY'
   const isGenericPlaceholder = /^enter\s+.+\.\.\.$/i.test(explicitPlaceholder)
@@ -413,7 +486,7 @@ function RuntimeValueControl({
   value,
 }) {
   const control = String(section?.control ?? 'TEXT').trim().toUpperCase()
-  const label = section?.label ?? section?.key ?? 'Runtime field'
+  const label = getSectionDisplayLabel(section)
   const error = getSectionValidationError(section)
   const helperText = getSectionHelperText(section)
   const isReadOnly = !editable || disabled
@@ -533,6 +606,11 @@ function RuntimeSection({
   const canSave = editable && isDirty && !isSaving
   const generatedContent = stringifyGeneratedContent(section?.generated)
   const acceptedContent = stringifyAcceptedContent(section?.accepted)
+  const intelligence = getSectionIntelligence(section)
+  const confidenceState = intelligence.confidence?.level || 'NONE'
+  const dependencyState = intelligence.dependency?.state || 'NO_SECTION_DEPENDENCIES'
+  const readinessState = intelligence.readiness?.state || 'DRAFT_INPUT_NEEDED'
+  const compareState = intelligence.compare?.state || 'NO_GENERATED_CONTENT'
   const scopedEvidenceView = getSectionScopedEvidenceView({ discovery, section })
   const scopedEvidenceSummary = scopedEvidenceView?.summary
     || formatProjectionSummary(scopedEvidenceView)
@@ -542,8 +620,15 @@ function RuntimeSection({
   })
   const isAcceptingSection = acceptingRuntimePath === section?.runtimePath
   const revisions = Array.isArray(section?.revisions) ? section.revisions : []
-  const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null
-  const previousGeneratedContent = stringifyGeneratedContent(latestRevision?.generated)
+  const acceptedRevisions = Array.isArray(section?.acceptedRevisions)
+    ? section.acceptedRevisions
+    : Array.isArray(section?.accepted?.revisions)
+      ? section.accepted.revisions
+      : []
+  const latestGeneratedRevision = getLatestRevisionValue(revisions, 'generated')
+  const latestAcceptedRevision = getLatestRevisionValue(acceptedRevisions, 'accepted')
+  const previousGeneratedContent = stringifyGeneratedContent(latestGeneratedRevision?.generated)
+  const previousAcceptedContent = stringifyAcceptedContent(latestAcceptedRevision?.accepted)
   const generateAction = generationActions[SECTION_ACTION_KEYS.GENERATE_SECTION] || null
   const regenerateAction = generationActions[SECTION_ACTION_KEYS.REGENERATE_SECTION] || null
   const generateLabel = getRuntimeActionLabel(generateAction, 'Generate')
@@ -579,6 +664,7 @@ function RuntimeSection({
   const resolvedFeedback = localError
     ? { variant: 'error', message: localError }
     : feedback
+  const sectionDisplayLabel = getSectionDisplayLabel(section, `Guided item ${section?.key ?? ''}`.trim())
 
   const handleChange = (event) => {
     setLocalError('')
@@ -618,7 +704,7 @@ function RuntimeSection({
           <form className="runtime-workspace__section-form" onSubmit={handleSubmit}>
             <div className="runtime-workspace__section-heading">
               <div>
-                <h2>{section.label}</h2>
+                <h2>{sectionDisplayLabel}</h2>
                 {showRuntimePath ? (
                   <p>{section.runtimePath}</p>
                 ) : null}
@@ -635,7 +721,7 @@ function RuntimeSection({
             <div
               className="runtime-workspace__section-panels"
               role="region"
-              aria-label="Section ownership zones"
+              aria-label="Ownership zones"
             >
               <section className="runtime-workspace__section-panel" aria-label="Suggested from Discovery">
                 <h3>Suggested From Discovery</h3>
@@ -665,18 +751,18 @@ function RuntimeSection({
                   onChange={handleChange}
                 />
               </section>
-              <section className="runtime-workspace__section-panel" aria-label="Generated Section">
-                <h3>Generated Section</h3>
+              <section className="runtime-workspace__section-panel" aria-label="Generated content">
+                <h3>Generated</h3>
                 <p>{generatedContent || 'Awaiting generation'}</p>
               </section>
-              <section className="runtime-workspace__section-panel" aria-label="Accepted Final">
-                <h3>Accepted / Final</h3>
+              <section className="runtime-workspace__section-panel" aria-label="Accepted truth">
+                <h3>Accepted Truth</h3>
                 <p>
-                  {acceptedContent || 'No accepted final truth has been projected for this section.'}
+                  {acceptedContent || 'No accepted governed truth has been projected for this section.'}
                 </p>
               </section>
             </div>
-            <div className="runtime-workspace__section-state-row" aria-label="Section state and review">
+            <div className="runtime-workspace__section-state-row" aria-label="State and review">
               <Status variant={getTokenStatusVariant(section?.state?.status)} size="sm" showIcon>
                 {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
                 {Number(section?.state?.revisionCount || 0) > 0
@@ -687,19 +773,56 @@ function RuntimeSection({
                 {formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}
               </Status>
             </div>
+            <div className="runtime-workspace__section-intelligence" role="region" aria-label="Governed intelligence">
+              <div>
+                <span className="runtime-workspace__section-intelligence-label">Confidence</span>
+                <Status variant={getTokenStatusVariant(confidenceState)} size="sm" showIcon>
+                  {formatRuntimeTokenLabel(confidenceState)}
+                  {Number.isFinite(Number(intelligence.confidence?.score))
+                    ? ` (${Number(intelligence.confidence.score)})`
+                    : ''}
+                </Status>
+              </div>
+              <div>
+                <span className="runtime-workspace__section-intelligence-label">Dependencies</span>
+                <Status variant={getTokenStatusVariant(dependencyState)} size="sm" showIcon>
+                  {getDependencySummary(intelligence.dependency)}
+                </Status>
+              </div>
+              <div>
+                <span className="runtime-workspace__section-intelligence-label">Truth Readiness</span>
+                <Status variant={getTokenStatusVariant(readinessState)} size="sm" showIcon>
+                  {getTruthReadinessSummary(intelligence.readiness)}
+                </Status>
+              </div>
+              <div>
+                <span className="runtime-workspace__section-intelligence-label">Compare</span>
+                <Status variant={getTokenStatusVariant(compareState)} size="sm" showIcon>
+                  {formatRuntimeTokenLabel(compareState)}
+                </Status>
+              </div>
+            </div>
             {showCompare ? (
               <div
                 className="runtime-workspace__compare"
                 role="region"
-                aria-label="Generated comparison"
+                aria-label="Section truth comparison"
               >
                 <section>
-                  <h3>Previous</h3>
+                  <h3>Generated Section</h3>
+                  <p>{generatedContent || 'Awaiting generation'}</p>
+                </section>
+                <section>
+                  <h3>Accepted Truth</h3>
+                  <p>{acceptedContent || 'No accepted governed truth has been projected for this section.'}</p>
+                </section>
+                <section>
+                  <h3>Previous Generated</h3>
                   <p>{previousGeneratedContent || 'No previous generated revision'}</p>
                 </section>
                 <section>
-                  <h3>Current</h3>
-                  <p>{generatedContent || 'Awaiting generation'}</p>
+                  <h3>Previous Accepted Truth</h3>
+                  <p>{previousAcceptedContent || 'No previous accepted truth revision'}</p>
                 </section>
               </div>
             ) : null}
@@ -761,7 +884,7 @@ function RuntimeSection({
                 leftIcon={<MdCheckCircle aria-hidden="true" />}
                 onClick={() => onAcceptSection?.({ section })}
               >
-                Accept Final
+                Accept Truth
               </Button>
               <Button
                 type="submit"
@@ -799,7 +922,7 @@ function RuntimeSection({
               ) : null
             ))}
             {validationMessages.length > 0 ? (
-              <ul className="runtime-workspace__validation-list" aria-label={`${section.label} validation messages`}>
+              <ul className="runtime-workspace__validation-list" aria-label={`${sectionDisplayLabel} validation messages`}>
                 {validationMessages.map((message, index) => (
                   <li key={`${message.validationKey ?? section.key}-${index}`}>
                     <Status
@@ -940,7 +1063,7 @@ function RuntimeSectionNavigation({
           </button>
         </li>
         {sections.map((section, index) => {
-          const label = section?.shortLabel || section?.label || section?.sectionKey || `Section ${index + 1}`
+          const label = getSectionDisplayLabel(section, `Guided item ${index + 1}`)
           const status = getSectionNavigationStatus(section)
           const sectionKey = section?.sectionKey || section?.key || getSectionDomId(section, index)
           const isActive = activeKey === sectionKey
@@ -1313,6 +1436,7 @@ function RuntimeWorkspace() {
   const packageSummary = [packageName || packageKey, packageVersion].filter(Boolean).join(' / ') || '--'
   const validationState = renderer?.validation?.state ?? 'UNKNOWN'
   const readinessState = renderer?.readiness?.state ?? 'DRAFT'
+  const sectionTruthState = renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
   const publishState = renderer?.publish?.state ?? 'UNKNOWN'
   const lockState = renderer?.lock?.state ?? 'UNKNOWN'
   const summaryItems = [
@@ -1346,6 +1470,12 @@ function RuntimeWorkspace() {
       variant: getTokenStatusVariant(readinessState),
     },
     {
+      key: 'section-truth',
+      label: 'Section Truth',
+      value: formatRuntimeTokenLabel(sectionTruthState),
+      variant: getTokenStatusVariant(sectionTruthState),
+    },
+    {
       key: 'publish',
       label: 'Publish',
       value: formatRuntimeTokenLabel(publishState),
@@ -1370,6 +1500,7 @@ function RuntimeWorkspace() {
   const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
+  const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
 
   useEffect(() => {
     if (activeWorkspaceKey === DISCOVERY_NAV_KEY) return
@@ -1610,7 +1741,7 @@ function RuntimeWorkspace() {
       }).unwrap()
       setSectionFeedback(runtimePath, {
         variant: 'success',
-        message: 'Section accepted as final.',
+        message: 'Section accepted as governed truth.',
       })
       await refetch()
       return true
@@ -1831,6 +1962,40 @@ function RuntimeWorkspace() {
               </Status>
             </Card.Body>
           </Card>
+
+          {activeSection && activeSectionIntelligence ? (
+            <Card variant="default" className="runtime-workspace__panel">
+              <Card.Body className="runtime-workspace__panel-body">
+                <div className="runtime-workspace__panel-heading">
+                  <MdCompareArrows aria-hidden="true" />
+                  <h2>Governed Intelligence</h2>
+                </div>
+                <ul className="runtime-workspace__plain-list" aria-label="Active governed intelligence">
+                  <li>
+                    <strong>{getSectionDisplayLabel(activeSection, 'Active item')}</strong>
+                    <span>{getTruthReadinessSummary(activeSectionIntelligence.readiness)}</span>
+                  </li>
+                  <li>
+                    <strong>Confidence</strong>
+                    <span>
+                      {formatRuntimeTokenLabel(activeSectionIntelligence.confidence?.level || 'NONE')}
+                      {Number.isFinite(Number(activeSectionIntelligence.confidence?.score))
+                        ? ` (${Number(activeSectionIntelligence.confidence.score)})`
+                        : ''}
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Dependencies</strong>
+                    <span>{getDependencySummary(activeSectionIntelligence.dependency)}</span>
+                  </li>
+                  <li>
+                    <strong>Compare</strong>
+                    <span>{activeSectionIntelligence.compare?.summary || formatRuntimeTokenLabel(activeSectionIntelligence.compare?.state || 'UNKNOWN')}</span>
+                  </li>
+                </ul>
+              </Card.Body>
+            </Card>
+          ) : null}
 
           <Card variant="default" className="runtime-workspace__panel">
             <Card.Body className="runtime-workspace__panel-body">
