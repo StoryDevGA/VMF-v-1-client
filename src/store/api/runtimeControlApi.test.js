@@ -56,6 +56,7 @@ import {
   useActivateRuntimePathMutation,
   useUpdateFrameworkRegistryMutation,
   useUpdateFrameworkPackageMutation,
+  useUpdateFrameworkPackageSafeMetadataMutation,
   useValidateRuntimeOperationMutation,
   useUpdateRuntimeAgentMutation,
   useUpdateRuntimePathMutation,
@@ -119,6 +120,7 @@ describe('runtimeControlApi', () => {
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageAudit')
     expect(runtimeControlApi.endpoints).toHaveProperty('getFrameworkPackageDiff')
     expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkPackage')
+    expect(runtimeControlApi.endpoints).toHaveProperty('updateFrameworkPackageSafeMetadata')
     expect(runtimeControlApi.endpoints).toHaveProperty('activateFrameworkPackage')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeActivationReadiness')
     expect(runtimeControlApi.endpoints).toHaveProperty('getRuntimeActivationHistory')
@@ -197,6 +199,7 @@ describe('runtimeControlApi', () => {
     expect(typeof useCreateFrameworkPackageMutation).toBe('function')
     expect(typeof useCloneFrameworkPackageMutation).toBe('function')
     expect(typeof useUpdateFrameworkPackageMutation).toBe('function')
+    expect(typeof useUpdateFrameworkPackageSafeMetadataMutation).toBe('function')
     expect(typeof useActivateFrameworkPackageMutation).toBe('function')
     expect(typeof useValidateRuntimeOperationMutation).toBe('function')
     expect(typeof useCreateRuntimeAgentMutation).toBe('function')
@@ -236,6 +239,7 @@ describe('runtimeControlApi', () => {
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackageAudit.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getFrameworkPackageDiff.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.updateFrameworkPackage.initiate).toBe('function')
+    expect(typeof runtimeControlApi.endpoints.updateFrameworkPackageSafeMetadata.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.activateFrameworkPackage.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate).toBe('function')
     expect(typeof runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate).toBe('function')
@@ -335,6 +339,31 @@ describe('runtimeControlApi', () => {
       url: '/super-admin/runtime-control/framework-packages/pkg-live-2',
       method: 'PATCH',
       body: { version: '3.1.1' },
+    })
+
+    expect(
+      buildRuntimeControlMutationRequest({
+        resourcePath: 'framework-packages',
+        entityId: 'pkg-vmf-231/safe-metadata',
+        method: 'PATCH',
+        body: {
+          packageName: 'Enterprise VMF Package',
+          description: 'Customer-facing package.',
+          visibility: 'CUSTOMER_VISIBLE',
+          customerAccessMode: 'ALL_CUSTOMERS',
+          assignedCustomerIds: [],
+        },
+      }),
+    ).toEqual({
+      url: '/super-admin/runtime-control/framework-packages/pkg-vmf-231/safe-metadata',
+      method: 'PATCH',
+      body: {
+        packageName: 'Enterprise VMF Package',
+        description: 'Customer-facing package.',
+        visibility: 'CUSTOMER_VISIBLE',
+        customerAccessMode: 'ALL_CUSTOMERS',
+        assignedCustomerIds: [],
+      },
     })
 
     expect(
@@ -718,6 +747,118 @@ describe('runtimeControlApi', () => {
     expect(getResult.error).toBeUndefined()
     expect(getResult.data?.data?.workflowPolicyConfig).toBeUndefined()
     expect(getResult.data?.data?.validationConfig).toBeUndefined()
+  })
+
+  it('keeps mock active framework package safe metadata updates scoped to display and access fields', async () => {
+    const store = createTestStore()
+    const beforeResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate('pkg-vmf-231'),
+    )
+    const previousDependencyLock = beforeResult.data?.data?.dependencyLock
+    const previousCheckpointStatus = beforeResult.data?.data?.lastCheckpointStatus
+
+    const updateResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateFrameworkPackageSafeMetadata.initiate({
+        packageId: 'pkg-vmf-231',
+        packageName: 'Enterprise VMF Package',
+        description: 'Customer-facing package.',
+        visibility: 'CUSTOMER_VISIBLE',
+        customerAccessMode: 'SELECTED_CUSTOMERS',
+        assignedCustomerIds: ['cust-acme'],
+      }),
+    )
+
+    expect(updateResult.error).toBeUndefined()
+    expect(updateResult.data?.data).toEqual(expect.objectContaining({
+      packageName: 'Enterprise VMF Package',
+      description: 'Customer-facing package.',
+      visibility: 'CUSTOMER_VISIBLE',
+      customerAccessMode: 'SELECTED_CUSTOMERS',
+      assignedCustomerIds: ['cust-acme'],
+      status: 'ACTIVE',
+    }))
+    expect(updateResult.data?.data?.dependencyLock).toEqual(previousDependencyLock)
+    expect(updateResult.data?.data?.lastCheckpointStatus).toEqual(previousCheckpointStatus)
+
+    const blockedResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateFrameworkPackageSafeMetadata.initiate({
+        packageId: 'pkg-vmf-231',
+        sections: [],
+      }),
+    )
+    expect(blockedResult.error?.status).toBe(422)
+    expect(blockedResult.error?.data?.error?.code).toBe('FIELD_LOCKED_ON_ACTIVE_PACKAGE')
+
+    const nonActiveResult = await store.dispatch(
+      runtimeControlApi.endpoints.updateFrameworkPackageSafeMetadata.initiate({
+        packageId: 'pkg-vmf-240',
+        packageName: 'Draft Package',
+      }),
+    )
+    expect(nonActiveResult.error?.status).toBe(409)
+    expect(nonActiveResult.error?.data?.error?.details?.reason).toBe(
+      'FRAMEWORK_PACKAGE_SAFE_METADATA_REQUIRES_ACTIVE',
+    )
+  })
+
+  it('rejects mock active framework package safe metadata payloads that live validation rejects', async () => {
+    const invalidCases = [
+      {
+        label: 'overlong package name',
+        payload: { packageName: 'A'.repeat(161) },
+        field: 'packageName',
+      },
+      {
+        label: 'overlong description',
+        payload: { description: 'A'.repeat(501) },
+        field: 'description',
+      },
+      {
+        label: 'invalid visibility enum',
+        payload: { visibility: 'PUBLIC' },
+        field: 'visibility',
+      },
+      {
+        label: 'invalid customer access enum',
+        payload: {
+          visibility: 'CUSTOMER_VISIBLE',
+          customerAccessMode: 'MANUAL_LIST',
+        },
+        field: 'customerAccessMode',
+      },
+      {
+        label: 'invalid customer id',
+        payload: {
+          visibility: 'CUSTOMER_VISIBLE',
+          customerAccessMode: 'SELECTED_CUSTOMERS',
+          assignedCustomerIds: ['customer 123'],
+        },
+        field: 'assignedCustomerIds',
+      },
+      {
+        label: 'oversized customer id list',
+        payload: {
+          visibility: 'CUSTOMER_VISIBLE',
+          customerAccessMode: 'SELECTED_CUSTOMERS',
+          assignedCustomerIds: Array.from({ length: 201 }, (_, index) => `customer-${index + 1}`),
+        },
+        field: 'assignedCustomerIds',
+      },
+    ]
+
+    for (const invalidCase of invalidCases) {
+      const store = createTestStore()
+      const result = await store.dispatch(
+        runtimeControlApi.endpoints.updateFrameworkPackageSafeMetadata.initiate({
+          packageId: 'pkg-vmf-231',
+          ...invalidCase.payload,
+        }),
+      )
+
+      expect(result.error?.status, invalidCase.label).toBe(422)
+      expect(result.error?.data?.error?.code, invalidCase.label).toBe('VALIDATION_FAILED')
+      expect(result.error?.data?.error?.details?.[invalidCase.field], invalidCase.label).toBeTruthy()
+    }
   })
 
   it('clones mock framework packages as editable drafts without release evidence', async () => {

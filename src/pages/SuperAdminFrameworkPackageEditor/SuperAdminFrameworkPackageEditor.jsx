@@ -34,6 +34,7 @@ import {
   useListWorkflowPoliciesQuery,
   useRunFrameworkPackageCheckpointMutation,
   useValidateFrameworkPackageMutation,
+  useUpdateFrameworkPackageSafeMetadataMutation,
   useUpdateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
   useGetRuntimeActivationHistoryQuery,
@@ -1063,6 +1064,48 @@ const getCheckpointFromMutationError = (error) =>
   ?? error?.error?.checkpoint
   ?? null
 
+const validateActivePackageSafeMetadataForm = (formState) => {
+  const errors = {}
+  const packageName = String(formState.packageName ?? '').trim()
+  const description = String(formState.description ?? '').trim()
+  const visibility = String(formState.visibility ?? 'INTERNAL_ONLY').trim() || 'INTERNAL_ONLY'
+  const customerAccessMode = visibility === 'INTERNAL_ONLY'
+    ? 'ALL_CUSTOMERS'
+    : String(formState.customerAccessMode ?? 'ALL_CUSTOMERS').trim() || 'ALL_CUSTOMERS'
+  const selectedCustomerIds = parseCustomerIdList(formState.assignedCustomerIds)
+  const assignedCustomerIds =
+    visibility === 'CUSTOMER_VISIBLE' && customerAccessMode === 'SELECTED_CUSTOMERS'
+      ? selectedCustomerIds
+      : []
+
+  if (packageName.length > 160) {
+    errors.packageName = 'Package name must be 160 characters or fewer.'
+  }
+
+  if (description.length > 500) {
+    errors.description = 'Description must be 500 characters or fewer.'
+  }
+
+  if (
+    visibility === 'CUSTOMER_VISIBLE'
+    && customerAccessMode === 'SELECTED_CUSTOMERS'
+    && assignedCustomerIds.length === 0
+  ) {
+    errors.assignedCustomerIds = 'Assigned customers are required for selected-customer access.'
+  }
+
+  return {
+    errors,
+    payload: {
+      packageName,
+      description,
+      visibility,
+      customerAccessMode,
+      assignedCustomerIds,
+    },
+  }
+}
+
 const getRuntimeValidationFromMutationError = (error) =>
   error?.data?.error?.validation
   ?? error?.data?.validation
@@ -1428,11 +1471,13 @@ function SuperAdminFrameworkPackageEditor() {
   const [createFrameworkPackage, { isLoading: isCreating }] = useCreateFrameworkPackageMutation()
   const [cloneFrameworkPackage, { isLoading: isCloning }] = useCloneFrameworkPackageMutation()
   const [updateFrameworkPackage, { isLoading: isUpdating }] = useUpdateFrameworkPackageMutation()
+  const [updateFrameworkPackageSafeMetadata, { isLoading: isUpdatingSafeMetadata }] =
+    useUpdateFrameworkPackageSafeMetadataMutation()
   const [runFrameworkPackageCheckpoint, { isLoading: isRunningCheckpoint }] = useRunFrameworkPackageCheckpointMutation()
   const [validateFrameworkPackage, { isLoading: isValidatingPackage }] = useValidateFrameworkPackageMutation()
   const [activateFrameworkPackage, { isLoading: isActivatingPackage }] = useActivateFrameworkPackageMutation()
   const [validateRuntimeOperation, { isLoading: isValidatingRuntimeOperation }] = useValidateRuntimeOperationMutation()
-  const isSaving = isCreating || isUpdating || isCloning
+  const isSaving = isCreating || isUpdating || isUpdatingSafeMetadata || isCloning
 
   const registryRows = useMemo(() => registryResponse?.data ?? [], [registryResponse?.data])
   const frameworkOptions = buildFrameworkRegistryOptions(registryRows).filter((option) => option.value)
@@ -1707,12 +1752,30 @@ function SuperAdminFrameworkPackageEditor() {
   const deprecatedPackageLocked = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.DEPRECATED
   const directEditLocked = activePackageLocked || validatedStructureLocked || deprecatedPackageLocked
   const runtimeStructureLocked = directEditLocked
+  const activePackageAccessTab = activePackageLocked && activeTab === FRAMEWORK_PACKAGE_EDITOR_TABS.ACCESS
+  const activePackageMetadataTab = activePackageLocked && activeTab === FRAMEWORK_PACKAGE_EDITOR_TABS.PACKAGE_IDENTITY
+  const activePackageSafeEditTab = activePackageAccessTab || activePackageMetadataTab
+  const displayMetadataLocked = directEditLocked && !activePackageLocked
+  const accessControlsLocked = directEditLocked && !activePackageLocked
   const cloneSourceLoaded = !isCloneMode || Boolean(loadedPackage)
   const cloneSourceStatus = String(loadedPackage?.status ?? '').trim().toUpperCase()
   const cloneSourceAllowed = !isCloneMode
     || cloneSourceStatus === FRAMEWORK_PACKAGE_STATUSES.ACTIVE
     || cloneSourceStatus === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
-  const cloneSaveDisabled = directEditLocked || (isCloneMode && (!cloneSourceLoaded || !cloneSourceAllowed))
+  const saveDisabled = (
+    activePackageLocked ? !activePackageSafeEditTab : directEditLocked
+  ) || (isCloneMode && (!cloneSourceLoaded || !cloneSourceAllowed))
+  const submitButtonLabel = isCloneMode
+    ? 'Save Clone'
+    : activePackageAccessTab
+      ? 'Update Access'
+      : activePackageMetadataTab
+        ? 'Update Metadata'
+        : activePackageLocked
+          ? 'Runtime Locked'
+          : isEditMode
+            ? 'Save Changes'
+            : 'Create Framework Package'
   const latestCheckpointStatus = String(
     latestCheckpointData?.status
     || 'NOT_RUN',
@@ -2208,7 +2271,14 @@ function SuperAdminFrameworkPackageEditor() {
 
   const executeSave = async (payload) => {
     try {
-      if (isEditMode) {
+      if (isEditMode && activePackageLocked) {
+        await updateFrameworkPackageSafeMetadata({ packageId, ...payload }).unwrap()
+        addToast({
+          title: activePackageAccessTab ? 'Package access updated' : 'Package metadata updated',
+          description: 'Active package runtime structure remains locked.',
+          variant: 'success',
+        })
+      } else if (isEditMode) {
         await updateFrameworkPackage({ packageId, ...payload }).unwrap()
         addToast({
           title: 'Framework package updated',
@@ -2247,7 +2317,11 @@ function SuperAdminFrameworkPackageEditor() {
         return
       }
       addToast({
-        title: isEditMode
+        title: isEditMode && activePackageLocked
+          ? activePackageAccessTab
+            ? 'Failed to update package access'
+            : 'Failed to update package metadata'
+          : isEditMode
           ? 'Failed to update framework package'
           : isCloneMode
             ? 'Failed to clone framework package'
@@ -2261,6 +2335,26 @@ function SuperAdminFrameworkPackageEditor() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setErrors({})
+
+    if (activePackageLocked) {
+      if (!activePackageSafeEditTab) {
+        addToast({
+          title: 'Runtime structure is locked',
+          description: 'Access controls and display metadata may still be updated from their tabs.',
+          variant: 'warning',
+        })
+        return
+      }
+
+      const { errors: nextErrors, payload } = validateActivePackageSafeMetadataForm(form)
+      if (Object.keys(nextErrors).length > 0) {
+        setErrors(nextErrors)
+        return
+      }
+
+      await executeSave(payload)
+      return
+    }
 
     if (directEditLocked) {
       const lockedDescription = activePackageLocked
@@ -2970,7 +3064,7 @@ function SuperAdminFrameworkPackageEditor() {
                       </Status>
                       <p className="super-admin-framework-packages__table-note">
                         {activePackageLocked
-                          ? 'Active framework packages cannot be edited directly. Clone flow is required for changes.'
+                          ? 'Runtime structure is locked. Access controls and display metadata may still be updated with audit evidence.'
                           : deprecatedPackageLocked
                             ? 'Deprecated framework packages are retained for audit and cannot be edited or cloned unless a revival workflow is explicitly introduced.'
                             : 'Validated packages are locked for direct edits. Clone the package to create the next draft, or activate it when checkpoint evidence is ready.'}
@@ -3118,7 +3212,7 @@ function SuperAdminFrameworkPackageEditor() {
                               setForm((current) => ({ ...current, packageName: event.target.value }))
                             }
                             error={errors.packageName}
-                            disabled={directEditLocked}
+                            disabled={displayMetadataLocked}
                             fullWidth
                           />
                         </div>
@@ -3132,7 +3226,7 @@ function SuperAdminFrameworkPackageEditor() {
                         }
                         error={errors.description}
                         rows={3}
-                        disabled={directEditLocked}
+                        disabled={displayMetadataLocked}
                         fullWidth
                       />
                     </div>
@@ -3165,7 +3259,7 @@ function SuperAdminFrameworkPackageEditor() {
                               return { ...current, visibility }
                             })
                           }
-                          disabled={directEditLocked}
+                          disabled={accessControlsLocked}
                         />
                         <Select
                           id="framework-package-editor-customer-access-mode"
@@ -3182,7 +3276,7 @@ function SuperAdminFrameworkPackageEditor() {
                                 : current.assignedCustomerIds,
                             }))
                           }}
-                          disabled={directEditLocked || form.visibility === 'INTERNAL_ONLY'}
+                          disabled={accessControlsLocked || form.visibility === 'INTERNAL_ONLY'}
                           error={errors.customerAccessMode}
                         />
                       </div>
@@ -3200,7 +3294,7 @@ function SuperAdminFrameworkPackageEditor() {
                           }))
                         }
                         error={errors.assignedCustomerIds}
-                        disabled={directEditLocked || !canAssignCustomers}
+                        disabled={accessControlsLocked || !canAssignCustomers}
                       />
                     </div>
                   </TabView.Tab>
@@ -3686,7 +3780,7 @@ function SuperAdminFrameworkPackageEditor() {
                               navigate(`/super-admin/runtime-control/ui-contracts/${targetId}`)
                             }}
                           >
-                            Open UI Contract
+                            View UI Contract
                           </Button>
                         </div>
                       </div>
@@ -4541,8 +4635,8 @@ function SuperAdminFrameworkPackageEditor() {
                   <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={isSaving}>
                     Cancel
                   </Button>
-                  <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={cloneSaveDisabled}>
-                    {isCloneMode ? 'Save Clone' : isEditMode ? 'Save Changes' : 'Create Framework Package'}
+                  <Button type="submit" variant="primary" size="sm" loading={isSaving} disabled={saveDisabled}>
+                    {submitButtonLabel}
                   </Button>
                 </div>
               </Card.Body>

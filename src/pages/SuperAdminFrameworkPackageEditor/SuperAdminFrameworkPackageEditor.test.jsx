@@ -15,6 +15,7 @@ const addToastMock = vi.fn()
 const createFrameworkPackageMock = vi.fn()
 const cloneFrameworkPackageMock = vi.fn()
 const updateFrameworkPackageMock = vi.fn()
+const updateFrameworkPackageSafeMetadataMock = vi.fn()
 const runFrameworkPackageCheckpointMock = vi.fn()
 const validateFrameworkPackageMock = vi.fn()
 const activateFrameworkPackageMock = vi.fn()
@@ -306,6 +307,7 @@ vi.mock('../../store/api/runtimeControlApi.js', () => ({
   useValidateFrameworkPackageMutation: () => [validateFrameworkPackageMock, { isLoading: false }],
   useValidateRuntimeOperationMutation: () => [validateRuntimeOperationMock, { isLoading: false }],
   useUpdateFrameworkPackageMutation: () => [updateFrameworkPackageMock, { isLoading: false }],
+  useUpdateFrameworkPackageSafeMetadataMutation: () => [updateFrameworkPackageSafeMetadataMock, { isLoading: false }],
 }))
 
 const buildLoadedPackage = () => ({
@@ -402,6 +404,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     createFrameworkPackageMock.mockReset()
     cloneFrameworkPackageMock.mockReset()
     updateFrameworkPackageMock.mockReset()
+    updateFrameworkPackageSafeMetadataMock.mockReset()
     runFrameworkPackageCheckpointMock.mockReset()
     validateFrameworkPackageMock.mockReset()
     activateFrameworkPackageMock.mockReset()
@@ -719,7 +722,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     render(<SuperAdminFrameworkPackageEditor />)
 
-    expect(await screen.findByText(/active framework packages cannot be edited directly/i)).toBeInTheDocument()
+    expect(await screen.findByText(/runtime structure is locked/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /runtime locked/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /clone package/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /dependency snapshot/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /checkpoint history/i })).toBeInTheDocument()
@@ -728,6 +732,76 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     await user.click(screen.getByRole('button', { name: /clone package/i }))
 
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages/new?cloneFrom=pkg-live-2')
+  })
+
+  it('updates safe display metadata for active packages without calling the runtime update endpoint', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    updateFrameworkPackageSafeMetadataMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-live-2' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(await screen.findByRole('tab', { name: /^package identity$/i }))
+
+    const packageNameInput = screen.getByRole('textbox', { name: /^package name$/i })
+    const packageKeyInput = screen.getByRole('textbox', { name: /package key/i })
+    expect(packageNameInput).toBeEnabled()
+    expect(packageKeyInput).toBeDisabled()
+
+    await user.clear(packageNameInput)
+    await user.type(packageNameInput, 'Enterprise VMF Package')
+    await user.clear(screen.getByRole('textbox', { name: /^description$/i }))
+    await user.type(screen.getByRole('textbox', { name: /^description$/i }), 'Customer-facing package.')
+    await user.click(screen.getByRole('button', { name: /update metadata/i }))
+
+    await waitFor(() => {
+      expect(updateFrameworkPackageSafeMetadataMock).toHaveBeenCalledWith(expect.objectContaining({
+        packageId: 'pkg-live-2',
+        packageName: 'Enterprise VMF Package',
+        description: 'Customer-facing package.',
+        visibility: 'INTERNAL_ONLY',
+        customerAccessMode: 'ALL_CUSTOMERS',
+        assignedCustomerIds: [],
+      }))
+    })
+    expect(updateFrameworkPackageMock).not.toHaveBeenCalled()
+    expect(updateFrameworkPackageSafeMetadataMock.mock.calls[0][0]).not.toHaveProperty('sections')
+  })
+
+  it('updates safe access metadata for active packages without revalidating runtime structure', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    updateFrameworkPackageSafeMetadataMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-live-2' } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    await user.click(await screen.findByRole('tab', { name: /^access$/i }))
+    expect(screen.getByRole('button', { name: /update access/i })).toBeEnabled()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /visibility/i }), 'CUSTOMER_VISIBLE')
+    await user.selectOptions(screen.getByRole('combobox', { name: /customer access/i }), 'SELECTED_CUSTOMERS')
+    await user.click(screen.getByRole('button', { name: /select acme corp/i }))
+    await user.click(screen.getByRole('button', { name: /update access/i }))
+
+    await waitFor(() => {
+      expect(updateFrameworkPackageSafeMetadataMock).toHaveBeenCalledWith(expect.objectContaining({
+        packageId: 'pkg-live-2',
+        visibility: 'CUSTOMER_VISIBLE',
+        customerAccessMode: 'SELECTED_CUSTOMERS',
+        assignedCustomerIds: ['cust-acme'],
+      }))
+    })
+    expect(updateFrameworkPackageMock).not.toHaveBeenCalled()
+    expect(runFrameworkPackageCheckpointMock).not.toHaveBeenCalled()
+    expect(validateFrameworkPackageMock).not.toHaveBeenCalled()
   })
 
   it('offers clone and activation actions for validated packages while blocking direct save', async () => {
@@ -1361,6 +1435,8 @@ describe('SuperAdminFrameworkPackageEditor', () => {
 
     expect(screen.getByRole('combobox', { name: /selected contract/i }))
       .toHaveValue('standard-ui-contract-2-3-1')
+    expect(screen.getByRole('button', { name: /view ui contract/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /open ui contract/i })).not.toBeInTheDocument()
     expect(listUiContractsQueryArgs).toEqual(expect.arrayContaining([
       expect.objectContaining({
         q: 'standard-ui-contract-2-3-1',

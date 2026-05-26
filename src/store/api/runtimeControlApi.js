@@ -3,8 +3,10 @@ import {
   cloneFrameworkPackage,
   DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES,
   DEPRECATED_FRAMEWORK_PACKAGE_FIELDS,
+  FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_OPTIONS,
   FRAMEWORK_PACKAGE_PAGE_SIZE,
   FRAMEWORK_PACKAGE_STATUSES,
+  FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS,
   INITIAL_FRAMEWORK_PACKAGES,
 } from '../../pages/SuperAdminFrameworkPackages/superAdminFrameworkPackages.constants.js'
 import {
@@ -88,6 +90,13 @@ const RUNTIME_DEPLOYMENT_STATUSES = Object.freeze({
   ACTIVE: 'ACTIVE',
   SUPERSEDED: 'SUPERSEDED',
 })
+const FRAMEWORK_PACKAGE_VISIBILITY_VALUES = new Set(
+  FRAMEWORK_PACKAGE_VISIBILITY_OPTIONS.map((option) => option.value),
+)
+const FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_VALUES = new Set(
+  FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_OPTIONS.map((option) => option.value),
+)
+const FRAMEWORK_PACKAGE_CUSTOMER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{1,119}$/
 const CLONEABLE_FRAMEWORK_PACKAGE_STATUSES = new Set([
   FRAMEWORK_PACKAGE_STATUSES.ACTIVE,
   FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
@@ -370,6 +379,59 @@ const buildNotFoundError = (message) => ({
     },
   },
 })
+
+const validateMockFrameworkPackageSafeMetadata = (payload = {}) => {
+  const details = {}
+  const hasField = (field) => Object.prototype.hasOwnProperty.call(payload, field)
+
+  if (Object.keys(payload).length === 0) {
+    details.packageName = 'At least one safe metadata field is required.'
+  }
+
+  if (hasField('packageName')) {
+    const packageName = String(payload.packageName ?? '').trim()
+    if (packageName.length > 160) {
+      details.packageName = 'Package name must be 160 characters or fewer.'
+    }
+  }
+
+  if (hasField('description')) {
+    const description = String(payload.description ?? '').trim()
+    if (description.length > 500) {
+      details.description = 'Description must be 500 characters or fewer.'
+    }
+  }
+
+  if (hasField('visibility') && !FRAMEWORK_PACKAGE_VISIBILITY_VALUES.has(payload.visibility)) {
+    details.visibility = 'Visibility must be a supported value.'
+  }
+
+  if (
+    hasField('customerAccessMode')
+    && !FRAMEWORK_PACKAGE_CUSTOMER_ACCESS_VALUES.has(payload.customerAccessMode)
+  ) {
+    details.customerAccessMode = 'Customer access mode must be a supported value.'
+  }
+
+  if (hasField('assignedCustomerIds')) {
+    if (!Array.isArray(payload.assignedCustomerIds)) {
+      details.assignedCustomerIds = 'Assigned customers must be an array.'
+    } else if (payload.assignedCustomerIds.length > 200) {
+      details.assignedCustomerIds = 'Assigned customers must contain 200 items or fewer.'
+    } else {
+      const invalidCustomerId = payload.assignedCustomerIds
+        .map((id) => String(id ?? '').trim())
+        .find((id) => !FRAMEWORK_PACKAGE_CUSTOMER_ID_PATTERN.test(id))
+      if (invalidCustomerId !== undefined) {
+        details.assignedCustomerIds = 'Customer id must use letters, numbers, underscores, or hyphens.'
+      }
+    }
+  }
+
+  return Object.keys(details).length > 0
+    ? buildValidationFailedError('Please check the form for errors.', details)
+    : null
+}
 
 const validateMockWorkflowPolicyGovernedMetadataFields = (payload = {}) => {
   const field = WORKFLOW_POLICY_GOVERNED_METADATA_FIELDS.find((fieldName) =>
@@ -4274,6 +4336,116 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    updateFrameworkPackageSafeMetadata: build.mutation({
+      queryFn: async ({ packageId, ...payload }, api, extraOptions, baseQuery) => {
+        if (!isRuntimeControlMockMode()) {
+          return baseQuery(
+            buildRuntimeControlMutationRequest({
+              resourcePath: 'framework-packages',
+              entityId: `${packageId}/safe-metadata`,
+              method: 'PATCH',
+              body: payload,
+            }),
+            api,
+            extraOptions,
+          )
+        }
+
+        const existingPackage = findFrameworkPackageById(packageId)
+        if (!existingPackage) {
+          return buildNotFoundError('Framework package was not found.')
+        }
+
+        if (String(existingPackage.status ?? '').trim().toUpperCase() !== FRAMEWORK_PACKAGE_STATUSES.ACTIVE) {
+          return buildConflictError('Safe metadata updates are only available for active framework packages.', {
+            field: 'status',
+            reason: 'FRAMEWORK_PACKAGE_SAFE_METADATA_REQUIRES_ACTIVE',
+          })
+        }
+
+        const safeFields = new Set([
+          'packageName',
+          'description',
+          'visibility',
+          'customerAccessMode',
+          'assignedCustomerIds',
+        ])
+        const blockedFields = Object.keys(payload).filter((field) => !safeFields.has(field))
+        if (blockedFields.length > 0) {
+          return {
+            error: {
+              status: 422,
+              data: {
+                error: {
+                  code: 'FIELD_LOCKED_ON_ACTIVE_PACKAGE',
+                  message: 'Active package runtime structure cannot be edited directly. Clone flow is required for runtime changes.',
+                  details: {
+                    reason: 'FIELD_LOCKED_ON_ACTIVE_PACKAGE',
+                    blockedFields,
+                  },
+                },
+              },
+            },
+          }
+        }
+
+        const validationError = validateMockFrameworkPackageSafeMetadata(payload)
+        if (validationError) return validationError
+
+        const packageName = Object.prototype.hasOwnProperty.call(payload, 'packageName')
+          ? String(payload.packageName ?? '').trim()
+          : existingPackage.packageName
+        const description = Object.prototype.hasOwnProperty.call(payload, 'description')
+          ? String(payload.description ?? '').trim()
+          : existingPackage.description
+        const visibility = payload.visibility ?? existingPackage.visibility
+        const customerAccessMode = visibility === 'INTERNAL_ONLY'
+          ? 'ALL_CUSTOMERS'
+          : payload.customerAccessMode ?? existingPackage.customerAccessMode ?? 'ALL_CUSTOMERS'
+        const assignedCustomerIds =
+          visibility === 'CUSTOMER_VISIBLE' && customerAccessMode === 'SELECTED_CUSTOMERS'
+            ? Array.isArray(payload.assignedCustomerIds)
+              ? [...new Set(payload.assignedCustomerIds.map((id) => String(id).trim()).filter(Boolean))]
+              : Array.isArray(existingPackage.assignedCustomerIds)
+                ? [...existingPackage.assignedCustomerIds]
+                : []
+            : []
+
+        if (
+          visibility === 'CUSTOMER_VISIBLE'
+          && customerAccessMode === 'SELECTED_CUSTOMERS'
+          && assignedCustomerIds.length === 0
+        ) {
+          return buildValidationFailedError('Please check the form for errors.', {
+            assignedCustomerIds: 'Assigned customers are required for selected-customer access.',
+          })
+        }
+
+        const nextPackage = cloneFrameworkPackage({
+          ...existingPackage,
+          packageName,
+          description,
+          visibility,
+          customerAccessMode,
+          assignedCustomerIds,
+          ...buildAuditFields(),
+        })
+
+        runtimeControlState = {
+          ...runtimeControlState,
+          frameworkPackages: runtimeControlState.frameworkPackages.map((pkg) =>
+            pkg.id === packageId ? nextPackage : pkg,
+          ),
+        }
+
+        return { data: buildEntityResponse(cloneFrameworkPackage(nextPackage)) }
+      },
+      invalidatesTags: (_result, _error, { packageId }) => [
+        FRAMEWORK_PACKAGE_LIST_TAG,
+        { type: 'RuntimeFrameworkPackage', id: packageId },
+      ],
+    }),
+
     validateFrameworkPackage: build.mutation({
       queryFn: async ({ packageId }, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -7693,6 +7865,7 @@ export const {
   useGetFrameworkPackageIntegrityQuery,
   useGetFrameworkPackageLatestCheckpointQuery,
   useUpdateFrameworkPackageMutation,
+  useUpdateFrameworkPackageSafeMetadataMutation,
   useRunFrameworkPackageCheckpointMutation,
   useValidateFrameworkPackageMutation,
   useActivateFrameworkPackageMutation,
