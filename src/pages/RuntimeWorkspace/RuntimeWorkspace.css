@@ -6,12 +6,18 @@
 
 .runtime-workspace__hero {
   overflow: visible;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-surface-elevated) 92%, transparent),
+      color-mix(in srgb, var(--color-background-secondary) 96%, transparent)
+    );
 }
 
 .runtime-workspace__hero-body {
   display: grid;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
 }
 
 .runtime-workspace__actions {
@@ -20,6 +26,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-xs);
+  align-self: start;
 }
 
 .runtime-workspace__hero-copy {
@@ -51,9 +58,8 @@
 
 .runtime-workspace__progress-summary {
   display: grid;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
   width: 100%;
-  max-width: min(100%, calc(var(--spacing-3xl) * 8));
   min-width: 0;
 }
 
@@ -99,17 +105,16 @@
 
 .runtime-workspace__metric-list {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacing-xs);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .runtime-workspace__metric-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
+  display: grid;
+  gap: var(--spacing-2xs);
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -120,7 +125,6 @@
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
-  text-align: right;
 }
 
 .runtime-workspace__summary-grid {
@@ -140,6 +144,69 @@
   border-radius: var(--border-radius-md);
   padding: var(--spacing-sm);
   background-color: var(--color-background);
+}
+
+.runtime-workspace__action-panel {
+  overflow: visible;
+}
+
+.runtime-workspace__action-panel-body {
+  display: grid;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.runtime-workspace__action-panel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.runtime-workspace__action-panel-heading h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__action-accordion {
+  border: var(--border-width-thin) solid var(--color-border);
+  background-color: var(--color-background);
+}
+
+.runtime-workspace__action-accordion .accordion__item {
+  background-color: transparent;
+}
+
+.runtime-workspace__action-accordion .accordion__header {
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.runtime-workspace__action-accordion .accordion__header-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.runtime-workspace__action-accordion .accordion__content-inner {
+  padding: 0 var(--spacing-md);
+}
+
+.runtime-workspace__action-accordion-content .accordion__content-inner {
+  overflow: hidden;
+}
+
+.runtime-workspace__action-accordion .accordion__item--open .accordion__content-inner {
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
 }
 
 .runtime-workspace__summary-label {
@@ -301,6 +368,25 @@
   gap: var(--spacing-sm);
 }
 
+.runtime-workspace__action-list--bar {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  width: max-content;
+  max-width: none;
+}
+
+.runtime-workspace__action-list--bar .runtime-workspace__action-item {
+  flex: 0 0 auto;
+}
+
+.runtime-workspace__action-scroll .h-scroll__track {
+  padding-block-end: var(--spacing-md);
+}
+
+.runtime-workspace__action-list--blocked {
+  align-items: flex-start;
+}
+
 .runtime-workspace__section-nav ol {
   display: grid;
   gap: var(--spacing-xs);
@@ -337,6 +423,7 @@
 .runtime-workspace__section-nav-button--active {
   border-color: var(--color-border-focus);
   background-color: var(--color-surface-elevated);
+  box-shadow: inset var(--border-width-thick) 0 0 var(--color-action-primary);
 }
 
 .runtime-workspace__section-nav-button > span {
@@ -562,17 +649,26 @@
 
 @media (min-width: 48rem) {
   .runtime-workspace__actions {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
   }
 
   .runtime-workspace__hero-body {
     grid-template-columns:
-      minmax(0, 1.2fr)
-      minmax(calc((var(--spacing-3xl) * 4) + var(--spacing-xl)), 0.8fr);
+      minmax(0, 1fr)
+      auto;
     align-items: start;
   }
 
+  .runtime-workspace__hero-copy {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .runtime-workspace__summary-grid {
+    grid-column: 1 / -1;
+    grid-row: 2;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -595,18 +691,44 @@
 }
 
 @media (min-width: 64rem) {
-  .runtime-workspace__layout {
+  .runtime-workspace__actions {
+    grid-column: 3;
+  }
+
+  .runtime-workspace__hero-body {
     grid-template-columns:
       minmax(0, 1fr)
-      minmax(
-        calc((var(--spacing-3xl) * 4) + var(--spacing-xl)),
-        calc(var(--spacing-3xl) * 6)
-      );
+      minmax(0, 1fr)
+      auto;
+  }
+
+  .runtime-workspace__summary-grid {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .runtime-workspace__layout {
+    grid-template-columns:
+      minmax(calc(var(--spacing-3xl) * 3), calc(var(--spacing-3xl) * 4.5))
+      minmax(0, 1fr)
+      minmax(calc(var(--spacing-3xl) * 3.25), calc(var(--spacing-3xl) * 5));
   }
 
   .runtime-workspace__aside {
     position: sticky;
     top: var(--spacing-md);
+  }
+
+  .runtime-workspace__aside--left {
+    grid-column: 1;
+  }
+
+  .runtime-workspace__main {
+    grid-column: 2;
+  }
+
+  .runtime-workspace__aside--right {
+    grid-column: 3;
   }
 }
 

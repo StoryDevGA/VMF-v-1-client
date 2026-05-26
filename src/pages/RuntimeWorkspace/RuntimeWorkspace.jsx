@@ -14,7 +14,9 @@ import {
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Accordion } from '../../components/Accordion'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
+import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -201,6 +203,8 @@ const getSummaryValueClassName = (variant = 'neutral') => [
   'runtime-workspace__summary-value',
   variant !== 'neutral' && `runtime-workspace__summary-value--${variant}`,
 ].filter(Boolean).join(' ')
+
+const getActionButtonVariant = () => 'outline'
 
 const formatRuntimeIdentifier = (value) => {
   const normalized = String(value ?? '').trim()
@@ -955,6 +959,7 @@ function RuntimeActionButton({
   disabled = false,
   executing = false,
   onExecute,
+  showDisabledReason = true,
 }) {
   const enabled = Boolean(action?.enabled)
   const disabledReason = String(action?.disabledReason ?? '').trim()
@@ -967,7 +972,7 @@ function RuntimeActionButton({
     <div className="runtime-workspace__action-item">
       <Button
         type="button"
-        variant="outline"
+        variant={getActionButtonVariant(action)}
         size="sm"
         disabled={!enabled || disabled}
         loading={executing}
@@ -978,7 +983,10 @@ function RuntimeActionButton({
         {getRuntimeActionLabel(action, actionKey)}
       </Button>
       {!enabled && disabledReason ? (
-        <p id={reasonId} className="runtime-workspace__action-disabled-reason">
+        <p
+          id={reasonId}
+          className={showDisabledReason ? 'runtime-workspace__action-disabled-reason' : 'sr-only'}
+        >
           {disabledReason}
         </p>
       ) : null}
@@ -1411,6 +1419,16 @@ function RuntimeWorkspace() {
     !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey))
     && !DISCOVERY_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
   )
+  const availableSidePanelActions = sidePanelActions.filter((action) => Boolean(action?.enabled))
+  const blockedSidePanelActions = sidePanelActions.filter((action) => !action?.enabled)
+  const actionAccordionOpenItems = [
+    availableSidePanelActions.length > 0 && 'available-actions',
+    availableSidePanelActions.length === 0 && blockedSidePanelActions.length > 0 && 'blocked-actions',
+  ].filter(Boolean)
+  const actionAccordionKey = [
+    availableSidePanelActions.length > 0 ? 'has-available' : 'no-available',
+    blockedSidePanelActions.length > 0 ? 'has-blocked' : 'no-blocked',
+  ].join(':')
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
   const discovery = getDiscoveryProjection(renderer)
@@ -1486,12 +1504,6 @@ function RuntimeWorkspace() {
       label: 'Readiness',
       value: formatRuntimeTokenLabel(readinessState),
       variant: getTokenStatusVariant(readinessState),
-    },
-    {
-      key: 'section-truth',
-      label: 'Section Truth',
-      value: formatRuntimeTokenLabel(sectionTruthState),
-      variant: getTokenStatusVariant(sectionTruthState),
     },
     {
       key: 'publish',
@@ -1898,14 +1910,171 @@ function RuntimeWorkspace() {
         </Card.Body>
       </Card>
 
-      <div className="runtime-workspace__layout">
-        <main className="runtime-workspace__main" aria-label="Guided execution sections">
-          <div className="runtime-workspace__section-title-row">
-            <h2>Guided Sections</h2>
-            <Badge variant="neutral" size="sm" pill outline>
-              {activeWorkspaceKey === DISCOVERY_NAV_KEY ? 'Discovery active' : '1 active'}
-            </Badge>
+      <Card variant="default" className="runtime-workspace__action-panel">
+        <Card.Body className="runtime-workspace__action-panel-body">
+          <div className="runtime-workspace__action-panel-heading">
+            <h2>Actions</h2>
+            {actionFeedback ? (
+              <Status variant={actionFeedback.variant} size="sm" showIcon>
+                {actionFeedback.message}
+              </Status>
+            ) : null}
           </div>
+          {sidePanelActions.length > 0 ? (
+            <Accordion
+              key={actionAccordionKey}
+              variant="default"
+              allowMultiple
+              defaultOpenItems={actionAccordionOpenItems}
+              className="runtime-workspace__action-accordion"
+              aria-label="Governed runtime action groups"
+            >
+              {availableSidePanelActions.length > 0 ? (
+                <Accordion.Item id="available-actions">
+                  <Accordion.Header itemId="available-actions" className="runtime-workspace__action-accordion-header">
+                    <span>Available Actions</span>
+                    <Badge variant="success" size="sm" pill outline>
+                      {availableSidePanelActions.length} available
+                    </Badge>
+                  </Accordion.Header>
+                  <Accordion.Content itemId="available-actions" className="runtime-workspace__action-accordion-content">
+                    <HorizontalScroll
+                      className="runtime-workspace__action-scroll"
+                      ariaLabel="Available governed runtime actions scroll region"
+                      gap="sm"
+                    >
+                      <div
+                        className="runtime-workspace__action-list runtime-workspace__action-list--bar"
+                        role="group"
+                        aria-label="Governed runtime actions"
+                      >
+                        {availableSidePanelActions.map((action) => (
+                          <RuntimeActionButton
+                            key={action.actionKey}
+                            action={action}
+                            disabled={Boolean(executingActionKey)}
+                            executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
+                            onExecute={handleExecuteAction}
+                            showDisabledReason={false}
+                          />
+                        ))}
+                      </div>
+                    </HorizontalScroll>
+                  </Accordion.Content>
+                </Accordion.Item>
+              ) : null}
+              {blockedSidePanelActions.length > 0 ? (
+                <Accordion.Item id="blocked-actions">
+                  <Accordion.Header itemId="blocked-actions" className="runtime-workspace__action-accordion-header">
+                    <span>Blocked Actions</span>
+                    <Badge variant="neutral" size="sm" pill outline>
+                      {blockedSidePanelActions.length} blocked
+                    </Badge>
+                  </Accordion.Header>
+                  <Accordion.Content itemId="blocked-actions" className="runtime-workspace__action-accordion-content">
+                    <HorizontalScroll
+                      className="runtime-workspace__action-scroll runtime-workspace__action-scroll--blocked"
+                      ariaLabel="Blocked governed runtime actions scroll region"
+                      gap="sm"
+                    >
+                      <div
+                        className="runtime-workspace__action-list runtime-workspace__action-list--bar runtime-workspace__action-list--blocked"
+                        role="group"
+                        aria-label="Blocked governed runtime actions"
+                      >
+                        {blockedSidePanelActions.map((action) => (
+                          <RuntimeActionButton
+                            key={action.actionKey}
+                            action={action}
+                            disabled={Boolean(executingActionKey)}
+                            executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
+                            onExecute={handleExecuteAction}
+                            showDisabledReason
+                          />
+                        ))}
+                      </div>
+                    </HorizontalScroll>
+                  </Accordion.Content>
+                </Accordion.Item>
+              ) : null}
+            </Accordion>
+          ) : (
+            <Status variant="neutral" size="sm" showIcon>
+              No actions available
+            </Status>
+          )}
+        </Card.Body>
+      </Card>
+
+      <div className="runtime-workspace__layout">
+        <aside className="runtime-workspace__aside runtime-workspace__aside--left" aria-label="Execution intelligence side panel">
+          <Card variant="default" className="runtime-workspace__panel">
+            <Card.Body className="runtime-workspace__panel-body">
+              <div className="runtime-workspace__panel-heading">
+                <MdOutlineWarningAmber aria-hidden="true" />
+                <h2>Signals</h2>
+              </div>
+              {signals.length > 0 ? (
+                <ul className="runtime-workspace__plain-list">
+                  {signals.map((signal) => (
+                    <li key={signal.id ?? signal.signalId}>{signal.summary ?? signal.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <Status variant="neutral" size="sm" showIcon>No runtime signals</Status>
+              )}
+            </Card.Body>
+          </Card>
+
+          <Card variant="default" className="runtime-workspace__panel">
+            <Card.Body className="runtime-workspace__panel-body">
+              <div className="runtime-workspace__panel-heading">
+                <MdOutlineHistory aria-hidden="true" />
+                <h2>Activity</h2>
+              </div>
+              {activity.length > 0 ? (
+                <ul className="runtime-workspace__plain-list">
+                  {activity.map((event) => (
+                    <li key={event.eventId ?? event.id}>{event.summary}</li>
+                  ))}
+                </ul>
+              ) : (
+                <Status variant="neutral" size="sm" showIcon>No runtime activity</Status>
+              )}
+            </Card.Body>
+          </Card>
+
+          {configWarnings.length > 0 ? (
+            <Card variant="default" className="runtime-workspace__panel">
+              <Card.Body className="runtime-workspace__panel-body">
+                <div className="runtime-workspace__panel-heading">
+                  <MdInfoOutline aria-hidden="true" />
+                  <h2>Renderer Warnings</h2>
+                </div>
+                <ul className="runtime-workspace__plain-list">
+                  {configWarnings.map((warning, index) => (
+                    <li key={`${warning.code}-${index}`}>
+                      <div className="runtime-workspace__warning-heading">
+                        <Badge
+                          variant={getWarningSeverityVariant(warning.severity)}
+                          size="sm"
+                          pill
+                          outline
+                        >
+                          {normalizeWarningSeverity(warning.severity)}
+                        </Badge>
+                        <strong>{warning.code}</strong>
+                      </div>
+                      <span>{warning.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card.Body>
+            </Card>
+          ) : null}
+        </aside>
+
+        <main className="runtime-workspace__main" aria-label="Guided execution sections">
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
             <DiscoverySection
               key={`discovery-${JSON.stringify(discovery?.inputValues || {})}`}
@@ -1952,7 +2121,7 @@ function RuntimeWorkspace() {
           )}
         </main>
 
-        <aside className="runtime-workspace__aside" aria-label="Execution intelligence side panel">
+        <aside className="runtime-workspace__aside runtime-workspace__aside--right" aria-label="Guided sections side panel">
           <Card variant="default" className="runtime-workspace__panel">
             <Card.Body className="runtime-workspace__panel-body">
               <div className="runtime-workspace__panel-heading">
@@ -1977,6 +2146,9 @@ function RuntimeWorkspace() {
               </div>
               <Status variant={discoveryState === 'Evidence Ready' ? 'success' : 'neutral'} size="sm" showIcon>
                 {discoveryState}
+              </Status>
+              <Status variant={getTokenStatusVariant(sectionTruthState)} size="sm" showIcon>
+                {formatRuntimeTokenLabel(sectionTruthState)}
               </Status>
             </Card.Body>
           </Card>
@@ -2044,99 +2216,6 @@ function RuntimeWorkspace() {
             </Card>
           ) : null}
 
-          <Card variant="default" className="runtime-workspace__panel">
-            <Card.Body className="runtime-workspace__panel-body">
-              <div className="runtime-workspace__panel-heading">
-                <MdBolt aria-hidden="true" />
-                <h2>Actions</h2>
-              </div>
-              {actionFeedback ? (
-                <Status variant={actionFeedback.variant} size="sm" showIcon>
-                  {actionFeedback.message}
-                </Status>
-              ) : null}
-              {sidePanelActions.length > 0 ? (
-                <div className="runtime-workspace__action-list">
-                  {sidePanelActions.map((action) => (
-                    <RuntimeActionButton
-                      key={action.actionKey}
-                      action={action}
-                      disabled={Boolean(executingActionKey)}
-                      executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
-                      onExecute={handleExecuteAction}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Status variant="neutral" size="sm" showIcon>No actions available</Status>
-              )}
-            </Card.Body>
-          </Card>
-
-          <Card variant="default" className="runtime-workspace__panel">
-            <Card.Body className="runtime-workspace__panel-body">
-              <div className="runtime-workspace__panel-heading">
-                <MdOutlineWarningAmber aria-hidden="true" />
-                <h2>Signals</h2>
-              </div>
-              {signals.length > 0 ? (
-                <ul className="runtime-workspace__plain-list">
-                  {signals.map((signal) => (
-                    <li key={signal.id ?? signal.signalId}>{signal.summary ?? signal.message}</li>
-                  ))}
-                </ul>
-              ) : (
-                <Status variant="neutral" size="sm" showIcon>No runtime signals</Status>
-              )}
-            </Card.Body>
-          </Card>
-
-          <Card variant="default" className="runtime-workspace__panel">
-            <Card.Body className="runtime-workspace__panel-body">
-              <div className="runtime-workspace__panel-heading">
-                <MdOutlineHistory aria-hidden="true" />
-                <h2>Activity</h2>
-              </div>
-              {activity.length > 0 ? (
-                <ul className="runtime-workspace__plain-list">
-                  {activity.map((event) => (
-                    <li key={event.eventId ?? event.id}>{event.summary}</li>
-                  ))}
-                </ul>
-              ) : (
-                <Status variant="neutral" size="sm" showIcon>No runtime activity</Status>
-              )}
-            </Card.Body>
-          </Card>
-
-          {configWarnings.length > 0 ? (
-            <Card variant="default" className="runtime-workspace__panel">
-              <Card.Body className="runtime-workspace__panel-body">
-                <div className="runtime-workspace__panel-heading">
-                  <MdInfoOutline aria-hidden="true" />
-                  <h2>Workspace Warnings</h2>
-                </div>
-                <ul className="runtime-workspace__plain-list">
-                  {configWarnings.map((warning, index) => (
-                    <li key={`${warning.code}-${index}`}>
-                      <div className="runtime-workspace__warning-heading">
-                        <Badge
-                          variant={getWarningSeverityVariant(warning.severity)}
-                          size="sm"
-                          pill
-                          outline
-                        >
-                          {normalizeWarningSeverity(warning.severity)}
-                        </Badge>
-                        <strong>{warning.code}</strong>
-                      </div>
-                      <span>{warning.message}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Card.Body>
-            </Card>
-          ) : null}
         </aside>
       </div>
     </section>

@@ -147,6 +147,7 @@ Accordion.Content = function AccordionContent({ itemId, children, className = ''
       className={contentClasses}
       role="region"
       aria-hidden={!isOpen}
+      hidden={!isOpen}
       {...props}
     >
       <div className="accordion__content-inner">{children}</div>

@@ -387,6 +387,7 @@ describe('Accordion Component', () => {
       const content = container.querySelector('.accordion__content')
       expect(content).toHaveAttribute('role', 'region')
       expect(content).toHaveAttribute('aria-hidden', 'true')
+      expect(content).toHaveAttribute('hidden')
       expect(content).toHaveAttribute('id', 'accordion-content-item-1')
     })
 
@@ -408,6 +409,35 @@ describe('Accordion Component', () => {
 
       await user.click(header)
       expect(content).toHaveAttribute('aria-hidden', 'false')
+      expect(content).not.toHaveAttribute('hidden')
+    })
+
+    it('should remove closed content descendants from the accessibility tree', async () => {
+      const user = userEvent.setup()
+      const { container } = render(
+        <Accordion>
+          <Accordion.Item id="item-1">
+            <Accordion.Header itemId="item-1">Section 1</Accordion.Header>
+            <Accordion.Content itemId="item-1">
+              <button type="button">Hidden Action</button>
+            </Accordion.Content>
+          </Accordion.Item>
+        </Accordion>
+      )
+
+      const header = screen.getByRole('button', { name: 'Section 1' })
+      const content = container.querySelector('.accordion__content')
+
+      expect(content).toHaveAttribute('hidden')
+      expect(screen.queryByRole('button', { name: 'Hidden Action' })).not.toBeInTheDocument()
+
+      await user.click(header)
+      expect(content).not.toHaveAttribute('hidden')
+      expect(screen.getByRole('button', { name: 'Hidden Action' })).toBeInTheDocument()
+
+      await user.click(header)
+      expect(content).toHaveAttribute('hidden')
+      expect(screen.queryByRole('button', { name: 'Hidden Action' })).not.toBeInTheDocument()
     })
 
     it('should have aria-hidden on icon', () => {

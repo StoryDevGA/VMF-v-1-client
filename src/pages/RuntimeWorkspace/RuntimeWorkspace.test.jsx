@@ -164,16 +164,20 @@ const rendererPayload = {
   },
 }
 
-function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001') {
-  return render(
+function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001') {
+  return (
     <ToasterProvider>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/app/runtime/:runtimeInstanceId" element={<RuntimeWorkspace />} />
         </Routes>
       </MemoryRouter>
-    </ToasterProvider>,
+    </ToasterProvider>
   )
+}
+
+function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001') {
+  return render(runtimeWorkspaceTree(initialEntry))
 }
 
 async function openGuidedSection(name = /customer problem/i) {
@@ -243,13 +247,12 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Unknown')).toBeInTheDocument()
     const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     const summaryItems = within(summary).getAllByRole('listitem')
-    expect(summaryItems).toHaveLength(9)
+    expect(summaryItems).toHaveLength(8)
     expect(within(summary).getByText('Runtime Status')).toBeInTheDocument()
     expect(within(summary).getByText('Execution')).toBeInTheDocument()
     expect(within(summary).getByText('Lifecycle Stage')).toBeInTheDocument()
     expect(within(summary).getByText('Validation')).toBeInTheDocument()
     expect(within(summary).getByText('Readiness')).toBeInTheDocument()
-    expect(within(summary).getByText('Section Truth')).toBeInTheDocument()
     expect(within(summary).getByText('Publish')).toBeInTheDocument()
     expect(within(summary).getByText('Lock')).toBeInTheDocument()
     expect(within(summary).queryByRole('status')).not.toBeInTheDocument()
@@ -291,19 +294,25 @@ describe('RuntimeWorkspace', () => {
     expect(truthReadiness).not.toHaveClass('runtime-workspace__section-intelligence-label')
     expect(truthReadiness.closest('.status')).toHaveClass('status--warning')
 
-    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
-    const sectionNav = within(sidePanel).getByRole('navigation', { name: /guided section navigation/i })
+    const intelligencePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
-    expect(within(sidePanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
-    expect(within(sidePanel).getByRole('button', { name: /submit for review/i })).toBeEnabled()
-    expect(within(sidePanel).getByRole('heading', { name: /governed intelligence/i })).toBeInTheDocument()
-    expect(within(sidePanel).getByText(/no generated content is available for comparison/i)).toBeInTheDocument()
-    expect(within(sidePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
-    expect(within(sidePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
-    expect(within(sidePanel).getByRole('heading', { name: /workspace warnings/i })).toBeInTheDocument()
-    expect(within(sidePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
-    expect(within(sidePanel).getByText('WARNING')).toBeInTheDocument()
+    expect(within(guidedPanel).getByRole('status', { name: /section truth blocked/i })).toBeInTheDocument()
+    expect(within(guidedPanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /governed runtime actions scroll region/i })).toBeInTheDocument()
+    const runtimeActions = screen.getByRole('group', { name: /governed runtime actions/i })
+    const submitAction = within(runtimeActions).getByRole('button', { name: /submit for review/i })
+    expect(submitAction).toBeEnabled()
+    expect(submitAction).toHaveClass('btn--outline')
+    expect(within(guidedPanel).getByRole('heading', { name: /governed intelligence/i })).toBeInTheDocument()
+    expect(within(guidedPanel).getByText(/no generated content is available for comparison/i)).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
+    expect(within(intelligencePanel).getByRole('heading', { name: /renderer warnings/i })).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
   })
 
   it('shows raw runtime paths only when renderer diagnostics explicitly allow it', async () => {
@@ -411,8 +420,8 @@ describe('RuntimeWorkspace', () => {
     expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
       'Discovery has not been accepted',
     )
-    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
-    expect(within(sidePanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    expect(within(guidedPanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
   })
 
   it('renders section-scoped discovery evidence in the active section ownership zone', async () => {
@@ -1012,8 +1021,8 @@ describe('RuntimeWorkspace', () => {
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/1')).toBeInTheDocument()
-    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
-    const sectionNav = within(sidePanel).getByRole('navigation', { name: /guided section navigation/i })
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toBeInTheDocument()
   })
 
@@ -1039,8 +1048,8 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
-    expect(within(sidePanel).getByRole('button', { name: /send to review/i })).toBeEnabled()
+    const runtimeActions = screen.getByRole('group', { name: /governed runtime actions/i })
+    expect(within(runtimeActions).getByRole('button', { name: /send to review/i })).toBeEnabled()
   })
 
   it('shows missing publish and lock projections as unknown', () => {
@@ -1566,7 +1575,9 @@ describe('RuntimeWorkspace', () => {
     })
     expect(refetchRenderer).toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'Discovery' })).toBeInTheDocument()
-    expect(screen.getByText('Discovery active')).toBeInTheDocument()
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(within(sectionNav).getByRole('button', { name: /0 discovery/i })).toHaveAttribute('aria-current', 'step')
   })
 
   it('accepts natural text for JSON-backed object sections by wrapping it as summary context', async () => {
@@ -1910,7 +1921,7 @@ describe('RuntimeWorkspace', () => {
     expect(await screen.findByText(/runtime action completed/i)).toBeInTheDocument()
   })
 
-  it('does not execute disabled runtime actions', async () => {
+  it('renders disabled runtime actions with server-projected blocked reasons', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -1933,14 +1944,101 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const actionButton = screen.getByRole('button', { name: /submit for review/i })
-    expect(actionButton).toBeDisabled()
-    expect(screen.getByText('Mark this runtime ready first.')).toBeInTheDocument()
-    expect(actionButton).toHaveAccessibleDescription('Mark this runtime ready first.')
-    await user.click(actionButton)
-
+    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
+    const blockedButton = within(blockedActions).getByRole('button', { name: /submit for review/i })
+    expect(blockedButton).toBeDisabled()
+    expect(blockedButton).toHaveClass('btn--outline')
+    expect(blockedButton).toHaveAccessibleDescription('Mark this runtime ready first.')
+    expect(within(blockedActions).getByText('Mark this runtime ready first.')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /blocked governed runtime actions scroll region/i })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /available governed runtime actions scroll region/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
+    await user.click(blockedButton)
     expect(executeRuntimeAction).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
+  it('keeps available and blocked runtime actions in separate governed accordion groups', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            rendererPayload.actions[0],
+            {
+              actionKey: 'LOCK_RUNTIME',
+              governedAction: 'LOCK_RUNTIME',
+              buttonLabel: 'Lock Runtime',
+              enabled: false,
+              disabledReason: 'Runtime must be published before it can be locked.',
+              requiresConfirmation: false,
+              policyKey: 'lock-runtime-policy',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('region', { name: /available governed runtime actions scroll region/i })).toBeInTheDocument()
+    const availableActions = screen.getByRole('group', { name: /^governed runtime actions$/i })
+    expect(within(availableActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
+    expect(within(availableActions).queryByRole('button', { name: /lock runtime/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /available actions/i })).toHaveAttribute('aria-expanded', 'true')
+    const blockedHeader = screen.getByRole('button', { name: /blocked actions/i })
+    expect(blockedHeader).toHaveAttribute('aria-expanded', 'false')
+    await user.click(blockedHeader)
+    expect(screen.getByRole('region', { name: /blocked governed runtime actions scroll region/i })).toBeInTheDocument()
+    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
+    const blockedButton = within(blockedActions).getByRole('button', { name: /lock runtime/i })
+    expect(blockedButton).toBeDisabled()
+    expect(blockedButton).toHaveAccessibleDescription('Runtime must be published before it can be locked.')
+    expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
+  })
+
+  it('refreshes the action accordion default-open state when renderer action groups change', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              ...rendererPayload.actions[0],
+              enabled: false,
+              disabledReason: 'Mark this runtime ready first.',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    const view = renderRuntimeWorkspace()
+
+    expect(screen.getByRole('button', { name: /blocked actions/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByRole('button', { name: /available actions/i })).not.toBeInTheDocument()
+
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: rendererPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    view.rerender(runtimeWorkspaceTree())
+
+    expect(screen.getByRole('button', { name: /available actions/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('region', { name: /available governed runtime actions scroll region/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /blocked actions/i })).not.toBeInTheDocument()
   })
 
   it('uses a default confirmation message when required confirmation has no seeded message', async () => {
@@ -2219,9 +2317,13 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
-    const runValidationButton = screen.getByRole('button', { name: /run validation/i })
-    expect(runValidationButton).toBeDisabled()
-    expect(runValidationButton).toHaveAccessibleDescription('Runtime is locked and cannot be mutated or actioned.')
+    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
+    const blockedButton = within(blockedActions).getByRole('button', { name: /run validation/i })
+    expect(blockedButton).toBeDisabled()
+    expect(blockedButton).toHaveAccessibleDescription('Runtime is locked and cannot be mutated or actioned.')
+    expect(within(blockedActions).getByText('Runtime is locked and cannot be mutated or actioned.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /blocked actions/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
   })
 
   it('executes section generation actions with the section target and keeps them out of the side panel', async () => {
