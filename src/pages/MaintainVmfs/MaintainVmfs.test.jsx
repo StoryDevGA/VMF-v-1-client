@@ -264,7 +264,7 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('table', { name: /value narrative work register/i }))
       .toBeInTheDocument()
     expect(screen.getByText(/no value narratives found/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeInTheDocument()
   })
 
   it('lists Value Narrative runtime instances from the runtime instance API', async () => {
@@ -316,13 +316,27 @@ describe('MaintainVmfs', () => {
     const runtimeActions = within(table).getByRole('combobox', {
       name: /runtime actions for northwind value narrative/i,
     })
-    expect(within(runtimeActions).getByRole('option', { name: /^open$/i })).toBeInTheDocument()
+    expect(within(runtimeActions).getByRole('option', { name: /^continue$/i })).toBeInTheDocument()
     expect(within(runtimeActions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
     expect(within(runtimeActions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
+    const moreInformation = within(table).getByRole('button', {
+      name: /show more information for northwind value narrative/i,
+    })
+    expect(moreInformation).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByLabelText(/value narrative register counts/i))
       .toHaveTextContent(/1 runtime object\s*\|\s*0 VMF bridge records/i)
 
-    await user.selectOptions(runtimeActions, 'Open')
+    await user.click(moreInformation)
+
+    expect(moreInformation).toHaveAttribute('aria-expanded', 'true')
+    expect(within(table).queryByRole('tablist')).not.toBeInTheDocument()
+    expect(within(table).getAllByText('Overview').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Runtime').length).toBeGreaterThan(0)
+    expect(within(table).queryByText(/no dependency records returned/i)).not.toBeInTheDocument()
+    expect(within(table).queryByText(/no notes returned/i)).not.toBeInTheDocument()
+    expect(within(table).queryByText(/no change-log events returned/i)).not.toBeInTheDocument()
+
+    await user.selectOptions(runtimeActions, 'Continue')
 
     expect(screen.getByText('Runtime Route')).toBeInTheDocument()
   })
@@ -467,7 +481,7 @@ describe('MaintainVmfs', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
@@ -531,7 +545,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
@@ -590,7 +604,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
     await user.selectOptions(
       within(dialog).getByRole('combobox', { name: /framework package/i }),
@@ -648,7 +662,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
     await user.type(
@@ -691,7 +705,7 @@ describe('MaintainVmfs', () => {
     })
 
     expect(capacityGuidance).toHaveTextContent(/0 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
   })
 
   it('shows compact Value Narrative usage guidance when runtime capacity remains', () => {
@@ -722,7 +736,7 @@ describe('MaintainVmfs', () => {
     const capacityGuidance = screen.getByRole('status', { name: /^value narrative capacity/i })
 
     expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeEnabled()
   })
 
   it('uses runtime instance capacity instead of stale VMF catalogue capacity', () => {
@@ -772,7 +786,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity reached/i }))
       .toHaveTextContent(/0 of 3 left/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
   })
 
   it('fails closed when runtime instance capacity cannot be loaded', () => {
@@ -807,7 +821,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
       .toHaveTextContent(/capacity unavailable/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
   })
 
   it('fails closed when runtime instance metadata omits runtime capacity', () => {
@@ -842,7 +856,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
       .toHaveTextContent(/capacity unavailable/i)
-    expect(screen.getByRole('button', { name: /^create value narrative$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
   })
 
   it('blocks create submission when runtime capacity becomes unavailable after the dialog opens', async () => {
@@ -850,7 +864,7 @@ describe('MaintainVmfs', () => {
 
     const view = renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     runtimeInstanceQueryResponse = {
@@ -912,11 +926,9 @@ describe('MaintainVmfs', () => {
       .toHaveTextContent(/2 of 4 left/i)
     expect(screen.getByRole('status', { name: /eligible framework package required/i }))
       .toHaveTextContent(/no eligible package/i)
-    expect(actionBar).toHaveTextContent(
-      /No eligible package\s*Back\s*Create Value Narrative\s*2 of 4 left/i,
-    )
+    expect(actionBar).toHaveTextContent(/No eligible package\s*Back\s*2 of 4 left/i)
 
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
     expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
@@ -932,7 +944,7 @@ describe('MaintainVmfs', () => {
     expect(within(dialog).getByRole('button', { name: /^create$/i })).toBeDisabled()
   })
 
-  it('renders Back, capacity, and Create Value Narrative in the compact workspace action bar', () => {
+  it('keeps create as a single primary header action and leaves the compact workspace action bar for navigation', () => {
     runtimeInstanceQueryResponse = {
       data: {
         data: [],
@@ -958,11 +970,13 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     const actionBar = screen.getByRole('group', { name: /value narrative workspace actions/i })
+    const quickCreate = screen.getByRole('group', { name: /value narrative quick create/i })
 
     expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
     expect(within(actionBar).getByRole('status', { name: /^value narrative capacity/i })).toHaveTextContent('2 of 4 left')
-    expect(within(actionBar).getByRole('button', { name: /^create value narrative$/i })).toBeEnabled()
-    expect(actionBar).toHaveTextContent(/BackCreate Value Narrative.*2 of 4 left/)
+    expect(within(actionBar).queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
+    expect(within(quickCreate).getByRole('button', { name: /^create new instance$/i })).toBeEnabled()
+    expect(actionBar).toHaveTextContent(/Back.*2 of 4 left/)
   })
 
   it('resets workspace filters and dialogs when the tenant context changes', async () => {
@@ -985,7 +999,7 @@ describe('MaintainVmfs', () => {
       screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
       'ARCHIVED',
     )
-    await user.click(screen.getByRole('button', { name: /^create value narrative$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')

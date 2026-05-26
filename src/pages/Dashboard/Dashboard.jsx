@@ -8,7 +8,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   MdAddCircleOutline,
   MdFilterList,
-  MdOutlineAssessment,
   MdOutlineDashboardCustomize,
   MdOutlineInsights,
   MdOutlinePeopleAlt,
@@ -31,12 +30,12 @@ import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi
 import { normalizeError } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
-  getExecutionStateVariant,
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
   getRuntimeInstanceRouteId,
   getRuntimeLifecycleStatus,
   getRuntimeReadinessLabel,
+  getRuntimeReadinessVariant,
   getRuntimeStatusVariant,
   getRuntimeWorkspaceRoute,
 } from '../../utils/runtimeWorkspace.js'
@@ -46,9 +45,6 @@ import './Dashboard.css'
 const WORK_TYPE_OPTIONS = [
   { value: 'ALL', label: 'All Work' },
   { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
-  { value: 'DEAL_ANALYSIS', label: 'Deal Analysis' },
-  { value: 'BUSINESS_CASE', label: 'Business Cases' },
-  { value: 'ACCOUNT_PLAN', label: 'Account Plans' },
 ]
 
 const EMPTY_RUNTIME_ROWS = Object.freeze([])
@@ -511,9 +507,6 @@ function Dashboard() {
   )
 
   const hasVmfFeature = featureEntitlements.includes('VMF')
-  const hasDealFeature =
-    featureEntitlements.includes('DEALS')
-    || featureEntitlements.includes('DEAL_ANALYSIS')
 
   const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
 
@@ -660,8 +653,6 @@ function Dashboard() {
     return false
   }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
   const canCreateValueNarrative = Boolean(contextReady && hasVmfFeature && canCreateVmfRuntime)
-  // Deal Analysis creation remains backend-blocked until a locked VMF runtime anchor contract exists.
-  const canCreateDealAnalysis = false
   const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
   const runtimeInstanceRows = !runtimeInstanceAppError && Array.isArray(runtimeInstanceListResponse?.data)
     ? runtimeInstanceListResponse.data
@@ -797,37 +788,7 @@ function Dashboard() {
       title: 'Create Value Narrative',
       to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
     },
-    {
-      description: 'Create Deal Analysis anchored to a locked VMF runtime instance.',
-      disabled: !canCreateDealAnalysis,
-      icon: MdOutlineAssessment,
-      label: canCreateDealAnalysis ? 'Create' : 'Unavailable',
-      reason: canCreateDealAnalysis
-        ? 'Deal Analysis will inherit the current VMF runtime anchor.'
-        : !hasVmfFeature
-          ? 'Deal Analysis unavailable - VMF entitlement is required before a locked runtime anchor can be created.'
-          : hasDealFeature && hasSelectedSalesExecutionRole
-          ? 'Deal Analysis unavailable - locked VMF runtime anchor creation is not available yet.'
-          : 'Deal Analysis unavailable - Deals entitlement and Sales runtime role are required.',
-      title: 'Create Deal Analysis',
-      to: canCreateDealAnalysis ? '/app/workspaces/vmf' : '/app/dashboard',
-    },
-    {
-      description: 'Prepare governed outputs from completed runtime work.',
-      disabled: true,
-      icon: MdOutlineInsights,
-      label: 'Planned',
-      reason: 'Output generation will be enabled after Runtime Execution integration.',
-      title: 'Generate Output',
-      to: '/app/dashboard',
-    },
-  ], [
-    canCreateDealAnalysis,
-    canCreateValueNarrative,
-    hasDealFeature,
-    hasSelectedSalesExecutionRole,
-    hasVmfFeature,
-  ])
+  ], [canCreateValueNarrative])
 
   const alerts = useMemo(() => {
     if (!contextReady) {
@@ -856,22 +817,6 @@ function Dashboard() {
         meta: canOpenVmfWorkspace ? 'Current VMF runtime workspace' : 'VMF workspace unavailable',
         title: 'Value Narrative Workspace',
         to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
-      },
-      {
-        badge: { label: 'Planned', variant: 'neutral' },
-        disabled: true,
-        icon: MdOutlineAssessment,
-        meta: 'Output workspace is planned',
-        title: 'Outputs',
-        to: '/app/dashboard',
-      },
-      {
-        badge: { label: 'Planned', variant: 'neutral' },
-        disabled: true,
-        icon: MdOutlineInsights,
-        meta: 'Insights workspace is planned',
-        title: 'Insights',
-        to: '/app/dashboard',
       },
     ]
 
@@ -919,61 +864,68 @@ function Dashboard() {
   const tableColumns = useMemo(() => [
     {
       key: 'runtimeDisplayId',
-      label: 'Runtime ID',
+      label: 'Instance',
+      width: '20%',
       render: (value, row) => (
         <div className="dashboard__work-cell">
           <span className="dashboard__work-heading">
-            <span className="dashboard__work-title">{value}</span>
+            <span className="dashboard__work-title">{row.work}</span>
           </span>
-          <span className="dashboard__work-id">{row.work}</span>
+          <span className="dashboard__work-id">{value}</span>
         </div>
       ),
     },
     {
       key: 'workTypeLabel',
       label: 'Work Type',
+      width: '14%',
       render: (value) => (
         <Badge variant="neutral" size="sm" pill outline>{value}</Badge>
       ),
     },
     {
-      key: 'tenant',
-      label: 'Tenant Scope',
+      key: 'packageSummary',
+      label: 'Package',
+      width: '18%',
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
-          <span>{value}</span>
-          <span>{row.packageSummary}</span>
+          <span>{value.replace(/^Package:\s*/, '')}</span>
+          <span>{row.tenant}</span>
         </div>
       ),
     },
     {
       key: 'status',
-      label: 'Runtime Status',
+      label: 'State',
+      width: '12%',
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
           <Status variant={getRuntimeStatusVariant(value)} size="sm" showIcon>
             {formatRuntimeTokenLabel(value)}
           </Status>
-          <span>{row.readiness}</span>
+          <span>{formatRuntimeTokenLabel(row.executionState)}</span>
         </div>
       ),
     },
     {
-      key: 'executionState',
-      label: 'Execution State',
+      key: 'readiness',
+      label: 'Health',
+      width: '16%',
       render: (value) => (
-        <Status variant={getExecutionStateVariant(value)} size="sm">
-          {formatRuntimeTokenLabel(value)}
+        <Status variant={getRuntimeReadinessVariant(value)} size="sm">
+          {value}
         </Status>
       ),
     },
     {
       key: 'lastActivity',
       label: 'Updated',
+      width: '10%',
     },
     {
       key: 'nextAction',
       label: 'Next Action',
+      width: '10%',
       render: (value, row) => (
         <div className="dashboard__next-cell">
           <Link to={row.to ?? '/app/workspaces/vmf'} variant="primary" underline="none">
@@ -986,25 +938,17 @@ function Dashboard() {
 
   return (
     <section className="dashboard container" aria-label="Customer runtime home">
-      <Card variant="default" className="dashboard__hero">
-        <Card.Body className="dashboard__hero-body">
-          <div className="dashboard__hero-copy">
-            <div className="dashboard__hero-heading">
-              <Badge
-                variant="info"
-                size="sm"
-                pill
-                outline
-                icon={<MdOutlineDashboardCustomize aria-hidden="true" />}
-              >
-                Runtime Home
-              </Badge>
-              <h1 className="dashboard__hero-title">Customer Workspace</h1>
-              <p className="dashboard__hero-description">
-                Continue governed runtime work inside the selected customer, tenant, and role context.
-              </p>
-              <p className="dashboard__scope-feedback">{tenantScopeSummary}</p>
-            </div>
+      <header className="dashboard__page-header">
+        <h1 className="dashboard__hero-title">Customer Workspace</h1>
+        <p className="dashboard__hero-description">
+          Your operating hub for governed runtime work and customer value intelligence.
+        </p>
+      </header>
+
+      <Card variant="default" className="dashboard__context-card">
+        <Card.Body className="dashboard__context-body">
+          <div className="dashboard__scope-feedback" role="status">
+            {tenantScopeSummary}
           </div>
 
           <dl className="dashboard__hero-metrics" aria-label="Runtime context summary">
@@ -1026,6 +970,9 @@ function Dashboard() {
                 <span className="dashboard__context-value">{tenantScopeValue}</span>
               )}
             </DashboardHeroMetric>
+            <DashboardHeroMetric label="Role">
+              <span className="dashboard__context-value">{primaryRole}</span>
+            </DashboardHeroMetric>
             <DashboardHeroMetric label="Work Type" control>
               <CustomSelect
                 value={workTypeFilter}
@@ -1036,9 +983,6 @@ function Dashboard() {
                 ariaLabel="Work Type"
                 className="dashboard__context-selector"
               />
-            </DashboardHeroMetric>
-            <DashboardHeroMetric label="Role">
-              <span className="dashboard__context-value">{primaryRole}</span>
             </DashboardHeroMetric>
           </dl>
         </Card.Body>
@@ -1053,7 +997,7 @@ function Dashboard() {
           panelAs="nav"
           panelLabel="Runtime action queue panel"
           status={{ label: contextReady ? 'Context ready' : 'Tenant required', variant: contextReady ? 'success' : 'warning' }}
-          title="What should I do now?"
+          title="Continue Work"
         >
           <ul className={runtimeActionGridClassName} aria-label="Runtime action queue">
             {runtimeActions.length > 0 ? (
@@ -1081,7 +1025,7 @@ function Dashboard() {
           modifier="work"
           panelLabel="Work in progress runtime instances panel"
           status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatRuntimeTokenLabel(workTypeFilter), variant: 'info' }}
-          title="Work In Progress"
+          title="Active Work"
         >
           <HorizontalScroll
             className="dashboard__table-wrap"
@@ -1101,43 +1045,13 @@ function Dashboard() {
         </DashboardSectionCard>
 
         <DashboardSectionCard
-          badge={{ label: `${runtimeActivityItems.length} events`, variant: 'neutral' }}
-          description="Runtime activity will show execution, review, validation, and state-transition events when the Runtime Execution Engine emits them."
-          icon={MdOutlineInsights}
-          modifier="activity"
-          panelLabel="Recent runtime activity panel"
-          status={{ label: 'No activity yet', variant: 'neutral' }}
-          title="Recent Runtime Activity"
-        >
-          <ul className="dashboard__activity-list" aria-label="Recent runtime activity">
-            {runtimeActivityItems.length > 0 ? (
-              runtimeActivityItems.map((activity) => (
-                <li key={activity.id} className="dashboard__activity-item">
-                  <Status variant={activity.variant} size="sm" showIcon>
-                    {activity.label}
-                  </Status>
-                  <p>{activity.description}</p>
-                </li>
-              ))
-            ) : (
-              <li className="dashboard__empty-item">
-                <Status variant="info" size="sm" showIcon>
-                  No runtime activity yet
-                </Status>
-                <p>Activity will appear here when runtime instances emit execution, review, or validation events.</p>
-              </li>
-            )}
-          </ul>
-        </DashboardSectionCard>
-
-        <DashboardSectionCard
           badge={{ label: `${createWorkItems.length} options`, variant: 'info' }}
           description="Create options are driven by active deployments, tenant entitlement, role, and runtime anchors."
           icon={MdAddCircleOutline}
           modifier="create"
           panelAs="nav"
           panelLabel="Create new work panel"
-          status={{ label: canCreateValueNarrative || canCreateDealAnalysis ? 'Available now' : 'Limited', variant: canCreateValueNarrative || canCreateDealAnalysis ? 'success' : 'warning' }}
+          status={{ label: canCreateValueNarrative ? 'Available now' : 'Limited', variant: canCreateValueNarrative ? 'success' : 'warning' }}
           title="Create New Work"
         >
           <ul className="dashboard__launch-grid dashboard__launch-grid--create" aria-label="Create new work">
@@ -1154,7 +1068,7 @@ function Dashboard() {
           modifier="signals"
           panelLabel="Runtime alerts and navigation"
           status={{ label: 'Current', variant: 'success' }}
-          title="Alerts & Recommendations"
+          title="Signals & Recommendations"
         >
           <div className="dashboard__signals-grid">
             <ul className="dashboard__alert-list" aria-label="Runtime alerts">
@@ -1184,6 +1098,36 @@ function Dashboard() {
               </ul>
             </nav>
           </div>
+        </DashboardSectionCard>
+
+        <DashboardSectionCard
+          badge={{ label: `${runtimeActivityItems.length} events`, variant: 'neutral' }}
+          description="Latest runtime events across your workspace."
+          icon={MdOutlineInsights}
+          modifier="activity"
+          panelLabel="Recent runtime activity panel"
+          status={{ label: 'No activity yet', variant: 'neutral' }}
+          title="Recent Activity"
+        >
+          <ul className="dashboard__activity-list" aria-label="Recent runtime activity">
+            {runtimeActivityItems.length > 0 ? (
+              runtimeActivityItems.map((activity) => (
+                <li key={activity.id} className="dashboard__activity-item">
+                  <Status variant={activity.variant} size="sm" showIcon>
+                    {activity.label}
+                  </Status>
+                  <p>{activity.description}</p>
+                </li>
+              ))
+            ) : (
+              <li className="dashboard__empty-item">
+                <Status variant="info" size="sm" showIcon>
+                  No runtime activity yet
+                </Status>
+                <p>Activity will appear here when runtime instances emit execution, review, or validation events.</p>
+              </li>
+            )}
+          </ul>
         </DashboardSectionCard>
       </div>
     </section>

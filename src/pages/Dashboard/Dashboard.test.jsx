@@ -148,12 +148,12 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.getByRole('heading', { name: /^customer workspace$/i })).toBeInTheDocument()
-    expect(screen.getByText(/runtime home/i)).toBeInTheDocument()
+    expect(screen.getByText(/operating hub for governed runtime work/i)).toBeInTheDocument()
     expect(screen.getByText(/viewing runtime workspace for alpha tenant under current customer/i))
       .toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /what should i do now/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /work in progress/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /recent runtime activity/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /continue work/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /active work/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /recent activity/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /create new work/i })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /runtime action queue panel/i })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /create new work panel/i })).toBeInTheDocument()
@@ -169,7 +169,7 @@ describe('Dashboard page', () => {
     expect(screen.getByText(/no runtime activity yet/i)).toBeInTheDocument()
     expect(screen.getByText(/activity will appear here when runtime instances emit execution/i))
       .toBeInTheDocument()
-    expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(4)
+    expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(2)
     const valueNarrativeLink = within(secondaryNavigation).getByRole(
       'link',
       { name: /value narrative workspace/i },
@@ -366,11 +366,43 @@ describe('Dashboard page', () => {
       .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
     expect(screen.getByText('New Package')).toBeInTheDocument()
     expect(screen.getByText('value-narrative-859907')).toBeInTheDocument()
-    expect(screen.getByText('Package: latest-package')).toBeInTheDocument()
+    expect(screen.getByText('latest-package')).toBeInTheDocument()
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
     expect(screen.getByText('1 available')).toBeInTheDocument()
     expect(screen.getByText('1 visible')).toBeInTheDocument()
+  })
+
+  it('styles runtime health from readiness instead of execution state', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-blocked-health',
+            runtimeInstanceKey: 'value-narrative-blocked',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Blocked Runtime Health',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            validationStatus: 'BLOCKED',
+            packageKey: 'blocked-package',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const table = screen.getByRole('table', { name: /work in progress runtime instances/i })
+    const health = within(table).getByText('Execution blocked').closest('.status')
+
+    expect(health).toHaveClass('status--error')
+    expect(health).not.toHaveClass('status--neutral')
   })
 
   it('surfaces runtime instance API failures instead of showing an empty runtime state', () => {
@@ -418,11 +450,11 @@ describe('Dashboard page', () => {
     expect(workTable).toHaveClass('table--hoverable')
     expect(workTable).not.toHaveClass('table--bordered')
     expect(workTable).not.toHaveClass('table--compact')
-    expect(within(workTable).getByRole('columnheader', { name: /runtime id/i })).toBeInTheDocument()
+    expect(within(workTable).getByRole('columnheader', { name: /instance/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /work type/i })).toBeInTheDocument()
-    expect(within(workTable).getByRole('columnheader', { name: /tenant scope/i })).toBeInTheDocument()
-    expect(within(workTable).getByRole('columnheader', { name: /runtime status/i })).toBeInTheDocument()
-    expect(within(workTable).getByRole('columnheader', { name: /execution state/i })).toBeInTheDocument()
+    expect(within(workTable).getByRole('columnheader', { name: /package/i })).toBeInTheDocument()
+    expect(within(workTable).getByRole('columnheader', { name: /state/i })).toBeInTheDocument()
+    expect(within(workTable).getByRole('columnheader', { name: /health/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /updated/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /next action/i })).toBeInTheDocument()
     expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
@@ -430,8 +462,8 @@ describe('Dashboard page', () => {
     expect(screen.getByText(/no runtime instances are available for this tenant yet/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: /work type/i }))
-    expect(screen.getAllByRole('option')).toHaveLength(5)
-    await user.click(screen.getByRole('option', { name: 'Business Cases' }))
+    expect(screen.getAllByRole('option')).toHaveLength(2)
+    await user.click(screen.getByRole('option', { name: 'Value Narratives' }))
 
     expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
     expect(screen.queryByText('Globex Business Case')).not.toBeInTheDocument()
@@ -460,7 +492,7 @@ describe('Dashboard page', () => {
     expect(screen.getByText('0 available')).toBeInTheDocument()
   })
 
-  it('keeps Sales User Deal Analysis creation unavailable until a locked VMF runtime anchor exists', () => {
+  it('keeps unsupported future framework and output placeholders out of the dashboard', () => {
     mockRole({
       accessibleCustomerIds: ['cust-1'],
       memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
@@ -473,39 +505,19 @@ describe('Dashboard page', () => {
 
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('Beta Deal Analysis')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /create deal analysis/i })).toBeInTheDocument()
+    expect(screen.queryByText('Deal Analysis')).not.toBeInTheDocument()
+    expect(screen.queryByText('Business Cases')).not.toBeInTheDocument()
+    expect(screen.queryByText('Account Plans')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /generate output/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /outputs/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /create value narrative/i })).toBeInTheDocument()
-    expect(
-      screen.getByText(/deal analysis unavailable - locked vmf runtime anchor creation is not available yet/i),
-    ).toBeInTheDocument()
     const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
     const createGrid = within(createPanel).getByRole('list', { name: /^create new work$/i })
-    const dealAnalysisLink = within(createGrid).getByRole('link', { name: /create deal analysis/i })
-    const dealTopline = within(dealAnalysisLink).getByText('Unavailable').closest('.dashboard__launch-topline')
 
     expect(createGrid).toHaveClass('dashboard__launch-grid--create')
-    expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(3)
-    expect(dealAnalysisLink).toHaveAttribute('aria-disabled', 'true')
-    expect(dealAnalysisLink).toHaveClass('dashboard__launch-link--create')
-    expect(dealTopline).toBeInTheDocument()
-    expect(dealTopline?.querySelector('.dashboard__launch-icon')).toBeInTheDocument()
-  })
-
-  it('shows the Deal Analysis anchor unavailable reason when VMF is not active for the tenant', () => {
-    mockRole({
-      accessibleCustomerIds: ['cust-1'],
-      memberships: [{ customerId: 'cust-1', roles: ['SALES'] }],
-      tenantMemberships: [{ customerId: 'cust-1', tenantId: 'ten-1', roles: ['SALES'] }],
-      featureEntitlements: ['DEALS'],
-    })
-
-    renderDashboard()
-
-    expect(
-      screen.getAllByText(/deal analysis unavailable - vmf entitlement is required before a locked runtime anchor can be created/i)
-        .length,
-    ).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByRole('link', { name: /unavailable/i }).length).toBeGreaterThanOrEqual(1)
+    expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(1)
   })
 
   it('resolves tenant memberships that use nested customer references', () => {
@@ -526,7 +538,8 @@ describe('Dashboard page', () => {
 
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Nested Customer').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('link', { name: /create deal analysis/i })).toHaveAttribute(
+    expect(screen.queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /create value narrative/i })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
