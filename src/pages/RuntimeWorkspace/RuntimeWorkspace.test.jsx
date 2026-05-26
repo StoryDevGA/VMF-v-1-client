@@ -2158,11 +2158,28 @@ describe('RuntimeWorkspace', () => {
             state: 'PUBLISHED',
             published: true,
             outputEligible: true,
+            snapshot: {
+              snapshotId: 'runtime-truth-publish-value-narrative-001-abcdef1234567890',
+              snapshotHash: 'abcdef1234567890',
+            },
           },
           lock: {
             state: 'LOCKED',
             locked: true,
             lockedAt: '2026-05-22T10:00:00.000Z',
+            outputEligibility: {
+              state: 'OUTPUT_ELIGIBLE',
+              outputEligible: true,
+              canonicalOutputEligible: true,
+              anchorEligible: true,
+            },
+            snapshot: {
+              snapshotId: 'runtime-truth-lock-record-value-narrative-001-fedcba0987654321',
+              snapshotHash: 'fedcba0987654321',
+            },
+            replayAnchor: {
+              replayAnchorId: 'runtime-replay-anchor-1234567890abcdef',
+            },
           },
           sections: rendererPayload.sections.map((section) => ({
             ...section,
@@ -2194,6 +2211,11 @@ describe('RuntimeWorkspace', () => {
     const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
     expect(within(summary).getByText('Published')).toBeInTheDocument()
+    const certifiedTruth = screen.getByRole('list', { name: /certified runtime truth/i })
+    expect(within(certifiedTruth).getByText('Eligible')).toBeInTheDocument()
+    expect(within(certifiedTruth).getByText('runtime-trut...34567890')).toBeInTheDocument()
+    expect(within(certifiedTruth).getByText('runtime-trut...87654321')).toBeInTheDocument()
+    expect(within(certifiedTruth).getByText('runtime-repl...90abcdef')).toBeInTheDocument()
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()

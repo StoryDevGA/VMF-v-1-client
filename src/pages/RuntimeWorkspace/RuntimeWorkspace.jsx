@@ -202,6 +202,13 @@ const getSummaryValueClassName = (variant = 'neutral') => [
   variant !== 'neutral' && `runtime-workspace__summary-value--${variant}`,
 ].filter(Boolean).join(' ')
 
+const formatRuntimeIdentifier = (value) => {
+  const normalized = String(value ?? '').trim()
+  if (!normalized) return '--'
+  if (normalized.length <= 24) return normalized
+  return `${normalized.slice(0, 12)}...${normalized.slice(-8)}`
+}
+
 const normalizeWarningSeverity = (value) => {
   const severity = String(value ?? '').trim().toUpperCase()
   if (severity === 'INFO' || severity === 'WARNING' || severity === 'ERROR' || severity === 'BLOCKER') {
@@ -1439,6 +1446,17 @@ function RuntimeWorkspace() {
   const sectionTruthState = renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
   const publishState = renderer?.publish?.state ?? 'UNKNOWN'
   const lockState = renderer?.lock?.state ?? 'UNKNOWN'
+  const publishSnapshot = renderer?.publish?.snapshot || {}
+  const lockSnapshot = renderer?.lock?.snapshot || {}
+  const replayAnchor = renderer?.lock?.replayAnchor || renderer?.lock?.anchor || {}
+  const outputEligibility = renderer?.lock?.outputEligibility || renderer?.publish?.outputEligibility || {}
+  const hasCertifiedTruthState = Boolean(
+    renderer?.publish?.published
+    || renderer?.lock?.locked
+    || publishSnapshot.snapshotId
+    || lockSnapshot.snapshotId
+    || replayAnchor.replayAnchorId,
+  )
   const summaryItems = [
     {
       key: 'runtime-status',
@@ -1962,6 +1980,35 @@ function RuntimeWorkspace() {
               </Status>
             </Card.Body>
           </Card>
+
+          {hasCertifiedTruthState ? (
+            <Card variant="default" className="runtime-workspace__panel">
+              <Card.Body className="runtime-workspace__panel-body">
+                <div className="runtime-workspace__panel-heading">
+                  <MdCheckCircle aria-hidden="true" />
+                  <h2>Certified Truth</h2>
+                </div>
+                <ul className="runtime-workspace__plain-list" aria-label="Certified runtime truth">
+                  <li>
+                    <strong>Output</strong>
+                    <span>{outputEligibility.outputEligible ? 'Eligible' : 'Not eligible'}</span>
+                  </li>
+                  <li>
+                    <strong>Publish Snapshot</strong>
+                    <span>{formatRuntimeIdentifier(publishSnapshot.snapshotId)}</span>
+                  </li>
+                  <li>
+                    <strong>Lock Snapshot</strong>
+                    <span>{formatRuntimeIdentifier(lockSnapshot.snapshotId)}</span>
+                  </li>
+                  <li>
+                    <strong>Replay Anchor</strong>
+                    <span>{formatRuntimeIdentifier(replayAnchor.replayAnchorId)}</span>
+                  </li>
+                </ul>
+              </Card.Body>
+            </Card>
+          ) : null}
 
           {activeSection && activeSectionIntelligence ? (
             <Card variant="default" className="runtime-workspace__panel">
