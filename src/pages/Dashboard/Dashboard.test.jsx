@@ -166,7 +166,11 @@ describe('Dashboard page', () => {
 
     expect(alertsList.querySelectorAll('.dashboard__alert-item')).toHaveLength(0)
     expect(within(alertsList).getByText(/no runtime signals/i)).toBeInTheDocument()
-    expect(screen.getByText(/no runtime activity yet/i)).toBeInTheDocument()
+    expect(within(alertsList).getByText(/no runtime signals/i).closest('.dashboard__empty-item'))
+      .toHaveClass('dashboard__empty-item--composed')
+    const activityEmptyTitle = screen.getByText(/no runtime activity yet/i)
+    expect(activityEmptyTitle.closest('.dashboard__empty-item'))
+      .toHaveClass('dashboard__empty-item--composed', 'dashboard__empty-item--spacious')
     expect(screen.getByText(/activity will appear here when runtime instances emit execution/i))
       .toBeInTheDocument()
     expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(2)
@@ -191,7 +195,7 @@ describe('Dashboard page', () => {
     expect(within(context).getByText('Tenant')).toBeInTheDocument()
     expect(screen.getByTestId('tenant-switcher')).toBeInTheDocument()
     expect(screen.getByTestId('tenant-switcher')).toHaveTextContent('Select tenant')
-    const workTypeControl = screen.getByRole('combobox', { name: /work type/i })
+    const workTypeControl = within(context).getByRole('combobox', { name: /^work type$/i })
 
     expect(workTypeControl).toHaveTextContent('All Work')
     expect(workTypeControl.closest('.dashboard__hero-metric'))
@@ -356,21 +360,41 @@ describe('Dashboard page', () => {
         customerId: 'cust-1',
         tenantId: 'ten-1',
         runtimeType: 'VALUE_NARRATIVE',
-        pageSize: 5,
+        q: '',
+        status: '',
+        pageSize: 25,
       }),
       { skip: false },
     )
-    expect(screen.getByRole('link', { name: /continue new package/i }))
+    const actionLink = screen.getByRole('link', { name: /continue new package/i })
+    expect(actionLink)
       .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
+    expect(within(actionLink).getByText('Active')).toBeInTheDocument()
+    expect(within(actionLink).getByText('Draft')).toBeInTheDocument()
+    expect(within(actionLink).getByText(/value narrative 2\.3\.569357 - updated 18 may 2026/i))
+      .toBeInTheDocument()
+    expect(within(actionLink).queryByText('Open the Value Narrative workspace to continue.'))
+      .not.toBeInTheDocument()
+    expect(actionLink.closest('.dashboard__launch-item')).not.toHaveClass('dashboard__launch-item--featured')
+    expect(within(actionLink).queryByText(/^Continue$/i)).not.toBeInTheDocument()
+    expect(actionLink.querySelector('.dashboard__launch-arrow')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open 2\.3\.569357/i }))
       .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
-    expect(screen.getByText('New Package')).toBeInTheDocument()
+    const workTable = screen.getByRole('table', { name: /work in progress runtime instances/i })
+    const updatedDate = within(workTable).getByText('2026-05-18')
+    const updatedTimestamp = updatedDate.closest('time')
+    expect(updatedTimestamp).not.toBeNull()
+    expect(updatedTimestamp).toHaveClass('table-date-time')
+    expect(updatedTimestamp).toHaveAttribute('datetime', '2026-05-18T11:13:00.000Z')
+    expect(updatedDate).toHaveClass('table-date-time__date')
+    expect(within(updatedTimestamp).getByText(/^\d{2}:\d{2}$/))
+      .toHaveClass('table-date-time__time')
+    expect(screen.getAllByText('New Package').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('value-narrative-859907')).toBeInTheDocument()
     expect(screen.getByText('latest-package')).toBeInTheDocument()
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
     expect(screen.getByText('1 available')).toBeInTheDocument()
-    expect(screen.getByText('1 visible')).toBeInTheDocument()
   })
 
   it('styles runtime health from readiness instead of execution state', () => {
@@ -397,6 +421,9 @@ describe('Dashboard page', () => {
     })
 
     renderDashboard()
+
+    const actionLink = screen.getByRole('link', { name: /continue blocked runtime health/i })
+    expect(within(actionLink).getByText('Needs Review')).toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: /work in progress runtime instances/i })
     const health = within(table).getByText('Execution blocked').closest('.status')
@@ -454,6 +481,7 @@ describe('Dashboard page', () => {
     expect(within(workTable).getByRole('columnheader', { name: /work type/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /package/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /state/i })).toBeInTheDocument()
+    expect(within(workTable).getByRole('columnheader', { name: /lifecycle/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /health/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /updated/i })).toBeInTheDocument()
     expect(within(workTable).getByRole('columnheader', { name: /next action/i })).toBeInTheDocument()
@@ -461,14 +489,103 @@ describe('Dashboard page', () => {
     expect(screen.queryByText('Globex Business Case')).not.toBeInTheDocument()
     expect(screen.getByText(/no runtime instances are available for this tenant yet/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('combobox', { name: /work type/i }))
-    expect(screen.getAllByRole('option')).toHaveLength(2)
-    await user.click(screen.getByRole('option', { name: 'Value Narratives' }))
+    const activeWorkFilters = screen.getByRole('group', { name: /active work filters/i })
+    expect(within(activeWorkFilters).getByRole('combobox', { name: /^state$/i })).toBeInTheDocument()
+    expect(within(activeWorkFilters).getByRole('combobox', { name: /^work type$/i })).toBeInTheDocument()
+    expect(within(activeWorkFilters).getByRole('combobox', { name: /^health$/i })).toBeInTheDocument()
+    expect(within(activeWorkFilters).getByRole('textbox', { name: /^search$/i })).toBeInTheDocument()
+
+    await user.selectOptions(
+      within(activeWorkFilters).getByRole('combobox', { name: /^work type$/i }),
+      'VALUE_NARRATIVE',
+    )
 
     expect(screen.queryByText('Acme Value Narrative')).not.toBeInTheDocument()
     expect(screen.queryByText('Globex Business Case')).not.toBeInTheDocument()
-    expect(screen.getByText(/no runtime instances match the selected work type/i)).toBeInTheDocument()
-    expect(screen.getByText('0 visible')).toBeInTheDocument()
+    expect(screen.getByText(/no runtime instances match the selected filters/i)).toBeInTheDocument()
+  })
+
+  it('passes active work search and state filters to the runtime instance API', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+    const activeWorkFilters = screen.getByRole('group', { name: /active work filters/i })
+
+    await user.selectOptions(
+      within(activeWorkFilters).getByRole('combobox', { name: /^state$/i }),
+      'LOCKED',
+    )
+    await user.type(within(activeWorkFilters).getByRole('textbox', { name: /^search$/i }), 'capacity')
+
+    await waitFor(() => {
+      expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          customerId: 'cust-1',
+          tenantId: 'ten-1',
+          runtimeType: 'VALUE_NARRATIVE',
+          q: 'capacity',
+          status: 'LOCKED',
+          pageSize: 25,
+        }),
+        { skip: false },
+      )
+    })
+  })
+
+  it('filters active work health from runtime readiness data without adding API-only filters', async () => {
+    const user = userEvent.setup()
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-good-health',
+            runtimeInstanceKey: 'value-narrative-good',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Healthy Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            completionState: 'COMPLETE',
+            validationStatus: 'READY',
+            lockStatus: 'LOCKED',
+            snapshotStatus: 'BOUND',
+            packageKey: 'ready-package',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+          {
+            id: 'runtime-blocked-health',
+            runtimeInstanceKey: 'value-narrative-blocked',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Blocked Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            validationStatus: 'BLOCKED',
+            packageKey: 'blocked-package',
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 2 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+    const activeWorkFilters = screen.getByRole('group', { name: /active work filters/i })
+
+    await user.selectOptions(
+      within(activeWorkFilters).getByRole('combobox', { name: /^health$/i }),
+      'BLOCKED',
+    )
+
+    const table = screen.getByRole('table', { name: /work in progress runtime instances/i })
+    expect(within(table).getByText('Blocked Runtime')).toBeInTheDocument()
+    expect(within(table).queryByText('Healthy Runtime')).not.toBeInTheDocument()
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({
+        health: 'BLOCKED',
+      }),
+      { skip: false },
+    )
   })
 
   it('shows Sales Manager scoped role without placeholder team work', () => {
@@ -518,6 +635,12 @@ describe('Dashboard page', () => {
 
     expect(createGrid).toHaveClass('dashboard__launch-grid--create')
     expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(1)
+    const createLink = within(createGrid).getByRole('link', { name: /create value narrative/i })
+    expect(createLink).toHaveAttribute('aria-disabled', 'true')
+    expect(within(createLink).getByText('Locked')).toBeInTheDocument()
+    expect(createLink.querySelector('.dashboard__create-command')).toBeNull()
+    expect(within(createLink).getByText(/vmf_create permission/i)).toBeInTheDocument()
+    expect(createLink.querySelector('.dashboard__create-reason')).toBeNull()
   })
 
   it('resolves tenant memberships that use nested customer references', () => {

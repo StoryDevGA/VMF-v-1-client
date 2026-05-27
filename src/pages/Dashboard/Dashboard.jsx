@@ -7,11 +7,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   MdAddCircleOutline,
+  MdBusiness,
+  MdChevronRight,
   MdFilterList,
+  MdOutlineEventNote,
   MdOutlineDashboardCustomize,
+  MdOutlineDescription,
+  MdOutlineDomain,
   MdOutlineInsights,
   MdOutlinePeopleAlt,
   MdOutlinePlayCircle,
+  MdOutlineTaskAlt,
   MdOutlineWarningAmber,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
@@ -19,11 +25,15 @@ import { Card } from '../../components/Card'
 import { CustomerSelector } from '../../components/CustomerSelector'
 import { CustomSelect } from '../../components/CustomSelect'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
+import { Input } from '../../components/Input'
 import { Link } from '../../components/Link'
+import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
+import { TableDateTime } from '../../components/TableDateTime'
 import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
+import { useDebounce } from '../../hooks/useDebounce.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
@@ -47,6 +57,28 @@ const WORK_TYPE_OPTIONS = [
   { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
 ]
 
+const ACTIVE_WORK_TYPE_OPTIONS = [
+  { value: 'ALL', label: 'All Work Types' },
+  { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
+]
+
+const ACTIVE_WORK_STATE_OPTIONS = [
+  { value: 'ALL', label: 'All States' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'LOCKED', label: 'Locked' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'FAILED', label: 'Failed' },
+]
+
+const ACTIVE_WORK_HEALTH_OPTIONS = [
+  { value: 'ALL', label: 'All Health' },
+  { value: 'GOOD', label: 'Good' },
+  { value: 'NEEDS_REVIEW', label: 'Needs Review' },
+  { value: 'BLOCKED', label: 'Blocked' },
+  { value: 'UNKNOWN', label: 'Unknown' },
+]
+
 const EMPTY_RUNTIME_ROWS = Object.freeze([])
 
 // TODO: replace with runtime activity events once the Runtime Execution Engine emits them.
@@ -63,6 +95,14 @@ const normalizeRoleKeys = (roles) =>
   Array.isArray(roles)
     ? roles.map((role) => String(role ?? '').trim().toUpperCase()).filter(Boolean)
     : []
+
+const getRuntimeHealthFilterKey = (readiness) => {
+  const variant = getRuntimeReadinessVariant(readiness)
+  if (variant === 'success') return 'GOOD'
+  if (variant === 'warning') return 'NEEDS_REVIEW'
+  if (variant === 'error') return 'BLOCKED'
+  return 'UNKNOWN'
+}
 
 const hasRole = (roles, role) => normalizeRoleKeys(roles).includes(role)
 
@@ -168,33 +208,149 @@ const getFrameworkPackageVersion = (vmf) => {
   return '--'
 }
 
-const formatUpdatedLabel = (value) => {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return 'Open workspace'
-  const date = new Date(trimmed)
-  if (Number.isNaN(date.getTime())) return 'Recently updated'
-  return `Updated ${date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })}`
+const normalizeDashboardToken = (value) =>
+  String(value ?? '').trim().toUpperCase()
+
+const getFrameworkState = (runtimeRecord) =>
+  runtimeRecord?.framework_state ?? runtimeRecord?.frameworkState ?? {}
+
+const getRuntimeFrameworkLifecycleStage = (runtimeRecord, fallback = 'DRAFT') => {
+  const frameworkState = getFrameworkState(runtimeRecord)
+  const lifecycle = frameworkState?.lifecycle ?? {}
+  const candidates = [
+    typeof lifecycle === 'string' ? lifecycle : lifecycle?.stage,
+    lifecycle?.status,
+    runtimeRecord?.frameworkLifecycleStage,
+    runtimeRecord?.frameworkLifecycleStatus,
+    runtimeRecord?.lifecycleStatus,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDashboardToken(candidate)
+    if (normalized) return normalized
+  }
+
+  return fallback
 }
 
-function DashboardHeroMetric({ label, value, children, control = false }) {
+const getRuntimeValidationState = (runtimeRecord) => {
+  const frameworkState = getFrameworkState(runtimeRecord)
+  const validation = frameworkState?.validation ?? {}
+  const readiness = frameworkState?.readiness ?? {}
+
+  return normalizeDashboardToken(
+    runtimeRecord?.validationStatus
+      ?? runtimeRecord?.runtimeValidationStatus
+      ?? readiness?.validationState
+      ?? validation?.state
+      ?? validation?.status
+      ?? validation?.result,
+  )
+}
+
+const getRuntimeReadinessState = (runtimeRecord) => {
+  const frameworkState = getFrameworkState(runtimeRecord)
+  const readiness = frameworkState?.readiness ?? {}
+  const explicitState = normalizeDashboardToken(
+    runtimeRecord?.readinessState
+      ?? runtimeRecord?.runtimeReadinessState
+      ?? readiness?.state,
+  )
+
+  if (explicitState) return explicitState
+
+  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
+  if (['LOCKED', 'PUBLISHED', 'APPROVED', 'IN_REVIEW', 'READY'].includes(lifecycleStage)) {
+    return lifecycleStage
+  }
+
+  const validationState = getRuntimeValidationState(runtimeRecord)
+  if (['PASSED', 'VALIDATED'].includes(validationState)) return 'VALIDATED'
+  if (['FAILED', 'ERROR', 'BLOCKED'].includes(validationState)) return 'BLOCKED'
+
+  return 'DRAFT'
+}
+
+const getRuntimeReviewBadge = (runtimeRecord) => {
+  const frameworkState = getFrameworkState(runtimeRecord)
+  const readiness = frameworkState?.readiness ?? {}
+  const readinessState = getRuntimeReadinessState(runtimeRecord)
+  const validationState = getRuntimeValidationState(runtimeRecord)
+  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
+  const executionState = getRuntimeExecutionState(runtimeRecord)
+
+  if (
+    readiness?.submittedForReview === true
+    || readinessState === 'IN_REVIEW'
+    || lifecycleStage === 'IN_REVIEW'
+    || executionState === 'WAITING_APPROVAL'
+  ) {
+    return { label: 'Needs Review', variant: 'info' }
+  }
+
+  if (
+    ['BLOCKED', 'FAILED', 'ERROR'].includes(readinessState)
+    || ['BLOCKED', 'FAILED', 'ERROR'].includes(validationState)
+    || ['BLOCKED', 'FAILED', 'ERROR'].includes(executionState)
+  ) {
+    return { label: 'Needs Review', variant: 'warning' }
+  }
+
+  if (['READY', 'VALIDATED', 'APPROVED', 'PUBLISHED', 'LOCKED'].includes(readinessState)) {
+    return {
+      label: formatRuntimeTokenLabel(readinessState),
+      variant: getRuntimeStatusVariant(readinessState, getRuntimeReadinessVariant(getRuntimeReadinessLabel(runtimeRecord))),
+    }
+  }
+
+  return null
+}
+
+const formatRuntimeActionUpdatedLabel = (value) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return 'Updated recently'
+
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return 'Updated recently'
+
+  const dateLabel = date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+  const timeLabel = date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  return `Updated ${dateLabel} ${timeLabel}`
+}
+
+function DashboardHeroMetric({ label, value, children, control = false, icon = null }) {
   const metricClassName = [
     'dashboard__hero-metric',
     control ? 'dashboard__hero-metric--control' : '',
   ].filter(Boolean).join(' ')
+  const Icon = icon
 
   return (
     <div className={metricClassName}>
-      <dt>{label}</dt>
-      <dd>{children ?? value}</dd>
+      {Icon ? (
+        <span className="dashboard__hero-metric-icon" aria-hidden="true">
+          <Icon />
+        </span>
+      ) : null}
+      <div className="dashboard__hero-metric-copy">
+        <dt>{label}</dt>
+        <dd>{children ?? value}</dd>
+      </div>
     </div>
   )
 }
 
 function DashboardSectionCard({
+  actions,
   badge,
   children,
   description,
@@ -219,25 +375,31 @@ function DashboardSectionCard({
     <Card variant="default" className={cardClassName} role="listitem">
       <Card.Body className="dashboard__section-body">
         <div className="dashboard__section-summary">
-          <div className="dashboard__section-meta">
-            <span className="dashboard__section-icon" aria-hidden="true">
-              <SectionIcon />
-            </span>
-            {badge ? (
-              <Badge variant={badge.variant ?? 'info'} size="sm" pill outline>
-                {badge.label}
-              </Badge>
-            ) : null}
-            {status ? (
-              <Status variant={status.variant ?? 'neutral'} size="sm" showIcon>
-                {status.label}
-              </Status>
-            ) : null}
-          </div>
           <div className="dashboard__section-copy">
             <h2 className="dashboard__section-title">{title}</h2>
             <p className="dashboard__section-description">{description}</p>
           </div>
+          {actions ? (
+            <div className="dashboard__section-actions">
+              {actions}
+            </div>
+          ) : (
+            <div className="dashboard__section-meta">
+              <span className="dashboard__section-icon" aria-hidden="true">
+                <SectionIcon />
+              </span>
+              {badge ? (
+                <Badge variant={badge.variant ?? 'info'} size="sm" pill outline>
+                  {badge.label}
+                </Badge>
+              ) : null}
+              {status ? (
+                <Status variant={status.variant ?? 'neutral'} size="sm" showIcon>
+                  {status.label}
+                </Status>
+              ) : null}
+            </div>
+          )}
         </div>
         <PanelElement className="dashboard__section-panel" {...panelProps}>
           {children}
@@ -249,6 +411,9 @@ function DashboardSectionCard({
 
 function RuntimeActionCard({ action }) {
   const Icon = action.icon
+  const displayTitle = String(action.title ?? '').replace(/^Continue\s+/i, '')
+  const linkLabel = [action.title, action.label].filter(Boolean).join(' ')
+  const commandLabel = action.label
 
   return (
     <li
@@ -265,6 +430,7 @@ function RuntimeActionCard({ action }) {
         className="dashboard__launch-link dashboard__launch-link--action"
         variant="subtle"
         underline="none"
+        aria-label={linkLabel}
       >
         <span className="dashboard__launch-topline">
           <span className="dashboard__launch-icon" aria-hidden="true">
@@ -280,10 +446,32 @@ function RuntimeActionCard({ action }) {
           </Badge>
         </span>
         <span className="dashboard__launch-copy">
-          <span className="dashboard__launch-label">{action.title}</span>
+          <span className="dashboard__launch-label">{displayTitle}</span>
+          {Array.isArray(action.badges) && action.badges.length > 0 ? (
+            <span className="dashboard__launch-badges" aria-label="Runtime state">
+              {action.badges.map((badge) => (
+                <Badge
+                  key={`${badge.label}-${badge.variant}`}
+                  variant={badge.variant}
+                  size="sm"
+                  pill
+                  outline
+                >
+                  {badge.label}
+                </Badge>
+              ))}
+            </span>
+          ) : null}
           <span className="dashboard__launch-meta">{action.meta}</span>
-          <span className="dashboard__launch-description">{action.description}</span>
-          <span className="dashboard__launch-command">{action.label}</span>
+          {action.description ? (
+            <span className="dashboard__launch-description">{action.description}</span>
+          ) : null}
+          {action.disabled ? (
+            <span className="dashboard__launch-command">{commandLabel}</span>
+          ) : null}
+        </span>
+        <span className="dashboard__launch-arrow" aria-hidden="true">
+          <MdChevronRight />
         </span>
       </Link>
     </li>
@@ -304,7 +492,7 @@ function CreateWorkCard({ item }) {
       <Link
         to={item.to}
         disabled={item.disabled}
-        className="dashboard__launch-link dashboard__launch-link--create"
+        className="dashboard__launch-link dashboard__launch-link--secondary"
         variant="subtle"
         underline="none"
       >
@@ -318,8 +506,7 @@ function CreateWorkCard({ item }) {
         </span>
         <span className="dashboard__launch-copy">
           <span className="dashboard__launch-label">{item.title}</span>
-          <span className="dashboard__launch-meta">{item.description}</span>
-          <span className="dashboard__launch-description">{item.reason}</span>
+          <span className="dashboard__launch-meta">{item.meta}</span>
         </span>
       </Link>
     </li>
@@ -364,8 +551,34 @@ function SecondaryNavigationLink({ item }) {
   )
 }
 
+function DashboardEmptyCard({ description, icon, spacious = false, title, variant = 'neutral' }) {
+  const Icon = icon
+
+  return (
+    <li
+      className={[
+        'dashboard__empty-item',
+        'dashboard__empty-item--composed',
+        spacious ? 'dashboard__empty-item--spacious' : '',
+        `dashboard__empty-item--${variant}`,
+      ].filter(Boolean).join(' ')}
+    >
+      <span className="dashboard__empty-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      <span className="dashboard__empty-copy">
+        <span className="dashboard__empty-title">{title}</span>
+        <span className="dashboard__empty-description">{description}</span>
+      </span>
+    </li>
+  )
+}
+
 function Dashboard() {
   const [workTypeFilter, setWorkTypeFilter] = useState('ALL')
+  const [activeWorkStateFilter, setActiveWorkStateFilter] = useState('ALL')
+  const [activeWorkHealthFilter, setActiveWorkHealthFilter] = useState('ALL')
+  const [activeWorkSearch, setActiveWorkSearch] = useState('')
   const authorization = useAuthorization()
   const {
     user,
@@ -509,6 +722,9 @@ function Dashboard() {
   const hasVmfFeature = featureEntitlements.includes('VMF')
 
   const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
+  const debouncedActiveWorkSearch = useDebounce(activeWorkSearch, 350)
+  const activeWorkSearchQuery = debouncedActiveWorkSearch.trim()
+  const activeWorkStatusQuery = activeWorkStateFilter === 'ALL' ? '' : activeWorkStateFilter
 
   const {
     data: runtimeInstanceListResponse,
@@ -520,8 +736,10 @@ function Dashboard() {
       customerId,
       tenantId,
       runtimeType: 'VALUE_NARRATIVE',
+      q: activeWorkSearchQuery,
+      status: activeWorkStatusQuery,
       page: 1,
-      pageSize: 5,
+      pageSize: 25,
     },
     { skip: !contextReady || !canOpenVmfWorkspace || !hasVmfFeature },
   )
@@ -713,18 +931,35 @@ function Dashboard() {
 
     return runtimeInstanceRows.map((runtimeInstance) => {
       const runtimeName = getVmfName(runtimeInstance)
-      const packageLabel = getFrameworkPackageLabel(runtimeInstance)
       const packageVersion = getFrameworkPackageVersion(runtimeInstance)
+      const runtimeTypeLabel = formatRuntimeTokenLabel(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE')
+      const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
+      const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(runtimeInstance)
+      const reviewBadge = getRuntimeReviewBadge(runtimeInstance)
       const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
       const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
+      const packageSummary = [
+        runtimeTypeLabel,
+        packageVersion && packageVersion !== '--' ? packageVersion : '',
+      ].filter(Boolean).join(' ')
 
       return {
         actionKey: 'OPEN_RUNTIME_INSTANCE',
-        description: `Open the Value Narrative runtime work backed by ${packageLabel}.`,
+        badges: [
+          {
+            label: formatRuntimeTokenLabel(runtimeStatus),
+            variant: getRuntimeStatusVariant(runtimeStatus),
+          },
+          {
+            label: formatRuntimeTokenLabel(frameworkLifecycle),
+            variant: getRuntimeStatusVariant(frameworkLifecycle),
+          },
+          reviewBadge,
+        ].filter(Boolean),
         disabled: !canOpenVmfWorkspace,
         icon: MdOutlinePlayCircle,
         label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
-        meta: `${tenantScopeValue} / ${packageLabel} / ${packageVersion}`,
+        meta: `${packageSummary} - ${formatRuntimeActionUpdatedLabel(runtimeInstance?.updatedAt)}`,
         priority: 'MEDIUM',
         runtimeInstanceId,
         title: `Continue ${runtimeName}`,
@@ -751,6 +986,8 @@ function Dashboard() {
       const workType = String(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE').trim() || 'VALUE_NARRATIVE'
       const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
       const executionState = getRuntimeExecutionState(runtimeInstance)
+      const lifecycle = getRuntimeFrameworkLifecycleStage(runtimeInstance)
+      const readiness = getRuntimeReadinessLabel(runtimeInstance)
       const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
 
       return {
@@ -763,8 +1000,10 @@ function Dashboard() {
         packageSummary: `Package: ${packageLabel}`,
         status: runtimeStatus,
         executionState,
-        readiness: getRuntimeReadinessLabel(runtimeInstance),
-        lastActivity: formatUpdatedLabel(runtimeInstance?.updatedAt),
+        lifecycle,
+        readiness,
+        healthFilterKey: getRuntimeHealthFilterKey(readiness),
+        updatedAt: runtimeInstance?.updatedAt,
         nextAction: `Open ${packageVersion}`,
         to: getRuntimeWorkspaceRoute(runtimeInstanceId),
       }
@@ -772,19 +1011,21 @@ function Dashboard() {
   }, [contextReady, runtimeInstanceRows, tenantScopeValue])
 
   const filteredRuntimeInstances = useMemo(() => {
-    if (workTypeFilter === 'ALL') return runtimeInstances
-    return runtimeInstances.filter((instance) => instance.workType === workTypeFilter)
-  }, [runtimeInstances, workTypeFilter])
+    return runtimeInstances.filter((instance) => {
+      const matchesWorkType = workTypeFilter === 'ALL' || instance.workType === workTypeFilter
+      const matchesHealth = activeWorkHealthFilter === 'ALL' || instance.healthFilterKey === activeWorkHealthFilter
+      return matchesWorkType && matchesHealth
+    })
+  }, [activeWorkHealthFilter, runtimeInstances, workTypeFilter])
 
   const createWorkItems = useMemo(() => [
     {
-      description: 'Create a governed Value Narrative from an active VMF package.',
       disabled: !canCreateValueNarrative,
       icon: MdOutlineDashboardCustomize,
-      label: canCreateValueNarrative ? 'Create' : 'Unavailable',
-      reason: canCreateValueNarrative
-        ? 'Select one active package in the VMF workspace to create runtime work.'
-        : 'Value Narrative unavailable - VMF_CREATE permission and VMF entitlement are required.',
+      label: canCreateValueNarrative ? 'Available' : 'Locked',
+      meta: canCreateValueNarrative
+        ? 'Create a new Value Narrative from an active VMF package.'
+        : 'VMF_CREATE permission and VMF entitlement required',
       title: 'Create Value Narrative',
       to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
     },
@@ -846,15 +1087,22 @@ function Dashboard() {
   ].filter(Boolean).join(' ')
   const runtimeActionAvailableCount = runtimeActions.filter((action) => !action.disabled).length
 
+  const hasActiveWorkFilters = Boolean(
+    activeWorkSearchQuery
+      || activeWorkStatusQuery
+      || workTypeFilter !== 'ALL'
+      || activeWorkHealthFilter !== 'ALL',
+  )
+
   const runtimeInstanceEmptyMessage = !contextReady
     ? 'Select a tenant to show runtime work.'
     : runtimeInstanceAppError
       ? `Unable to load runtime instances. ${runtimeInstanceAppError.message}`
     : isLoadingRuntimeVmfs
       ? 'Loading runtime work...'
-    : workTypeFilter === 'ALL'
-      ? 'No runtime instances are available for this tenant yet.'
-      : 'No runtime instances match the selected work type.'
+    : hasActiveWorkFilters
+      ? 'No runtime instances match the selected filters.'
+      : 'No runtime instances are available for this tenant yet.'
   const runtimeActionEmptyLabel = isLoadingRuntimeVmfs ? 'Loading runtime actions' : 'No runtime actions'
   const runtimeActionEmptyMessage = isLoadingRuntimeVmfs
     ? 'Checking for active VMF runtime work in this tenant.'
@@ -868,10 +1116,17 @@ function Dashboard() {
       width: '20%',
       render: (value, row) => (
         <div className="dashboard__work-cell">
-          <span className="dashboard__work-heading">
-            <span className="dashboard__work-title">{row.work}</span>
+          <span className="dashboard__work-instance">
+            <span className="dashboard__work-icon" aria-hidden="true">
+              <MdOutlineDescription />
+            </span>
+            <span className="dashboard__work-copy">
+              <span className="dashboard__work-heading">
+                <span className="dashboard__work-title">{row.work}</span>
+              </span>
+              <span className="dashboard__work-id">{value}</span>
+            </span>
           </span>
-          <span className="dashboard__work-id">{value}</span>
         </div>
       ),
     },
@@ -897,7 +1152,7 @@ function Dashboard() {
     {
       key: 'status',
       label: 'State',
-      width: '12%',
+      width: '11%',
       render: (value, row) => (
         <div className="dashboard__stacked-cell">
           <Status variant={getRuntimeStatusVariant(value)} size="sm" showIcon>
@@ -908,9 +1163,19 @@ function Dashboard() {
       ),
     },
     {
+      key: 'lifecycle',
+      label: 'Lifecycle',
+      width: '11%',
+      render: (value) => (
+        <Status variant={getRuntimeStatusVariant(value)} size="sm">
+          {formatRuntimeTokenLabel(value)}
+        </Status>
+      ),
+    },
+    {
       key: 'readiness',
       label: 'Health',
-      width: '16%',
+      width: '14%',
       render: (value) => (
         <Status variant={getRuntimeReadinessVariant(value)} size="sm">
           {value}
@@ -918,9 +1183,10 @@ function Dashboard() {
       ),
     },
     {
-      key: 'lastActivity',
+      key: 'updatedAt',
       label: 'Updated',
       width: '10%',
+      render: (value) => <TableDateTime value={value} fallback="No activity yet" />,
     },
     {
       key: 'nextAction',
@@ -935,6 +1201,48 @@ function Dashboard() {
       ),
     },
   ], [])
+
+  const activeWorkToolbar = (
+    <div className="dashboard__work-toolbar" role="group" aria-label="Active work filters">
+      <Input
+        id="dashboard-active-work-search"
+        label="Search"
+        className="dashboard__work-search"
+        value={activeWorkSearch}
+        onChange={(event) => setActiveWorkSearch(event.target.value)}
+        placeholder="Search instances..."
+        size="sm"
+        fullWidth
+      />
+      <Select
+        id="dashboard-active-work-state"
+        label="State"
+        size="sm"
+        value={activeWorkStateFilter}
+        onChange={(event) => setActiveWorkStateFilter(event.target.value)}
+        options={ACTIVE_WORK_STATE_OPTIONS}
+        className="dashboard__work-filter"
+      />
+      <Select
+        id="dashboard-active-work-type"
+        label="Work Type"
+        size="sm"
+        value={workTypeFilter}
+        onChange={(event) => setWorkTypeFilter(event.target.value)}
+        options={ACTIVE_WORK_TYPE_OPTIONS}
+        className="dashboard__work-filter"
+      />
+      <Select
+        id="dashboard-active-work-health"
+        label="Health"
+        size="sm"
+        value={activeWorkHealthFilter}
+        onChange={(event) => setActiveWorkHealthFilter(event.target.value)}
+        options={ACTIVE_WORK_HEALTH_OPTIONS}
+        className="dashboard__work-filter"
+      />
+    </div>
+  )
 
   return (
     <section className="dashboard container" aria-label="Customer runtime home">
@@ -952,14 +1260,14 @@ function Dashboard() {
           </div>
 
           <dl className="dashboard__hero-metrics" aria-label="Runtime context summary">
-            <DashboardHeroMetric label="Customer" control={showCustomerSelector}>
+            <DashboardHeroMetric label="Customer" control={showCustomerSelector} icon={MdOutlineDomain}>
               {showCustomerSelector ? (
                 <CustomerSelector className="dashboard__context-selector" />
               ) : (
                 <span className="dashboard__context-value">{customerScopeValue}</span>
               )}
             </DashboardHeroMetric>
-            <DashboardHeroMetric label="Tenant" control={showAccessibleTenantSwitcher}>
+            <DashboardHeroMetric label="Tenant" control={showAccessibleTenantSwitcher} icon={MdBusiness}>
               {showAccessibleTenantSwitcher ? (
                 <TenantSwitcher
                   className="dashboard__context-selector"
@@ -970,10 +1278,10 @@ function Dashboard() {
                 <span className="dashboard__context-value">{tenantScopeValue}</span>
               )}
             </DashboardHeroMetric>
-            <DashboardHeroMetric label="Role">
+            <DashboardHeroMetric label="Role" icon={MdOutlinePeopleAlt}>
               <span className="dashboard__context-value">{primaryRole}</span>
             </DashboardHeroMetric>
-            <DashboardHeroMetric label="Work Type" control>
+            <DashboardHeroMetric label="Work Type" control icon={MdFilterList}>
               <CustomSelect
                 value={workTypeFilter}
                 onChange={setWorkTypeFilter}
@@ -1026,6 +1334,7 @@ function Dashboard() {
           panelLabel="Work in progress runtime instances panel"
           status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatRuntimeTokenLabel(workTypeFilter), variant: 'info' }}
           title="Active Work"
+          actions={activeWorkToolbar}
         >
           <HorizontalScroll
             className="dashboard__table-wrap"
@@ -1082,12 +1391,12 @@ function Dashboard() {
                   </li>
                 ))
               ) : (
-                <li className="dashboard__empty-item">
-                  <Status variant="success" size="sm" showIcon>
-                    No runtime signals
-                  </Status>
-                  <p>Validation, output, and review signals will appear here when runtime work exists.</p>
-                </li>
+                <DashboardEmptyCard
+                  description="Validation, output, and review signals will appear here when runtime work exists."
+                  icon={MdOutlineTaskAlt}
+                  title="No runtime signals"
+                  variant="success"
+                />
               )}
             </ul>
             <nav className="dashboard__secondary-nav" aria-label="Customer workspace secondary navigation">
@@ -1120,12 +1429,13 @@ function Dashboard() {
                 </li>
               ))
             ) : (
-              <li className="dashboard__empty-item">
-                <Status variant="info" size="sm" showIcon>
-                  No runtime activity yet
-                </Status>
-                <p>Activity will appear here when runtime instances emit execution, review, or validation events.</p>
-              </li>
+              <DashboardEmptyCard
+                description="Activity will appear here when runtime instances emit execution, review, or validation events."
+                icon={MdOutlineEventNote}
+                spacious
+                title="No runtime activity yet"
+                variant="info"
+              />
             )}
           </ul>
         </DashboardSectionCard>
