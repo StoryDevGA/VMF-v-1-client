@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
@@ -164,11 +164,24 @@ const rendererPayload = {
   },
 }
 
+function VmfRouteProbe() {
+  const location = useLocation()
+  return (
+    <div>
+      <span>VMF Workspace Route</span>
+      <span>{location.search}</span>
+    </div>
+  )
+}
+
 function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001') {
+  const initialEntries = Array.isArray(initialEntry) ? initialEntry : [initialEntry]
   return (
     <ToasterProvider>
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
+          <Route path="/app/workspaces/vmf" element={<VmfRouteProbe />} />
+          <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
           <Route path="/app/runtime/:runtimeInstanceId" element={<RuntimeWorkspace />} />
         </Routes>
       </MemoryRouter>
@@ -256,6 +269,7 @@ describe('RuntimeWorkspace', () => {
     expect(backButton).toHaveClass('btn--outline', 'btn--sm')
     expect(screen.getByText('Execution Workspace')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Acme Value Narrative' })).toBeInTheDocument()
+    expect(screen.getByText('Continue governed runtime work for value-narrative-001.')).toBeInTheDocument()
     const heroMetadata = screen.getByLabelText(/runtime value-narrative-001 metadata/i)
     expect(within(heroMetadata).getByText('Value Narrative')).toBeInTheDocument()
     expect(within(heroMetadata).getByText('Draft')).toBeInTheDocument()
@@ -333,6 +347,32 @@ describe('RuntimeWorkspace', () => {
     expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
     expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('returns to the Value Narrative workspace from the Back button', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { from: '/app/workspaces/vmf?state=ACTIVE' },
+    })
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByText('VMF Workspace Route')).toBeInTheDocument()
+    expect(screen.getByText('?state=ACTIVE')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard Route')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the Value Narrative workspace for direct runtime routes', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByText('VMF Workspace Route')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard Route')).not.toBeInTheDocument()
   })
 
   it('groups repeated runtime warnings into business-safe summaries', async () => {

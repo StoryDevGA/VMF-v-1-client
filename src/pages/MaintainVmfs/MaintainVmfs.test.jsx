@@ -1,9 +1,58 @@
+import path from 'node:path'
+import process from 'node:process'
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import MaintainVmfs from './MaintainVmfs.jsx'
+
+const maintainVmfsCss = readFileSync(
+  path.resolve(process.cwd(), 'src/pages/MaintainVmfs/MaintainVmfs.css'),
+  'utf8',
+)
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function getCssRuleBody(selector, { after } = {}) {
+  const startIndex = after ? maintainVmfsCss.indexOf(after) : 0
+
+  if (startIndex === -1) {
+    throw new Error(`Missing CSS anchor ${after}`)
+  }
+
+  const source = maintainVmfsCss.slice(startIndex)
+  const match = new RegExp(`${escapeRegExp(selector)}\\s*\\{([\\s\\S]*?)\\}`).exec(source)
+
+  if (!match) {
+    throw new Error(`Missing CSS rule for ${selector}`)
+  }
+
+  return match[1]
+}
+
+function getCssDeclarations(selector, options) {
+  return getCssRuleBody(selector, options)
+    .split(';')
+    .map((declaration) => declaration.trim())
+    .filter(Boolean)
+    .reduce((declarations, declaration) => {
+      const separatorIndex = declaration.indexOf(':')
+
+      if (separatorIndex === -1) return declarations
+
+      const property = declaration.slice(0, separatorIndex).trim()
+      const value = declaration.slice(separatorIndex + 1).replace(/\s+/g, ' ').trim()
+
+      return {
+        ...declarations,
+        [property]: value,
+      }
+    }, {})
+}
 
 vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: vi.fn(),
@@ -51,13 +100,23 @@ let listQueryResponse
 let runtimeInstanceQueryResponse
 let frameworkPackageQueryResponse
 
+function RuntimeRouteProbe() {
+  const location = useLocation()
+  return (
+    <div>
+      <span>Runtime Route</span>
+      <span>{location.state?.from ?? ''}</span>
+    </div>
+  )
+}
+
 function getPageTree(initialEntry = '/app/workspaces/vmf') {
   return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <ToasterProvider>
         <Routes>
           <Route path="/app/workspaces/vmf" element={<MaintainVmfs />} />
-          <Route path="/app/runtime/:runtimeInstanceId" element={<div>Runtime Route</div>} />
+          <Route path="/app/runtime/:runtimeInstanceId" element={<RuntimeRouteProbe />} />
           <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
         </Routes>
       </ToasterProvider>
@@ -297,11 +356,31 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('heading', { name: /value narratives/i })).toBeInTheDocument()
     const continueSection = screen.getByRole('heading', { name: /^continue work$/i })
       .closest('section')
+    const primaryContinueCard = within(continueSection)
+      .getByText('Northwind Value Narrative')
+      .closest('li')
+    const primaryHead = primaryContinueCard.querySelector('.maintain-vmfs__continue-head')
+    const primaryCopy = primaryContinueCard.querySelector('.maintain-vmfs__continue-copy')
+    const primaryActions = primaryContinueCard.querySelector('.maintain-vmfs__continue-actions')
     const lockedSummaryCard = within(continueSection)
       .getByText('Review Locked Instances')
       .closest('li')
 
+    expect(primaryContinueCard).toHaveClass('maintain-vmfs__continue-card--primary')
+    expect(primaryHead).not.toBeNull()
+    expect(primaryHead).toContainElement(
+      within(primaryContinueCard).getByRole('heading', { name: 'Northwind Value Narrative' }),
+    )
+    expect(primaryHead).toContainElement(within(primaryContinueCard).getByLabelText('Runtime state'))
+    expect(primaryCopy).not.toBeNull()
+    expect(primaryCopy.querySelector('.maintain-vmfs__continue-title')).not.toBeInTheDocument()
+    expect(primaryCopy.querySelector('.maintain-vmfs__continue-status')).not.toBeInTheDocument()
+    expect(primaryActions).not.toBeNull()
+    expect(primaryActions).toContainElement(
+      within(primaryContinueCard).getByRole('button', { name: /^continue$/i }),
+    )
     expect(lockedSummaryCard).toHaveClass('maintain-vmfs__continue-card--summary')
+    expect(lockedSummaryCard).toHaveClass('maintain-vmfs__continue-card--secondary')
     expect(lockedSummaryCard.querySelector('.maintain-vmfs__continue-arrow')).not.toBeInTheDocument()
     expect(within(lockedSummaryCard).queryByRole('link')).not.toBeInTheDocument()
     expect(within(lockedSummaryCard).queryByRole('button')).not.toBeInTheDocument()
@@ -322,33 +401,194 @@ describe('MaintainVmfs', () => {
       .toHaveAttribute('href', '/app/runtime/value-narrative-001')
     expect(within(table).getAllByText('value-narrative-001').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('vmf-runtime-package').length).toBeGreaterThan(0)
-    expect(within(table).getAllByText('Idle').length).toBeGreaterThan(0)
-    const runtimeActions = within(table).getByRole('combobox', {
+    expect(within(table).queryByRole('combobox', {
       name: /runtime actions for northwind value narrative/i,
-    })
-    expect(within(runtimeActions).getByRole('option', { name: /^continue$/i })).toBeInTheDocument()
-    expect(within(runtimeActions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
-    expect(within(runtimeActions).queryByRole('option', { name: /delete/i })).not.toBeInTheDocument()
-    const moreInformation = within(table).getByRole('button', {
+    })).not.toBeInTheDocument()
+    const continueButton = within(table).getByRole('button', { name: /^continue$/i })
+    const detailsToggle = within(table).getByRole('button', {
       name: /show more information for northwind value narrative/i,
     })
-    expect(moreInformation).toHaveAttribute('aria-expanded', 'false')
+    expect(detailsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByLabelText(/value narrative register counts/i))
       .toHaveTextContent(/1 runtime object\s*\|\s*0 VMF bridge records/i)
 
-    await user.click(moreInformation)
-
-    expect(moreInformation).toHaveAttribute('aria-expanded', 'true')
     expect(within(table).queryByRole('tablist')).not.toBeInTheDocument()
+
+    await user.click(detailsToggle)
+
+    expect(detailsToggle).toHaveAttribute('aria-expanded', 'true')
     expect(within(table).getAllByText('Overview').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('Runtime').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Idle').length).toBeGreaterThan(0)
     expect(within(table).queryByText(/no dependency records returned/i)).not.toBeInTheDocument()
     expect(within(table).queryByText(/no notes returned/i)).not.toBeInTheDocument()
     expect(within(table).queryByText(/no change-log events returned/i)).not.toBeInTheDocument()
 
-    await user.selectOptions(runtimeActions, 'Continue')
+    await user.click(continueButton)
 
     expect(screen.getByText('Runtime Route')).toBeInTheDocument()
+    expect(screen.getByText('/app/workspaces/vmf')).toBeInTheDocument()
+  })
+
+  it('applies the featured Continue Work treatment only to the first Value Narrative card', () => {
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'runtime-first',
+            runtimeInstanceKey: 'value-narrative-first',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'First Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-27T09:21:00.000Z',
+          },
+          {
+            id: 'runtime-second',
+            runtimeInstanceKey: 'value-narrative-second',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Second Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-25T11:48:00.000Z',
+          },
+          {
+            id: 'runtime-third',
+            runtimeInstanceKey: 'value-narrative-third',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Third Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ARCHIVED',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-20T15:11:00.000Z',
+          },
+          {
+            id: 'runtime-fourth',
+            runtimeInstanceKey: 'value-narrative-fourth',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Fourth Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-20T14:46:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 4 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    const continueSection = screen.getByRole('heading', { name: /^continue work$/i })
+      .closest('section')
+    const continueCards = Array.from(continueSection.querySelectorAll('.maintain-vmfs__continue-card'))
+    const [primaryContinueCard, ...summaryCards] = continueCards
+
+    expect(continueCards).toHaveLength(4)
+    expect(primaryContinueCard).toHaveClass('maintain-vmfs__continue-card--primary')
+    expect(primaryContinueCard).not.toHaveClass('maintain-vmfs__continue-card--summary')
+    expect(within(primaryContinueCard).getByRole('heading', { name: 'First Runtime' }))
+      .toBeInTheDocument()
+    expect(within(primaryContinueCard).getByRole('button', { name: /^continue$/i }))
+      .toBeInTheDocument()
+    expect(primaryContinueCard.querySelector('.maintain-vmfs__continue-arrow')).toBeInTheDocument()
+
+    summaryCards.forEach((card) => {
+      expect(card).toHaveClass('maintain-vmfs__continue-card--summary')
+      expect(card).toHaveClass('maintain-vmfs__continue-card--secondary')
+      expect(card).not.toHaveClass('maintain-vmfs__continue-card--primary')
+      expect(card.querySelector('.maintain-vmfs__continue-actions')).not.toBeInTheDocument()
+      expect(card.querySelector('.maintain-vmfs__continue-arrow')).not.toBeInTheDocument()
+      expect(within(card).queryByRole('button')).not.toBeInTheDocument()
+      expect(within(card).queryByRole('link')).not.toBeInTheDocument()
+    })
+  })
+
+  it('surfaces API-backed focus details on secondary Continue Work cards', () => {
+    runtimeInstanceQueryResponse = {
+      data: {
+        data: [
+          {
+            id: 'runtime-risk',
+            runtimeInstanceKey: 'value-narrative-risk',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'At Risk Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'BLOCKED',
+            validationStatus: 'READY',
+            lockStatus: 'UNLOCKED',
+            updatedAt: '2026-05-27T09:21:00.000Z',
+          },
+          {
+            id: 'runtime-pending',
+            runtimeInstanceKey: 'value-narrative-pending',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Pending Validation Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            validationStatus: 'PENDING',
+            lockStatus: 'UNLOCKED',
+            updatedAt: '2026-05-26T10:10:00.000Z',
+          },
+          {
+            id: 'runtime-locked',
+            runtimeInstanceKey: 'value-narrative-locked',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Locked Runtime',
+            packageKey: 'vmf-runtime-package',
+            packageVersion: '2.3.1',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            validationStatus: 'READY',
+            lockStatus: 'LOCKED',
+            updatedAt: '2026-05-25T11:48:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 3 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+
+    renderPage()
+
+    const continueSection = screen.getByRole('heading', { name: /^continue work$/i })
+      .closest('section')
+    const lockedCard = within(continueSection)
+      .getByText('Review Locked Instances')
+      .closest('li')
+    const pendingCard = within(continueSection)
+      .getByText('Resolve Pending Validation')
+      .closest('li')
+    const atRiskCard = within(continueSection)
+      .getByText('Review At-Risk Instances')
+      .closest('li')
+
+    expect(within(lockedCard).getByText('1 instance locked')).toBeInTheDocument()
+    expect(within(lockedCard).getByText('Latest: Locked Runtime')).toBeInTheDocument()
+    expect(within(lockedCard).getByText('Locked').closest('.badge')).toHaveClass('badge--warning')
+
+    expect(within(pendingCard).getByText('1 instance needs attention')).toBeInTheDocument()
+    expect(within(pendingCard).getByText('Latest: Pending Validation Runtime')).toBeInTheDocument()
+    expect(within(pendingCard).getByText('Pending').closest('.badge')).toHaveClass('badge--info')
+
+    expect(within(atRiskCard).getByText('1 instance needs attention')).toBeInTheDocument()
+    expect(within(atRiskCard).getByText('Latest: At Risk Runtime')).toBeInTheDocument()
+    expect(within(atRiskCard).getByText('Blocked').closest('.badge')).toHaveClass('badge--danger')
   })
 
   it('does not send VMF-only disabled status to the runtime instance API', async () => {
@@ -1102,9 +1342,8 @@ describe('MaintainVmfs', () => {
       { skip: false },
     )
     expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/linked tenant members can review published vmf bridge records and published runtime lifecycle rows only/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Access')).toBeInTheDocument()
+    expect(screen.getByText('Review only')).toBeInTheDocument()
     expect(
       within(screen.getByRole('table', { name: /value narrative work register/i }))
         .getByText('Viewer VMF'),
@@ -1335,6 +1574,7 @@ describe('MaintainVmfs', () => {
 
   it('renders compact row-action menus with only the allowed actions per row state', async () => {
     const user = userEvent.setup()
+
     listQueryResponse = {
       data: {
         data: [
@@ -1366,41 +1606,37 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByText(/runtime objects are shown alongside transitional vmf bridge records/i)).toBeInTheDocument()
+    expect(screen.getByText('Register guide')).toBeInTheDocument()
+    expect(screen.getByText('Runtime objects + bridge records')).toBeInTheDocument()
+    expect(screen.getByText('State + package lineage')).toBeInTheDocument()
+    expect(screen.getByText('Lifecycle-gated bridge edits')).toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: /value narrative work register/i })
 
-    expect(within(table).getByRole('columnheader', { name: /^value narrative$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^description$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^instance$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^package$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^version$/i })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /^state$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^stage \/ health$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^framework \/ package$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^lifecycle$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^health$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^action$/i })).toBeInTheDocument()
+    expect(within(table).queryByRole('columnheader', { name: /^stage \/ health$/i })).not.toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: /^completion$/i })).not.toBeInTheDocument()
-    expect(within(table).getByText('Current active framework')).toBeInTheDocument()
     expect(within(table).getAllByText('CANONISED').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('PUBLISHED').length).toBeGreaterThan(0)
-    expect(within(table).getByText('Version 2.2')).toBeInTheDocument()
-    expect(within(table).getByText('Version 2.0')).toBeInTheDocument()
+    expect(within(table).getAllByText('2.2').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('2.0').length).toBeGreaterThan(0)
 
-    const activeCompletionAccordion = within(table).getByRole('button', {
-      name: /completion for active vmf/i,
+    const activeDetailsToggle = within(table).getByRole('button', {
+      name: /show more information for active vmf/i,
     })
-    const activeVmfIdAccordion = within(table).getByRole('button', {
-      name: /vmf id for active vmf/i,
-    })
+    expect(activeDetailsToggle).toHaveAttribute('aria-expanded', 'false')
 
-    expect(activeCompletionAccordion).toHaveAttribute('aria-expanded', 'false')
-    expect(activeVmfIdAccordion).toHaveAttribute('aria-expanded', 'false')
+    await user.click(activeDetailsToggle)
 
-    await user.click(activeCompletionAccordion)
-
-    expect(activeCompletionAccordion).toHaveAttribute('aria-expanded', 'true')
+    expect(activeDetailsToggle).toHaveAttribute('aria-expanded', 'true')
     const completionValue = within(table).getAllByText('NOT_TRACKED')[0]
     expect(completionValue.closest('.badge')).toHaveClass('badge--info')
-
-    await user.click(activeVmfIdAccordion)
-
-    expect(activeVmfIdAccordion).toHaveAttribute('aria-expanded', 'true')
     expect(within(table).getAllByText('VMF ID').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('vmf-active').length).toBeGreaterThan(0)
 
@@ -1447,5 +1683,238 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('heading', { name: /delete vmf/i })).toBeInTheDocument()
     expect(screen.getByText(/delete archived vmf\?/i)).toBeInTheDocument()
+  })
+
+  it('locks the primary Continue Work card visual hierarchy contract', () => {
+    const baseCard = getCssDeclarations('.maintain-vmfs__continue-card')
+    const primaryCard = getCssDeclarations('.maintain-vmfs__continue-card--primary')
+    const primaryIcon = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-icon')
+    const primaryHead = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-head')
+    const primaryCopy = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-copy')
+    const primaryTitle = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-title')
+    const primaryBadge = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-status .badge')
+    const primaryStatus = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-status .status')
+    const primaryStatusText = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-status .status__text')
+    const primaryActions = getCssDeclarations('.maintain-vmfs__continue-card--primary .maintain-vmfs__continue-actions')
+    const primaryCta = getCssDeclarations('.maintain-vmfs__continue-actions .btn')
+
+    expect(baseCard).toEqual(expect.objectContaining({
+      '--maintain-vmfs-continue-icon-size': 'var(--spacing-xl)',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'grid-template-rows': 'auto minmax(0, 1fr)',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-md)',
+      border: 'var(--border-width-thin) solid var(--color-card-border)',
+    }))
+    expect(primaryCard).toEqual(expect.objectContaining({
+      '--maintain-vmfs-continue-icon-size': 'var(--spacing-2xl)',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'grid-template-rows': 'auto auto',
+      'align-items': 'center',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-lg)',
+      'border-color': 'color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border))',
+      background: 'linear-gradient(135deg, color-mix(in srgb, var(--color-action-primary) 9%, transparent), transparent 48%), var(--color-background)',
+    }))
+    expect(primaryIcon).toEqual(expect.objectContaining({
+      'border-radius': 'var(--border-radius-md)',
+      'background-color': 'color-mix(in srgb, var(--color-action-primary) 14%, transparent)',
+      'font-size': 'var(--font-size-lg)',
+    }))
+    expect(primaryHead).toEqual(expect.objectContaining({
+      'align-items': 'center',
+      gap: 'var(--spacing-md)',
+    }))
+    expect(primaryCopy).toEqual(expect.objectContaining({
+      'grid-column': '1',
+      'grid-row': '2',
+      'padding-inline-start': 'calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-md))',
+      'padding-inline-end': 'var(--spacing-md)',
+      'border-inline-start': '0',
+    }))
+    expect(primaryTitle).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-lg)',
+      'font-weight': 'var(--font-weight-bold)',
+      'line-height': '1.05',
+      'text-wrap': 'balance',
+    }))
+    expect(primaryBadge).toEqual(expect.objectContaining({
+      'font-size': '0.6875rem',
+      'line-height': '1.05',
+    }))
+    expect(primaryStatus).toEqual(expect.objectContaining({
+      'font-size': '0.6875rem',
+      'line-height': '1.05',
+    }))
+    expect(primaryStatusText).toEqual(expect.objectContaining({
+      'font-size': '0.6875rem',
+      'line-height': '1.05',
+    }))
+    expect(primaryActions).toEqual(expect.objectContaining({
+      'grid-column': '2',
+      'grid-row': '1 / span 2',
+      gap: 'var(--spacing-md)',
+    }))
+    expect(primaryCta).toEqual(expect.objectContaining({
+      'min-width': '6.25rem',
+      'min-height': 'calc(var(--spacing-md) * 2.15)',
+      'padding-inline': 'var(--spacing-md)',
+      'font-size': 'var(--font-size-sm)',
+    }))
+  })
+
+  it('locks the register guide treatment below the filter toolbar', () => {
+    const registerMeta = getCssDeclarations('.maintain-vmfs__register-meta')
+    const registerGuide = getCssDeclarations('.maintain-vmfs__register-guide')
+    const guideTitle = getCssDeclarations('.maintain-vmfs__register-guide-title')
+    const guideList = getCssDeclarations('.maintain-vmfs__register-guide-list')
+    const guideItem = getCssDeclarations('.maintain-vmfs__register-guide-item')
+    const mobileRegisterMeta = getCssDeclarations('.maintain-vmfs__register-meta', {
+      after: '@media (max-width: 1024px)',
+    })
+    const mobileRegisterCounts = getCssDeclarations('.maintain-vmfs__register-counts', {
+      after: '@media (max-width: 1024px)',
+    })
+
+    expect(registerMeta).toEqual(expect.objectContaining({
+      display: 'grid',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'align-items': 'center',
+      gap: 'var(--spacing-md)',
+      'margin-block-start': 'var(--spacing-lg)',
+      'padding-block-start': 'var(--spacing-md)',
+      'border-block-start': 'var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 72%, transparent)',
+    }))
+    expect(registerGuide).toEqual(expect.objectContaining({
+      display: 'grid',
+      'grid-template-columns': 'minmax(0, 1fr)',
+      'align-items': 'center',
+      'min-width': '0',
+    }))
+    expect(guideTitle).toEqual(expect.objectContaining({
+      margin: '0',
+      color: 'var(--color-text-primary)',
+      'font-size': '0.6875rem',
+      'font-weight': 'var(--font-weight-bold)',
+      'line-height': '1',
+      'text-transform': 'uppercase',
+    }))
+    expect(guideList).toEqual(expect.objectContaining({
+      display: 'flex',
+      'align-items': 'center',
+      'flex-wrap': 'wrap',
+      gap: 'var(--spacing-xs) var(--spacing-sm)',
+      margin: '0',
+      padding: '0',
+      'list-style': 'none',
+    }))
+    expect(guideItem).toEqual(expect.objectContaining({
+      display: 'inline-flex',
+      'align-items': 'center',
+      gap: 'var(--spacing-2xs)',
+      'font-size': 'var(--font-size-xs)',
+      'line-height': 'var(--line-height-tight)',
+    }))
+    expect(mobileRegisterMeta).toEqual(expect.objectContaining({
+      'grid-template-columns': '1fr',
+    }))
+    expect(mobileRegisterCounts).toEqual(expect.objectContaining({
+      'justify-content': 'flex-start',
+    }))
+  })
+
+  it('locks the secondary Continue Work card compact hierarchy contract', () => {
+    const secondaryCard = getCssDeclarations('.maintain-vmfs__continue-card--secondary')
+    const secondaryIcon = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-icon')
+    const secondaryHead = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-head')
+    const secondaryHeading = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-heading')
+    const secondaryCopy = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-copy')
+    const secondaryTitle = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-title')
+    const secondaryCopyText = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-copy p')
+    const secondaryInsight = getCssDeclarations('.maintain-vmfs__continue-insight')
+    const secondaryDetail = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-detail')
+    const secondaryPill = getCssDeclarations('.maintain-vmfs__continue-pill.badge')
+
+    expect(secondaryCard).toEqual(expect.objectContaining({
+      '--maintain-vmfs-continue-icon-size': 'var(--spacing-xl)',
+      'grid-template-rows': 'auto auto',
+      'align-content': 'start',
+      gap: 'var(--spacing-sm) var(--spacing-sm)',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-md) var(--spacing-sm)',
+    }))
+    expect(secondaryIcon).toEqual(expect.objectContaining({
+      'margin-block-start': 'var(--spacing-2xs)',
+      'border-radius': 'var(--border-radius-sm)',
+      'background-color': 'color-mix(in srgb, var(--color-action-primary) 7%, transparent)',
+      'font-size': 'var(--font-size-sm)',
+    }))
+    expect(secondaryHead).toEqual(expect.objectContaining({
+      'align-items': 'start',
+      gap: 'var(--spacing-xs)',
+    }))
+    expect(secondaryHeading).toEqual(expect.objectContaining({
+      gap: 'var(--spacing-sm)',
+    }))
+    expect(secondaryCopy).toEqual(expect.objectContaining({
+      gap: 'var(--spacing-sm)',
+      'margin-block-start': 'var(--spacing-2xs)',
+      'padding-inline-start': 'calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-xs))',
+      'padding-inline-end': 'var(--spacing-xs)',
+    }))
+    expect(secondaryTitle).toEqual(expect.objectContaining({
+      'font-size': '0.9375rem',
+      'line-height': '1.1',
+      'text-wrap': 'balance',
+    }))
+    expect(secondaryCopyText).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-xs)',
+      'line-height': '1.18',
+      'text-wrap': 'pretty',
+    }))
+    expect(secondaryInsight).toEqual(expect.objectContaining({
+      display: 'flex',
+      'align-items': 'center',
+      gap: 'var(--spacing-xs)',
+      'flex-wrap': 'wrap',
+      'min-width': '0',
+    }))
+    expect(secondaryDetail).toEqual(expect.objectContaining({
+      color: 'color-mix(in srgb, var(--color-text-secondary) 70%, var(--color-text-primary))',
+      'font-weight': 'var(--font-weight-semibold)',
+    }))
+    expect(secondaryPill).toEqual(expect.objectContaining({
+      'max-width': '100%',
+      'min-height': '1.0625rem',
+      'padding-inline': 'var(--spacing-2xs)',
+      'font-size': 'var(--font-size-xs)',
+      'line-height': '1',
+    }))
+  })
+
+  it('locks the Continue Work responsive grid contract for a wide primary card', () => {
+    const desktopActionsGrid = getCssDeclarations('.maintain-vmfs__continue-grid', {
+      after: '@media (min-width: 768px)',
+    })
+    const mobilePrimaryCard = getCssDeclarations('.maintain-vmfs__continue-card--primary', {
+      after: '@media (max-width: 768px)',
+    })
+    const mobilePrimaryActions = getCssDeclarations('.maintain-vmfs__continue-actions', {
+      after: '@media (max-width: 768px)',
+    })
+
+    expect(desktopActionsGrid).toEqual(expect.objectContaining({
+      'grid-template-columns': 'minmax(0, 2fr) repeat(3, minmax(12rem, 1fr))',
+    }))
+    expect(mobilePrimaryCard).toEqual(expect.objectContaining({
+      'grid-template-columns': 'minmax(0, 1fr)',
+      'grid-template-rows': 'auto auto auto',
+    }))
+    expect(mobilePrimaryActions).toEqual(expect.objectContaining({
+      'grid-column': '1 / -1',
+      'grid-row': '3',
+      'justify-content': 'space-between',
+      width: '100%',
+    }))
   })
 })

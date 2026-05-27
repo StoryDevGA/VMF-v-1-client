@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
   MdCheckCircle,
@@ -7,7 +7,6 @@ import {
   MdErrorOutline,
   MdInfoOutline,
   MdOutlineHistory,
-  MdOutlineRoute,
   MdRefresh,
   MdSave,
   MdOutlineWarningAmber,
@@ -43,8 +42,21 @@ import {
 import './RuntimeWorkspace.css'
 
 const EMPTY_ARRAY = Object.freeze([])
+const RUNTIME_WORKSPACE_BACK_FALLBACK = '/app/workspaces/vmf'
 
 const getRendererPayload = (response) => response?.data ?? null
+
+const getRuntimeWorkspaceBackTarget = (state) => {
+  const from = typeof state?.from === 'string' ? state.from.trim() : ''
+  if (
+    from === RUNTIME_WORKSPACE_BACK_FALLBACK
+    || from.startsWith(`${RUNTIME_WORKSPACE_BACK_FALLBACK}?`)
+    || from.startsWith(`${RUNTIME_WORKSPACE_BACK_FALLBACK}#`)
+  ) {
+    return from
+  }
+  return RUNTIME_WORKSPACE_BACK_FALLBACK
+}
 
 const RENDERER_WARNING_SEVERITY_VARIANTS = Object.freeze({
   INFO: 'info',
@@ -1599,6 +1611,7 @@ function DiscoverySection({
 
 function RuntimeWorkspace() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { runtimeInstanceId = '' } = useParams()
   const {
     data: rendererResponse,
@@ -1801,7 +1814,7 @@ function RuntimeWorkspace() {
   }, [activeWorkspaceKey, discovery?.accepted, discoveryState, sections])
 
   const handleBack = () => {
-    navigate('/app/dashboard')
+    navigate(getRuntimeWorkspaceBackTarget(location.state))
   }
 
   const setSectionFeedback = (runtimePath, feedback) => {
@@ -2133,25 +2146,33 @@ function RuntimeWorkspace() {
 
   return (
     <section className="runtime-workspace container" aria-label="Execution workspace">
+      <header className="runtime-workspace__page-header">
+        <div className="runtime-workspace__page-copy">
+          <p className="runtime-workspace__page-kicker">Execution Workspace</p>
+          <h1 className="runtime-workspace__page-title">
+            {runtimeInstance?.name || runtimeDisplayId || 'Execution Workspace'}
+          </h1>
+          <p className="runtime-workspace__page-description">
+            Continue governed runtime work for {runtimeDisplayId}.
+          </p>
+        </div>
+        <div
+          className="runtime-workspace__actions"
+          role="group"
+          aria-label="Execution workspace actions"
+        >
+          <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+            Back
+          </Button>
+          {isFetching ? (
+            <Status variant="info" size="sm" showIcon>Refreshing</Status>
+          ) : null}
+        </div>
+      </header>
+
       <Card variant="default" className="runtime-workspace__hero">
         <Card.Body className="runtime-workspace__hero-body">
-          <div
-            className="runtime-workspace__actions"
-            role="group"
-            aria-label="Execution workspace actions"
-          >
-            <Button type="button" variant="outline" size="sm" onClick={handleBack}>
-              Back
-            </Button>
-            {isFetching ? (
-              <Status variant="info" size="sm" showIcon>Refreshing</Status>
-            ) : null}
-          </div>
           <div className="runtime-workspace__hero-copy">
-            <Badge variant="info" size="sm" pill outline icon={<MdOutlineRoute aria-hidden="true" />}>
-              Execution Workspace
-            </Badge>
-            <h1>{runtimeInstance?.name || 'Execution Workspace'}</h1>
             {heroMetaItems.length > 0 ? (
               <ul className="runtime-workspace__hero-meta" aria-label={`Runtime ${runtimeDisplayId} metadata`}>
                 {heroMetaItems.map((item) => (

@@ -100,7 +100,12 @@
   --color-error: #ef4444;
   --color-error-hover: #dc2626;
   --color-error-active: #b91c1c;
+  --color-danger: var(--color-error);
+  --color-danger-hover: var(--color-error-hover);
+  --color-danger-active: var(--color-error-active);
   --color-info: #a8b0b0;
+  --color-info-hover: #8a9494;
+  --color-info-active: #677070;
 
   /* Compatibility aliases for legacy component/page tokens.
      These keep older surfaces aligned with the canonical SLOS system. */
@@ -113,17 +118,23 @@
   --color-focus-ring: var(--color-border-focus);
   --color-link-hover: var(--color-primary-200);
   --color-secondary: var(--color-text-secondary);
-  --color-danger-700: var(--color-error-active);
+  --color-danger-700: var(--color-danger-active);
   --color-error-400: #f87171;
   --color-error-600: var(--color-error-hover);
   --color-error-bg: color-mix(in srgb, var(--color-error) 14%, white);
   --color-error-text: color-mix(in srgb, var(--color-error) 70%, black);
+  --color-danger-bg: var(--color-error-bg);
+  --color-danger-border: color-mix(in srgb, var(--color-danger) 35%, white);
+  --color-danger-text: var(--color-error-text);
   --color-success-bg: color-mix(in srgb, var(--color-success) 16%, white);
   --color-success-text: color-mix(in srgb, var(--color-success) 70%, black);
   --color-warning-bg: color-mix(in srgb, var(--color-warning) 16%, white);
   --color-warning-background: var(--color-warning-bg);
   --color-warning-border: color-mix(in srgb, var(--color-warning) 35%, white);
   --color-warning-text: color-mix(in srgb, var(--color-warning) 70%, black);
+  --color-info-bg: color-mix(in srgb, var(--color-info) 16%, white);
+  --color-info-border: color-mix(in srgb, var(--color-info) 35%, white);
+  --color-info-text: color-mix(in srgb, var(--color-info) 70%, black);
   --font-family-mono: var(--font-mono);
   --font-size-md: var(--font-size-base);
   --border-radius-xs: 0.125rem;
@@ -139,6 +150,10 @@
   --border-width-thin: 1px;
   --border-width-medium: 2px;
   --border-width-thick: 4px;
+
+  --color-card-border: color-mix(in srgb, var(--color-border) 30%, transparent);
+  --color-card-border-hover: color-mix(in srgb, var(--color-border) 45%, transparent);
+  --color-card-border-active: color-mix(in srgb, var(--color-border) 55%, transparent);
 
   --border-radius-sm: 0.25rem;   /* 4px */
   --border-radius-md: 0.5rem;    /* 8px */

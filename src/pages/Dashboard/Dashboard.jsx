@@ -434,26 +434,30 @@ function RuntimeActionCard({ action, primary = false }) {
           underline="none"
           aria-label={linkLabel}
         >
-          <span className="dashboard__continue-icon" aria-hidden="true">
-            <Icon />
-          </span>
+          <div className="dashboard__continue-head">
+            <span className="dashboard__continue-icon" aria-hidden="true">
+              <Icon />
+            </span>
+            <div className="dashboard__continue-heading">
+              <h3 className="dashboard__continue-title">{displayTitle}</h3>
+              {Array.isArray(action.badges) && action.badges.length > 0 ? (
+                <div className="dashboard__continue-status" aria-label="Runtime state">
+                  {action.badges.map((badge) => (
+                    <Badge
+                      key={`${badge.label}-${badge.variant}`}
+                      variant={badge.variant}
+                      size="sm"
+                      pill
+                      outline
+                    >
+                      {badge.label}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
           <div className="dashboard__continue-copy">
-            <h3 className="dashboard__continue-title">{displayTitle}</h3>
-            {Array.isArray(action.badges) && action.badges.length > 0 ? (
-              <div className="dashboard__continue-status" aria-label="Runtime state">
-                {action.badges.map((badge) => (
-                  <Badge
-                    key={`${badge.label}-${badge.variant}`}
-                    variant={badge.variant}
-                    size="sm"
-                    pill
-                    outline
-                  >
-                    {badge.label}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
             <p>{action.meta}</p>
             {action.description ? (
               <p>{action.description}</p>
@@ -473,31 +477,35 @@ function RuntimeActionCard({ action, primary = false }) {
       <Link
         to={action.to}
         disabled={action.disabled}
-        className="dashboard__continue-card dashboard__continue-card--link"
+        className="dashboard__continue-card dashboard__continue-card--secondary dashboard__continue-card--link"
         variant="subtle"
         underline="none"
         aria-label={linkLabel}
       >
-        <span className="dashboard__continue-icon" aria-hidden="true">
-          <Icon />
-        </span>
+        <div className="dashboard__continue-head">
+          <span className="dashboard__continue-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <div className="dashboard__continue-heading">
+            <h3 className="dashboard__continue-title">{displayTitle}</h3>
+            {Array.isArray(action.badges) && action.badges.length > 0 ? (
+              <div className="dashboard__continue-status" aria-label="Runtime state">
+                {action.badges.map((badge) => (
+                  <Badge
+                    key={`${badge.label}-${badge.variant}`}
+                    variant={badge.variant}
+                    size="sm"
+                    pill
+                    outline
+                  >
+                    {badge.label}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
         <div className="dashboard__continue-copy">
-          <h3 className="dashboard__continue-title">{displayTitle}</h3>
-          {Array.isArray(action.badges) && action.badges.length > 0 ? (
-            <div className="dashboard__continue-status" aria-label="Runtime state">
-              {action.badges.map((badge) => (
-                <Badge
-                  key={`${badge.label}-${badge.variant}`}
-                  variant={badge.variant}
-                  size="sm"
-                  pill
-                  outline
-                >
-                  {badge.label}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
           <p>{action.meta}</p>
           {action.description ? (
             <p>{action.description}</p>

@@ -66,7 +66,18 @@ describe('CSS Design System', () => {
       expect(computedStyles.getPropertyValue('--color-success')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--color-warning')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--color-error')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger-hover')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger-active')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger-bg')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger-border')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-danger-text')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--color-info')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-info-hover')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-info-active')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-info-bg')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-info-border')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-info-text')).toBeTruthy()
     })
   })
 
@@ -80,6 +91,12 @@ describe('CSS Design System', () => {
     it('should define border width variables', () => {
       expect(computedStyles.getPropertyValue('--border-width-thin')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--border-width-medium')).toBeTruthy()
+    })
+
+    it('should define card border tone variables', () => {
+      expect(computedStyles.getPropertyValue('--color-card-border')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-card-border-hover')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-card-border-active')).toBeTruthy()
     })
   })
 

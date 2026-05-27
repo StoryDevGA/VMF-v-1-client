@@ -17,7 +17,7 @@
 
   /* Appearance */
   background-color: var(--color-surface);
-  border: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+  border: 1px solid var(--color-card-border);
   overflow: hidden;
 
   /* Spacing */
@@ -91,7 +91,7 @@
 .card--hoverable:hover {
   transform: translateY(calc(var(--spacing-xs) * -1));
   box-shadow: var(--shadow-lg);
-  border-color: var(--color-border);
+  border-color: var(--color-card-border-hover);
 }
 
 /* Clickable cards */

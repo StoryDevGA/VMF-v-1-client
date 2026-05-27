@@ -9,13 +9,14 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import {
   MdAdd,
   MdChevronRight,
+  MdKeyboardArrowDown,
+  MdKeyboardArrowUp,
   MdOutlineDescription,
   MdLockOutline,
   MdOutlineWarningAmber,
   MdShield,
 } from 'react-icons/md'
-import { useNavigate } from 'react-router-dom'
-import { Accordion } from '../../components/Accordion'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -110,10 +111,22 @@ const VMF_LICENCE_MESSAGE =
   'This customer licence does not include VMF. Contact your Super Admin to update entitlements.'
 
 const VMF_LIFECYCLE_NOTE =
-  'Runtime objects are shown alongside transitional VMF bridge records. Open the compact row accordions for runtime state and package lineage fields; use Actions for bridge-record details, edits, or soft-delete where permitted. Active VMFs must be disabled before deletion.'
+  'Runtime objects are shown alongside transitional VMF bridge records. Open row details for runtime state and package lineage fields; use Actions for bridge-record details, edits, or soft-delete where permitted. Active VMFs must be disabled before deletion.'
 
 const VMF_READ_ONLY_NOTE =
-  "This workspace is read-only for your current access level. Open the compact row accordions for package lineage and use Actions to view details; standard users and linked tenant members can review published VMF bridge records and published runtime lifecycle rows only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
+  "This workspace is read-only for your current access level. Open row details for package lineage and use Actions to view details; standard users and linked tenant members can review published VMF bridge records and published runtime lifecycle rows only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
+
+const VMF_REGISTER_GUIDE_ITEMS = [
+  ['Scope', 'Runtime objects + bridge records'],
+  ['Details', 'State + package lineage'],
+  ['Actions', 'Lifecycle-gated bridge edits'],
+]
+
+const VMF_READ_ONLY_REGISTER_GUIDE_ITEMS = [
+  ['Scope', 'Published VMF bridge records'],
+  ['Details', 'Package lineage + runtime state'],
+  ['Access', 'Review only'],
+]
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
@@ -220,13 +233,6 @@ const getFrameworkPackageOptionLabel = (frameworkPackage) => {
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
-
-const normalizeAccordionId = (value) =>
-  String(value ?? 'vmf')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '') || 'vmf'
 
 const getRuntimeCapacityCountLabel = (countMode) => {
   const normalizedCountMode = String(countMode ?? '').trim().toUpperCase()
@@ -486,6 +492,7 @@ const buildRuntimeInstanceRegisterRow = (row) => {
   const status = getRuntimeLifecycleStatus(row)
   const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(row)
   const executionState = getRuntimeExecutionState(row)
+  const readiness = getRuntimeReadinessLabel(row)
   const packageLabel = getFrameworkPackageLabel(row)
   const packageVersion = getPackageVersion(row)
   const name = String(row?.name ?? '').trim() || 'Value Narrative'
@@ -515,6 +522,8 @@ const buildRuntimeInstanceRegisterRow = (row) => {
     stageLabel: formatRuntimeTokenLabel(executionState),
     stageHelper: 'Execution state',
     stageVariant: getExecutionStateVariant(executionState),
+    healthLabel: readiness,
+    healthVariant: getRuntimeReadinessVariant(readiness),
     updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
     updatedTime: getUpdatedTimestamp(row),
     route: getRuntimeWorkspaceRoute(row),
@@ -576,6 +585,8 @@ const buildVmfRegisterRow = (row) => {
     stageLabel: readiness,
     stageHelper: `Validation ${String(row?.validationStatus ?? 'NOT_RUN').trim().toUpperCase() || 'NOT_RUN'}`,
     stageVariant: getRuntimeReadinessVariant(readiness),
+    healthLabel: readiness,
+    healthVariant: getRuntimeReadinessVariant(readiness),
     updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
     updatedTime: getUpdatedTimestamp(row),
     evidenceItems: getRuntimeEvidenceItems(row),
@@ -651,109 +662,33 @@ function VmfRowActionsMenu({ row, actions, onAction }) {
   )
 }
 
-function RuntimeRowActionsMenu({ row, onOpen }) {
-  const rowName = row?.name || row?.displayId || 'runtime row'
-  const options = [{ value: 'Continue', label: 'Continue' }]
+const getEvidenceItem = (row, label) =>
+  row?.evidenceItems?.find((item) => item.label === label) ?? null
 
-  return (
-    <div className="maintain-vmfs__row-actions">
-      <Select
-        size="sm"
-        value=""
-        placeholder="Actions"
-        options={options}
-        onChange={(event) => {
-          if (event.target.value === 'Continue') onOpen(row)
-        }}
-        aria-label={`Runtime actions for ${rowName}`}
-      />
-    </div>
-  )
+const getEvidenceItemValue = (row, label) => getEvidenceItem(row, label)?.value ?? ''
+
+const getBadgeSafeVariant = (variant, fallback = 'neutral') => {
+  const normalized = String(variant ?? '').trim()
+  if (normalized === 'error') return 'danger'
+  return normalized || fallback
 }
 
-function RuntimeEvidenceAccordionCell({ row }) {
-  const baseId = `runtime-evidence-${normalizeAccordionId(row.key)}`
-
-  return (
-    <Accordion
-      variant="default"
-      rounded={false}
-      className="maintain-vmfs__cell-accordion"
-    >
-      {row.evidenceItems.map((item) => {
-        const itemId = `${baseId}-${normalizeAccordionId(item.label)}`
-
-        return (
-          <Accordion.Item id={itemId} key={item.label}>
-            <Accordion.Header
-              itemId={itemId}
-              className="maintain-vmfs__cell-accordion-header"
-              aria-label={`${item.label} for ${row.name}`}
-            >
-              {item.label}
-            </Accordion.Header>
-            <Accordion.Content
-              itemId={itemId}
-              className="maintain-vmfs__cell-accordion-content"
-            >
-              <Badge
-                size="sm"
-                variant={item.variant}
-                pill
-                className="maintain-vmfs__cell-accordion-badge"
-              >
-                {item.value}
-              </Badge>
-            </Accordion.Content>
-          </Accordion.Item>
-        )
-      })}
-    </Accordion>
-  )
-}
-
-function PackageLineageAccordionCell({ row }) {
-  const baseId = `package-lineage-${normalizeAccordionId(row.key)}`
-
-  return (
-    <Accordion
-      variant="default"
-      rounded={false}
-      className="maintain-vmfs__cell-accordion"
-    >
-      {row.lineageItems.map(([label, value]) => {
-        const itemId = `${baseId}-${normalizeAccordionId(label)}`
-
-        return (
-          <Accordion.Item id={itemId} key={`${row.key}-${label}`}>
-            <Accordion.Header
-              itemId={itemId}
-              className="maintain-vmfs__cell-accordion-header"
-              aria-label={`${label} for ${row.name}`}
-            >
-              {label}
-            </Accordion.Header>
-            <Accordion.Content
-              itemId={itemId}
-              className="maintain-vmfs__cell-accordion-content"
-            >
-              <code className="maintain-vmfs__cell-accordion-value">{value}</code>
-            </Accordion.Content>
-          </Accordion.Item>
-        )
-      })}
-    </Accordion>
-  )
-}
-
-const getEvidenceItemValue = (row, label) =>
-  row?.evidenceItems?.find((item) => item.label === label)?.value ?? ''
-
-function ContinueWorkCard({ row, primary = false, title, description, icon, tone = 'primary', onOpen }) {
+function ContinueWorkCard({
+  row,
+  primary = false,
+  title,
+  description,
+  insight = '',
+  summaryBadge = null,
+  icon,
+  tone = 'primary',
+  onOpen,
+}) {
   const className = [
     'maintain-vmfs__continue-card',
     primary ? 'maintain-vmfs__continue-card--primary' : '',
     !primary ? 'maintain-vmfs__continue-card--summary' : '',
+    !primary ? 'maintain-vmfs__continue-card--secondary' : '',
     tone !== 'primary' ? `maintain-vmfs__continue-card--${tone}` : '',
   ].filter(Boolean).join(' ')
   const canOpen = Boolean(row?.route)
@@ -769,14 +704,14 @@ function ContinueWorkCard({ row, primary = false, title, description, icon, tone
 
   return (
     <li className={className}>
-      <span className="maintain-vmfs__continue-icon" aria-hidden="true">
-        <CardIcon />
-      </span>
-      <div className="maintain-vmfs__continue-copy">
-        <h3 className="maintain-vmfs__continue-title">{primaryTitle}</h3>
-        {primary && row ? (
-          <>
-            <div className="maintain-vmfs__continue-status">
+      <div className="maintain-vmfs__continue-head">
+        <span className="maintain-vmfs__continue-icon" aria-hidden="true">
+          <CardIcon />
+        </span>
+        <div className="maintain-vmfs__continue-heading">
+          <h3 className="maintain-vmfs__continue-title">{primaryTitle}</h3>
+          {primary && row ? (
+            <div className="maintain-vmfs__continue-status" aria-label="Runtime state">
               <Status
                 size="sm"
                 variant={row.statusVariant === 'danger' ? 'error' : row.statusVariant}
@@ -791,11 +726,36 @@ function ContinueWorkCard({ row, primary = false, title, description, icon, tone
                 {row.stageLabel}
               </Badge>
             </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="maintain-vmfs__continue-copy">
+        {primary && row ? (
+          <>
             <p>{packageSummary ? `Bound to ${packageSummary}` : 'Bound framework unavailable'}</p>
             <p>{updatedLabel}</p>
           </>
         ) : (
-          <p>{description}</p>
+          <>
+            <p>{description}</p>
+            {insight || summaryBadge?.label ? (
+              <div className="maintain-vmfs__continue-insight">
+                {insight ? (
+                  <p className="maintain-vmfs__continue-detail">{insight}</p>
+                ) : null}
+                {summaryBadge?.label ? (
+                  <Badge
+                    size="sm"
+                    variant={getBadgeSafeVariant(summaryBadge.variant)}
+                    pill
+                    className="maintain-vmfs__continue-pill"
+                  >
+                    {summaryBadge.label}
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
       {primary ? (
@@ -825,26 +785,45 @@ function DetailPair({ label, children }) {
   )
 }
 
-function RegisterExpansionPanel({ row, onOpen }) {
+function CompactBadgeText({ value, compact = false }) {
+  const label = String(value ?? '').trim()
+  const parts = label.split(/\s+/).filter(Boolean)
+
+  if (!compact || parts.length < 2) return label
+
+  return (
+    <span className="maintain-vmfs__badge-lines">
+      {parts.map((part, index) => (
+        <span key={`${label}-${part}-${index}`}>
+          {part}
+          {index < parts.length - 1 ? ' ' : ''}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function RegisterExpansionPanel({ row, onOpen, runtimeWorkspaceBackState }) {
   const runtimeRoute = String(row?.route ?? '').trim()
 
   return (
     <div className="maintain-vmfs__expansion" aria-label={`${row.name} expanded runtime details`}>
-      <div className="maintain-vmfs__section-pills" aria-label={`${row.name} detail sections available in this panel`}>
-        {['Overview', 'Runtime', 'Framework', 'Lineage'].map((tab) => (
-          <span
-            key={tab}
-            className="maintain-vmfs__section-pill"
-          >
-            {tab}
-          </span>
-        ))}
-      </div>
-      <div className="maintain-vmfs__expansion-actions">
+      <div className="maintain-vmfs__expansion-header">
+        <div className="maintain-vmfs__section-pills" aria-label={`${row.name} detail sections available in this panel`}>
+          {['Overview', 'Runtime', 'Framework', 'Lineage', 'Dependencies', 'Notes', 'Change Log'].map((tab) => (
+            <span
+              key={tab}
+              className="maintain-vmfs__section-pill"
+            >
+              {tab}
+            </span>
+          ))}
+        </div>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="maintain-vmfs__table-action-button"
           disabled={!runtimeRoute}
           onClick={() => onOpen(row)}
         >
@@ -868,7 +847,9 @@ function RegisterExpansionPanel({ row, onOpen }) {
           <dl>
             {row.evidenceItems.map((item) => (
               <DetailPair key={item.label} label={item.label}>
-                <Badge size="sm" variant={item.variant} pill>{item.value}</Badge>
+                <Badge size="sm" variant={item.variant} pill className="maintain-vmfs__detail-badge">
+                  <CompactBadgeText value={item.value} compact={item.variant === 'warning'} />
+                </Badge>
               </DetailPair>
             ))}
           </dl>
@@ -882,7 +863,12 @@ function RegisterExpansionPanel({ row, onOpen }) {
             <DetailPair label="Lifecycle">{row.lifecycleLabel}</DetailPair>
           </dl>
           {runtimeRoute ? (
-            <Link to={runtimeRoute} variant="primary" underline="hover">
+            <Link
+              to={runtimeRoute}
+              state={runtimeWorkspaceBackState}
+              variant="primary"
+              underline="hover"
+            >
               Open runtime workspace
             </Link>
           ) : null}
@@ -943,6 +929,7 @@ function MaintainVmfsBoundaryState({ message, onBack }) {
 
 function MaintainVmfs() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { addToast } = useToaster()
   const {
     customerId,
@@ -988,6 +975,12 @@ function MaintainVmfs() {
 
   const debouncedSearch = useDebounce(search, 300)
   const querySearch = search.trim() ? debouncedSearch.trim() : ''
+  const runtimeWorkspaceBackState = useMemo(
+    () => ({
+      from: `${location.pathname}${location.search}${location.hash}`,
+    }),
+    [location.hash, location.pathname, location.search],
+  )
 
   useEffect(() => {
     if (tenantId || !customerId) return
@@ -1236,6 +1229,7 @@ function MaintainVmfs() {
   })
   const isCreateRuntimeCapacityBlocked = Boolean(runtimeCapacityBlockMessage)
   const workspaceTableNote = canMutateVmfs ? VMF_LIFECYCLE_NOTE : VMF_READ_ONLY_NOTE
+  const registerGuideItems = canMutateVmfs ? VMF_REGISTER_GUIDE_ITEMS : VMF_READ_ONLY_REGISTER_GUIDE_ITEMS
 
   const canManageVmfRow = useCallback(
     () => Boolean(canUpdateVmfs && customerId && tenantId),
@@ -1386,9 +1380,9 @@ function MaintainVmfs() {
   const handleRuntimeRowOpen = useCallback(
     (row) => {
       const route = String(row?.route ?? '').trim()
-      if (route) navigate(route)
+      if (route) navigate(route, { state: runtimeWorkspaceBackState })
     },
-    [navigate],
+    [navigate, runtimeWorkspaceBackState],
   )
 
   const runtimeRegisterRows = useMemo(() => {
@@ -1439,17 +1433,52 @@ function MaintainVmfs() {
   }, [expandedRegisterRowKey, registerRows])
 
   const featuredRegisterRow = registerRows[0] ?? null
-  const lockedInstanceCount = registerRows.filter(
+  const lockedInstanceRows = registerRows.filter(
     (row) => String(getEvidenceItemValue(row, 'Lock')).trim().toUpperCase() === 'LOCKED',
-  ).length
-  const pendingValidationCount = registerRows.filter((row) => {
+  )
+  const pendingValidationRows = registerRows.filter((row) => {
     const validation = String(getEvidenceItemValue(row, 'Validation')).trim().toUpperCase()
     return ['FAILED', 'ERROR', 'BLOCKED', 'NOT_RUN', 'PENDING'].includes(validation)
-  }).length
-  const atRiskInstanceCount = registerRows.filter((row) =>
+  })
+  const atRiskInstanceRows = registerRows.filter((row) =>
     ['warning', 'error', 'danger'].includes(row.stageVariant)
     || ['FAILED', 'ERROR', 'BLOCKED', 'WAITING'].includes(String(row.status).trim().toUpperCase()),
-  ).length
+  )
+  const lockedInstanceCount = lockedInstanceRows.length
+  const pendingValidationCount = pendingValidationRows.length
+  const atRiskInstanceCount = atRiskInstanceRows.length
+  const lockedInstanceFocus = lockedInstanceRows[0] ?? null
+  const pendingValidationFocus = pendingValidationRows[0] ?? null
+  const atRiskInstanceFocus = atRiskInstanceRows[0] ?? null
+  const lockedInstanceEvidence = getEvidenceItem(lockedInstanceFocus, 'Lock')
+  const pendingValidationEvidence = getEvidenceItem(pendingValidationFocus, 'Validation')
+  const lockedInstanceInsight = lockedInstanceFocus
+    ? `Latest: ${lockedInstanceFocus.name}`
+    : 'No locked instances'
+  const pendingValidationInsight = pendingValidationFocus
+    ? `Latest: ${pendingValidationFocus.name}`
+    : 'No pending validation'
+  const atRiskInstanceInsight = atRiskInstanceFocus
+    ? `Latest: ${atRiskInstanceFocus.name}`
+    : 'No at-risk instances'
+  const lockedInstanceBadge = lockedInstanceFocus
+    ? {
+        label: formatRuntimeTokenLabel(lockedInstanceEvidence?.value ?? 'LOCKED'),
+        variant: lockedInstanceEvidence?.variant ?? 'warning',
+      }
+    : { label: 'Clear', variant: 'success' }
+  const pendingValidationBadge = pendingValidationFocus
+    ? {
+        label: formatRuntimeTokenLabel(pendingValidationEvidence?.value ?? 'PENDING'),
+        variant: pendingValidationEvidence?.variant ?? 'warning',
+      }
+    : { label: 'Clear', variant: 'success' }
+  const atRiskInstanceBadge = atRiskInstanceFocus
+    ? {
+        label: atRiskInstanceFocus.stageLabel,
+        variant: atRiskInstanceFocus.stageVariant,
+      }
+    : { label: 'Clear', variant: 'success' }
   const handleCreateSubmit = useCallback(
     async (event) => {
       event.preventDefault()
@@ -1770,16 +1799,22 @@ function MaintainVmfs() {
             <ContinueWorkCard
               title="Review Locked Instances"
               description={`${lockedInstanceCount} ${lockedInstanceCount === 1 ? 'instance' : 'instances'} locked`}
+              insight={lockedInstanceInsight}
+              summaryBadge={lockedInstanceBadge}
               icon={MdLockOutline}
             />
             <ContinueWorkCard
               title="Resolve Pending Validation"
               description={`${pendingValidationCount} ${pendingValidationCount === 1 ? 'instance needs' : 'instances need'} attention`}
+              insight={pendingValidationInsight}
+              summaryBadge={pendingValidationBadge}
               icon={MdShield}
             />
             <ContinueWorkCard
               title="Review At-Risk Instances"
               description={`${atRiskInstanceCount} ${atRiskInstanceCount === 1 ? 'instance needs' : 'instances need'} attention`}
+              insight={atRiskInstanceInsight}
+              summaryBadge={atRiskInstanceBadge}
               icon={MdOutlineWarningAmber}
               tone="warning"
             />
@@ -1791,9 +1826,9 @@ function MaintainVmfs() {
         )}
       </section>
 
-      <Fieldset className="maintain-vmfs__fieldset">
+      <Fieldset className="maintain-vmfs__fieldset maintain-vmfs__register-section">
         <Fieldset.Legend className="sr-only">Value Narrative work register</Fieldset.Legend>
-        <Card variant="elevated" className="maintain-vmfs__card">
+        <Card variant="elevated" className="maintain-vmfs__card maintain-vmfs__register-card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
             <div className="maintain-vmfs__register-header">
               <div className="maintain-vmfs__register-copy-wrapper">
@@ -1907,7 +1942,19 @@ function MaintainVmfs() {
             ) : null}
 
             <div className="maintain-vmfs__register-meta">
-              <p className="maintain-vmfs__table-note">{workspaceTableNote}</p>
+              <div className="maintain-vmfs__register-guide" aria-label={workspaceTableNote}>
+                <div className="maintain-vmfs__register-guide-copy">
+                  <p className="maintain-vmfs__register-guide-title">Register guide</p>
+                  <ul className="maintain-vmfs__register-guide-list">
+                    {registerGuideItems.map(([label, value]) => (
+                      <li key={label} className="maintain-vmfs__register-guide-item">
+                        <span className="maintain-vmfs__register-guide-label">{label}</span>
+                        <span className="maintain-vmfs__register-guide-value">{value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
               <div className="maintain-vmfs__register-counts" aria-label="Value Narrative register counts">
                 <Badge size="sm" variant="neutral" pill>{registerCountLabel}</Badge>
                 <Badge size="sm" variant="info" pill>{registerSourceCountLabel}</Badge>
@@ -1926,26 +1973,27 @@ function MaintainVmfs() {
                 ariaLabel="Value Narrative work register"
               >
                 <Table.Head>
-                  <Table.Row>
-                    <Table.Header width="210px">Value Narrative</Table.Header>
-                    <Table.Header width="180px">Description</Table.Header>
-                    <Table.Header width="118px">State</Table.Header>
-                    <Table.Header width="150px">Stage / Health</Table.Header>
-                    <Table.Header width="190px">Framework / Package</Table.Header>
-                    <Table.Header width="128px">Updated</Table.Header>
-                    <Table.Header width="150px" align="center">Actions</Table.Header>
+                    <Table.Row>
+                    <Table.Header width="300px">Instance</Table.Header>
+                    <Table.Header width="220px">Package</Table.Header>
+                    <Table.Header width="130px">Version</Table.Header>
+                    <Table.Header width="140px">State</Table.Header>
+                    <Table.Header width="130px">Lifecycle</Table.Header>
+                    <Table.Header width="150px">Health</Table.Header>
+                    <Table.Header width="140px">Updated</Table.Header>
+                    <Table.Header width="170px" align="center">Action</Table.Header>
                   </Table.Row>
                 </Table.Head>
                 <Table.Body>
                   {isRegisterLoading ? (
                     <Table.Row className="table__row--loading">
-                      <Table.Cell colSpan={7} className="table__cell--empty">
+                      <Table.Cell colSpan={8} className="table__cell--empty">
                         <p className="table__empty-message">Loading Value Narrative work...</p>
                       </Table.Cell>
                     </Table.Row>
                   ) : registerRows.length === 0 ? (
                     <Table.Row className="table__row--empty">
-                      <Table.Cell colSpan={7} className="table__cell--empty">
+                      <Table.Cell colSpan={8} className="table__cell--empty">
                         <p className="table__empty-message">No Value Narratives found.</p>
                       </Table.Cell>
                     </Table.Row>
@@ -1962,14 +2010,18 @@ function MaintainVmfs() {
                             ].filter(Boolean).join(' ')}
                           >
                             <Table.Cell
-                              dataLabel="Value Narrative"
+                              dataLabel="Instance"
                               className="maintain-vmfs__register-identity-cell"
                             >
-                              <div className="maintain-vmfs__vmf-summary">
+                              <div className="maintain-vmfs__instance-summary">
+                                <span className="maintain-vmfs__instance-icon" aria-hidden="true">
+                                  <MdOutlineDescription />
+                                </span>
                                 <div className="maintain-vmfs__vmf-summary-header">
                                   {registerRow.route ? (
                                     <Link
                                       to={registerRow.route}
+                                      state={runtimeWorkspaceBackState}
                                       className="maintain-vmfs__vmf-name"
                                       variant="primary"
                                       underline="hover"
@@ -1990,59 +2042,46 @@ function MaintainVmfs() {
                                 </div>
                               </div>
                             </Table.Cell>
-                            <Table.Cell dataLabel="Description">
-                              {registerRow.description ? (
-                                <span className="maintain-vmfs__vmf-description">
-                                  {registerRow.description}
-                                </span>
-                              ) : (
-                                <span className="maintain-vmfs__muted">No description recorded</span>
-                              )}
+                            <Table.Cell dataLabel="Package">
+                              <span className="maintain-vmfs__summary-value">
+                                {registerRow.packageLabel}
+                              </span>
+                            </Table.Cell>
+                            <Table.Cell dataLabel="Version">
+                              <span className="maintain-vmfs__summary-value">
+                                {registerRow.packageVersion}
+                              </span>
                             </Table.Cell>
                             <Table.Cell dataLabel="State">
-                              <div className="maintain-vmfs__state-stack">
-                                <Status
-                                  size="sm"
-                                  showIcon
-                                  variant={registerRow.statusVariant === 'danger' ? 'error' : registerRow.statusVariant}
-                                >
-                                  {registerRow.statusLabel}
-                                </Status>
-                                <Badge
-                                  size="sm"
-                                  variant={registerRow.lifecycleVariant}
-                                  pill
-                                >
-                                  {registerRow.lifecycleLabel}
-                                </Badge>
-                              </div>
+                              <Status
+                                size="sm"
+                                showIcon
+                                variant={registerRow.statusVariant === 'danger' ? 'error' : registerRow.statusVariant}
+                              >
+                                {registerRow.statusLabel}
+                              </Status>
                             </Table.Cell>
-                            <Table.Cell dataLabel="Stage / Health">
-                              <div className="maintain-vmfs__state-stack">
-                                <Badge size="sm" variant={registerRow.stageVariant} pill>
-                                  {registerRow.stageLabel}
-                                </Badge>
-                                <span className="maintain-vmfs__summary-label">
-                                  {registerRow.stageHelper}
-                                </span>
-                                <RuntimeEvidenceAccordionCell row={registerRow} />
-                              </div>
+                            <Table.Cell dataLabel="Lifecycle">
+                              <Badge
+                                size="sm"
+                                variant={registerRow.lifecycleVariant}
+                                pill
+                              >
+                                {registerRow.lifecycleLabel}
+                              </Badge>
                             </Table.Cell>
-                            <Table.Cell dataLabel="Framework / Package">
-                              <div className="maintain-vmfs__framework-summary">
-                                <div className="maintain-vmfs__summary-pair">
-                                  <span className="maintain-vmfs__summary-label">
-                                    {registerRow.frameworkLabel}
-                                  </span>
-                                  <span className="maintain-vmfs__summary-value">
-                                    {registerRow.packageLabel}
-                                  </span>
-                                </div>
-                                <span className="maintain-vmfs__vmf-description">
-                                  Version {registerRow.packageVersion}
-                                </span>
-                                <PackageLineageAccordionCell row={registerRow} />
-                              </div>
+                            <Table.Cell dataLabel="Health">
+                              <Badge
+                                size="sm"
+                                variant={registerRow.healthVariant}
+                                pill
+                                className="maintain-vmfs__health-badge"
+                              >
+                                <CompactBadgeText
+                                  value={registerRow.healthLabel}
+                                  compact={registerRow.healthVariant === 'warning'}
+                                />
+                              </Badge>
                             </Table.Cell>
                             <Table.Cell dataLabel="Updated">
                               <TableDateTime value={registerRow.updatedAt} />
@@ -2054,10 +2093,16 @@ function MaintainVmfs() {
                             >
                               <div className="maintain-vmfs__row-action-cluster">
                                 {registerRow.source === 'runtime' ? (
-                                  <RuntimeRowActionsMenu
-                                    row={registerRow}
-                                    onOpen={handleRuntimeRowOpen}
-                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="maintain-vmfs__table-action-button"
+                                    disabled={!registerRow.route}
+                                    onClick={() => handleRuntimeRowOpen(registerRow)}
+                                  >
+                                    Continue
+                                  </Button>
                                 ) : (
                                   <VmfRowActionsMenu
                                     row={registerRow.original}
@@ -2067,8 +2112,9 @@ function MaintainVmfs() {
                                 )}
                                 <Button
                                   type="button"
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
+                                  iconOnly
                                   className="maintain-vmfs__details-toggle"
                                   aria-expanded={isExpanded}
                                   aria-label={`${isExpanded ? 'Hide information for' : 'Show more information for'} ${registerRow.name}`}
@@ -2076,17 +2122,22 @@ function MaintainVmfs() {
                                     setExpandedRegisterRowKey((current) =>
                                       current === registerRow.key ? '' : registerRow.key)}
                                 >
-                                  <span>{isExpanded ? 'Hide information' : 'More information'}</span>
+                                  {isExpanded ? (
+                                    <MdKeyboardArrowUp aria-hidden="true" />
+                                  ) : (
+                                    <MdKeyboardArrowDown aria-hidden="true" />
+                                  )}
                                 </Button>
                               </div>
                             </Table.Cell>
                           </Table.Row>
                           {isExpanded ? (
                             <Table.Row className="maintain-vmfs__register-detail-row">
-                              <Table.Cell colSpan={7} className="maintain-vmfs__register-detail-cell">
+                              <Table.Cell colSpan={8} className="maintain-vmfs__register-detail-cell">
                                 <RegisterExpansionPanel
                                   row={registerRow}
                                   onOpen={handleRuntimeRowOpen}
+                                  runtimeWorkspaceBackState={runtimeWorkspaceBackState}
                                 />
                               </Table.Cell>
                             </Table.Row>

@@ -3,10 +3,59 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import path from 'node:path'
+import process from 'node:process'
+import { readFileSync } from 'node:fs'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
+
+const dashboardCss = readFileSync(
+  path.resolve(process.cwd(), 'src/pages/Dashboard/Dashboard.css'),
+  'utf8',
+)
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function getCssRuleBody(selector, { after } = {}) {
+  const startIndex = after ? dashboardCss.indexOf(after) : 0
+
+  if (startIndex === -1) {
+    throw new Error(`Missing CSS anchor ${after}`)
+  }
+
+  const source = dashboardCss.slice(startIndex)
+  const match = new RegExp(`${escapeRegExp(selector)}\\s*\\{([\\s\\S]*?)\\}`).exec(source)
+
+  if (!match) {
+    throw new Error(`Missing CSS rule for ${selector}`)
+  }
+
+  return match[1]
+}
+
+function getCssDeclarations(selector, options) {
+  return getCssRuleBody(selector, options)
+    .split(';')
+    .map((declaration) => declaration.trim())
+    .filter(Boolean)
+    .reduce((declarations, declaration) => {
+      const separatorIndex = declaration.indexOf(':')
+
+      if (separatorIndex === -1) return declarations
+
+      const property = declaration.slice(0, separatorIndex).trim()
+      const value = declaration.slice(separatorIndex + 1).replace(/\s+/g, ' ').trim()
+
+      return {
+        ...declarations,
+        [property]: value,
+      }
+    }, {})
+}
 
 vi.mock('../../hooks/useAuthorization.js', () => ({
   useAuthorization: vi.fn(),
@@ -382,9 +431,21 @@ describe('Dashboard page', () => {
     const primaryActionLink = within(primaryActionCard).getByRole('link', {
       name: /continue new package open workspace/i,
     })
+    const primaryHead = primaryActionLink.querySelector('.dashboard__continue-head')
+    const primaryCopy = primaryActionLink.querySelector('.dashboard__continue-copy')
+    const primaryActions = primaryActionLink.querySelector('.dashboard__continue-actions')
 
+    expect(primaryActionLink)
+      .toHaveClass('dashboard__continue-card', 'dashboard__continue-card--primary', 'dashboard__continue-card--link')
     expect(primaryActionLink).toHaveAttribute('href', '/app/runtime/value-narrative-859907')
-    expect(within(primaryActionLink).getByText('Continue')).toBeInTheDocument()
+    expect(primaryHead).not.toBeNull()
+    expect(primaryHead).toContainElement(within(primaryActionLink).getByRole('heading', { name: 'New Package' }))
+    expect(primaryHead).toContainElement(within(primaryActionLink).getByLabelText('Runtime state'))
+    expect(primaryCopy).not.toBeNull()
+    expect(primaryCopy.querySelector('.dashboard__continue-title')).not.toBeInTheDocument()
+    expect(primaryCopy.querySelector('.dashboard__continue-status')).not.toBeInTheDocument()
+    expect(primaryActions).not.toBeNull()
+    expect(primaryActions).toContainElement(within(primaryActionLink).getByText('Continue'))
     expect(within(primaryActionCard).queryByRole('button', { name: /^continue$/i }))
       .not.toBeInTheDocument()
     expect(primaryActionCard.querySelector('.dashboard__continue-arrow')).toBeInTheDocument()
@@ -405,6 +466,88 @@ describe('Dashboard page', () => {
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
     expect(screen.getByText('1 available')).toBeInTheDocument()
+  })
+
+  it('applies the featured Continue Work treatment only to the first runtime action', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-first',
+            runtimeInstanceKey: 'value-narrative-first',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'First Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            packageVersion: '2.3.569357',
+            updatedAt: '2026-05-27T09:21:00.000Z',
+          },
+          {
+            id: 'runtime-second',
+            runtimeInstanceKey: 'value-narrative-second',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Second Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            packageVersion: '2.3.569357',
+            updatedAt: '2026-05-25T11:48:00.000Z',
+          },
+          {
+            id: 'runtime-third',
+            runtimeInstanceKey: 'value-narrative-third',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Third Runtime',
+            status: 'ARCHIVED',
+            executionStatus: 'IDLE',
+            packageVersion: '2.3.569357',
+            updatedAt: '2026-05-20T15:11:00.000Z',
+          },
+          {
+            id: 'runtime-fourth',
+            runtimeInstanceKey: 'value-narrative-fourth',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Fourth Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            packageVersion: '2.3.569357',
+            updatedAt: '2026-05-20T14:46:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 4 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+    const actionCards = Array.from(actionQueue.querySelectorAll('.dashboard__launch-item--action'))
+    const [primaryActionCard, ...secondaryActionCards] = actionCards
+    const primaryActionLink = within(primaryActionCard).getByRole('link', {
+      name: /continue first runtime open workspace/i,
+    })
+
+    expect(actionQueue).toHaveClass('dashboard__launch-grid--actions')
+    expect(actionCards).toHaveLength(4)
+    expect(primaryActionCard).toHaveClass('dashboard__launch-item--primary-action')
+    expect(primaryActionLink)
+      .toHaveClass('dashboard__continue-card', 'dashboard__continue-card--primary', 'dashboard__continue-card--link')
+    expect(primaryActionLink.querySelector('.dashboard__continue-cta'))
+      .toHaveTextContent('Continue')
+
+    secondaryActionCards.forEach((card) => {
+      const compactActionLink = card.querySelector('.dashboard__continue-card')
+
+      expect(card).not.toHaveClass('dashboard__launch-item--primary-action')
+      expect(compactActionLink)
+        .toHaveClass('dashboard__continue-card--secondary', 'dashboard__continue-card--link')
+      expect(compactActionLink).not.toHaveClass('dashboard__continue-card--primary')
+      expect(compactActionLink.querySelector('.dashboard__continue-cta')).not.toBeInTheDocument()
+      expect(compactActionLink.querySelector('.dashboard__continue-command')).not.toBeInTheDocument()
+    })
   })
 
   it('styles runtime health from readiness instead of execution state', () => {
@@ -742,5 +885,168 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.queryByRole('link', { name: /tenant administration/i })).not.toBeInTheDocument()
+  })
+
+  it('locks the primary Continue Work card visual hierarchy contract', () => {
+    const baseCard = getCssDeclarations('.dashboard__continue-card')
+    const primaryCard = getCssDeclarations('.dashboard__continue-card--primary')
+    const primaryIcon = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-icon')
+    const primaryHead = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-head')
+    const primaryCopy = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-copy')
+    const primaryTitle = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-title')
+    const primaryBadge = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-status .badge')
+    const primaryActions = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-actions')
+    const primaryCta = getCssDeclarations('.dashboard__continue-card--primary .dashboard__continue-cta')
+
+    expect(baseCard).toEqual(expect.objectContaining({
+      '--dashboard-continue-icon-size': 'var(--spacing-xl)',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'grid-template-rows': 'auto minmax(0, 1fr)',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-md)',
+      border: 'var(--border-width-thin) solid var(--color-card-border)',
+    }))
+    expect(primaryCard).toEqual(expect.objectContaining({
+      '--dashboard-continue-icon-size': 'var(--spacing-2xl)',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'grid-template-rows': 'auto auto',
+      'align-items': 'center',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-lg)',
+      'border-color': 'color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border))',
+      background: 'linear-gradient(135deg, color-mix(in srgb, var(--color-action-primary) 9%, transparent), transparent 48%), var(--color-background)',
+    }))
+    expect(primaryIcon).toEqual(expect.objectContaining({
+      'border-radius': 'var(--border-radius-md)',
+      'background-color': 'color-mix(in srgb, var(--color-action-primary) 14%, transparent)',
+      'font-size': 'var(--font-size-lg)',
+    }))
+    expect(primaryHead).toEqual(expect.objectContaining({
+      'align-items': 'center',
+      gap: 'var(--spacing-md)',
+    }))
+    expect(primaryCopy).toEqual(expect.objectContaining({
+      'grid-column': '1',
+      'grid-row': '2',
+      'padding-inline-start': 'calc(var(--dashboard-continue-icon-size) + var(--spacing-md))',
+      'padding-inline-end': 'var(--spacing-md)',
+      'border-inline-start': '0',
+    }))
+    expect(primaryTitle).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-lg)',
+      'font-weight': 'var(--font-weight-bold)',
+      'line-height': '1.05',
+      'text-wrap': 'balance',
+    }))
+    expect(primaryBadge).toEqual(expect.objectContaining({
+      'font-size': '0.6875rem',
+      'line-height': '1.05',
+    }))
+    expect(primaryActions).toEqual(expect.objectContaining({
+      'grid-column': '2',
+      'grid-row': '1 / span 2',
+      gap: 'var(--spacing-md)',
+    }))
+    expect(primaryCta).toEqual(expect.objectContaining({
+      'min-width': '6.25rem',
+      'min-height': 'calc(var(--spacing-md) * 2.15)',
+      'padding-inline': 'var(--spacing-md)',
+      'font-size': 'var(--font-size-sm)',
+    }))
+  })
+
+  it('locks the secondary Continue Work card compact hierarchy contract', () => {
+    const secondaryCard = getCssDeclarations('.dashboard__continue-card--secondary')
+    const secondaryIcon = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-icon')
+    const secondaryHead = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-head')
+    const secondaryHeading = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-heading')
+    const secondaryCopy = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-copy')
+    const secondaryTitle = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-title')
+    const secondaryStatus = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-status')
+    const secondaryBadge = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-status .badge')
+    const secondaryCopyText = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-copy p')
+    const secondaryActions = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-actions')
+    const secondaryArrow = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-arrow')
+
+    expect(secondaryCard).toEqual(expect.objectContaining({
+      '--dashboard-continue-icon-size': 'var(--spacing-xl)',
+      'grid-template-rows': 'auto auto',
+      'align-content': 'start',
+      gap: 'var(--spacing-sm) var(--spacing-sm)',
+      'min-height': '8.25rem',
+      padding: 'var(--spacing-md) var(--spacing-sm)',
+    }))
+    expect(secondaryIcon).toEqual(expect.objectContaining({
+      'margin-block-start': 'var(--spacing-2xs)',
+      'border-radius': 'var(--border-radius-sm)',
+      'background-color': 'color-mix(in srgb, var(--color-action-primary) 7%, transparent)',
+      'font-size': 'var(--font-size-sm)',
+    }))
+    expect(secondaryHead).toEqual(expect.objectContaining({
+      'align-items': 'start',
+      gap: 'var(--spacing-xs)',
+    }))
+    expect(secondaryHeading).toEqual(expect.objectContaining({
+      gap: 'var(--spacing-sm)',
+    }))
+    expect(secondaryCopy).toEqual(expect.objectContaining({
+      gap: 'var(--spacing-sm)',
+      'margin-block-start': 'var(--spacing-2xs)',
+      'padding-inline-start': 'calc(var(--dashboard-continue-icon-size) + var(--spacing-xs))',
+      'padding-inline-end': 'var(--spacing-xs)',
+    }))
+    expect(secondaryTitle).toEqual(expect.objectContaining({
+      'font-size': '0.9375rem',
+      'line-height': '1.1',
+      'text-wrap': 'balance',
+    }))
+    expect(secondaryStatus).toEqual(expect.objectContaining({
+      gap: 'var(--spacing-2xs)',
+    }))
+    expect(secondaryBadge).toEqual(expect.objectContaining({
+      'min-height': '1.0625rem',
+      'padding-inline': 'var(--spacing-2xs)',
+      'font-size': 'var(--font-size-xs)',
+      'line-height': '1',
+    }))
+    expect(secondaryCopyText).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-xs)',
+      'line-height': '1.18',
+      'text-wrap': 'pretty',
+    }))
+    expect(secondaryActions).toEqual(expect.objectContaining({
+      'grid-column': '2',
+      'grid-row': '1 / span 2',
+      gap: 'var(--spacing-xs)',
+    }))
+    expect(secondaryArrow).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-sm)',
+    }))
+  })
+
+  it('locks the Continue Work responsive grid contract for a wide primary card', () => {
+    const desktopActionsGrid = getCssDeclarations('.dashboard__launch-grid--actions', {
+      after: '@media (min-width: 1280px)',
+    })
+    const mobilePrimaryCard = getCssDeclarations('.dashboard__continue-card--primary', {
+      after: '@media (max-width: 768px)',
+    })
+    const mobilePrimaryActions = getCssDeclarations('.dashboard__continue-actions', {
+      after: '@media (max-width: 768px)',
+    })
+
+    expect(desktopActionsGrid).toEqual(expect.objectContaining({
+      'grid-template-columns': 'minmax(0, 2fr) repeat(3, minmax(12rem, 1fr))',
+    }))
+    expect(mobilePrimaryCard).toEqual(expect.objectContaining({
+      'grid-template-columns': 'minmax(0, 1fr)',
+      'grid-template-rows': 'auto auto auto',
+    }))
+    expect(mobilePrimaryActions).toEqual(expect.objectContaining({
+      'grid-column': '1 / -1',
+      'grid-row': '3',
+      'justify-content': 'space-between',
+      width: '100%',
+    }))
   })
 })
