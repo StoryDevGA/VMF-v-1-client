@@ -26,7 +26,7 @@
   padding: var(--spacing-sm);
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-border) 60%, transparent) transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 
   /* Mobile-optimized touch interactions */
   touch-action: pan-x;
@@ -46,16 +46,20 @@
 
 /* Desktop scrollbar styling */
 .h-scroll__track::-webkit-scrollbar {
-  height: 8px;
+  height: var(--scrollbar-size);
 }
 
 .h-scroll__track::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-border) 60%, transparent);
+  background: var(--scrollbar-thumb);
   border-radius: var(--border-radius-sm);
 }
 
+.h-scroll__track::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
 .h-scroll__track::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 /* Hidden scrollbar variant */

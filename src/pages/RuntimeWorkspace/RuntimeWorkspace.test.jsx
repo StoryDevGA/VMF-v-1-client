@@ -186,6 +186,21 @@ async function openGuidedSection(name = /customer problem/i) {
   return user
 }
 
+function buildRuntimeSection(index, label) {
+  const sectionKey = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  return {
+    ...rendererPayload.sections[0],
+    key: sectionKey,
+    runtimePath: `framework_state.sections.${sectionKey}`,
+    label,
+    value: `${label} context`,
+    state: {
+      status: 'DRAFT',
+      revisionCount: index,
+    },
+  }
+}
+
 describe('RuntimeWorkspace', () => {
   beforeEach(() => {
     refetchRenderer.mockReset()
@@ -241,7 +256,10 @@ describe('RuntimeWorkspace', () => {
     expect(backButton).toHaveClass('btn--outline', 'btn--sm')
     expect(screen.getByText('Execution Workspace')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Acme Value Narrative' })).toBeInTheDocument()
-    expect(screen.getByText('value-narrative-001')).toBeInTheDocument()
+    const heroMetadata = screen.getByLabelText(/runtime value-narrative-001 metadata/i)
+    expect(within(heroMetadata).getByText('Value Narrative')).toBeInTheDocument()
+    expect(within(heroMetadata).getByText('Draft')).toBeInTheDocument()
+    expect(within(heroMetadata).getByText('Package 2.3.1')).toBeInTheDocument()
     expect(screen.getByText('VMF Standard / 2.3.1')).toBeInTheDocument()
     expect(screen.getAllByText('Draft').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Unknown')).toBeInTheDocument()
@@ -297,6 +315,7 @@ describe('RuntimeWorkspace', () => {
     const intelligencePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(within(guidedPanel).getByText('1 section')).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
     expect(within(guidedPanel).getByRole('status', { name: /section truth blocked/i })).toBeInTheDocument()
@@ -310,9 +329,106 @@ describe('RuntimeWorkspace', () => {
     expect(within(guidedPanel).getByText(/no generated content is available for comparison/i)).toBeInTheDocument()
     expect(within(intelligencePanel).getByText(/no runtime signals/i)).toBeInTheDocument()
     expect(within(intelligencePanel).getByText(/no runtime activity/i)).toBeInTheDocument()
-    expect(within(intelligencePanel).getByRole('heading', { name: /renderer warnings/i })).toBeInTheDocument()
-    expect(within(intelligencePanel).getByText('UI_CONTRACT_SECTION_MISSING')).toBeInTheDocument()
+    expect(within(intelligencePanel).getByRole('heading', { name: /runtime warnings/i })).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('groups repeated runtime warnings into business-safe summaries', async () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          diagnostics: {
+            ...rendererPayload.diagnostics,
+            configWarnings: [
+              {
+                code: 'ACTION_POLICY_MISSING',
+                severity: 'WARNING',
+                message: 'UI Contract action has no matching active workflow policy and was disabled.',
+              },
+              {
+                code: 'POLICY_ACTION_MISSING',
+                severity: 'WARNING',
+                message: 'Active workflow policy has no UI Contract action and was not rendered.',
+              },
+              {
+                code: 'POLICY_ACTION_MISSING',
+                severity: 'WARNING',
+                message: 'Active workflow policy has no UI Contract action and was not rendered.',
+              },
+              {
+                code: 'UI_CONTRACT_SECTION_MISSING',
+                severity: 'INFO',
+                message: 'Renderer fallback presentation was applied.',
+              },
+            ],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const intelligencePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(intelligencePanel).getByRole('heading', { name: /runtime warnings/i })).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText('Workflow and action alignment issue')).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText(/3 warnings\. A governed runtime action is unavailable/i)).toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText('Workspace presentation fallback')).not.toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText('ACTION_POLICY_MISSING')).not.toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText('POLICY_ACTION_MISSING')).not.toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
+
+    const user = userEvent.setup()
+    const viewAllButton = within(intelligencePanel).getByRole('button', { name: /view all warnings/i })
+    expect(viewAllButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(viewAllButton)
+
+    expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
+    expect(within(intelligencePanel).getByText(/workspace configuration action has no matching active workflow alignment/i)).toBeInTheDocument()
+    expect(within(intelligencePanel).getByRole('button', { name: /show key warnings/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(intelligencePanel).queryByText(/UI Contract/)).not.toBeInTheDocument()
+    expect(within(intelligencePanel).queryByText(/renderer/i)).not.toBeInTheDocument()
+  })
+
+  it('renders large framework section navigation as a flat scrollable list', () => {
+    const largeSections = [
+      ...Array.from({ length: 14 }, (_, index) => buildRuntimeSection(index, `Core Section ${index + 1}`)),
+      buildRuntimeSection(14, 'Deal Mode'),
+      buildRuntimeSection(15, 'Appendix Command Interface'),
+      buildRuntimeSection(16, 'Appendix Execution Visibility'),
+    ]
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: largeSections,
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    const guidedCard = guidedPanel.querySelector('.runtime-workspace__panel--guided-sections')
+    expect(guidedCard).toBeInTheDocument()
+    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(sectionNav).toHaveClass('runtime-workspace__section-nav')
+    expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /1 core section 1 draft/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /15 deal mode draft/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /16 appendix command interface draft/i })).toBeInTheDocument()
+    expect(within(sectionNav).queryByText('Core Framework')).not.toBeInTheDocument()
+    expect(within(sectionNav).queryByText('Runtime Appendices')).not.toBeInTheDocument()
   })
 
   it('shows raw runtime paths only when renderer diagnostics explicitly allow it', async () => {
@@ -373,6 +489,137 @@ describe('RuntimeWorkspace', () => {
     expect(within(sidePanel).queryByText(/framework_state.sections.customer_problem.input/i)).not.toBeInTheDocument()
     expect(within(sidePanel).queryByText(/proposal creation is slow/i)).not.toBeInTheDocument()
     expect(within(sidePanel).queryByText(/no runtime activity/i)).not.toBeInTheDocument()
+  })
+
+  it('renders server-projected signals with a compact preview and expansion control', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          signals: [
+            { signalId: 'signal-1', severity: 'WARNING', summary: '2 sections have warnings' },
+            { signalId: 'signal-2', status: 'NEEDS_VALIDATION', summary: '1 instance needs validation' },
+            { signalId: 'signal-3', variant: 'SUCCESS', summary: 'No blocking issues' },
+            { signalId: 'signal-4', severity: 'INFO', summary: 'Source lineage available' },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(sidePanel).getByRole('heading', { name: /signals/i })).toBeInTheDocument()
+    expect(within(sidePanel).getByText('2 sections have warnings')).toBeInTheDocument()
+    expect(within(sidePanel).getByText('1 instance needs validation')).toBeInTheDocument()
+    expect(within(sidePanel).getByText('No blocking issues')).toBeInTheDocument()
+    expect(within(sidePanel).queryByText('Source lineage available')).not.toBeInTheDocument()
+    expect(within(sidePanel).queryByText(/no runtime signals/i)).not.toBeInTheDocument()
+
+    const viewAllButton = within(sidePanel).getByRole('button', { name: /view all signals/i })
+    expect(viewAllButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(viewAllButton)
+
+    expect(within(sidePanel).getByText('Source lineage available')).toBeInTheDocument()
+    expect(within(sidePanel).getByRole('button', { name: /show key signals/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('shows recent activity first and expands to the full server-projected activity list', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          activity: [
+            {
+              eventId: 'activity-1',
+              summary: 'First event',
+              occurredAt: '2026-05-19T08:04:00.000Z',
+            },
+            {
+              eventId: 'activity-2',
+              summary: 'Second event',
+              occurredAt: '2026-05-19T08:03:00.000Z',
+            },
+            {
+              eventId: 'activity-3',
+              summary: 'Third event',
+              occurredAt: '2026-05-19T08:02:00.000Z',
+            },
+            {
+              eventId: 'activity-4',
+              summary: 'Fourth event',
+              occurredAt: '2026-05-19T08:01:00.000Z',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(sidePanel).getByText('First event')).toBeInTheDocument()
+    expect(within(sidePanel).getByText('Second event')).toBeInTheDocument()
+    expect(within(sidePanel).getByText('Third event')).toBeInTheDocument()
+    expect(within(sidePanel).queryByText('Fourth event')).not.toBeInTheDocument()
+
+    const viewAllButton = within(sidePanel).getByRole('button', { name: /view all activity/i })
+    expect(viewAllButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(viewAllButton)
+
+    expect(within(sidePanel).getByText('Fourth event')).toBeInTheDocument()
+    expect(within(sidePanel).getByRole('button', { name: /show recent activity/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('collapses repeated server-projected activity rows into one counted item', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          activity: [
+            {
+              eventId: 'activity-1',
+              summary: 'Run Validation executed',
+              actorLabel: 'Jena Gregory',
+              occurredAt: '2026-05-21T15:03:00.000Z',
+            },
+            {
+              eventId: 'activity-2',
+              summary: 'Run Validation executed',
+              actorLabel: 'Jena Gregory',
+              occurredAt: '2026-05-21T15:02:00.000Z',
+            },
+            {
+              eventId: 'activity-3',
+              summary: 'Run Validation executed',
+              actorLabel: 'Jena Gregory',
+              occurredAt: '2026-05-21T15:01:00.000Z',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
+    expect(within(sidePanel).getAllByText('Run Validation executed')).toHaveLength(1)
+    expect(within(sidePanel).getByText('3 events')).toBeInTheDocument()
+    expect(within(sidePanel).queryByRole('button', { name: /view all activity/i })).not.toBeInTheDocument()
   })
 
   it('renders server-projected discovery state without inventing evidence content', () => {
@@ -1944,22 +2191,20 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
-    const blockedButton = within(blockedActions).getByRole('button', { name: /submit for review/i })
+    const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })
+    const blockedButton = within(governedActions).getByRole('button', { name: /submit for review/i })
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveClass('btn--outline')
     expect(blockedButton).toHaveAccessibleDescription('Mark this runtime ready first.')
-    expect(within(blockedActions).getByText('Mark this runtime ready first.')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: /blocked governed runtime actions scroll region/i })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /available governed runtime actions scroll region/i })).not.toBeInTheDocument()
+    expect(within(governedActions).getByText('Mark this runtime ready first.')).toBeVisible()
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
     await user.click(blockedButton)
     expect(executeRuntimeAction).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
-  it('keeps available and blocked runtime actions in separate governed accordion groups', async () => {
-    const user = userEvent.setup()
+  it('keeps available and blocked runtime actions visible in the governed command strip', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -1986,23 +2231,19 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    expect(screen.getByRole('region', { name: /available governed runtime actions scroll region/i })).toBeInTheDocument()
-    const availableActions = screen.getByRole('group', { name: /^governed runtime actions$/i })
-    expect(within(availableActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
-    expect(within(availableActions).queryByRole('button', { name: /lock runtime/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /available actions/i })).toHaveAttribute('aria-expanded', 'true')
-    const blockedHeader = screen.getByRole('button', { name: /blocked actions/i })
-    expect(blockedHeader).toHaveAttribute('aria-expanded', 'false')
-    await user.click(blockedHeader)
-    expect(screen.getByRole('region', { name: /blocked governed runtime actions scroll region/i })).toBeInTheDocument()
-    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
-    const blockedButton = within(blockedActions).getByRole('button', { name: /lock runtime/i })
+    const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    const governedActions = within(actionScroll).getByRole('group', { name: /^governed runtime actions$/i })
+    expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
+    const blockedButton = within(governedActions).getByRole('button', { name: /lock runtime/i })
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveAccessibleDescription('Runtime must be published before it can be locked.')
+    expect(within(governedActions).getByText('Runtime must be published before it can be locked.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /available actions/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /blocked actions/i })).not.toBeInTheDocument()
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
   })
 
-  it('refreshes the action accordion default-open state when renderer action groups change', () => {
+  it('refreshes the governed action command strip when renderer action groups change', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -2023,8 +2264,9 @@ describe('RuntimeWorkspace', () => {
     })
     const view = renderRuntimeWorkspace()
 
-    expect(screen.getByRole('button', { name: /blocked actions/i })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.queryByRole('button', { name: /available actions/i })).not.toBeInTheDocument()
+    let actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    let governedActions = within(actionScroll).getByRole('group', { name: /^governed runtime actions$/i })
+    expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeDisabled()
 
     useGetRuntimeRendererQuery.mockReturnValue({
       data: { data: rendererPayload },
@@ -2036,9 +2278,9 @@ describe('RuntimeWorkspace', () => {
 
     view.rerender(runtimeWorkspaceTree())
 
-    expect(screen.getByRole('button', { name: /available actions/i })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('region', { name: /available governed runtime actions scroll region/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /blocked actions/i })).not.toBeInTheDocument()
+    actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    governedActions = within(actionScroll).getByRole('group', { name: /^governed runtime actions$/i })
+    expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
   })
 
   it('uses a default confirmation message when required confirmation has no seeded message', async () => {
@@ -2317,12 +2559,12 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
-    const blockedActions = screen.getByRole('group', { name: /blocked governed runtime actions/i })
-    const blockedButton = within(blockedActions).getByRole('button', { name: /run validation/i })
+    const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })
+    const blockedButton = within(governedActions).getByRole('button', { name: /run validation/i })
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveAccessibleDescription('Runtime is locked and cannot be mutated or actioned.')
-    expect(within(blockedActions).getByText('Runtime is locked and cannot be mutated or actioned.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /blocked actions/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(governedActions).getByText('Runtime is locked and cannot be mutated or actioned.')).toBeVisible()
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
   })
 

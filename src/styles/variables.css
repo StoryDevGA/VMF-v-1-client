@@ -148,6 +148,14 @@
   --border-radius-full: 9999px;
 
   /* ===========================
+     SCROLLBARS
+     =========================== */
+  --scrollbar-size: 0.5rem; /* 8px */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: color-mix(in srgb, var(--color-border) 60%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--color-border) 70%, transparent);
+
+  /* ===========================
      SHADOWS
      =========================== */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);

@@ -83,6 +83,15 @@ describe('CSS Design System', () => {
     })
   })
 
+  describe('Design Tokens - Scrollbars', () => {
+    it('should define scrollbar styling variables', () => {
+      expect(computedStyles.getPropertyValue('--scrollbar-size')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--scrollbar-track')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--scrollbar-thumb')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--scrollbar-thumb-hover')).toBeTruthy()
+    })
+  })
+
   describe('Design Tokens - Shadows', () => {
     it('should define shadow variables', () => {
       expect(computedStyles.getPropertyValue('--shadow-sm')).toBeTruthy()

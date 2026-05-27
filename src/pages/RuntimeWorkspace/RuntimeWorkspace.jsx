@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
   MdCheckCircle,
   MdCompareArrows,
+  MdErrorOutline,
   MdInfoOutline,
   MdOutlineHistory,
   MdOutlineRoute,
@@ -14,7 +15,6 @@ import {
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
-import { Accordion } from '../../components/Accordion'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
@@ -30,7 +30,7 @@ import {
   useMutateRuntimeStateMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
-import { formatDateOnly } from '../../utils/dateTime.js'
+import { formatDateOnly, formatDateTimeParts } from '../../utils/dateTime.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
@@ -113,6 +113,30 @@ const DISCOVERY_ACTION_KEYS = Object.freeze({
 const DISCOVERY_ACTION_KEY_SET = new Set(Object.values(DISCOVERY_ACTION_KEYS))
 
 const DISCOVERY_NAV_KEY = 'discovery'
+const ACTIVITY_PREVIEW_LIMIT = 3
+const SIGNAL_PREVIEW_LIMIT = 3
+const WARNING_PREVIEW_LIMIT = 1
+
+const SIGNAL_STATUS_VARIANTS = Object.freeze({
+  BLOCKED: 'danger',
+  BLOCKER: 'danger',
+  DANGER: 'danger',
+  ERROR: 'danger',
+  FAILED: 'danger',
+  FAILING: 'danger',
+  WARNING: 'warning',
+  WARN: 'warning',
+  AT_RISK: 'warning',
+  NEEDS_ATTENTION: 'warning',
+  NEEDS_VALIDATION: 'warning',
+  SUCCESS: 'success',
+  GOOD: 'success',
+  HEALTHY: 'success',
+  PASSED: 'success',
+  READY: 'success',
+  INFO: 'info',
+  INFORMATION: 'info',
+})
 
 const getRuntimeActionLabel = (action, fallback) =>
   action?.buttonLabel || action?.label || fallback
@@ -163,6 +187,29 @@ const getAcceptSectionDisabledReason = ({
 const getDefaultConfirmationMessage = (action) => {
   const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'this runtime action').trim()
   return `Confirm ${label}?`
+}
+
+const getRuntimeActionGateStatus = (validationState) => {
+  const normalizedValidationState = normalizeRuntimeActionToken(validationState)
+  if (['PASSED', 'VALIDATED', 'VALIDATION_PASSED'].includes(normalizedValidationState)) {
+    return {
+      variant: 'success',
+      message: 'Runtime Validation Gate passed.',
+    }
+  }
+  if (['BLOCKED', 'FAILED', 'ERROR', 'VALIDATION_BLOCKED'].includes(normalizedValidationState)) {
+    return {
+      variant: 'error',
+      message: 'Runtime Validation Gate blocked.',
+    }
+  }
+  if (['PENDING', 'RUNNING', 'IN_PROGRESS', 'WARNING'].includes(normalizedValidationState)) {
+    return {
+      variant: 'warning',
+      message: `Runtime Validation Gate ${formatRuntimeTokenLabel(validationState).toLowerCase()}.`,
+    }
+  }
+  return null
 }
 
 const getTokenStatusVariant = (value, fallback = 'neutral') =>
@@ -223,6 +270,171 @@ const normalizeWarningSeverity = (value) => {
 
 const getWarningSeverityVariant = (severity) =>
   RENDERER_WARNING_SEVERITY_VARIANTS[normalizeWarningSeverity(severity)] ?? 'warning'
+
+const WARNING_SEVERITY_RANK = Object.freeze({
+  INFO: 0,
+  WARNING: 1,
+  ERROR: 2,
+  BLOCKER: 3,
+})
+
+const getHigherWarningSeverity = (currentSeverity, nextSeverity) => {
+  const current = normalizeWarningSeverity(currentSeverity)
+  const next = normalizeWarningSeverity(nextSeverity)
+  return WARNING_SEVERITY_RANK[next] > WARNING_SEVERITY_RANK[current] ? next : current
+}
+
+const getWarningPresentation = (warning) => {
+  const code = normalizeRuntimeActionToken(warning?.code)
+  if (code.includes('ACTION_POLICY') || code.includes('POLICY_ACTION')) {
+    return {
+      groupKey: 'workflow-action-alignment',
+      title: 'Workflow and action alignment issue',
+      summary: 'A governed runtime action is unavailable because its workspace configuration is incomplete.',
+    }
+  }
+  if (code.includes('UI_CONTRACT') || code.includes('PRESENTATION') || code.includes('SECTION_MISSING')) {
+    return {
+      groupKey: 'workspace-presentation-fallback',
+      title: 'Workspace presentation fallback',
+      summary: 'The workspace used a safe fallback because configured presentation metadata is incomplete.',
+    }
+  }
+  if (code.includes('RENDER') || code.includes('FALLBACK')) {
+    return {
+      groupKey: 'workspace-rendering-fallback',
+      title: 'Workspace fallback state',
+      summary: 'The workspace displayed a safe fallback for one or more governed runtime fields.',
+    }
+  }
+  return {
+    groupKey: code || 'runtime-warning',
+    title: formatRuntimeTokenLabel(code || 'Runtime warning'),
+    summary: 'A runtime configuration warning was returned by the server projection.',
+  }
+}
+
+const sanitizeWarningMessage = (message) => {
+  const normalized = String(message ?? '').trim()
+  if (!normalized) return ''
+  return normalized
+    .replace(/\bUI Contract\b/gi, 'workspace configuration')
+    .replace(/\bworkflow policy\b/gi, 'workflow alignment')
+    .replace(/\brenderer\b/gi, 'runtime workspace')
+    .replace(/\bexecutable by runtime workspace\b/gi, 'available in this workspace')
+    .replace(/\bexecutable by renderer\b/gi, 'available in this workspace')
+}
+
+const buildWarningGroups = (warnings = EMPTY_ARRAY) => {
+  const groups = new Map()
+  warnings.forEach((warning) => {
+    const presentation = getWarningPresentation(warning)
+    const existing = groups.get(presentation.groupKey) || {
+      ...presentation,
+      count: 0,
+      severity: normalizeWarningSeverity(warning?.severity),
+      messages: [],
+    }
+    existing.count += 1
+    existing.severity = getHigherWarningSeverity(existing.severity, warning?.severity)
+    const safeMessage = sanitizeWarningMessage(warning?.message)
+    if (safeMessage && !existing.messages.includes(safeMessage)) {
+      existing.messages.push(safeMessage)
+    }
+    groups.set(presentation.groupKey, existing)
+  })
+  return Array.from(groups.values()).sort((left, right) => {
+    const severityDelta = WARNING_SEVERITY_RANK[right.severity] - WARNING_SEVERITY_RANK[left.severity]
+    if (severityDelta !== 0) return severityDelta
+    return right.count - left.count
+  })
+}
+
+const formatWarningCount = (count) =>
+  `${count} warning${count === 1 ? '' : 's'}`
+
+const normalizeSignalValue = (value) => String(value ?? '').trim()
+
+const getSignalSummary = (signal) =>
+  normalizeSignalValue(signal?.summary ?? signal?.message ?? signal?.label ?? signal?.title)
+
+const getSignalVariant = (signal) => {
+  const token = normalizeRuntimeActionToken(
+    signal?.variant ?? signal?.severity ?? signal?.status ?? signal?.state ?? signal?.type,
+  )
+  return SIGNAL_STATUS_VARIANTS[token] ?? 'neutral'
+}
+
+const getSignalIcon = (variant) => {
+  if (variant === 'success') return <MdCheckCircle aria-hidden="true" />
+  if (variant === 'info' || variant === 'neutral') return <MdInfoOutline aria-hidden="true" />
+  if (variant === 'warning') return <MdOutlineWarningAmber aria-hidden="true" />
+  return <MdErrorOutline aria-hidden="true" />
+}
+
+const normalizeActivityValue = (value) => String(value ?? '').trim()
+
+const getActivitySummary = (event) => normalizeActivityValue(event?.summary)
+
+const getActivityActorLabel = (event) =>
+  normalizeActivityValue(event?.actorLabel).replace(/\s*<[^>]+>\s*/g, ' ').trim()
+
+const activitySummaryIncludesActor = (summary, actorLabel) => {
+  if (!summary || !actorLabel) return false
+  return summary.toLocaleLowerCase().includes(actorLabel.toLocaleLowerCase())
+}
+
+const buildActivityDisplayEvents = (events = EMPTY_ARRAY) => {
+  const groupedEvents = []
+  const eventByKey = new Map()
+
+  events.forEach((event) => {
+    const summary = getActivitySummary(event)
+    if (!summary) return
+
+    const actorLabel = getActivityActorLabel(event)
+    const groupKey = [
+      summary.toLocaleLowerCase(),
+      actorLabel.toLocaleLowerCase(),
+    ].join('|')
+    const existingEvent = eventByKey.get(groupKey)
+
+    if (!existingEvent) {
+      const nextEvent = {
+        ...event,
+        summary,
+        actorLabel,
+        occurrenceCount: 1,
+      }
+      eventByKey.set(groupKey, nextEvent)
+      groupedEvents.push(nextEvent)
+      return
+    }
+
+    existingEvent.occurrenceCount += 1
+  })
+
+  return groupedEvents
+}
+
+const formatActivityTime = (value) => {
+  const parts = formatDateTimeParts(value)
+  if (!parts) return ''
+
+  const occurredAt = new Date(parts.iso)
+  const now = new Date()
+  const isToday =
+    occurredAt.getFullYear() === now.getFullYear()
+    && occurredAt.getMonth() === now.getMonth()
+    && occurredAt.getDate() === now.getDate()
+  const timeLabel = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(occurredAt)
+
+  return isToday ? `Today, ${timeLabel}` : `${parts.dateLabel}, ${timeLabel}`
+}
 
 const isEmptyStructuredValue = (value) => {
   if (!value || typeof value !== 'object') return false
@@ -1024,28 +1236,32 @@ function RuntimeProgressSummary({
 
   return (
     <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
-      <div className="runtime-workspace__progress-row">
-        <span>Required input</span>
-        <strong>{requiredPercentLabel}</strong>
+      <div className="runtime-workspace__progress-meter">
+        <div className="runtime-workspace__progress-row">
+          <span>Required input</span>
+          <strong>{requiredPercentLabel}</strong>
+        </div>
+        <progress
+          className="runtime-workspace__progress-bar"
+          max="100"
+          value={requiredPercent}
+          aria-label={completionLabel}
+        />
       </div>
-      <progress
-        className="runtime-workspace__progress-bar"
-        max="100"
-        value={requiredPercent}
-        aria-label={completionLabel}
-      />
       <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
           <span>Required</span>
-          <strong>{hasRequiredInput ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}</strong>
+          <strong className="runtime-workspace__metric-value runtime-workspace__metric-value--success">
+            {hasRequiredInput ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}
+          </strong>
         </li>
         <li>
           <span>Generated</span>
-          <strong>{generatedCount}/{sections.length}</strong>
+          <strong className="runtime-workspace__metric-value">{generatedCount}/{sections.length}</strong>
         </li>
         <li>
           <span>Warnings</span>
-          <strong>{warningSummary}</strong>
+          <strong className="runtime-workspace__metric-value">{warningSummary}</strong>
         </li>
       </ul>
     </div>
@@ -1059,48 +1275,60 @@ function RuntimeSectionNavigation({
   onSelectSection,
   sections = EMPTY_ARRAY,
 }) {
+  const navItems = sections.map((section, index) => {
+    const label = getSectionDisplayLabel(section, `Guided item ${index + 1}`)
+    const status = getSectionNavigationStatus(section)
+    const sectionKey = section?.sectionKey || section?.key || getSectionDomId(section, index)
+    const displayNumber = index + 1
+    return {
+      displayNumber,
+      isActive: activeKey === sectionKey,
+      label,
+      sectionKey,
+      status,
+      index,
+    }
+  })
+  const renderNavigationItem = (item) => (
+    <li key={`${item.sectionKey}-nav`}>
+      <button
+        type="button"
+        className={[
+          'runtime-workspace__section-nav-button',
+          item.isActive && 'runtime-workspace__section-nav-button--active',
+        ].filter(Boolean).join(' ')}
+        aria-current={item.isActive ? 'step' : undefined}
+        onClick={() => onSelectSection?.(item.index)}
+      >
+        <span>{item.displayNumber}</span>
+        <strong title={item.label}>{item.label}</strong>
+        <small>{item.status}</small>
+      </button>
+    </li>
+  )
+
   return (
     <nav className="runtime-workspace__section-nav" aria-label="Guided section navigation">
-      <ol>
-        <li>
-          <button
-            type="button"
-            className={[
-              'runtime-workspace__section-nav-button',
-              activeKey === DISCOVERY_NAV_KEY && 'runtime-workspace__section-nav-button--active',
-            ].filter(Boolean).join(' ')}
-            aria-current={activeKey === DISCOVERY_NAV_KEY ? 'step' : undefined}
-            onClick={onSelectDiscovery}
-          >
-            <span>0</span>
-            <strong>Discovery</strong>
-            <small>{discoveryState}</small>
-          </button>
-        </li>
-        {sections.map((section, index) => {
-          const label = getSectionDisplayLabel(section, `Guided item ${index + 1}`)
-          const status = getSectionNavigationStatus(section)
-          const sectionKey = section?.sectionKey || section?.key || getSectionDomId(section, index)
-          const isActive = activeKey === sectionKey
-          return (
-            <li key={`${sectionKey}-nav`}>
-              <button
-                type="button"
-                className={[
-                  'runtime-workspace__section-nav-button',
-                  isActive && 'runtime-workspace__section-nav-button--active',
-                ].filter(Boolean).join(' ')}
-                aria-current={isActive ? 'step' : undefined}
-                onClick={() => onSelectSection?.(index)}
-              >
-                <span>{index + 1}</span>
-                <strong>{label}</strong>
-                <small>{status}</small>
-              </button>
-            </li>
-          )
-        })}
-      </ol>
+      <div className="runtime-workspace__section-nav-scroll">
+        <ol className="runtime-workspace__section-nav-list">
+          <li>
+            <button
+              type="button"
+              className={[
+                'runtime-workspace__section-nav-button',
+                activeKey === DISCOVERY_NAV_KEY && 'runtime-workspace__section-nav-button--active',
+              ].filter(Boolean).join(' ')}
+              aria-current={activeKey === DISCOVERY_NAV_KEY ? 'step' : undefined}
+              onClick={onSelectDiscovery}
+            >
+              <span>0</span>
+              <strong title="Discovery">Discovery</strong>
+              <small>{discoveryState}</small>
+            </button>
+          </li>
+          {navItems.map(renderNavigationItem)}
+        </ol>
+      </div>
     </nav>
   )
 }
@@ -1394,8 +1622,12 @@ function RuntimeWorkspace() {
   const [actionFeedback, setActionFeedback] = useState(null)
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
   const [showEvidenceSources, setShowEvidenceSources] = useState(false)
+  const [showWarningDetails, setShowWarningDetails] = useState(false)
+  const [showAllSignals, setShowAllSignals] = useState(false)
+  const [showAllActivity, setShowAllActivity] = useState(false)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
+  const hasAutoSelectedInitialSection = useRef(false)
 
   const renderer = getRendererPayload(rendererResponse)
   const runtimeInstance = renderer?.runtimeInstance ?? {}
@@ -1419,18 +1651,17 @@ function RuntimeWorkspace() {
     !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey))
     && !DISCOVERY_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
   )
-  const availableSidePanelActions = sidePanelActions.filter((action) => Boolean(action?.enabled))
-  const blockedSidePanelActions = sidePanelActions.filter((action) => !action?.enabled)
-  const actionAccordionOpenItems = [
-    availableSidePanelActions.length > 0 && 'available-actions',
-    availableSidePanelActions.length === 0 && blockedSidePanelActions.length > 0 && 'blocked-actions',
-  ].filter(Boolean)
-  const actionAccordionKey = [
-    availableSidePanelActions.length > 0 ? 'has-available' : 'no-available',
-    blockedSidePanelActions.length > 0 ? 'has-blocked' : 'no-blocked',
-  ].join(':')
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
+  const signalItems = signals.filter((signal) => getSignalSummary(signal))
+  const visibleSignalItems = showAllSignals
+    ? signalItems
+    : signalItems.slice(0, SIGNAL_PREVIEW_LIMIT)
   const activity = Array.isArray(renderer?.activity) ? renderer.activity : EMPTY_ARRAY
+  const activityEvents = activity.filter((event) => getActivitySummary(event))
+  const activityDisplayEvents = buildActivityDisplayEvents(activityEvents)
+  const visibleActivityEvents = showAllActivity
+    ? activityDisplayEvents
+    : activityDisplayEvents.slice(0, ACTIVITY_PREVIEW_LIMIT)
   const discovery = getDiscoveryProjection(renderer)
   const discoveryState = getDiscoveryState(renderer)
   const {
@@ -1446,6 +1677,13 @@ function RuntimeWorkspace() {
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
     : EMPTY_ARRAY
+  const configWarningGroups = buildWarningGroups(configWarnings)
+  const warningDetailsAvailable = configWarningGroups.some((warningGroup) => warningGroup.messages.length > 0)
+  const warningDisclosureAvailable =
+    configWarningGroups.length > WARNING_PREVIEW_LIMIT || warningDetailsAvailable
+  const visibleConfigWarningGroups = showWarningDetails
+    ? configWarningGroups
+    : configWarningGroups.slice(0, WARNING_PREVIEW_LIMIT)
   const showRuntimePaths = String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
   const appError = error ? normalizeError(error) : null
 
@@ -1460,6 +1698,7 @@ function RuntimeWorkspace() {
   const packageVersion = String(renderer?.package?.frameworkVersion ?? runtimeInstance?.packageVersion ?? '').trim()
   const packageSummary = [packageName || packageKey, packageVersion].filter(Boolean).join(' / ') || '--'
   const validationState = renderer?.validation?.state ?? 'UNKNOWN'
+  const actionGateStatus = getRuntimeActionGateStatus(validationState)
   const readinessState = renderer?.readiness?.state ?? 'DRAFT'
   const sectionTruthState = renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
   const publishState = renderer?.publish?.state ?? 'UNKNOWN'
@@ -1523,6 +1762,11 @@ function RuntimeWorkspace() {
       value: packageSummary,
     },
   ]
+  const heroMetaItems = [
+    formatRuntimeTokenLabel(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE'),
+    formatRuntimeTokenLabel(renderer?.lifecycle?.stage ?? 'DRAFT'),
+    packageVersion ? `Package ${packageVersion}` : packageName || packageKey,
+  ].filter(Boolean)
   const matchedActiveSectionIndex = sections.findIndex((section) =>
     (section?.sectionKey || section?.key) === activeWorkspaceKey,
   )
@@ -1541,6 +1785,20 @@ function RuntimeWorkspace() {
       setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
     }
   }, [activeWorkspaceKey, sections])
+
+  useEffect(() => {
+    if (hasAutoSelectedInitialSection.current) return
+    if (activeWorkspaceKey !== DISCOVERY_NAV_KEY) {
+      hasAutoSelectedInitialSection.current = true
+      return
+    }
+
+    const firstSectionKey = sections[0]?.sectionKey || sections[0]?.key
+    if (firstSectionKey && sections.length > 1 && discovery?.accepted === true) {
+      hasAutoSelectedInitialSection.current = true
+      setActiveWorkspaceKey(firstSectionKey)
+    }
+  }, [activeWorkspaceKey, discovery?.accepted, discoveryState, sections])
 
   const handleBack = () => {
     navigate('/app/dashboard')
@@ -1894,7 +2152,13 @@ function RuntimeWorkspace() {
               Execution Workspace
             </Badge>
             <h1>{runtimeInstance?.name || 'Execution Workspace'}</h1>
-            <p>{runtimeDisplayId}</p>
+            {heroMetaItems.length > 0 ? (
+              <ul className="runtime-workspace__hero-meta" aria-label={`Runtime ${runtimeDisplayId} metadata`}>
+                {heroMetaItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
             <RuntimeProgressSummary sections={sections} configWarnings={configWarnings} />
           </div>
           <ul className="runtime-workspace__summary-grid" aria-label="Execution workspace summary">
@@ -1918,86 +2182,39 @@ function RuntimeWorkspace() {
               <Status variant={actionFeedback.variant} size="sm" showIcon>
                 {actionFeedback.message}
               </Status>
+            ) : actionGateStatus ? (
+              <Status
+                variant={actionGateStatus.variant}
+                size="sm"
+                showIcon
+                className="runtime-workspace__action-panel-status"
+              >
+                {actionGateStatus.message}
+              </Status>
             ) : null}
           </div>
           {sidePanelActions.length > 0 ? (
-            <Accordion
-              key={actionAccordionKey}
-              variant="default"
-              allowMultiple
-              defaultOpenItems={actionAccordionOpenItems}
-              className="runtime-workspace__action-accordion"
-              aria-label="Governed runtime action groups"
+            <HorizontalScroll
+              className="runtime-workspace__action-scroll"
+              ariaLabel="Governed runtime actions scroll region"
+              gap="sm"
             >
-              {availableSidePanelActions.length > 0 ? (
-                <Accordion.Item id="available-actions">
-                  <Accordion.Header itemId="available-actions" className="runtime-workspace__action-accordion-header">
-                    <span>Available Actions</span>
-                    <Badge variant="success" size="sm" pill outline>
-                      {availableSidePanelActions.length} available
-                    </Badge>
-                  </Accordion.Header>
-                  <Accordion.Content itemId="available-actions" className="runtime-workspace__action-accordion-content">
-                    <HorizontalScroll
-                      className="runtime-workspace__action-scroll"
-                      ariaLabel="Available governed runtime actions scroll region"
-                      gap="sm"
-                    >
-                      <div
-                        className="runtime-workspace__action-list runtime-workspace__action-list--bar"
-                        role="group"
-                        aria-label="Governed runtime actions"
-                      >
-                        {availableSidePanelActions.map((action) => (
-                          <RuntimeActionButton
-                            key={action.actionKey}
-                            action={action}
-                            disabled={Boolean(executingActionKey)}
-                            executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
-                            onExecute={handleExecuteAction}
-                            showDisabledReason={false}
-                          />
-                        ))}
-                      </div>
-                    </HorizontalScroll>
-                  </Accordion.Content>
-                </Accordion.Item>
-              ) : null}
-              {blockedSidePanelActions.length > 0 ? (
-                <Accordion.Item id="blocked-actions">
-                  <Accordion.Header itemId="blocked-actions" className="runtime-workspace__action-accordion-header">
-                    <span>Blocked Actions</span>
-                    <Badge variant="neutral" size="sm" pill outline>
-                      {blockedSidePanelActions.length} blocked
-                    </Badge>
-                  </Accordion.Header>
-                  <Accordion.Content itemId="blocked-actions" className="runtime-workspace__action-accordion-content">
-                    <HorizontalScroll
-                      className="runtime-workspace__action-scroll runtime-workspace__action-scroll--blocked"
-                      ariaLabel="Blocked governed runtime actions scroll region"
-                      gap="sm"
-                    >
-                      <div
-                        className="runtime-workspace__action-list runtime-workspace__action-list--bar runtime-workspace__action-list--blocked"
-                        role="group"
-                        aria-label="Blocked governed runtime actions"
-                      >
-                        {blockedSidePanelActions.map((action) => (
-                          <RuntimeActionButton
-                            key={action.actionKey}
-                            action={action}
-                            disabled={Boolean(executingActionKey)}
-                            executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
-                            onExecute={handleExecuteAction}
-                            showDisabledReason
-                          />
-                        ))}
-                      </div>
-                    </HorizontalScroll>
-                  </Accordion.Content>
-                </Accordion.Item>
-              ) : null}
-            </Accordion>
+              <div
+                className="runtime-workspace__action-list runtime-workspace__action-list--bar"
+                role="group"
+                aria-label="Governed runtime actions"
+              >
+                {sidePanelActions.map((action) => (
+                  <RuntimeActionButton
+                    key={action.actionKey || action.governedAction}
+                    action={action}
+                    disabled={Boolean(executingActionKey)}
+                    executing={executingActionKey === normalizeRuntimeActionToken(action.governedAction || action.actionKey)}
+                    onExecute={handleExecuteAction}
+                  />
+                ))}
+              </div>
+            </HorizontalScroll>
           ) : (
             <Status variant="neutral" size="sm" showIcon>
               No actions available
@@ -2014,12 +2231,39 @@ function RuntimeWorkspace() {
                 <MdOutlineWarningAmber aria-hidden="true" />
                 <h2>Signals</h2>
               </div>
-              {signals.length > 0 ? (
-                <ul className="runtime-workspace__plain-list">
-                  {signals.map((signal) => (
-                    <li key={signal.id ?? signal.signalId}>{signal.summary ?? signal.message}</li>
-                  ))}
-                </ul>
+              {signalItems.length > 0 ? (
+                <>
+                  <ul className="runtime-workspace__plain-list runtime-workspace__signal-list" id="runtime-workspace-signal-list">
+                    {visibleSignalItems.map((signal) => {
+                      const summary = getSignalSummary(signal)
+                      const variant = getSignalVariant(signal)
+                      return (
+                        <li key={signal.id ?? signal.signalId ?? `${variant}-${summary}`} className="runtime-workspace__signal-item">
+                          <span
+                            className={`runtime-workspace__signal-icon runtime-workspace__signal-icon--${variant}`}
+                            aria-hidden="true"
+                          >
+                            {getSignalIcon(variant)}
+                          </span>
+                          <span>{summary}</span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {signalItems.length > SIGNAL_PREVIEW_LIMIT ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="runtime-workspace__panel-link"
+                      aria-controls="runtime-workspace-signal-list"
+                      aria-expanded={showAllSignals}
+                      onClick={() => setShowAllSignals((current) => !current)}
+                    >
+                      {showAllSignals ? 'Show key signals' : 'View all signals'}
+                    </Button>
+                  ) : null}
+                </>
               ) : (
                 <Status variant="neutral" size="sm" showIcon>No runtime signals</Status>
               )}
@@ -2032,43 +2276,108 @@ function RuntimeWorkspace() {
                 <MdOutlineHistory aria-hidden="true" />
                 <h2>Activity</h2>
               </div>
-              {activity.length > 0 ? (
-                <ul className="runtime-workspace__plain-list">
-                  {activity.map((event) => (
-                    <li key={event.eventId ?? event.id}>{event.summary}</li>
-                  ))}
-                </ul>
+              {activityDisplayEvents.length > 0 ? (
+                <>
+                  <ul className="runtime-workspace__plain-list runtime-workspace__activity-list" id="runtime-workspace-activity-list">
+                    {visibleActivityEvents.map((event) => {
+                      const summary = getActivitySummary(event)
+                      const actorLabel = getActivityActorLabel(event)
+                      const occurredAtLabel = formatActivityTime(event.occurredAt)
+                      const occurrenceCount = Number(event.occurrenceCount || 1)
+                      return (
+                        <li key={event.eventId ?? event.id ?? `${summary}-${event.occurredAt}`} className="runtime-workspace__activity-item">
+                          <strong className="runtime-workspace__activity-title">
+                            {actorLabel && !activitySummaryIncludesActor(summary, actorLabel) ? (
+                              <>
+                                <span>{actorLabel}</span>
+                                {' '}
+                                <span>{summary}</span>
+                              </>
+                            ) : (
+                              summary
+                            )}
+                          </strong>
+                          {occurredAtLabel ? (
+                            <span className="runtime-workspace__activity-time">{occurredAtLabel}</span>
+                          ) : null}
+                          {occurrenceCount > 1 ? (
+                            <span className="runtime-workspace__activity-count">
+                              {occurrenceCount}
+                              {' '}
+                              events
+                            </span>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {activityDisplayEvents.length > ACTIVITY_PREVIEW_LIMIT ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="runtime-workspace__panel-link"
+                      aria-controls="runtime-workspace-activity-list"
+                      aria-expanded={showAllActivity}
+                      onClick={() => setShowAllActivity((current) => !current)}
+                    >
+                      {showAllActivity ? 'Show recent activity' : 'View all activity'}
+                    </Button>
+                  ) : null}
+                </>
               ) : (
                 <Status variant="neutral" size="sm" showIcon>No runtime activity</Status>
               )}
             </Card.Body>
           </Card>
 
-          {configWarnings.length > 0 ? (
+          {configWarningGroups.length > 0 ? (
             <Card variant="default" className="runtime-workspace__panel">
               <Card.Body className="runtime-workspace__panel-body">
                 <div className="runtime-workspace__panel-heading">
-                  <MdInfoOutline aria-hidden="true" />
-                  <h2>Renderer Warnings</h2>
+                  <MdOutlineWarningAmber aria-hidden="true" />
+                  <h2>Runtime Warnings</h2>
                 </div>
-                <ul className="runtime-workspace__plain-list">
-                  {configWarnings.map((warning, index) => (
-                    <li key={`${warning.code}-${index}`}>
+                <ul className="runtime-workspace__plain-list runtime-workspace__warning-list" id="runtime-workspace-warning-list">
+                  {visibleConfigWarningGroups.map((warningGroup) => (
+                    <li key={warningGroup.groupKey} className="runtime-workspace__warning-item">
                       <div className="runtime-workspace__warning-heading">
                         <Badge
-                          variant={getWarningSeverityVariant(warning.severity)}
+                          variant={getWarningSeverityVariant(warningGroup.severity)}
                           size="sm"
                           pill
                           outline
                         >
-                          {normalizeWarningSeverity(warning.severity)}
+                          {normalizeWarningSeverity(warningGroup.severity)}
                         </Badge>
-                        <strong>{warning.code}</strong>
+                        <strong>{warningGroup.title}</strong>
                       </div>
-                      <span>{warning.message}</span>
+                      <span className="runtime-workspace__warning-summary">
+                        {formatWarningCount(warningGroup.count)}. {warningGroup.summary}
+                      </span>
+                      {showWarningDetails && warningGroup.messages.length > 0 ? (
+                        <ul className="runtime-workspace__warning-detail-list" aria-label={`${warningGroup.title} details`}>
+                          {warningGroup.messages.map((message) => (
+                            <li key={`${warningGroup.groupKey}-${message}`}>{message}</li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
+                {warningDisclosureAvailable ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="runtime-workspace__panel-link"
+                    aria-controls="runtime-workspace-warning-list"
+                    aria-expanded={showWarningDetails}
+                    onClick={() => setShowWarningDetails((current) => !current)}
+                  >
+                    {showWarningDetails ? 'Show key warnings' : 'View all warnings'}
+                  </Button>
+                ) : null}
               </Card.Body>
             </Card>
           ) : null}
@@ -2122,11 +2431,15 @@ function RuntimeWorkspace() {
         </main>
 
         <aside className="runtime-workspace__aside runtime-workspace__aside--right" aria-label="Guided sections side panel">
-          <Card variant="default" className="runtime-workspace__panel">
+          <Card variant="default" className="runtime-workspace__panel runtime-workspace__panel--guided-sections">
             <Card.Body className="runtime-workspace__panel-body">
-              <div className="runtime-workspace__panel-heading">
-                <MdOutlineRoute aria-hidden="true" />
-                <h2>Guided Sections</h2>
+              <div className="runtime-workspace__panel-heading runtime-workspace__panel-heading--split">
+                <div className="runtime-workspace__panel-heading-title">
+                  <h2>Guided Sections</h2>
+                </div>
+                <Badge variant="neutral" size="sm" pill outline>
+                  {sections.length} section{sections.length === 1 ? '' : 's'}
+                </Badge>
               </div>
               <RuntimeSectionNavigation
                 activeKey={activeWorkspaceKey}

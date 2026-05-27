@@ -55,6 +55,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -72,16 +73,20 @@
 
 /* Hide scrollbar for webkit browsers */
 .tabview--horizontal .tabview__tablist::-webkit-scrollbar {
-  height: var(--spacing-xs);
+  height: var(--scrollbar-size);
 }
 
 .tabview--horizontal .tabview__tablist::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 .tabview--horizontal .tabview__tablist::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--scrollbar-thumb);
   border-radius: var(--border-radius-sm);
+}
+
+.tabview--horizontal .tabview__tablist::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ===========================
