@@ -409,46 +409,82 @@ function DashboardSectionCard({
   )
 }
 
-function RuntimeActionCard({ action }) {
+function RuntimeActionCard({ action, primary = false }) {
   const Icon = action.icon
   const displayTitle = String(action.title ?? '').replace(/^Continue\s+/i, '')
   const linkLabel = [action.title, action.label].filter(Boolean).join(' ')
-  const commandLabel = action.label
+  const commandLabel = primary ? 'Continue' : action.label
+  const cardClassName = [
+    'dashboard__launch-item',
+    'dashboard__launch-item--action',
+    primary ? 'dashboard__launch-item--primary-action' : '',
+    'dashboard__continue-item',
+    action.priority === 'HIGH' ? 'dashboard__action-card--priority' : '',
+    action.disabled ? 'dashboard__action-card--disabled' : '',
+  ].filter(Boolean).join(' ')
+
+  if (primary) {
+    return (
+      <li className={cardClassName}>
+        <Link
+          to={action.to}
+          disabled={action.disabled}
+          className="dashboard__continue-card dashboard__continue-card--primary dashboard__continue-card--link"
+          variant="subtle"
+          underline="none"
+          aria-label={linkLabel}
+        >
+          <span className="dashboard__continue-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <div className="dashboard__continue-copy">
+            <h3 className="dashboard__continue-title">{displayTitle}</h3>
+            {Array.isArray(action.badges) && action.badges.length > 0 ? (
+              <div className="dashboard__continue-status" aria-label="Runtime state">
+                {action.badges.map((badge) => (
+                  <Badge
+                    key={`${badge.label}-${badge.variant}`}
+                    variant={badge.variant}
+                    size="sm"
+                    pill
+                    outline
+                  >
+                    {badge.label}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+            <p>{action.meta}</p>
+            {action.description ? (
+              <p>{action.description}</p>
+            ) : null}
+          </div>
+          <span className="dashboard__continue-actions">
+            <span className="dashboard__continue-cta">{commandLabel}</span>
+            <MdChevronRight className="dashboard__continue-arrow" aria-hidden="true" />
+          </span>
+        </Link>
+      </li>
+    )
+  }
 
   return (
-    <li
-      className={[
-        'dashboard__launch-item',
-        'dashboard__launch-item--action',
-        action.priority === 'HIGH' ? 'dashboard__action-card--priority' : '',
-        action.disabled ? 'dashboard__action-card--disabled' : '',
-      ].filter(Boolean).join(' ')}
-    >
+    <li className={cardClassName}>
       <Link
         to={action.to}
         disabled={action.disabled}
-        className="dashboard__launch-link dashboard__launch-link--action"
+        className="dashboard__continue-card dashboard__continue-card--link"
         variant="subtle"
         underline="none"
         aria-label={linkLabel}
       >
-        <span className="dashboard__launch-topline">
-          <span className="dashboard__launch-icon" aria-hidden="true">
-            <Icon />
-          </span>
-          <Badge
-            variant={action.priority === 'HIGH' ? 'warning' : 'neutral'}
-            size="sm"
-            pill
-            outline
-          >
-            {action.priority}
-          </Badge>
+        <span className="dashboard__continue-icon" aria-hidden="true">
+          <Icon />
         </span>
-        <span className="dashboard__launch-copy">
-          <span className="dashboard__launch-label">{displayTitle}</span>
+        <div className="dashboard__continue-copy">
+          <h3 className="dashboard__continue-title">{displayTitle}</h3>
           {Array.isArray(action.badges) && action.badges.length > 0 ? (
-            <span className="dashboard__launch-badges" aria-label="Runtime state">
+            <div className="dashboard__continue-status" aria-label="Runtime state">
               {action.badges.map((badge) => (
                 <Badge
                   key={`${badge.label}-${badge.variant}`}
@@ -460,19 +496,17 @@ function RuntimeActionCard({ action }) {
                   {badge.label}
                 </Badge>
               ))}
-            </span>
+            </div>
           ) : null}
-          <span className="dashboard__launch-meta">{action.meta}</span>
+          <p>{action.meta}</p>
           {action.description ? (
-            <span className="dashboard__launch-description">{action.description}</span>
+            <p>{action.description}</p>
           ) : null}
           {action.disabled ? (
-            <span className="dashboard__launch-command">{commandLabel}</span>
+            <span className="dashboard__continue-command">{commandLabel}</span>
           ) : null}
-        </span>
-        <span className="dashboard__launch-arrow" aria-hidden="true">
-          <MdChevronRight />
-        </span>
+        </div>
+        <MdChevronRight className="dashboard__continue-arrow" aria-hidden="true" />
       </Link>
     </li>
   )
@@ -957,7 +991,7 @@ function Dashboard() {
           reviewBadge,
         ].filter(Boolean),
         disabled: !canOpenVmfWorkspace,
-        icon: MdOutlinePlayCircle,
+        icon: MdOutlineDescription,
         label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
         meta: `${packageSummary} - ${formatRuntimeActionUpdatedLabel(runtimeInstance?.updatedAt)}`,
         priority: 'MEDIUM',
@@ -1086,7 +1120,6 @@ function Dashboard() {
     runtimeActions.length === 1 ? 'dashboard__launch-grid--single' : '',
   ].filter(Boolean).join(' ')
   const runtimeActionAvailableCount = runtimeActions.filter((action) => !action.disabled).length
-
   const hasActiveWorkFilters = Boolean(
     activeWorkSearchQuery
       || activeWorkStatusQuery
@@ -1309,10 +1342,11 @@ function Dashboard() {
         >
           <ul className={runtimeActionGridClassName} aria-label="Runtime action queue">
             {runtimeActions.length > 0 ? (
-              runtimeActions.map((action) => (
+              runtimeActions.map((action, index) => (
                 <RuntimeActionCard
                   key={`${action.runtimeInstanceId ?? 'context'}-${action.actionKey}`}
                   action={action}
+                  primary={index === 0 && !action.disabled}
                 />
               ))
             ) : (

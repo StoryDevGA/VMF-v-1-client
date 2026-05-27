@@ -295,6 +295,16 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /value narratives/i })).toBeInTheDocument()
+    const continueSection = screen.getByRole('heading', { name: /^continue work$/i })
+      .closest('section')
+    const lockedSummaryCard = within(continueSection)
+      .getByText('Review Locked Instances')
+      .closest('li')
+
+    expect(lockedSummaryCard).toHaveClass('maintain-vmfs__continue-card--summary')
+    expect(lockedSummaryCard.querySelector('.maintain-vmfs__continue-arrow')).not.toBeInTheDocument()
+    expect(within(lockedSummaryCard).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(lockedSummaryCard).queryByRole('button')).not.toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'cust-1',
@@ -397,7 +407,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     await user.selectOptions(
-      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
       'DISABLED',
     )
 
@@ -412,7 +422,10 @@ describe('MaintainVmfs', () => {
       { skip: false },
     )
     expect(screen.queryByText('Active Runtime Narrative')).not.toBeInTheDocument()
-    expect(screen.getByText('Disabled Bridge VMF')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Disabled Bridge VMF'),
+    ).toBeInTheDocument()
   })
 
   it('paginates Value Narrative runtime instances without silently truncating after the first page', async () => {
@@ -446,7 +459,10 @@ describe('MaintainVmfs', () => {
       name: /value narrative runtime pagination/i,
     })
 
-    expect(screen.getByText('Page 1 Value Narrative')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Page 1 Value Narrative'),
+    ).toBeInTheDocument()
     expect(within(pagination).getByText('Runtime objects page 1 of 3 (25 runtime objects)')).toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -473,7 +489,10 @@ describe('MaintainVmfs', () => {
         { skip: false },
       )
     })
-    expect(screen.getByText('Page 2 Value Narrative')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Page 2 Value Narrative'),
+    ).toBeInTheDocument()
     expect(within(pagination).getByText('Runtime objects page 2 of 3 (25 runtime objects)')).toBeInTheDocument()
   })
 
@@ -996,7 +1015,7 @@ describe('MaintainVmfs', () => {
 
     await user.type(screen.getByLabelText(/search/i), 'Legacy')
     await user.selectOptions(
-      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
       'ARCHIVED',
     )
     await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
@@ -1004,7 +1023,7 @@ describe('MaintainVmfs', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')
     expect(
-      screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
     ).toHaveValue('ARCHIVED')
 
     currentTenantContext = {
@@ -1019,7 +1038,7 @@ describe('MaintainVmfs', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(screen.getByLabelText(/search/i)).toHaveValue('')
       expect(
-        screen.getByLabelText(/status/i, { selector: 'select#vmf-status-filter' }),
+        screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
       ).toHaveValue('')
       expect(useListVmfsQuery).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -1086,7 +1105,10 @@ describe('MaintainVmfs', () => {
     expect(
       screen.getByText(/linked tenant members can review published vmf bridge records and published runtime lifecycle rows only/i),
     ).toBeInTheDocument()
-    expect(screen.getByText('Viewer VMF')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Viewer VMF'),
+    ).toBeInTheDocument()
     const actions = screen.getByRole('combobox', { name: /actions for viewer vmf/i })
     expect(within(actions).getByRole('option', { name: /view details/i })).toBeInTheDocument()
     expect(within(actions).queryByRole('option', { name: /edit/i })).not.toBeInTheDocument()
@@ -1165,7 +1187,10 @@ describe('MaintainVmfs', () => {
       expect.objectContaining({ lifecycleStatus: 'PUBLISHED' }),
       { skip: false },
     )
-    expect(screen.getByText('Published Bridge VMF')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Published Bridge VMF'),
+    ).toBeInTheDocument()
     expect(screen.queryByText('Draft Runtime Narrative')).not.toBeInTheDocument()
   })
 
@@ -1203,7 +1228,10 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByText('Package-backed VMF')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('table', { name: /value narrative work register/i }))
+        .getByText('Package-backed VMF'),
+    ).toBeInTheDocument()
     expect(screen.getAllByText('Latest Package').length).toBeGreaterThan(0)
     expect(screen.queryByText('6a06e86458a5e0613e859907')).not.toBeInTheDocument()
   })

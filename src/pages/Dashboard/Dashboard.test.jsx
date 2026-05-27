@@ -366,18 +366,28 @@ describe('Dashboard page', () => {
       }),
       { skip: false },
     )
-    const actionLink = screen.getByRole('link', { name: /continue new package/i })
-    expect(actionLink)
-      .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
-    expect(within(actionLink).getByText('Active')).toBeInTheDocument()
-    expect(within(actionLink).getByText('Draft')).toBeInTheDocument()
-    expect(within(actionLink).getByText(/value narrative 2\.3\.569357 - updated 18 may 2026/i))
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
+    const primaryActionCard = actionQueue.querySelector('.dashboard__launch-item--primary-action')
+
+    expect(primaryActionCard).not.toBeNull()
+    expect(within(primaryActionCard).getByText('New Package')).toBeInTheDocument()
+    expect(within(primaryActionCard).getByText('Active')).toBeInTheDocument()
+    expect(within(primaryActionCard).getByText('Draft')).toBeInTheDocument()
+    expect(within(primaryActionCard).getByText(/value narrative 2\.3\.569357 - updated 18 may 2026/i))
       .toBeInTheDocument()
-    expect(within(actionLink).queryByText('Open the Value Narrative workspace to continue.'))
+    expect(within(primaryActionCard).queryByText('Open the Value Narrative workspace to continue.'))
       .not.toBeInTheDocument()
-    expect(actionLink.closest('.dashboard__launch-item')).not.toHaveClass('dashboard__launch-item--featured')
-    expect(within(actionLink).queryByText(/^Continue$/i)).not.toBeInTheDocument()
-    expect(actionLink.querySelector('.dashboard__launch-arrow')).toBeInTheDocument()
+    expect(primaryActionCard).not.toHaveClass('dashboard__launch-item--featured')
+    const primaryActionLink = within(primaryActionCard).getByRole('link', {
+      name: /continue new package open workspace/i,
+    })
+
+    expect(primaryActionLink).toHaveAttribute('href', '/app/runtime/value-narrative-859907')
+    expect(within(primaryActionLink).getByText('Continue')).toBeInTheDocument()
+    expect(within(primaryActionCard).queryByRole('button', { name: /^continue$/i }))
+      .not.toBeInTheDocument()
+    expect(primaryActionCard.querySelector('.dashboard__continue-arrow')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open 2\.3\.569357/i }))
       .toHaveAttribute('href', '/app/runtime/value-narrative-859907')
     const workTable = screen.getByRole('table', { name: /work in progress runtime instances/i })
@@ -422,8 +432,13 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    const actionLink = screen.getByRole('link', { name: /continue blocked runtime health/i })
-    expect(within(actionLink).getByText('Needs Review')).toBeInTheDocument()
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const primaryActionCard = within(actionPanel)
+      .getByText('Blocked Runtime Health')
+      .closest('.dashboard__launch-item')
+
+    expect(primaryActionCard).toHaveClass('dashboard__launch-item--primary-action')
+    expect(within(primaryActionCard).getByText('Needs Review')).toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: /work in progress runtime instances/i })
     const health = within(table).getByText('Execution blocked').closest('.status')

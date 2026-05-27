@@ -8,6 +8,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MdAdd,
+  MdChevronRight,
+  MdOutlineDescription,
   MdLockOutline,
   MdOutlineWarningAmber,
   MdShield,
@@ -67,7 +69,7 @@ import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tena
 import './MaintainVmfs.css'
 
 const VMF_STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
+  { value: '', label: 'All States' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'DISABLED', label: 'Disabled' },
   { value: 'ARCHIVED', label: 'Archived' },
@@ -83,7 +85,7 @@ const RUNTIME_INSTANCE_STATUS_FILTER_VALUES = new Set([
 ])
 
 const VMF_LIFECYCLE_OPTIONS = [
-  { value: '', label: 'All lifecycle states' },
+  { value: '', label: 'All Lifecycles' },
   { value: 'DRAFT', label: 'Draft' },
   { value: 'CANONISED', label: 'Canonised' },
   { value: 'PUBLISHED', label: 'Published' },
@@ -450,6 +452,27 @@ const getUpdatedTimestamp = (row) => {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
+const formatContinueUpdatedLabel = (value) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return 'Updated recently'
+
+  const date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return 'Updated recently'
+
+  const dateLabel = date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+  const timeLabel = date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  return `Updated ${dateLabel} ${timeLabel}`
+}
+
 const buildSearchText = (values) =>
   values
     .map((value) => String(value ?? '').trim())
@@ -726,13 +749,23 @@ function PackageLineageAccordionCell({ row }) {
 const getEvidenceItemValue = (row, label) =>
   row?.evidenceItems?.find((item) => item.label === label)?.value ?? ''
 
-function ContinueWorkCard({ row, primary = false, title, description, icon, count, onOpen }) {
+function ContinueWorkCard({ row, primary = false, title, description, icon, tone = 'primary', onOpen }) {
   const className = [
     'maintain-vmfs__continue-card',
     primary ? 'maintain-vmfs__continue-card--primary' : '',
+    !primary ? 'maintain-vmfs__continue-card--summary' : '',
+    tone !== 'primary' ? `maintain-vmfs__continue-card--${tone}` : '',
   ].filter(Boolean).join(' ')
   const canOpen = Boolean(row?.route)
   const CardIcon = icon
+  const primaryTitle = primary && row ? row.name : title
+  const packageSummary = primary && row
+    ? [row.packageLabel, row.packageVersion]
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value && value !== '--')
+      .join(' ')
+    : ''
+  const updatedLabel = primary && row ? formatContinueUpdatedLabel(row.updatedAt) : ''
 
   return (
     <li className={className}>
@@ -740,7 +773,7 @@ function ContinueWorkCard({ row, primary = false, title, description, icon, coun
         <CardIcon />
       </span>
       <div className="maintain-vmfs__continue-copy">
-        <h3 className="maintain-vmfs__continue-title">{title}</h3>
+        <h3 className="maintain-vmfs__continue-title">{primaryTitle}</h3>
         {primary && row ? (
           <>
             <div className="maintain-vmfs__continue-status">
@@ -758,25 +791,27 @@ function ContinueWorkCard({ row, primary = false, title, description, icon, coun
                 {row.stageLabel}
               </Badge>
             </div>
-            <p>{row.packageLabel} / {row.packageVersion}</p>
+            <p>{packageSummary ? `Bound to ${packageSummary}` : 'Bound framework unavailable'}</p>
+            <p>{updatedLabel}</p>
           </>
         ) : (
           <p>{description}</p>
         )}
       </div>
       {primary ? (
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          disabled={!canOpen}
-          onClick={() => onOpen(row)}
-        >
-          Continue
-        </Button>
-      ) : (
-        <span className="maintain-vmfs__continue-count">{count}</span>
-      )}
+        <span className="maintain-vmfs__continue-actions">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={!canOpen}
+            onClick={() => onOpen(row)}
+          >
+            Continue
+          </Button>
+          <MdChevronRight className="maintain-vmfs__continue-arrow" aria-hidden="true" />
+        </span>
+      ) : null}
     </li>
   )
 }
@@ -1729,26 +1764,24 @@ function MaintainVmfs() {
               row={featuredRegisterRow}
               primary
               title="Continue latest instance"
-              icon={MdShield}
+              icon={MdOutlineDescription}
               onOpen={handleRuntimeRowOpen}
             />
             <ContinueWorkCard
               title="Review Locked Instances"
               description={`${lockedInstanceCount} ${lockedInstanceCount === 1 ? 'instance' : 'instances'} locked`}
               icon={MdLockOutline}
-              count={lockedInstanceCount}
             />
             <ContinueWorkCard
               title="Resolve Pending Validation"
               description={`${pendingValidationCount} ${pendingValidationCount === 1 ? 'instance needs' : 'instances need'} attention`}
               icon={MdShield}
-              count={pendingValidationCount}
             />
             <ContinueWorkCard
               title="Review At-Risk Instances"
               description={`${atRiskInstanceCount} ${atRiskInstanceCount === 1 ? 'instance needs' : 'instances need'} attention`}
               icon={MdOutlineWarningAmber}
-              count={atRiskInstanceCount}
+              tone="warning"
             />
           </ul>
         ) : (
@@ -1763,99 +1796,106 @@ function MaintainVmfs() {
         <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
             <div className="maintain-vmfs__register-header">
-              <div className="maintain-vmfs__section-copy">
-                <h2 className="maintain-vmfs__section-title">
-                  Instances <span className="sr-only">Value Narratives</span>
-                </h2>
-                <p className="maintain-vmfs__section-description">
-                  Runtime objects are shown with transitional VMF bridge records for this tenant.
-                </p>
-              </div>
-
-              <div
-                className="maintain-vmfs__catalogue-actions"
-                role="group"
-                aria-label="Value Narrative workspace actions"
-              >
-                {canCreateVmfs && hasNoRuntimeReadyFrameworkPackages ? (
-                  <Status
-                    variant="warning"
-                    size="sm"
-                    showIcon
-                    className="maintain-vmfs__package-status"
-                    aria-label="Eligible framework package required"
-                  >
-                    No eligible package
-                  </Status>
-                ) : null}
-                <div className="maintain-vmfs__catalogue-buttons">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBackToHome}
-                  >
-                    Back
-                  </Button>
+              <div className="maintain-vmfs__register-copy-wrapper">
+                <div className="maintain-vmfs__section-copy">
+                  <h2 className="maintain-vmfs__section-title">
+                    Instances <span className="sr-only">Value Narratives</span>
+                  </h2>
+                  <p className="maintain-vmfs__section-description">
+                    Runtime objects are shown with transitional VMF bridge records for this tenant.
+                  </p>
                 </div>
-                {canCreateVmfs && runtimeCapacityGuidance ? (
-                  <Status
-                    variant={runtimeCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
-                    size="sm"
-                    showIcon
-                    className="maintain-vmfs__capacity-status"
-                    aria-label={runtimeCapacityGuidance.ariaLabel}
-                  >
-                    {runtimeCapacityGuidance.displayValue}
-                  </Status>
-                ) : null}
               </div>
-            </div>
 
-            <div className="maintain-vmfs__toolbar">
-              <Input
-                id="vmf-search"
-                label="Search runtime name, description, ID, or package"
-                size="sm"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
-                  setPage(1)
-                  setRuntimePage(1)
-                }}
-                placeholder="Search Value Narratives"
-                fullWidth
-              />
-              <Select
-                id="vmf-status-filter"
-                label="Status"
-                size="sm"
-                value={statusFilter}
-                options={VMF_STATUS_OPTIONS}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value)
-                  setPage(1)
-                  setRuntimePage(1)
-                }}
-              />
-              <Select
-                id="vmf-lifecycle-filter"
-                label="Lifecycle"
-                size="sm"
-                value={effectiveLifecycleFilter}
-                options={
-                  isReadOnlyVmfViewer
-                    ? VMF_LIFECYCLE_OPTIONS.filter(
-                      (option) => option.value === READ_ONLY_VMF_LIFECYCLE,
-                    )
-                    : VMF_LIFECYCLE_OPTIONS
-                }
-                disabled={isReadOnlyVmfViewer}
-                onChange={(event) => {
-                  setLifecycleFilter(event.target.value)
-                  setPage(1)
-                }}
-              />
+              <div className="maintain-vmfs__register-controls">
+                <div
+                  className="maintain-vmfs__catalogue-actions"
+                  role="group"
+                  aria-label="Value Narrative workspace actions"
+                >
+                  {canCreateVmfs && hasNoRuntimeReadyFrameworkPackages ? (
+                    <Status
+                      variant="warning"
+                      size="sm"
+                      showIcon
+                      className="maintain-vmfs__package-status"
+                      aria-label="Eligible framework package required"
+                    >
+                      No eligible package
+                    </Status>
+                  ) : null}
+                  <div className="maintain-vmfs__catalogue-buttons">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBackToHome}
+                    >
+                      Back
+                    </Button>
+                  </div>
+                  {canCreateVmfs && runtimeCapacityGuidance ? (
+                    <Status
+                      variant={runtimeCapacityGuidance.tone === 'warning' ? 'warning' : 'info'}
+                      size="sm"
+                      showIcon
+                      className="maintain-vmfs__capacity-status"
+                      aria-label={runtimeCapacityGuidance.ariaLabel}
+                    >
+                      {runtimeCapacityGuidance.displayValue}
+                    </Status>
+                  ) : null}
+                </div>
+
+                <div className="maintain-vmfs__toolbar" role="group" aria-label="Instance filters">
+                  <Input
+                    id="vmf-search"
+                    aria-label="Search"
+                    className="maintain-vmfs__search-control"
+                    size="sm"
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value)
+                      setPage(1)
+                      setRuntimePage(1)
+                    }}
+                    placeholder="Search"
+                    fullWidth
+                  />
+                  <Select
+                    id="vmf-status-filter"
+                    label="State"
+                    className="maintain-vmfs__filter-control"
+                    size="sm"
+                    value={statusFilter}
+                    options={VMF_STATUS_OPTIONS}
+                    onChange={(event) => {
+                      setStatusFilter(event.target.value)
+                      setPage(1)
+                      setRuntimePage(1)
+                    }}
+                  />
+                  <Select
+                    id="vmf-lifecycle-filter"
+                    label="Lifecycle"
+                    className="maintain-vmfs__filter-control"
+                    size="sm"
+                    value={effectiveLifecycleFilter}
+                    options={
+                      isReadOnlyVmfViewer
+                        ? VMF_LIFECYCLE_OPTIONS.filter(
+                          (option) => option.value === READ_ONLY_VMF_LIFECYCLE,
+                        )
+                        : VMF_LIFECYCLE_OPTIONS
+                    }
+                    disabled={isReadOnlyVmfViewer}
+                    onChange={(event) => {
+                      setLifecycleFilter(event.target.value)
+                      setPage(1)
+                    }}
+                  />
+                </div>
+              </div>
             </div>
 
             {runtimeInstanceAppError ? (
