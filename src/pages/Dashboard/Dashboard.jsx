@@ -10,6 +10,7 @@ import {
   MdBusiness,
   MdChevronRight,
   MdFilterList,
+  MdLockOutline,
   MdOutlineEventNote,
   MdOutlineDashboardCustomize,
   MdOutlineDescription,
@@ -19,6 +20,7 @@ import {
   MdOutlinePlayCircle,
   MdOutlineTaskAlt,
   MdOutlineWarningAmber,
+  MdShield,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
 import { Card } from '../../components/Card'
@@ -80,6 +82,7 @@ const ACTIVE_WORK_HEALTH_OPTIONS = [
 ]
 
 const EMPTY_RUNTIME_ROWS = Object.freeze([])
+const RUNTIME_ACTION_SUMMARY_PAGE_SIZE = 50
 
 // TODO: replace with runtime activity events once the Runtime Execution Engine emits them.
 const EMPTY_RUNTIME_ACTIVITY = Object.freeze([])
@@ -248,6 +251,22 @@ const getRuntimeValidationState = (runtimeRecord) => {
   )
 }
 
+const getRuntimeLockState = (runtimeRecord) => {
+  const frameworkState = getFrameworkState(runtimeRecord)
+  const lifecycle = frameworkState?.lifecycle ?? {}
+  const explicitLock = normalizeDashboardToken(
+    runtimeRecord?.lockStatus
+      ?? runtimeRecord?.runtimeLockStatus
+      ?? runtimeRecord?.lockState
+      ?? lifecycle?.lockStatus
+      ?? lifecycle?.lockState,
+  )
+
+  if (explicitLock) return explicitLock
+  if (runtimeRecord?.isLocked === true || lifecycle?.locked === true) return 'LOCKED'
+  return ''
+}
+
 const getRuntimeReadinessState = (runtimeRecord) => {
   const frameworkState = getFrameworkState(runtimeRecord)
   const readiness = frameworkState?.readiness ?? {}
@@ -269,6 +288,74 @@ const getRuntimeReadinessState = (runtimeRecord) => {
   if (['FAILED', 'ERROR', 'BLOCKED'].includes(validationState)) return 'BLOCKED'
 
   return 'DRAFT'
+}
+
+const getRuntimeUpdatedTime = (runtimeRecord) => {
+  const date = new Date(String(runtimeRecord?.updatedAt ?? '').trim())
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
+const isRuntimeInstanceLocked = (runtimeRecord) => {
+  const runtimeStatus = getRuntimeLifecycleStatus(runtimeRecord)
+  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
+  const lockState = getRuntimeLockState(runtimeRecord)
+
+  return lockState === 'LOCKED'
+    || runtimeStatus === 'LOCKED'
+    || lifecycleStage === 'LOCKED'
+}
+
+const isRuntimeInstancePendingValidation = (runtimeRecord) => {
+  const validationState = getRuntimeValidationState(runtimeRecord)
+  const readinessState = getRuntimeReadinessState(runtimeRecord)
+  const readinessLabel = getRuntimeReadinessLabel(runtimeRecord)
+
+  return [
+    'NOT_RUN',
+    'PENDING',
+    'WAITING',
+    'IN_REVIEW',
+    'REQUIRED',
+    'REQUIRES_VALIDATION',
+  ].includes(validationState)
+    || readinessState === 'IN_REVIEW'
+    || readinessLabel === 'Readiness pending'
+}
+
+const isRuntimeInstanceAtRisk = (runtimeRecord) => {
+  const runtimeStatus = getRuntimeLifecycleStatus(runtimeRecord)
+  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
+  const validationState = getRuntimeValidationState(runtimeRecord)
+  const readinessState = getRuntimeReadinessState(runtimeRecord)
+  const executionState = getRuntimeExecutionState(runtimeRecord)
+  const readinessVariant = getRuntimeReadinessVariant(getRuntimeReadinessLabel(runtimeRecord))
+  const blockedStates = ['BLOCKED', 'FAILED', 'ERROR']
+
+  return blockedStates.includes(runtimeStatus)
+    || blockedStates.includes(lifecycleStage)
+    || blockedStates.includes(validationState)
+    || blockedStates.includes(readinessState)
+    || blockedStates.includes(executionState)
+    || executionState === 'WAITING_APPROVAL'
+    || readinessVariant === 'error'
+}
+
+const getRuntimeListTotal = (response) => {
+  const candidates = [
+    response?.meta?.total,
+    response?.meta?.totalCount,
+    response?.data?.meta?.total,
+    response?.data?.meta?.totalCount,
+    response?.total,
+  ]
+  const numeric = candidates.map(Number).find((value) => Number.isFinite(value))
+
+  return numeric ?? 0
+}
+
+const formatRuntimeActionCount = (count, singular, plural, { isLimited = false } = {}) => {
+  const label = `${count} ${count === 1 ? singular : plural}`
+  return isLimited ? `${label} in latest ${RUNTIME_ACTION_SUMMARY_PAGE_SIZE}` : label
 }
 
 const getRuntimeReviewBadge = (runtimeRecord) => {
@@ -419,6 +506,7 @@ function RuntimeActionCard({ action, primary = false }) {
     'dashboard__launch-item--action',
     primary ? 'dashboard__launch-item--primary-action' : '',
     'dashboard__continue-item',
+    action.actionable === false ? 'dashboard__action-card--summary' : '',
     action.priority === 'HIGH' ? 'dashboard__action-card--priority' : '',
     action.disabled ? 'dashboard__action-card--disabled' : '',
   ].filter(Boolean).join(' ')
@@ -433,6 +521,7 @@ function RuntimeActionCard({ action, primary = false }) {
           variant="subtle"
           underline="none"
           aria-label={linkLabel}
+          onClick={action.onSelect}
         >
           <div className="dashboard__continue-head">
             <span className="dashboard__continue-icon" aria-hidden="true">
@@ -474,12 +563,8 @@ function RuntimeActionCard({ action, primary = false }) {
 
   return (
     <li className={cardClassName}>
-      <Link
-        to={action.to}
-        disabled={action.disabled}
-        className="dashboard__continue-card dashboard__continue-card--secondary dashboard__continue-card--link"
-        variant="subtle"
-        underline="none"
+      <div
+        className="dashboard__continue-card dashboard__continue-card--secondary dashboard__continue-card--summary"
         aria-label={linkLabel}
       >
         <div className="dashboard__continue-head">
@@ -510,12 +595,8 @@ function RuntimeActionCard({ action, primary = false }) {
           {action.description ? (
             <p>{action.description}</p>
           ) : null}
-          {action.disabled ? (
-            <span className="dashboard__continue-command">{commandLabel}</span>
-          ) : null}
         </div>
-        <MdChevronRight className="dashboard__continue-arrow" aria-hidden="true" />
-      </Link>
+      </div>
     </li>
   )
 }
@@ -769,6 +850,22 @@ function Dashboard() {
   const activeWorkStatusQuery = activeWorkStateFilter === 'ALL' ? '' : activeWorkStateFilter
 
   const {
+    data: runtimeActionListResponse,
+    isLoading: isLoadingRuntimeActions,
+    isFetching: isFetchingRuntimeActions,
+    error: runtimeActionError,
+  } = useListRuntimeInstancesQuery(
+    {
+      customerId,
+      tenantId,
+      runtimeType: 'VALUE_NARRATIVE',
+      page: 1,
+      pageSize: RUNTIME_ACTION_SUMMARY_PAGE_SIZE,
+    },
+    { skip: !contextReady || !canOpenVmfWorkspace || !hasVmfFeature },
+  )
+
+  const {
     data: runtimeInstanceListResponse,
     isLoading: isLoadingRuntimeInstances,
     isFetching: isFetchingRuntimeInstances,
@@ -914,10 +1011,15 @@ function Dashboard() {
   }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
   const canCreateValueNarrative = Boolean(contextReady && hasVmfFeature && canCreateVmfRuntime)
   const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
+  const runtimeActionAppError = runtimeActionError ? normalizeError(runtimeActionError) : null
   const runtimeInstanceRows = !runtimeInstanceAppError && Array.isArray(runtimeInstanceListResponse?.data)
     ? runtimeInstanceListResponse.data
     : EMPTY_RUNTIME_ROWS
+  const runtimeActionRows = !runtimeActionAppError && Array.isArray(runtimeActionListResponse?.data)
+    ? [...runtimeActionListResponse.data].sort((left, right) => getRuntimeUpdatedTime(right) - getRuntimeUpdatedTime(left))
+    : EMPTY_RUNTIME_ROWS
   const isLoadingRuntimeVmfs = Boolean(isLoadingRuntimeInstances || isFetchingRuntimeInstances)
+  const isLoadingRuntimeActionSummary = Boolean(isLoadingRuntimeActions || isFetchingRuntimeActions)
 
   const runtimeActions = useMemo(() => {
     if (!customerId) {
@@ -954,11 +1056,11 @@ function Dashboard() {
       ]
     }
 
-    if (runtimeInstanceAppError) {
+    if (runtimeActionAppError) {
       return [
         {
           actionKey: 'RUNTIME_INSTANCE_LOAD_FAILED',
-          description: runtimeInstanceAppError.message,
+          description: runtimeActionAppError.message,
           disabled: true,
           icon: MdOutlineWarningAmber,
           label: 'Unavailable',
@@ -971,21 +1073,49 @@ function Dashboard() {
       ]
     }
 
-    return runtimeInstanceRows.map((runtimeInstance) => {
-      const runtimeName = getVmfName(runtimeInstance)
-      const packageVersion = getFrameworkPackageVersion(runtimeInstance)
-      const runtimeTypeLabel = formatRuntimeTokenLabel(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE')
-      const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
-      const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(runtimeInstance)
-      const reviewBadge = getRuntimeReviewBadge(runtimeInstance)
-      const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
-      const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
-      const packageSummary = [
-        runtimeTypeLabel,
-        packageVersion && packageVersion !== '--' ? packageVersion : '',
-      ].filter(Boolean).join(' ')
+    const primaryRuntimeInstance = runtimeActionRows[0] ?? null
+    if (!primaryRuntimeInstance) return []
 
-      return {
+    const runtimeActionTotal = getRuntimeListTotal(runtimeActionListResponse)
+    const isRuntimeActionSummaryLimited = runtimeActionTotal > runtimeActionRows.length
+    const lockedInstances = runtimeActionRows.filter(isRuntimeInstanceLocked)
+    const pendingValidationInstances = runtimeActionRows.filter(isRuntimeInstancePendingValidation)
+    const atRiskInstances = runtimeActionRows.filter(isRuntimeInstanceAtRisk)
+    const buildSummaryAction = ({
+      actionKey,
+      count,
+      icon,
+      label,
+      meta,
+      priority = 'MEDIUM',
+      title,
+    }) => ({
+      actionable: false,
+      actionKey,
+      disabled: count === 0 || !canOpenVmfWorkspace,
+      icon,
+      label,
+      meta,
+      priority,
+      runtimeInstanceId: null,
+      title,
+    })
+
+    const runtimeName = getVmfName(primaryRuntimeInstance)
+    const packageVersion = getFrameworkPackageVersion(primaryRuntimeInstance)
+    const runtimeTypeLabel = formatRuntimeTokenLabel(primaryRuntimeInstance?.runtimeType ?? 'VALUE_NARRATIVE')
+    const runtimeStatus = getRuntimeLifecycleStatus(primaryRuntimeInstance)
+    const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(primaryRuntimeInstance)
+    const reviewBadge = getRuntimeReviewBadge(primaryRuntimeInstance)
+    const runtimeInstanceId = getRuntimeInstanceRouteId(primaryRuntimeInstance) || runtimeName
+    const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
+    const packageSummary = [
+      runtimeTypeLabel,
+      packageVersion && packageVersion !== '--' ? packageVersion : '',
+    ].filter(Boolean).join(' ')
+
+    return [
+      {
         actionKey: 'OPEN_RUNTIME_INSTANCE',
         badges: [
           {
@@ -1001,19 +1131,57 @@ function Dashboard() {
         disabled: !canOpenVmfWorkspace,
         icon: MdOutlineDescription,
         label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
-        meta: `${packageSummary} - ${formatRuntimeActionUpdatedLabel(runtimeInstance?.updatedAt)}`,
+        meta: `${packageSummary} - ${formatRuntimeActionUpdatedLabel(primaryRuntimeInstance?.updatedAt)}`,
         priority: 'MEDIUM',
         runtimeInstanceId,
         title: `Continue ${runtimeName}`,
         to: canOpenVmfWorkspace ? runtimeWorkspaceTo : '/app/dashboard',
-      }
-    })
+      },
+      buildSummaryAction({
+        actionKey: 'REVIEW_LOCKED_RUNTIME_INSTANCES',
+        count: lockedInstances.length,
+        icon: MdLockOutline,
+        label: 'Review locked instances',
+        meta: formatRuntimeActionCount(lockedInstances.length, 'instance locked', 'instances locked', {
+          isLimited: isRuntimeActionSummaryLimited,
+        }),
+        title: 'Review Locked Instances',
+      }),
+      buildSummaryAction({
+        actionKey: 'RESOLVE_PENDING_RUNTIME_VALIDATION',
+        count: pendingValidationInstances.length,
+        icon: MdShield,
+        label: 'Resolve pending validation',
+        meta: formatRuntimeActionCount(
+          pendingValidationInstances.length,
+          'instance needs attention',
+          'instances need attention',
+          { isLimited: isRuntimeActionSummaryLimited },
+        ),
+        title: 'Resolve Pending Validation',
+      }),
+      buildSummaryAction({
+        actionKey: 'REVIEW_AT_RISK_RUNTIME_INSTANCES',
+        count: atRiskInstances.length,
+        icon: MdOutlineWarningAmber,
+        label: 'Review at-risk instances',
+        meta: formatRuntimeActionCount(
+          atRiskInstances.length,
+          'instance needs attention',
+          'instances need attention',
+          { isLimited: isRuntimeActionSummaryLimited },
+        ),
+        priority: 'HIGH',
+        title: 'Review At-Risk Instances',
+      }),
+    ]
   }, [
     canOpenVmfWorkspace,
     customerId,
     customerScopeValue,
-    runtimeInstanceAppError,
-    runtimeInstanceRows,
+    runtimeActionAppError,
+    runtimeActionListResponse,
+    runtimeActionRows,
     supportsTenantManagement,
     tenantId,
     tenantScopeValue,
@@ -1127,7 +1295,8 @@ function Dashboard() {
     'dashboard__launch-grid--actions',
     runtimeActions.length === 1 ? 'dashboard__launch-grid--single' : '',
   ].filter(Boolean).join(' ')
-  const runtimeActionAvailableCount = runtimeActions.filter((action) => !action.disabled).length
+  const runtimeActionAvailableCount = runtimeActions
+    .filter((action) => action.actionable !== false && !action.disabled).length
   const hasActiveWorkFilters = Boolean(
     activeWorkSearchQuery
       || activeWorkStatusQuery
@@ -1144,8 +1313,8 @@ function Dashboard() {
     : hasActiveWorkFilters
       ? 'No runtime instances match the selected filters.'
       : 'No runtime instances are available for this tenant yet.'
-  const runtimeActionEmptyLabel = isLoadingRuntimeVmfs ? 'Loading runtime actions' : 'No runtime actions'
-  const runtimeActionEmptyMessage = isLoadingRuntimeVmfs
+  const runtimeActionEmptyLabel = isLoadingRuntimeActionSummary ? 'Loading runtime actions' : 'No runtime actions'
+  const runtimeActionEmptyMessage = isLoadingRuntimeActionSummary
     ? 'Checking for active VMF runtime work in this tenant.'
     : 'Runtime actions will appear here once runtime instances exist for this tenant.'
   const runtimeActivityItems = EMPTY_RUNTIME_ACTIVITY

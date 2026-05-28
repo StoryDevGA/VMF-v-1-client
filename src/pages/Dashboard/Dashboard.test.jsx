@@ -354,7 +354,9 @@ describe('Dashboard page', () => {
     renderDashboard()
 
     expect(screen.getByText(/select a tenant to continue your work/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /tenant required/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.queryByRole('link', { name: /tenant required/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/select a tenant to continue your work tenant required/i))
+      .toHaveClass('dashboard__continue-card--summary')
     expect(screen.getByText(/select a tenant to show runtime work/i)).toBeInTheDocument()
     const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
     const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
@@ -404,7 +406,19 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+    expect(useListRuntimeInstancesQuery).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        customerId: 'cust-1',
+        tenantId: 'ten-1',
+        runtimeType: 'VALUE_NARRATIVE',
+        page: 1,
+        pageSize: 50,
+      }),
+      { skip: false },
+    )
+    expect(useListRuntimeInstancesQuery).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
         customerId: 'cust-1',
         tenantId: 'ten-1',
@@ -489,6 +503,10 @@ describe('Dashboard page', () => {
             name: 'Second Runtime',
             status: 'ACTIVE',
             executionStatus: 'IDLE',
+            completionState: 'COMPLETE',
+            validationStatus: 'READY',
+            lockStatus: 'LOCKED',
+            snapshotStatus: 'BOUND',
             packageVersion: '2.3.569357',
             updatedAt: '2026-05-25T11:48:00.000Z',
           },
@@ -499,6 +517,7 @@ describe('Dashboard page', () => {
             name: 'Third Runtime',
             status: 'ARCHIVED',
             executionStatus: 'IDLE',
+            validationStatus: 'PENDING',
             packageVersion: '2.3.569357',
             updatedAt: '2026-05-20T15:11:00.000Z',
           },
@@ -508,7 +527,8 @@ describe('Dashboard page', () => {
             runtimeType: 'VALUE_NARRATIVE',
             name: 'Fourth Runtime',
             status: 'ACTIVE',
-            executionStatus: 'IDLE',
+            executionStatus: 'ERROR',
+            validationStatus: 'BLOCKED',
             packageVersion: '2.3.569357',
             updatedAt: '2026-05-20T14:46:00.000Z',
           },
@@ -537,17 +557,77 @@ describe('Dashboard page', () => {
       .toHaveClass('dashboard__continue-card', 'dashboard__continue-card--primary', 'dashboard__continue-card--link')
     expect(primaryActionLink.querySelector('.dashboard__continue-cta'))
       .toHaveTextContent('Continue')
+    expect(within(actionPanel).queryByText('Second Runtime')).not.toBeInTheDocument()
+    expect(within(actionPanel).queryByText('Third Runtime')).not.toBeInTheDocument()
+    expect(within(actionPanel).queryByText('Fourth Runtime')).not.toBeInTheDocument()
+    expect(within(actionPanel).queryByRole('link', { name: /review locked instances/i }))
+      .not.toBeInTheDocument()
+    expect(within(actionPanel).getByLabelText(/review locked instances/i))
+      .toHaveClass('dashboard__continue-card--summary')
+    expect(within(actionPanel).getByText('1 instance locked')).toBeInTheDocument()
+    expect(within(actionPanel).queryByRole('link', { name: /resolve pending validation/i }))
+      .not.toBeInTheDocument()
+    expect(within(actionPanel).getByLabelText(/resolve pending validation/i))
+      .toHaveClass('dashboard__continue-card--summary')
+    expect(within(actionPanel).getAllByText('1 instance needs attention').length).toBe(2)
+    expect(within(actionPanel).queryByRole('link', { name: /review at-risk instances/i }))
+      .not.toBeInTheDocument()
+    expect(within(actionPanel).getByLabelText(/review at-risk instances/i))
+      .toHaveClass('dashboard__continue-card--summary')
+    expect(within(actionPanel).queryByText(/latest:/i)).not.toBeInTheDocument()
+    expect(screen.getByText('1 available')).toBeInTheDocument()
 
     secondaryActionCards.forEach((card) => {
-      const compactActionLink = card.querySelector('.dashboard__continue-card')
+      const compactActionCard = card.querySelector('.dashboard__continue-card')
 
       expect(card).not.toHaveClass('dashboard__launch-item--primary-action')
-      expect(compactActionLink)
-        .toHaveClass('dashboard__continue-card--secondary', 'dashboard__continue-card--link')
-      expect(compactActionLink).not.toHaveClass('dashboard__continue-card--primary')
-      expect(compactActionLink.querySelector('.dashboard__continue-cta')).not.toBeInTheDocument()
-      expect(compactActionLink.querySelector('.dashboard__continue-command')).not.toBeInTheDocument()
+      expect(card).toHaveClass('dashboard__action-card--summary')
+      expect(compactActionCard)
+        .toHaveClass('dashboard__continue-card--secondary', 'dashboard__continue-card--summary')
+      expect(compactActionCard).not.toHaveClass('dashboard__continue-card--link')
+      expect(compactActionCard).not.toHaveClass('dashboard__continue-card--primary')
+      expect(compactActionCard.querySelector('.dashboard__continue-arrow')).not.toBeInTheDocument()
+      expect(compactActionCard.querySelector('.dashboard__continue-cta')).not.toBeInTheDocument()
+      expect(compactActionCard.querySelector('.dashboard__continue-command')).not.toBeInTheDocument()
     })
+  })
+
+  it('labels Continue Work summary counts when they are scoped to the loaded API page', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-first',
+            runtimeInstanceKey: 'value-narrative-first',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'First Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            updatedAt: '2026-05-27T09:21:00.000Z',
+          },
+          {
+            id: 'runtime-locked',
+            runtimeInstanceKey: 'value-narrative-locked',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Locked Runtime',
+            status: 'LOCKED',
+            lockStatus: 'LOCKED',
+            updatedAt: '2026-05-25T11:48:00.000Z',
+          },
+        ],
+        meta: { page: 1, pageSize: 50, totalPages: 2, total: 75 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+
+    expect(within(actionPanel).getByText('1 instance locked in latest 50')).toBeInTheDocument()
+    expect(within(actionPanel).getAllByText(/in latest 50$/)).toHaveLength(3)
   })
 
   it('styles runtime health from readiness instead of execution state', () => {
@@ -612,8 +692,10 @@ describe('Dashboard page', () => {
     const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
     const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
 
-    expect(within(actionQueue).getByRole('link', { name: /runtime work unavailable/i }))
-      .toHaveAttribute('aria-disabled', 'true')
+    expect(within(actionQueue).queryByRole('link', { name: /runtime work unavailable/i }))
+      .not.toBeInTheDocument()
+    expect(within(actionQueue).getByLabelText(/runtime work unavailable unavailable/i))
+      .toHaveClass('dashboard__continue-card--summary')
     expect(screen.getAllByText(/runtime instance service unavailable/i).length)
       .toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/unable to load runtime instances/i)).toBeInTheDocument()
@@ -675,17 +757,14 @@ describe('Dashboard page', () => {
     await user.type(within(activeWorkFilters).getByRole('textbox', { name: /^search$/i }), 'capacity')
 
     await waitFor(() => {
-      expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          customerId: 'cust-1',
-          tenantId: 'ten-1',
-          runtimeType: 'VALUE_NARRATIVE',
-          q: 'capacity',
-          status: 'LOCKED',
-          pageSize: 25,
-        }),
-        { skip: false },
-      )
+      expect(useListRuntimeInstancesQuery.mock.calls.some(([args, options]) =>
+        args.customerId === 'cust-1'
+          && args.tenantId === 'ten-1'
+          && args.runtimeType === 'VALUE_NARRATIVE'
+          && args.q === 'capacity'
+          && args.status === 'LOCKED'
+          && args.pageSize === 25
+          && options?.skip === false)).toBe(true)
     })
   })
 
@@ -738,12 +817,11 @@ describe('Dashboard page', () => {
     const table = screen.getByRole('table', { name: /work in progress runtime instances/i })
     expect(within(table).getByText('Blocked Runtime')).toBeInTheDocument()
     expect(within(table).queryByText('Healthy Runtime')).not.toBeInTheDocument()
-    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({
-        health: 'BLOCKED',
-      }),
-      { skip: false },
-    )
+    expect(useListRuntimeInstancesQuery.mock.calls.some(([args, options]) =>
+      args.runtimeType === 'VALUE_NARRATIVE'
+        && args.pageSize === 25
+        && args.health === undefined
+        && options?.skip === false)).toBe(true)
   })
 
   it('shows Sales Manager scoped role without placeholder team work', () => {
@@ -905,12 +983,15 @@ describe('Dashboard page', () => {
       'min-height': '8.25rem',
       padding: 'var(--spacing-md)',
       border: 'var(--border-width-thin) solid var(--color-card-border)',
+      'text-transform': 'none',
     }))
     expect(primaryCard).toEqual(expect.objectContaining({
       '--dashboard-continue-icon-size': 'var(--spacing-2xl)',
       'grid-template-columns': 'minmax(0, 1fr) auto',
       'grid-template-rows': 'auto auto',
+      'align-content': 'center',
       'align-items': 'center',
+      gap: 'var(--spacing-sm) var(--spacing-md)',
       'min-height': '8.25rem',
       padding: 'var(--spacing-lg)',
       'border-color': 'color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border))',
@@ -928,6 +1009,7 @@ describe('Dashboard page', () => {
     expect(primaryCopy).toEqual(expect.objectContaining({
       'grid-column': '1',
       'grid-row': '2',
+      gap: 'var(--spacing-sm)',
       'padding-inline-start': 'calc(var(--dashboard-continue-icon-size) + var(--spacing-md))',
       'padding-inline-end': 'var(--spacing-md)',
       'border-inline-start': '0',
@@ -952,12 +1034,14 @@ describe('Dashboard page', () => {
       'min-height': 'calc(var(--spacing-md) * 2.15)',
       'padding-inline': 'var(--spacing-md)',
       'font-size': 'var(--font-size-sm)',
+      'text-transform': 'none',
     }))
   })
 
   it('locks the secondary Continue Work card compact hierarchy contract', () => {
     const secondaryCard = getCssDeclarations('.dashboard__continue-card--secondary')
     const secondaryIcon = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-icon')
+    const secondaryIconSvg = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-icon svg')
     const secondaryHead = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-head')
     const secondaryHeading = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-heading')
     const secondaryCopy = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-copy')
@@ -967,37 +1051,54 @@ describe('Dashboard page', () => {
     const secondaryCopyText = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-copy p')
     const secondaryActions = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-actions')
     const secondaryArrow = getCssDeclarations('.dashboard__continue-card--secondary .dashboard__continue-arrow')
+    const disabledSecondaryItem = getCssDeclarations('.dashboard__continue-item.dashboard__action-card--disabled')
+    const summarySecondaryCard = getCssDeclarations(
+      '.dashboard__continue-card--secondary.dashboard__continue-card--summary',
+    )
+    const disabledSecondaryIcon = getCssDeclarations(
+      '.dashboard__continue-card--secondary.dashboard__continue-card--summary .dashboard__continue-icon',
+    )
 
     expect(secondaryCard).toEqual(expect.objectContaining({
       '--dashboard-continue-icon-size': 'var(--spacing-xl)',
-      'grid-template-rows': 'auto auto',
+      'grid-template-columns': 'minmax(0, 1fr) auto',
+      'grid-template-rows': 'auto minmax(0, 1fr)',
       'align-content': 'start',
-      gap: 'var(--spacing-sm) var(--spacing-sm)',
+      gap: 'var(--spacing-sm)',
       'min-height': '8.25rem',
-      padding: 'var(--spacing-md) var(--spacing-sm)',
+      padding: 'var(--spacing-md)',
     }))
     expect(secondaryIcon).toEqual(expect.objectContaining({
-      'margin-block-start': 'var(--spacing-2xs)',
       'border-radius': 'var(--border-radius-sm)',
       'background-color': 'color-mix(in srgb, var(--color-action-primary) 7%, transparent)',
-      'font-size': 'var(--font-size-sm)',
+      'font-size': 'var(--font-size-lg)',
+    }))
+    expect(secondaryIconSvg).toEqual(expect.objectContaining({
+      width: '1em',
+      height: '1em',
     }))
     expect(secondaryHead).toEqual(expect.objectContaining({
+      'grid-column': '1 / -1',
+      'grid-row': '1',
+      'grid-template-columns': 'minmax(0, 1fr)',
       'align-items': 'start',
-      gap: 'var(--spacing-xs)',
+      gap: 'var(--spacing-md)',
     }))
     expect(secondaryHeading).toEqual(expect.objectContaining({
-      gap: 'var(--spacing-sm)',
+      gap: 'var(--spacing-xs)',
+      'max-width': '12rem',
     }))
     expect(secondaryCopy).toEqual(expect.objectContaining({
-      gap: 'var(--spacing-sm)',
-      'margin-block-start': 'var(--spacing-2xs)',
-      'padding-inline-start': 'calc(var(--dashboard-continue-icon-size) + var(--spacing-xs))',
-      'padding-inline-end': 'var(--spacing-xs)',
+      'grid-column': '1',
+      'grid-row': '2',
+      'align-self': 'end',
+      gap: 'var(--spacing-2xs)',
+      'margin-block-start': 'var(--spacing-xs)',
+      'padding-inline': '0 var(--spacing-sm)',
     }))
     expect(secondaryTitle).toEqual(expect.objectContaining({
-      'font-size': '0.9375rem',
-      'line-height': '1.1',
+      'font-size': 'var(--font-size-base)',
+      'line-height': '1.12',
       'text-wrap': 'balance',
     }))
     expect(secondaryStatus).toEqual(expect.objectContaining({
@@ -1010,17 +1111,31 @@ describe('Dashboard page', () => {
       'line-height': '1',
     }))
     expect(secondaryCopyText).toEqual(expect.objectContaining({
-      'font-size': 'var(--font-size-xs)',
-      'line-height': '1.18',
+      'font-size': 'var(--font-size-sm)',
+      'line-height': 'var(--line-height-tight)',
       'text-wrap': 'pretty',
     }))
     expect(secondaryActions).toEqual(expect.objectContaining({
       'grid-column': '2',
-      'grid-row': '1 / span 2',
+      'grid-row': '2',
+      'align-self': 'end',
       gap: 'var(--spacing-xs)',
     }))
     expect(secondaryArrow).toEqual(expect.objectContaining({
+      'grid-column': '2',
+      'grid-row': '2',
+      'align-self': 'end',
+      'margin-block-end': 'var(--spacing-2xs)',
       'font-size': 'var(--font-size-sm)',
+    }))
+    expect(disabledSecondaryItem).toEqual(expect.objectContaining({
+      opacity: '0.66',
+    }))
+    expect(summarySecondaryCard).toEqual(expect.objectContaining({
+      cursor: 'default',
+    }))
+    expect(disabledSecondaryIcon).toEqual(expect.objectContaining({
+      opacity: '0.72',
     }))
   })
 
