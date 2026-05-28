@@ -205,32 +205,18 @@ describe('Dashboard page', () => {
     expect(screen.getByRole('heading', { name: /recent activity/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /create new work/i })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /runtime action queue panel/i })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: /create new work panel/i })).toBeInTheDocument()
-    const signalsPanel = screen.getByRole('region', { name: /runtime alerts and navigation/i })
-    const alertsList = within(signalsPanel).getByRole('list', { name: /^runtime alerts$/i })
-    const secondaryNavigation = within(signalsPanel).getByRole(
-      'navigation',
-      { name: /customer workspace secondary navigation/i },
-    )
+    expect(screen.getByRole('region', { name: /create new work panel/i })).toBeInTheDocument()
+    const signalsPanel = screen.getByRole('region', { name: /runtime recommendations panel/i })
+    const recommendationsList = within(signalsPanel).getByRole('list', { name: /^runtime recommendations$/i })
 
-    expect(alertsList.querySelectorAll('.dashboard__alert-item')).toHaveLength(0)
-    expect(within(alertsList).getByText(/no runtime signals/i)).toBeInTheDocument()
-    expect(within(alertsList).getByText(/no runtime signals/i).closest('.dashboard__empty-item'))
-      .toHaveClass('dashboard__empty-item--composed')
+    expect(recommendationsList.querySelectorAll('.dashboard__signal-card')).toHaveLength(1)
+    expect(within(recommendationsList).getByText(/signals pending/i)).toBeInTheDocument()
+    expect(within(recommendationsList).getByText(/persisted signal source is available/i))
+      .toBeInTheDocument()
     const activityEmptyTitle = screen.getByText(/no runtime activity yet/i)
     expect(activityEmptyTitle.closest('.dashboard__empty-item'))
       .toHaveClass('dashboard__empty-item--composed', 'dashboard__empty-item--spacious')
     expect(screen.getByText(/activity will appear here when runtime instances emit execution/i))
-      .toBeInTheDocument()
-    expect(secondaryNavigation.querySelectorAll('.dashboard__launch-item--secondary')).toHaveLength(2)
-    const valueNarrativeLink = within(secondaryNavigation).getByRole(
-      'link',
-      { name: /value narrative workspace/i },
-    )
-
-    expect(valueNarrativeLink).toHaveClass('dashboard__launch-link--secondary')
-    expect(within(valueNarrativeLink).getByText('Current')).toBeInTheDocument()
-    expect(valueNarrativeLink.querySelector('.dashboard__launch-topline .dashboard__launch-icon'))
       .toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /workflow tiles/i })).not.toBeInTheDocument()
   })
@@ -480,6 +466,42 @@ describe('Dashboard page', () => {
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
     expect(screen.getAllByText('1 available').length).toBeGreaterThanOrEqual(1)
+    const activityPanel = screen.getByRole('region', { name: /recent runtime activity panel/i })
+    expect(within(activityPanel).getByText('No runtime activity yet')).toBeInTheDocument()
+    expect(within(activityPanel).queryByText('New Package updated')).not.toBeInTheDocument()
+  })
+
+  it('keeps signals deferred until a persisted signal source exists', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-validation',
+            runtimeInstanceKey: 'value-narrative-validation',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'QA Permission Fix',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            validationStatus: 'PENDING',
+            updatedAt: '2026-05-27T09:00:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const signalsPanel = screen.getByRole('region', { name: /runtime recommendations panel/i })
+    const recommendationsList = within(signalsPanel).getByRole('list', { name: /^runtime recommendations$/i })
+
+    expect(recommendationsList.querySelectorAll('.dashboard__signal-card')).toHaveLength(1)
+    expect(within(recommendationsList).getByText('Signals pending')).toBeInTheDocument()
+    expect(within(recommendationsList).queryByText('QA Permission Fix requires validation attention.')).not.toBeInTheDocument()
+    expect(within(recommendationsList).queryByText('No blocked dependencies')).not.toBeInTheDocument()
   })
 
   it('applies the featured Continue Work treatment only to the first runtime action', () => {
@@ -865,7 +887,7 @@ describe('Dashboard page', () => {
     expect(screen.queryByRole('link', { name: /generate output/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /outputs/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument()
-    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    const createPanel = screen.getByRole('region', { name: /create new work panel/i })
     const sourceBackedCreateGrid = within(createPanel).getByRole('list', { name: /source-backed create work/i })
     const plannedCapabilitiesGrid = within(createPanel).getByRole('list', { name: /planned locked capabilities/i })
 
@@ -902,7 +924,7 @@ describe('Dashboard page', () => {
   it('renders source-backed Create New Work separately from planned locked capabilities', () => {
     renderDashboard()
 
-    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    const createPanel = screen.getByRole('region', { name: /create new work panel/i })
     const sourceBackedCreateGrid = within(createPanel).getByRole('list', { name: /source-backed create work/i })
     const plannedCapabilitiesGrid = within(createPanel).getByRole('list', { name: /planned locked capabilities/i })
     const createLink = within(sourceBackedCreateGrid).getByRole('link', { name: /create value narrative create new/i })
@@ -945,7 +967,7 @@ describe('Dashboard page', () => {
     expect(screen.getAllByText('Nested Customer').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /create value narrative/i })).not.toBeInTheDocument()
-    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    const createPanel = screen.getByRole('region', { name: /create new work panel/i })
     expect(within(createPanel).getByLabelText(/create value narrative locked/i))
       .toHaveClass('dashboard__create-card')
   })
@@ -971,7 +993,7 @@ describe('Dashboard page', () => {
     expect(screen.queryByRole('link', { name: /tenant administration/i })).not.toBeInTheDocument()
   })
 
-  it('shows tenant administration only for multi-tenant customer or tenant admins', () => {
+  it('does not render secondary tenant administration navigation for tenant admins', () => {
     mockRole({
       isCustomerAdmin: false,
       accessibleCustomerIds: ['cust-1'],
@@ -988,7 +1010,7 @@ describe('Dashboard page', () => {
 
     renderDashboard()
 
-    expect(screen.getByRole('link', { name: /tenant administration/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /tenant administration/i })).not.toBeInTheDocument()
   })
 
   it('hides tenant administration for multi-tenant users without admin scope', () => {
@@ -1201,7 +1223,7 @@ describe('Dashboard page', () => {
       display: 'grid',
       'grid-template-columns': 'auto minmax(0, 1fr)',
       gap: 'var(--spacing-md)',
-      'min-height': '9rem',
+      'min-height': 'calc(var(--spacing-3xl) * 2 + var(--spacing-md))',
       padding: 'var(--spacing-lg)',
       'border-radius': 'var(--border-radius-md)',
     }))
@@ -1212,6 +1234,12 @@ describe('Dashboard page', () => {
       '--dashboard-create-accent': 'var(--dashboard-create-deal-analysis-accent)',
     }))
     expect(createIcon).toEqual(expect.objectContaining({
+      width: 'var(--spacing-2xl)',
+      height: 'var(--spacing-2xl)',
+      'border-radius': 'var(--border-radius-md)',
+      'font-size': 'var(--font-size-xl)',
+    }))
+    expect(getCssDeclarations('.dashboard__signal-icon')).toEqual(expect.objectContaining({
       width: 'var(--spacing-2xl)',
       height: 'var(--spacing-2xl)',
       'border-radius': 'var(--border-radius-md)',

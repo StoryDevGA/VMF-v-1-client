@@ -19,7 +19,6 @@ import {
   MdOutlineInsights,
   MdOutlinePeopleAlt,
   MdOutlinePlayCircle,
-  MdOutlineTaskAlt,
   MdOutlineTrendingUp,
   MdOutlineWarningAmber,
   MdShield,
@@ -85,8 +84,15 @@ const ACTIVE_WORK_HEALTH_OPTIONS = [
 
 const EMPTY_RUNTIME_ROWS = Object.freeze([])
 const RUNTIME_ACTION_SUMMARY_PAGE_SIZE = 50
-
-// TODO: replace with runtime activity events once the Runtime Execution Engine emits them.
+const EMPTY_RUNTIME_SIGNAL_CARDS = Object.freeze([
+  {
+    id: 'runtime-signals-deferred',
+    title: 'Signals pending',
+    description: 'Runtime signals will appear here when a persisted signal source is available.',
+    icon: MdOutlineInsights,
+    variant: 'info',
+  },
+])
 const EMPTY_RUNTIME_ACTIVITY = Object.freeze([])
 
 const normalizeFeatureKeys = (features) =>
@@ -669,40 +675,18 @@ function CreateWorkCard({ item }) {
   )
 }
 
-function SecondaryNavigationLink({ item }) {
-  const Icon = item.icon
-  const badge = item.badge
+function SignalRecommendationCard({ signal }) {
+  const Icon = signal.icon
 
   return (
-    <li
-      className={[
-        'dashboard__launch-item',
-        'dashboard__launch-item--secondary',
-        item.disabled ? 'dashboard__secondary-card--disabled' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      <Link
-        to={item.to}
-        disabled={item.disabled}
-        className="dashboard__launch-link dashboard__launch-link--secondary"
-        variant="subtle"
-        underline="none"
-      >
-        <span className="dashboard__launch-topline">
-          <span className="dashboard__launch-icon" aria-hidden="true">
-            <Icon />
-          </span>
-          {badge ? (
-            <Badge variant={badge.variant ?? 'neutral'} size="sm" pill outline>
-              {badge.label}
-            </Badge>
-          ) : null}
-        </span>
-        <span className="dashboard__launch-copy">
-          <span className="dashboard__launch-label">{item.title}</span>
-          <span className="dashboard__launch-meta">{item.meta}</span>
-        </span>
-      </Link>
+    <li className={['dashboard__signal-card', signal.variant ? `dashboard__signal-card--${signal.variant}` : ''].filter(Boolean).join(' ')}>
+      <span className="dashboard__signal-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      <span className="dashboard__signal-copy">
+        <span className="dashboard__signal-title">{signal.title}</span>
+        <span className="dashboard__signal-description">{signal.description}</span>
+      </span>
     </li>
   )
 }
@@ -1313,55 +1297,7 @@ function Dashboard() {
   const availableCreateCount = useMemo(() => (
     sourceBackedCreateItems.filter((item) => !item.disabled).length
   ), [sourceBackedCreateItems])
-
-  const alerts = useMemo(() => {
-    if (!contextReady) {
-      return [
-        {
-          id: 'context-required',
-          label: 'Runtime context required',
-          description: 'Select a tenant before runtime work and governed actions are enabled.',
-          variant: 'warning',
-        },
-      ]
-    }
-
-    return []
-  }, [contextReady])
-
-  const secondaryNavigationItems = useMemo(() => {
-    const items = [
-      {
-        badge: {
-          label: canOpenVmfWorkspace ? 'Current' : 'Unavailable',
-          variant: canOpenVmfWorkspace ? 'success' : 'neutral',
-        },
-        disabled: !canOpenVmfWorkspace,
-        icon: MdOutlineDashboardCustomize,
-        meta: canOpenVmfWorkspace ? 'Current VMF runtime workspace' : 'VMF workspace unavailable',
-        title: 'Value Narrative Workspace',
-        to: canOpenVmfWorkspace ? '/app/workspaces/vmf' : '/app/dashboard',
-      },
-    ]
-
-    if (supportsTenantManagement && (hasSelectedCustomerAdminAccess || hasSelectedCustomerTenantAdminAccess)) {
-      items.push({
-        badge: { label: 'Admin', variant: 'info' },
-        disabled: false,
-        icon: MdOutlinePeopleAlt,
-        meta: 'Tenant and user administration',
-        title: 'Tenant Administration',
-        to: '/app/administration/maintain-tenants',
-      })
-    }
-
-    return items
-  }, [
-    canOpenVmfWorkspace,
-    hasSelectedCustomerAdminAccess,
-    hasSelectedCustomerTenantAdminAccess,
-    supportsTenantManagement,
-  ])
+  const alerts = EMPTY_RUNTIME_SIGNAL_CARDS
 
   const runtimeActionGridClassName = [
     'dashboard__launch-grid',
@@ -1642,7 +1578,6 @@ function Dashboard() {
           description="Source-backed create work is separated from planned locked capabilities that still require runtime anchors and output eligibility."
           icon={MdAddCircleOutline}
           modifier="create"
-          panelAs="nav"
           panelLabel="Create new work panel"
           status={{ label: availableCreateCount > 0 ? 'Available now' : 'No create actions', variant: availableCreateCount > 0 ? 'success' : 'warning' }}
           title="Create New Work"
@@ -1663,40 +1598,19 @@ function Dashboard() {
 
         <DashboardSectionCard
           badge={{ label: `${alerts.length} signals`, variant: 'info' }}
-          description="Runtime signals stay tied to actions, validation, output state, and supporting workspace areas."
+          description="Signals remain deferred until a persisted runtime signal source is available."
           icon={MdOutlineInsights}
           modifier="signals"
-          panelLabel="Runtime alerts and navigation"
+          panelLabel="Runtime recommendations panel"
           status={{ label: 'Current', variant: 'success' }}
           title="Signals & Recommendations"
         >
           <div className="dashboard__signals-grid">
-            <ul className="dashboard__alert-list" aria-label="Runtime alerts">
-              {alerts.length > 0 ? (
-                alerts.map((alert) => (
-                  <li key={alert.id} className="dashboard__alert-item">
-                    <Status variant={alert.variant} size="sm" showIcon>
-                      {alert.label}
-                    </Status>
-                    <p>{alert.description}</p>
-                  </li>
-                ))
-              ) : (
-                <DashboardEmptyCard
-                  description="Validation, output, and review signals will appear here when runtime work exists."
-                  icon={MdOutlineTaskAlt}
-                  title="No runtime signals"
-                  variant="success"
-                />
-              )}
+            <ul className="dashboard__signal-list" aria-label="Runtime recommendations">
+              {alerts.map((alert) => (
+                <SignalRecommendationCard key={alert.id} signal={alert} />
+              ))}
             </ul>
-            <nav className="dashboard__secondary-nav" aria-label="Customer workspace secondary navigation">
-              <ul className="dashboard__launch-grid dashboard__launch-grid--secondary">
-                {secondaryNavigationItems.map((item) => (
-                  <SecondaryNavigationLink key={item.title} item={item} />
-                ))}
-              </ul>
-            </nav>
           </div>
         </DashboardSectionCard>
 
@@ -1706,7 +1620,9 @@ function Dashboard() {
           icon={MdOutlineInsights}
           modifier="activity"
           panelLabel="Recent runtime activity panel"
-          status={{ label: 'No activity yet', variant: 'neutral' }}
+          status={runtimeActivityItems.length > 0
+            ? { label: 'Current', variant: 'success' }
+            : { label: 'No activity yet', variant: 'neutral' }}
           title="Recent Activity"
         >
           <ul className="dashboard__activity-list" aria-label="Recent runtime activity">
