@@ -20,6 +20,7 @@ import { Input } from '../../components/Input'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
+import { Tooltip } from '../../components/Tooltip'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
@@ -43,6 +44,13 @@ import './RuntimeWorkspace.css'
 
 const EMPTY_ARRAY = Object.freeze([])
 const RUNTIME_WORKSPACE_BACK_FALLBACK = '/app/workspaces/vmf'
+const DISCOVERY_INPUT_LABELS = Object.freeze({
+  companyWebsite: 'Company website',
+  companyName: 'Company name',
+  marketRegion: 'Market / region',
+  targetOffer: 'Target product or offer',
+  notes: 'Optional notes',
+})
 
 const getRendererPayload = (response) => response?.data ?? null
 
@@ -80,6 +88,7 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
   GENERATED_REVIEW_NEEDED: 'warning',
   GENERATED_STALE_AGAINST_INPUT: 'warning',
   IN_REVIEW: 'info',
+  INSUFFICIENT_EVIDENCE: 'warning',
   MISSING_CONTEXT: 'warning',
   MISSING_ACCEPTED_TRUTH: 'warning',
   APPROVED: 'success',
@@ -159,6 +168,7 @@ const getSectionActionDisabledReason = ({
   editable,
   executingActionKey,
   generatedContent,
+  hasGenerationBaseline = false,
   section,
 }) => {
   if (!action) return ''
@@ -170,8 +180,11 @@ const getSectionActionDisabledReason = ({
     if (eligibility && eligibility.canGenerate === false) {
       return eligibility.reason || 'Accept discovery evidence before generating this section.'
     }
+    if (!generatedContent && hasGenerationBaseline) {
+      return 'Regenerate this section because previous generated content is archived for comparison.'
+    }
   }
-  if (actionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION && !generatedContent) {
+  if (actionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION && !generatedContent && !hasGenerationBaseline) {
     return 'Generate this section before regenerating it.'
   }
   return ''
@@ -187,6 +200,13 @@ const getAcceptSectionDisabledReason = ({
   section,
 }) => {
   if (!generatedContent) return 'Generate this section before accepting it as governed truth.'
+  const truthEligibility = section?.intelligence?.truthEligibility || section?.generated?.truthEligibility || null
+  if (truthEligibility?.eligible === false) {
+    const firstMessage = Array.isArray(truthEligibility.messages)
+      ? truthEligibility.messages.find((message) => message?.message)?.message
+      : ''
+    return firstMessage || 'This generated section needs more evidence before it can be accepted as truth.'
+  }
   if (acceptedIsCurrent) return 'Current generated content is already accepted as governed truth.'
   if (!editable) {
     return section?.readonlyReason || 'Current role or permissions do not allow accepting this section.'
@@ -234,7 +254,23 @@ const getSectionIntelligence = (section) => ({
   compare: section?.intelligence?.compare ?? section?.compare ?? null,
   readiness: section?.intelligence?.readiness ?? section?.readiness ?? null,
   generationControls: section?.intelligence?.generationControls ?? {},
+  sourceProjection: section?.intelligence?.sourceProjection ?? null,
+  scopedEvidence: section?.intelligence?.scopedEvidence ?? null,
+  supportingEvidence: section?.intelligence?.supportingEvidence ?? [],
+  generationBoundaries: section?.intelligence?.generationBoundaries ?? [],
+  truthEligibility: section?.intelligence?.truthEligibility ?? section?.generated?.truthEligibility ?? null,
+  displayProjection: section?.intelligence?.displayProjection ?? {},
 })
+
+const getProjectionItems = (value) => (Array.isArray(value) ? value.filter(Boolean) : [])
+
+const getTruthEligibilityMessage = (truthEligibility) => {
+  if (!truthEligibility) return ''
+  const firstMessage = Array.isArray(truthEligibility.messages)
+    ? truthEligibility.messages.find((message) => message?.message)?.message
+    : null
+  return firstMessage || ''
+}
 
 const getDependencySummary = (dependency) => {
   const required = Array.isArray(dependency?.requiredSectionKeys) ? dependency.requiredSectionKeys : []
@@ -461,6 +497,28 @@ const hasRuntimeValue = (value) => {
   return true
 }
 
+const hasAcceptedSectionTruth = (section) =>
+  hasRuntimeValue(section?.accepted?.content ?? section?.accepted)
+  || section?.intelligence?.ownershipZones?.acceptedTruth?.available === true
+  || section?.intelligence?.compare?.hasAccepted === true
+  || section?.compare?.hasAccepted === true
+
+const hasRequiredSectionProgress = (section) =>
+  section?.intelligence?.readiness?.publishEligible === true
+  || section?.readiness?.publishEligible === true
+  || section?.intelligence?.compare?.currentGeneratedAccepted === true
+  || section?.compare?.currentGeneratedAccepted === true
+  || (
+    hasAcceptedSectionTruth(section)
+    && String(section?.state?.status || '').trim().toUpperCase() === 'ACCEPTED'
+  )
+
+const toProgressCount = (value) => {
+  const count = Number(value)
+  if (!Number.isFinite(count) || count < 0) return null
+  return Math.floor(count)
+}
+
 const stringifyValue = (value) => {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
@@ -505,6 +563,39 @@ const getLatestRevisionValue = (revisions, key) => {
     if (revisions[index]?.[key]) return revisions[index]
   }
   return null
+}
+
+const formatReadableRuntimeKey = (value) => {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) return ''
+  return DISCOVERY_INPUT_LABELS[rawValue] || formatRuntimeTokenLabel(rawValue)
+}
+
+const formatReadableKeyList = (keys = [], limit = 4) => {
+  const labels = keys.map(formatReadableRuntimeKey).filter(Boolean)
+  if (labels.length === 0) return ''
+  return labels.slice(0, limit).join(', ') + (labels.length > limit ? `, +${labels.length - limit} more` : '')
+}
+
+const formatDiscoveryInputsSummary = ({ count, inputValues, keys }) => {
+  const keyCount = Number.isFinite(Number(count)) ? Number(count) : keys.length
+  if (keys.length > 0) {
+    const readableKeys = formatReadableKeyList(keys)
+    return `${keyCount} accepted discovery input${keyCount === 1 ? '' : 's'} captured${readableKeys ? `: ${readableKeys}` : ''}.`
+  }
+  if (hasRuntimeValue(inputValues)) return 'Accepted discovery inputs are captured for governed downstream use.'
+  return ''
+}
+
+const formatDiscoveryEvidenceSummary = ({ count, evidence, evidenceReady, keys }) => {
+  const evidenceCount = Number.isFinite(Number(count)) ? Number(count) : keys.length
+  if (evidenceCount > 0) {
+    return `${evidenceCount} governed evidence signal${evidenceCount === 1 ? '' : 's'} prepared for section intelligence.`
+  }
+  if (evidenceReady || hasRuntimeValue(evidence)) {
+    return 'Discovery evidence pack is ready for governed downstream use.'
+  }
+  return ''
 }
 
 const getDiscoveryProjection = (renderer) =>
@@ -553,10 +644,7 @@ const formatProjectionSummary = (value) => {
   if (typeof value === 'string') return value
   if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'} projected`
   if (typeof value === 'object') {
-    const keys = Object.keys(value)
-    return keys.length > 0
-      ? keys.slice(0, 4).join(', ') + (keys.length > 4 ? `, +${keys.length - 4} more` : '')
-      : ''
+    return 'Structured evidence projection is available.'
   }
   return String(value)
 }
@@ -846,6 +934,18 @@ function RuntimeSection({
   const dependencyState = intelligence.dependency?.state || 'NO_SECTION_DEPENDENCIES'
   const readinessState = intelligence.readiness?.state || 'DRAFT_INPUT_NEEDED'
   const compareState = intelligence.compare?.state || 'NO_GENERATED_CONTENT'
+  const displayProjection = intelligence.displayProjection || {}
+  const suggestedProjection = displayProjection.suggestedFromDiscovery || {}
+  const generatedInsightProjection = displayProjection.generatedInsight || {}
+  const supportingEvidenceProjection = displayProjection.supportingEvidence || {}
+  const boundariesProjection = displayProjection.boundaries || {}
+  const confidenceProjection = displayProjection.confidence || {}
+  const suggestedBullets = getProjectionItems(suggestedProjection.bullets)
+  const generatedInsightSections = getProjectionItems(generatedInsightProjection.sections)
+  const supportingEvidenceItems = getProjectionItems(supportingEvidenceProjection.items)
+  const boundaryItems = getProjectionItems(boundariesProjection.items)
+  const confidenceSignals = getProjectionItems(confidenceProjection.signals)
+  const truthEligibilityMessage = getTruthEligibilityMessage(intelligence.truthEligibility)
   const scopedEvidenceView = getSectionScopedEvidenceView({ discovery, section })
   const scopedEvidenceSummary = scopedEvidenceView?.summary
     || formatProjectionSummary(scopedEvidenceView)
@@ -862,8 +962,11 @@ function RuntimeSection({
       : []
   const latestGeneratedRevision = getLatestRevisionValue(revisions, 'generated')
   const latestAcceptedRevision = getLatestRevisionValue(acceptedRevisions, 'accepted')
+    || getLatestRevisionValue(revisions, 'accepted')
   const previousGeneratedContent = stringifyGeneratedContent(latestGeneratedRevision?.generated)
   const previousAcceptedContent = stringifyAcceptedContent(latestAcceptedRevision?.accepted)
+  const hasGenerationBaseline = hasRuntimeValue(latestGeneratedRevision?.generated)
+  const canCompare = Boolean(generatedContent || acceptedContent || previousGeneratedContent || previousAcceptedContent)
   const generateAction = generationActions[SECTION_ACTION_KEYS.GENERATE_SECTION] || null
   const regenerateAction = generationActions[SECTION_ACTION_KEYS.REGENERATE_SECTION] || null
   const generateLabel = getRuntimeActionLabel(generateAction, 'Generate')
@@ -874,6 +977,7 @@ function RuntimeSection({
     editable,
     executingActionKey,
     generatedContent,
+    hasGenerationBaseline,
     section,
   })
   const regenerateDisabledReason = getSectionActionDisabledReason({
@@ -882,6 +986,7 @@ function RuntimeSection({
     editable,
     executingActionKey,
     generatedContent,
+    hasGenerationBaseline,
     section,
   })
   const generateReasonId = `${section.key}-generate-section-reason`
@@ -960,18 +1065,22 @@ function RuntimeSection({
             >
               <section className="runtime-workspace__section-panel" aria-label="Suggested from Discovery">
                 <h3>Suggested From Discovery</h3>
-                {hasRuntimeValue(scopedEvidenceView) ? (
+                {suggestedBullets.length > 0 || suggestedProjection.summary ? (
                   <>
-                    <p>{scopedEvidenceSummary}</p>
-                    {Array.isArray(scopedEvidenceView?.inputKeys) && scopedEvidenceView.inputKeys.length > 0 ? (
-                      <p>
-                        Inputs: {scopedEvidenceView.inputKeys.slice(0, 5).join(', ')}
-                        {scopedEvidenceView.inputKeys.length > 5
-                          ? `, +${scopedEvidenceView.inputKeys.length - 5} more`
-                          : ''}
-                      </p>
+                    <p>{suggestedProjection.summary || scopedEvidenceSummary}</p>
+                    {suggestedBullets.length > 0 ? (
+                      <ul className="runtime-workspace__projection-list" aria-label="Evidence themes">
+                        {suggestedBullets.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {suggestedProjection.evidenceScope ? (
+                      <p className="runtime-workspace__section-note">{suggestedProjection.evidenceScope}</p>
                     ) : null}
                   </>
+                ) : hasRuntimeValue(scopedEvidenceView) ? (
+                  <p>{scopedEvidenceSummary}</p>
                 ) : (
                   <p>No discovery evidence is projected for this section yet.</p>
                 )}
@@ -987,8 +1096,52 @@ function RuntimeSection({
                 />
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Generated content">
-                <h3>Generated</h3>
-                <p>{generatedContent || 'Awaiting generation'}</p>
+                <h3>{generatedInsightProjection.title || 'Generated Insight'}</h3>
+                {generatedInsightSections.length > 0 ? (
+                  <div className="runtime-workspace__generated-zones">
+                    {generatedInsightSections.map((generatedSection) => (
+                      <div
+                        className="runtime-workspace__generated-zone"
+                        key={generatedSection.heading || generatedSection.body}
+                      >
+                        {generatedSection.heading ? <h4>{generatedSection.heading}</h4> : null}
+                        {generatedSection.body ? <p>{generatedSection.body}</p> : null}
+                        {Array.isArray(generatedSection.bullets) && generatedSection.bullets.length > 0 ? (
+                          <ul className="runtime-workspace__projection-list">
+                            {generatedSection.bullets.map((bullet) => (
+                              <li key={bullet}>{bullet}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{generatedInsightProjection.summary || generatedContent || 'Awaiting generation'}</p>
+                )}
+                {supportingEvidenceItems.length > 0 ? (
+                  <div className="runtime-workspace__projection-group">
+                    <h4>{supportingEvidenceProjection.title || 'Supporting Evidence'}</h4>
+                    <ul className="runtime-workspace__projection-list" aria-label="Supporting evidence">
+                      {supportingEvidenceItems.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {boundaryItems.length > 0 ? (
+                  <div className="runtime-workspace__projection-group">
+                    <h4>{boundariesProjection.title || 'Boundaries / Not Assumed'}</h4>
+                    <ul className="runtime-workspace__projection-list" aria-label="Generation boundaries">
+                      {boundaryItems.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {truthEligibilityMessage ? (
+                  <p className="runtime-workspace__section-note">{truthEligibilityMessage}</p>
+                ) : null}
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Accepted truth">
                 <h3>Accepted Truth</h3>
@@ -1012,11 +1165,15 @@ function RuntimeSection({
               <div>
                 <span className="runtime-workspace__section-intelligence-label">Confidence</span>
                 <Status variant={getTokenStatusVariant(confidenceState)} size="sm" showIcon>
-                  {formatRuntimeTokenLabel(confidenceState)}
-                  {Number.isFinite(Number(intelligence.confidence?.score))
-                    ? ` (${Number(intelligence.confidence.score)})`
-                    : ''}
+                  {confidenceProjection.label || formatRuntimeTokenLabel(confidenceState)}
                 </Status>
+                {confidenceSignals.length > 0 ? (
+                  <ul className="runtime-workspace__projection-list runtime-workspace__projection-list--compact">
+                    {confidenceSignals.map((signal) => (
+                      <li key={signal}>{signal}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
               <div>
                 <span className="runtime-workspace__section-intelligence-label">Dependencies</span>
@@ -1103,7 +1260,7 @@ function RuntimeSection({
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={!generatedContent}
+                disabled={!canCompare}
                 leftIcon={<MdCompareArrows aria-hidden="true" />}
                 onClick={() => setShowCompare((current) => !current)}
               >
@@ -1183,62 +1340,95 @@ function RuntimeActionButton({
   disabled = false,
   executing = false,
   onExecute,
-  showDisabledReason = true,
 }) {
   const enabled = Boolean(action?.enabled)
   const disabledReason = String(action?.disabledReason ?? '').trim()
   const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey || 'runtime-action')
-  const reasonId = disabledReason
+  const actionLabel = getRuntimeActionLabel(action, actionKey)
+  const disabledReasonId = disabledReason
     ? `runtime-action-disabled-${actionKey.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`
     : undefined
+  const tooltipId = disabledReasonId ? `${disabledReasonId}-tooltip` : undefined
+  const actionButton = (
+    <Button
+      type="button"
+      variant={getActionButtonVariant(action)}
+      size="sm"
+      disabled={!enabled || disabled}
+      loading={executing}
+      aria-describedby={!enabled && disabledReason ? disabledReasonId : undefined}
+      onClick={() => onExecute?.(action)}
+      leftIcon={
+        enabled ? (
+          <MdBolt className="runtime-workspace__action-icon runtime-workspace__action-icon--execute" aria-hidden="true" />
+        ) : (
+          <MdInfoOutline className="runtime-workspace__action-icon runtime-workspace__action-icon--info" aria-hidden="true" />
+        )
+      }
+    >
+      {actionLabel}
+    </Button>
+  )
 
   return (
     <div className="runtime-workspace__action-item">
-      <Button
-        type="button"
-        variant={getActionButtonVariant(action)}
-        size="sm"
-        disabled={!enabled || disabled}
-        loading={executing}
-        aria-describedby={!enabled && disabledReason ? reasonId : undefined}
-        onClick={() => onExecute?.(action)}
-        leftIcon={<MdBolt aria-hidden="true" />}
-      >
-        {getRuntimeActionLabel(action, actionKey)}
-      </Button>
-      {!enabled && disabledReason ? (
-        <p
-          id={reasonId}
-          className={showDisabledReason ? 'runtime-workspace__action-disabled-reason' : 'sr-only'}
-        >
-          {disabledReason}
-        </p>
-      ) : null}
+      {!enabled && disabledReason && disabledReasonId && tooltipId ? (
+        <>
+          <Tooltip
+            id={tooltipId}
+            content={disabledReason}
+            position="top"
+            className="runtime-workspace__action-tooltip"
+          >
+            <span
+              className="runtime-workspace__action-tooltip-trigger"
+              tabIndex={0}
+              aria-label={`${actionLabel} unavailable. ${disabledReason}`}
+            >
+              {actionButton}
+            </span>
+          </Tooltip>
+          <p id={disabledReasonId} className="runtime-workspace__action-disabled-reason">
+            {disabledReason}
+          </p>
+        </>
+      ) : (
+        actionButton
+      )}
     </div>
   )
 }
 
 function RuntimeProgressSummary({
   configWarnings = EMPTY_ARRAY,
+  readiness = null,
   sections = EMPTY_ARRAY,
 }) {
   const requiredSections = sections.filter((section) => section?.required)
-  const requiredCompleteCount = requiredSections.filter((section) => hasRuntimeValue(section?.value)).length
-  const requiredTotal = requiredSections.length
+  const sectionTruth = readiness?.sectionTruth || {}
+  const serverReadyCount = toProgressCount(sectionTruth.readySectionCount)
+  const serverRequiredCount = toProgressCount(sectionTruth.requiredSectionCount)
+  const hasServerSectionTruthCounts = serverReadyCount !== null && serverRequiredCount !== null
+  const requiredCompleteCount = hasServerSectionTruthCounts
+    ? Math.min(serverReadyCount, serverRequiredCount)
+    : requiredSections.filter(hasRequiredSectionProgress).length
+  const requiredTotal = hasServerSectionTruthCounts
+    ? serverRequiredCount
+    : requiredSections.length
   const generatedCount = sections.filter((section) => hasRuntimeValue(section?.generated?.content ?? section?.generated)).length
   const warningCounts = configWarnings.reduce((acc, warning) => {
     const severity = normalizeWarningSeverity(warning?.severity)
     acc[severity] = (acc[severity] || 0) + 1
     return acc
   }, {})
-  const hasRequiredInput = requiredTotal > 0
-  const requiredPercent = hasRequiredInput
+  const hasRequiredTruth = requiredTotal > 0
+  const requiredPercent = hasRequiredTruth
     ? Math.round((requiredCompleteCount / requiredTotal) * 100)
     : 0
-  const requiredPercentLabel = hasRequiredInput ? `${requiredPercent}%` : 'N/A'
-  const completionLabel = hasRequiredInput
-    ? `${requiredCompleteCount} of ${requiredTotal} required sections have input`
-    : 'No required input to measure'
+  const requiredPercentLabel = hasRequiredTruth ? `${requiredPercent}%` : 'N/A'
+  const completionLabel = hasRequiredTruth
+    ? `${requiredCompleteCount} of ${requiredTotal} required sections have accepted truth ready`
+    : 'No required section truth to measure'
   const warningSummary = [
     warningCounts.BLOCKER ? `${warningCounts.BLOCKER} blocker${warningCounts.BLOCKER === 1 ? '' : 's'}` : '',
     warningCounts.ERROR ? `${warningCounts.ERROR} error${warningCounts.ERROR === 1 ? '' : 's'}` : '',
@@ -1250,7 +1440,7 @@ function RuntimeProgressSummary({
     <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
       <div className="runtime-workspace__progress-meter">
         <div className="runtime-workspace__progress-row">
-          <span>Required input</span>
+          <span>Accepted truth</span>
           <strong>{requiredPercentLabel}</strong>
         </div>
         <progress
@@ -1262,9 +1452,9 @@ function RuntimeProgressSummary({
       </div>
       <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
-          <span>Required</span>
+          <span>Truth ready</span>
           <strong className="runtime-workspace__metric-value runtime-workspace__metric-value--success">
-            {hasRequiredInput ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}
+            {hasRequiredTruth ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}
           </strong>
         </li>
         <li>
@@ -1375,12 +1565,17 @@ function DiscoverySection({
   })
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
-  const inputsSummary = inputSummaryKeys.length > 0
-    ? inputSummaryKeys.slice(0, 4).join(', ') + (inputSummaryKeys.length > 4 ? `, +${inputSummaryKeys.length - 4} more` : '')
-    : formatProjectionSummary(discovery?.inputs)
-  const evidenceSummary = evidenceSummaryKeys.length > 0
-    ? evidenceSummaryKeys.slice(0, 4).join(', ') + (evidenceSummaryKeys.length > 4 ? `, +${evidenceSummaryKeys.length - 4} more` : '')
-    : formatProjectionSummary(discovery?.evidence)
+  const inputsSummary = formatDiscoveryInputsSummary({
+    count: discovery?.inputSummary?.count,
+    inputValues: discovery?.inputs ?? inputValues,
+    keys: inputSummaryKeys,
+  })
+  const evidenceSummary = formatDiscoveryEvidenceSummary({
+    count: discovery?.evidenceSummary?.count,
+    evidence: discovery?.evidence,
+    evidenceReady: discovery?.evidenceReady === true,
+    keys: evidenceSummaryKeys,
+  })
   const sourceCount = Number(discovery?.lineageSummary?.sourceCount || 0)
   const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
   const evidenceSources = Array.isArray(evidenceDetail?.lineage?.sources)
@@ -1510,7 +1705,7 @@ function DiscoverySection({
             <h3>Scoped Evidence Views</h3>
             <p>
               {scopedViewKeys.length > 0
-                ? `${scopedViewKeys.length} scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected: ${scopedViewKeys.slice(0, 4).join(', ')}${scopedViewKeys.length > 4 ? `, +${scopedViewKeys.length - 4} more` : ''}`
+                ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
                 : 'Section-scoped evidence will appear here when the backend projects it.'}
             </p>
           </section>
@@ -1706,6 +1901,7 @@ function RuntimeWorkspace() {
     runtimeInstance,
     runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE',
   )
+  const runtimeHeaderContext = String(runtimeInstance?.name ?? '').trim() || runtimeDisplayId || 'this runtime'
   const packageName = String(renderer?.package?.packageName ?? runtimeInstance?.packageName ?? '').trim()
   const packageKey = String(renderer?.package?.packageKey ?? runtimeInstance?.packageKey ?? '').trim()
   const packageVersion = String(renderer?.package?.frameworkVersion ?? runtimeInstance?.packageVersion ?? '').trim()
@@ -2148,12 +2344,11 @@ function RuntimeWorkspace() {
     <section className="runtime-workspace container" aria-label="Execution workspace">
       <header className="runtime-workspace__page-header">
         <div className="runtime-workspace__page-copy">
-          <p className="runtime-workspace__page-kicker">Execution Workspace</p>
           <h1 className="runtime-workspace__page-title">
-            {runtimeInstance?.name || runtimeDisplayId || 'Execution Workspace'}
+            Execution Workspace
           </h1>
           <p className="runtime-workspace__page-description">
-            Continue governed runtime work for {runtimeDisplayId}.
+            Continue governed runtime work for {runtimeHeaderContext}.
           </p>
         </div>
         <div
@@ -2180,7 +2375,11 @@ function RuntimeWorkspace() {
                 ))}
               </ul>
             ) : null}
-            <RuntimeProgressSummary sections={sections} configWarnings={configWarnings} />
+            <RuntimeProgressSummary
+              sections={sections}
+              readiness={renderer?.readiness}
+              configWarnings={configWarnings}
+            />
           </div>
           <ul className="runtime-workspace__summary-grid" aria-label="Execution workspace summary">
             {summaryItems.map((item) => (
@@ -2530,12 +2729,7 @@ function RuntimeWorkspace() {
                   </li>
                   <li>
                     <strong>Confidence</strong>
-                    <span>
-                      {formatRuntimeTokenLabel(activeSectionIntelligence.confidence?.level || 'NONE')}
-                      {Number.isFinite(Number(activeSectionIntelligence.confidence?.score))
-                        ? ` (${Number(activeSectionIntelligence.confidence.score)})`
-                        : ''}
-                    </span>
+                    <span>{activeSectionIntelligence.displayProjection?.confidence?.label || formatRuntimeTokenLabel(activeSectionIntelligence.confidence?.level || 'NONE')}</span>
                   </li>
                   <li>
                     <strong>Dependencies</strong>

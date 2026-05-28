@@ -267,9 +267,8 @@ describe('RuntimeWorkspace', () => {
     const actionBar = screen.getByRole('group', { name: /execution workspace actions/i })
     const backButton = within(actionBar).getByRole('button', { name: /^back$/i })
     expect(backButton).toHaveClass('btn--outline', 'btn--sm')
-    expect(screen.getByText('Execution Workspace')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Acme Value Narrative' })).toBeInTheDocument()
-    expect(screen.getByText('Continue governed runtime work for value-narrative-001.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Execution Workspace' })).toBeInTheDocument()
+    expect(screen.getByText('Continue governed runtime work for Acme Value Narrative.')).toBeInTheDocument()
     const heroMetadata = screen.getByLabelText(/runtime value-narrative-001 metadata/i)
     expect(within(heroMetadata).getByText('Value Narrative')).toBeInTheDocument()
     expect(within(heroMetadata).getByText('Draft')).toBeInTheDocument()
@@ -309,10 +308,10 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionCard).getByText('Required')).toBeInTheDocument()
     expect(within(sectionCard).getByText('Editable')).toBeInTheDocument()
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
-    expect(within(progressSummary).getByRole('progressbar', { name: /1 of 1 required sections have input/i })).toHaveAttribute('value', '100')
+    expect(within(progressSummary).getByRole('progressbar', { name: /0 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '0')
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
-    expect(within(metrics).getByText('Required')).toBeInTheDocument()
-    expect(within(metrics).getByText('1/1')).toBeInTheDocument()
+    expect(within(metrics).getByText('Truth ready')).toBeInTheDocument()
+    expect(within(metrics).getAllByText('0/1').length).toBeGreaterThanOrEqual(1)
     expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
     const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
     expect(sectionObject).toBeInTheDocument()
@@ -347,6 +346,130 @@ describe('RuntimeWorkspace', () => {
     expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
     expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('counts accepted section truth toward required progress when section input is empty', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          readiness: {
+            ...rendererPayload.readiness,
+            sectionTruth: {
+              ...rendererPayload.readiness.sectionTruth,
+              state: 'SECTION_TRUTH_READY',
+              publishEligible: true,
+              lockEligible: true,
+              readySectionCount: 1,
+              blockingSectionCount: 0,
+              readySectionKeys: ['customer_problem'],
+              blockers: [],
+              reason: '',
+            },
+          },
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              value: '',
+              generated: null,
+              accepted: {
+                content: 'Accepted customer problem truth.',
+                acceptedAt: '2026-05-22T09:15:00.000Z',
+              },
+              state: {
+                status: 'ACCEPTED',
+                revisionCount: 0,
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                ownershipZones: {
+                  acceptedTruth: {
+                    available: true,
+                    current: false,
+                    acceptedAt: '2026-05-22T09:15:00.000Z',
+                  },
+                },
+                compare: {
+                  hasAccepted: true,
+                  hasGenerated: false,
+                  currentGeneratedAccepted: false,
+                  state: 'ACCEPTED_TRUTH_WITHOUT_CURRENT_GENERATION',
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
+    expect(within(progressSummary).getByText('Accepted truth')).toBeInTheDocument()
+    expect(within(progressSummary).getByRole('progressbar', { name: /1 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '100')
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
+    expect(within(metrics).getByText('1/1')).toBeInTheDocument()
+  })
+
+  it('does not count unaccepted generated drafts as required progress', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              value: '',
+              generated: {
+                content: 'Generated draft awaiting acceptance.',
+                generatedAt: '2026-05-22T09:10:00.000Z',
+              },
+              accepted: null,
+              state: {
+                status: 'GENERATED',
+                revisionCount: 0,
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                ownershipZones: {
+                  generatedSection: {
+                    available: true,
+                    generatedAt: '2026-05-22T09:10:00.000Z',
+                  },
+                  acceptedTruth: {
+                    available: false,
+                    current: false,
+                    acceptedAt: '',
+                  },
+                },
+                compare: {
+                  hasAccepted: false,
+                  hasGenerated: true,
+                  currentGeneratedAccepted: false,
+                  state: 'UNACCEPTED_GENERATED_CONTENT',
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
+    expect(within(progressSummary).getByRole('progressbar', { name: /0 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '0')
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
+    expect(within(metrics).getByText('0/1')).toBeInTheDocument()
+    expect(within(metrics).getByText('1/1')).toBeInTheDocument()
   })
 
   it('returns to the Value Narrative workspace from the Back button', async () => {
@@ -676,12 +799,12 @@ describe('RuntimeWorkspace', () => {
             accepted: false,
             needsRefresh: false,
             inputSummary: {
-              keys: ['source'],
-              count: 1,
+              keys: ['companyWebsite', 'companyName', 'marketRegion', 'targetOffer'],
+              count: 4,
             },
             evidenceSummary: {
-              keys: ['priorities'],
-              count: 1,
+              keys: ['source', 'inputKeys', 'requiredInputKeys', 'missingInputKeys', 'lineage'],
+              count: 5,
             },
             scopedViews: {
               customer_problem: {
@@ -701,9 +824,16 @@ describe('RuntimeWorkspace', () => {
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(discoverySection).getByText('Evidence Ready')).toBeInTheDocument()
-    expect(within(discoverySection).getByRole('region', { name: /discovery inputs/i })).toHaveTextContent('source')
-    expect(within(discoverySection).getByRole('region', { name: /evidence pack/i })).toHaveTextContent('priorities')
-    expect(within(discoverySection).getByRole('region', { name: /scoped evidence views/i })).toHaveTextContent('customer_problem')
+    const discoveryInputs = within(discoverySection).getByRole('region', { name: /discovery inputs/i })
+    expect(discoveryInputs).toHaveTextContent('4 accepted discovery inputs captured')
+    expect(discoveryInputs).toHaveTextContent('Company website')
+    expect(discoveryInputs).not.toHaveTextContent('companyWebsite')
+    const evidencePack = within(discoverySection).getByRole('region', { name: /evidence pack/i })
+    expect(evidencePack).toHaveTextContent('5 governed evidence signals prepared for section intelligence.')
+    expect(evidencePack).not.toHaveTextContent('inputKeys')
+    const scopedEvidenceViews = within(discoverySection).getByRole('region', { name: /scoped evidence views/i })
+    expect(scopedEvidenceViews).toHaveTextContent('1 section-scoped evidence view projected for guided sections.')
+    expect(scopedEvidenceViews).not.toHaveTextContent('customer_problem')
     expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
       'Discovery has not been accepted',
     )
@@ -730,6 +860,26 @@ describe('RuntimeWorkspace', () => {
               },
             },
           },
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                displayProjection: {
+                  suggestedFromDiscovery: {
+                    title: 'Evidence Themes',
+                    summary: 'The available accepted evidence supports these section-relevant themes.',
+                    bullets: [
+                      'Enterprise workflow friction',
+                      'Governed narrative execution',
+                      'Speed-to-output improvement',
+                    ],
+                    evidenceScope: 'Derived from accepted Discovery evidence and current section dependencies.',
+                  },
+                },
+              },
+            },
+          ],
         },
       },
       isLoading: false,
@@ -742,8 +892,121 @@ describe('RuntimeWorkspace', () => {
     await openGuidedSection()
 
     const suggestedRegion = screen.getByRole('region', { name: /suggested from discovery/i })
-    expect(suggestedRegion).toHaveTextContent('Customer-provided discovery inputs are available for this section.')
-    expect(suggestedRegion).toHaveTextContent('companyWebsite, companyName, marketRegion, targetOffer')
+    expect(suggestedRegion).toHaveTextContent('The available accepted evidence supports these section-relevant themes.')
+    expect(within(suggestedRegion).getByRole('list', { name: /evidence themes/i })).toHaveTextContent(
+      'Governed narrative execution',
+    )
+    expect(suggestedRegion).toHaveTextContent('Derived from accepted Discovery evidence and current section dependencies.')
+    expect(suggestedRegion).not.toHaveTextContent('companyWebsite')
+    expect(suggestedRegion).not.toHaveTextContent('marketRegion')
+  })
+
+  it('renders generated section intelligence with supporting evidence, boundaries, and confidence signals', async () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                format: 'STRUCTURED_TEXT',
+                content: 'Primary value drivers identified for Acme include governed workflow execution.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+                truthEligibility: {
+                  eligible: true,
+                  status: 'ELIGIBLE',
+                  messages: [],
+                },
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                confidence: {
+                  level: 'MEDIUM',
+                  reasons: ['Discovery evidence accepted', 'No customer validation notes supplied'],
+                },
+                truthEligibility: {
+                  eligible: true,
+                  status: 'ELIGIBLE',
+                  messages: [],
+                },
+                displayProjection: {
+                  generatedInsight: {
+                    title: 'Generated Insight',
+                    summary: 'Primary value drivers identified for Acme include governed workflow execution.',
+                    sections: [
+                      {
+                        heading: 'Primary Value Drivers',
+                        body: '',
+                        bullets: [
+                          'Reduced manual narrative overhead',
+                          'More consistent governed output generation',
+                        ],
+                      },
+                      {
+                        heading: 'Why These Matter',
+                        body: 'These drivers align to accepted discovery context and available section dependencies.',
+                        bullets: [],
+                      },
+                    ],
+                  },
+                  supportingEvidence: {
+                    title: 'Supporting Evidence',
+                    items: [
+                      'Target Offer: AI-native enterprise value management platform',
+                      'Discovery Scope: Accepted Discovery evidence',
+                    ],
+                  },
+                  boundaries: {
+                    title: 'Boundaries / Not Assumed',
+                    items: [
+                      'No ROI statistics were generated because no accepted ROI evidence is present.',
+                      'No competitor claims were generated because no accepted competitor evidence is present.',
+                    ],
+                  },
+                  confidence: {
+                    label: 'Confidence: Medium',
+                    signals: [
+                      'Discovery evidence accepted',
+                      'No customer validation notes supplied',
+                    ],
+                  },
+                },
+              },
+              state: {
+                status: 'GENERATED',
+                revisionCount: 0,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await openGuidedSection()
+
+    const generatedRegion = screen.getByRole('region', { name: /generated content/i })
+    expect(within(generatedRegion).getByRole('heading', { name: /generated insight/i })).toBeInTheDocument()
+    expect(within(generatedRegion).getByRole('heading', { name: /primary value drivers/i })).toBeInTheDocument()
+    expect(within(generatedRegion).getByText('Reduced manual narrative overhead')).toBeInTheDocument()
+    expect(within(generatedRegion).getByText(/These drivers align to accepted discovery context/i)).toBeInTheDocument()
+    expect(within(generatedRegion).getByRole('list', { name: /supporting evidence/i })).toHaveTextContent(
+      'Target Offer: AI-native enterprise value management platform',
+    )
+    expect(within(generatedRegion).getByRole('list', { name: /generation boundaries/i })).toHaveTextContent(
+      'No ROI statistics were generated because no accepted ROI evidence is present.',
+    )
+
+    const governedIntelligence = screen.getByRole('region', { name: /governed intelligence/i })
+    expect(within(governedIntelligence).getByText('Confidence: Medium')).toBeInTheDocument()
+    expect(within(governedIntelligence).getByText('No customer validation notes supplied')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /accept truth/i })).toBeEnabled()
   })
 
   it('loads evidence source lineage on demand without rendering fake source data', async () => {
@@ -1261,6 +1524,21 @@ describe('RuntimeWorkspace', () => {
       data: {
         data: {
           ...rendererPayload,
+          readiness: {
+            ...rendererPayload.readiness,
+            sectionTruth: {
+              ...rendererPayload.readiness.sectionTruth,
+              state: 'SECTION_TRUTH_NOT_CONFIGURED',
+              publishEligible: false,
+              lockEligible: false,
+              requiredSectionCount: 0,
+              readySectionCount: 0,
+              blockingSectionCount: 0,
+              readySectionKeys: [],
+              blockers: [],
+              reason: 'Required section truth is not configured.',
+            },
+          },
           sections: [],
         },
       },
@@ -1274,7 +1552,7 @@ describe('RuntimeWorkspace', () => {
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
-    expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
+    expect(within(progressSummary).getByRole('progressbar', { name: /no required section truth to measure/i })).toHaveAttribute('value', '0')
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/0')).toBeInTheDocument()
@@ -1287,6 +1565,21 @@ describe('RuntimeWorkspace', () => {
       data: {
         data: {
           ...rendererPayload,
+          readiness: {
+            ...rendererPayload.readiness,
+            sectionTruth: {
+              ...rendererPayload.readiness.sectionTruth,
+              state: 'SECTION_TRUTH_NOT_CONFIGURED',
+              publishEligible: false,
+              lockEligible: false,
+              requiredSectionCount: 0,
+              readySectionCount: 0,
+              blockingSectionCount: 0,
+              readySectionKeys: [],
+              blockers: [],
+              reason: 'Required section truth is not configured.',
+            },
+          },
           sections: rendererPayload.sections.map((section) => ({
             ...section,
             required: false,
@@ -1304,7 +1597,7 @@ describe('RuntimeWorkspace', () => {
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
-    expect(within(progressSummary).getByRole('progressbar', { name: /no required input to measure/i })).toHaveAttribute('value', '0')
+    expect(within(progressSummary).getByRole('progressbar', { name: /no required section truth to measure/i })).toHaveAttribute('value', '0')
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/1')).toBeInTheDocument()
@@ -1451,6 +1744,87 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
+  })
+
+  it('keeps section acceptance disabled when generated intelligence is not truth eligible', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                format: 'STRUCTURED_TEXT',
+                content: 'Evidence not sufficient to derive this section safely.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+                truthEligibility: {
+                  eligible: false,
+                  status: 'INSUFFICIENT_EVIDENCE',
+                  messages: [
+                    {
+                      code: 'INSUFFICIENT_EVIDENCE',
+                      message: 'Evidence not sufficient to derive this section safely.',
+                    },
+                  ],
+                },
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                truthEligibility: {
+                  eligible: false,
+                  status: 'INSUFFICIENT_EVIDENCE',
+                  messages: [
+                    {
+                      code: 'INSUFFICIENT_EVIDENCE',
+                      message: 'Evidence not sufficient to derive this section safely.',
+                    },
+                  ],
+                },
+                displayProjection: {
+                  generatedInsight: {
+                    title: 'Insufficient Evidence',
+                    summary: 'Evidence not sufficient to derive this section safely.',
+                    sections: [],
+                  },
+                  boundaries: {
+                    title: 'Boundaries / Not Assumed',
+                    items: [
+                      'No ROI statistics were generated because no accepted ROI evidence is present.',
+                    ],
+                  },
+                  confidence: {
+                    label: 'Confidence: Low',
+                    signals: ['No customer validation notes supplied'],
+                  },
+                },
+              },
+              state: {
+                status: 'INSUFFICIENT_EVIDENCE',
+                revisionCount: 0,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    const generatedRegion = screen.getByRole('region', { name: /generated content/i })
+    expect(within(generatedRegion).getByRole('heading', { name: /insufficient evidence/i })).toBeInTheDocument()
+    expect(within(generatedRegion).getAllByText('Evidence not sufficient to derive this section safely.')).toHaveLength(2)
+    const acceptTruth = screen.getByRole('button', { name: /accept truth/i })
+    expect(acceptTruth).toBeDisabled()
+    expect(acceptTruth).toHaveAccessibleDescription('Evidence not sufficient to derive this section safely.')
+    expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
   it('keeps section acceptance disabled when current generated content is already accepted', async () => {
@@ -2234,12 +2608,25 @@ describe('RuntimeWorkspace', () => {
     const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
     const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })
     const blockedButton = within(governedActions).getByRole('button', { name: /submit for review/i })
+    const tooltipTrigger = within(governedActions).getByLabelText(/submit for review unavailable/i)
+    const blockedReason = within(governedActions)
+      .getAllByText('Mark this runtime ready first.')
+      .find((element) => element.closest('[role="tooltip"]'))
+    const visibleReason = governedActions.querySelector('.runtime-workspace__action-disabled-reason')
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveClass('btn--outline')
     expect(blockedButton).toHaveAccessibleDescription('Mark this runtime ready first.')
-    expect(within(governedActions).getByText('Mark this runtime ready first.')).toBeVisible()
+    expect(tooltipTrigger).toHaveAccessibleName('Submit for Review unavailable. Mark this runtime ready first.')
+    expect(blockedReason).toBeTruthy()
+    expect(blockedReason.closest('[role="tooltip"]')).toHaveAttribute('data-position', 'top')
+    expect(blockedReason).not.toBeVisible()
+    expect(blockedButton.querySelector('.runtime-workspace__action-icon--info')).not.toBeNull()
+    expect(visibleReason).toHaveTextContent('Mark this runtime ready first.')
+    expect(visibleReason).toBeVisible()
+    await user.hover(tooltipTrigger)
+    await waitFor(() => expect(blockedReason).toBeVisible())
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
-    await user.click(blockedButton)
+    await user.click(tooltipTrigger)
     expect(executeRuntimeAction).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
@@ -2275,9 +2662,20 @@ describe('RuntimeWorkspace', () => {
     const governedActions = within(actionScroll).getByRole('group', { name: /^governed runtime actions$/i })
     expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
     const blockedButton = within(governedActions).getByRole('button', { name: /lock runtime/i })
+    const tooltipTrigger = within(governedActions).getByLabelText(/lock runtime unavailable/i)
+    const blockedReason = within(governedActions)
+      .getAllByText('Runtime must be published before it can be locked.')
+      .find((element) => element.closest('[role="tooltip"]'))
+    const visibleReason = governedActions.querySelector('.runtime-workspace__action-disabled-reason')
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveAccessibleDescription('Runtime must be published before it can be locked.')
-    expect(within(governedActions).getByText('Runtime must be published before it can be locked.')).toBeVisible()
+    expect(tooltipTrigger).toHaveAccessibleName('Lock Runtime unavailable. Runtime must be published before it can be locked.')
+    expect(blockedReason).toBeTruthy()
+    expect(blockedReason.closest('[role="tooltip"]')).toHaveAttribute('data-position', 'top')
+    expect(blockedReason).not.toBeVisible()
+    expect(blockedButton.querySelector('.runtime-workspace__action-icon--info')).not.toBeNull()
+    expect(visibleReason).toHaveTextContent('Runtime must be published before it can be locked.')
+    expect(visibleReason).toBeVisible()
     expect(screen.queryByRole('button', { name: /available actions/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /blocked actions/i })).not.toBeInTheDocument()
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
@@ -2602,9 +3000,19 @@ describe('RuntimeWorkspace', () => {
     const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
     const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })
     const blockedButton = within(governedActions).getByRole('button', { name: /run validation/i })
+    const tooltipTrigger = within(governedActions).getByLabelText(/run validation unavailable/i)
+    const blockedReason = within(governedActions)
+      .getAllByText('Runtime is locked and cannot be mutated or actioned.')
+      .find((element) => element.closest('[role="tooltip"]'))
+    const visibleReason = governedActions.querySelector('.runtime-workspace__action-disabled-reason')
     expect(blockedButton).toBeDisabled()
     expect(blockedButton).toHaveAccessibleDescription('Runtime is locked and cannot be mutated or actioned.')
-    expect(within(governedActions).getByText('Runtime is locked and cannot be mutated or actioned.')).toBeVisible()
+    expect(tooltipTrigger).toHaveAccessibleName('Run Validation unavailable. Runtime is locked and cannot be mutated or actioned.')
+    expect(blockedReason).toBeTruthy()
+    expect(blockedReason).not.toBeVisible()
+    expect(blockedButton.querySelector('.runtime-workspace__action-icon--info')).not.toBeNull()
+    expect(visibleReason).toHaveTextContent('Runtime is locked and cannot be mutated or actioned.')
+    expect(visibleReason).toBeVisible()
     expect(screen.queryByText('No actions available')).not.toBeInTheDocument()
   })
 
@@ -2730,16 +3138,6 @@ describe('RuntimeWorkspace', () => {
                 content: 'Accepted customer problem truth.',
                 acceptedAt: '2026-05-22T09:12:00.000Z',
                 sourceGeneratedAt: '2026-05-22T09:10:00.000Z',
-                revisions: [
-                  {
-                    revisionNumber: 1,
-                    accepted: {
-                      content: 'Earlier accepted customer problem truth.',
-                    },
-                    replacedAt: '2026-05-22T09:12:00.000Z',
-                    reason: 'ACCEPTED_TRUTH_REPLACED',
-                  },
-                ],
               },
               review: {
                 status: 'PENDING_REVIEW',
@@ -2755,17 +3153,11 @@ describe('RuntimeWorkspace', () => {
                     content: 'Customer Problem: Older generated content.',
                     generatedAt: '2026-05-22T09:00:00.000Z',
                   },
-                  replacedAt: '2026-05-22T09:10:00.000Z',
-                },
-              ],
-              acceptedRevisions: [
-                {
-                  revisionNumber: 1,
                   accepted: {
                     content: 'Earlier accepted customer problem truth.',
                   },
-                  replacedAt: '2026-05-22T09:12:00.000Z',
-                  reason: 'ACCEPTED_TRUTH_REPLACED',
+                  replacedAt: '2026-05-22T09:10:00.000Z',
+                  reason: 'SECTION_INPUT_CHANGED',
                 },
               ],
             },
@@ -2807,5 +3199,100 @@ describe('RuntimeWorkspace', () => {
     expect(compareRegion).toHaveTextContent('Customer Problem: Proposal creation is slow.')
     expect(compareRegion).toHaveTextContent('Accepted customer problem truth.')
     expect(compareRegion).toHaveTextContent('Earlier accepted customer problem truth.')
+  })
+
+  it('uses archived section revisions for regenerate and compare after input invalidation', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: null,
+              accepted: null,
+              review: {
+                status: 'PENDING_REVIEW',
+                invalidationReason: 'SECTION_INPUT_CHANGED',
+              },
+              state: {
+                status: 'DRAFT',
+                revisionCount: 1,
+              },
+              revisions: [
+                {
+                  revisionNumber: 1,
+                  generated: {
+                    content: 'Customer Problem: Older generated content.',
+                    generatedAt: '2026-05-22T09:00:00.000Z',
+                  },
+                  accepted: {
+                    content: 'Earlier accepted customer problem truth.',
+                    acceptedAt: '2026-05-22T09:02:00.000Z',
+                  },
+                  replacedAt: '2026-05-22T09:10:00.000Z',
+                  reason: 'SECTION_INPUT_CHANGED',
+                },
+              ],
+            },
+          ],
+          actions: [
+            {
+              actionKey: 'GENERATE_SECTION',
+              governedAction: 'GENERATE_SECTION',
+              buttonLabel: 'Generate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'generate-section-policy',
+            },
+            {
+              actionKey: 'REGENERATE_SECTION',
+              governedAction: 'REGENERATE_SECTION',
+              buttonLabel: 'Regenerate Section',
+              enabled: true,
+              requiresConfirmation: false,
+              policyKey: 'regenerate-section-policy',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await openGuidedSection()
+
+    const generateButton = screen.getByRole('button', { name: /^generate section$/i })
+    const regenerateButton = screen.getByRole('button', { name: /^regenerate section$/i })
+    expect(generateButton).toBeDisabled()
+    expect(generateButton).toHaveAccessibleDescription(
+      'Regenerate this section because previous generated content is archived for comparison.',
+    )
+    expect(regenerateButton).toBeEnabled()
+
+    const compareButton = screen.getByRole('button', { name: /^compare$/i })
+    expect(compareButton).toBeEnabled()
+    await user.click(compareButton)
+
+    const compareRegion = screen.getByRole('region', { name: /section truth comparison/i })
+    expect(compareRegion).toHaveTextContent('Awaiting generation')
+    expect(compareRegion).toHaveTextContent('No accepted governed truth has been projected for this section.')
+    expect(compareRegion).toHaveTextContent('Customer Problem: Older generated content.')
+    expect(compareRegion).toHaveTextContent('Earlier accepted customer problem truth.')
+
+    await user.click(regenerateButton)
+    expect(executeRuntimeAction).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      actionKey: 'REGENERATE_SECTION',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+      },
+    })
   })
 })
