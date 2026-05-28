@@ -118,7 +118,9 @@
 
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
+  align-content: center;
   align-items: center;
+  gap: var(--spacing-sm) var(--spacing-md);
   min-height: 8.25rem;
   padding: var(--spacing-lg);
   border-color: color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border));
@@ -132,9 +134,9 @@
 
   grid-template-rows: auto auto;
   align-content: start;
-  gap: var(--spacing-sm) var(--spacing-sm);
+  gap: var(--spacing-sm);
   min-height: 8.25rem;
-  padding: var(--spacing-md) var(--spacing-sm);
+  padding: var(--spacing-lg);
 }
 
 .maintain-vmfs__continue-head {
@@ -178,13 +180,15 @@
 }
 
 .maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-icon {
-  margin-block-start: var(--spacing-2xs);
-  border-radius: var(--border-radius-sm);
-  background-color: color-mix(in srgb, var(--color-action-primary) 7%, transparent);
-  font-size: var(--font-size-sm);
+  margin-block-start: 0;
+  border-color: color-mix(in srgb, var(--color-action-primary) 18%, transparent);
+  border-radius: var(--border-radius-md);
+  background-color: color-mix(in srgb, var(--color-action-primary) 10%, transparent);
+  font-size: var(--font-size-lg);
 }
 
 .maintain-vmfs__continue-card--warning .maintain-vmfs__continue-icon {
+  border-color: color-mix(in srgb, var(--color-warning) 18%, transparent);
   background-color: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-warning);
 }
@@ -233,12 +237,13 @@
 }
 
 .maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-head {
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
 }
 
 .maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-heading {
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .maintain-vmfs__continue-card--primary .maintain-vmfs__continue-copy {
@@ -252,9 +257,9 @@
 
 .maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-copy {
   gap: var(--spacing-sm);
-  margin-block-start: var(--spacing-2xs);
-  padding-inline-start: calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-xs));
-  padding-inline-end: var(--spacing-xs);
+  margin-block-start: 0;
+  padding-inline-start: calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-sm));
+  padding-inline-end: 0;
 }
 
 .maintain-vmfs__continue-copy p,
@@ -284,8 +289,8 @@
 }
 
 .maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-title {
-  font-size: 0.9375rem;
-  line-height: 1.1;
+  font-size: var(--font-size-base);
+  line-height: 1.16;
   text-wrap: balance;
 }
 

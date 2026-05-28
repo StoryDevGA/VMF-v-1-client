@@ -1710,7 +1710,9 @@ describe('MaintainVmfs', () => {
       '--maintain-vmfs-continue-icon-size': 'var(--spacing-2xl)',
       'grid-template-columns': 'minmax(0, 1fr) auto',
       'grid-template-rows': 'auto auto',
+      'align-content': 'center',
       'align-items': 'center',
+      gap: 'var(--spacing-sm) var(--spacing-md)',
       'min-height': '8.25rem',
       padding: 'var(--spacing-lg)',
       'border-color': 'color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border))',
@@ -1826,6 +1828,7 @@ describe('MaintainVmfs', () => {
   it('locks the secondary Continue Work card compact hierarchy contract', () => {
     const secondaryCard = getCssDeclarations('.maintain-vmfs__continue-card--secondary')
     const secondaryIcon = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-icon')
+    const warningIcon = getCssDeclarations('.maintain-vmfs__continue-card--warning .maintain-vmfs__continue-icon')
     const secondaryHead = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-head')
     const secondaryHeading = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-heading')
     const secondaryCopy = getCssDeclarations('.maintain-vmfs__continue-card--secondary .maintain-vmfs__continue-copy')
@@ -1839,32 +1842,37 @@ describe('MaintainVmfs', () => {
       '--maintain-vmfs-continue-icon-size': 'var(--spacing-xl)',
       'grid-template-rows': 'auto auto',
       'align-content': 'start',
-      gap: 'var(--spacing-sm) var(--spacing-sm)',
+      gap: 'var(--spacing-sm)',
       'min-height': '8.25rem',
-      padding: 'var(--spacing-md) var(--spacing-sm)',
+      padding: 'var(--spacing-lg)',
     }))
     expect(secondaryIcon).toEqual(expect.objectContaining({
-      'margin-block-start': 'var(--spacing-2xs)',
-      'border-radius': 'var(--border-radius-sm)',
-      'background-color': 'color-mix(in srgb, var(--color-action-primary) 7%, transparent)',
-      'font-size': 'var(--font-size-sm)',
+      'margin-block-start': '0',
+      'border-color': 'color-mix(in srgb, var(--color-action-primary) 18%, transparent)',
+      'border-radius': 'var(--border-radius-md)',
+      'background-color': 'color-mix(in srgb, var(--color-action-primary) 10%, transparent)',
+      'font-size': 'var(--font-size-lg)',
+    }))
+    expect(warningIcon).toEqual(expect.objectContaining({
+      'border-color': 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
     }))
     expect(secondaryHead).toEqual(expect.objectContaining({
+      'grid-template-columns': 'auto minmax(0, 1fr)',
       'align-items': 'start',
-      gap: 'var(--spacing-xs)',
+      gap: 'var(--spacing-sm)',
     }))
     expect(secondaryHeading).toEqual(expect.objectContaining({
-      gap: 'var(--spacing-sm)',
+      gap: 'var(--spacing-xs)',
     }))
     expect(secondaryCopy).toEqual(expect.objectContaining({
       gap: 'var(--spacing-sm)',
-      'margin-block-start': 'var(--spacing-2xs)',
-      'padding-inline-start': 'calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-xs))',
-      'padding-inline-end': 'var(--spacing-xs)',
+      'margin-block-start': '0',
+      'padding-inline-start': 'calc(var(--maintain-vmfs-continue-icon-size) + var(--spacing-sm))',
+      'padding-inline-end': '0',
     }))
     expect(secondaryTitle).toEqual(expect.objectContaining({
-      'font-size': '0.9375rem',
-      'line-height': '1.1',
+      'font-size': 'var(--font-size-base)',
+      'line-height': '1.16',
       'text-wrap': 'balance',
     }))
     expect(secondaryCopyText).toEqual(expect.objectContaining({
