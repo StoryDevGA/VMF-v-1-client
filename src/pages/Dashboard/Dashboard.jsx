@@ -7,18 +7,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   MdAddCircleOutline,
+  MdLockOutline,
   MdBusiness,
   MdChevronRight,
   MdFilterList,
-  MdLockOutline,
   MdOutlineEventNote,
   MdOutlineDashboardCustomize,
   MdOutlineDescription,
   MdOutlineDomain,
+  MdOutlineInventory2,
   MdOutlineInsights,
   MdOutlinePeopleAlt,
   MdOutlinePlayCircle,
   MdOutlineTaskAlt,
+  MdOutlineTrendingUp,
   MdOutlineWarningAmber,
   MdShield,
 } from 'react-icons/md'
@@ -603,6 +605,38 @@ function RuntimeActionCard({ action, primary = false }) {
 
 function CreateWorkCard({ item }) {
   const Icon = item.icon
+  const cardClassName = [
+    'dashboard__create-card',
+    item.tone ? `dashboard__create-card--${item.tone}` : '',
+    item.kind ? `dashboard__create-card--${item.kind}` : '',
+  ].filter(Boolean).join(' ')
+  const content = (
+    <>
+      <span className="dashboard__create-visual">
+        <span className="dashboard__create-icon" aria-hidden="true">
+          <Icon />
+        </span>
+      </span>
+      <span className="dashboard__create-main">
+        <span className="dashboard__create-header">
+          <span className="dashboard__create-title">{item.title}</span>
+          <Badge variant={item.disabled ? 'neutral' : 'success'} size="sm" pill outline>
+            {item.label}
+          </Badge>
+        </span>
+        <span className="dashboard__create-meta">{item.meta}</span>
+        {item.reason ? (
+          <span className="dashboard__create-reason">
+            <MdLockOutline aria-hidden="true" />
+            <span>{item.reason}</span>
+          </span>
+        ) : null}
+        <span className={['dashboard__create-command', item.disabled ? 'dashboard__create-command--disabled' : ''].filter(Boolean).join(' ')}>
+          {item.commandLabel}
+        </span>
+      </span>
+    </>
+  )
 
   return (
     <li
@@ -612,26 +646,25 @@ function CreateWorkCard({ item }) {
         item.disabled ? 'dashboard__create-card--disabled' : '',
       ].filter(Boolean).join(' ')}
     >
-      <Link
-        to={item.to}
-        disabled={item.disabled}
-        className="dashboard__launch-link dashboard__launch-link--secondary"
-        variant="subtle"
-        underline="none"
-      >
-        <span className="dashboard__launch-topline">
-          <span className="dashboard__launch-icon" aria-hidden="true">
-            <Icon />
-          </span>
-          <Badge variant={item.disabled ? 'neutral' : 'success'} size="sm" pill outline>
-            {item.label}
-          </Badge>
-        </span>
-        <span className="dashboard__launch-copy">
-          <span className="dashboard__launch-label">{item.title}</span>
-          <span className="dashboard__launch-meta">{item.meta}</span>
-        </span>
-      </Link>
+      {item.disabled ? (
+        <div
+          className={cardClassName}
+          aria-label={`${item.title} ${item.label} guidance`}
+        >
+          {content}
+        </div>
+      ) : (
+        <Link
+          to={item.to}
+          disabled={item.disabled}
+          className={`${cardClassName} dashboard__create-card--link`}
+          variant="subtle"
+          underline="none"
+          aria-label={`${item.title} ${item.commandLabel}`}
+        >
+          {content}
+        </Link>
+      )}
     </li>
   )
 }
@@ -1232,14 +1265,54 @@ function Dashboard() {
     {
       disabled: !canCreateValueNarrative,
       icon: MdOutlineDashboardCustomize,
+      kind: 'source-backed',
       label: canCreateValueNarrative ? 'Available' : 'Locked',
       meta: canCreateValueNarrative
         ? 'Create a new Value Narrative from an active VMF package.'
         : 'VMF_CREATE permission and VMF entitlement required',
+      commandLabel: canCreateValueNarrative ? 'Create New' : 'Unavailable',
+      reason: canCreateValueNarrative ? '' : 'Requires VMF_CREATE permission and VMF entitlement',
+      tone: 'value-narrative',
       title: 'Create Value Narrative',
       to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
     },
+    {
+      commandLabel: 'Unavailable',
+      disabled: true,
+      icon: MdOutlineTrendingUp,
+      kind: 'planned',
+      label: 'Planned',
+      meta: 'Unlocks when a locked Value Narrative can be validated as the analysis anchor.',
+      reason: 'Requires locked Value Narrative anchor validation',
+      tone: 'deal-analysis',
+      title: 'Create Deal Analysis',
+      to: '/app/dashboard',
+    },
+    {
+      commandLabel: 'Unavailable',
+      disabled: true,
+      icon: MdOutlineInventory2,
+      kind: 'planned',
+      label: 'Planned',
+      meta: 'Unlocks after runtime work is certified, locked, and eligible for governed outputs.',
+      reason: 'Requires certified locked runtime truth',
+      tone: 'output',
+      title: 'Generate Output',
+      to: '/app/dashboard',
+    },
   ], [canCreateValueNarrative])
+
+  const sourceBackedCreateItems = useMemo(() => (
+    createWorkItems.filter((item) => item.kind === 'source-backed')
+  ), [createWorkItems])
+
+  const plannedCreateItems = useMemo(() => (
+    createWorkItems.filter((item) => item.kind === 'planned')
+  ), [createWorkItems])
+
+  const availableCreateCount = useMemo(() => (
+    sourceBackedCreateItems.filter((item) => !item.disabled).length
+  ), [sourceBackedCreateItems])
 
   const alerts = useMemo(() => {
     if (!contextReady) {
@@ -1565,20 +1638,27 @@ function Dashboard() {
         </DashboardSectionCard>
 
         <DashboardSectionCard
-          badge={{ label: `${createWorkItems.length} options`, variant: 'info' }}
-          description="Create options are driven by active deployments, tenant entitlement, role, and runtime anchors."
+          badge={{ label: `${availableCreateCount} available`, variant: availableCreateCount > 0 ? 'success' : 'neutral' }}
+          description="Source-backed create work is separated from planned locked capabilities that still require runtime anchors and output eligibility."
           icon={MdAddCircleOutline}
           modifier="create"
           panelAs="nav"
           panelLabel="Create new work panel"
-          status={{ label: canCreateValueNarrative ? 'Available now' : 'Limited', variant: canCreateValueNarrative ? 'success' : 'warning' }}
+          status={{ label: availableCreateCount > 0 ? 'Available now' : 'No create actions', variant: availableCreateCount > 0 ? 'success' : 'warning' }}
           title="Create New Work"
         >
-          <ul className="dashboard__launch-grid dashboard__launch-grid--create" aria-label="Create new work">
-            {createWorkItems.map((item) => (
-              <CreateWorkCard key={item.title} item={item} />
-            ))}
-          </ul>
+          <div className="dashboard__create-groups">
+            <ul className="dashboard__launch-grid dashboard__launch-grid--create dashboard__launch-grid--create-actions" aria-label="Source-backed create work">
+              {sourceBackedCreateItems.map((item) => (
+                <CreateWorkCard key={item.title} item={item} />
+              ))}
+            </ul>
+            <ul className="dashboard__launch-grid dashboard__launch-grid--create dashboard__launch-grid--planned" aria-label="Planned locked capabilities">
+              {plannedCreateItems.map((item) => (
+                <CreateWorkCard key={item.title} item={item} />
+              ))}
+            </ul>
+          </div>
         </DashboardSectionCard>
 
         <DashboardSectionCard

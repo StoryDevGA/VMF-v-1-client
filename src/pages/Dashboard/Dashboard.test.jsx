@@ -378,7 +378,7 @@ describe('Dashboard page', () => {
       .toBeInTheDocument()
     expect(actionQueue).toHaveClass('dashboard__launch-grid--actions')
     expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(0)
-    expect(screen.getByText('0 available')).toBeInTheDocument()
+    expect(screen.getAllByText('0 available').length).toBeGreaterThanOrEqual(1)
   })
 
   it('links runtime instance work to the runtime renderer workspace', () => {
@@ -479,7 +479,7 @@ describe('Dashboard page', () => {
     expect(screen.getByText('latest-package')).toBeInTheDocument()
     expect(screen.getByText('Idle')).toBeInTheDocument()
     expect(screen.getByText('Pending runtime engine')).toBeInTheDocument()
-    expect(screen.getByText('1 available')).toBeInTheDocument()
+    expect(screen.getAllByText('1 available').length).toBeGreaterThanOrEqual(1)
   })
 
   it('applies the featured Continue Work treatment only to the first runtime action', () => {
@@ -575,7 +575,7 @@ describe('Dashboard page', () => {
     expect(within(actionPanel).getByLabelText(/review at-risk instances/i))
       .toHaveClass('dashboard__continue-card--summary')
     expect(within(actionPanel).queryByText(/latest:/i)).not.toBeInTheDocument()
-    expect(screen.getByText('1 available')).toBeInTheDocument()
+    expect(screen.getAllByText('1 available').length).toBeGreaterThanOrEqual(1)
 
     secondaryActionCards.forEach((card) => {
       const compactActionCard = card.querySelector('.dashboard__continue-card')
@@ -702,7 +702,7 @@ describe('Dashboard page', () => {
     expect(within(actionQueue).queryByText(/no runtime actions/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/no runtime instances are available for this tenant yet/i))
       .not.toBeInTheDocument()
-    expect(screen.getByText('0 available')).toBeInTheDocument()
+    expect(screen.getAllByText('0 available').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders an honest empty work-in-progress table until runtime instances are API-backed', async () => {
@@ -842,7 +842,7 @@ describe('Dashboard page', () => {
     const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
     const actionQueue = within(actionPanel).getByRole('list', { name: /^runtime action queue$/i })
     expect(actionQueue.querySelectorAll('.dashboard__launch-item--action')).toHaveLength(0)
-    expect(screen.getByText('0 available')).toBeInTheDocument()
+    expect(screen.getAllByText('0 available').length).toBeGreaterThanOrEqual(1)
   })
 
   it('keeps unsupported future framework and output placeholders out of the dashboard', () => {
@@ -858,25 +858,71 @@ describe('Dashboard page', () => {
 
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('Beta Deal Analysis')).not.toBeInTheDocument()
-    expect(screen.queryByText('Deal Analysis')).not.toBeInTheDocument()
+    expect(screen.getByText('Create Deal Analysis')).toBeInTheDocument()
     expect(screen.queryByText('Business Cases')).not.toBeInTheDocument()
     expect(screen.queryByText('Account Plans')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /generate output/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /outputs/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /create value narrative/i })).toBeInTheDocument()
     const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
-    const createGrid = within(createPanel).getByRole('list', { name: /^create new work$/i })
+    const sourceBackedCreateGrid = within(createPanel).getByRole('list', { name: /source-backed create work/i })
+    const plannedCapabilitiesGrid = within(createPanel).getByRole('list', { name: /planned locked capabilities/i })
 
-    expect(createGrid).toHaveClass('dashboard__launch-grid--create')
-    expect(createGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(1)
-    const createLink = within(createGrid).getByRole('link', { name: /create value narrative/i })
-    expect(createLink).toHaveAttribute('aria-disabled', 'true')
-    expect(within(createLink).getByText('Locked')).toBeInTheDocument()
-    expect(createLink.querySelector('.dashboard__create-command')).toBeNull()
-    expect(within(createLink).getByText(/vmf_create permission/i)).toBeInTheDocument()
-    expect(createLink.querySelector('.dashboard__create-reason')).toBeNull()
+    expect(screen.getAllByText('0 available').length).toBeGreaterThanOrEqual(1)
+    expect(sourceBackedCreateGrid).toHaveClass('dashboard__launch-grid--create-actions')
+    expect(plannedCapabilitiesGrid).toHaveClass('dashboard__launch-grid--planned')
+    expect(sourceBackedCreateGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(1)
+    expect(plannedCapabilitiesGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(2)
+    expect(within(sourceBackedCreateGrid).queryByRole('link', { name: /create value narrative/i }))
+      .not.toBeInTheDocument()
+    const valueNarrativeCard = sourceBackedCreateGrid.querySelector('.dashboard__create-card')
+    const plannedCards = plannedCapabilitiesGrid.querySelectorAll('.dashboard__create-card')
+    const [dealAnalysisCard, outputCard] = plannedCards
+
+    expect(valueNarrativeCard).toHaveTextContent('Create Value Narrative')
+    expect(valueNarrativeCard).toHaveTextContent('Locked')
+    expect(valueNarrativeCard).toHaveTextContent('VMF_CREATE permission and VMF entitlement required')
+    expect(valueNarrativeCard).toHaveTextContent('Unavailable')
+    expect(valueNarrativeCard).toHaveClass('dashboard__create-card--value-narrative')
+    expect(dealAnalysisCard).toHaveTextContent('Create Deal Analysis')
+    expect(dealAnalysisCard).toHaveTextContent('Planned')
+    expect(dealAnalysisCard).toHaveTextContent('Unlocks when a locked Value Narrative can be validated as the analysis anchor.')
+    expect(dealAnalysisCard).toHaveTextContent('Requires locked Value Narrative anchor validation')
+    expect(dealAnalysisCard).toHaveClass('dashboard__create-card--planned')
+    expect(dealAnalysisCard).toHaveClass('dashboard__create-card--deal-analysis')
+    expect(outputCard).toHaveTextContent('Generate Output')
+    expect(outputCard).toHaveTextContent('Planned')
+    expect(outputCard).toHaveTextContent('Unlocks after runtime work is certified, locked, and eligible for governed outputs.')
+    expect(outputCard).toHaveTextContent('Requires certified locked runtime truth')
+    expect(outputCard).toHaveClass('dashboard__create-card--planned')
+    expect(outputCard).toHaveClass('dashboard__create-card--output')
+  })
+
+  it('renders source-backed Create New Work separately from planned locked capabilities', () => {
+    renderDashboard()
+
+    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    const sourceBackedCreateGrid = within(createPanel).getByRole('list', { name: /source-backed create work/i })
+    const plannedCapabilitiesGrid = within(createPanel).getByRole('list', { name: /planned locked capabilities/i })
+    const createLink = within(sourceBackedCreateGrid).getByRole('link', { name: /create value narrative create new/i })
+    const plannedCards = plannedCapabilitiesGrid.querySelectorAll('.dashboard__create-card')
+
+    expect(screen.getAllByText('1 available').length).toBeGreaterThanOrEqual(1)
+    expect(sourceBackedCreateGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(1)
+    expect(plannedCapabilitiesGrid.querySelectorAll('.dashboard__launch-item--create')).toHaveLength(2)
+    expect(createLink).toHaveAttribute('href', '/app/workspaces/vmf')
+    expect(createLink).toHaveClass('dashboard__create-card--link', 'dashboard__create-card--value-narrative')
+    expect(within(createLink).getByText('Available')).toBeInTheDocument()
+    expect(within(createLink).getByText('Create New')).toHaveClass('dashboard__create-command')
+    expect(within(plannedCapabilitiesGrid).queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
+    expect(within(plannedCapabilitiesGrid).queryByRole('link', { name: /generate output/i })).not.toBeInTheDocument()
+    expect(plannedCards[0]).toHaveTextContent('Planned')
+    expect(plannedCards[0]).toHaveTextContent('Unavailable')
+    expect(plannedCards[0]).toHaveTextContent('Requires locked Value Narrative anchor validation')
+    expect(plannedCards[1]).toHaveTextContent('Planned')
+    expect(plannedCards[1]).toHaveTextContent('Unavailable')
+    expect(plannedCards[1]).toHaveTextContent('Requires certified locked runtime truth')
   })
 
   it('resolves tenant memberships that use nested customer references', () => {
@@ -898,10 +944,10 @@ describe('Dashboard page', () => {
     expect(screen.getAllByText('Sales User').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Nested Customer').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('link', { name: /create deal analysis/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /create value narrative/i })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    expect(screen.queryByRole('link', { name: /create value narrative/i })).not.toBeInTheDocument()
+    const createPanel = screen.getByRole('navigation', { name: /create new work panel/i })
+    expect(within(createPanel).getByLabelText(/create value narrative locked/i))
+      .toHaveClass('dashboard__create-card')
   })
 
   it('preserves single-tenant context without rendering tenant switcher', () => {
@@ -1139,8 +1185,82 @@ describe('Dashboard page', () => {
     }))
   })
 
+  it('locks the Create New Work card visual contract', () => {
+    const createCard = getCssDeclarations('.dashboard__create-card')
+    const dashboard = getCssDeclarations('.dashboard')
+    const dealAnalysisCard = getCssDeclarations('.dashboard__create-card--deal-analysis')
+    const createIcon = getCssDeclarations('.dashboard__create-icon')
+    const createMain = getCssDeclarations('.dashboard__create-main')
+    const createHeader = getCssDeclarations('.dashboard__create-header')
+    const createTitle = getCssDeclarations('.dashboard__create-title')
+    const createReason = getCssDeclarations('.dashboard__create-reason')
+    const createCommand = getCssDeclarations('.dashboard__create-command')
+    const disabledCommand = getCssDeclarations('.dashboard__create-command--disabled')
+
+    expect(createCard).toEqual(expect.objectContaining({
+      display: 'grid',
+      'grid-template-columns': 'auto minmax(0, 1fr)',
+      gap: 'var(--spacing-md)',
+      'min-height': '9rem',
+      padding: 'var(--spacing-lg)',
+      'border-radius': 'var(--border-radius-md)',
+    }))
+    expect(dashboard).toEqual(expect.objectContaining({
+      '--dashboard-create-deal-analysis-accent': '#a855f7',
+    }))
+    expect(dealAnalysisCard).toEqual(expect.objectContaining({
+      '--dashboard-create-accent': 'var(--dashboard-create-deal-analysis-accent)',
+    }))
+    expect(createIcon).toEqual(expect.objectContaining({
+      width: 'var(--spacing-2xl)',
+      height: 'var(--spacing-2xl)',
+      'border-radius': 'var(--border-radius-md)',
+      'font-size': 'var(--font-size-xl)',
+    }))
+    expect(createMain).toEqual(expect.objectContaining({
+      display: 'grid',
+      'grid-template-rows': 'auto auto minmax(0, 1fr) auto',
+      gap: 'var(--spacing-xs)',
+      'min-height': '100%',
+    }))
+    expect(createHeader).toEqual(expect.objectContaining({
+      display: 'flex',
+      'justify-content': 'space-between',
+      gap: 'var(--spacing-sm)',
+    }))
+    expect(createTitle).toEqual(expect.objectContaining({
+      'font-size': 'var(--font-size-base)',
+      'font-weight': 'var(--font-weight-bold)',
+    }))
+    expect(createReason).toEqual(expect.objectContaining({
+      display: 'inline-grid',
+      'grid-template-columns': 'auto minmax(0, 1fr)',
+      gap: 'var(--spacing-xs)',
+      'margin-block-start': 'var(--spacing-md)',
+    }))
+    expect(createCommand).toEqual(expect.objectContaining({
+      'min-width': '8.75rem',
+      'min-height': 'calc(var(--spacing-md) * 2.25)',
+      padding: 'var(--spacing-2xs) var(--spacing-xs)',
+      'border-radius': 'var(--border-radius-pill)',
+      'font-size': 'var(--font-size-sm)',
+    }))
+    expect(disabledCommand).toEqual(expect.objectContaining({
+      color: 'var(--color-text-secondary)',
+    }))
+  })
+
   it('locks the Continue Work responsive grid contract for a wide primary card', () => {
     const desktopActionsGrid = getCssDeclarations('.dashboard__launch-grid--actions', {
+      after: '@media (min-width: 1280px)',
+    })
+    const desktopCreateGroups = getCssDeclarations('.dashboard__create-groups', {
+      after: '@media (min-width: 1280px)',
+    })
+    const desktopCreateActionsGrid = getCssDeclarations('.dashboard__launch-grid--create-actions', {
+      after: '@media (min-width: 1280px)',
+    })
+    const desktopPlannedGrid = getCssDeclarations('.dashboard__launch-grid--planned', {
       after: '@media (min-width: 1280px)',
     })
     const mobilePrimaryCard = getCssDeclarations('.dashboard__continue-card--primary', {
@@ -1152,6 +1272,15 @@ describe('Dashboard page', () => {
 
     expect(desktopActionsGrid).toEqual(expect.objectContaining({
       'grid-template-columns': 'minmax(0, 2fr) repeat(3, minmax(12rem, 1fr))',
+    }))
+    expect(desktopCreateGroups).toEqual(expect.objectContaining({
+      'grid-template-columns': 'minmax(0, 1fr) minmax(0, 2fr)',
+    }))
+    expect(desktopCreateActionsGrid).toEqual(expect.objectContaining({
+      'grid-template-columns': '1fr',
+    }))
+    expect(desktopPlannedGrid).toEqual(expect.objectContaining({
+      'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
     }))
     expect(mobilePrimaryCard).toEqual(expect.objectContaining({
       'grid-template-columns': 'minmax(0, 1fr)',
