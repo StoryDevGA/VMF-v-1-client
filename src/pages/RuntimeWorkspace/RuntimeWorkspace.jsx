@@ -1388,7 +1388,10 @@ function RuntimeActionButton({
               {actionButton}
             </span>
           </Tooltip>
-          <p id={disabledReasonId} className="runtime-workspace__action-disabled-reason">
+          <p
+            id={disabledReasonId}
+            className="runtime-workspace__action-disabled-reason runtime-workspace__action-disabled-reason--tooltip-only sr-only"
+          >
             {disabledReason}
           </p>
         </>
