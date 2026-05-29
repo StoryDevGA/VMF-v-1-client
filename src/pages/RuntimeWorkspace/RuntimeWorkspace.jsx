@@ -17,6 +17,7 @@ import { Card } from '../../components/Card'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { Textarea } from '../../components/Textarea'
@@ -30,6 +31,10 @@ import {
   useMutateRuntimeStateMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
+import {
+  DISCOVERY_ACQUISITION_PROFILES,
+  DISCOVERY_ACQUISITION_PROFILE_OPTIONS,
+} from '../../constants/discoveryAcquisitionProfiles.js'
 import { formatDateOnly, formatDateTimeParts } from '../../utils/dateTime.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
@@ -600,6 +605,17 @@ const formatDiscoveryEvidenceSummary = ({ count, evidence, evidenceReady, keys }
 
 const getDiscoveryProjection = (renderer) =>
   renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
+
+const getDiscoveryAcquisitionProfile = (discovery) => {
+  const profile = String(discovery?.acquisition?.profile || discovery?.acquisitionProfile || '').trim().toUpperCase()
+  if (profile === DISCOVERY_ACQUISITION_PROFILES.STANDARD) return profile
+  return DISCOVERY_ACQUISITION_PROFILES.STANDARD
+}
+
+const getDiscoveryAcquisitionLabel = (profile) => {
+  if (profile === DISCOVERY_ACQUISITION_PROFILES.STANDARD) return 'Standard Acquisition'
+  return formatRuntimeTokenLabel(profile)
+}
 
 const getDiscoveryState = (renderer) => {
   const discovery = getDiscoveryProjection(renderer)
@@ -1559,6 +1575,7 @@ function DiscoverySection({
   const inputValues = discovery?.inputValues && typeof discovery.inputValues === 'object'
     ? discovery.inputValues
     : {}
+  const persistedAcquisitionProfile = getDiscoveryAcquisitionProfile(discovery)
   const [draftInputs, setDraftInputs] = useState({
     companyWebsite: inputValues.companyWebsite || '',
     companyName: inputValues.companyName || '',
@@ -1566,6 +1583,7 @@ function DiscoverySection({
     targetOffer: inputValues.targetOffer || '',
     notes: inputValues.notes || '',
   })
+  const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
   const inputsSummary = formatDiscoveryInputsSummary({
@@ -1581,6 +1599,19 @@ function DiscoverySection({
   })
   const sourceCount = Number(discovery?.lineageSummary?.sourceCount || 0)
   const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
+  const acquisition = discovery?.acquisition && typeof discovery.acquisition === 'object'
+    ? discovery.acquisition
+    : null
+  const coverage = acquisition?.coverage && typeof acquisition.coverage === 'object'
+    ? acquisition.coverage
+    : null
+  const coverageScore = Number.isFinite(Number(coverage?.score)) ? Number(coverage.score) : null
+  const hasPersistedEvidenceProfile = discovery?.evidenceReady === true
+    || Number(discovery?.evidenceSummary?.count || 0) > 0
+    || Boolean(discovery?.acceptedAt)
+  const acquisitionLabel = hasPersistedEvidenceProfile
+    ? getDiscoveryAcquisitionLabel(persistedAcquisitionProfile)
+    : getDiscoveryAcquisitionLabel(acquisitionProfile)
   const evidenceSources = Array.isArray(evidenceDetail?.lineage?.sources)
     ? evidenceDetail.lineage.sources
     : []
@@ -1623,9 +1654,13 @@ function DiscoverySection({
     }))
   }
 
+  const handleAcquisitionProfileChange = (event) => {
+    setAcquisitionProfile(event.target.value)
+  }
+
   const handleRefreshEvidence = async (event) => {
     event.preventDefault()
-    await onRefreshEvidence?.({ inputs: draftInputs })
+    await onRefreshEvidence?.({ acquisitionProfile, inputs: draftInputs })
   }
 
   const handleAcceptDiscovery = async () => {
@@ -1651,8 +1686,19 @@ function DiscoverySection({
             role="region"
             aria-label="Discovery state"
           >
-            <section className="runtime-workspace__section-panel" aria-label="Discovery inputs">
+            <section
+              className="runtime-workspace__section-panel runtime-workspace__section-panel--discovery-inputs"
+              aria-label="Discovery inputs"
+            >
               <h3>Discovery Inputs</h3>
+              <Select
+                id="runtime-discovery-acquisition-profile"
+                label="Acquisition Profile"
+                value={acquisitionProfile}
+                onChange={handleAcquisitionProfileChange}
+                options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
+                disabled={disabled}
+              />
               <Input
                 id="runtime-discovery-company-website"
                 label="Company Website"
@@ -1693,6 +1739,10 @@ function DiscoverySection({
             </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
             <h3>Evidence Pack</h3>
+            <p>
+              {acquisitionLabel}
+              {coverageScore !== null ? ` / Coverage ${coverageScore}%` : ''}
+            </p>
             <p>
               {hasEvidence
                 ? evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
@@ -2023,7 +2073,7 @@ function RuntimeWorkspace() {
     }))
   }
 
-  const handleRefreshDiscoveryEvidence = async ({ inputs }) => {
+  const handleRefreshDiscoveryEvidence = async ({ acquisitionProfile, inputs }) => {
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
       setDiscoveryFeedback({
@@ -2057,6 +2107,7 @@ function RuntimeWorkspace() {
           runtimeInstanceId,
           actionKey: resolvedActionKey,
           body: {
+            acquisitionProfile,
             inputs,
             expectedUpdatedAt,
           },
@@ -2065,6 +2116,7 @@ function RuntimeWorkspace() {
         await updateRuntimeDiscoveryInputs({
           runtimeInstanceId,
           body: {
+            acquisitionProfile,
             inputs,
             expectedUpdatedAt,
           },
@@ -2609,7 +2661,7 @@ function RuntimeWorkspace() {
         <main className="runtime-workspace__main" aria-label="Guided execution sections">
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
             <DiscoverySection
-              key={`discovery-${JSON.stringify(discovery?.inputValues || {})}`}
+              key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
               discovery={discovery}
               discoveryState={discoveryState}
               disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}

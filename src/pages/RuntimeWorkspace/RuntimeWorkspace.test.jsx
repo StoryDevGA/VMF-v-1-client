@@ -1155,6 +1155,7 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       body: {
+        acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
           companyName: 'Acme',
@@ -1208,6 +1209,8 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    expect(screen.getByRole('option', { name: /enhanced acquisition/i })).toBeDisabled()
+    expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
     await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
@@ -1217,6 +1220,7 @@ describe('RuntimeWorkspace', () => {
       runtimeInstanceId: 'value-narrative-001',
       actionKey: 'BUILD_EVIDENCE_PACK',
       body: {
+        acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
           companyName: 'Acme',
@@ -1229,6 +1233,54 @@ describe('RuntimeWorkspace', () => {
     })
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
+  })
+
+  it('keeps the evidence pack profile tied to persisted evidence until refresh runs', async () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: true,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {
+              companyName: 'Acme',
+            },
+            evidenceSummary: {
+              keys: ['source', 'inputKeys'],
+              count: 2,
+            },
+            lineageSummary: {
+              sourceCount: 1,
+              builderMode: 'DETERMINISTIC',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
+    expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
+
+    expect(screen.getByRole('option', { name: /enhanced acquisition/i })).toBeDisabled()
+    expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
+    expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
+    expect(within(evidencePack).queryByText('Enhanced')).not.toBeInTheDocument()
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(executeRuntimeAction).not.toHaveBeenCalled()
   })
 
   it('accepts ready discovery evidence through the discovery acceptance endpoint', async () => {
@@ -1478,6 +1530,7 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith(expect.objectContaining({
       runtimeInstanceId: 'value-narrative-001',
       body: expect.objectContaining({
+        acquisitionProfile: 'STANDARD',
         inputs: expect.objectContaining({
           companyName: 'Acme',
         }),

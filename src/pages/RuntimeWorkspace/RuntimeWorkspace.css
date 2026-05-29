@@ -696,6 +696,10 @@
   background-color: color-mix(in srgb, var(--color-background-secondary) 72%, var(--color-background));
 }
 
+.runtime-workspace__section-panel--discovery-inputs {
+  gap: calc(var(--spacing-sm) + var(--spacing-xs));
+}
+
 .runtime-workspace__section-panel h3,
 .runtime-workspace__compare h3 {
   margin: 0;

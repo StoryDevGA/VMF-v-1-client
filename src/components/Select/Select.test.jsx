@@ -63,6 +63,19 @@ describe('Select Component', () => {
     expect(screen.getByLabelText('Test Select')).toBeDisabled()
   })
 
+  it('should render disabled options when an option is unavailable', () => {
+    render(<Select
+      id="test"
+      label="Test Select"
+      options={[
+        ...options,
+        { value: 'option4', label: 'Option 4', disabled: true },
+      ]}
+    />)
+
+    expect(screen.getByRole('option', { name: 'Option 4' })).toBeDisabled()
+  })
+
   it('should display an error message', () => {
     render(<Select id="test" label="Test Select" options={options} error="This field is required" />)
     expect(screen.getByText('This field is required')).toBeInTheDocument()
