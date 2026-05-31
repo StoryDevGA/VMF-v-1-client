@@ -10,6 +10,7 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import RuntimeWorkspace from './RuntimeWorkspace'
@@ -21,6 +22,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
+  useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
 
@@ -33,6 +35,8 @@ const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
 const unwrapAcceptDiscovery = vi.fn()
+const reviewRuntimeDiscoveryEvidence = vi.fn()
+const unwrapReviewDiscoveryEvidence = vi.fn()
 const acceptRuntimeSection = vi.fn()
 const unwrapAcceptSection = vi.fn()
 
@@ -225,6 +229,8 @@ describe('RuntimeWorkspace', () => {
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
     unwrapAcceptDiscovery.mockReset()
+    reviewRuntimeDiscoveryEvidence.mockReset()
+    unwrapReviewDiscoveryEvidence.mockReset()
     acceptRuntimeSection.mockReset()
     unwrapAcceptSection.mockReset()
     window.confirm = vi.fn(() => true)
@@ -236,11 +242,14 @@ describe('RuntimeWorkspace', () => {
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
     acceptRuntimeDiscovery.mockReturnValue({ unwrap: unwrapAcceptDiscovery })
+    unwrapReviewDiscoveryEvidence.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
+    reviewRuntimeDiscoveryEvidence.mockReturnValue({ unwrap: unwrapReviewDiscoveryEvidence })
     unwrapAcceptSection.mockResolvedValue({ data: { section: { accepted: { content: 'Accepted final.' } } } })
     acceptRuntimeSection.mockReturnValue({ unwrap: unwrapAcceptSection })
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
+    useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
     useGetRuntimeEvidenceQuery.mockReturnValue({
       data: null,
       isFetching: false,
@@ -1066,6 +1075,10 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    expect(useGetRuntimeEvidenceQuery).toHaveBeenLastCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: true },
+    )
     await user.click(screen.getByRole('button', { name: /view sources/i }))
 
     expect(useGetRuntimeEvidenceQuery).toHaveBeenLastCalledWith(
@@ -1171,6 +1184,128 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByRole('status', { name: /status: discovery evidence refreshed/i })).toBeInTheDocument()
   })
 
+  it('uploads selected discovery documents with the governed evidence refresh request', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const discoveryDocument = new File(
+      ['Customer teams need governed workflow automation for value narratives.'],
+      'customer-notes.txt',
+      { type: 'text/plain' },
+    )
+
+    await user.upload(screen.getByLabelText('Upload Documents'), discoveryDocument)
+    expect(await screen.findByText('customer-notes.txt')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+
+    expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        acquisitionProfile: 'STANDARD',
+        documentSources: [
+          expect.objectContaining({
+            fileName: 'customer-notes.txt',
+            mimeType: 'text/plain',
+            assetType: 'CUSTOMER_DOCUMENT',
+            sizeBytes: discoveryDocument.size,
+            contentBase64: expect.stringMatching(/^data:text\/plain;base64,/),
+          }),
+        ],
+        inputs: {
+          companyWebsite: 'https://acme.example',
+          companyName: 'Acme',
+          marketRegion: 'UK enterprise',
+          targetOffer: 'Managed proposal platform',
+          notes: '',
+        },
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/discovery evidence refreshed/i)).toBeInTheDocument()
+  })
+
+  it('blocks evidence refresh while selected discovery documents are still preparing', async () => {
+    const OriginalFileReader = window.FileReader
+    window.FileReader = class PendingFileReader {
+      readAsDataURL() {}
+    }
+
+    try {
+      renderRuntimeWorkspace()
+
+      const discoveryDocument = new File(
+        ['Customer teams need governed workflow automation for value narratives.'],
+        'customer-notes.txt',
+        { type: 'text/plain' },
+      )
+
+      fireEvent.change(screen.getByLabelText('Upload Documents'), {
+        target: { files: [discoveryDocument] },
+      })
+
+      expect(await screen.findByText(/preparing selected documents/i)).toBeInTheDocument()
+      const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
+      expect(buildButton).toBeDisabled()
+      fireEvent.submit(buildButton.closest('form'))
+      expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    } finally {
+      window.FileReader = OriginalFileReader
+    }
+  })
+
+  it('blocks evidence refresh after discovery document validation fails', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace()
+
+    fireEvent.change(screen.getByLabelText('Upload Documents'), {
+      target: {
+        files: [
+          new File(['Unsupported executable content.'], 'customer-notes.exe', {
+            type: 'application/octet-stream',
+          }),
+        ],
+      },
+    })
+
+    expect(await screen.findByRole('status', {
+      name: /status: customer-notes\.exe is not a supported Discovery document type/i,
+    })).toBeInTheDocument()
+    const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
+    expect(buildButton).toBeDisabled()
+    await user.click(buildButton)
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+  })
+
   it('builds discovery evidence through a governed runtime action when projected', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -1209,7 +1344,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    expect(screen.getByRole('option', { name: /enhanced acquisition/i })).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
     await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
@@ -1233,6 +1368,68 @@ describe('RuntimeWorkspace', () => {
     })
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
+  })
+
+  it('sends Enhanced Acquisition when the enabled profile is selected', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              actionKey: 'BUILD_EVIDENCE_PACK',
+              governedAction: 'BUILD_EVIDENCE_PACK',
+              buttonLabel: 'Build Evidence Pack',
+              enabled: true,
+              successMessage: 'Evidence pack built.',
+            },
+          ],
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.selectOptions(screen.getByLabelText('Acquisition Profile'), 'ENHANCED')
+    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+
+    expect(executeRuntimeAction).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      actionKey: 'BUILD_EVIDENCE_PACK',
+      body: {
+        acquisitionProfile: 'ENHANCED',
+        inputs: {
+          companyWebsite: 'https://acme.example',
+          companyName: 'Acme',
+          marketRegion: 'UK enterprise',
+          targetOffer: 'Managed proposal platform',
+          notes: '',
+        },
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
   })
 
   it('keeps the evidence pack profile tied to persisted evidence until refresh runs', async () => {
@@ -1275,12 +1472,444 @@ describe('RuntimeWorkspace', () => {
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
 
-    expect(screen.getByRole('option', { name: /enhanced acquisition/i })).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
     expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
     expect(within(evidencePack).queryByText('Enhanced')).not.toBeInTheDocument()
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
     expect(executeRuntimeAction).not.toHaveBeenCalled()
+  })
+
+  it('renders source registry, evidence object, and discovery health projections without mock rows', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {},
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 5,
+              builderMode: 'DETERMINISTIC',
+            },
+            sourceRegistrySummary: {
+              count: 5,
+              sourceTypes: ['WEBSITE', 'DISCOVERY_NOTES'],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 5,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 5,
+              rejectedEvidenceCount: 0,
+            },
+            discoveryHealth: {
+              coveragePercent: 40,
+              confidence: 'STANDARD',
+              missingAreas: ['PROOF', 'ECONOMICS'],
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
+    expect(within(evidencePack).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
+      .toBeInTheDocument()
+    expect(within(evidencePack).getByText(/5 sources recorded via deterministic/i)).toBeInTheDocument()
+
+    const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
+    expect(within(sourceRegistry).getByText(/5 registered sources: Website, Discovery Notes/i)).toBeInTheDocument()
+
+    const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
+    expect(within(evidenceReview).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
+      .toBeInTheDocument()
+
+    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+    expect(within(discoveryHealth).getByText(/coverage 40% \/ standard confidence/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/missing areas: Proof, Economics/i)).toBeInTheDocument()
+  })
+
+  it('renders Enhanced Acquisition evidence as source-backed website evidence', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'ENHANCED',
+            acquisition: {
+              profile: 'ENHANCED',
+              coverage: {
+                score: 70,
+              },
+            },
+            inputValues: {},
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 6,
+              builderMode: 'DETERMINISTIC_WEBSITE_ACQUISITION',
+            },
+            sourceRegistrySummary: {
+              count: 6,
+              sourceTypes: ['WEBSITE', 'DISCOVERY_NOTES'],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 11,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 11,
+              rejectedEvidenceCount: 0,
+            },
+            discoveryHealth: {
+              coveragePercent: 70,
+              confidence: 'SOURCE_BACKED',
+              missingAreas: ['ECONOMICS'],
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
+    expect(within(evidencePack).getByText(/Enhanced Acquisition \/ Coverage 70%/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/11 evidence objects: 0 accepted, 11 pending review, 0 rejected/i))
+      .toBeInTheDocument()
+    expect(within(evidencePack).getByText(/6 sources recorded via Deterministic Website Acquisition/i))
+      .toBeInTheDocument()
+
+    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+    expect(within(discoveryHealth).getByText(/coverage 70% \/ Source Backed confidence/i)).toBeInTheDocument()
+  })
+
+  it('reviews an evidence object from the evidence details projection', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {},
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 1,
+              builderMode: 'DETERMINISTIC',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          discovery: {
+            sourceRegistry: [
+              {
+                sourceId: 'input_companyWebsite',
+                sourceType: 'WEBSITE',
+                label: 'Company Website',
+                acquisitionStatus: 'CAPTURED',
+                evidenceProduced: 1,
+                url: 'https://acme.example',
+              },
+            ],
+            evidenceObjects: [
+              {
+                evidenceObjectId: 'evidence_companyWebsite_fixture',
+                sourceId: 'input_companyWebsite',
+                category: 'Company',
+                coverageArea: 'Company',
+                extractedFact: 'Company website: https://acme.example',
+                reviewStatus: 'PENDING',
+              },
+            ],
+          },
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+    const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
+    expect(within(evidenceSources).getByText('Company Website')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Company website: https://acme.example')).toBeInTheDocument()
+
+    await user.click(within(evidenceSources).getByRole('button', {
+      name: /reject evidence object evidence_companyWebsite_fixture/i,
+    }))
+
+    expect(reviewRuntimeDiscoveryEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      evidenceObjectId: 'evidence_companyWebsite_fixture',
+      body: {
+        reviewStatus: 'REJECTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/evidence object rejected/i)).toBeInTheDocument()
+  })
+
+  it('serializes governed evidence review actions while a review mutation is in flight', async () => {
+    const user = userEvent.setup()
+    unwrapReviewDiscoveryEvidence.mockReturnValueOnce(new Promise(() => {}))
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {},
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 2,
+              builderMode: 'DETERMINISTIC',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          discovery: {
+            evidenceObjects: [
+              {
+                evidenceObjectId: 'evidence_companyWebsite_fixture',
+                sourceId: 'input_companyWebsite',
+                category: 'Company',
+                coverageArea: 'Company',
+                extractedFact: 'Company website: https://acme.example',
+                reviewStatus: 'PENDING',
+              },
+              {
+                evidenceObjectId: 'evidence_targetOffer_fixture',
+                sourceId: 'input_targetOffer',
+                category: 'Products',
+                coverageArea: 'Products',
+                extractedFact: 'Target offer: Managed proposal platform',
+                reviewStatus: 'PENDING',
+              },
+            ],
+          },
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+    const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
+    await user.click(within(evidenceSources).getByRole('button', {
+      name: /reject evidence object evidence_companyWebsite_fixture/i,
+    }))
+
+    expect(reviewRuntimeDiscoveryEvidence).toHaveBeenCalledTimes(1)
+    expect(within(evidenceSources).getByRole('button', {
+      name: /reject evidence object evidence_companyWebsite_fixture/i,
+    })).toBeDisabled()
+    expect(within(evidenceSources).getByRole('button', {
+      name: /accept evidence object evidence_targetOffer_fixture/i,
+    })).toBeDisabled()
+
+    await user.click(within(evidenceSources).getByRole('button', {
+      name: /accept evidence object evidence_targetOffer_fixture/i,
+    }))
+    expect(reviewRuntimeDiscoveryEvidence).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps discovery mutations read-only for immutable lifecycle truth', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          lifecycle: {
+            stage: 'APPROVED',
+          },
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: true,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {
+              companyWebsite: 'https://acme.example',
+              companyName: 'Acme',
+              marketRegion: 'UK enterprise',
+              targetOffer: 'Managed proposal platform',
+            },
+            sourceRegistrySummary: {
+              count: 0,
+              sourceTypes: [],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 0,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 0,
+              rejectedEvidenceCount: 0,
+            },
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 1,
+              builderMode: 'DETERMINISTIC',
+            },
+            scopedViews: {},
+            acceptedAt: '2026-05-24T09:00:00.000Z',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          discovery: {
+            sourceRegistry: [
+              {
+                sourceId: 'input_companyWebsite',
+                sourceType: 'WEBSITE',
+                label: 'Company Website',
+                acquisitionStatus: 'CAPTURED',
+                evidenceProduced: 1,
+                url: 'https://acme.example',
+              },
+            ],
+            evidenceObjects: [
+              {
+                evidenceObjectId: 'evidence_companyWebsite_fixture',
+                sourceId: 'input_companyWebsite',
+                category: 'Company',
+                coverageArea: 'Company',
+                extractedFact: 'Company website: https://acme.example',
+                reviewStatus: 'PENDING',
+              },
+            ],
+            discoveryHealth: {
+              coveragePercent: 10,
+              confidence: 'USER_PROVIDED',
+              evidenceObjectCount: 1,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 1,
+              rejectedEvidenceCount: 0,
+              sourceCount: 1,
+              missingAreas: ['Products', 'Proof'],
+            },
+          },
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    const lifecycleReasons = screen.getAllByText(/runtime lifecycle truth is approved or published/i)
+    const refreshButton = screen.getByRole('button', { name: /refresh evidence pack/i })
+    const acceptEvidenceButton = screen.getByRole('button', { name: /accept evidence/i })
+    const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
+    const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
+    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+
+    expect(screen.getByLabelText('Company Website')).toBeDisabled()
+    expect(lifecycleReasons).toHaveLength(2)
+    expect(refreshButton).toBeDisabled()
+    expect(refreshButton).toHaveAttribute('aria-describedby', 'discovery-build-disabled-reason')
+    expect(acceptEvidenceButton).toBeDisabled()
+    expect(acceptEvidenceButton).toHaveAttribute('aria-describedby', 'discovery-accept-disabled-reason')
+    expect(sourceRegistry).toHaveTextContent('1 registered source: Website.')
+    expect(evidenceReview).toHaveTextContent('1 evidence object: 0 accepted, 1 pending review, 0 rejected.')
+    expect(discoveryHealth).toHaveTextContent('Coverage 10% / User Provided confidence.')
+
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
+    expect(within(evidenceSources).getByText('Company Website')).toBeInTheDocument()
+    expect(within(evidenceSources).getByRole('button', {
+      name: /accept evidence object evidence_companyWebsite_fixture/i,
+    })).toBeDisabled()
+    expect(within(evidenceSources).getByRole('button', {
+      name: /reject evidence object evidence_companyWebsite_fixture/i,
+    })).toBeDisabled()
+    expect(reviewRuntimeDiscoveryEvidence).not.toHaveBeenCalled()
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
   })
 
   it('accepts ready discovery evidence through the discovery acceptance endpoint', async () => {

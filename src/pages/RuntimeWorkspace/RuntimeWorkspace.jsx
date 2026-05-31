@@ -10,6 +10,7 @@ import {
   MdRefresh,
   MdSave,
   MdOutlineWarningAmber,
+  MdUploadFile,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
@@ -29,6 +30,7 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import {
@@ -56,6 +58,20 @@ const DISCOVERY_INPUT_LABELS = Object.freeze({
   targetOffer: 'Target product or offer',
   notes: 'Optional notes',
 })
+const DISCOVERY_DOCUMENT_ACCEPT = [
+  '.csv',
+  '.docx',
+  '.md',
+  '.pdf',
+  '.txt',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/csv',
+  'text/markdown',
+  'text/plain',
+].join(',')
+const DISCOVERY_DOCUMENT_MAX_COUNT = 5
+const DISCOVERY_DOCUMENT_MAX_BYTES = 2500000
 
 const getRendererPayload = (response) => response?.data ?? null
 
@@ -69,6 +85,54 @@ const getRuntimeWorkspaceBackTarget = (state) => {
     return from
   }
   return RUNTIME_WORKSPACE_BACK_FALLBACK
+}
+
+const getFileExtension = (fileName = '') => {
+  const normalized = String(fileName || '').trim().toLowerCase()
+  const dotIndex = normalized.lastIndexOf('.')
+  return dotIndex >= 0 ? normalized.slice(dotIndex) : ''
+}
+
+const isSupportedDiscoveryDocument = (file) => {
+  const mimeType = String(file?.type || '').trim().toLowerCase()
+  const extension = getFileExtension(file?.name)
+  return [
+    '.csv',
+    '.docx',
+    '.md',
+    '.pdf',
+    '.txt',
+  ].includes(extension) || [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/csv',
+    'text/markdown',
+    'text/plain',
+  ].includes(mimeType)
+}
+
+const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
+  reader.readAsDataURL(file)
+})
+
+const buildDiscoveryDocumentSource = async (file) => {
+  if (!isSupportedDiscoveryDocument(file)) {
+    throw new Error(`${file.name} is not a supported Discovery document type.`)
+  }
+  if (file.size > DISCOVERY_DOCUMENT_MAX_BYTES) {
+    throw new Error(`${file.name} exceeds the Discovery document size limit.`)
+  }
+
+  return {
+    fileName: file.name,
+    mimeType: file.type || '',
+    assetType: 'CUSTOMER_DOCUMENT',
+    sizeBytes: file.size,
+    contentBase64: await readFileAsDataUrl(file),
+  }
 }
 
 const RENDERER_WARNING_SEVERITY_VARIANTS = Object.freeze({
@@ -137,6 +201,8 @@ const DISCOVERY_ACTION_KEYS = Object.freeze({
 })
 
 const DISCOVERY_ACTION_KEY_SET = new Set(Object.values(DISCOVERY_ACTION_KEYS))
+const IMMUTABLE_RUNTIME_LIFECYCLE_STAGES = new Set(['APPROVED', 'PUBLISHED', 'LOCKED'])
+const IMMUTABLE_RUNTIME_DISCOVERY_REASON = 'Runtime lifecycle truth is approved or published and cannot be directly mutated.'
 
 const DISCOVERY_NAV_KEY = 'discovery'
 const ACTIVITY_PREVIEW_LIMIT = 3
@@ -603,17 +669,99 @@ const formatDiscoveryEvidenceSummary = ({ count, evidence, evidenceReady, keys }
   return ''
 }
 
+const getSummaryCount = (summary, key) => {
+  const count = Number(summary?.[key])
+  return Number.isFinite(count) ? count : 0
+}
+
+const hasSourceRegistrySummary = (summary) =>
+  getSummaryCount(summary, 'count') > 0
+  || (Array.isArray(summary?.sourceTypes) && summary.sourceTypes.length > 0)
+
+const hasEvidenceObjectSummary = (summary) =>
+  getSummaryCount(summary, 'evidenceObjectCount') > 0
+
+const hasDiscoveryHealthSummary = (summary) =>
+  Boolean(
+    summary
+    && typeof summary === 'object'
+    && !Array.isArray(summary)
+    && (
+      Number.isFinite(Number(summary.coveragePercent))
+      || getSummaryCount(summary, 'evidenceObjectCount') > 0
+      || getSummaryCount(summary, 'sourceCount') > 0
+      || (Array.isArray(summary.missingAreas) && summary.missingAreas.length > 0)
+    ),
+  )
+
+const formatDiscoveryEvidenceObjectSummary = (summary = {}) => {
+  const evidenceObjectCount = getSummaryCount(summary, 'evidenceObjectCount')
+  if (evidenceObjectCount === 0) return ''
+
+  const acceptedCount = getSummaryCount(summary, 'acceptedEvidenceCount')
+  const pendingCount = getSummaryCount(summary, 'pendingReviewCount')
+  const rejectedCount = getSummaryCount(summary, 'rejectedEvidenceCount')
+
+  return `${evidenceObjectCount} evidence object${evidenceObjectCount === 1 ? '' : 's'}: ${
+    acceptedCount
+  } accepted, ${pendingCount} pending review, ${rejectedCount} rejected.`
+}
+
+const formatSourceRegistrySummary = (summary = {}) => {
+  const sourceCount = getSummaryCount(summary, 'count')
+  if (sourceCount === 0) return ''
+  const sourceTypes = Array.isArray(summary.sourceTypes)
+    ? summary.sourceTypes.map(formatRuntimeTokenLabel).filter(Boolean)
+    : []
+
+  return `${sourceCount} registered source${sourceCount === 1 ? '' : 's'}${
+    sourceTypes.length > 0 ? `: ${sourceTypes.join(', ')}` : ''
+  }.`
+}
+
+const getReviewStatusVariant = (reviewStatus) => {
+  const normalizedStatus = String(reviewStatus || '').trim().toUpperCase()
+  if (normalizedStatus === 'ACCEPTED') return 'success'
+  if (normalizedStatus === 'REJECTED') return 'error'
+  return 'neutral'
+}
+
+const getEvidenceObjectActionLabel = (evidenceObject = {}) => {
+  const candidate = evidenceObject.evidenceObjectId
+    || evidenceObject.extractedFact
+    || evidenceObject.category
+    || evidenceObject.sourceId
+    || 'evidence object'
+  return String(candidate || '').trim() || 'evidence object'
+}
+
+const getDiscoverySourceRegistry = ({ discovery, evidenceDetail }) => {
+  if (Array.isArray(evidenceDetail?.sourceRegistry)) return evidenceDetail.sourceRegistry
+  if (Array.isArray(discovery?.sourceRegistry)) return discovery.sourceRegistry
+  return EMPTY_ARRAY
+}
+
+const getDiscoveryEvidenceObjects = ({ discovery, evidenceDetail }) => {
+  if (Array.isArray(evidenceDetail?.evidenceObjects)) return evidenceDetail.evidenceObjects
+  if (Array.isArray(discovery?.evidenceObjects)) return discovery.evidenceObjects
+  return EMPTY_ARRAY
+}
+
 const getDiscoveryProjection = (renderer) =>
   renderer?.discovery ?? renderer?.evidencePack ?? renderer?.evidence_pack ?? null
 
 const getDiscoveryAcquisitionProfile = (discovery) => {
   const profile = String(discovery?.acquisition?.profile || discovery?.acquisitionProfile || '').trim().toUpperCase()
-  if (profile === DISCOVERY_ACQUISITION_PROFILES.STANDARD) return profile
+  if (
+    profile === DISCOVERY_ACQUISITION_PROFILES.STANDARD
+    || profile === DISCOVERY_ACQUISITION_PROFILES.ENHANCED
+  ) return profile
   return DISCOVERY_ACQUISITION_PROFILES.STANDARD
 }
 
 const getDiscoveryAcquisitionLabel = (profile) => {
   if (profile === DISCOVERY_ACQUISITION_PROFILES.STANDARD) return 'Standard Acquisition'
+  if (profile === DISCOVERY_ACQUISITION_PROFILES.ENHANCED) return 'Enhanced Acquisition'
   return formatRuntimeTokenLabel(profile)
 }
 
@@ -1563,10 +1711,13 @@ function DiscoverySection({
   evidenceDetailLoading = false,
   feedback = null,
   discoveryActions = {},
+  mutationDisabledReason = '',
   executingActionKey = '',
   onAcceptDiscovery,
+  onReviewEvidenceObject,
   onRefreshEvidence,
   onToggleSources,
+  reviewingEvidenceObjectId = '',
   saving = false,
   showSources = false,
 }) {
@@ -1583,7 +1734,11 @@ function DiscoverySection({
     targetOffer: inputValues.targetOffer || '',
     notes: inputValues.notes || '',
   })
+  const [draftDocumentSources, setDraftDocumentSources] = useState([])
+  const [documentUploadError, setDocumentUploadError] = useState('')
+  const [documentUploadPreparing, setDocumentUploadPreparing] = useState(false)
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
+  const documentUploadPreparingRef = useRef(false)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
   const inputsSummary = formatDiscoveryInputsSummary({
@@ -1597,7 +1752,56 @@ function DiscoverySection({
     evidenceReady: discovery?.evidenceReady === true,
     keys: evidenceSummaryKeys,
   })
-  const sourceCount = Number(discovery?.lineageSummary?.sourceCount || 0)
+  const sourceRegistry = getDiscoverySourceRegistry({ discovery, evidenceDetail })
+  const evidenceObjects = getDiscoveryEvidenceObjects({ discovery, evidenceDetail })
+  const rawSourceRegistrySummary = hasSourceRegistrySummary(discovery?.sourceRegistrySummary)
+    ? discovery.sourceRegistrySummary
+    : hasSourceRegistrySummary(evidenceDetail?.sourceRegistrySummary)
+      ? evidenceDetail.sourceRegistrySummary
+      : {}
+  const sourceRegistrySummary = {
+    count: Number.isFinite(Number(rawSourceRegistrySummary.count))
+      ? Number(rawSourceRegistrySummary.count)
+      : sourceRegistry.length,
+    sourceTypes: Array.isArray(rawSourceRegistrySummary.sourceTypes)
+      ? rawSourceRegistrySummary.sourceTypes
+      : Array.from(new Set(sourceRegistry.map((source) => source.sourceType).filter(Boolean))),
+  }
+  const rawEvidenceObjectSummary = hasEvidenceObjectSummary(discovery?.evidenceObjectSummary)
+    ? discovery.evidenceObjectSummary
+    : hasEvidenceObjectSummary(evidenceDetail?.evidenceObjectSummary)
+      ? evidenceDetail.evidenceObjectSummary
+      : hasEvidenceObjectSummary(evidenceDetail?.evidence?.reviewSummary)
+        ? evidenceDetail.evidence.reviewSummary
+        : {}
+  const evidenceObjectSummary = {
+    evidenceObjectCount: Number.isFinite(Number(rawEvidenceObjectSummary.evidenceObjectCount))
+      ? Number(rawEvidenceObjectSummary.evidenceObjectCount)
+      : evidenceObjects.length,
+    acceptedEvidenceCount: Number.isFinite(Number(rawEvidenceObjectSummary.acceptedEvidenceCount))
+      ? Number(rawEvidenceObjectSummary.acceptedEvidenceCount)
+      : evidenceObjects.filter((evidenceObject) => evidenceObject.reviewStatus === 'ACCEPTED').length,
+    pendingReviewCount: Number.isFinite(Number(rawEvidenceObjectSummary.pendingReviewCount))
+      ? Number(rawEvidenceObjectSummary.pendingReviewCount)
+      : evidenceObjects.filter((evidenceObject) => evidenceObject.reviewStatus === 'PENDING').length,
+    rejectedEvidenceCount: Number.isFinite(Number(rawEvidenceObjectSummary.rejectedEvidenceCount))
+      ? Number(rawEvidenceObjectSummary.rejectedEvidenceCount)
+      : evidenceObjects.filter((evidenceObject) => evidenceObject.reviewStatus === 'REJECTED').length,
+  }
+  const evidenceObjectSummaryText = formatDiscoveryEvidenceObjectSummary(evidenceObjectSummary)
+  const sourceRegistrySummaryText = formatSourceRegistrySummary(sourceRegistrySummary)
+  const discoveryHealth = hasDiscoveryHealthSummary(discovery?.discoveryHealth)
+    ? discovery.discoveryHealth
+    : hasDiscoveryHealthSummary(evidenceDetail?.discoveryHealth)
+      ? evidenceDetail.discoveryHealth
+      : {}
+  const healthCoveragePercent = Number.isFinite(Number(discoveryHealth.coveragePercent))
+    ? Number(discoveryHealth.coveragePercent)
+    : null
+  const healthMissingAreas = Array.isArray(discoveryHealth.missingAreas)
+    ? discoveryHealth.missingAreas.map(formatRuntimeTokenLabel).filter(Boolean)
+    : []
+  const sourceCount = sourceRegistrySummary.count || Number(discovery?.lineageSummary?.sourceCount || 0)
   const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
   const acquisition = discovery?.acquisition && typeof discovery.acquisition === 'object'
     ? discovery.acquisition
@@ -1612,7 +1816,7 @@ function DiscoverySection({
   const acquisitionLabel = hasPersistedEvidenceProfile
     ? getDiscoveryAcquisitionLabel(persistedAcquisitionProfile)
     : getDiscoveryAcquisitionLabel(acquisitionProfile)
-  const evidenceSources = Array.isArray(evidenceDetail?.lineage?.sources)
+  const lineageSources = Array.isArray(evidenceDetail?.lineage?.sources)
     ? evidenceDetail.lineage.sources
     : []
   const isAccepted = discovery?.accepted === true
@@ -1626,9 +1830,14 @@ function DiscoverySection({
     || null
   const acceptAction = discoveryActions[DISCOVERY_ACTION_KEYS.ACCEPT_EVIDENCE] || null
   const buildButtonLabel = hasEvidence ? 'Refresh Evidence Pack' : 'Build Evidence Pack'
-  const buildDisabledReason = buildAction && !buildAction.enabled
-    ? buildAction.disabledReason || 'Discovery evidence action is currently unavailable.'
-    : ''
+  const documentBuildDisabledReason = documentUploadPreparing
+    ? 'Wait for selected documents to finish preparing before refreshing evidence.'
+    : documentUploadError
+  const buildDisabledReason = mutationDisabledReason
+    || documentBuildDisabledReason
+    || (buildAction && !buildAction.enabled
+      ? buildAction.disabledReason || 'Discovery evidence action is currently unavailable.'
+      : '')
   const buildReasonId = 'discovery-build-disabled-reason'
   const sourcesReasonId = 'discovery-sources-disabled-reason'
   const sourcesDisabledReason = hasEvidence ? '' : 'Build an evidence pack before viewing sources.'
@@ -1637,15 +1846,18 @@ function DiscoverySection({
     && !isAccepted
     && !needsRefresh
     && !disabled
+    && !mutationDisabledReason
     && (!acceptAction || acceptAction.enabled)
-  const acceptDisabledReason = acceptAction && !acceptAction.enabled
-    ? acceptAction.disabledReason || 'Evidence acceptance is currently unavailable.'
-    : ''
+  const acceptDisabledReason = mutationDisabledReason
+    || (acceptAction && !acceptAction.enabled
+      ? acceptAction.disabledReason || 'Evidence acceptance is currently unavailable.'
+      : '')
   const acceptReasonId = 'discovery-accept-disabled-reason'
   const buildExecutingActionKey = normalizeRuntimeActionToken(buildAction?.governedAction || buildAction?.actionKey)
   const acceptExecutingActionKey = normalizeRuntimeActionToken(acceptAction?.governedAction || acceptAction?.actionKey)
   const isBuildExecuting = Boolean(buildExecutingActionKey && executingActionKey === buildExecutingActionKey)
   const isAcceptExecuting = Boolean(acceptExecutingActionKey && executingActionKey === acceptExecutingActionKey)
+  const evidenceReviewInFlight = Boolean(reviewingEvidenceObjectId)
 
   const handleInputChange = (field) => (event) => {
     setDraftInputs((current) => ({
@@ -1658,13 +1870,63 @@ function DiscoverySection({
     setAcquisitionProfile(event.target.value)
   }
 
+  const handleDocumentUploadChange = async (event) => {
+    const files = Array.from(event.target.files || [])
+    documentUploadPreparingRef.current = true
+    setDocumentUploadPreparing(true)
+    setDocumentUploadError('')
+
+    try {
+      if (files.length === 0) {
+        setDraftDocumentSources([])
+        return
+      }
+
+      if (files.length > DISCOVERY_DOCUMENT_MAX_COUNT) {
+        setDraftDocumentSources([])
+        setDocumentUploadError(`Select ${DISCOVERY_DOCUMENT_MAX_COUNT} documents or fewer.`)
+        return
+      }
+
+      const documentSources = await Promise.all(files.map(buildDiscoveryDocumentSource))
+      setDraftDocumentSources(documentSources)
+    } catch (err) {
+      setDraftDocumentSources([])
+      setDocumentUploadError(err?.message || 'One or more documents could not be prepared for ingestion.')
+    } finally {
+      documentUploadPreparingRef.current = false
+      setDocumentUploadPreparing(false)
+    }
+  }
+
   const handleRefreshEvidence = async (event) => {
     event.preventDefault()
-    await onRefreshEvidence?.({ acquisitionProfile, inputs: draftInputs })
+    if (documentUploadPreparingRef.current || documentUploadPreparing) {
+      setDocumentUploadError('Wait for selected documents to finish preparing before refreshing evidence.')
+      return false
+    }
+    if (documentUploadError) return false
+
+    const refreshed = await onRefreshEvidence?.({
+      acquisitionProfile,
+      documentSources: draftDocumentSources.length > 0 ? draftDocumentSources : undefined,
+      inputs: draftInputs,
+    })
+    if (refreshed) {
+      setDraftDocumentSources([])
+      setDocumentUploadError('')
+    }
   }
 
   const handleAcceptDiscovery = async () => {
     await onAcceptDiscovery?.()
+  }
+
+  const handleReviewEvidenceObject = (evidenceObject, reviewStatus) => async () => {
+    await onReviewEvidenceObject?.({
+      evidenceObjectId: evidenceObject.evidenceObjectId,
+      reviewStatus,
+    })
   }
 
   return (
@@ -1735,6 +1997,35 @@ function DiscoverySection({
                 disabled={disabled}
                 rows={4}
               />
+              <div className="runtime-workspace__document-upload">
+                <Input
+                  id="runtime-discovery-documents"
+                  type="file"
+                  label="Upload Documents"
+                  accept={DISCOVERY_DOCUMENT_ACCEPT}
+                  multiple
+                  onChange={handleDocumentUploadChange}
+                  disabled={disabled || saving || documentUploadPreparing}
+                  leftIcon={<MdUploadFile aria-hidden="true" />}
+                  helperText="PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack."
+                />
+                {documentUploadPreparing ? (
+                  <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
+                ) : null}
+                {documentUploadError ? (
+                  <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
+                ) : null}
+                {draftDocumentSources.length > 0 ? (
+                  <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label="Selected discovery documents">
+                    {draftDocumentSources.map((documentSource) => (
+                      <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
+                        <strong>{documentSource.fileName}</strong>
+                        <span>{`${Math.max(1, Math.round((documentSource.sizeBytes || 0) / 1024))} KB ready for ingestion`}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <p>{inputsSummary || 'No discovery input projection is available yet.'}</p>
             </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
@@ -1745,13 +2036,38 @@ function DiscoverySection({
             </p>
             <p>
               {hasEvidence
-                ? evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
+                ? evidenceObjectSummaryText || evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
                 : 'No discovery evidence pack is projected for this runtime yet.'}
             </p>
             <p>
               {sourceCount > 0
-                ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${builderMode}` : ''}.`
+                ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
                 : 'No source lineage is recorded for this runtime yet.'}
+            </p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Source registry">
+            <h3>Source Registry</h3>
+            <p>
+              {sourceRegistrySummaryText || 'No source registry entries are projected for this runtime yet.'}
+            </p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Evidence review">
+            <h3>Evidence Review</h3>
+            <p>
+              {evidenceObjectSummaryText || 'No reviewable evidence objects are projected for this runtime yet.'}
+            </p>
+          </section>
+          <section className="runtime-workspace__section-panel" aria-label="Discovery health">
+            <h3>Discovery Health</h3>
+            <p>
+              {healthCoveragePercent !== null
+                ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+                : 'Discovery health is not projected for this runtime yet.'}
+            </p>
+            <p className="runtime-workspace__section-note">
+              {healthMissingAreas.length > 0
+                ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
+                : 'No missing areas are currently projected.'}
             </p>
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
@@ -1788,7 +2104,8 @@ function DiscoverySection({
               size="sm"
               leftIcon={<MdRefresh aria-hidden="true" />}
               disabled={disabled || Boolean(buildDisabledReason)}
-              loading={saving || isBuildExecuting}
+              loading={saving || isBuildExecuting || documentUploadPreparing}
+              aria-label={buildButtonLabel}
               aria-describedby={buildDisabledReason ? buildReasonId : undefined}
             >
               {buildButtonLabel}
@@ -1837,15 +2154,102 @@ function DiscoverySection({
                 <Status variant="info" size="sm" showIcon>Loading sources</Status>
               ) : evidenceDetailError ? (
                 <Status variant="error" size="sm" showIcon>{evidenceDetailError.message}</Status>
-              ) : evidenceSources.length > 0 ? (
-                <ul className="runtime-workspace__plain-list">
-                  {evidenceSources.map((source) => (
-                    <li key={source.sourceId || source.fieldKey || source.valueHash}>
-                      <strong>{source.fieldKey || source.sourceId || 'Source'}</strong>
-                      <span>{[source.type, source.status, source.url].filter(Boolean).join(' / ')}</span>
-                    </li>
-                  ))}
-                </ul>
+              ) : sourceRegistry.length > 0 || evidenceObjects.length > 0 || lineageSources.length > 0 ? (
+                <div className="runtime-workspace__evidence-detail-grid">
+                  <div>
+                    <h4>Source Registry</h4>
+                    {sourceRegistry.length > 0 ? (
+                      <ul className="runtime-workspace__plain-list">
+                        {sourceRegistry.map((source) => (
+                          <li key={source.sourceId || source.fieldKey || source.lineageRef}>
+                            <strong>{source.label || source.fieldKey || source.sourceId || 'Source'}</strong>
+                            <span>
+                              {[
+                                formatRuntimeTokenLabel(source.sourceType),
+                                formatRuntimeTokenLabel(source.acquisitionStatus || source.status),
+                                source.evidenceProduced ? `${source.evidenceProduced} evidence object${source.evidenceProduced === 1 ? '' : 's'}` : '',
+                                source.fileName,
+                                source.url,
+                              ].filter(Boolean).join(' / ')}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No source registry entries are available for this evidence pack.</p>
+                    )}
+                  </div>
+                  <div>
+                    <h4>Evidence Objects</h4>
+                    {evidenceObjects.length > 0 ? (
+                      <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects">
+                        {evidenceObjects.map((evidenceObject) => {
+                          const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
+                          const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
+                          const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
+                          const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
+                            && !disabled
+                            && !mutationDisabledReason
+                            && !evidenceReviewInFlight
+
+                          return (
+                            <li key={evidenceObject.evidenceObjectId || evidenceObject.lineageRef}>
+                              <div className="runtime-workspace__evidence-object-heading">
+                                <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
+                                <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
+                                  {formatRuntimeTokenLabel(reviewStatus)}
+                                </Badge>
+                              </div>
+                              <span>{evidenceObject.extractedFact || 'No extracted fact text is available.'}</span>
+                              <span className="runtime-workspace__section-note">
+                                {[evidenceObject.coverageArea, evidenceObject.sourceId].filter(Boolean).join(' / ')}
+                              </span>
+                              <div className="runtime-workspace__evidence-object-actions">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
+                                  loading={isReviewing && reviewStatus !== 'ACCEPTED'}
+                                  aria-label={`Accept evidence object ${actionLabel}`}
+                                  onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
+                                >
+                                  Accept
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="danger"
+                                  size="sm"
+                                  disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
+                                  loading={isReviewing && reviewStatus !== 'REJECTED'}
+                                  aria-label={`Reject evidence object ${actionLabel}`}
+                                  onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p>No reviewable evidence objects are available for this evidence pack.</p>
+                    )}
+                  </div>
+                  {lineageSources.length > 0 ? (
+                    <div>
+                      <h4>Lineage</h4>
+                      <ul className="runtime-workspace__plain-list">
+                        {lineageSources.map((source) => (
+                          <li key={source.sourceId || source.fieldKey || source.valueHash}>
+                            <strong>{source.label || source.fieldKey || source.fileName || source.sourceId || 'Source'}</strong>
+                            <span>{[source.type, source.status, source.fileName, source.url].filter(Boolean).join(' / ')}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <p>No source lineage is available for this evidence pack.</p>
               )}
@@ -1874,11 +2278,13 @@ function RuntimeWorkspace() {
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
+  const [reviewRuntimeDiscoveryEvidence] = useReviewRuntimeDiscoveryEvidenceMutation()
   const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
   const [acceptingRuntimePath, setAcceptingRuntimePath] = useState('')
   const [savingDiscovery, setSavingDiscovery] = useState(false)
+  const [reviewingEvidenceObjectId, setReviewingEvidenceObjectId] = useState('')
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [actionFeedback, setActionFeedback] = useState(null)
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
@@ -1889,6 +2295,7 @@ function RuntimeWorkspace() {
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
   const hasAutoSelectedInitialSection = useRef(false)
+  const reviewingEvidenceObjectIdRef = useRef('')
 
   const renderer = getRendererPayload(rendererResponse)
   const runtimeInstance = renderer?.runtimeInstance ?? {}
@@ -1925,6 +2332,9 @@ function RuntimeWorkspace() {
     : activityDisplayEvents.slice(0, ACTIVITY_PREVIEW_LIMIT)
   const discovery = getDiscoveryProjection(renderer)
   const discoveryState = getDiscoveryState(renderer)
+  const lifecycleStage = normalizeRuntimeActionToken(renderer?.lifecycle?.stage)
+  const isRuntimeLifecycleImmutable = IMMUTABLE_RUNTIME_LIFECYCLE_STAGES.has(lifecycleStage)
+  const discoveryMutationDisabledReason = isRuntimeLifecycleImmutable ? IMMUTABLE_RUNTIME_DISCOVERY_REASON : ''
   const {
     data: evidenceResponse,
     isFetching: isFetchingEvidence,
@@ -2073,7 +2483,7 @@ function RuntimeWorkspace() {
     }))
   }
 
-  const handleRefreshDiscoveryEvidence = async ({ acquisitionProfile, inputs }) => {
+  const handleRefreshDiscoveryEvidence = async ({ acquisitionProfile, documentSources, inputs }) => {
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
       setDiscoveryFeedback({
@@ -2108,6 +2518,7 @@ function RuntimeWorkspace() {
           actionKey: resolvedActionKey,
           body: {
             acquisitionProfile,
+            ...(documentSources ? { documentSources } : {}),
             inputs,
             expectedUpdatedAt,
           },
@@ -2117,6 +2528,7 @@ function RuntimeWorkspace() {
           runtimeInstanceId,
           body: {
             acquisitionProfile,
+            ...(documentSources ? { documentSources } : {}),
             inputs,
             expectedUpdatedAt,
           },
@@ -2193,6 +2605,61 @@ function RuntimeWorkspace() {
     } finally {
       setSavingDiscovery(false)
       setExecutingActionKey('')
+    }
+  }
+
+  const handleReviewEvidenceObject = async ({ evidenceObjectId, reviewStatus }) => {
+    if (reviewingEvidenceObjectIdRef.current) {
+      return false
+    }
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    const normalizedEvidenceObjectId = String(evidenceObjectId || '').trim()
+    if (!normalizedEvidenceObjectId) {
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: 'Discovery evidence object is missing its review identifier.',
+      })
+      return false
+    }
+
+    reviewingEvidenceObjectIdRef.current = normalizedEvidenceObjectId
+    setReviewingEvidenceObjectId(normalizedEvidenceObjectId)
+    setDiscoveryFeedback(null)
+
+    try {
+      await reviewRuntimeDiscoveryEvidence({
+        runtimeInstanceId,
+        evidenceObjectId: normalizedEvidenceObjectId,
+        body: {
+          reviewStatus,
+          expectedUpdatedAt,
+        },
+      }).unwrap()
+      setDiscoveryFeedback({
+        variant: 'success',
+        message: reviewStatus === 'REJECTED' ? 'Evidence object rejected.' : 'Evidence object accepted.',
+      })
+      await refetch()
+      return true
+    } catch (discoveryError) {
+      const normalizedError = normalizeError(discoveryError)
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      reviewingEvidenceObjectIdRef.current = ''
+      setReviewingEvidenceObjectId('')
     }
   }
 
@@ -2664,16 +3131,23 @@ function RuntimeWorkspace() {
               key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
               discovery={discovery}
               discoveryState={discoveryState}
-              disabled={savingDiscovery || !runtimeInstance?.updatedAt || !discovery || !discovery.inputValues}
+              disabled={savingDiscovery
+                || Boolean(discoveryMutationDisabledReason)
+                || !runtimeInstance?.updatedAt
+                || !discovery
+                || !discovery.inputValues}
               discoveryActions={discoveryActionByKey}
               evidenceDetail={evidenceDetail}
               evidenceDetailError={evidenceDetailError}
               evidenceDetailLoading={isFetchingEvidence}
               executingActionKey={executingActionKey}
               feedback={discoveryFeedback}
+              mutationDisabledReason={discoveryMutationDisabledReason}
               onAcceptDiscovery={handleAcceptDiscovery}
+              onReviewEvidenceObject={handleReviewEvidenceObject}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
               onToggleSources={() => setShowEvidenceSources((current) => !current)}
+              reviewingEvidenceObjectId={reviewingEvidenceObjectId}
               saving={savingDiscovery}
               showSources={showEvidenceSources}
             />

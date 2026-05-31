@@ -102,6 +102,14 @@ export const buildAcceptRuntimeDiscoveryQuery = ({ runtimeInstanceId, body }) =>
   body,
 })
 
+export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, evidenceObjectId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-evidence/${
+    encodeURIComponent(String(evidenceObjectId ?? '').trim())
+  }/review`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildAcceptRuntimeSectionQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-acceptance`,
   method: 'PATCH',
@@ -153,6 +161,7 @@ export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeI
 export const getExecuteRuntimeActionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeDiscoveryInputsInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getReviewRuntimeDiscoveryEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
@@ -197,6 +206,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getAcceptRuntimeDiscoveryInvalidationTags,
     }),
 
+    reviewRuntimeDiscoveryEvidence: build.mutation({
+      query: buildReviewRuntimeDiscoveryEvidenceQuery,
+      invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
+    }),
+
     acceptRuntimeSection: build.mutation({
       query: buildAcceptRuntimeSectionQuery,
       invalidatesTags: getAcceptRuntimeSectionInvalidationTags,
@@ -219,6 +233,7 @@ export const {
   useMutateRuntimeStateMutation,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
   useExecuteRuntimeActionMutation,
 } = runtimeInstanceApi
