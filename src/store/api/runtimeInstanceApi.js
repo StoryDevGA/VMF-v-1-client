@@ -102,6 +102,12 @@ export const buildAcceptRuntimeDiscoveryQuery = ({ runtimeInstanceId, body }) =>
   body,
 })
 
+export const buildResetRuntimeDiscoveryQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-reset`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, evidenceObjectId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-evidence/${
     encodeURIComponent(String(evidenceObjectId ?? '').trim())
@@ -161,6 +167,7 @@ export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeI
 export const getExecuteRuntimeActionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeDiscoveryInputsInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getResetRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewRuntimeDiscoveryEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInvalidationTags
 
@@ -206,6 +213,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getAcceptRuntimeDiscoveryInvalidationTags,
     }),
 
+    resetRuntimeDiscovery: build.mutation({
+      query: buildResetRuntimeDiscoveryQuery,
+      invalidatesTags: getResetRuntimeDiscoveryInvalidationTags,
+    }),
+
     reviewRuntimeDiscoveryEvidence: build.mutation({
       query: buildReviewRuntimeDiscoveryEvidenceQuery,
       invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
@@ -233,6 +245,7 @@ export const {
   useMutateRuntimeStateMutation,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
   useExecuteRuntimeActionMutation,

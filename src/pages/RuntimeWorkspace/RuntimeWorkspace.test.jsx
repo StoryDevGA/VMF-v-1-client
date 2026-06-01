@@ -10,6 +10,7 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -22,6 +23,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
+  useResetRuntimeDiscoveryMutation: vi.fn(),
   useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
@@ -35,6 +37,8 @@ const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
 const unwrapAcceptDiscovery = vi.fn()
+const resetRuntimeDiscovery = vi.fn()
+const unwrapResetDiscovery = vi.fn()
 const reviewRuntimeDiscoveryEvidence = vi.fn()
 const unwrapReviewDiscoveryEvidence = vi.fn()
 const acceptRuntimeSection = vi.fn()
@@ -229,6 +233,8 @@ describe('RuntimeWorkspace', () => {
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
     unwrapAcceptDiscovery.mockReset()
+    resetRuntimeDiscovery.mockReset()
+    unwrapResetDiscovery.mockReset()
     reviewRuntimeDiscoveryEvidence.mockReset()
     unwrapReviewDiscoveryEvidence.mockReset()
     acceptRuntimeSection.mockReset()
@@ -242,6 +248,8 @@ describe('RuntimeWorkspace', () => {
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
     acceptRuntimeDiscovery.mockReturnValue({ unwrap: unwrapAcceptDiscovery })
+    unwrapResetDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'RESET' } } } })
+    resetRuntimeDiscovery.mockReturnValue({ unwrap: unwrapResetDiscovery })
     unwrapReviewDiscoveryEvidence.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
     reviewRuntimeDiscoveryEvidence.mockReturnValue({ unwrap: unwrapReviewDiscoveryEvidence })
     unwrapAcceptSection.mockResolvedValue({ data: { section: { accepted: { content: 'Accepted final.' } } } })
@@ -249,6 +257,7 @@ describe('RuntimeWorkspace', () => {
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
+    useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
     useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
     useGetRuntimeEvidenceQuery.mockReturnValue({
       data: null,
@@ -303,7 +312,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     const sections = screen.getByRole('main', { name: /guided execution sections/i })
-    expect(within(sections).getByRole('heading', { name: /^discovery$/i })).toBeInTheDocument()
+    expect(within(sections).getByRole('heading', { name: /^intelligence hub$/i })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /guided section navigation/i })).toBeInTheDocument()
     await openGuidedSection()
     const sectionList = within(sections).getByRole('list', { name: /runtime section cards/i })
@@ -338,7 +347,7 @@ describe('RuntimeWorkspace', () => {
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(within(guidedPanel).getByText('1 section')).toBeInTheDocument()
-    expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub evidence not ready/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
     expect(within(guidedPanel).getByRole('status', { name: /section truth blocked/i })).toBeInTheDocument()
     expect(within(guidedPanel).queryByText(/runtime action execution is not live in this preview/i)).not.toBeInTheDocument()
@@ -595,7 +604,7 @@ describe('RuntimeWorkspace', () => {
     expect(guidedCard).toBeInTheDocument()
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(sectionNav).toHaveClass('runtime-workspace__section-nav')
-    expect(within(sectionNav).getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
+    expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub evidence not ready/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /1 core section 1 draft/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /15 deal mode draft/i })).toBeInTheDocument()
     expect(within(sectionNav).getByRole('button', { name: /16 appendix command interface draft/i })).toBeInTheDocument()
@@ -833,8 +842,8 @@ describe('RuntimeWorkspace', () => {
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(discoverySection).getByText('Evidence Ready')).toBeInTheDocument()
-    const discoveryInputs = within(discoverySection).getByRole('region', { name: /discovery inputs/i })
-    expect(discoveryInputs).toHaveTextContent('4 accepted discovery inputs captured')
+    const discoveryInputs = within(discoverySection).getByRole('region', { name: /intelligence hub inputs/i })
+    expect(discoveryInputs).toHaveTextContent('4 accepted Intelligence Hub inputs captured')
     expect(discoveryInputs).toHaveTextContent('Company website')
     expect(discoveryInputs).not.toHaveTextContent('companyWebsite')
     const evidencePack = within(discoverySection).getByRole('region', { name: /evidence pack/i })
@@ -843,11 +852,11 @@ describe('RuntimeWorkspace', () => {
     const scopedEvidenceViews = within(discoverySection).getByRole('region', { name: /scoped evidence views/i })
     expect(scopedEvidenceViews).toHaveTextContent('1 section-scoped evidence view projected for guided sections.')
     expect(scopedEvidenceViews).not.toHaveTextContent('customer_problem')
-    expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
-      'Discovery has not been accepted',
+    expect(within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })).toHaveTextContent(
+      'Intelligence Hub has not been accepted',
     )
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
-    expect(within(guidedPanel).getByRole('button', { name: /0 discovery evidence ready/i })).toBeInTheDocument()
+    expect(within(guidedPanel).getByRole('button', { name: /0 intelligence hub evidence ready/i })).toBeInTheDocument()
   })
 
   it('renders section-scoped discovery evidence in the active section ownership zone', async () => {
@@ -864,7 +873,7 @@ describe('RuntimeWorkspace', () => {
             evidenceReady: true,
             scopedViews: {
               customer_problem: {
-                summary: 'Customer-provided discovery inputs are available for this section.',
+                summary: 'Customer-provided Intelligence Hub inputs are available for this section.',
                 inputKeys: ['companyWebsite', 'companyName', 'marketRegion', 'targetOffer'],
               },
             },
@@ -883,7 +892,7 @@ describe('RuntimeWorkspace', () => {
                       'Governed narrative execution',
                       'Speed-to-output improvement',
                     ],
-                    evidenceScope: 'Derived from accepted Discovery evidence and current section dependencies.',
+                    evidenceScope: 'Derived from accepted Intelligence Hub evidence and current section dependencies.',
                   },
                 },
               },
@@ -900,12 +909,12 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await openGuidedSection()
 
-    const suggestedRegion = screen.getByRole('region', { name: /suggested from discovery/i })
+    const suggestedRegion = screen.getByRole('region', { name: /suggested from intelligence hub/i })
     expect(suggestedRegion).toHaveTextContent('The available accepted evidence supports these section-relevant themes.')
     expect(within(suggestedRegion).getByRole('list', { name: /evidence themes/i })).toHaveTextContent(
       'Governed narrative execution',
     )
-    expect(suggestedRegion).toHaveTextContent('Derived from accepted Discovery evidence and current section dependencies.')
+    expect(suggestedRegion).toHaveTextContent('Derived from accepted Intelligence Hub evidence and current section dependencies.')
     expect(suggestedRegion).not.toHaveTextContent('companyWebsite')
     expect(suggestedRegion).not.toHaveTextContent('marketRegion')
   })
@@ -933,7 +942,7 @@ describe('RuntimeWorkspace', () => {
                 ...rendererPayload.sections[0].intelligence,
                 confidence: {
                   level: 'MEDIUM',
-                  reasons: ['Discovery evidence accepted', 'No customer validation notes supplied'],
+                  reasons: ['Intelligence Hub evidence accepted', 'No customer validation notes supplied'],
                 },
                 truthEligibility: {
                   eligible: true,
@@ -955,7 +964,7 @@ describe('RuntimeWorkspace', () => {
                       },
                       {
                         heading: 'Why These Matter',
-                        body: 'These drivers align to accepted discovery context and available section dependencies.',
+                        body: 'These drivers align to accepted Intelligence Hub context and available section dependencies.',
                         bullets: [],
                       },
                     ],
@@ -964,7 +973,7 @@ describe('RuntimeWorkspace', () => {
                     title: 'Supporting Evidence',
                     items: [
                       'Target Offer: AI-native enterprise value management platform',
-                      'Discovery Scope: Accepted Discovery evidence',
+                      'Intelligence Hub Scope: Accepted Intelligence Hub evidence',
                     ],
                   },
                   boundaries: {
@@ -977,7 +986,7 @@ describe('RuntimeWorkspace', () => {
                   confidence: {
                     label: 'Confidence: Medium',
                     signals: [
-                      'Discovery evidence accepted',
+                      'Intelligence Hub evidence accepted',
                       'No customer validation notes supplied',
                     ],
                   },
@@ -1004,7 +1013,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(generatedRegion).getByRole('heading', { name: /generated insight/i })).toBeInTheDocument()
     expect(within(generatedRegion).getByRole('heading', { name: /primary value drivers/i })).toBeInTheDocument()
     expect(within(generatedRegion).getByText('Reduced manual narrative overhead')).toBeInTheDocument()
-    expect(within(generatedRegion).getByText(/These drivers align to accepted discovery context/i)).toBeInTheDocument()
+    expect(within(generatedRegion).getByText(/These drivers align to accepted Intelligence Hub context/i)).toBeInTheDocument()
     expect(within(generatedRegion).getByRole('list', { name: /supporting evidence/i })).toHaveTextContent(
       'Target Offer: AI-native enterprise value management platform',
     )
@@ -1159,7 +1168,9 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
+    await user.click(screen.getByRole('button', { name: /add url/i }))
+    await user.type(screen.getByLabelText('Website Source 2'), 'https://acme.example/product')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
     await user.type(screen.getByLabelText('Optional Notes'), 'Prioritize governed evidence reuse.')
@@ -1171,6 +1182,7 @@ describe('RuntimeWorkspace', () => {
         acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
+          websiteSources: ['https://acme.example', 'https://acme.example/product'],
           companyName: 'Acme',
           marketRegion: 'UK enterprise',
           targetOffer: 'Managed proposal platform',
@@ -1180,8 +1192,8 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/discovery evidence refreshed/i)).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: /status: discovery evidence refreshed/i })).toBeInTheDocument()
+    expect(await screen.findByText(/Intelligence Hub evidence refreshed/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: Intelligence Hub evidence refreshed/i })).toBeInTheDocument()
   })
 
   it('uploads selected discovery documents with the governed evidence refresh request', async () => {
@@ -1221,7 +1233,7 @@ describe('RuntimeWorkspace', () => {
 
     await user.upload(screen.getByLabelText('Upload Documents'), discoveryDocument)
     expect(await screen.findByText('customer-notes.txt')).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
     await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
@@ -1241,6 +1253,7 @@ describe('RuntimeWorkspace', () => {
         ],
         inputs: {
           companyWebsite: 'https://acme.example',
+          websiteSources: ['https://acme.example'],
           companyName: 'Acme',
           marketRegion: 'UK enterprise',
           targetOffer: 'Managed proposal platform',
@@ -1250,7 +1263,7 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/discovery evidence refreshed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Intelligence Hub evidence refreshed/i)).toBeInTheDocument()
   })
 
   it('blocks evidence refresh while selected discovery documents are still preparing', async () => {
@@ -1298,7 +1311,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     expect(await screen.findByRole('status', {
-      name: /status: customer-notes\.exe is not a supported Discovery document type/i,
+      name: /status: customer-notes\.exe is not a supported Intelligence Hub document type/i,
     })).toBeInTheDocument()
     const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
     expect(buildButton).toBeDisabled()
@@ -1346,7 +1359,7 @@ describe('RuntimeWorkspace', () => {
 
     expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
-    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
     await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
@@ -1358,6 +1371,7 @@ describe('RuntimeWorkspace', () => {
         acquisitionProfile: 'STANDARD',
         inputs: {
           companyWebsite: 'https://acme.example',
+          websiteSources: ['https://acme.example'],
           companyName: 'Acme',
           marketRegion: 'UK enterprise',
           targetOffer: 'Managed proposal platform',
@@ -1409,7 +1423,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     await user.selectOptions(screen.getByLabelText('Acquisition Profile'), 'ENHANCED')
-    await user.type(screen.getByLabelText('Company Website'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
     await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
@@ -1421,6 +1435,7 @@ describe('RuntimeWorkspace', () => {
         acquisitionProfile: 'ENHANCED',
         inputs: {
           companyWebsite: 'https://acme.example',
+          websiteSources: ['https://acme.example'],
           companyName: 'Acme',
           marketRegion: 'UK enterprise',
           targetOffer: 'Managed proposal platform',
@@ -1480,6 +1495,199 @@ describe('RuntimeWorkspace', () => {
     expect(executeRuntimeAction).not.toHaveBeenCalled()
   })
 
+  it('warns before clearing discovery evidence and accepted truths', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: true,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            acceptedAt: '2026-05-19T08:02:00.000Z',
+            inputValues: {
+              companyWebsite: 'https://acme.example',
+              websiteSources: ['https://acme.example'],
+              companyName: 'Acme',
+              marketRegion: 'UK enterprise',
+              targetOffer: 'Managed proposal platform',
+              notes: 'Accepted evidence from prior Intelligence Hub run.',
+            },
+            inputSummary: {
+              keys: ['companyWebsite', 'companyName', 'marketRegion', 'targetOffer', 'notes'],
+              count: 5,
+            },
+            evidenceSummary: {
+              keys: ['source', 'inputKeys'],
+              count: 2,
+            },
+            lineageSummary: {
+              sourceCount: 2,
+              builderMode: 'DETERMINISTIC',
+            },
+            sourceRegistrySummary: {
+              count: 2,
+              sourceTypes: ['WEBSITE', 'DISCOVERY_NOTES'],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 5,
+              acceptedEvidenceCount: 5,
+              pendingReviewCount: 0,
+              rejectedEvidenceCount: 0,
+            },
+            scopedViews: {
+              executive_summary: {
+                source: 'DISCOVERY_EVIDENCE_OBJECTS',
+              },
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /clear intelligence hub/i }))
+
+    expect(screen.getByText(/clear all Intelligence Hub evidence and accepted truths/i)).toBeInTheDocument()
+    expect(screen.getByText(/the audit log will record who cleared it/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(resetRuntimeDiscovery).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /clear intelligence hub/i }))
+    await user.click(screen.getByRole('button', { name: /clear all/i }))
+
+    expect(resetRuntimeDiscovery).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        confirmReset: true,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'USER_REQUESTED_DISCOVERY_RESET',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/Intelligence Hub cleared/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Website Source 1')).toHaveValue('')
+    expect(screen.getByLabelText('Company Name')).toHaveValue('')
+    expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
+  })
+
+  it('clears local Intelligence Hub draft input without calling governed reset', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace()
+
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://draft.example')
+    await user.type(screen.getByLabelText('Company Name'), 'Draft Acme')
+
+    await user.click(screen.getByRole('button', { name: /clear intelligence hub/i }))
+
+    expect(resetRuntimeDiscovery).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Website Source 1')).toHaveValue('')
+    expect(screen.getByLabelText('Company Name')).toHaveValue('')
+    expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
+  })
+
+  it('renders safe Discovery reset history from projected audit activity', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'RESET',
+              lastResetAt: '2026-05-19T08:05:00.000Z',
+              resetBy: 'user-1',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {},
+            inputSummary: {
+              keys: [],
+              count: 0,
+            },
+            evidenceSummary: {
+              keys: [],
+              count: 0,
+            },
+            sourceRegistrySummary: {
+              count: 0,
+              sourceTypes: [],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 0,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 0,
+              rejectedEvidenceCount: 0,
+            },
+            scopedViews: {},
+            resetSummary: {
+              resetAt: '2026-05-19T08:05:00.000Z',
+              resetBy: 'user-1',
+              previousEvidenceSummary: {
+                inputCount: 6,
+                sourceRegistryCount: 10,
+                evidenceObjectCount: 10,
+                scopedViewCount: 25,
+              },
+              clearedSectionTruthCount: 1,
+            },
+          },
+          activity: [
+            {
+              eventId: 'audit-reset-1',
+              action: 'RUNTIME_STATE_MUTATED',
+              activityType: 'DISCOVERY_RESET',
+              summary: 'Intelligence Hub evidence and section truth cleared',
+              actorLabel: 'Jill Faithful',
+              occurredAt: '2026-05-19T08:05:00.000Z',
+              reset: {
+                reason: 'DISCOVERY_RESET',
+                resetAt: '2026-05-19T08:05:00.000Z',
+                resetBy: 'user-1',
+                previousEvidenceSummary: {
+                  inputCount: 6,
+                  sourceRegistryCount: 10,
+                  evidenceObjectCount: 10,
+                  scopedViewCount: 25,
+                },
+                clearedSectionTruthCount: 1,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const resetHistory = screen.getByRole('region', { name: /intelligence hub reset history/i })
+    expect(within(resetHistory).getByText(/last reset/i)).toHaveTextContent('Jill Faithful')
+    expect(resetHistory).toHaveTextContent('Previous Intelligence Hub held 6 inputs, 10 sources, 10 evidence objects, 25 scoped views.')
+    expect(resetHistory).toHaveTextContent('1 section truth cleared.')
+    expect(resetHistory).not.toHaveTextContent('previousValue')
+    expect(resetHistory).not.toHaveTextContent('sourceRegistry')
+    expect(resetHistory).not.toHaveTextContent('user-1')
+  })
+
   it('renders source registry, evidence object, and discovery health projections without mock rows', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -1536,15 +1744,98 @@ describe('RuntimeWorkspace', () => {
     expect(within(evidencePack).getByText(/5 sources recorded via deterministic/i)).toBeInTheDocument()
 
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
-    expect(within(sourceRegistry).getByText(/5 registered sources: Website, Discovery Notes/i)).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText(/5 registered sources: Website, Intelligence Hub Notes/i)).toBeInTheDocument()
 
     const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
     expect(within(evidenceReview).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
       .toBeInTheDocument()
 
-    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+    const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
     expect(within(discoveryHealth).getByText(/coverage 40% \/ standard confidence/i)).toBeInTheDocument()
     expect(within(discoveryHealth).getByText(/missing areas: Proof, Economics/i)).toBeInTheDocument()
+  })
+
+  it('groups website sources and uploaded documents in the source registry', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            inputValues: {},
+            evidenceSummary: {
+              keys: ['source'],
+              count: 1,
+            },
+            lineageSummary: {
+              sourceCount: 3,
+              builderMode: 'DETERMINISTIC_WEBSITE_AND_DOCUMENT_ACQUISITION',
+            },
+            sourceRegistrySummary: {
+              count: 3,
+              sourceTypes: ['WEBSITE', 'UPLOADED_DOCUMENT', 'DISCOVERY_NOTES'],
+            },
+            sourceRegistry: [
+              {
+                sourceId: 'website_acme',
+                sourceType: 'WEBSITE',
+                label: 'Website Source',
+                acquisitionStatus: 'ACQUIRED',
+                evidenceProduced: 8,
+                url: 'https://acme.example/product',
+              },
+              {
+                sourceId: 'document_customer_notes',
+                sourceType: 'UPLOADED_DOCUMENT',
+                label: 'Customer Document: customer-notes.docx',
+                acquisitionStatus: 'ACQUIRED',
+                documentStatus: 'PROCESSED',
+                documentType: 'DOCX',
+                fileName: 'customer-notes.docx',
+                evidenceObjectsGenerated: 30,
+              },
+              {
+                sourceId: 'input_notes',
+                sourceType: 'DISCOVERY_NOTES',
+                label: 'Discovery Notes',
+                acquisitionStatus: 'CAPTURED',
+                evidenceProduced: 1,
+              },
+            ],
+            evidenceObjectSummary: {
+              evidenceObjectCount: 39,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 39,
+              rejectedEvidenceCount: 0,
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
+    expect(within(sourceRegistry).getByText('Website Sources (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText('https://acme.example/product')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText('Uploaded Documents (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText('customer-notes.docx')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText(/DOCX \/ Processed \/ 30 evidence objects/i)).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByText('Intelligence Hub Notes')).toBeInTheDocument()
+    expect(within(sourceRegistry).queryByText('Discovery Notes')).not.toBeInTheDocument()
   })
 
   it('renders Enhanced Acquisition evidence as source-backed website evidence', () => {
@@ -1610,7 +1901,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(evidencePack).getByText(/6 sources recorded via Deterministic Website Acquisition/i))
       .toBeInTheDocument()
 
-    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+    const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
     expect(within(discoveryHealth).getByText(/coverage 70% \/ Source Backed confidence/i)).toBeInTheDocument()
   })
 
@@ -1682,7 +1973,8 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /view sources/i }))
     const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
-    expect(within(evidenceSources).getByText('Company Website')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Company website: https://acme.example')).toBeInTheDocument()
 
     await user.click(within(evidenceSources).getByRole('button', {
@@ -1884,16 +2176,19 @@ describe('RuntimeWorkspace', () => {
     const lifecycleReasons = screen.getAllByText(/runtime lifecycle truth is approved or published/i)
     const refreshButton = screen.getByRole('button', { name: /refresh evidence pack/i })
     const acceptEvidenceButton = screen.getByRole('button', { name: /accept evidence/i })
+    const clearDiscoveryButton = screen.getByRole('button', { name: /clear intelligence hub/i })
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
     const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
-    const discoveryHealth = screen.getByRole('region', { name: /discovery health/i })
+    const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
 
-    expect(screen.getByLabelText('Company Website')).toBeDisabled()
-    expect(lifecycleReasons).toHaveLength(2)
+    expect(screen.getByLabelText('Website Source 1')).toBeDisabled()
+    expect(lifecycleReasons).toHaveLength(3)
     expect(refreshButton).toBeDisabled()
     expect(refreshButton).toHaveAttribute('aria-describedby', 'discovery-build-disabled-reason')
     expect(acceptEvidenceButton).toBeDisabled()
     expect(acceptEvidenceButton).toHaveAttribute('aria-describedby', 'discovery-accept-disabled-reason')
+    expect(clearDiscoveryButton).toBeDisabled()
+    expect(clearDiscoveryButton).toHaveAttribute('aria-describedby', 'discovery-reset-disabled-reason')
     expect(sourceRegistry).toHaveTextContent('1 registered source: Website.')
     expect(evidenceReview).toHaveTextContent('1 evidence object: 0 accepted, 1 pending review, 0 rejected.')
     expect(discoveryHealth).toHaveTextContent('Coverage 10% / User Provided confidence.')
@@ -1901,7 +2196,8 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /view sources/i }))
 
     const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
-    expect(within(evidenceSources).getByText('Company Website')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByRole('button', {
       name: /accept evidence object evidence_companyWebsite_fixture/i,
     })).toBeDisabled()
@@ -1954,8 +2250,8 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/discovery accepted/i)).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: /status: discovery accepted/i })).toBeInTheDocument()
+    expect(await screen.findByText(/Intelligence Hub accepted/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: Intelligence Hub accepted/i })).toBeInTheDocument()
   })
 
   it('accepts ready discovery evidence through a governed runtime action when projected', async () => {
@@ -2052,7 +2348,7 @@ describe('RuntimeWorkspace', () => {
       data: {
         error: {
           code: 'CONFLICT',
-          message: 'Discovery evidence is incomplete and must be refreshed before acceptance.',
+          message: 'Intelligence Hub evidence is incomplete and must be refreshed before acceptance.',
         },
       },
     })
@@ -2083,8 +2379,8 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /accept evidence/i }))
 
-    expect(await screen.findByText(/discovery evidence is incomplete/i)).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: /status: discovery evidence is incomplete/i })).toBeInTheDocument()
+    expect(await screen.findByText(/Intelligence Hub evidence is incomplete/i)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /status: Intelligence Hub evidence is incomplete/i })).toBeInTheDocument()
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
@@ -2196,8 +2492,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
-    expect(within(discoverySection).getByRole('region', { name: /discovery acceptance/i })).toHaveTextContent(
-      'Discovery accepted on 2026-05-24.',
+    expect(within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })).toHaveTextContent(
+      'Intelligence Hub accepted on 2026-05-24.',
     )
   })
 
@@ -2238,8 +2534,8 @@ describe('RuntimeWorkspace', () => {
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('None')).toBeInTheDocument()
     expect(within(metrics).getByText('0/0')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^discovery$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /0 discovery evidence not ready/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^intelligence hub$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /0 intelligence hub evidence not ready/i })).toBeInTheDocument()
   })
 
   it('shows neutral progress when projected sections have no required input', async () => {
@@ -2879,7 +3175,7 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByRole('button', { name: /3 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
   })
 
-  it('returns to Discovery when the server-owned advance projection has no next section', async () => {
+  it('returns to Intelligence Hub when the server-owned advance projection has no next section', async () => {
     const user = userEvent.setup()
     unwrapMutation.mockResolvedValueOnce({
       data: {
@@ -2917,10 +3213,10 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(screen.getByRole('heading', { name: 'Discovery' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
-    expect(within(sectionNav).getByRole('button', { name: /0 discovery/i })).toHaveAttribute('aria-current', 'step')
+    expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub/i })).toHaveAttribute('aria-current', 'step')
   })
 
   it('accepts natural text for JSON-backed object sections by wrapping it as summary context', async () => {
@@ -3778,7 +4074,7 @@ describe('RuntimeWorkspace', () => {
               value: '',
               generationEligibility: {
                 canGenerate: false,
-                reason: 'Accept discovery evidence before generating this section.',
+                reason: 'Accept Intelligence Hub evidence before generating this section.',
                 sources: [],
               },
             },
@@ -3796,7 +4092,7 @@ describe('RuntimeWorkspace', () => {
 
     const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     expect(generateButton).toBeDisabled()
-    expect(generateButton).toHaveAccessibleDescription('Accept discovery evidence before generating this section.')
+    expect(generateButton).toHaveAccessibleDescription('Accept Intelligence Hub evidence before generating this section.')
     await user.click(generateButton)
 
     expect(executeRuntimeAction).not.toHaveBeenCalled()

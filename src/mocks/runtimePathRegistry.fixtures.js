@@ -741,8 +741,8 @@ export const INITIAL_RUNTIME_PATH_REGISTRY = Object.freeze([
   }),
   Object.freeze({
     pathKey: 'framework_state.evidence_pack',
-    label: 'Discovery Evidence Pack',
-    description: 'Governed Discovery evidence pack used by Execution Workspace Section 0.',
+    label: 'Intelligence Hub Evidence Pack',
+    description: 'Governed Intelligence Hub evidence pack used by Execution Workspace Section 0.',
     status: RUNTIME_PATH_REGISTRY_STATUSES.ACTIVE,
     frameworkKeys: Object.freeze(['VMF']),
     scope: 'FRAMEWORK_STATE',

@@ -282,6 +282,15 @@
 }
 
 /* Icon wrappers */
+.btn__content,
+.btn__content--hidden {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  line-height: var(--line-height-tight);
+}
+
 .btn__icon {
   display: inline-flex;
   align-items: center;

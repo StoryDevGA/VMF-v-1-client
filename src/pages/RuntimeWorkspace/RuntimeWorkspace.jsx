@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
+  MdAdd,
   MdCheckCircle,
+  MdClose,
   MdCompareArrows,
+  MdDelete,
   MdErrorOutline,
   MdInfoOutline,
   MdOutlineHistory,
@@ -15,6 +18,7 @@ import {
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
@@ -30,6 +34,7 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -53,6 +58,7 @@ const EMPTY_ARRAY = Object.freeze([])
 const RUNTIME_WORKSPACE_BACK_FALLBACK = '/app/workspaces/vmf'
 const DISCOVERY_INPUT_LABELS = Object.freeze({
   companyWebsite: 'Company website',
+  websiteSources: 'Website sources',
   companyName: 'Company name',
   marketRegion: 'Market / region',
   targetOffer: 'Target product or offer',
@@ -72,6 +78,21 @@ const DISCOVERY_DOCUMENT_ACCEPT = [
 ].join(',')
 const DISCOVERY_DOCUMENT_MAX_COUNT = 5
 const DISCOVERY_DOCUMENT_MAX_BYTES = 2500000
+const DISCOVERY_WEBSITE_SOURCE_MAX_COUNT = 10
+
+const buildEmptyDiscoveryDraftInputs = () => ({
+  companyWebsite: '',
+  websiteSources: [''],
+  companyName: '',
+  marketRegion: '',
+  targetOffer: '',
+  notes: '',
+})
+const INTELLIGENCE_HUB_LABEL = 'Intelligence Hub'
+const INTELLIGENCE_HUB_EVIDENCE_LABEL = `${INTELLIGENCE_HUB_LABEL} evidence`
+const INTELLIGENCE_HUB_INPUTS_LABEL = `${INTELLIGENCE_HUB_LABEL} inputs`
+const normalizeIntelligenceHubDisplayText = (value) =>
+  String(value || '').trim().replace(/\bDiscovery\b/g, INTELLIGENCE_HUB_LABEL)
 
 const getRendererPayload = (response) => response?.data ?? null
 
@@ -120,10 +141,10 @@ const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
 
 const buildDiscoveryDocumentSource = async (file) => {
   if (!isSupportedDiscoveryDocument(file)) {
-    throw new Error(`${file.name} is not a supported Discovery document type.`)
+    throw new Error(`${file.name} is not a supported ${INTELLIGENCE_HUB_LABEL} document type.`)
   }
   if (file.size > DISCOVERY_DOCUMENT_MAX_BYTES) {
-    throw new Error(`${file.name} exceeds the Discovery document size limit.`)
+    throw new Error(`${file.name} exceeds the ${INTELLIGENCE_HUB_LABEL} document size limit.`)
   }
 
   return {
@@ -249,7 +270,7 @@ const getSectionActionDisabledReason = ({
   if (actionKey === SECTION_ACTION_KEYS.GENERATE_SECTION) {
     const eligibility = section?.generationEligibility ?? null
     if (eligibility && eligibility.canGenerate === false) {
-      return eligibility.reason || 'Accept discovery evidence before generating this section.'
+      return eligibility.reason || `Accept ${INTELLIGENCE_HUB_EVIDENCE_LABEL} before generating this section.`
     }
     if (!generatedContent && hasGenerationBaseline) {
       return 'Regenerate this section because previous generated content is archived for comparison.'
@@ -652,9 +673,9 @@ const formatDiscoveryInputsSummary = ({ count, inputValues, keys }) => {
   const keyCount = Number.isFinite(Number(count)) ? Number(count) : keys.length
   if (keys.length > 0) {
     const readableKeys = formatReadableKeyList(keys)
-    return `${keyCount} accepted discovery input${keyCount === 1 ? '' : 's'} captured${readableKeys ? `: ${readableKeys}` : ''}.`
+    return `${keyCount} accepted ${INTELLIGENCE_HUB_LABEL} input${keyCount === 1 ? '' : 's'} captured${readableKeys ? `: ${readableKeys}` : ''}.`
   }
-  if (hasRuntimeValue(inputValues)) return 'Accepted discovery inputs are captured for governed downstream use.'
+  if (hasRuntimeValue(inputValues)) return `${INTELLIGENCE_HUB_INPUTS_LABEL} are captured for governed downstream use.`
   return ''
 }
 
@@ -664,7 +685,7 @@ const formatDiscoveryEvidenceSummary = ({ count, evidence, evidenceReady, keys }
     return `${evidenceCount} governed evidence signal${evidenceCount === 1 ? '' : 's'} prepared for section intelligence.`
   }
   if (evidenceReady || hasRuntimeValue(evidence)) {
-    return 'Discovery evidence pack is ready for governed downstream use.'
+    return `${INTELLIGENCE_HUB_LABEL} evidence pack is ready for governed downstream use.`
   }
   return ''
 }
@@ -707,16 +728,96 @@ const formatDiscoveryEvidenceObjectSummary = (summary = {}) => {
   } accepted, ${pendingCount} pending review, ${rejectedCount} rejected.`
 }
 
+const formatSourceRegistryTypeLabel = (value) => {
+  const normalizedValue = String(value || '').trim().toUpperCase()
+  if (normalizedValue === 'DISCOVERY_NOTES') return `${INTELLIGENCE_HUB_LABEL} Notes`
+  if (normalizedValue === 'DISCOVERY_INPUTS') return INTELLIGENCE_HUB_INPUTS_LABEL
+  return formatRuntimeTokenLabel(value)
+}
+
 const formatSourceRegistrySummary = (summary = {}) => {
   const sourceCount = getSummaryCount(summary, 'count')
   if (sourceCount === 0) return ''
   const sourceTypes = Array.isArray(summary.sourceTypes)
-    ? summary.sourceTypes.map(formatRuntimeTokenLabel).filter(Boolean)
+    ? summary.sourceTypes.map(formatSourceRegistryTypeLabel).filter(Boolean)
     : []
 
   return `${sourceCount} registered source${sourceCount === 1 ? '' : 's'}${
     sourceTypes.length > 0 ? `: ${sourceTypes.join(', ')}` : ''
   }.`
+}
+
+const formatResetCount = (count, singularLabel, pluralLabel = `${singularLabel}s`) => {
+  const normalizedCount = Number(count)
+  if (!Number.isFinite(normalizedCount) || normalizedCount < 0) return ''
+  return `${normalizedCount} ${normalizedCount === 1 ? singularLabel : pluralLabel}`
+}
+
+const isDiscoveryResetActivity = (event = {}) =>
+  normalizeRuntimeActionToken(event.activityType) === 'DISCOVERY_RESET'
+  || normalizeRuntimeActionToken(event.reset?.reason) === 'DISCOVERY_RESET'
+
+const getDiscoveryResetSummary = ({ activity = EMPTY_ARRAY, discovery = {} } = {}) => {
+  const safeDiscovery = discovery && typeof discovery === 'object' && !Array.isArray(discovery)
+    ? discovery
+    : {}
+  const resetActivity = Array.isArray(activity)
+    ? activity.find(isDiscoveryResetActivity)
+    : null
+  const activityReset = resetActivity?.reset && typeof resetActivity.reset === 'object'
+    ? resetActivity.reset
+    : {}
+  const persistedReset = discovery?.resetSummary && typeof discovery.resetSummary === 'object'
+    ? discovery.resetSummary
+    : {}
+  const discoveryState = safeDiscovery.state && typeof safeDiscovery.state === 'object'
+    ? safeDiscovery.state
+    : {}
+  const resetAt = activityReset.resetAt
+    || persistedReset.resetAt
+    || safeDiscovery.resetAt
+    || discoveryState.lastResetAt
+    || discoveryState.resetAt
+    || ''
+  const resetBy = resetActivity?.actorLabel
+    || activityReset.resetByLabel
+    || persistedReset.resetByLabel
+    || ''
+  const previousEvidenceSummary = activityReset.previousEvidenceSummary
+    || persistedReset.previousEvidenceSummary
+    || {}
+  const clearedSectionTruthCount = Number.isFinite(Number(activityReset.clearedSectionTruthCount))
+    ? Number(activityReset.clearedSectionTruthCount)
+    : Number.isFinite(Number(persistedReset.clearedSectionTruthCount))
+      ? Number(persistedReset.clearedSectionTruthCount)
+      : null
+
+  if (!resetAt && !resetBy && Object.keys(previousEvidenceSummary).length === 0 && clearedSectionTruthCount === null) {
+    return null
+  }
+
+  return {
+    resetAt,
+    resetBy,
+    previousEvidenceSummary,
+    clearedSectionTruthCount,
+  }
+}
+
+const formatDiscoveryResetPreviousEvidence = (summary = {}) => {
+  const parts = [
+    formatResetCount(getSummaryCount(summary, 'inputCount'), 'input'),
+    formatResetCount(
+      getSummaryCount(summary, 'sourceRegistryCount') || getSummaryCount(summary, 'sourceCount'),
+      'source',
+    ),
+    formatResetCount(getSummaryCount(summary, 'evidenceObjectCount'), 'evidence object'),
+    formatResetCount(getSummaryCount(summary, 'scopedViewCount'), 'scoped view'),
+  ].filter((part) => part && !part.startsWith('0 '))
+
+  return parts.length > 0
+    ? `Previous ${INTELLIGENCE_HUB_LABEL} held ${parts.join(', ')}.`
+    : `Previous ${INTELLIGENCE_HUB_LABEL} summary was not projected.`
 }
 
 const getReviewStatusVariant = (reviewStatus) => {
@@ -738,6 +839,7 @@ const getEvidenceObjectActionLabel = (evidenceObject = {}) => {
 const getDiscoverySourceRegistry = ({ discovery, evidenceDetail }) => {
   if (Array.isArray(evidenceDetail?.sourceRegistry)) return evidenceDetail.sourceRegistry
   if (Array.isArray(discovery?.sourceRegistry)) return discovery.sourceRegistry
+  if (Array.isArray(discovery?.acquisition?.sourceRegistry)) return discovery.acquisition.sourceRegistry
   return EMPTY_ARRAY
 }
 
@@ -745,6 +847,134 @@ const getDiscoveryEvidenceObjects = ({ discovery, evidenceDetail }) => {
   if (Array.isArray(evidenceDetail?.evidenceObjects)) return evidenceDetail.evidenceObjects
   if (Array.isArray(discovery?.evidenceObjects)) return discovery.evidenceObjects
   return EMPTY_ARRAY
+}
+
+const normalizeWebsiteSourceDrafts = (inputValues = {}) => {
+  const explicitSources = Array.isArray(inputValues.websiteSources)
+    ? inputValues.websiteSources
+    : []
+  const candidates = [
+    ...explicitSources,
+    inputValues.companyWebsite,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+  const uniqueSources = Array.from(new Set(candidates))
+  return uniqueSources.length > 0 ? uniqueSources : ['']
+}
+
+const buildDiscoveryInputsPayload = (draftInputs = {}) => {
+  const websiteSources = Array.isArray(draftInputs.websiteSources)
+    ? draftInputs.websiteSources.map((value) => String(value || '').trim()).filter(Boolean)
+    : []
+  const payload = {
+    companyWebsite: websiteSources[0] || String(draftInputs.companyWebsite || '').trim(),
+    companyName: String(draftInputs.companyName || '').trim(),
+    marketRegion: String(draftInputs.marketRegion || '').trim(),
+    targetOffer: String(draftInputs.targetOffer || '').trim(),
+    notes: String(draftInputs.notes || '').trim(),
+  }
+
+  if (websiteSources.length > 0) {
+    payload.websiteSources = websiteSources
+  }
+
+  return payload
+}
+
+const getSourceRegistryGroupKey = (source = {}) => {
+  const fieldKey = String(source.fieldKey || '').trim()
+  const sourceId = String(source.sourceId || '').trim()
+  const sourceType = String(source.sourceType || source.type || '').trim().toUpperCase()
+  const lineageType = String(source.type || '').trim().toUpperCase()
+  if (fieldKey === 'companyWebsite' || sourceId === 'input_companyWebsite' || lineageType === 'USER_PROVIDED_WEBSITE') {
+    return 'discovery'
+  }
+  if (sourceType === 'WEBSITE' || lineageType === 'WEBSITE_ACQUISITION') return 'website'
+  if (sourceType === 'UPLOADED_DOCUMENT') return 'document'
+  return 'discovery'
+}
+
+const SOURCE_REGISTRY_GROUP_LABELS = Object.freeze({
+  website: 'Website Sources',
+  document: 'Uploaded Documents',
+  discovery: `${INTELLIGENCE_HUB_LABEL} Sources`,
+})
+
+const buildSourceRegistryGroups = (sourceRegistry = []) => {
+  const groupedEntries = sourceRegistry.reduce((groups, source) => {
+    const groupKey = getSourceRegistryGroupKey(source)
+    return {
+      ...groups,
+      [groupKey]: [...(groups[groupKey] || []), source],
+    }
+  }, {})
+
+  return ['website', 'document', 'discovery']
+    .map((groupKey) => ({
+      key: groupKey,
+      label: SOURCE_REGISTRY_GROUP_LABELS[groupKey],
+      entries: groupedEntries[groupKey] || [],
+    }))
+    .filter((group) => group.entries.length > 0)
+}
+
+const formatSourceRegistryEvidenceCount = (source = {}) => {
+  const count = Number(source.evidenceObjectsGenerated ?? source.evidenceProduced ?? 0)
+  if (!Number.isFinite(count) || count <= 0) return ''
+  return `${count} evidence object${count === 1 ? '' : 's'}`
+}
+
+const formatSourceRegistryEntryTitle = (source = {}) =>
+  source.fileName
+  || source.url
+  || source.finalUrl
+  || normalizeIntelligenceHubDisplayText(source.label)
+  || normalizeIntelligenceHubDisplayText(source.fieldKey)
+  || source.sourceId
+  || 'Source'
+
+const formatLineageSourceTitle = (source = {}) =>
+  normalizeIntelligenceHubDisplayText(source.label)
+  || normalizeIntelligenceHubDisplayText(source.fieldKey)
+  || source.fileName
+  || source.url
+  || source.finalUrl
+  || source.sourceId
+  || 'Source'
+
+const formatSourceRegistryEntryMeta = (source = {}) => [
+  source.documentType || source.assetType || formatSourceRegistryTypeLabel(source.sourceType),
+  source.documentStatus || source.acquisitionStatus || source.status,
+  formatSourceRegistryEvidenceCount(source),
+  source.contentTruncated ? 'Sampled to supported size' : '',
+  source.failureReason,
+].map((value) => {
+  const rawValue = String(value || '').trim()
+  if (/^[A-Z0-9]{2,5}$/.test(rawValue)) return rawValue
+  return /^[A-Z0-9_]+$/.test(rawValue) ? formatRuntimeTokenLabel(rawValue) : rawValue
+}).filter(Boolean).join(' / ')
+
+function SourceRegistryGroupList({ groups = EMPTY_ARRAY }) {
+  if (!Array.isArray(groups) || groups.length === 0) return null
+
+  return (
+    <div className="runtime-workspace__source-registry-groups">
+      {groups.map((group) => (
+        <div className="runtime-workspace__source-registry-group" key={group.key}>
+          <h4>{`${group.label} (${group.entries.length})`}</h4>
+          <ul className="runtime-workspace__plain-list runtime-workspace__source-registry-list">
+            {group.entries.map((source) => (
+              <li key={source.sourceId || source.fieldKey || source.lineageRef}>
+                <strong>{formatSourceRegistryEntryTitle(source)}</strong>
+                <span>{formatSourceRegistryEntryMeta(source)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 const getDiscoveryProjection = (renderer) =>
@@ -830,7 +1060,7 @@ const getSectionDisplayLabel = (section, fallback = 'Runtime field') => {
     || fallback,
   ).trim()
 
-  return rawLabel.replace(/^Section\s+/i, '').trim() || fallback
+  return normalizeIntelligenceHubDisplayText(rawLabel.replace(/^Section\s+/i, '').trim()) || fallback
 }
 
 const getSectionPlaceholder = (section) => {
@@ -1227,8 +1457,8 @@ function RuntimeSection({
               role="region"
               aria-label="Ownership zones"
             >
-              <section className="runtime-workspace__section-panel" aria-label="Suggested from Discovery">
-                <h3>Suggested From Discovery</h3>
+              <section className="runtime-workspace__section-panel" aria-label={`Suggested from ${INTELLIGENCE_HUB_LABEL}`}>
+                <h3>Suggested From {INTELLIGENCE_HUB_LABEL}</h3>
                 {suggestedBullets.length > 0 || suggestedProjection.summary ? (
                   <>
                     <p>{suggestedProjection.summary || scopedEvidenceSummary}</p>
@@ -1246,7 +1476,7 @@ function RuntimeSection({
                 ) : hasRuntimeValue(scopedEvidenceView) ? (
                   <p>{scopedEvidenceSummary}</p>
                 ) : (
-                  <p>No discovery evidence is projected for this section yet.</p>
+                  <p>No {INTELLIGENCE_HUB_EVIDENCE_LABEL} is projected for this section yet.</p>
                 )}
               </section>
               <section className="runtime-workspace__section-panel" aria-label="Your Additional Context">
@@ -1691,7 +1921,7 @@ function RuntimeSectionNavigation({
               onClick={onSelectDiscovery}
             >
               <span>0</span>
-              <strong title="Discovery">Discovery</strong>
+              <strong title={INTELLIGENCE_HUB_LABEL}>{INTELLIGENCE_HUB_LABEL}</strong>
               <small>{discoveryState}</small>
             </button>
           </li>
@@ -1703,6 +1933,7 @@ function RuntimeSectionNavigation({
 }
 
 function DiscoverySection({
+  activity = EMPTY_ARRAY,
   discovery = null,
   discoveryState = 'Evidence Not Ready',
   disabled = false,
@@ -1714,6 +1945,7 @@ function DiscoverySection({
   mutationDisabledReason = '',
   executingActionKey = '',
   onAcceptDiscovery,
+  onResetDiscovery,
   onReviewEvidenceObject,
   onRefreshEvidence,
   onToggleSources,
@@ -1726,9 +1958,11 @@ function DiscoverySection({
   const inputValues = discovery?.inputValues && typeof discovery.inputValues === 'object'
     ? discovery.inputValues
     : {}
+  const initialWebsiteSources = normalizeWebsiteSourceDrafts(inputValues)
   const persistedAcquisitionProfile = getDiscoveryAcquisitionProfile(discovery)
   const [draftInputs, setDraftInputs] = useState({
-    companyWebsite: inputValues.companyWebsite || '',
+    companyWebsite: initialWebsiteSources.find(Boolean) || inputValues.companyWebsite || '',
+    websiteSources: initialWebsiteSources,
     companyName: inputValues.companyName || '',
     marketRegion: inputValues.marketRegion || '',
     targetOffer: inputValues.targetOffer || '',
@@ -1738,6 +1972,7 @@ function DiscoverySection({
   const [documentUploadError, setDocumentUploadError] = useState('')
   const [documentUploadPreparing, setDocumentUploadPreparing] = useState(false)
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
+  const [showResetWarning, setShowResetWarning] = useState(false)
   const documentUploadPreparingRef = useRef(false)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
@@ -1753,6 +1988,7 @@ function DiscoverySection({
     keys: evidenceSummaryKeys,
   })
   const sourceRegistry = getDiscoverySourceRegistry({ discovery, evidenceDetail })
+  const sourceRegistryGroups = buildSourceRegistryGroups(sourceRegistry)
   const evidenceObjects = getDiscoveryEvidenceObjects({ discovery, evidenceDetail })
   const rawSourceRegistrySummary = hasSourceRegistrySummary(discovery?.sourceRegistrySummary)
     ? discovery.sourceRegistrySummary
@@ -1803,6 +2039,14 @@ function DiscoverySection({
     : []
   const sourceCount = sourceRegistrySummary.count || Number(discovery?.lineageSummary?.sourceCount || 0)
   const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
+  const discoveryResetSummary = getDiscoveryResetSummary({ activity, discovery })
+  const discoveryResetAtLabel = discoveryResetSummary?.resetAt
+    ? formatActivityTime(discoveryResetSummary.resetAt) || formatDateOnly(discoveryResetSummary.resetAt)
+    : ''
+  const discoveryResetClearedText = discoveryResetSummary
+    && Number.isFinite(Number(discoveryResetSummary.clearedSectionTruthCount))
+    ? `${formatResetCount(discoveryResetSummary.clearedSectionTruthCount, 'section truth', 'section truths')} cleared.`
+    : ''
   const acquisition = discovery?.acquisition && typeof discovery.acquisition === 'object'
     ? discovery.acquisition
     : null
@@ -1836,7 +2080,7 @@ function DiscoverySection({
   const buildDisabledReason = mutationDisabledReason
     || documentBuildDisabledReason
     || (buildAction && !buildAction.enabled
-      ? buildAction.disabledReason || 'Discovery evidence action is currently unavailable.'
+      ? buildAction.disabledReason || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} action is currently unavailable.`
       : '')
   const buildReasonId = 'discovery-build-disabled-reason'
   const sourcesReasonId = 'discovery-sources-disabled-reason'
@@ -1858,12 +2102,77 @@ function DiscoverySection({
   const isBuildExecuting = Boolean(buildExecutingActionKey && executingActionKey === buildExecutingActionKey)
   const isAcceptExecuting = Boolean(acceptExecutingActionKey && executingActionKey === acceptExecutingActionKey)
   const evidenceReviewInFlight = Boolean(reviewingEvidenceObjectId)
+  const hasPersistedDiscoveryStateToReset = hasEvidence
+    || isAccepted
+    || sourceCount > 0
+    || inputSummaryKeys.length > 0
+  const hasLocalDiscoveryDraftToClear = draftDocumentSources.length > 0
+    || Object.values(draftInputs).some((value) => {
+      if (Array.isArray(value)) return value.some((item) => String(item || '').trim())
+      return String(value || '').trim()
+    })
+  const hasDiscoveryStateToReset = hasPersistedDiscoveryStateToReset || hasLocalDiscoveryDraftToClear
+  const canResetDiscovery = hasDiscoveryStateToReset
+    && !disabled
+    && !mutationDisabledReason
+    && !saving
+    && !documentUploadPreparing
+    && !evidenceReviewInFlight
+  const resetDisabledReason = mutationDisabledReason
+    || (hasDiscoveryStateToReset ? '' : `There is no ${INTELLIGENCE_HUB_EVIDENCE_LABEL} or input to clear.`)
+  const resetReasonId = 'discovery-reset-disabled-reason'
 
   const handleInputChange = (field) => (event) => {
     setDraftInputs((current) => ({
       ...current,
       [field]: event.target.value,
     }))
+  }
+
+  const handleWebsiteSourceChange = (index) => (event) => {
+    const value = event.target.value
+    setDraftInputs((current) => {
+      const currentWebsiteSources = Array.isArray(current.websiteSources) && current.websiteSources.length > 0
+        ? current.websiteSources
+        : ['']
+      const websiteSources = currentWebsiteSources.map((source, sourceIndex) =>
+        sourceIndex === index ? value : source)
+      const firstWebsiteSource = websiteSources.map((source) => String(source || '').trim()).find(Boolean) || ''
+      return {
+        ...current,
+        companyWebsite: firstWebsiteSource,
+        websiteSources,
+      }
+    })
+  }
+
+  const handleAddWebsiteSource = () => {
+    setDraftInputs((current) => {
+      const currentWebsiteSources = Array.isArray(current.websiteSources) && current.websiteSources.length > 0
+        ? current.websiteSources
+        : ['']
+      if (currentWebsiteSources.length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT) return current
+      return {
+        ...current,
+        websiteSources: [...currentWebsiteSources, ''],
+      }
+    })
+  }
+
+  const handleRemoveWebsiteSource = (index) => () => {
+    setDraftInputs((current) => {
+      const currentWebsiteSources = Array.isArray(current.websiteSources) && current.websiteSources.length > 0
+        ? current.websiteSources
+        : ['']
+      const websiteSources = currentWebsiteSources.filter((_source, sourceIndex) => sourceIndex !== index)
+      const nextWebsiteSources = websiteSources.length > 0 ? websiteSources : ['']
+      const firstWebsiteSource = nextWebsiteSources.map((source) => String(source || '').trim()).find(Boolean) || ''
+      return {
+        ...current,
+        companyWebsite: firstWebsiteSource,
+        websiteSources: nextWebsiteSources,
+      }
+    })
   }
 
   const handleAcquisitionProfileChange = (event) => {
@@ -1910,7 +2219,7 @@ function DiscoverySection({
     const refreshed = await onRefreshEvidence?.({
       acquisitionProfile,
       documentSources: draftDocumentSources.length > 0 ? draftDocumentSources : undefined,
-      inputs: draftInputs,
+      inputs: buildDiscoveryInputsPayload(draftInputs),
     })
     if (refreshed) {
       setDraftDocumentSources([])
@@ -1920,6 +2229,30 @@ function DiscoverySection({
 
   const handleAcceptDiscovery = async () => {
     await onAcceptDiscovery?.()
+  }
+
+  const clearLocalDiscoveryDraft = () => {
+    setDraftInputs(buildEmptyDiscoveryDraftInputs())
+    setDraftDocumentSources([])
+    setDocumentUploadError('')
+    setAcquisitionProfile(DISCOVERY_ACQUISITION_PROFILES.STANDARD)
+    setShowResetWarning(false)
+  }
+
+  const handleClearDiscoveryClick = () => {
+    if (hasPersistedDiscoveryStateToReset) {
+      setShowResetWarning(true)
+      return
+    }
+
+    clearLocalDiscoveryDraft()
+  }
+
+  const handleResetDiscovery = async () => {
+    const reset = await onResetDiscovery?.()
+    if (reset) {
+      clearLocalDiscoveryDraft()
+    }
   }
 
   const handleReviewEvidenceObject = (evidenceObject, reviewStatus) => async () => {
@@ -1935,7 +2268,7 @@ function DiscoverySection({
         <form className="runtime-workspace__section-form" onSubmit={handleRefreshEvidence}>
           <div className="runtime-workspace__section-heading">
           <div>
-            <h2>Discovery</h2>
+            <h2>{INTELLIGENCE_HUB_LABEL}</h2>
             <p>Section 0 evidence layer for downstream guided execution.</p>
           </div>
           <div className="runtime-workspace__section-badges">
@@ -1946,13 +2279,13 @@ function DiscoverySection({
           <div
             className="runtime-workspace__section-panels"
             role="region"
-            aria-label="Discovery state"
+            aria-label={`${INTELLIGENCE_HUB_LABEL} state`}
           >
             <section
               className="runtime-workspace__section-panel runtime-workspace__section-panel--discovery-inputs"
-              aria-label="Discovery inputs"
+              aria-label={INTELLIGENCE_HUB_INPUTS_LABEL}
             >
-              <h3>Discovery Inputs</h3>
+              <h3>{INTELLIGENCE_HUB_INPUTS_LABEL}</h3>
               <Select
                 id="runtime-discovery-acquisition-profile"
                 label="Acquisition Profile"
@@ -1961,13 +2294,50 @@ function DiscoverySection({
                 options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
                 disabled={disabled}
               />
-              <Input
-                id="runtime-discovery-company-website"
-                label="Company Website"
-                value={draftInputs.companyWebsite}
-                onChange={handleInputChange('companyWebsite')}
-                disabled={disabled}
-              />
+              <div
+                className="runtime-workspace__website-sources"
+                role="group"
+                aria-labelledby="runtime-discovery-website-sources-label"
+              >
+                <div className="runtime-workspace__website-sources-heading">
+                  <span id="runtime-discovery-website-sources-label">Website Sources</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="runtime-workspace__website-source-control"
+                    leftIcon={<MdAdd aria-hidden="true" />}
+                    disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
+                    onClick={handleAddWebsiteSource}
+                  >
+                    Add URL
+                  </Button>
+                </div>
+                {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
+                  <div className="runtime-workspace__website-source-row" key={`website-source-${index}`}>
+                    <Input
+                      id={`runtime-discovery-website-source-${index}`}
+                      label={`Website Source ${index + 1}`}
+                      value={websiteSource}
+                      onChange={handleWebsiteSourceChange(index)}
+                      disabled={disabled}
+                      helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="runtime-workspace__website-source-control"
+                      leftIcon={<MdDelete aria-hidden="true" />}
+                      disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
+                      aria-label={`Remove website source ${index + 1}`}
+                      onClick={handleRemoveWebsiteSource(index)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
               <Input
                 id="runtime-discovery-company-name"
                 label="Company Name"
@@ -1998,17 +2368,41 @@ function DiscoverySection({
                 rows={4}
               />
               <div className="runtime-workspace__document-upload">
-                <Input
-                  id="runtime-discovery-documents"
-                  type="file"
-                  label="Upload Documents"
-                  accept={DISCOVERY_DOCUMENT_ACCEPT}
-                  multiple
-                  onChange={handleDocumentUploadChange}
-                  disabled={disabled || saving || documentUploadPreparing}
-                  leftIcon={<MdUploadFile aria-hidden="true" />}
-                  helperText="PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack."
-                />
+                <div className="runtime-workspace__document-upload-field">
+                  <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
+                    Upload Documents
+                  </span>
+                  <input
+                    id="runtime-discovery-documents"
+                    type="file"
+                    className="runtime-workspace__document-upload-input sr-only"
+                    accept={DISCOVERY_DOCUMENT_ACCEPT}
+                    multiple
+                    onChange={handleDocumentUploadChange}
+                    disabled={disabled || saving || documentUploadPreparing}
+                    aria-labelledby="runtime-discovery-documents-label"
+                    aria-describedby="runtime-discovery-documents-helper"
+                  />
+                  <label
+                    htmlFor="runtime-discovery-documents"
+                    className={`btn btn--primary btn--md runtime-workspace__document-upload-button${
+                      disabled || saving || documentUploadPreparing
+                        ? ' runtime-workspace__document-upload-button--disabled'
+                        : ''
+                    }`}
+                    aria-disabled={disabled || saving || documentUploadPreparing}
+                  >
+                    <span className="btn__content">
+                      <span className="btn__icon btn__icon--left" aria-hidden="true">
+                        <MdUploadFile />
+                      </span>
+                      Choose Files
+                    </span>
+                  </label>
+                  <span className="input-helper" id="runtime-discovery-documents-helper">
+                    PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
+                  </span>
+                </div>
                 {documentUploadPreparing ? (
                   <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
                 ) : null}
@@ -2016,7 +2410,7 @@ function DiscoverySection({
                   <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
                 ) : null}
                 {draftDocumentSources.length > 0 ? (
-                  <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label="Selected discovery documents">
+                  <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label={`Selected ${INTELLIGENCE_HUB_LABEL} documents`}>
                     {draftDocumentSources.map((documentSource) => (
                       <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
                         <strong>{documentSource.fileName}</strong>
@@ -2026,7 +2420,7 @@ function DiscoverySection({
                   </ul>
                 ) : null}
               </div>
-              <p>{inputsSummary || 'No discovery input projection is available yet.'}</p>
+              <p>{inputsSummary || `No ${INTELLIGENCE_HUB_LABEL} input projection is available yet.`}</p>
             </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
             <h3>Evidence Pack</h3>
@@ -2036,8 +2430,8 @@ function DiscoverySection({
             </p>
             <p>
               {hasEvidence
-                ? evidenceObjectSummaryText || evidenceSummary || 'Discovery evidence is ready for governed downstream use.'
-                : 'No discovery evidence pack is projected for this runtime yet.'}
+                ? evidenceObjectSummaryText || evidenceSummary || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} is ready for governed downstream use.`
+                : `No ${INTELLIGENCE_HUB_LABEL} evidence pack is projected for this runtime yet.`}
             </p>
             <p>
               {sourceCount > 0
@@ -2050,6 +2444,9 @@ function DiscoverySection({
             <p>
               {sourceRegistrySummaryText || 'No source registry entries are projected for this runtime yet.'}
             </p>
+            {sourceRegistryGroups.length > 0 ? (
+              <SourceRegistryGroupList groups={sourceRegistryGroups} />
+            ) : null}
           </section>
           <section className="runtime-workspace__section-panel" aria-label="Evidence review">
             <h3>Evidence Review</h3>
@@ -2057,12 +2454,12 @@ function DiscoverySection({
               {evidenceObjectSummaryText || 'No reviewable evidence objects are projected for this runtime yet.'}
             </p>
           </section>
-          <section className="runtime-workspace__section-panel" aria-label="Discovery health">
-            <h3>Discovery Health</h3>
+          <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} health`}>
+            <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
             <p>
               {healthCoveragePercent !== null
                 ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
-                : 'Discovery health is not projected for this runtime yet.'}
+                : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
             </p>
             <p className="runtime-workspace__section-note">
               {healthMissingAreas.length > 0
@@ -2078,14 +2475,31 @@ function DiscoverySection({
                 : 'Section-scoped evidence will appear here when the backend projects it.'}
             </p>
           </section>
-          <section className="runtime-workspace__section-panel" aria-label="Discovery acceptance">
+          <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} acceptance`}>
             <h3>Acceptance</h3>
             <p>
               {isAccepted
-                ? `Discovery accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
-                : 'Discovery has not been accepted for governed downstream generation.'}
+                ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
+                : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
             </p>
           </section>
+          {discoveryResetSummary ? (
+            <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} reset history`}>
+              <h3>Reset History</h3>
+              <p>
+                Last reset
+                {discoveryResetAtLabel ? ` ${discoveryResetAtLabel}` : ''}
+                {discoveryResetSummary.resetBy ? ` by ${discoveryResetSummary.resetBy}` : ''}
+                .
+              </p>
+              <p className="runtime-workspace__section-note">
+                {formatDiscoveryResetPreviousEvidence(discoveryResetSummary.previousEvidenceSummary)}
+              </p>
+              {discoveryResetClearedText ? (
+                <p className="runtime-workspace__section-note">{discoveryResetClearedText}</p>
+              ) : null}
+            </section>
+          ) : null}
           </div>
           {feedback?.message ? (
             <Status
@@ -2097,7 +2511,7 @@ function DiscoverySection({
               {feedback.message}
             </Status>
           ) : null}
-          <div className="runtime-workspace__section-actions" aria-label="Discovery actions">
+          <div className="runtime-workspace__section-actions" aria-label={`${INTELLIGENCE_HUB_LABEL} actions`}>
             <Button
               type="submit"
               variant="primary"
@@ -2114,6 +2528,7 @@ function DiscoverySection({
               type="button"
               variant="outline"
               size="sm"
+              leftIcon={<MdInfoOutline aria-hidden="true" />}
               disabled={!hasEvidence}
               aria-describedby={sourcesDisabledReason ? sourcesReasonId : undefined}
               onClick={onToggleSources}
@@ -2124,6 +2539,7 @@ function DiscoverySection({
               type="button"
               variant="secondary"
               size="sm"
+              leftIcon={<MdCheckCircle aria-hidden="true" />}
               disabled={!canAcceptDiscovery}
               loading={saving || isAcceptExecuting}
               aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
@@ -2131,7 +2547,74 @@ function DiscoverySection({
             >
               Accept Evidence
             </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              leftIcon={<MdDelete aria-hidden="true" />}
+              disabled={!canResetDiscovery}
+              loading={saving && showResetWarning}
+              aria-describedby={resetDisabledReason ? resetReasonId : undefined}
+              onClick={handleClearDiscoveryClick}
+            >
+              Clear {INTELLIGENCE_HUB_LABEL}
+            </Button>
           </div>
+          <Dialog
+            open={showResetWarning}
+            onClose={() => {
+              if (!saving) setShowResetWarning(false)
+            }}
+            size="md"
+            closeOnBackdropClick={!saving}
+            closeOnEscape={!saving}
+            showCloseButton={!saving}
+            className="runtime-workspace__reset-dialog"
+            role="alertdialog"
+            aria-labelledby="discovery-reset-warning-title"
+            aria-describedby="discovery-reset-warning-copy"
+          >
+            <Dialog.Header>
+              <h2 id="discovery-reset-warning-title">Clear all {INTELLIGENCE_HUB_LABEL} evidence and accepted truths?</h2>
+            </Dialog.Header>
+            <Dialog.Body>
+              <div className="runtime-workspace__reset-warning-copy">
+                <MdOutlineWarningAmber aria-hidden="true" />
+                <div>
+                  <p id="discovery-reset-warning-copy">
+                    This clears {INTELLIGENCE_HUB_INPUTS_LABEL}, uploaded document registry, evidence objects,
+                    accepted evidence, generated section intelligence, and accepted section truth
+                    for this runtime. The audit log will record who cleared it.
+                  </p>
+                </div>
+              </div>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <div className="runtime-workspace__reset-warning-actions">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  leftIcon={<MdDelete aria-hidden="true" />}
+                  disabled={!canResetDiscovery}
+                  loading={saving}
+                  onClick={handleResetDiscovery}
+                >
+                  Clear All
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<MdClose aria-hidden="true" />}
+                  disabled={saving}
+                  onClick={() => setShowResetWarning(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog>
           {buildDisabledReason ? (
             <p id={buildReasonId} className="runtime-workspace__action-disabled-reason">
               {buildDisabledReason}
@@ -2147,6 +2630,11 @@ function DiscoverySection({
               {acceptDisabledReason}
             </p>
           ) : null}
+          {resetDisabledReason ? (
+            <p id={resetReasonId} className="runtime-workspace__action-disabled-reason">
+              {resetDisabledReason}
+            </p>
+          ) : null}
           {showSources ? (
             <section className="runtime-workspace__section-panel" aria-label="Evidence sources">
               <h3>Evidence Sources</h3>
@@ -2159,22 +2647,7 @@ function DiscoverySection({
                   <div>
                     <h4>Source Registry</h4>
                     {sourceRegistry.length > 0 ? (
-                      <ul className="runtime-workspace__plain-list">
-                        {sourceRegistry.map((source) => (
-                          <li key={source.sourceId || source.fieldKey || source.lineageRef}>
-                            <strong>{source.label || source.fieldKey || source.sourceId || 'Source'}</strong>
-                            <span>
-                              {[
-                                formatRuntimeTokenLabel(source.sourceType),
-                                formatRuntimeTokenLabel(source.acquisitionStatus || source.status),
-                                source.evidenceProduced ? `${source.evidenceProduced} evidence object${source.evidenceProduced === 1 ? '' : 's'}` : '',
-                                source.fileName,
-                                source.url,
-                              ].filter(Boolean).join(' / ')}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                      <SourceRegistryGroupList groups={sourceRegistryGroups} />
                     ) : (
                       <p>No source registry entries are available for this evidence pack.</p>
                     )}
@@ -2209,6 +2682,7 @@ function DiscoverySection({
                                   type="button"
                                   variant="outline"
                                   size="sm"
+                                  leftIcon={<MdCheckCircle aria-hidden="true" />}
                                   disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
                                   loading={isReviewing && reviewStatus !== 'ACCEPTED'}
                                   aria-label={`Accept evidence object ${actionLabel}`}
@@ -2220,6 +2694,7 @@ function DiscoverySection({
                                   type="button"
                                   variant="danger"
                                   size="sm"
+                                  leftIcon={<MdErrorOutline aria-hidden="true" />}
                                   disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
                                   loading={isReviewing && reviewStatus !== 'REJECTED'}
                                   aria-label={`Reject evidence object ${actionLabel}`}
@@ -2242,7 +2717,7 @@ function DiscoverySection({
                       <ul className="runtime-workspace__plain-list">
                         {lineageSources.map((source) => (
                           <li key={source.sourceId || source.fieldKey || source.valueHash}>
-                            <strong>{source.label || source.fieldKey || source.fileName || source.sourceId || 'Source'}</strong>
+                            <strong>{formatLineageSourceTitle(source)}</strong>
                             <span>{[source.type, source.status, source.fileName, source.url].filter(Boolean).join(' / ')}</span>
                           </li>
                         ))}
@@ -2278,6 +2753,7 @@ function RuntimeWorkspace() {
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
+  const [resetRuntimeDiscovery] = useResetRuntimeDiscoveryMutation()
   const [reviewRuntimeDiscoveryEvidence] = useReviewRuntimeDiscoveryEvidenceMutation()
   const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
   const [executeRuntimeAction] = useExecuteRuntimeActionMutation()
@@ -2509,7 +2985,7 @@ function RuntimeWorkspace() {
 
       if (discoveryAction) {
         if (!discoveryAction.enabled) {
-          throw new Error(discoveryAction.disabledReason || 'Discovery evidence action is currently unavailable.')
+          throw new Error(discoveryAction.disabledReason || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} action is currently unavailable.`)
         }
         const resolvedActionKey = normalizeRuntimeActionToken(discoveryAction.governedAction || discoveryAction.actionKey)
         setExecutingActionKey(resolvedActionKey)
@@ -2536,7 +3012,7 @@ function RuntimeWorkspace() {
       }
       setDiscoveryFeedback({
         variant: 'success',
-        message: 'Discovery evidence refreshed.',
+        message: `${INTELLIGENCE_HUB_EVIDENCE_LABEL} refreshed.`,
       })
       await refetch()
       return true
@@ -2591,7 +3067,7 @@ function RuntimeWorkspace() {
       }
       setDiscoveryFeedback({
         variant: 'success',
-        message: 'Discovery accepted.',
+        message: `${INTELLIGENCE_HUB_LABEL} accepted.`,
       })
       await refetch()
       return true
@@ -2605,6 +3081,48 @@ function RuntimeWorkspace() {
     } finally {
       setSavingDiscovery(false)
       setExecutingActionKey('')
+    }
+  }
+
+  const handleResetDiscovery = async () => {
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    setSavingDiscovery(true)
+    setDiscoveryFeedback(null)
+    setShowEvidenceSources(false)
+
+    try {
+      await resetRuntimeDiscovery({
+        runtimeInstanceId,
+        body: {
+          confirmReset: true,
+          expectedUpdatedAt,
+          reason: 'USER_REQUESTED_DISCOVERY_RESET',
+        },
+      }).unwrap()
+      setDiscoveryFeedback({
+        variant: 'success',
+        message: `${INTELLIGENCE_HUB_LABEL} cleared. Enter new ${INTELLIGENCE_HUB_LABEL} data to build a fresh evidence pack.`,
+      })
+      setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
+      await refetch()
+      return true
+    } catch (discoveryError) {
+      const normalizedError = normalizeError(discoveryError)
+      setDiscoveryFeedback({
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      setSavingDiscovery(false)
     }
   }
 
@@ -2626,7 +3144,7 @@ function RuntimeWorkspace() {
     if (!normalizedEvidenceObjectId) {
       setDiscoveryFeedback({
         variant: 'error',
-        message: 'Discovery evidence object is missing its review identifier.',
+        message: `${INTELLIGENCE_HUB_LABEL} evidence object is missing its review identifier.`,
       })
       return false
     }
@@ -3129,6 +3647,7 @@ function RuntimeWorkspace() {
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
             <DiscoverySection
               key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
+              activity={activity}
               discovery={discovery}
               discoveryState={discoveryState}
               disabled={savingDiscovery
@@ -3144,6 +3663,7 @@ function RuntimeWorkspace() {
               feedback={discoveryFeedback}
               mutationDisabledReason={discoveryMutationDisabledReason}
               onAcceptDiscovery={handleAcceptDiscovery}
+              onResetDiscovery={handleResetDiscovery}
               onReviewEvidenceObject={handleReviewEvidenceObject}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
               onToggleSources={() => setShowEvidenceSources((current) => !current)}
@@ -3204,7 +3724,7 @@ function RuntimeWorkspace() {
             <Card.Body className="runtime-workspace__panel-body">
               <div className="runtime-workspace__panel-heading">
                 <MdInfoOutline aria-hidden="true" />
-                <h2>Discovery State</h2>
+                <h2>{INTELLIGENCE_HUB_LABEL} State</h2>
               </div>
               <Status variant={discoveryState === 'Evidence Ready' ? 'success' : 'neutral'} size="sm" showIcon>
                 {discoveryState}
