@@ -6,6 +6,9 @@ import './styles/index.css'
 import App from './App.jsx'
 import { ToasterProvider } from './components/Toaster'
 import { AppInit } from './components/AppInit'
+import { registerDynamicImportRecovery } from './utils/dynamicImportRecovery.js'
+
+registerDynamicImportRecovery()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
