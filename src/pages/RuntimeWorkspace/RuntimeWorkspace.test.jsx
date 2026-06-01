@@ -201,6 +201,12 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
   return render(runtimeWorkspaceTree(initialEntry))
 }
 
+function selectIntelligenceHubTab(name) {
+  const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
+  fireEvent.click(within(discoverySection).getByRole('tab', { name }))
+  return discoverySection
+}
+
 async function openGuidedSection(name = /customer problem/i) {
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name }))
@@ -842,13 +848,26 @@ describe('RuntimeWorkspace', () => {
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(discoverySection).getByText('Evidence Ready')).toBeInTheDocument()
+    expect(within(discoverySection).getByRole('tablist', { name: /intelligence hub sections/i })).toBeInTheDocument()
+    expect(within(discoverySection).getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    const intelligenceHubTabs = ['Inputs', 'Sources', 'Evidence', 'Coverage', 'Governance']
+    intelligenceHubTabs.forEach((tabName) => {
+      expect(within(discoverySection).getByRole('tab', { name: tabName })).toBeInTheDocument()
+    })
+    expect(within(discoverySection).getByRole('region', { name: /acquisition sources/i })).toBeInTheDocument()
+
+    selectIntelligenceHubTab('Inputs')
     const discoveryInputs = within(discoverySection).getByRole('region', { name: /intelligence hub inputs/i })
     expect(discoveryInputs).toHaveTextContent('4 accepted Intelligence Hub inputs captured')
     expect(discoveryInputs).toHaveTextContent('Company website')
     expect(discoveryInputs).not.toHaveTextContent('companyWebsite')
+
+    selectIntelligenceHubTab('Evidence')
     const evidencePack = within(discoverySection).getByRole('region', { name: /evidence pack/i })
     expect(evidencePack).toHaveTextContent('5 governed evidence signals prepared for section intelligence.')
     expect(evidencePack).not.toHaveTextContent('inputKeys')
+
+    selectIntelligenceHubTab('Governance')
     const scopedEvidenceViews = within(discoverySection).getByRole('region', { name: /scoped evidence views/i })
     expect(scopedEvidenceViews).toHaveTextContent('1 section-scoped evidence view projected for guided sections.')
     expect(scopedEvidenceViews).not.toHaveTextContent('customer_problem')
@@ -1167,6 +1186,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.click(screen.getByRole('button', { name: /add url/i }))
@@ -1224,6 +1244,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     const discoveryDocument = new File(
       ['Customer teams need governed workflow automation for value narratives.'],
@@ -1274,6 +1295,7 @@ describe('RuntimeWorkspace', () => {
 
     try {
       renderRuntimeWorkspace()
+      selectIntelligenceHubTab('Inputs')
 
       const discoveryDocument = new File(
         ['Customer teams need governed workflow automation for value narratives.'],
@@ -1299,6 +1321,7 @@ describe('RuntimeWorkspace', () => {
     const user = userEvent.setup()
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     fireEvent.change(screen.getByLabelText('Upload Documents'), {
       target: {
@@ -1356,6 +1379,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
@@ -1421,6 +1445,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     await user.selectOptions(screen.getByLabelText('Acquisition Profile'), 'ENHANCED')
     await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
@@ -1484,11 +1509,14 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    selectIntelligenceHubTab('Evidence')
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
 
+    selectIntelligenceHubTab('Inputs')
     expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
+    selectIntelligenceHubTab('Evidence')
     expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
     expect(within(evidencePack).queryByText('Enhanced')).not.toBeInTheDocument()
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
@@ -1578,6 +1606,7 @@ describe('RuntimeWorkspace', () => {
     })
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/Intelligence Hub cleared/i)).toBeInTheDocument()
+    selectIntelligenceHubTab('Inputs')
     expect(screen.getByLabelText('Website Source 1')).toHaveValue('')
     expect(screen.getByLabelText('Company Name')).toHaveValue('')
     expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
@@ -1587,6 +1616,7 @@ describe('RuntimeWorkspace', () => {
     const user = userEvent.setup()
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     await user.type(screen.getByLabelText('Website Source 1'), 'https://draft.example')
     await user.type(screen.getByLabelText('Company Name'), 'Draft Acme')
@@ -1679,6 +1709,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    selectIntelligenceHubTab('Governance')
     const resetHistory = screen.getByRole('region', { name: /intelligence hub reset history/i })
     expect(within(resetHistory).getByText(/last reset/i)).toHaveTextContent('Jill Faithful')
     expect(resetHistory).toHaveTextContent('Previous Intelligence Hub held 6 inputs, 10 sources, 10 evidence objects, 25 scoped views.')
@@ -1738,18 +1769,22 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    selectIntelligenceHubTab('Evidence')
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
       .toBeInTheDocument()
     expect(within(evidencePack).getByText(/5 sources recorded via deterministic/i)).toBeInTheDocument()
 
+    selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
     expect(within(sourceRegistry).getByText(/5 registered sources: Website, Intelligence Hub Notes/i)).toBeInTheDocument()
 
+    selectIntelligenceHubTab('Evidence')
     const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
     expect(within(evidenceReview).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
       .toBeInTheDocument()
 
+    selectIntelligenceHubTab('Coverage')
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
     expect(within(discoveryHealth).getByText(/coverage 40% \/ standard confidence/i)).toBeInTheDocument()
     expect(within(discoveryHealth).getByText(/missing areas: Proof, Economics/i)).toBeInTheDocument()
@@ -1827,6 +1862,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
     expect(within(sourceRegistry).getByText('Website Sources (1)')).toBeInTheDocument()
     expect(within(sourceRegistry).getByText('https://acme.example/product')).toBeInTheDocument()
@@ -1894,6 +1930,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    selectIntelligenceHubTab('Evidence')
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText(/Enhanced Acquisition \/ Coverage 70%/i)).toBeInTheDocument()
     expect(within(evidencePack).getByText(/11 evidence objects: 0 accepted, 11 pending review, 0 rejected/i))
@@ -1901,6 +1938,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(evidencePack).getByText(/6 sources recorded via Deterministic Website Acquisition/i))
       .toBeInTheDocument()
 
+    selectIntelligenceHubTab('Coverage')
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
     expect(within(discoveryHealth).getByText(/coverage 70% \/ Source Backed confidence/i)).toBeInTheDocument()
   })
@@ -1961,6 +1999,14 @@ describe('RuntimeWorkspace', () => {
                 extractedFact: 'Company website: https://acme.example',
                 reviewStatus: 'PENDING',
               },
+              {
+                evidenceObjectId: 'evidence_notes_fixture',
+                sourceId: 'input_notes',
+                category: 'Value Drivers',
+                coverageArea: 'Value Drivers',
+                extractedFact: 'Discovery note: governed narrative generation is required.',
+                reviewStatus: 'PENDING',
+              },
             ],
           },
         },
@@ -1976,6 +2022,9 @@ describe('RuntimeWorkspace', () => {
     expect(within(evidenceSources).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Company website: https://acme.example')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Intelligence Hub note: governed narrative generation is required.'))
+      .toBeInTheDocument()
+    expect(within(evidenceSources).queryByText(/Discovery note/i)).not.toBeInTheDocument()
 
     await user.click(within(evidenceSources).getByRole('button', {
       name: /reject evidence object evidence_companyWebsite_fixture/i,
@@ -2177,11 +2226,15 @@ describe('RuntimeWorkspace', () => {
     const refreshButton = screen.getByRole('button', { name: /refresh evidence pack/i })
     const acceptEvidenceButton = screen.getByRole('button', { name: /accept evidence/i })
     const clearDiscoveryButton = screen.getByRole('button', { name: /clear intelligence hub/i })
+    selectIntelligenceHubTab('Inputs')
+    expect(screen.getByLabelText('Website Source 1')).toBeDisabled()
+    selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
+    selectIntelligenceHubTab('Evidence')
     const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
+    selectIntelligenceHubTab('Coverage')
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
 
-    expect(screen.getByLabelText('Website Source 1')).toBeDisabled()
     expect(lifecycleReasons).toHaveLength(3)
     expect(refreshButton).toBeDisabled()
     expect(refreshButton).toHaveAttribute('aria-describedby', 'discovery-build-disabled-reason')
@@ -2446,6 +2499,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Inputs')
 
     const refreshButton = screen.getByRole('button', { name: /build evidence pack/i })
     expect(refreshButton).toBeEnabled()
@@ -2492,6 +2546,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
+    selectIntelligenceHubTab('Governance')
     expect(within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })).toHaveTextContent(
       'Intelligence Hub accepted on 2026-05-24.',
     )

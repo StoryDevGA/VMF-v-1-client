@@ -3,16 +3,21 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
   MdAdd,
+  MdAccountTree,
   MdCheckCircle,
   MdClose,
   MdCompareArrows,
   MdDelete,
+  MdDonutLarge,
   MdErrorOutline,
+  MdFactCheck,
   MdInfoOutline,
+  MdInventory2,
   MdOutlineHistory,
   MdRefresh,
   MdSave,
   MdOutlineWarningAmber,
+  MdSource,
   MdUploadFile,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
@@ -25,6 +30,7 @@ import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
+import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tooltip } from '../../components/Tooltip'
 import {
@@ -91,6 +97,14 @@ const buildEmptyDiscoveryDraftInputs = () => ({
 const INTELLIGENCE_HUB_LABEL = 'Intelligence Hub'
 const INTELLIGENCE_HUB_EVIDENCE_LABEL = `${INTELLIGENCE_HUB_LABEL} evidence`
 const INTELLIGENCE_HUB_INPUTS_LABEL = `${INTELLIGENCE_HUB_LABEL} inputs`
+const INTELLIGENCE_HUB_TAB_INDEXES = Object.freeze({
+  OVERVIEW: 0,
+  INPUTS: 1,
+  SOURCES: 2,
+  EVIDENCE: 3,
+  COVERAGE: 4,
+  GOVERNANCE: 5,
+})
 const normalizeIntelligenceHubDisplayText = (value) =>
   String(value || '').trim().replace(/\bDiscovery\b/g, INTELLIGENCE_HUB_LABEL)
 
@@ -1973,6 +1987,7 @@ function DiscoverySection({
   const [documentUploadPreparing, setDocumentUploadPreparing] = useState(false)
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
   const [showResetWarning, setShowResetWarning] = useState(false)
+  const [activeIntelligenceHubTab, setActiveIntelligenceHubTab] = useState(INTELLIGENCE_HUB_TAB_INDEXES.OVERVIEW)
   const documentUploadPreparingRef = useRef(false)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
   const evidenceSummaryKeys = Array.isArray(discovery?.evidenceSummary?.keys) ? discovery.evidenceSummary.keys : []
@@ -2262,245 +2277,517 @@ function DiscoverySection({
     })
   }
 
+  const handleToggleSourcesClick = () => {
+    setActiveIntelligenceHubTab(INTELLIGENCE_HUB_TAB_INDEXES.SOURCES)
+    onToggleSources?.()
+  }
+
+  const recentSourceEntries = sourceRegistryGroups
+    .flatMap((group) => group.entries.map((source) => ({
+      groupLabel: group.label,
+      source,
+    })))
+    .slice(0, 3)
+  const coverageMetricValue = healthCoveragePercent !== null
+    ? `${healthCoveragePercent}%`
+    : coverageScore !== null
+      ? `${coverageScore}%`
+      : 'Not projected'
+  const coverageMetricSummary = healthCoveragePercent !== null
+    ? `${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+    : 'Coverage is not projected for this runtime yet.'
+  const sourceLineageValue = sourceCount > 0 ? String(sourceCount) : '0'
+
   return (
     <Card variant="default" className="runtime-workspace__section-card">
       <Card.Body className="runtime-workspace__section-body">
         <form className="runtime-workspace__section-form" onSubmit={handleRefreshEvidence}>
           <div className="runtime-workspace__section-heading">
-          <div>
-            <h2>{INTELLIGENCE_HUB_LABEL}</h2>
-            <p>Section 0 evidence layer for downstream guided execution.</p>
+            <div>
+              <h2>{INTELLIGENCE_HUB_LABEL}</h2>
+              <p>Section 0 evidence layer for downstream guided execution.</p>
+            </div>
+            <div className="runtime-workspace__section-badges">
+              <Badge variant="info" size="sm" pill outline>Section 0</Badge>
+              <Badge variant="neutral" size="sm" pill outline>{discoveryState}</Badge>
+            </div>
           </div>
-          <div className="runtime-workspace__section-badges">
-            <Badge variant="info" size="sm" pill outline>Section 0</Badge>
-            <Badge variant="neutral" size="sm" pill outline>{discoveryState}</Badge>
-          </div>
-          </div>
-          <div
-            className="runtime-workspace__section-panels"
-            role="region"
-            aria-label={`${INTELLIGENCE_HUB_LABEL} state`}
+          <TabView
+            activeTab={activeIntelligenceHubTab}
+            onTabChange={setActiveIntelligenceHubTab}
+            variant="default"
+            size="sm"
+            className="runtime-workspace__intelligence-tabs"
+            aria-label={`${INTELLIGENCE_HUB_LABEL} sections`}
           >
-            <section
-              className="runtime-workspace__section-panel runtime-workspace__section-panel--discovery-inputs"
-              aria-label={INTELLIGENCE_HUB_INPUTS_LABEL}
-            >
-              <h3>{INTELLIGENCE_HUB_INPUTS_LABEL}</h3>
-              <Select
-                id="runtime-discovery-acquisition-profile"
-                label="Acquisition Profile"
-                value={acquisitionProfile}
-                onChange={handleAcquisitionProfileChange}
-                options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
-                disabled={disabled}
-              />
-              <div
-                className="runtime-workspace__website-sources"
-                role="group"
-                aria-labelledby="runtime-discovery-website-sources-label"
-              >
-                <div className="runtime-workspace__website-sources-heading">
-                  <span id="runtime-discovery-website-sources-label">Website Sources</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="runtime-workspace__website-source-control"
-                    leftIcon={<MdAdd aria-hidden="true" />}
-                    disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
-                    onClick={handleAddWebsiteSource}
+            <TabView.Tab label="Overview">
+              <div className="runtime-workspace__intelligence-tab-panel">
+                <div className="runtime-workspace__intelligence-overview-grid">
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__intelligence-metric"
+                    aria-label="Acquisition sources"
                   >
-                    Add URL
-                  </Button>
-                </div>
-                {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
-                  <div className="runtime-workspace__website-source-row" key={`website-source-${index}`}>
-                    <Input
-                      id={`runtime-discovery-website-source-${index}`}
-                      label={`Website Source ${index + 1}`}
-                      value={websiteSource}
-                      onChange={handleWebsiteSourceChange(index)}
-                      disabled={disabled}
-                      helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="runtime-workspace__website-source-control"
-                      leftIcon={<MdDelete aria-hidden="true" />}
-                      disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
-                      aria-label={`Remove website source ${index + 1}`}
-                      onClick={handleRemoveWebsiteSource(index)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <Input
-                id="runtime-discovery-company-name"
-                label="Company Name"
-                value={draftInputs.companyName}
-                onChange={handleInputChange('companyName')}
-                disabled={disabled}
-              />
-              <Input
-                id="runtime-discovery-market-region"
-                label="Market / Region"
-                value={draftInputs.marketRegion}
-                onChange={handleInputChange('marketRegion')}
-                disabled={disabled}
-              />
-              <Input
-                id="runtime-discovery-target-offer"
-                label="Target Product or Offer"
-                value={draftInputs.targetOffer}
-                onChange={handleInputChange('targetOffer')}
-                disabled={disabled}
-              />
-              <Textarea
-                id="runtime-discovery-notes"
-                label="Optional Notes"
-                value={draftInputs.notes}
-                onChange={handleInputChange('notes')}
-                disabled={disabled}
-                rows={4}
-              />
-              <div className="runtime-workspace__document-upload">
-                <div className="runtime-workspace__document-upload-field">
-                  <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
-                    Upload Documents
-                  </span>
-                  <input
-                    id="runtime-discovery-documents"
-                    type="file"
-                    className="runtime-workspace__document-upload-input sr-only"
-                    accept={DISCOVERY_DOCUMENT_ACCEPT}
-                    multiple
-                    onChange={handleDocumentUploadChange}
-                    disabled={disabled || saving || documentUploadPreparing}
-                    aria-labelledby="runtime-discovery-documents-label"
-                    aria-describedby="runtime-discovery-documents-helper"
-                  />
-                  <label
-                    htmlFor="runtime-discovery-documents"
-                    className={`btn btn--primary btn--md runtime-workspace__document-upload-button${
-                      disabled || saving || documentUploadPreparing
-                        ? ' runtime-workspace__document-upload-button--disabled'
-                        : ''
-                    }`}
-                    aria-disabled={disabled || saving || documentUploadPreparing}
-                  >
-                    <span className="btn__content">
-                      <span className="btn__icon btn__icon--left" aria-hidden="true">
-                        <MdUploadFile />
-                      </span>
-                      Choose Files
+                    <div className="runtime-workspace__intelligence-metric-copy">
+                      <h3>Acquisition Sources</h3>
+                      <p className="runtime-workspace__intelligence-metric-value">{sourceCount}</p>
+                      <p className="runtime-workspace__section-note">
+                        {sourceRegistrySummaryText || 'No source registry entries are projected yet.'}
+                      </p>
+                    </div>
+                    <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
+                      <MdSource />
                     </span>
-                  </label>
-                  <span className="input-helper" id="runtime-discovery-documents-helper">
-                    PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
-                  </span>
+                  </section>
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__intelligence-metric"
+                    aria-label="Evidence objects"
+                  >
+                    <div className="runtime-workspace__intelligence-metric-copy">
+                      <h3>Evidence Objects</h3>
+                      <p className="runtime-workspace__intelligence-metric-value">
+                        {evidenceObjectSummary.evidenceObjectCount}
+                      </p>
+                      <p className="runtime-workspace__section-note">
+                        {evidenceObjectSummaryText || 'No reviewable evidence objects are projected yet.'}
+                      </p>
+                    </div>
+                    <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
+                      <MdInventory2 />
+                    </span>
+                  </section>
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__intelligence-metric"
+                    aria-label="Accepted evidence"
+                  >
+                    <div className="runtime-workspace__intelligence-metric-copy">
+                      <h3>Accepted Evidence</h3>
+                      <p className="runtime-workspace__intelligence-metric-value">
+                        {evidenceObjectSummary.acceptedEvidenceCount}
+                      </p>
+                      <p className="runtime-workspace__section-note">
+                        {isAccepted
+                          ? `${INTELLIGENCE_HUB_LABEL} is accepted for downstream generation.`
+                          : `${INTELLIGENCE_HUB_LABEL} has not been accepted yet.`}
+                      </p>
+                    </div>
+                    <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
+                      <MdFactCheck />
+                    </span>
+                  </section>
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__intelligence-metric"
+                    aria-label="Coverage score"
+                  >
+                    <div className="runtime-workspace__intelligence-metric-copy">
+                      <h3>Coverage Score</h3>
+                      <p className="runtime-workspace__intelligence-metric-value">{coverageMetricValue}</p>
+                      <p className="runtime-workspace__section-note">{coverageMetricSummary}</p>
+                    </div>
+                    <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
+                      <MdDonutLarge />
+                    </span>
+                  </section>
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__intelligence-metric"
+                    aria-label="Source lineage"
+                  >
+                    <div className="runtime-workspace__intelligence-metric-copy">
+                      <h3>Source Lineage</h3>
+                      <p className="runtime-workspace__intelligence-metric-value">{sourceLineageValue}</p>
+                      <p className="runtime-workspace__section-note">
+                        {sourceCount > 0
+                          ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
+                          : 'No source lineage is recorded for this runtime yet.'}
+                      </p>
+                    </div>
+                    <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
+                      <MdAccountTree />
+                    </span>
+                  </section>
                 </div>
-                {documentUploadPreparing ? (
-                  <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
-                ) : null}
-                {documentUploadError ? (
-                  <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
-                ) : null}
-                {draftDocumentSources.length > 0 ? (
-                  <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label={`Selected ${INTELLIGENCE_HUB_LABEL} documents`}>
-                    {draftDocumentSources.map((documentSource) => (
-                      <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
-                        <strong>{documentSource.fileName}</strong>
-                        <span>{`${Math.max(1, Math.round((documentSource.sizeBytes || 0) / 1024))} KB ready for ingestion`}</span>
-                      </li>
+                <div className="runtime-workspace__section-panels runtime-workspace__intelligence-overview-panels">
+                  <section className="runtime-workspace__section-panel" aria-label="Recent sources">
+                    <h3>Recent Sources</h3>
+                    {recentSourceEntries.length > 0 ? (
+                      <ul className="runtime-workspace__plain-list">
+                        {recentSourceEntries.map(({ groupLabel, source }) => (
+                          <li key={source.sourceId || source.fieldKey || source.lineageRef}>
+                            <strong>{formatSourceRegistryEntryTitle(source)}</strong>
+                            <span>{[groupLabel, formatSourceRegistryEntryMeta(source)].filter(Boolean).join(' / ')}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>{sourceRegistrySummaryText || 'No recent source registry entries are projected yet.'}</p>
+                    )}
+                  </section>
+                  <section className="runtime-workspace__section-panel" aria-label="Coverage summary">
+                    <h3>Coverage Summary</h3>
+                    <p>
+                      {healthCoveragePercent !== null
+                        ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+                        : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
+                    </p>
+                    <p className="runtime-workspace__section-note">
+                      {healthMissingAreas.length > 0
+                        ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
+                        : 'No missing areas are currently projected.'}
+                    </p>
+                  </section>
+                  <section className="runtime-workspace__section-panel" aria-label="Accepted truth summary">
+                    <h3>Accepted Truth Summary</h3>
+                    <p>
+                      {isAccepted
+                        ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
+                        : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
+                    </p>
+                    <p className="runtime-workspace__section-note">
+                      {scopedViewKeys.length > 0
+                        ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
+                        : 'Section-scoped evidence will appear when the backend projects it.'}
+                    </p>
+                  </section>
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Inputs">
+              <div className="runtime-workspace__section-panels">
+                <section
+                  className="runtime-workspace__section-panel runtime-workspace__section-panel--discovery-inputs"
+                  aria-label={INTELLIGENCE_HUB_INPUTS_LABEL}
+                >
+                  <h3>{INTELLIGENCE_HUB_INPUTS_LABEL}</h3>
+                  <Select
+                    id="runtime-discovery-acquisition-profile"
+                    label="Acquisition Profile"
+                    value={acquisitionProfile}
+                    onChange={handleAcquisitionProfileChange}
+                    options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
+                    disabled={disabled}
+                  />
+                  <div
+                    className="runtime-workspace__website-sources"
+                    role="group"
+                    aria-labelledby="runtime-discovery-website-sources-label"
+                  >
+                    <div className="runtime-workspace__website-sources-heading">
+                      <span id="runtime-discovery-website-sources-label">Website Sources</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="runtime-workspace__website-source-control"
+                        leftIcon={<MdAdd aria-hidden="true" />}
+                        disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
+                        onClick={handleAddWebsiteSource}
+                      >
+                        Add URL
+                      </Button>
+                    </div>
+                    {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
+                      <div className="runtime-workspace__website-source-row" key={`website-source-${index}`}>
+                        <Input
+                          id={`runtime-discovery-website-source-${index}`}
+                          label={`Website Source ${index + 1}`}
+                          value={websiteSource}
+                          onChange={handleWebsiteSourceChange(index)}
+                          disabled={disabled}
+                          helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="runtime-workspace__website-source-control"
+                          leftIcon={<MdDelete aria-hidden="true" />}
+                          disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
+                          aria-label={`Remove website source ${index + 1}`}
+                          onClick={handleRemoveWebsiteSource(index)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+                  <Input
+                    id="runtime-discovery-company-name"
+                    label="Company Name"
+                    value={draftInputs.companyName}
+                    onChange={handleInputChange('companyName')}
+                    disabled={disabled}
+                  />
+                  <Input
+                    id="runtime-discovery-market-region"
+                    label="Market / Region"
+                    value={draftInputs.marketRegion}
+                    onChange={handleInputChange('marketRegion')}
+                    disabled={disabled}
+                  />
+                  <Input
+                    id="runtime-discovery-target-offer"
+                    label="Target Product or Offer"
+                    value={draftInputs.targetOffer}
+                    onChange={handleInputChange('targetOffer')}
+                    disabled={disabled}
+                  />
+                  <Textarea
+                    id="runtime-discovery-notes"
+                    label="Optional Notes"
+                    value={draftInputs.notes}
+                    onChange={handleInputChange('notes')}
+                    disabled={disabled}
+                    rows={4}
+                  />
+                  <div className="runtime-workspace__document-upload">
+                    <div className="runtime-workspace__document-upload-field">
+                      <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
+                        Upload Documents
+                      </span>
+                      <input
+                        id="runtime-discovery-documents"
+                        type="file"
+                        className="runtime-workspace__document-upload-input sr-only"
+                        accept={DISCOVERY_DOCUMENT_ACCEPT}
+                        multiple
+                        onChange={handleDocumentUploadChange}
+                        disabled={disabled || saving || documentUploadPreparing}
+                        aria-labelledby="runtime-discovery-documents-label"
+                        aria-describedby="runtime-discovery-documents-helper"
+                      />
+                      <label
+                        htmlFor="runtime-discovery-documents"
+                        className={`btn btn--primary btn--md runtime-workspace__document-upload-button${
+                          disabled || saving || documentUploadPreparing
+                            ? ' runtime-workspace__document-upload-button--disabled'
+                            : ''
+                        }`}
+                        aria-disabled={disabled || saving || documentUploadPreparing}
+                      >
+                        <span className="btn__content">
+                          <span className="btn__icon btn__icon--left" aria-hidden="true">
+                            <MdUploadFile />
+                          </span>
+                          Choose Files
+                        </span>
+                      </label>
+                      <span className="input-helper" id="runtime-discovery-documents-helper">
+                        PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
+                      </span>
+                    </div>
+                    {documentUploadPreparing ? (
+                      <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
+                    ) : null}
+                    {documentUploadError ? (
+                      <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
+                    ) : null}
+                    {draftDocumentSources.length > 0 ? (
+                      <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label={`Selected ${INTELLIGENCE_HUB_LABEL} documents`}>
+                        {draftDocumentSources.map((documentSource) => (
+                          <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
+                            <strong>{documentSource.fileName}</strong>
+                            <span>{`${Math.max(1, Math.round((documentSource.sizeBytes || 0) / 1024))} KB ready for ingestion`}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                  <p>{inputsSummary || `No ${INTELLIGENCE_HUB_LABEL} input projection is available yet.`}</p>
+                </section>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Sources">
+              <div className="runtime-workspace__section-panels">
+                <section className="runtime-workspace__section-panel" aria-label="Source registry">
+                  <h3>Source Registry</h3>
+                  <p>
+                    {sourceRegistrySummaryText || 'No source registry entries are projected for this runtime yet.'}
+                  </p>
+                  {sourceRegistryGroups.length > 0 ? (
+                    <SourceRegistryGroupList groups={sourceRegistryGroups} />
+                  ) : null}
+                </section>
+                {showSources ? (
+                  <section className="runtime-workspace__section-panel" aria-label="Evidence sources">
+                    <h3>Evidence Sources</h3>
+                    {evidenceDetailLoading ? (
+                      <Status variant="info" size="sm" showIcon>Loading sources</Status>
+                    ) : evidenceDetailError ? (
+                      <Status variant="error" size="sm" showIcon>{evidenceDetailError.message}</Status>
+                    ) : sourceRegistry.length > 0 || evidenceObjects.length > 0 || lineageSources.length > 0 ? (
+                      <div className="runtime-workspace__evidence-detail-grid">
+                        <div>
+                          <h4>Source Registry</h4>
+                          {sourceRegistry.length > 0 ? (
+                            <SourceRegistryGroupList groups={sourceRegistryGroups} />
+                          ) : (
+                            <p>No source registry entries are available for this evidence pack.</p>
+                          )}
+                        </div>
+                        <div>
+                          <h4>Evidence Objects</h4>
+                          {evidenceObjects.length > 0 ? (
+                            <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects">
+                              {evidenceObjects.map((evidenceObject) => {
+                                const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
+                                const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
+                                const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
+                                const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
+                                  && !disabled
+                                  && !mutationDisabledReason
+                                  && !evidenceReviewInFlight
+
+                                return (
+                                  <li key={evidenceObject.evidenceObjectId || evidenceObject.lineageRef}>
+                                    <div className="runtime-workspace__evidence-object-heading">
+                                      <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
+                                      <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
+                                        {formatRuntimeTokenLabel(reviewStatus)}
+                                      </Badge>
+                                    </div>
+                                    <span>
+                                      {normalizeIntelligenceHubDisplayText(evidenceObject.extractedFact)
+                                        || 'No extracted fact text is available.'}
+                                    </span>
+                                    <span className="runtime-workspace__section-note">
+                                      {[evidenceObject.coverageArea, evidenceObject.sourceId].filter(Boolean).join(' / ')}
+                                    </span>
+                                    <div className="runtime-workspace__evidence-object-actions">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        leftIcon={<MdCheckCircle aria-hidden="true" />}
+                                        disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
+                                        loading={isReviewing && reviewStatus !== 'ACCEPTED'}
+                                        aria-label={`Accept evidence object ${actionLabel}`}
+                                        onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
+                                      >
+                                        Accept
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="danger"
+                                        size="sm"
+                                        leftIcon={<MdErrorOutline aria-hidden="true" />}
+                                        disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
+                                        loading={isReviewing && reviewStatus !== 'REJECTED'}
+                                        aria-label={`Reject evidence object ${actionLabel}`}
+                                        onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
+                                      >
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          ) : (
+                            <p>No reviewable evidence objects are available for this evidence pack.</p>
+                          )}
+                        </div>
+                        {lineageSources.length > 0 ? (
+                          <div>
+                            <h4>Lineage</h4>
+                            <ul className="runtime-workspace__plain-list">
+                              {lineageSources.map((source) => (
+                                <li key={source.sourceId || source.fieldKey || source.valueHash}>
+                                  <strong>{formatLineageSourceTitle(source)}</strong>
+                                  <span>{[source.type, source.status, source.fileName, source.url].filter(Boolean).join(' / ')}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p>No source lineage is available for this evidence pack.</p>
+                    )}
+                  </section>
                 ) : null}
               </div>
-              <p>{inputsSummary || `No ${INTELLIGENCE_HUB_LABEL} input projection is available yet.`}</p>
-            </section>
-          <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
-            <h3>Evidence Pack</h3>
-            <p>
-              {acquisitionLabel}
-              {coverageScore !== null ? ` / Coverage ${coverageScore}%` : ''}
-            </p>
-            <p>
-              {hasEvidence
-                ? evidenceObjectSummaryText || evidenceSummary || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} is ready for governed downstream use.`
-                : `No ${INTELLIGENCE_HUB_LABEL} evidence pack is projected for this runtime yet.`}
-            </p>
-            <p>
-              {sourceCount > 0
-                ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
-                : 'No source lineage is recorded for this runtime yet.'}
-            </p>
-          </section>
-          <section className="runtime-workspace__section-panel" aria-label="Source registry">
-            <h3>Source Registry</h3>
-            <p>
-              {sourceRegistrySummaryText || 'No source registry entries are projected for this runtime yet.'}
-            </p>
-            {sourceRegistryGroups.length > 0 ? (
-              <SourceRegistryGroupList groups={sourceRegistryGroups} />
-            ) : null}
-          </section>
-          <section className="runtime-workspace__section-panel" aria-label="Evidence review">
-            <h3>Evidence Review</h3>
-            <p>
-              {evidenceObjectSummaryText || 'No reviewable evidence objects are projected for this runtime yet.'}
-            </p>
-          </section>
-          <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} health`}>
-            <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
-            <p>
-              {healthCoveragePercent !== null
-                ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
-                : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
-            </p>
-            <p className="runtime-workspace__section-note">
-              {healthMissingAreas.length > 0
-                ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
-                : 'No missing areas are currently projected.'}
-            </p>
-          </section>
-          <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
-            <h3>Scoped Evidence Views</h3>
-            <p>
-              {scopedViewKeys.length > 0
-                ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
-                : 'Section-scoped evidence will appear here when the backend projects it.'}
-            </p>
-          </section>
-          <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} acceptance`}>
-            <h3>Acceptance</h3>
-            <p>
-              {isAccepted
-                ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
-                : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
-            </p>
-          </section>
-          {discoveryResetSummary ? (
-            <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} reset history`}>
-              <h3>Reset History</h3>
-              <p>
-                Last reset
-                {discoveryResetAtLabel ? ` ${discoveryResetAtLabel}` : ''}
-                {discoveryResetSummary.resetBy ? ` by ${discoveryResetSummary.resetBy}` : ''}
-                .
-              </p>
-              <p className="runtime-workspace__section-note">
-                {formatDiscoveryResetPreviousEvidence(discoveryResetSummary.previousEvidenceSummary)}
-              </p>
-              {discoveryResetClearedText ? (
-                <p className="runtime-workspace__section-note">{discoveryResetClearedText}</p>
-              ) : null}
-            </section>
-          ) : null}
-          </div>
+            </TabView.Tab>
+            <TabView.Tab label="Evidence">
+              <div className="runtime-workspace__section-panels">
+                <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
+                  <h3>Evidence Pack</h3>
+                  <p>
+                    {acquisitionLabel}
+                    {coverageScore !== null ? ` / Coverage ${coverageScore}%` : ''}
+                  </p>
+                  <p>
+                    {hasEvidence
+                      ? evidenceObjectSummaryText || evidenceSummary || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} is ready for governed downstream use.`
+                      : `No ${INTELLIGENCE_HUB_LABEL} evidence pack is projected for this runtime yet.`}
+                  </p>
+                  <p>
+                    {sourceCount > 0
+                      ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
+                      : 'No source lineage is recorded for this runtime yet.'}
+                  </p>
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label="Evidence review">
+                  <h3>Evidence Review</h3>
+                  <p>
+                    {evidenceObjectSummaryText || 'No reviewable evidence objects are projected for this runtime yet.'}
+                  </p>
+                </section>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Coverage">
+              <div className="runtime-workspace__section-panels">
+                <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} health`}>
+                  <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
+                  <p>
+                    {healthCoveragePercent !== null
+                      ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+                      : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
+                  </p>
+                  <p className="runtime-workspace__section-note">
+                    {healthMissingAreas.length > 0
+                      ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
+                      : 'No missing areas are currently projected.'}
+                  </p>
+                </section>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Governance">
+              <div className="runtime-workspace__section-panels">
+                <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
+                  <h3>Scoped Evidence Views</h3>
+                  <p>
+                    {scopedViewKeys.length > 0
+                      ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
+                      : 'Section-scoped evidence will appear here when the backend projects it.'}
+                  </p>
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} acceptance`}>
+                  <h3>Acceptance</h3>
+                  <p>
+                    {isAccepted
+                      ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
+                      : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
+                  </p>
+                </section>
+                {discoveryResetSummary ? (
+                  <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} reset history`}>
+                    <h3>Reset History</h3>
+                    <p>
+                      Last reset
+                      {discoveryResetAtLabel ? ` ${discoveryResetAtLabel}` : ''}
+                      {discoveryResetSummary.resetBy ? ` by ${discoveryResetSummary.resetBy}` : ''}
+                      .
+                    </p>
+                    <p className="runtime-workspace__section-note">
+                      {formatDiscoveryResetPreviousEvidence(discoveryResetSummary.previousEvidenceSummary)}
+                    </p>
+                    {discoveryResetClearedText ? (
+                      <p className="runtime-workspace__section-note">{discoveryResetClearedText}</p>
+                    ) : null}
+                  </section>
+                ) : null}
+              </div>
+            </TabView.Tab>
+          </TabView>
           {feedback?.message ? (
             <Status
               variant={feedback.variant === 'error' ? 'error' : feedback.variant === 'success' ? 'success' : 'info'}
@@ -2531,7 +2818,7 @@ function DiscoverySection({
               leftIcon={<MdInfoOutline aria-hidden="true" />}
               disabled={!hasEvidence}
               aria-describedby={sourcesDisabledReason ? sourcesReasonId : undefined}
-              onClick={onToggleSources}
+              onClick={handleToggleSourcesClick}
             >
               {showSources ? 'Hide Sources' : 'View Sources'}
             </Button>
@@ -2634,101 +2921,6 @@ function DiscoverySection({
             <p id={resetReasonId} className="runtime-workspace__action-disabled-reason">
               {resetDisabledReason}
             </p>
-          ) : null}
-          {showSources ? (
-            <section className="runtime-workspace__section-panel" aria-label="Evidence sources">
-              <h3>Evidence Sources</h3>
-              {evidenceDetailLoading ? (
-                <Status variant="info" size="sm" showIcon>Loading sources</Status>
-              ) : evidenceDetailError ? (
-                <Status variant="error" size="sm" showIcon>{evidenceDetailError.message}</Status>
-              ) : sourceRegistry.length > 0 || evidenceObjects.length > 0 || lineageSources.length > 0 ? (
-                <div className="runtime-workspace__evidence-detail-grid">
-                  <div>
-                    <h4>Source Registry</h4>
-                    {sourceRegistry.length > 0 ? (
-                      <SourceRegistryGroupList groups={sourceRegistryGroups} />
-                    ) : (
-                      <p>No source registry entries are available for this evidence pack.</p>
-                    )}
-                  </div>
-                  <div>
-                    <h4>Evidence Objects</h4>
-                    {evidenceObjects.length > 0 ? (
-                      <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects">
-                        {evidenceObjects.map((evidenceObject) => {
-                          const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
-                          const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
-                          const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
-                          const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
-                            && !disabled
-                            && !mutationDisabledReason
-                            && !evidenceReviewInFlight
-
-                          return (
-                            <li key={evidenceObject.evidenceObjectId || evidenceObject.lineageRef}>
-                              <div className="runtime-workspace__evidence-object-heading">
-                                <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
-                                <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
-                                  {formatRuntimeTokenLabel(reviewStatus)}
-                                </Badge>
-                              </div>
-                              <span>{evidenceObject.extractedFact || 'No extracted fact text is available.'}</span>
-                              <span className="runtime-workspace__section-note">
-                                {[evidenceObject.coverageArea, evidenceObject.sourceId].filter(Boolean).join(' / ')}
-                              </span>
-                              <div className="runtime-workspace__evidence-object-actions">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  leftIcon={<MdCheckCircle aria-hidden="true" />}
-                                  disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
-                                  loading={isReviewing && reviewStatus !== 'ACCEPTED'}
-                                  aria-label={`Accept evidence object ${actionLabel}`}
-                                  onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
-                                >
-                                  Accept
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="danger"
-                                  size="sm"
-                                  leftIcon={<MdErrorOutline aria-hidden="true" />}
-                                  disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
-                                  loading={isReviewing && reviewStatus !== 'REJECTED'}
-                                  aria-label={`Reject evidence object ${actionLabel}`}
-                                  onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
-                                >
-                                  Reject
-                                </Button>
-                              </div>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    ) : (
-                      <p>No reviewable evidence objects are available for this evidence pack.</p>
-                    )}
-                  </div>
-                  {lineageSources.length > 0 ? (
-                    <div>
-                      <h4>Lineage</h4>
-                      <ul className="runtime-workspace__plain-list">
-                        {lineageSources.map((source) => (
-                          <li key={source.sourceId || source.fieldKey || source.valueHash}>
-                            <strong>{formatLineageSourceTitle(source)}</strong>
-                            <span>{[source.type, source.status, source.fileName, source.url].filter(Boolean).join(' / ')}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <p>No source lineage is available for this evidence pack.</p>
-              )}
-            </section>
           ) : null}
         </form>
       </Card.Body>
