@@ -106,6 +106,8 @@
   --color-info: #a8b0b0;
   --color-info-hover: #8a9494;
   --color-info-active: #677070;
+  --color-data-blue: #67e8f9;
+  --color-metric-accent: var(--color-data-blue);
 
   /* Compatibility aliases for legacy component/page tokens.
      These keep older surfaces aligned with the canonical SLOS system. */

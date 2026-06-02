@@ -207,6 +207,12 @@ function selectIntelligenceHubTab(name) {
   return discoverySection
 }
 
+function selectRuntimeSectionTab(name) {
+  const guidedSections = screen.getByRole('main', { name: /guided execution sections/i })
+  fireEvent.click(within(guidedSections).getByRole('tab', { name }))
+  return guidedSections
+}
+
 async function openGuidedSection(name = /customer problem/i) {
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name }))
@@ -326,7 +332,6 @@ describe('RuntimeWorkspace', () => {
     expect(sectionList).not.toHaveAttribute('role')
     expect(within(sectionList).getAllByRole('listitem')).toHaveLength(1)
     expect(within(sections).getByRole('heading', { name: /customer problem/i })).toBeInTheDocument()
-    expect(screen.getByLabelText(/customer problem/i)).toHaveValue('Proposal creation is slow.')
     expect(screen.queryByText('framework_state.sections.customer_problem')).not.toBeInTheDocument()
     const sectionCard = within(sectionList).getByRole('listitem')
     expect(within(sectionCard).getByText('Required')).toBeInTheDocument()
@@ -339,15 +344,25 @@ describe('RuntimeWorkspace', () => {
     expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
     const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
     expect(sectionObject).toBeInTheDocument()
+    expect(within(sectionObject).getByRole('tablist', { name: /customer problem sections/i })).toBeInTheDocument()
+    const customerProblemTabs = ['Overview', 'Context', 'Truth', 'Governance']
+    customerProblemTabs.forEach((tabName) => {
+      expect(within(sectionObject).getByRole('tab', { name: tabName })).toBeInTheDocument()
+    })
+    selectRuntimeSectionTab('Context')
+    expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveValue('Proposal creation is slow.')
     expect(within(sectionObject).getByRole('region', { name: /your additional context/i })).toHaveTextContent('Customer Problem')
+    selectRuntimeSectionTab('Overview')
     expect(within(sectionObject).getByRole('region', { name: /generated content/i })).toHaveTextContent('Awaiting generation')
+    selectRuntimeSectionTab('Truth')
     expect(within(sectionObject).getByRole('region', { name: /accepted truth/i })).toHaveTextContent('No accepted governed truth')
+    selectRuntimeSectionTab('Governance')
     const governedIntelligence = screen.getByRole('region', { name: /governed intelligence/i })
-    expect(within(governedIntelligence).getByText('Confidence')).toHaveClass('runtime-workspace__section-intelligence-label')
+    expect(within(governedIntelligence).getByText('Confidence').closest('.runtime-workspace__section-detail-row')).toBeInTheDocument()
     const truthReadiness = within(governedIntelligence).getByText(/section needs generated and accepted truth/i)
     expect(truthReadiness).toBeInTheDocument()
-    expect(truthReadiness).not.toHaveClass('runtime-workspace__section-intelligence-label')
-    expect(truthReadiness.closest('.status')).toHaveClass('status--warning')
+    expect(truthReadiness.closest('.runtime-workspace__section-detail-copy')).toBeInTheDocument()
+    expect(within(governedIntelligence).getByText('Draft Input Needed').closest('.badge')).toHaveClass('badge--warning')
 
     const intelligencePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
@@ -869,7 +884,8 @@ describe('RuntimeWorkspace', () => {
 
     selectIntelligenceHubTab('Governance')
     const scopedEvidenceViews = within(discoverySection).getByRole('region', { name: /scoped evidence views/i })
-    expect(scopedEvidenceViews).toHaveTextContent('1 section-scoped evidence view projected for guided sections.')
+    expect(scopedEvidenceViews).toHaveTextContent('1 section-scoped evidence view')
+    expect(scopedEvidenceViews).toHaveTextContent('Projected for guided sections.')
     expect(scopedEvidenceViews).not.toHaveTextContent('customer_problem')
     expect(within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })).toHaveTextContent(
       'Intelligence Hub has not been accepted',
@@ -1028,18 +1044,20 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await openGuidedSection()
 
+    expect(screen.getByRole('tablist', { name: /customer problem sections/i })).toBeInTheDocument()
     const generatedRegion = screen.getByRole('region', { name: /generated content/i })
     expect(within(generatedRegion).getByRole('heading', { name: /generated insight/i })).toBeInTheDocument()
     expect(within(generatedRegion).getByRole('heading', { name: /primary value drivers/i })).toBeInTheDocument()
     expect(within(generatedRegion).getByText('Reduced manual narrative overhead')).toBeInTheDocument()
     expect(within(generatedRegion).getByText(/These drivers align to accepted Intelligence Hub context/i)).toBeInTheDocument()
-    expect(within(generatedRegion).getByRole('list', { name: /supporting evidence/i })).toHaveTextContent(
-      'Target Offer: AI-native enterprise value management platform',
-    )
+    const supportingEvidence = within(generatedRegion).getByRole('list', { name: /supporting evidence/i })
+    expect(within(supportingEvidence).getByText('Target Offer')).toBeInTheDocument()
+    expect(within(supportingEvidence).getByText('AI-native enterprise value management platform')).toBeInTheDocument()
     expect(within(generatedRegion).getByRole('list', { name: /generation boundaries/i })).toHaveTextContent(
       'No ROI statistics were generated because no accepted ROI evidence is present.',
     )
 
+    selectRuntimeSectionTab('Governance')
     const governedIntelligence = screen.getByRole('region', { name: /governed intelligence/i })
     expect(within(governedIntelligence).getByText('Confidence: Medium')).toBeInTheDocument()
     expect(within(governedIntelligence).getByText('No customer validation notes supplied')).toBeInTheDocument()
@@ -1711,7 +1729,8 @@ describe('RuntimeWorkspace', () => {
 
     selectIntelligenceHubTab('Governance')
     const resetHistory = screen.getByRole('region', { name: /intelligence hub reset history/i })
-    expect(within(resetHistory).getByText(/last reset/i)).toHaveTextContent('Jill Faithful')
+    expect(within(resetHistory).getByText(/last reset/i)).toBeInTheDocument()
+    expect(resetHistory).toHaveTextContent('Jill Faithful')
     expect(resetHistory).toHaveTextContent('Previous Intelligence Hub held 6 inputs, 10 sources, 10 evidence objects, 25 scoped views.')
     expect(resetHistory).toHaveTextContent('1 section truth cleared.')
     expect(resetHistory).not.toHaveTextContent('previousValue')
@@ -1773,7 +1792,8 @@ describe('RuntimeWorkspace', () => {
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
       .toBeInTheDocument()
-    expect(within(evidencePack).getByText(/5 sources recorded via deterministic/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/5 sources recorded/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/Recorded via Deterministic/i)).toBeInTheDocument()
 
     selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
@@ -1786,8 +1806,10 @@ describe('RuntimeWorkspace', () => {
 
     selectIntelligenceHubTab('Coverage')
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
-    expect(within(discoveryHealth).getByText(/coverage 40% \/ standard confidence/i)).toBeInTheDocument()
-    expect(within(discoveryHealth).getByText(/missing areas: Proof, Economics/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/coverage 40%/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/Standard confidence/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/Missing areas/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/Proof, Economics/i)).toBeInTheDocument()
   })
 
   it('groups website sources and uploaded documents in the source registry', () => {
@@ -1864,12 +1886,13 @@ describe('RuntimeWorkspace', () => {
 
     selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
-    expect(within(sourceRegistry).getByText('Website Sources (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByRole('heading', { name: 'Website Sources (1)' })).toBeInTheDocument()
+    expect(within(sourceRegistry).getAllByText('1 source')).toHaveLength(3)
     expect(within(sourceRegistry).getByText('https://acme.example/product')).toBeInTheDocument()
-    expect(within(sourceRegistry).getByText('Uploaded Documents (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByRole('heading', { name: 'Uploaded Documents (1)' })).toBeInTheDocument()
     expect(within(sourceRegistry).getByText('customer-notes.docx')).toBeInTheDocument()
     expect(within(sourceRegistry).getByText(/DOCX \/ Processed \/ 30 evidence objects/i)).toBeInTheDocument()
-    expect(within(sourceRegistry).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(sourceRegistry).getByRole('heading', { name: 'Intelligence Hub Sources (1)' })).toBeInTheDocument()
     expect(within(sourceRegistry).getByText('Intelligence Hub Notes')).toBeInTheDocument()
     expect(within(sourceRegistry).queryByText('Discovery Notes')).not.toBeInTheDocument()
   })
@@ -1917,6 +1940,44 @@ describe('RuntimeWorkspace', () => {
               coveragePercent: 70,
               confidence: 'SOURCE_BACKED',
               missingAreas: ['ECONOMICS'],
+              coverageAreas: [
+                {
+                  area: 'Company',
+                  state: 'STRONG',
+                  evidenceCount: 3,
+                  acceptedEvidenceCount: 2,
+                },
+                {
+                  area: 'Economics',
+                  state: 'MISSING',
+                  evidenceCount: 0,
+                  acceptedEvidenceCount: 0,
+                },
+                {
+                  area: 'Products',
+                  state: 'ADEQUATE',
+                  evidenceCount: 2,
+                  acceptedEvidenceCount: 1,
+                },
+                {
+                  area: 'Services',
+                  state: 'WEAK',
+                  evidenceCount: 1,
+                  acceptedEvidenceCount: 0,
+                },
+                {
+                  area: 'Markets',
+                  state: 'MISSING',
+                  evidenceCount: 0,
+                  acceptedEvidenceCount: 0,
+                },
+                {
+                  area: 'Industries',
+                  state: 'MISSING',
+                  evidenceCount: 0,
+                  acceptedEvidenceCount: 0,
+                },
+              ],
             },
             scopedViews: {},
           },
@@ -1930,17 +1991,118 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
+    const coverageHeatmap = screen.getByRole('region', { name: /coverage heatmap/i })
+    expect(within(coverageHeatmap).getByText('Company')).toBeInTheDocument()
+    expect(within(coverageHeatmap).getByText('Industries')).toBeInTheDocument()
+    expect(within(coverageHeatmap).getByLabelText(/Company coverage status: Strong accepted evidence coverage/i))
+      .toBeInTheDocument()
+    expect(within(coverageHeatmap).getByLabelText(/Economics coverage status: No accepted evidence coverage/i))
+      .toBeInTheDocument()
+    expect(within(coverageHeatmap).getAllByRole('progressbar')).toHaveLength(6)
+    const companyCoverageProgress = within(coverageHeatmap).getByRole('progressbar', {
+      name: /Company: Strong, 2 accepted of 3 evidence objects/i,
+    })
+    expect(companyCoverageProgress).toHaveAttribute('value', '67')
+    expect(companyCoverageProgress).toHaveAttribute('aria-valuetext', '2 accepted of 3 evidence objects')
+
+    const evidenceAcceptanceSummary = screen.getByRole('region', { name: /evidence acceptance summary/i })
+    expect(within(evidenceAcceptanceSummary).getByText('Pending')).toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('Evidence')).toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('Accepted objects')).toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('Sources')).toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('Contributing')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /accepted truth summary/i })).not.toBeInTheDocument()
+
     selectIntelligenceHubTab('Evidence')
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
-    expect(within(evidencePack).getByText(/Enhanced Acquisition \/ Coverage 70%/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/Enhanced Acquisition/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/Coverage 70%/i)).toBeInTheDocument()
     expect(within(evidencePack).getByText(/11 evidence objects: 0 accepted, 11 pending review, 0 rejected/i))
       .toBeInTheDocument()
-    expect(within(evidencePack).getByText(/6 sources recorded via Deterministic Website Acquisition/i))
+    expect(within(evidencePack).getByText(/6 sources recorded/i)).toBeInTheDocument()
+    expect(within(evidencePack).getByText(/Recorded via Deterministic Website Acquisition/i))
       .toBeInTheDocument()
 
     selectIntelligenceHubTab('Coverage')
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
-    expect(within(discoveryHealth).getByText(/coverage 70% \/ Source Backed confidence/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/coverage 70%/i)).toBeInTheDocument()
+    expect(within(discoveryHealth).getByText(/Source Backed confidence/i)).toBeInTheDocument()
+  })
+
+  it('keeps accepted evidence summary separate from accepted section truth copy', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'ACCEPTED',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: true,
+            acceptedAt: '2026-06-01T14:41:00.000Z',
+            needsRefresh: false,
+            acquisitionProfile: 'STANDARD',
+            acquisition: {
+              profile: 'STANDARD',
+              coverage: {
+                score: 100,
+              },
+            },
+            evidenceSummary: {
+              keys: ['companyWebsite', 'companyName'],
+              count: 2,
+            },
+            lineageSummary: {
+              sourceCount: 5,
+              builderMode: 'DETERMINISTIC',
+            },
+            sourceRegistrySummary: {
+              count: 5,
+              sourceTypes: ['WEBSITE', 'DISCOVERY_NOTES'],
+            },
+            evidenceObjectSummary: {
+              evidenceObjectCount: 11,
+              acceptedEvidenceCount: 11,
+              pendingReviewCount: 0,
+              rejectedEvidenceCount: 0,
+            },
+            discoveryHealth: {
+              coveragePercent: 100,
+              confidence: 'SOURCE_BACKED',
+              missingAreas: [],
+              coverageAreas: [],
+            },
+            scopedViews: {},
+          },
+          sections: rendererPayload.sections.map((section) => ({
+            ...section,
+            accepted: null,
+            state: {
+              ...section.state,
+              status: 'DRAFT',
+            },
+          })),
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const evidenceAcceptanceSummary = screen.getByRole('region', { name: /evidence acceptance summary/i })
+    expect(within(evidenceAcceptanceSummary).getByRole('heading', { name: /evidence acceptance summary/i }))
+      .toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText(/accepted evidence is ready for downstream generation/i))
+      .toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('11')).toBeInTheDocument()
+    expect(within(evidenceAcceptanceSummary).getByText('Accepted objects')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /accepted truth summary/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/governed truth ready for downstream generation/i)).not.toBeInTheDocument()
   })
 
   it('reviews an evidence object from the evidence details projection', async () => {
@@ -2019,7 +2181,7 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /view sources/i }))
     const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
-    expect(within(evidenceSources).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(evidenceSources).getByRole('heading', { name: 'Intelligence Hub Sources (1)' })).toBeInTheDocument()
     expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Company website: https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Intelligence Hub note: governed narrative generation is required.'))
@@ -2244,12 +2406,13 @@ describe('RuntimeWorkspace', () => {
     expect(clearDiscoveryButton).toHaveAttribute('aria-describedby', 'discovery-reset-disabled-reason')
     expect(sourceRegistry).toHaveTextContent('1 registered source: Website.')
     expect(evidenceReview).toHaveTextContent('1 evidence object: 0 accepted, 1 pending review, 0 rejected.')
-    expect(discoveryHealth).toHaveTextContent('Coverage 10% / User Provided confidence.')
+    expect(discoveryHealth).toHaveTextContent('Coverage 10%')
+    expect(discoveryHealth).toHaveTextContent('User Provided confidence.')
 
     await user.click(screen.getByRole('button', { name: /view sources/i }))
 
     const evidenceSources = screen.getByRole('region', { name: /evidence sources/i })
-    expect(within(evidenceSources).getByText('Intelligence Hub Sources (1)')).toBeInTheDocument()
+    expect(within(evidenceSources).getByRole('heading', { name: 'Intelligence Hub Sources (1)' })).toBeInTheDocument()
     expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByRole('button', {
       name: /accept evidence object evidence_companyWebsite_fixture/i,
@@ -2547,9 +2710,9 @@ describe('RuntimeWorkspace', () => {
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
     selectIntelligenceHubTab('Governance')
-    expect(within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })).toHaveTextContent(
-      'Intelligence Hub accepted on 2026-05-24.',
-    )
+    const acceptance = within(discoverySection).getByRole('region', { name: /intelligence hub acceptance/i })
+    expect(acceptance).toHaveTextContent('Intelligence Hub accepted')
+    expect(acceptance).toHaveTextContent('Accepted on 2026-05-24.')
   })
 
   it('shows neutral progress when no runtime sections are projected', () => {
@@ -2704,7 +2867,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const field = screen.getByLabelText(/customer problem/i)
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams lack a shared story.')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -2896,6 +3060,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
+    selectRuntimeSectionTab('Truth')
     expect(screen.getByRole('region', { name: /accepted truth/i })).toHaveTextContent(
       'Customer Problem: Proposal creation is slow.',
     )
@@ -3210,7 +3375,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const field = screen.getByLabelText(/customer problem/i)
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams need a shared governed narrative.')
     await user.click(screen.getByRole('button', { name: /^save & next$/i }))
@@ -3252,7 +3418,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const field = screen.getByLabelText(/customer problem/i)
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Final section update.')
     await user.click(screen.getByRole('button', { name: /^save & next$/i }))
@@ -3305,6 +3472,12 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
+    expect(screen.getByRole('tablist', { name: /executive summary sections/i })).toBeInTheDocument()
+    const executiveSummaryTabs = ['Overview', 'Context', 'Truth', 'Governance']
+    executiveSummaryTabs.forEach((tabName) => {
+      expect(screen.getByRole('tab', { name: tabName })).toBeInTheDocument()
+    })
+    selectRuntimeSectionTab('Context')
     const field = screen.getByLabelText('Executive Summary')
     await user.clear(field)
     await user.type(field, 'Customer needs a clearer executive narrative.')
@@ -3355,6 +3528,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
+    selectRuntimeSectionTab('Context')
     const field = screen.getByLabelText('Executive Summary')
     await user.clear(field)
     fireEvent.change(field, { target: { value: '{"summary":' } })
@@ -3394,6 +3568,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /confidence score/i }))
 
+    selectRuntimeSectionTab('Context')
     const field = screen.getByLabelText('Confidence Score')
     await user.clear(field)
     await user.type(field, '42.5')
@@ -3439,6 +3614,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /confidence score/i }))
 
+    selectRuntimeSectionTab('Context')
     const field = screen.getByLabelText('Confidence Score')
     await user.clear(field)
     await user.type(field, 'not numeric')
@@ -3477,6 +3653,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /priority confirmed/i }))
 
+    selectRuntimeSectionTab('Context')
     await user.click(screen.getByRole('checkbox', { name: /priority confirmed/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -3525,6 +3702,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /narrative status/i }))
 
+    selectRuntimeSectionTab('Context')
     await user.selectOptions(screen.getByLabelText('Narrative Status'), 'READY')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -3558,7 +3736,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const field = screen.getByLabelText(/customer problem/i)
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Updated value without marker.')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -3586,7 +3765,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const field = screen.getByLabelText(/customer problem/i)
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams lack a shared story.')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
@@ -3875,6 +4055,9 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /executive summary/i }))
 
+    expect(screen.getByRole('tablist', { name: /executive summary sections/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    selectRuntimeSectionTab('Context')
     expect(screen.getByLabelText('Executive Summary')).toHaveAttribute(
       'placeholder',
       'Summarise the customer situation, priority, and recommended value narrative focus.',
@@ -3931,7 +4114,8 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
-    expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
+    selectRuntimeSectionTab('Context')
+    expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveAttribute('readonly')
     const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     const regenerateButton = screen.getByRole('button', { name: /^regenerate section$/i })
     expect(generateButton).toBeDisabled()
@@ -4028,7 +4212,8 @@ describe('RuntimeWorkspace', () => {
     expect(within(certifiedTruth).getByText('runtime-trut...87654321')).toBeInTheDocument()
     expect(within(certifiedTruth).getByText('runtime-repl...90abcdef')).toBeInTheDocument()
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
-    expect(screen.getByLabelText(/customer problem/i)).toHaveAttribute('readonly')
+    selectRuntimeSectionTab('Context')
+    expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveAttribute('readonly')
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
     const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })

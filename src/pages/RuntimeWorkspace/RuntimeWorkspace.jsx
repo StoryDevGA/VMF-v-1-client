@@ -27,6 +27,7 @@ import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { ProgressBar } from '../../components/ProgressBar'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -915,6 +916,54 @@ const SOURCE_REGISTRY_GROUP_LABELS = Object.freeze({
   discovery: `${INTELLIGENCE_HUB_LABEL} Sources`,
 })
 
+const COVERAGE_AREA_STATE_META = Object.freeze({
+  STRONG: {
+    label: 'Strong',
+    className: 'strong',
+    description: 'Strong accepted evidence coverage',
+    icon: MdCheckCircle,
+    progressVariant: 'success',
+  },
+  ADEQUATE: {
+    label: 'Adequate',
+    className: 'adequate',
+    description: 'Adequate accepted evidence coverage',
+    icon: MdOutlineWarningAmber,
+    progressVariant: 'warning',
+  },
+  WEAK: {
+    label: 'Weak',
+    className: 'weak',
+    description: 'Weak accepted evidence coverage',
+    icon: MdErrorOutline,
+    progressVariant: 'danger',
+  },
+  MISSING: {
+    label: 'Missing',
+    className: 'missing',
+    description: 'No accepted evidence coverage',
+    icon: MdInfoOutline,
+    progressVariant: 'danger',
+  },
+})
+
+const getCoverageAreaProgressValue = ({ acceptedEvidenceCount = 0, evidenceCount = 0 } = {}) => {
+  const acceptedCount = Number(acceptedEvidenceCount)
+  const totalCount = Number(evidenceCount)
+
+  if (!Number.isFinite(acceptedCount) || !Number.isFinite(totalCount) || totalCount <= 0) {
+    return 0
+  }
+
+  return Math.round((Math.min(Math.max(acceptedCount, 0), totalCount) / totalCount) * 100)
+}
+
+const getCoverageAreaProgressText = ({ acceptedEvidenceCount = 0, evidenceCount = 0 } = {}) => {
+  const acceptedCount = Number.isFinite(Number(acceptedEvidenceCount)) ? Number(acceptedEvidenceCount) : 0
+  const totalCount = Number.isFinite(Number(evidenceCount)) ? Number(evidenceCount) : 0
+  return `${acceptedCount} accepted of ${totalCount} evidence object${totalCount === 1 ? '' : 's'}`
+}
+
 const buildSourceRegistryGroups = (sourceRegistry = []) => {
   const groupedEntries = sourceRegistry.reduce((groups, source) => {
     const groupKey = getSourceRegistryGroupKey(source)
@@ -969,24 +1018,202 @@ const formatSourceRegistryEntryMeta = (source = {}) => [
   return /^[A-Z0-9_]+$/.test(rawValue) ? formatRuntimeTokenLabel(rawValue) : rawValue
 }).filter(Boolean).join(' / ')
 
+const getSourceRegistryGroupIcon = (groupKey) => {
+  if (groupKey === 'website') return MdSource
+  if (groupKey === 'document') return MdUploadFile
+  return MdInfoOutline
+}
+
+const getSourceRegistryGroupBadgeVariant = (groupKey) => {
+  if (groupKey === 'website') return 'primary'
+  if (groupKey === 'document') return 'warning'
+  return 'info'
+}
+
+const getCoverageAreaStateMeta = (state) => {
+  const normalizedState = normalizeRuntimeActionToken(state)
+  return COVERAGE_AREA_STATE_META[normalizedState] || {
+    label: formatRuntimeTokenLabel(normalizedState || 'UNKNOWN'),
+    className: 'unknown',
+    description: 'Unknown accepted evidence coverage',
+    icon: MdInfoOutline,
+    progressVariant: 'info',
+  }
+}
+
+const renderStackedMetricHeading = (label) => {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2) return label
+
+  const [firstWord, ...remainingWords] = words
+  return (
+    <>
+      <span className="runtime-workspace__intelligence-metric-heading-lead">{firstWord}</span>
+      {' '}
+      <span className="runtime-workspace__intelligence-metric-heading-focus">{remainingWords.join(' ')}</span>
+    </>
+  )
+}
+
+const splitInsightListItem = (item) => {
+  const text = String(item || '').trim()
+  const separatorIndex = text.indexOf(':')
+
+  if (separatorIndex <= 0 || separatorIndex > 42) {
+    return { label: '', detail: text }
+  }
+
+  return {
+    label: text.slice(0, separatorIndex + 1),
+    detail: text.slice(separatorIndex + 1).trim(),
+  }
+}
+
+const normalizeInsightLabel = (value) => String(value || '').replace(/:\s*$/, '').trim()
+
+const buildProjectionDetailRows = (items = EMPTY_ARRAY) => (
+  Array.isArray(items)
+    ? items.map((item, index) => {
+      const text = String(item || '').trim()
+      const itemParts = splitInsightListItem(text)
+      const title = itemParts.label
+        ? normalizeInsightLabel(itemParts.label)
+        : text
+
+      return {
+        id: `${index}-${text}`,
+        title,
+        meta: itemParts.label ? itemParts.detail : '',
+      }
+    }).filter((row) => row.title)
+    : EMPTY_ARRAY
+)
+
 function SourceRegistryGroupList({ groups = EMPTY_ARRAY }) {
   if (!Array.isArray(groups) || groups.length === 0) return null
 
   return (
     <div className="runtime-workspace__source-registry-groups">
-      {groups.map((group) => (
-        <div className="runtime-workspace__source-registry-group" key={group.key}>
-          <h4>{`${group.label} (${group.entries.length})`}</h4>
-          <ul className="runtime-workspace__plain-list runtime-workspace__source-registry-list">
-            {group.entries.map((source) => (
-              <li key={source.sourceId || source.fieldKey || source.lineageRef}>
-                <strong>{formatSourceRegistryEntryTitle(source)}</strong>
-                <span>{formatSourceRegistryEntryMeta(source)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {groups.map((group) => {
+        const GroupIcon = getSourceRegistryGroupIcon(group.key)
+        return (
+          <div className="runtime-workspace__source-registry-group" key={group.key}>
+            <div className="runtime-workspace__source-registry-group-header">
+              <span
+                className={`runtime-workspace__source-registry-group-icon runtime-workspace__source-registry-group-icon--${group.key}`}
+                aria-hidden="true"
+              >
+                <GroupIcon />
+              </span>
+              <h4 aria-label={`${group.label} (${group.entries.length})`}>{group.label}</h4>
+              <Badge
+                variant={getSourceRegistryGroupBadgeVariant(group.key)}
+                size="sm"
+                pill
+                outline
+              >
+                {`${group.entries.length} source${group.entries.length === 1 ? '' : 's'}`}
+              </Badge>
+            </div>
+            <ul className="runtime-workspace__plain-list runtime-workspace__source-registry-list">
+              {group.entries.map((source) => (
+                <li key={source.sourceId || source.fieldKey || source.lineageRef}>
+                  <strong className="runtime-workspace__source-registry-title">
+                    {formatSourceRegistryEntryTitle(source)}
+                  </strong>
+                  <span className="runtime-workspace__source-registry-meta">
+                    {formatSourceRegistryEntryMeta(source)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SectionDetailRows({ rows = EMPTY_ARRAY, ariaLabel = '', className = '' }) {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+
+  const resolvedClassName = [
+    'runtime-workspace__section-detail-rows',
+    className,
+  ].filter(Boolean).join(' ')
+  const listProps = ariaLabel
+    ? { role: 'list', 'aria-label': ariaLabel }
+    : {}
+
+  return (
+    <div className={resolvedClassName} {...listProps}>
+      {rows.map((row) => {
+        const badgeLabel = String(row.badgeLabel || '').trim()
+        const hasMeta = row.meta !== null && row.meta !== undefined && row.meta !== ''
+
+        return (
+          <div
+            className="runtime-workspace__section-detail-row"
+            key={row.id}
+            role={ariaLabel ? 'listitem' : undefined}
+          >
+            <span className="runtime-workspace__section-detail-copy">
+              <strong>{row.title}</strong>
+              {hasMeta ? <span>{row.meta}</span> : null}
+            </span>
+            {badgeLabel ? (
+              <Badge
+                variant={row.badgeVariant || 'neutral'}
+                size="sm"
+                pill
+                outline
+              >
+                {badgeLabel}
+              </Badge>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function IntelligenceDetailRows({ rows = EMPTY_ARRAY }) {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+
+  return (
+    <div className="runtime-workspace__intelligence-detail-rows">
+      {rows.map((row) => {
+        const RowIcon = row.icon || MdInfoOutline
+        const badgeLabel = String(row.badgeLabel || '').trim()
+
+        return (
+          <div className="runtime-workspace__intelligence-detail-row" key={row.id}>
+            <span
+              className={`runtime-workspace__intelligence-detail-icon${
+                row.iconVariant ? ` runtime-workspace__intelligence-detail-icon--${row.iconVariant}` : ''
+              }`}
+              aria-hidden="true"
+            >
+              <RowIcon />
+            </span>
+            <span className="runtime-workspace__intelligence-detail-copy">
+              <strong>{row.title}</strong>
+              {row.meta ? <span>{row.meta}</span> : null}
+            </span>
+            {badgeLabel ? (
+              <Badge
+                variant={row.badgeVariant || 'neutral'}
+                size="sm"
+                pill
+                outline
+              >
+                {badgeLabel}
+              </Badge>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1331,6 +1558,7 @@ function RuntimeSection({
   const [draftValue, setDraftValue] = useState(currentValue)
   const [localError, setLocalError] = useState('')
   const [showCompare, setShowCompare] = useState(false)
+  const [activeSectionContentTab, setActiveSectionContentTab] = useState(0)
   const editable = Boolean(section?.editable)
   const isDirty = draftValue !== currentValue
   const isSaving = Boolean(disabled)
@@ -1413,6 +1641,78 @@ function RuntimeSection({
     ? { variant: 'error', message: localError }
     : feedback
   const sectionDisplayLabel = getSectionDisplayLabel(section, `Guided item ${section?.key ?? ''}`.trim())
+  const suggestedRows = buildProjectionDetailRows(suggestedBullets)
+  const supportingEvidenceRows = buildProjectionDetailRows(supportingEvidenceItems)
+  const boundaryRows = buildProjectionDetailRows(boundaryItems)
+  const confidenceRows = [
+    {
+      id: 'confidence-state',
+      title: 'Confidence',
+      meta: confidenceSignals.length > 0
+        ? 'Projected from section evidence and generation controls.'
+        : 'No confidence signals are projected yet.',
+      badgeLabel: confidenceProjection.label || formatRuntimeTokenLabel(confidenceState),
+      badgeVariant: getTokenStatusVariant(confidenceState),
+    },
+    ...confidenceSignals.map((signal, index) => ({
+      id: `confidence-signal-${index}-${signal}`,
+      title: signal,
+      meta: 'Confidence signal',
+    })),
+  ]
+  const governedIntelligenceRows = [
+    ...confidenceRows,
+    {
+      id: 'dependency-state',
+      title: 'Dependencies',
+      meta: getDependencySummary(intelligence.dependency),
+      badgeLabel: formatRuntimeTokenLabel(dependencyState),
+      badgeVariant: getTokenStatusVariant(dependencyState),
+    },
+    {
+      id: 'truth-readiness-state',
+      title: 'Truth Readiness',
+      meta: getTruthReadinessSummary(intelligence.readiness),
+      badgeLabel: formatRuntimeTokenLabel(readinessState),
+      badgeVariant: getTokenStatusVariant(readinessState),
+    },
+    {
+      id: 'compare-state',
+      title: 'Compare',
+      meta: intelligence.compare?.summary || formatRuntimeTokenLabel(compareState),
+      badgeLabel: formatRuntimeTokenLabel(compareState),
+      badgeVariant: getTokenStatusVariant(compareState),
+    },
+  ]
+  const acceptedTruthRows = [
+    {
+      id: 'accepted-truth',
+      title: acceptedContent ? 'Current accepted truth' : 'Accepted truth not projected',
+      meta: acceptedContent || 'No accepted governed truth has been projected for this section.',
+    },
+  ]
+  const compareRows = [
+    {
+      id: 'generated-section',
+      title: 'Generated Section',
+      meta: generatedContent || 'Awaiting generation',
+    },
+    {
+      id: 'accepted-truth',
+      title: 'Accepted Truth',
+      meta: acceptedContent || 'No accepted governed truth has been projected for this section.',
+    },
+    {
+      id: 'previous-generated',
+      title: 'Previous Generated',
+      meta: previousGeneratedContent || 'No previous generated revision',
+    },
+    {
+      id: 'previous-accepted-truth',
+      title: 'Previous Accepted Truth',
+      meta: previousAcceptedContent || 'No previous accepted truth revision',
+    },
+  ]
 
   const handleChange = (event) => {
     setLocalError('')
@@ -1445,6 +1745,199 @@ function RuntimeSection({
     await onSaveAndNext?.({ section, value })
   }
 
+  const suggestedFromIntelligencePanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__insight-card"
+      aria-label={`Suggested from ${INTELLIGENCE_HUB_LABEL}`}
+    >
+      <div className="runtime-workspace__insight-header">
+        <div>
+          <h3>Suggested From {INTELLIGENCE_HUB_LABEL}</h3>
+          <p className="runtime-workspace__insight-lede">
+            {suggestedProjection.summary || scopedEvidenceSummary || `No ${INTELLIGENCE_HUB_EVIDENCE_LABEL} is projected for this section yet.`}
+          </p>
+        </div>
+      </div>
+      {suggestedBullets.length > 0 || suggestedProjection.summary ? (
+        <>
+          {suggestedRows.length > 0 ? (
+            <SectionDetailRows rows={suggestedRows} ariaLabel="Evidence themes" />
+          ) : null}
+          {suggestedProjection.evidenceScope ? (
+            <p className="runtime-workspace__insight-note">
+              <span>{suggestedProjection.evidenceScope}</span>
+            </p>
+          ) : null}
+        </>
+      ) : hasRuntimeValue(scopedEvidenceView) ? (
+        null
+      ) : (
+        <p className="runtime-workspace__insight-note">
+          <span>No section-scoped intelligence is available yet.</span>
+        </p>
+      )}
+    </section>
+  )
+
+  const additionalContextPanel = (
+    <section className="runtime-workspace__section-panel" aria-label="Your Additional Context">
+      <h3>Your Additional Context</h3>
+      <RuntimeValueControl
+        section={section}
+        value={draftValue}
+        editable={editable}
+        disabled={isSaving}
+        onChange={handleChange}
+      />
+    </section>
+  )
+
+  const generatedInsightPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__insight-card"
+      aria-label="Generated content"
+    >
+      <div className="runtime-workspace__insight-header">
+        <div>
+          <h3>{generatedInsightProjection.title || 'Generated Insight'}</h3>
+          <p className="runtime-workspace__insight-lede">
+            {generatedInsightProjection.summary || generatedContent || 'Awaiting generation'}
+          </p>
+        </div>
+      </div>
+      {generatedInsightSections.length > 0 ? (
+        <div className="runtime-workspace__generated-zones">
+          {generatedInsightSections.map((generatedSection) => {
+            const generatedRows = buildProjectionDetailRows(generatedSection.bullets)
+
+            return (
+              <div
+                className="runtime-workspace__generated-zone"
+                key={generatedSection.heading || generatedSection.body}
+              >
+                {generatedSection.heading ? <h4>{generatedSection.heading}</h4> : null}
+                {generatedSection.body ? (
+                  <p className="runtime-workspace__insight-body">{generatedSection.body}</p>
+                ) : null}
+                {generatedRows.length > 0 ? (
+                  <SectionDetailRows
+                    rows={generatedRows}
+                    ariaLabel={`${generatedSection.heading || 'Generated insight'} points`}
+                  />
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+      {supportingEvidenceItems.length > 0 ? (
+        <div className="runtime-workspace__insight-group runtime-workspace__insight-group--evidence">
+          <div className="runtime-workspace__insight-group-header">
+            <h4>{supportingEvidenceProjection.title || 'Supporting Evidence'}</h4>
+          </div>
+          <SectionDetailRows rows={supportingEvidenceRows} ariaLabel="Supporting evidence" />
+        </div>
+      ) : null}
+      {boundaryItems.length > 0 ? (
+        <div className="runtime-workspace__insight-group runtime-workspace__insight-group--boundary">
+          <div className="runtime-workspace__insight-group-header">
+            <h4>{boundariesProjection.title || 'Boundaries / Not Assumed'}</h4>
+          </div>
+          <SectionDetailRows rows={boundaryRows} ariaLabel="Generation boundaries" />
+        </div>
+      ) : null}
+      {truthEligibilityMessage ? (
+        <p className="runtime-workspace__insight-note">
+          <span>{truthEligibilityMessage}</span>
+        </p>
+      ) : null}
+    </section>
+  )
+
+  const acceptedTruthPanel = (
+    <section className="runtime-workspace__section-panel" aria-label="Accepted truth">
+      <h3>Accepted Truth</h3>
+      <SectionDetailRows rows={acceptedTruthRows} />
+    </section>
+  )
+
+  const stateAndReviewContent = (
+    <div className="runtime-workspace__section-state-row" aria-label="State and review">
+      <Status variant={getTokenStatusVariant(section?.state?.status)} size="sm" showIcon>
+        {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
+        {Number(section?.state?.revisionCount || 0) > 0
+          ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
+          : ''}
+      </Status>
+      <Status variant={getTokenStatusVariant(section?.review?.status)} size="sm" showIcon>
+        {formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}
+      </Status>
+    </div>
+  )
+
+  const governedIntelligenceContent = (
+    <div className="runtime-workspace__section-intelligence" role="region" aria-label="Governed intelligence">
+      <SectionDetailRows rows={governedIntelligenceRows} ariaLabel="Governed intelligence states" />
+    </div>
+  )
+
+  const compareContent = showCompare ? (
+    <div
+      className="runtime-workspace__compare"
+      role="region"
+      aria-label="Section truth comparison"
+    >
+      <SectionDetailRows rows={compareRows} />
+    </div>
+  ) : null
+
+  const tabbedSectionContent = (
+    <div
+      className="runtime-workspace__section-tabs-region"
+      role="region"
+      aria-label="Ownership zones"
+    >
+      <TabView
+        activeTab={activeSectionContentTab}
+        onTabChange={setActiveSectionContentTab}
+        variant="default"
+        size="sm"
+        className="runtime-workspace__section-tabs"
+        aria-label={`${sectionDisplayLabel} sections`}
+      >
+        <TabView.Tab label="Overview">
+          <div className="runtime-workspace__section-tab-panel">
+            <div className="runtime-workspace__section-panels">
+              {suggestedFromIntelligencePanel}
+              {generatedInsightPanel}
+            </div>
+          </div>
+        </TabView.Tab>
+        <TabView.Tab label="Context">
+          <div className="runtime-workspace__section-tab-panel">
+            <div className="runtime-workspace__section-panels">
+              {additionalContextPanel}
+            </div>
+          </div>
+        </TabView.Tab>
+        <TabView.Tab label="Truth">
+          <div className="runtime-workspace__section-tab-panel">
+            <div className="runtime-workspace__section-panels">
+              {acceptedTruthPanel}
+            </div>
+            {compareContent}
+          </div>
+        </TabView.Tab>
+        <TabView.Tab label="Governance">
+          <div className="runtime-workspace__section-tab-panel">
+            {stateAndReviewContent}
+            {governedIntelligenceContent}
+          </div>
+        </TabView.Tab>
+      </TabView>
+    </div>
+  )
+
   return (
     <li id={id} className="runtime-workspace__section-item">
       <Card variant="default" className="runtime-workspace__section-card">
@@ -1466,166 +1959,7 @@ function RuntimeSection({
                 </Badge>
               </div>
             </div>
-            <div
-              className="runtime-workspace__section-panels"
-              role="region"
-              aria-label="Ownership zones"
-            >
-              <section className="runtime-workspace__section-panel" aria-label={`Suggested from ${INTELLIGENCE_HUB_LABEL}`}>
-                <h3>Suggested From {INTELLIGENCE_HUB_LABEL}</h3>
-                {suggestedBullets.length > 0 || suggestedProjection.summary ? (
-                  <>
-                    <p>{suggestedProjection.summary || scopedEvidenceSummary}</p>
-                    {suggestedBullets.length > 0 ? (
-                      <ul className="runtime-workspace__projection-list" aria-label="Evidence themes">
-                        {suggestedBullets.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {suggestedProjection.evidenceScope ? (
-                      <p className="runtime-workspace__section-note">{suggestedProjection.evidenceScope}</p>
-                    ) : null}
-                  </>
-                ) : hasRuntimeValue(scopedEvidenceView) ? (
-                  <p>{scopedEvidenceSummary}</p>
-                ) : (
-                  <p>No {INTELLIGENCE_HUB_EVIDENCE_LABEL} is projected for this section yet.</p>
-                )}
-              </section>
-              <section className="runtime-workspace__section-panel" aria-label="Your Additional Context">
-                <h3>Your Additional Context</h3>
-                <RuntimeValueControl
-                  section={section}
-                  value={draftValue}
-                  editable={editable}
-                  disabled={isSaving}
-                  onChange={handleChange}
-                />
-              </section>
-              <section className="runtime-workspace__section-panel" aria-label="Generated content">
-                <h3>{generatedInsightProjection.title || 'Generated Insight'}</h3>
-                {generatedInsightSections.length > 0 ? (
-                  <div className="runtime-workspace__generated-zones">
-                    {generatedInsightSections.map((generatedSection) => (
-                      <div
-                        className="runtime-workspace__generated-zone"
-                        key={generatedSection.heading || generatedSection.body}
-                      >
-                        {generatedSection.heading ? <h4>{generatedSection.heading}</h4> : null}
-                        {generatedSection.body ? <p>{generatedSection.body}</p> : null}
-                        {Array.isArray(generatedSection.bullets) && generatedSection.bullets.length > 0 ? (
-                          <ul className="runtime-workspace__projection-list">
-                            {generatedSection.bullets.map((bullet) => (
-                              <li key={bullet}>{bullet}</li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p>{generatedInsightProjection.summary || generatedContent || 'Awaiting generation'}</p>
-                )}
-                {supportingEvidenceItems.length > 0 ? (
-                  <div className="runtime-workspace__projection-group">
-                    <h4>{supportingEvidenceProjection.title || 'Supporting Evidence'}</h4>
-                    <ul className="runtime-workspace__projection-list" aria-label="Supporting evidence">
-                      {supportingEvidenceItems.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {boundaryItems.length > 0 ? (
-                  <div className="runtime-workspace__projection-group">
-                    <h4>{boundariesProjection.title || 'Boundaries / Not Assumed'}</h4>
-                    <ul className="runtime-workspace__projection-list" aria-label="Generation boundaries">
-                      {boundaryItems.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {truthEligibilityMessage ? (
-                  <p className="runtime-workspace__section-note">{truthEligibilityMessage}</p>
-                ) : null}
-              </section>
-              <section className="runtime-workspace__section-panel" aria-label="Accepted truth">
-                <h3>Accepted Truth</h3>
-                <p>
-                  {acceptedContent || 'No accepted governed truth has been projected for this section.'}
-                </p>
-              </section>
-            </div>
-            <div className="runtime-workspace__section-state-row" aria-label="State and review">
-              <Status variant={getTokenStatusVariant(section?.state?.status)} size="sm" showIcon>
-                {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
-                {Number(section?.state?.revisionCount || 0) > 0
-                  ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
-                  : ''}
-              </Status>
-              <Status variant={getTokenStatusVariant(section?.review?.status)} size="sm" showIcon>
-                {formatRuntimeTokenLabel(section?.review?.status || 'PENDING_REVIEW')}
-              </Status>
-            </div>
-            <div className="runtime-workspace__section-intelligence" role="region" aria-label="Governed intelligence">
-              <div>
-                <span className="runtime-workspace__section-intelligence-label">Confidence</span>
-                <Status variant={getTokenStatusVariant(confidenceState)} size="sm" showIcon>
-                  {confidenceProjection.label || formatRuntimeTokenLabel(confidenceState)}
-                </Status>
-                {confidenceSignals.length > 0 ? (
-                  <ul className="runtime-workspace__projection-list runtime-workspace__projection-list--compact">
-                    {confidenceSignals.map((signal) => (
-                      <li key={signal}>{signal}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-              <div>
-                <span className="runtime-workspace__section-intelligence-label">Dependencies</span>
-                <Status variant={getTokenStatusVariant(dependencyState)} size="sm" showIcon>
-                  {getDependencySummary(intelligence.dependency)}
-                </Status>
-              </div>
-              <div>
-                <span className="runtime-workspace__section-intelligence-label">Truth Readiness</span>
-                <Status variant={getTokenStatusVariant(readinessState)} size="sm" showIcon>
-                  {getTruthReadinessSummary(intelligence.readiness)}
-                </Status>
-              </div>
-              <div>
-                <span className="runtime-workspace__section-intelligence-label">Compare</span>
-                <Status variant={getTokenStatusVariant(compareState)} size="sm" showIcon>
-                  {formatRuntimeTokenLabel(compareState)}
-                </Status>
-              </div>
-            </div>
-            {showCompare ? (
-              <div
-                className="runtime-workspace__compare"
-                role="region"
-                aria-label="Section truth comparison"
-              >
-                <section>
-                  <h3>Generated Section</h3>
-                  <p>{generatedContent || 'Awaiting generation'}</p>
-                </section>
-                <section>
-                  <h3>Accepted Truth</h3>
-                  <p>{acceptedContent || 'No accepted governed truth has been projected for this section.'}</p>
-                </section>
-                <section>
-                  <h3>Previous Generated</h3>
-                  <p>{previousGeneratedContent || 'No previous generated revision'}</p>
-                </section>
-                <section>
-                  <h3>Previous Accepted Truth</h3>
-                  <p>{previousAcceptedContent || 'No previous accepted truth revision'}</p>
-                </section>
-              </div>
-            ) : null}
+            {tabbedSectionContent}
             {resolvedFeedback ? (
               <Status
                 variant={resolvedFeedback.variant}
@@ -1670,7 +2004,10 @@ function RuntimeSection({
                 size="sm"
                 disabled={!canCompare}
                 leftIcon={<MdCompareArrows aria-hidden="true" />}
-                onClick={() => setShowCompare((current) => !current)}
+                onClick={() => {
+                  setShowCompare((current) => !current)
+                  setActiveSectionContentTab(2)
+                }}
               >
                 Compare
               </Button>
@@ -1849,18 +2186,14 @@ function RuntimeProgressSummary({
 
   return (
     <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
-      <div className="runtime-workspace__progress-meter">
-        <div className="runtime-workspace__progress-row">
-          <span>Accepted truth</span>
-          <strong>{requiredPercentLabel}</strong>
-        </div>
-        <progress
-          className="runtime-workspace__progress-bar"
-          max="100"
-          value={requiredPercent}
-          aria-label={completionLabel}
-        />
-      </div>
+      <ProgressBar
+        ariaLabel={completionLabel}
+        className="runtime-workspace__progress-meter"
+        label="Accepted truth"
+        size="sm"
+        value={requiredPercent}
+        valueLabel={requiredPercentLabel}
+      />
       <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
           <span>Truth ready</span>
@@ -2284,19 +2617,225 @@ function DiscoverySection({
 
   const recentSourceEntries = sourceRegistryGroups
     .flatMap((group) => group.entries.map((source) => ({
+      groupKey: group.key,
       groupLabel: group.label,
       source,
     })))
     .slice(0, 3)
+  const coverageAreaRows = Array.isArray(discoveryHealth.coverageAreas)
+    ? discoveryHealth.coverageAreas
+        .map((area) => {
+          const evidenceCount = Number.isFinite(Number(area?.evidenceCount)) ? Number(area.evidenceCount) : 0
+          const acceptedEvidenceCount = Number.isFinite(Number(area?.acceptedEvidenceCount))
+            ? Number(area.acceptedEvidenceCount)
+            : 0
+          return {
+            areaLabel: formatRuntimeTokenLabel(area?.area || ''),
+            evidenceCount,
+            acceptedEvidenceCount,
+            progressValue: getCoverageAreaProgressValue({ acceptedEvidenceCount, evidenceCount }),
+            progressText: getCoverageAreaProgressText({ acceptedEvidenceCount, evidenceCount }),
+            state: area?.state,
+            stateMeta: getCoverageAreaStateMeta(area?.state),
+          }
+        })
+        .filter((area) => area.areaLabel && area.areaLabel !== '--')
+    : []
+  const intelligenceLastUpdatedAt = discoveryHealth.lastAcquisitionDate || discovery?.acceptedAt || discovery?.updatedAt || ''
+  const intelligenceLastUpdatedParts = formatDateTimeParts(intelligenceLastUpdatedAt)
+  const intelligenceLastUpdatedLabel = intelligenceLastUpdatedAt
+    ? formatActivityTime(intelligenceLastUpdatedAt) || formatDateOnly(intelligenceLastUpdatedAt)
+    : ''
   const coverageMetricValue = healthCoveragePercent !== null
     ? `${healthCoveragePercent}%`
     : coverageScore !== null
       ? `${coverageScore}%`
       : 'Not projected'
   const coverageMetricSummary = healthCoveragePercent !== null
-    ? `${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
-    : 'Coverage is not projected for this runtime yet.'
+    ? 'Overall coverage.'
+    : 'Coverage pending.'
   const sourceLineageValue = sourceCount > 0 ? String(sourceCount) : '0'
+  const sourceMetricSummary = sourceCount > 0
+    ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded.`
+    : 'No sources yet.'
+  const evidenceMetricSummary = evidenceObjectSummary.evidenceObjectCount > 0
+    ? `${evidenceObjectSummary.evidenceObjectCount} total extracted.`
+    : 'No evidence yet.'
+  const acceptedEvidenceMetricSummary = evidenceObjectSummary.acceptedEvidenceCount > 0
+    ? `${evidenceObjectSummary.acceptedEvidenceCount} accepted by user.`
+    : 'Awaiting review.'
+  const sourceLineageMetricSummary = sourceCount > 0
+    ? `${sourceCount} source path${sourceCount === 1 ? '' : 's'}.`
+    : 'No source paths yet.'
+  const evidenceAcceptanceSummaryRows = [
+    {
+      id: 'accepted-evidence',
+      icon: MdFactCheck,
+      label: 'Evidence',
+      value: evidenceObjectSummary.acceptedEvidenceCount,
+      detail: 'Accepted objects',
+    },
+    {
+      id: 'source-lineage',
+      icon: MdSource,
+      label: 'Sources',
+      value: sourceCount,
+      detail: 'Contributing',
+    },
+    ...(scopedViewKeys.length > 0
+      ? [{
+        id: 'scoped-views',
+        icon: MdAccountTree,
+        label: 'Section views',
+        value: scopedViewKeys.length,
+        detail: 'Projected',
+      }]
+      : []),
+    ...(intelligenceLastUpdatedLabel
+      ? [{
+        id: 'last-updated',
+        icon: MdOutlineHistory,
+        label: 'Updated',
+        value: intelligenceLastUpdatedParts?.dateLabel || intelligenceLastUpdatedLabel,
+        detail: intelligenceLastUpdatedParts?.timeLabel || 'Latest intelligence refresh',
+      }]
+      : []),
+  ]
+  const evidencePackRows = [
+    {
+      id: 'evidence-acquisition',
+      icon: MdDonutLarge,
+      title: acquisitionLabel,
+      meta: coverageScore !== null ? `Coverage ${coverageScore}%` : 'Coverage is not projected yet.',
+      badgeLabel: coverageScore !== null ? `${coverageScore}%` : '',
+      badgeVariant: coverageScore !== null ? 'info' : 'neutral',
+    },
+    {
+      id: 'evidence-objects',
+      icon: MdInventory2,
+      title: hasEvidence
+        ? `${evidenceObjectSummary.evidenceObjectCount} evidence object${evidenceObjectSummary.evidenceObjectCount === 1 ? '' : 's'}`
+        : `No ${INTELLIGENCE_HUB_LABEL} evidence objects`,
+      meta: hasEvidence
+        ? evidenceObjectSummaryText || evidenceSummary || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} is ready for governed downstream use.`
+        : `No ${INTELLIGENCE_HUB_LABEL} evidence pack is projected for this runtime yet.`,
+      badgeLabel: hasEvidence ? `${evidenceObjectSummary.acceptedEvidenceCount} accepted` : 'Pending',
+      badgeVariant: hasEvidence ? 'success' : 'warning',
+    },
+    {
+      id: 'evidence-source-lineage',
+      icon: MdSource,
+      title: sourceCount > 0
+        ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded`
+        : 'No source lineage',
+      meta: sourceCount > 0
+        ? builderMode
+          ? `Recorded via ${formatRuntimeTokenLabel(builderMode)}.`
+          : 'Source lineage is recorded for this runtime.'
+        : 'No source lineage is recorded for this runtime yet.',
+      badgeLabel: builderMode ? formatRuntimeTokenLabel(builderMode) : '',
+      badgeVariant: sourceCount > 0 ? 'info' : 'neutral',
+    },
+  ]
+  const evidenceReviewRows = [
+    {
+      id: 'evidence-review-summary',
+      icon: MdFactCheck,
+      title: evidenceObjectSummaryText || 'No reviewable evidence objects',
+      meta: evidenceObjectSummaryText
+        ? 'Review state is projected from governed evidence objects.'
+        : 'No reviewable evidence objects are projected for this runtime yet.',
+      badgeLabel: evidenceObjectSummary.pendingReviewCount > 0
+        ? `${evidenceObjectSummary.pendingReviewCount} pending`
+        : evidenceObjectSummary.acceptedEvidenceCount > 0
+          ? `${evidenceObjectSummary.acceptedEvidenceCount} accepted`
+          : '',
+      badgeVariant: evidenceObjectSummary.pendingReviewCount > 0 ? 'warning' : 'success',
+    },
+  ]
+  const coverageHealthRows = [
+    {
+      id: 'coverage-health-score',
+      icon: MdDonutLarge,
+      title: healthCoveragePercent !== null
+        ? `Coverage ${healthCoveragePercent}%`
+        : `${INTELLIGENCE_HUB_LABEL} health is not projected`,
+      meta: healthCoveragePercent !== null
+        ? `${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+        : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`,
+      badgeLabel: healthCoveragePercent !== null ? `${healthCoveragePercent}%` : '',
+      badgeVariant: healthCoveragePercent !== null ? 'info' : 'neutral',
+    },
+    {
+      id: 'coverage-health-missing',
+      icon: healthMissingAreas.length > 0 ? MdOutlineWarningAmber : MdCheckCircle,
+      iconVariant: healthMissingAreas.length > 0 ? 'warning' : 'success',
+      title: healthMissingAreas.length > 0 ? 'Missing areas' : 'No missing areas',
+      meta: healthMissingAreas.length > 0
+        ? healthMissingAreas.join(', ')
+        : 'No missing areas are currently projected.',
+      badgeLabel: healthMissingAreas.length > 0 ? `${healthMissingAreas.length} missing` : 'Clear',
+      badgeVariant: healthMissingAreas.length > 0 ? 'warning' : 'success',
+    },
+  ]
+  const scopedEvidenceRows = [
+    {
+      id: 'scoped-evidence-views',
+      icon: MdAccountTree,
+      title: scopedViewKeys.length > 0
+        ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'}`
+        : 'No scoped evidence views',
+      meta: scopedViewKeys.length > 0
+        ? 'Projected for guided sections.'
+        : 'Section-scoped evidence will appear here when the backend projects it.',
+      badgeLabel: scopedViewKeys.length > 0 ? `${scopedViewKeys.length} projected` : '',
+      badgeVariant: scopedViewKeys.length > 0 ? 'info' : 'neutral',
+    },
+  ]
+  const acceptanceRows = [
+    {
+      id: 'intelligence-acceptance',
+      icon: isAccepted ? MdCheckCircle : MdOutlineWarningAmber,
+      iconVariant: isAccepted ? 'success' : 'warning',
+      title: isAccepted ? `${INTELLIGENCE_HUB_LABEL} accepted` : `${INTELLIGENCE_HUB_LABEL} not accepted`,
+      meta: isAccepted
+        ? discovery?.acceptedAt
+          ? `Accepted on ${formatDateOnly(discovery.acceptedAt)}.`
+          : 'Accepted for governed downstream generation.'
+        : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`,
+      badgeLabel: isAccepted ? 'Accepted' : 'Pending',
+      badgeVariant: isAccepted ? 'success' : 'warning',
+    },
+  ]
+  const resetHistoryRows = discoveryResetSummary
+    ? [
+        {
+          id: 'reset-history-last-reset',
+          icon: MdOutlineHistory,
+          title: `Last reset${discoveryResetAtLabel ? ` ${discoveryResetAtLabel}` : ''}`,
+          meta: discoveryResetSummary.resetBy ? `Reset by ${discoveryResetSummary.resetBy}.` : 'Reset actor was not projected.',
+          badgeLabel: 'Audit',
+          badgeVariant: 'info',
+        },
+        {
+          id: 'reset-history-previous-evidence',
+          icon: MdInventory2,
+          title: 'Previous evidence state',
+          meta: formatDiscoveryResetPreviousEvidence(discoveryResetSummary.previousEvidenceSummary),
+        },
+        ...(discoveryResetClearedText
+          ? [{
+            id: 'reset-history-cleared-state',
+            icon: MdDelete,
+            iconVariant: 'warning',
+            title: 'Cleared state',
+            meta: discoveryResetClearedText,
+            badgeLabel: 'Reset',
+            badgeVariant: 'warning',
+          }]
+          : []),
+      ]
+    : EMPTY_ARRAY
 
   return (
     <Card variant="default" className="runtime-workspace__section-card">
@@ -2328,11 +2867,9 @@ function DiscoverySection({
                     aria-label="Acquisition sources"
                   >
                     <div className="runtime-workspace__intelligence-metric-copy">
-                      <h3>Acquisition Sources</h3>
+                      <h3>{renderStackedMetricHeading('Acquisition Sources')}</h3>
                       <p className="runtime-workspace__intelligence-metric-value">{sourceCount}</p>
-                      <p className="runtime-workspace__section-note">
-                        {sourceRegistrySummaryText || 'No source registry entries are projected yet.'}
-                      </p>
+                      <p className="runtime-workspace__section-note">{sourceMetricSummary}</p>
                     </div>
                     <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
                       <MdSource />
@@ -2343,13 +2880,11 @@ function DiscoverySection({
                     aria-label="Evidence objects"
                   >
                     <div className="runtime-workspace__intelligence-metric-copy">
-                      <h3>Evidence Objects</h3>
+                      <h3>{renderStackedMetricHeading('Evidence Objects')}</h3>
                       <p className="runtime-workspace__intelligence-metric-value">
                         {evidenceObjectSummary.evidenceObjectCount}
                       </p>
-                      <p className="runtime-workspace__section-note">
-                        {evidenceObjectSummaryText || 'No reviewable evidence objects are projected yet.'}
-                      </p>
+                      <p className="runtime-workspace__section-note">{evidenceMetricSummary}</p>
                     </div>
                     <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
                       <MdInventory2 />
@@ -2360,15 +2895,11 @@ function DiscoverySection({
                     aria-label="Accepted evidence"
                   >
                     <div className="runtime-workspace__intelligence-metric-copy">
-                      <h3>Accepted Evidence</h3>
+                      <h3>{renderStackedMetricHeading('Accepted Evidence')}</h3>
                       <p className="runtime-workspace__intelligence-metric-value">
                         {evidenceObjectSummary.acceptedEvidenceCount}
                       </p>
-                      <p className="runtime-workspace__section-note">
-                        {isAccepted
-                          ? `${INTELLIGENCE_HUB_LABEL} is accepted for downstream generation.`
-                          : `${INTELLIGENCE_HUB_LABEL} has not been accepted yet.`}
-                      </p>
+                      <p className="runtime-workspace__section-note">{acceptedEvidenceMetricSummary}</p>
                     </div>
                     <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
                       <MdFactCheck />
@@ -2379,7 +2910,7 @@ function DiscoverySection({
                     aria-label="Coverage score"
                   >
                     <div className="runtime-workspace__intelligence-metric-copy">
-                      <h3>Coverage Score</h3>
+                      <h3>{renderStackedMetricHeading('Coverage Score')}</h3>
                       <p className="runtime-workspace__intelligence-metric-value">{coverageMetricValue}</p>
                       <p className="runtime-workspace__section-note">{coverageMetricSummary}</p>
                     </div>
@@ -2392,13 +2923,9 @@ function DiscoverySection({
                     aria-label="Source lineage"
                   >
                     <div className="runtime-workspace__intelligence-metric-copy">
-                      <h3>Source Lineage</h3>
+                      <h3>{renderStackedMetricHeading('Lineage Paths')}</h3>
                       <p className="runtime-workspace__intelligence-metric-value">{sourceLineageValue}</p>
-                      <p className="runtime-workspace__section-note">
-                        {sourceCount > 0
-                          ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
-                          : 'No source lineage is recorded for this runtime yet.'}
-                      </p>
+                      <p className="runtime-workspace__section-note">{sourceLineageMetricSummary}</p>
                     </div>
                     <span className="runtime-workspace__intelligence-metric-icon" aria-hidden="true">
                       <MdAccountTree />
@@ -2409,43 +2936,114 @@ function DiscoverySection({
                   <section className="runtime-workspace__section-panel" aria-label="Recent sources">
                     <h3>Recent Sources</h3>
                     {recentSourceEntries.length > 0 ? (
-                      <ul className="runtime-workspace__plain-list">
-                        {recentSourceEntries.map(({ groupLabel, source }) => (
-                          <li key={source.sourceId || source.fieldKey || source.lineageRef}>
-                            <strong>{formatSourceRegistryEntryTitle(source)}</strong>
-                            <span>{[groupLabel, formatSourceRegistryEntryMeta(source)].filter(Boolean).join(' / ')}</span>
-                          </li>
-                        ))}
+                      <ul className="runtime-workspace__intelligence-source-list">
+                        {recentSourceEntries.map(({ groupKey, groupLabel, source }) => {
+                          const SourceIcon = getSourceRegistryGroupIcon(groupKey)
+                          return (
+                            <li key={source.sourceId || source.fieldKey || source.lineageRef}>
+                              <span
+                                className={`runtime-workspace__intelligence-source-icon runtime-workspace__intelligence-source-icon--${groupKey}`}
+                                aria-hidden="true"
+                              >
+                                <SourceIcon />
+                              </span>
+                              <span className="runtime-workspace__intelligence-source-copy">
+                                <strong>{formatSourceRegistryEntryTitle(source)}</strong>
+                                <span>{[groupLabel, formatSourceRegistryEntryMeta(source)].filter(Boolean).join(' / ')}</span>
+                              </span>
+                            </li>
+                          )
+                        })}
                       </ul>
                     ) : (
                       <p>{sourceRegistrySummaryText || 'No recent source registry entries are projected yet.'}</p>
                     )}
                   </section>
-                  <section className="runtime-workspace__section-panel" aria-label="Coverage summary">
-                    <h3>Coverage Summary</h3>
-                    <p>
-                      {healthCoveragePercent !== null
-                        ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
-                        : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
-                    </p>
-                    <p className="runtime-workspace__section-note">
-                      {healthMissingAreas.length > 0
-                        ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
-                        : 'No missing areas are currently projected.'}
-                    </p>
+                  <section className="runtime-workspace__section-panel" aria-label="Coverage heatmap">
+                    <h3>Coverage Heatmap</h3>
+                    {coverageAreaRows.length > 0 ? (
+                      <ul className="runtime-workspace__coverage-heatmap">
+                        {coverageAreaRows.map((area) => {
+                          const CoverageStateIcon = area.stateMeta.icon
+                          return (
+                            <li key={area.areaLabel}>
+                              <span className="runtime-workspace__coverage-heatmap-label">{area.areaLabel}</span>
+                              <ProgressBar
+                                ariaLabel={`${area.areaLabel}: ${area.stateMeta.label}, ${area.progressText}`}
+                                ariaValueText={area.progressText}
+                                className="runtime-workspace__coverage-heatmap-progress"
+                                size="sm"
+                                value={area.progressValue}
+                                variant={area.stateMeta.progressVariant}
+                              />
+                              <span
+                                className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
+                                aria-label={`${area.areaLabel} coverage status: ${area.stateMeta.description}`}
+                                title={area.stateMeta.description}
+                              >
+                                <CoverageStateIcon aria-hidden="true" focusable="false" />
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <>
+                        <p>
+                          {healthCoveragePercent !== null
+                            ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
+                            : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
+                        </p>
+                        <p className="runtime-workspace__section-note">
+                          {healthMissingAreas.length > 0
+                            ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
+                            : 'No missing areas are currently projected.'}
+                        </p>
+                      </>
+                    )}
                   </section>
-                  <section className="runtime-workspace__section-panel" aria-label="Accepted truth summary">
-                    <h3>Accepted Truth Summary</h3>
-                    <p>
-                      {isAccepted
-                        ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
-                        : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
-                    </p>
-                    <p className="runtime-workspace__section-note">
-                      {scopedViewKeys.length > 0
-                        ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
-                        : 'Section-scoped evidence will appear when the backend projects it.'}
-                    </p>
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__evidence-acceptance-summary"
+                    aria-label="Evidence acceptance summary"
+                  >
+                    <div className="runtime-workspace__evidence-acceptance-summary-header">
+                      <div>
+                        <h3>Evidence Acceptance Summary</h3>
+                        <p className="runtime-workspace__evidence-acceptance-summary-lede">
+                          {isAccepted
+                            ? 'Accepted evidence is ready for downstream generation.'
+                            : `${INTELLIGENCE_HUB_LABEL} evidence is not accepted for downstream generation.`}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={isAccepted ? 'success' : 'warning'}
+                        size="sm"
+                        pill
+                        outline
+                        icon={isAccepted ? <MdCheckCircle aria-hidden="true" /> : <MdOutlineWarningAmber aria-hidden="true" />}
+                      >
+                        {isAccepted ? 'Accepted' : 'Pending'}
+                      </Badge>
+                    </div>
+                    <dl className="runtime-workspace__evidence-acceptance-summary-list">
+                      {evidenceAcceptanceSummaryRows.map((row) => {
+                        const RowIcon = row.icon
+                        return (
+                          <div className="runtime-workspace__evidence-acceptance-summary-row" key={row.id}>
+                            <dt>
+                              <span className="runtime-workspace__evidence-acceptance-summary-icon" aria-hidden="true">
+                                <RowIcon />
+                              </span>
+                              <span>
+                                <span className="runtime-workspace__evidence-acceptance-summary-label">{row.label}</span>
+                                <span className="runtime-workspace__evidence-acceptance-summary-detail">{row.detail}</span>
+                              </span>
+                            </dt>
+                            <dd>{row.value}</dd>
+                          </div>
+                        )
+                      })}
+                    </dl>
                   </section>
                 </div>
               </div>
@@ -2456,142 +3054,167 @@ function DiscoverySection({
                   className="runtime-workspace__section-panel runtime-workspace__section-panel--discovery-inputs"
                   aria-label={INTELLIGENCE_HUB_INPUTS_LABEL}
                 >
-                  <h3>{INTELLIGENCE_HUB_INPUTS_LABEL}</h3>
-                  <Select
-                    id="runtime-discovery-acquisition-profile"
-                    label="Acquisition Profile"
-                    value={acquisitionProfile}
-                    onChange={handleAcquisitionProfileChange}
-                    options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
-                    disabled={disabled}
-                  />
-                  <div
-                    className="runtime-workspace__website-sources"
-                    role="group"
-                    aria-labelledby="runtime-discovery-website-sources-label"
-                  >
-                    <div className="runtime-workspace__website-sources-heading">
-                      <span id="runtime-discovery-website-sources-label">Website Sources</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="runtime-workspace__website-source-control"
-                        leftIcon={<MdAdd aria-hidden="true" />}
-                        disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
-                        onClick={handleAddWebsiteSource}
-                      >
-                        Add URL
-                      </Button>
+                  <div className="runtime-workspace__inputs-heading">
+                    <h3>{INTELLIGENCE_HUB_INPUTS_LABEL}</h3>
+                    {inputsSummary ? <p>{inputsSummary}</p> : null}
+                  </div>
+                  <div className="runtime-workspace__input-groups">
+                    <div className="runtime-workspace__input-group">
+                      <div className="runtime-workspace__input-group-heading">
+                        <h4>Acquisition</h4>
+                      </div>
+                      <Select
+                        id="runtime-discovery-acquisition-profile"
+                        label="Acquisition Profile"
+                        value={acquisitionProfile}
+                        onChange={handleAcquisitionProfileChange}
+                        options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
+                        disabled={disabled}
+                      />
                     </div>
-                    {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
-                      <div className="runtime-workspace__website-source-row" key={`website-source-${index}`}>
-                        <Input
-                          id={`runtime-discovery-website-source-${index}`}
-                          label={`Website Source ${index + 1}`}
-                          value={websiteSource}
-                          onChange={handleWebsiteSourceChange(index)}
-                          disabled={disabled}
-                          helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
-                        />
+                    <div
+                      className="runtime-workspace__input-group runtime-workspace__website-sources"
+                      role="group"
+                      aria-labelledby="runtime-discovery-website-sources-label"
+                    >
+                      <div className="runtime-workspace__input-group-heading runtime-workspace__website-sources-heading">
+                        <h4 id="runtime-discovery-website-sources-label">Website Sources</h4>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           className="runtime-workspace__website-source-control"
-                          leftIcon={<MdDelete aria-hidden="true" />}
-                          disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
-                          aria-label={`Remove website source ${index + 1}`}
-                          onClick={handleRemoveWebsiteSource(index)}
+                          leftIcon={<MdAdd aria-hidden="true" />}
+                          disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
+                          onClick={handleAddWebsiteSource}
                         >
-                          Remove
+                          Add URL
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                  <Input
-                    id="runtime-discovery-company-name"
-                    label="Company Name"
-                    value={draftInputs.companyName}
-                    onChange={handleInputChange('companyName')}
-                    disabled={disabled}
-                  />
-                  <Input
-                    id="runtime-discovery-market-region"
-                    label="Market / Region"
-                    value={draftInputs.marketRegion}
-                    onChange={handleInputChange('marketRegion')}
-                    disabled={disabled}
-                  />
-                  <Input
-                    id="runtime-discovery-target-offer"
-                    label="Target Product or Offer"
-                    value={draftInputs.targetOffer}
-                    onChange={handleInputChange('targetOffer')}
-                    disabled={disabled}
-                  />
-                  <Textarea
-                    id="runtime-discovery-notes"
-                    label="Optional Notes"
-                    value={draftInputs.notes}
-                    onChange={handleInputChange('notes')}
-                    disabled={disabled}
-                    rows={4}
-                  />
-                  <div className="runtime-workspace__document-upload">
-                    <div className="runtime-workspace__document-upload-field">
-                      <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
-                        Upload Documents
-                      </span>
-                      <input
-                        id="runtime-discovery-documents"
-                        type="file"
-                        className="runtime-workspace__document-upload-input sr-only"
-                        accept={DISCOVERY_DOCUMENT_ACCEPT}
-                        multiple
-                        onChange={handleDocumentUploadChange}
-                        disabled={disabled || saving || documentUploadPreparing}
-                        aria-labelledby="runtime-discovery-documents-label"
-                        aria-describedby="runtime-discovery-documents-helper"
-                      />
-                      <label
-                        htmlFor="runtime-discovery-documents"
-                        className={`btn btn--primary btn--md runtime-workspace__document-upload-button${
-                          disabled || saving || documentUploadPreparing
-                            ? ' runtime-workspace__document-upload-button--disabled'
-                            : ''
-                        }`}
-                        aria-disabled={disabled || saving || documentUploadPreparing}
-                      >
-                        <span className="btn__content">
-                          <span className="btn__icon btn__icon--left" aria-hidden="true">
-                            <MdUploadFile />
-                          </span>
-                          Choose Files
-                        </span>
-                      </label>
-                      <span className="input-helper" id="runtime-discovery-documents-helper">
-                        PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
-                      </span>
-                    </div>
-                    {documentUploadPreparing ? (
-                      <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
-                    ) : null}
-                    {documentUploadError ? (
-                      <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
-                    ) : null}
-                    {draftDocumentSources.length > 0 ? (
-                      <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label={`Selected ${INTELLIGENCE_HUB_LABEL} documents`}>
-                        {draftDocumentSources.map((documentSource) => (
-                          <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
-                            <strong>{documentSource.fileName}</strong>
-                            <span>{`${Math.max(1, Math.round((documentSource.sizeBytes || 0) / 1024))} KB ready for ingestion`}</span>
-                          </li>
+                      <div className="runtime-workspace__website-source-list">
+                        {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
+                          <div className="runtime-workspace__website-source-row" key={`website-source-${index}`}>
+                            <Input
+                              id={`runtime-discovery-website-source-${index}`}
+                              label={`Website Source ${index + 1}`}
+                              value={websiteSource}
+                              onChange={handleWebsiteSourceChange(index)}
+                              disabled={disabled}
+                              helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
+                            />
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              className="runtime-workspace__website-source-control"
+                              leftIcon={<MdDelete aria-hidden="true" />}
+                              disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
+                              aria-label={`Remove website source ${index + 1}`}
+                              onClick={handleRemoveWebsiteSource(index)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
                         ))}
-                      </ul>
-                    ) : null}
+                      </div>
+                    </div>
+                    <div className="runtime-workspace__input-group">
+                      <div className="runtime-workspace__input-group-heading">
+                        <h4>Business Context</h4>
+                      </div>
+                      <div className="runtime-workspace__input-field-grid">
+                        <Input
+                          id="runtime-discovery-company-name"
+                          label="Company Name"
+                          value={draftInputs.companyName}
+                          onChange={handleInputChange('companyName')}
+                          disabled={disabled}
+                        />
+                        <Input
+                          id="runtime-discovery-market-region"
+                          label="Market / Region"
+                          value={draftInputs.marketRegion}
+                          onChange={handleInputChange('marketRegion')}
+                          disabled={disabled}
+                        />
+                        <Input
+                          id="runtime-discovery-target-offer"
+                          label="Target Product or Offer"
+                          value={draftInputs.targetOffer}
+                          onChange={handleInputChange('targetOffer')}
+                          disabled={disabled}
+                          className="runtime-workspace__input-field--wide"
+                        />
+                        <Textarea
+                          id="runtime-discovery-notes"
+                          label="Optional Notes"
+                          value={draftInputs.notes}
+                          onChange={handleInputChange('notes')}
+                          disabled={disabled}
+                          rows={4}
+                          className="runtime-workspace__input-field--wide"
+                        />
+                      </div>
+                    </div>
+                    <div className="runtime-workspace__input-group">
+                      <div className="runtime-workspace__input-group-heading">
+                        <h4>Source Documents</h4>
+                      </div>
+                      <div className="runtime-workspace__document-upload">
+                        <div className="runtime-workspace__document-upload-field">
+                          <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
+                            Upload Documents
+                          </span>
+                          <input
+                            id="runtime-discovery-documents"
+                            type="file"
+                            className="runtime-workspace__document-upload-input sr-only"
+                            accept={DISCOVERY_DOCUMENT_ACCEPT}
+                            multiple
+                            onChange={handleDocumentUploadChange}
+                            disabled={disabled || saving || documentUploadPreparing}
+                            aria-labelledby="runtime-discovery-documents-label"
+                            aria-describedby="runtime-discovery-documents-helper"
+                          />
+                          <label
+                            htmlFor="runtime-discovery-documents"
+                            className={`btn btn--primary btn--md runtime-workspace__document-upload-button${
+                              disabled || saving || documentUploadPreparing
+                                ? ' runtime-workspace__document-upload-button--disabled'
+                                : ''
+                            }`}
+                            aria-disabled={disabled || saving || documentUploadPreparing}
+                          >
+                            <span className="btn__content">
+                              <span className="btn__icon btn__icon--left" aria-hidden="true">
+                                <MdUploadFile />
+                              </span>
+                              Choose Files
+                            </span>
+                          </label>
+                          <span className="input-helper" id="runtime-discovery-documents-helper">
+                            PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
+                          </span>
+                        </div>
+                        {documentUploadPreparing ? (
+                          <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
+                        ) : null}
+                        {documentUploadError ? (
+                          <Status variant="error" size="sm" showIcon>{documentUploadError}</Status>
+                        ) : null}
+                        {draftDocumentSources.length > 0 ? (
+                          <ul className="runtime-workspace__plain-list runtime-workspace__document-upload-list" aria-label={`Selected ${INTELLIGENCE_HUB_LABEL} documents`}>
+                            {draftDocumentSources.map((documentSource) => (
+                              <li key={`${documentSource.fileName}-${documentSource.sizeBytes}`}>
+                                <strong>{documentSource.fileName}</strong>
+                                <span>{`${Math.max(1, Math.round((documentSource.sizeBytes || 0) / 1024))} KB ready for ingestion`}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
-                  <p>{inputsSummary || `No ${INTELLIGENCE_HUB_LABEL} input projection is available yet.`}</p>
                 </section>
               </div>
             </TabView.Tab>
@@ -2710,26 +3333,11 @@ function DiscoverySection({
               <div className="runtime-workspace__section-panels">
                 <section className="runtime-workspace__section-panel" aria-label="Evidence pack">
                   <h3>Evidence Pack</h3>
-                  <p>
-                    {acquisitionLabel}
-                    {coverageScore !== null ? ` / Coverage ${coverageScore}%` : ''}
-                  </p>
-                  <p>
-                    {hasEvidence
-                      ? evidenceObjectSummaryText || evidenceSummary || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} is ready for governed downstream use.`
-                      : `No ${INTELLIGENCE_HUB_LABEL} evidence pack is projected for this runtime yet.`}
-                  </p>
-                  <p>
-                    {sourceCount > 0
-                      ? `${sourceCount} source${sourceCount === 1 ? '' : 's'} recorded${builderMode ? ` via ${formatRuntimeTokenLabel(builderMode)}` : ''}.`
-                      : 'No source lineage is recorded for this runtime yet.'}
-                  </p>
+                  <IntelligenceDetailRows rows={evidencePackRows} />
                 </section>
                 <section className="runtime-workspace__section-panel" aria-label="Evidence review">
                   <h3>Evidence Review</h3>
-                  <p>
-                    {evidenceObjectSummaryText || 'No reviewable evidence objects are projected for this runtime yet.'}
-                  </p>
+                  <IntelligenceDetailRows rows={evidenceReviewRows} />
                 </section>
               </div>
             </TabView.Tab>
@@ -2737,16 +3345,7 @@ function DiscoverySection({
               <div className="runtime-workspace__section-panels">
                 <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} health`}>
                   <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
-                  <p>
-                    {healthCoveragePercent !== null
-                      ? `Coverage ${healthCoveragePercent}% / ${formatRuntimeTokenLabel(discoveryHealth.confidence || 'UNKNOWN')} confidence.`
-                      : `${INTELLIGENCE_HUB_LABEL} health is not projected for this runtime yet.`}
-                  </p>
-                  <p className="runtime-workspace__section-note">
-                    {healthMissingAreas.length > 0
-                      ? `Missing areas: ${healthMissingAreas.slice(0, 5).join(', ')}${healthMissingAreas.length > 5 ? `, +${healthMissingAreas.length - 5} more` : ''}.`
-                      : 'No missing areas are currently projected.'}
-                  </p>
+                  <IntelligenceDetailRows rows={coverageHealthRows} />
                 </section>
               </div>
             </TabView.Tab>
@@ -2754,35 +3353,16 @@ function DiscoverySection({
               <div className="runtime-workspace__section-panels">
                 <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
                   <h3>Scoped Evidence Views</h3>
-                  <p>
-                    {scopedViewKeys.length > 0
-                      ? `${scopedViewKeys.length} section-scoped evidence view${scopedViewKeys.length === 1 ? '' : 's'} projected for guided sections.`
-                      : 'Section-scoped evidence will appear here when the backend projects it.'}
-                  </p>
+                  <IntelligenceDetailRows rows={scopedEvidenceRows} />
                 </section>
                 <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} acceptance`}>
                   <h3>Acceptance</h3>
-                  <p>
-                    {isAccepted
-                      ? `${INTELLIGENCE_HUB_LABEL} accepted${discovery?.acceptedAt ? ` on ${formatDateOnly(discovery.acceptedAt)}` : ''}.`
-                      : `${INTELLIGENCE_HUB_LABEL} has not been accepted for governed downstream generation.`}
-                  </p>
+                  <IntelligenceDetailRows rows={acceptanceRows} />
                 </section>
                 {discoveryResetSummary ? (
                   <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} reset history`}>
                     <h3>Reset History</h3>
-                    <p>
-                      Last reset
-                      {discoveryResetAtLabel ? ` ${discoveryResetAtLabel}` : ''}
-                      {discoveryResetSummary.resetBy ? ` by ${discoveryResetSummary.resetBy}` : ''}
-                      .
-                    </p>
-                    <p className="runtime-workspace__section-note">
-                      {formatDiscoveryResetPreviousEvidence(discoveryResetSummary.previousEvidenceSummary)}
-                    </p>
-                    {discoveryResetClearedText ? (
-                      <p className="runtime-workspace__section-note">{discoveryResetClearedText}</p>
-                    ) : null}
+                    <IntelligenceDetailRows rows={resetHistoryRows} />
                   </section>
                 ) : null}
               </div>
@@ -3934,24 +4514,31 @@ function RuntimeWorkspace() {
                   <MdCheckCircle aria-hidden="true" />
                   <h2>Certified Truth</h2>
                 </div>
-                <ul className="runtime-workspace__plain-list" aria-label="Certified runtime truth">
-                  <li>
-                    <strong>Output</strong>
-                    <span>{outputEligibility.outputEligible ? 'Eligible' : 'Not eligible'}</span>
-                  </li>
-                  <li>
-                    <strong>Publish Snapshot</strong>
-                    <span>{formatRuntimeIdentifier(publishSnapshot.snapshotId)}</span>
-                  </li>
-                  <li>
-                    <strong>Lock Snapshot</strong>
-                    <span>{formatRuntimeIdentifier(lockSnapshot.snapshotId)}</span>
-                  </li>
-                  <li>
-                    <strong>Replay Anchor</strong>
-                    <span>{formatRuntimeIdentifier(replayAnchor.replayAnchorId)}</span>
-                  </li>
-                </ul>
+                <SectionDetailRows
+                  ariaLabel="Certified runtime truth"
+                  rows={[
+                    {
+                      id: 'output-eligibility',
+                      title: 'Output',
+                      meta: outputEligibility.outputEligible ? 'Eligible' : 'Not eligible',
+                    },
+                    {
+                      id: 'publish-snapshot',
+                      title: 'Publish Snapshot',
+                      meta: formatRuntimeIdentifier(publishSnapshot.snapshotId),
+                    },
+                    {
+                      id: 'lock-snapshot',
+                      title: 'Lock Snapshot',
+                      meta: formatRuntimeIdentifier(lockSnapshot.snapshotId),
+                    },
+                    {
+                      id: 'replay-anchor',
+                      title: 'Replay Anchor',
+                      meta: formatRuntimeIdentifier(replayAnchor.replayAnchorId),
+                    },
+                  ]}
+                />
               </Card.Body>
             </Card>
           ) : null}
@@ -3963,24 +4550,33 @@ function RuntimeWorkspace() {
                   <MdCompareArrows aria-hidden="true" />
                   <h2>Governed Intelligence</h2>
                 </div>
-                <ul className="runtime-workspace__plain-list" aria-label="Active governed intelligence">
-                  <li>
-                    <strong>{getSectionDisplayLabel(activeSection, 'Active item')}</strong>
-                    <span>{getTruthReadinessSummary(activeSectionIntelligence.readiness)}</span>
-                  </li>
-                  <li>
-                    <strong>Confidence</strong>
-                    <span>{activeSectionIntelligence.displayProjection?.confidence?.label || formatRuntimeTokenLabel(activeSectionIntelligence.confidence?.level || 'NONE')}</span>
-                  </li>
-                  <li>
-                    <strong>Dependencies</strong>
-                    <span>{getDependencySummary(activeSectionIntelligence.dependency)}</span>
-                  </li>
-                  <li>
-                    <strong>Compare</strong>
-                    <span>{activeSectionIntelligence.compare?.summary || formatRuntimeTokenLabel(activeSectionIntelligence.compare?.state || 'UNKNOWN')}</span>
-                  </li>
-                </ul>
+                <SectionDetailRows
+                  ariaLabel="Active governed intelligence"
+                  rows={[
+                    {
+                      id: 'active-section',
+                      title: getSectionDisplayLabel(activeSection, 'Active item'),
+                      meta: getTruthReadinessSummary(activeSectionIntelligence.readiness),
+                    },
+                    {
+                      id: 'active-confidence',
+                      title: 'Confidence',
+                      meta: activeSectionIntelligence.displayProjection?.confidence?.label
+                        || formatRuntimeTokenLabel(activeSectionIntelligence.confidence?.level || 'NONE'),
+                    },
+                    {
+                      id: 'active-dependencies',
+                      title: 'Dependencies',
+                      meta: getDependencySummary(activeSectionIntelligence.dependency),
+                    },
+                    {
+                      id: 'active-compare',
+                      title: 'Compare',
+                      meta: activeSectionIntelligence.compare?.summary
+                        || formatRuntimeTokenLabel(activeSectionIntelligence.compare?.state || 'UNKNOWN'),
+                    },
+                  ]}
+                />
               </Card.Body>
             </Card>
           ) : null}

@@ -25,6 +25,7 @@ import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
 import { Status } from '../../components/Status'
+import { ProgressBar } from '../../components/ProgressBar'
 import { useToaster } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
@@ -1898,10 +1899,14 @@ function BulkUserOperations({
         )}
 
         {isProcessing && (
-          <div className="bulk-users__progress" aria-live="polite">
-            <p className="bulk-users__progress-label">{progressLabel}</p>
-            <progress max="100" value={progressValue} />
-          </div>
+          <ProgressBar
+            ariaLabel={progressLabel || 'Bulk user operation progress'}
+            aria-live="polite"
+            className="bulk-users__progress"
+            label={progressLabel}
+            value={progressValue}
+            valueLabel={`${Math.round(progressValue)}%`}
+          />
         )}
 
         {previewUsers.length > 0 && operation === 'create' && (

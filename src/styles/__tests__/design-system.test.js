@@ -78,6 +78,8 @@ describe('CSS Design System', () => {
       expect(computedStyles.getPropertyValue('--color-info-bg')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--color-info-border')).toBeTruthy()
       expect(computedStyles.getPropertyValue('--color-info-text')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-data-blue')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--color-metric-accent')).toBeTruthy()
     })
   })
 

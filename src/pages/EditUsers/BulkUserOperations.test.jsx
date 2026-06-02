@@ -8,11 +8,14 @@ const bulkCreateMock = vi.fn()
 const bulkUpdateMock = vi.fn()
 const bulkDisableMock = vi.fn()
 const mockUseTenantContext = vi.fn()
+let bulkCreateState = { isLoading: false }
+let bulkUpdateState = { isLoading: false }
+let bulkDisableState = { isLoading: false }
 
 vi.mock('../../store/api/userApi.js', () => ({
-  useBulkCreateUsersMutation: () => [bulkCreateMock, { isLoading: false }],
-  useBulkUpdateUsersMutation: () => [bulkUpdateMock, { isLoading: false }],
-  useBulkDisableUsersMutation: () => [bulkDisableMock, { isLoading: false }],
+  useBulkCreateUsersMutation: () => [bulkCreateMock, bulkCreateState],
+  useBulkUpdateUsersMutation: () => [bulkUpdateMock, bulkUpdateState],
+  useBulkDisableUsersMutation: () => [bulkDisableMock, bulkDisableState],
 }))
 
 vi.mock('../../hooks/useTenantContext.js', () => ({
@@ -96,6 +99,9 @@ beforeEach(() => {
   bulkCreateMock.mockReset()
   bulkUpdateMock.mockReset()
   bulkDisableMock.mockReset()
+  bulkCreateState = { isLoading: false }
+  bulkUpdateState = { isLoading: false }
+  bulkDisableState = { isLoading: false }
   mockUseTenantContext.mockReset()
   mockUseTenantContext.mockReturnValue(getTenantContextMockValue())
 
@@ -137,6 +143,21 @@ describe('BulkUserOperations', () => {
     const select = screen.getByLabelText(/operation/i)
     expect(select).toBeInTheDocument()
     expect(select.value).toBe('create')
+  })
+
+  it('exposes accessible progress while a bulk mutation is processing', () => {
+    bulkUpdateState = { isLoading: true }
+
+    renderDialog({
+      initialOperation: 'update',
+      selectedUserIds: ['u1'],
+    })
+
+    const progress = screen.getByRole('progressbar', { name: /bulk user operation progress/i })
+    expect(progress).toHaveAttribute('value', '0')
+    expect(progress).toHaveAttribute('aria-valuetext', '0%')
+    expect(screen.getByText('0%')).toBeInTheDocument()
+    expect(progress.closest('.progress-bar')).toHaveAttribute('aria-live', 'polite')
   })
 
   it('renders Close button in footer', () => {
