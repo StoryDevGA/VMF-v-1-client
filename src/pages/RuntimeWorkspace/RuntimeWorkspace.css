@@ -213,19 +213,18 @@
 
 .runtime-workspace__action-panel.card {
   position: relative;
-  z-index: var(--z-index-popover);
+  z-index: var(--z-index-dropdown);
   overflow: visible;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.runtime-workspace__action-panel-body {
+.runtime-workspace__action-panel .runtime-workspace__action-panel-body.card__body {
   position: relative;
-  z-index: 1;
   display: grid;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
 }
 
 .runtime-workspace__action-panel-heading {
@@ -441,7 +440,7 @@
 }
 
 .runtime-workspace__action-scroll .h-scroll__track {
-  --runtime-action-tooltip-clearance: calc(var(--spacing-3xl) + var(--spacing-sm));
+  --runtime-action-tooltip-clearance: calc(var(--spacing-3xl) + var(--spacing-md));
   --runtime-action-scroll-offset: calc(var(--runtime-action-tooltip-clearance) - var(--spacing-sm));
 
   margin-block-start: calc(var(--runtime-action-scroll-offset) * -1);
@@ -565,10 +564,6 @@
   align-items: center;
 }
 
-.runtime-workspace__action-tooltip {
-  z-index: calc(var(--z-index-tooltip) + 1);
-}
-
 .runtime-workspace__action-tooltip-trigger {
   border-radius: var(--border-radius-full);
   cursor: help;
@@ -606,7 +601,6 @@
 }
 
 .runtime-workspace__action-tooltip .tooltip__bubble {
-  z-index: calc(var(--z-index-tooltip) + 2);
   min-width: calc(var(--spacing-3xl) * 3.5);
   max-width: calc(var(--spacing-3xl) * 5);
   font-size: var(--font-size-xs);
