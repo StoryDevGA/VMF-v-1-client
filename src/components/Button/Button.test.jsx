@@ -64,6 +64,11 @@ describe('Button Component', () => {
       render(<Button variant="danger">Danger</Button>)
       expect(screen.getByRole('button')).toHaveClass('btn--danger')
     })
+
+    it('should apply warning variant', () => {
+      render(<Button variant="warning">Warning</Button>)
+      expect(screen.getByRole('button')).toHaveClass('btn--warning')
+    })
   })
 
   describe('Sizes', () => {

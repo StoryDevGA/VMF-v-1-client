@@ -12,6 +12,8 @@ import {
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useReviewRuntimeSectionEvidenceMutation,
+  useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import RuntimeWorkspace from './RuntimeWorkspace'
@@ -25,6 +27,8 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useMutateRuntimeStateMutation: vi.fn(),
   useResetRuntimeDiscoveryMutation: vi.fn(),
   useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
+  useReviewRuntimeSectionEvidenceMutation: vi.fn(),
+  useUpdateRuntimeSectionEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
 
@@ -41,6 +45,10 @@ const resetRuntimeDiscovery = vi.fn()
 const unwrapResetDiscovery = vi.fn()
 const reviewRuntimeDiscoveryEvidence = vi.fn()
 const unwrapReviewDiscoveryEvidence = vi.fn()
+const reviewRuntimeSectionEvidence = vi.fn()
+const unwrapReviewRuntimeSectionEvidence = vi.fn()
+const updateRuntimeSectionEvidence = vi.fn()
+const unwrapUpdateRuntimeSectionEvidence = vi.fn()
 const acceptRuntimeSection = vi.fn()
 const unwrapAcceptSection = vi.fn()
 
@@ -249,6 +257,10 @@ describe('RuntimeWorkspace', () => {
     unwrapResetDiscovery.mockReset()
     reviewRuntimeDiscoveryEvidence.mockReset()
     unwrapReviewDiscoveryEvidence.mockReset()
+    reviewRuntimeSectionEvidence.mockReset()
+    unwrapReviewRuntimeSectionEvidence.mockReset()
+    updateRuntimeSectionEvidence.mockReset()
+    unwrapUpdateRuntimeSectionEvidence.mockReset()
     acceptRuntimeSection.mockReset()
     unwrapAcceptSection.mockReset()
     window.confirm = vi.fn(() => true)
@@ -264,6 +276,10 @@ describe('RuntimeWorkspace', () => {
     resetRuntimeDiscovery.mockReturnValue({ unwrap: unwrapResetDiscovery })
     unwrapReviewDiscoveryEvidence.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
     reviewRuntimeDiscoveryEvidence.mockReturnValue({ unwrap: unwrapReviewDiscoveryEvidence })
+    unwrapReviewRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'ACCEPTED' } } } })
+    reviewRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapReviewRuntimeSectionEvidence })
+    unwrapUpdateRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'PENDING_REVIEW' } } } })
+    updateRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapUpdateRuntimeSectionEvidence })
     unwrapAcceptSection.mockResolvedValue({ data: { section: { accepted: { content: 'Accepted final.' } } } })
     acceptRuntimeSection.mockReturnValue({ unwrap: unwrapAcceptSection })
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
@@ -271,6 +287,8 @@ describe('RuntimeWorkspace', () => {
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
     useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
+    useReviewRuntimeSectionEvidenceMutation.mockReturnValue([reviewRuntimeSectionEvidence, { isLoading: false }])
+    useUpdateRuntimeSectionEvidenceMutation.mockReturnValue([updateRuntimeSectionEvidence, { isLoading: false }])
     useGetRuntimeEvidenceQuery.mockReturnValue({
       data: null,
       isFetching: false,
@@ -862,20 +880,27 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
-    expect(within(discoverySection).getByText('Evidence Ready')).toBeInTheDocument()
+    expect(within(discoverySection).getAllByText('Evidence Ready').length).toBeGreaterThan(0)
     expect(within(discoverySection).getByRole('tablist', { name: /intelligence hub sections/i })).toBeInTheDocument()
     expect(within(discoverySection).getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
-    const intelligenceHubTabs = ['Inputs', 'Sources', 'Evidence', 'Coverage', 'Governance']
+    const intelligenceHubTabs = ['Context', 'Sources', 'Evidence', 'Coverage', 'Governance']
     intelligenceHubTabs.forEach((tabName) => {
       expect(within(discoverySection).getByRole('tab', { name: tabName })).toBeInTheDocument()
     })
     expect(within(discoverySection).getByRole('region', { name: /acquisition sources/i })).toBeInTheDocument()
 
-    selectIntelligenceHubTab('Inputs')
-    const discoveryInputs = within(discoverySection).getByRole('region', { name: /intelligence hub inputs/i })
+    selectIntelligenceHubTab('Context')
+    const discoveryInputs = within(discoverySection).getByRole('region', { name: /runtime-wide context/i })
+    expect(discoveryInputs).toHaveTextContent('Runtime-Wide Context')
     expect(discoveryInputs).toHaveTextContent('4 accepted Intelligence Hub inputs captured')
     expect(discoveryInputs).toHaveTextContent('Company website')
     expect(discoveryInputs).not.toHaveTextContent('companyWebsite')
+    const businessContext = within(discoverySection).getByRole('region', { name: /runtime business context/i })
+    expect(businessContext).toHaveTextContent('Business Context')
+    expect(businessContext).toHaveTextContent('Company Name')
+    const discoveryDocuments = within(discoverySection).getByRole('region', { name: /intelligence hub document context/i })
+    expect(discoveryDocuments).toHaveTextContent('Source Documents')
+    expect(discoveryDocuments).toHaveTextContent('Upload Documents')
 
     selectIntelligenceHubTab('Evidence')
     const evidencePack = within(discoverySection).getByRole('region', { name: /evidence pack/i })
@@ -1204,7 +1229,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.click(screen.getByRole('button', { name: /add url/i }))
@@ -1262,7 +1287,9 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
+    const discoveryDocuments = screen.getByRole('region', { name: /intelligence hub document context/i })
+    expect(within(discoveryDocuments).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
 
     const discoveryDocument = new File(
       ['Customer teams need governed workflow automation for value narratives.'],
@@ -1270,12 +1297,33 @@ describe('RuntimeWorkspace', () => {
       { type: 'text/plain' },
     )
 
-    await user.upload(screen.getByLabelText('Upload Documents'), discoveryDocument)
-    expect(await screen.findByText('customer-notes.txt')).toBeInTheDocument()
+    const discoveryFileInput = within(discoveryDocuments).getByLabelText('Upload Documents')
+    await user.upload(discoveryFileInput, discoveryDocument)
+    expect(await within(discoveryDocuments).findByText('customer-notes.txt')).toBeInTheDocument()
+    expect(discoveryFileInput).toBeDisabled()
+    const selectedDiscoveryDocuments = within(discoveryDocuments).getByRole('list', {
+      name: /selected intelligence hub documents/i,
+    })
+    expect(within(selectedDiscoveryDocuments).getByText(/staged for upload/i)).toBeInTheDocument()
+    expect(within(selectedDiscoveryDocuments).getByText('Ready for ingestion')).toBeInTheDocument()
+    expect(within(discoveryDocuments).getByRole('status', {
+      name: /status: 1 selected document staged for upload/i,
+    })).toBeInTheDocument()
+    expect(within(discoveryDocuments).getByRole('button', { name: /^cancel$/i })).toBeInTheDocument()
+    expect(within(discoveryDocuments).queryByText(/^select files$/i)).not.toBeInTheDocument()
+
+    await user.click(within(discoveryDocuments).getByRole('button', { name: /^cancel$/i }))
+    expect(within(discoveryDocuments).queryByText('customer-notes.txt')).not.toBeInTheDocument()
+    expect(within(discoveryDocuments).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
+    expect(within(discoveryDocuments).getByText(/^select files$/i)).toBeInTheDocument()
+    expect(discoveryFileInput).not.toBeDisabled()
+
+    await user.upload(discoveryFileInput, discoveryDocument)
+    expect(await within(discoveryDocuments).findByText('customer-notes.txt')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
     await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
-    await user.click(screen.getByRole('button', { name: /build evidence pack/i }))
+    await user.click(within(discoveryDocuments).getByRole('button', { name: /upload intelligence hub documents/i }))
 
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -1313,7 +1361,7 @@ describe('RuntimeWorkspace', () => {
 
     try {
       renderRuntimeWorkspace()
-      selectIntelligenceHubTab('Inputs')
+      selectIntelligenceHubTab('Context')
 
       const discoveryDocument = new File(
         ['Customer teams need governed workflow automation for value narratives.'],
@@ -1326,6 +1374,8 @@ describe('RuntimeWorkspace', () => {
       })
 
       expect(await screen.findByText(/preparing selected documents/i)).toBeInTheDocument()
+      const discoveryDocuments = screen.getByRole('region', { name: /intelligence hub document context/i })
+      expect(within(discoveryDocuments).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
       const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
       expect(buildButton).toBeDisabled()
       fireEvent.submit(buildButton.closest('form'))
@@ -1339,7 +1389,7 @@ describe('RuntimeWorkspace', () => {
     const user = userEvent.setup()
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     fireEvent.change(screen.getByLabelText('Upload Documents'), {
       target: {
@@ -1354,6 +1404,8 @@ describe('RuntimeWorkspace', () => {
     expect(await screen.findByRole('status', {
       name: /status: customer-notes\.exe is not a supported Intelligence Hub document type/i,
     })).toBeInTheDocument()
+    const discoveryDocuments = screen.getByRole('region', { name: /intelligence hub document context/i })
+    expect(within(discoveryDocuments).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
     const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
     expect(buildButton).toBeDisabled()
     await user.click(buildButton)
@@ -1397,7 +1449,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByRole('option', { name: /strategic acquisition/i })).toBeDisabled()
@@ -1463,7 +1515,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     await user.selectOptions(screen.getByLabelText('Acquisition Profile'), 'ENHANCED')
     await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
@@ -1531,7 +1583,7 @@ describe('RuntimeWorkspace', () => {
     const evidencePack = screen.getByRole('region', { name: /evidence pack/i })
     expect(within(evidencePack).getByText('Standard Acquisition')).toBeInTheDocument()
 
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
     expect(screen.getByRole('option', { name: 'Enhanced Acquisition' })).toBeEnabled()
     expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
     selectIntelligenceHubTab('Evidence')
@@ -1624,7 +1676,7 @@ describe('RuntimeWorkspace', () => {
     })
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/Intelligence Hub cleared/i)).toBeInTheDocument()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
     expect(screen.getByLabelText('Website Source 1')).toHaveValue('')
     expect(screen.getByLabelText('Company Name')).toHaveValue('')
     expect(screen.getByLabelText('Acquisition Profile')).toHaveValue('STANDARD')
@@ -1634,7 +1686,7 @@ describe('RuntimeWorkspace', () => {
     const user = userEvent.setup()
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     await user.type(screen.getByLabelText('Website Source 1'), 'https://draft.example')
     await user.type(screen.getByLabelText('Company Name'), 'Draft Acme')
@@ -2388,7 +2440,7 @@ describe('RuntimeWorkspace', () => {
     const refreshButton = screen.getByRole('button', { name: /refresh evidence pack/i })
     const acceptEvidenceButton = screen.getByRole('button', { name: /accept evidence/i })
     const clearDiscoveryButton = screen.getByRole('button', { name: /clear intelligence hub/i })
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
     expect(screen.getByLabelText('Website Source 1')).toBeDisabled()
     selectIntelligenceHubTab('Sources')
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
@@ -2662,7 +2714,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    selectIntelligenceHubTab('Inputs')
+    selectIntelligenceHubTab('Context')
 
     const refreshButton = screen.getByRole('button', { name: /build evidence pack/i })
     expect(refreshButton).toBeEnabled()
@@ -2887,6 +2939,391 @@ describe('RuntimeWorkspace', () => {
     expect(await screen.findByText(/section saved/i)).toBeInTheDocument()
   })
 
+  it('uploads section supporting files through the section evidence endpoint', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    expect(within(sectionEvidenceRegion).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
+    const sectionDocument = new File(
+      ['Customer teams need governed workflow automation for value narratives.'],
+      'section-notes.txt',
+      { type: 'text/plain' },
+    )
+
+    const sectionFileInput = within(sectionEvidenceRegion).getByLabelText('Supporting Files')
+    await user.upload(sectionFileInput, sectionDocument)
+    expect(await within(sectionEvidenceRegion).findByText('section-notes.txt')).toBeInTheDocument()
+    expect(sectionFileInput).toBeDisabled()
+    const selectedSectionDocuments = within(sectionEvidenceRegion).getByRole('list', {
+      name: /selected section supporting files/i,
+    })
+    expect(within(selectedSectionDocuments).getByText(/staged for upload/i)).toBeInTheDocument()
+    expect(within(selectedSectionDocuments).getByText('Ready for ingestion')).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^cancel$/i })).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).queryByText(/^select files$/i)).not.toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^cancel$/i }))
+    expect(within(sectionEvidenceRegion).queryByText('section-notes.txt')).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText(/^select files$/i)).toBeInTheDocument()
+    expect(sectionFileInput).not.toBeDisabled()
+
+    await user.upload(sectionFileInput, sectionDocument)
+    expect(await within(sectionEvidenceRegion).findByText('section-notes.txt')).toBeInTheDocument()
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^upload$/i }))
+
+    expect(updateRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        documentSources: [
+          expect.objectContaining({
+            fileName: 'section-notes.txt',
+            mimeType: 'text/plain',
+            assetType: 'SECTION_SUPPORTING_FILE',
+            sizeBytes: sectionDocument.size,
+            contentBase64: expect.stringMatching(/^data:text\/plain;base64,/),
+          }),
+        ],
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/supporting files uploaded/i)).toBeInTheDocument()
+  })
+
+  it('preserves staged section supporting files and avoids success refetch when upload fails', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'Runtime instance has changed since the renderer projection was loaded.',
+          details: {
+            reason: 'RUNTIME_MUTATION_STALE',
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    const sectionDocument = new File(
+      ['Customer teams need governed workflow automation for value narratives.'],
+      'section-notes.txt',
+      { type: 'text/plain' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), sectionDocument)
+    expect(await within(sectionEvidenceRegion).findByText('section-notes.txt')).toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^upload$/i }))
+
+    expect(updateRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(/runtime instance has changed since the renderer projection was loaded/i)).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText('section-notes.txt')).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^upload$/i })).toBeInTheDocument()
+  })
+
+  it('reviews projected section evidence objects without exposing raw evidence text', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                    textContent: 'raw uploaded document text',
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                    extractedFact: 'confidential raw extracted fact',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    expect(within(sectionEvidenceRegion).getByText('section-notes.txt')).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText('Value Drivers')).toBeInTheDocument()
+    expect(sectionEvidenceRegion).not.toHaveTextContent('confidential raw extracted fact')
+    expect(sectionEvidenceRegion).not.toHaveTextContent('raw uploaded document text')
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^accept$/i }))
+
+    expect(reviewRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      evidenceObjectId: 'section_evidence_1',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        reviewStatus: 'ACCEPTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/section evidence accepted/i)).toBeInTheDocument()
+  })
+
+  it('rejects projected section evidence objects with the danger button variant', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    const rejectButton = within(sectionEvidenceRegion).getByRole('button', { name: /^reject$/i })
+    expect(rejectButton).toHaveClass('btn--danger', 'btn--sm')
+    expect(rejectButton).not.toHaveClass('btn--outline')
+    expect(rejectButton).not.toHaveClass('btn--ghost')
+
+    await user.click(rejectButton)
+
+    expect(reviewRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      evidenceObjectId: 'section_evidence_1',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        reviewStatus: 'REJECTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/section evidence rejected/i)).toBeInTheDocument()
+  })
+
+  it('shows normalized section evidence review errors without success refetch', async () => {
+    const user = userEvent.setup()
+    unwrapReviewRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 404,
+      data: {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Section evidence object was not found.',
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^accept$/i }))
+
+    expect(reviewRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      evidenceObjectId: 'section_evidence_1',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        reviewStatus: 'ACCEPTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(/section evidence object was not found/i)).toBeInTheDocument()
+    expect(screen.queryByText(/section evidence accepted/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps section evidence upload and review disabled for read-only sections', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              editable: false,
+              readonlyReason: 'Runtime is locked and cannot be mutated.',
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: /section evidence/i })
+    expect(within(sectionEvidenceRegion).getByLabelText('Supporting Files')).toBeDisabled()
+    expect(within(sectionEvidenceRegion).queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^accept$/i })).toBeDisabled()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^reject$/i })).toBeDisabled()
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^accept$/i }))
+    expect(updateRuntimeSectionEvidence).not.toHaveBeenCalled()
+    expect(reviewRuntimeSectionEvidence).not.toHaveBeenCalled()
+  })
+
   it('accepts generated section content through the section acceptance endpoint', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -3021,6 +3458,56 @@ describe('RuntimeWorkspace', () => {
     const acceptTruth = screen.getByRole('button', { name: /accept truth/i })
     expect(acceptTruth).toBeDisabled()
     expect(acceptTruth).toHaveAccessibleDescription('Evidence not sufficient to derive this section safely.')
+    expect(acceptRuntimeSection).not.toHaveBeenCalled()
+  })
+
+  it('keeps section acceptance disabled when accepted section evidence requires regeneration', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Customer Problem: Proposal creation is slow.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-before-evidence-change',
+              },
+              state: {
+                status: 'GENERATED',
+                revisionCount: 0,
+                needsRegeneration: true,
+                acceptedInvalidationReason: 'SECTION_EVIDENCE_CHANGED',
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                readiness: {
+                  state: 'REGENERATION_REQUIRED',
+                  publishEligible: false,
+                  reason: 'Accepted section evidence changed. Regenerate this section before accepting or publishing truth.',
+                  blockingValidationCount: 0,
+                },
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.getAllByText(/accepted section evidence changed/i).length).toBeGreaterThanOrEqual(1)
+    const acceptTruth = screen.getByRole('button', { name: /accept truth/i })
+    expect(acceptTruth).toBeDisabled()
+    expect(acceptTruth).toHaveAccessibleDescription(/Accepted section evidence changed/i)
+    await user.click(acceptTruth)
     expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
@@ -3216,6 +3703,11 @@ describe('RuntimeWorkspace', () => {
 
     expect(screen.getAllByText(/accepted upstream section truth changed/i).length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText(/1 upstream accepted truth changed/i).length).toBeGreaterThanOrEqual(1)
+    const acceptTruth = screen.getByRole('button', { name: /accept truth/i })
+    expect(acceptTruth).toBeDisabled()
+    expect(acceptTruth).toHaveAccessibleDescription(/Accepted upstream section truth changed/i)
+    await user.click(acceptTruth)
+    expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
   it('shows dependency feedback when upstream accepted truth is missing', async () => {

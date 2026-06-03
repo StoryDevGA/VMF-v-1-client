@@ -116,6 +116,20 @@ export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, ev
   body,
 })
 
+export const buildUpdateRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence`,
+  method: 'PATCH',
+  body,
+})
+
+export const buildReviewRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, evidenceObjectId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence/${
+    encodeURIComponent(String(evidenceObjectId ?? '').trim())
+  }/review`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildAcceptRuntimeSectionQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-acceptance`,
   method: 'PATCH',
@@ -170,6 +184,8 @@ export const getAcceptRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateIn
 export const getResetRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewRuntimeDiscoveryEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getUpdateRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -223,6 +239,16 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
     }),
 
+    updateRuntimeSectionEvidence: build.mutation({
+      query: buildUpdateRuntimeSectionEvidenceQuery,
+      invalidatesTags: getUpdateRuntimeSectionEvidenceInvalidationTags,
+    }),
+
+    reviewRuntimeSectionEvidence: build.mutation({
+      query: buildReviewRuntimeSectionEvidenceQuery,
+      invalidatesTags: getReviewRuntimeSectionEvidenceInvalidationTags,
+    }),
+
     acceptRuntimeSection: build.mutation({
       query: buildAcceptRuntimeSectionQuery,
       invalidatesTags: getAcceptRuntimeSectionInvalidationTags,
@@ -247,6 +273,8 @@ export const {
   useAcceptRuntimeSectionMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useReviewRuntimeSectionEvidenceMutation,
+  useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
   useExecuteRuntimeActionMutation,
 } = runtimeInstanceApi

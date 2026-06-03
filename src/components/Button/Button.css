@@ -58,9 +58,13 @@
 }
 
 /* Disabled state */
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background-color: transparent;
+  color: var(--color-text-secondary);
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 /* ===========================
@@ -144,6 +148,25 @@
 .btn--danger:active:not(:disabled) {
   background-color: var(--color-error-active);
   border-color: color-mix(in srgb, var(--color-error-active) 30%, transparent);
+}
+
+/* Warning - Cancellable staged actions */
+.btn--warning {
+  background-color: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-warning) 46%, transparent);
+}
+
+.btn--warning:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-warning) 86%, var(--color-background));
+  color: var(--color-background);
+  border-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
+}
+
+.btn--warning:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-warning) 86%, var(--color-background));
+  color: var(--color-background);
+  border-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
 }
 
 /* ===========================

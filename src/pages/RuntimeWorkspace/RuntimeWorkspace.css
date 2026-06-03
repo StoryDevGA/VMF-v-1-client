@@ -380,13 +380,6 @@
   align-self: flex-start;
 }
 
-.runtime-workspace__action-panel .btn:disabled {
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 72%, transparent);
-  background-color: transparent;
-  color: var(--color-text-secondary);
-  opacity: 0.55;
-}
-
 .runtime-workspace__action-scroll .h-scroll__track {
   --runtime-action-tooltip-clearance: calc(var(--spacing-3xl) + var(--spacing-md));
   --runtime-action-scroll-offset: calc(var(--runtime-action-tooltip-clearance) - var(--spacing-sm));
@@ -700,8 +693,50 @@
   background-color: color-mix(in srgb, var(--color-background-secondary) 72%, var(--color-background));
 }
 
-.runtime-workspace__section-panel--discovery-inputs {
+.runtime-workspace__intelligence-context-column {
+  display: grid;
+  align-content: start;
+  align-self: start;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.runtime-workspace__section-panel--discovery-context,
+.runtime-workspace__section-panel--discovery-business,
+.runtime-workspace__section-panel--discovery-documents {
   gap: var(--spacing-md);
+}
+
+.runtime-workspace__section-panel--discovery-context .runtime-workspace__input-group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.runtime-workspace__section-panel--discovery-documents {
+  align-content: start;
+}
+
+.runtime-workspace__section-panel--discovery-documents .runtime-workspace__section-evidence-heading {
+  flex-wrap: wrap;
+}
+
+.runtime-workspace__section-panel--discovery-documents .runtime-workspace__section-evidence-heading .badge {
+  justify-self: start;
+}
+
+.runtime-workspace__section-panel--discovery-documents .input-helper,
+.runtime-workspace__section-panel--discovery-documents .runtime-workspace__section-note,
+.runtime-workspace__section-panel--discovery-documents .runtime-workspace__section-note span,
+.runtime-workspace__section-panel--discovery-documents .status,
+.runtime-workspace__section-panel--discovery-documents .status__text {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.runtime-workspace__section-panel--discovery-documents .status {
+  align-items: flex-start;
 }
 
 .runtime-workspace__intelligence-tabs,
@@ -1124,19 +1159,6 @@
   margin-top: var(--spacing-sm);
 }
 
-.runtime-workspace__website-source-control.btn:not(.btn--danger) {
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 85%, transparent);
-  background-color: transparent;
-  color: var(--color-text-primary);
-}
-
-.runtime-workspace__website-source-control.btn:not(.btn--danger):hover:not(:disabled),
-.runtime-workspace__website-source-control.btn:not(.btn--danger):active:not(:disabled) {
-  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-action-primary) 38%, transparent);
-  background-color: color-mix(in srgb, var(--color-card-border) 22%, transparent);
-  color: var(--color-text-primary);
-}
-
 .runtime-workspace__source-registry-groups {
   display: grid;
   gap: 0;
@@ -1394,6 +1416,13 @@
   min-width: 0;
 }
 
+.runtime-workspace__document-upload-field > .btn--sm {
+  gap: var(--spacing-xs);
+  height: calc(var(--spacing-md) * 2.25);
+  min-height: calc(var(--spacing-md) * 2.25);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+}
+
 .runtime-workspace__document-upload-label {
   color: var(--color-text-primary);
   font-size: var(--font-size-xs);
@@ -1402,7 +1431,13 @@
 }
 
 .runtime-workspace__document-upload-button {
-  justify-self: start;
+  width: 100%;
+  justify-self: stretch;
+}
+
+.runtime-workspace__document-upload-cancel {
+  width: 100%;
+  justify-self: stretch;
 }
 
 .runtime-workspace__document-upload-input:focus-visible + .runtime-workspace__document-upload-button {
@@ -1422,13 +1457,78 @@
   border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 70%, transparent);
 }
 
+.runtime-workspace__document-upload-list--selected {
+  display: grid;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-success) 28%, var(--color-card-border));
+  border-radius: var(--border-radius-md);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-success) 10%, transparent),
+      color-mix(in srgb, var(--color-background-secondary) 86%, transparent)
+    );
+}
+
+.runtime-workspace__document-upload-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.runtime-workspace__document-upload-ready-icon {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--spacing-md) + var(--spacing-2xs));
+  height: calc(var(--spacing-md) + var(--spacing-2xs));
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-success) 34%, transparent);
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
+.runtime-workspace__document-upload-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .runtime-workspace__document-upload-list strong {
   font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
 }
 
 .runtime-workspace__document-upload-list span {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+
+.runtime-workspace__document-upload-list--selected .runtime-workspace__document-upload-ready-icon,
+.runtime-workspace__document-upload-list--selected .badge {
+  color: var(--color-success);
+}
+
+.runtime-workspace__section-evidence-heading,
+.runtime-workspace__section-evidence-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.runtime-workspace__section-evidence-heading > div {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.runtime-workspace__section-evidence-heading .badge {
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .runtime-workspace__section-panel h3 {
@@ -1672,7 +1772,7 @@
   font-size: var(--font-size-sm);
 }
 
-.runtime-workspace__evidence-detail-grid .runtime-workspace__plain-list span {
+.runtime-workspace__evidence-detail-grid .runtime-workspace__plain-list li > span {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
 }
@@ -1685,8 +1785,27 @@
   align-items: center;
 }
 
+.runtime-workspace__evidence-object-actions .btn__content,
+.runtime-workspace__evidence-object-actions .btn__content--hidden,
+.runtime-workspace__evidence-object-actions .btn__icon,
+.runtime-workspace__evidence-object-actions .btn svg {
+  color: inherit;
+}
+
 .runtime-workspace__evidence-object-heading {
   justify-content: space-between;
+}
+
+.runtime-workspace__evidence-object-heading > div {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.runtime-workspace__evidence-object-heading span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
 }
 
 .runtime-workspace__signal-list {
@@ -2019,6 +2138,15 @@
   }
 
   .runtime-workspace__intelligence-detail-row > .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .runtime-workspace__document-upload-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .runtime-workspace__document-upload-item .badge {
     grid-column: 2;
     justify-self: start;
   }

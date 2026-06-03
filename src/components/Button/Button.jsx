@@ -4,7 +4,7 @@
  * A fully accessible, responsive button component with multiple variants and states.
  *
  * Features:
- * - Multiple variants (primary, secondary, outline, ghost, danger)
+ * - Multiple variants (primary, secondary, outline, ghost, danger, warning)
  * - Three sizes (sm, md, lg)
  * - Double outline option for enhanced emphasis
  * - Loading state with spinner
