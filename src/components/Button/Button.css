@@ -337,6 +337,49 @@
 }
 
 /* ===========================
+   BUTTON GROUPS
+   =========================== */
+
+.btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.btn-group--gap-xs {
+  gap: var(--spacing-2xs);
+}
+
+.btn-group--gap-sm {
+  gap: var(--spacing-xs);
+}
+
+.btn-group--gap-md {
+  gap: var(--spacing-sm);
+}
+
+.btn-group--align-start {
+  justify-content: flex-start;
+}
+
+.btn-group--align-center {
+  justify-content: center;
+}
+
+.btn-group--align-end {
+  justify-content: flex-end;
+}
+
+.btn-group--align-stretch {
+  align-items: stretch;
+}
+
+.btn-group--align-stretch > .btn {
+  flex: 1 1 auto;
+}
+
+/* ===========================
    RESPONSIVE ADJUSTMENTS
    =========================== */
 
@@ -356,6 +399,16 @@
   .btn--lg {
     min-height: calc(var(--spacing-md) * 2.75);
     padding: var(--spacing-xs) var(--spacing-md);
+  }
+
+  .btn-group--stack-mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-group--full-width-mobile > .btn,
+  .btn-group--stack-mobile > .btn {
+    width: 100%;
   }
 }
 

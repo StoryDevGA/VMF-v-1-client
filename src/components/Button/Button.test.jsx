@@ -11,9 +11,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Button } from './Button'
+import { Button, ButtonGroup } from './Button'
 
 describe('Button Component', () => {
   describe('Rendering', () => {
@@ -379,5 +379,57 @@ describe('Button Component', () => {
       expect(button).toHaveClass('btn--icon-only')
       expect(screen.getByTestId('icon-only')).toBeInTheDocument()
     })
+  })
+})
+
+describe('ButtonGroup Component', () => {
+  it('renders grouped buttons with an accessible group role', () => {
+    render(
+      <ButtonGroup aria-label="Section actions">
+        <Button>Save</Button>
+        <Button>Next</Button>
+      </ButtonGroup>
+    )
+
+    const group = screen.getByRole('group', { name: /section actions/i })
+    expect(group).toHaveClass('btn-group')
+    expect(within(group).getByRole('button', { name: /save/i })).toBeInTheDocument()
+    expect(within(group).getByRole('button', { name: /next/i })).toBeInTheDocument()
+  })
+
+  it('applies alignment, gap, and responsive stacking classes', () => {
+    render(
+      <ButtonGroup
+        align="end"
+        gap="md"
+        stackOnMobile
+        fullWidthOnMobile
+        className="custom-actions"
+        aria-label="Responsive actions"
+      >
+        <Button>Cancel</Button>
+        <Button>Confirm</Button>
+      </ButtonGroup>
+    )
+
+    const group = screen.getByRole('group', { name: /responsive actions/i })
+    expect(group).toHaveClass('btn-group--align-end')
+    expect(group).toHaveClass('btn-group--gap-md')
+    expect(group).toHaveClass('btn-group--stack-mobile')
+    expect(group).toHaveClass('btn-group--full-width-mobile')
+    expect(group).toHaveClass('custom-actions')
+  })
+
+  it('allows the role to be overridden when grouping is presentational', () => {
+    render(
+      <ButtonGroup role="presentation" data-testid="presentational-buttons">
+        <Button>One</Button>
+      </ButtonGroup>
+    )
+
+    const group = screen.getByTestId('presentational-buttons')
+    expect(group).toHaveAttribute('role', 'presentation')
+    expect(group).toHaveClass('btn-group--align-start')
+    expect(group).toHaveClass('btn-group--gap-sm')
   })
 })

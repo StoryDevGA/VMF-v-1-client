@@ -3378,6 +3378,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled()
   })
 
   it('keeps section acceptance disabled when generated intelligence is not truth eligible', async () => {
@@ -3590,6 +3591,7 @@ describe('RuntimeWorkspace', () => {
 
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
     expect(screen.getByText(/current generated content is already accepted as governed truth/i)).toBeInTheDocument()
+    expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
   it('shows regeneration-required intelligence when accepted truth is stale against section input', async () => {
@@ -3871,7 +3873,7 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams need a shared governed narrative.')
-    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -3886,6 +3888,61 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'Value Drivers' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /3 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('advances to the next guided section without saving when the draft is unchanged', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              generated: {
+                content: 'Generated insight is ready for review.',
+                generatedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              intelligence: {
+                ...rendererPayload.sections[0].intelligence,
+                compare: {
+                  ...rendererPayload.sections[0].intelligence.compare,
+                  state: 'GENERATED_AVAILABLE',
+                  summary: 'Generated content is available for review.',
+                  hasGenerated: true,
+                },
+              },
+            },
+            {
+              key: 'value_drivers',
+              runtimePath: 'framework_state.sections.value_drivers',
+              label: 'Value Drivers',
+              control: 'TEXTAREA',
+              required: true,
+              value: '',
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Value Drivers' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /2 value drivers input required/i })).toHaveAttribute('aria-current', 'step')
   })
 
   it('returns to Intelligence Hub when the server-owned advance projection has no next section', async () => {
@@ -3914,7 +3971,7 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Final section update.')
-    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -4284,7 +4341,8 @@ describe('RuntimeWorkspace', () => {
     })
     expect(unwrapAction).toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(await screen.findByText(/runtime action completed/i)).toBeInTheDocument()
+    expect(await screen.findByText('Action completed')).toBeInTheDocument()
+    expect(screen.getByText(/runtime action completed/i)).toBeInTheDocument()
   })
 
   it('renders disabled runtime actions with server-projected blocked reasons', async () => {
@@ -4488,7 +4546,8 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
 
-    expect(await screen.findByText(/runtime projection is missing its concurrency marker/i)).toBeInTheDocument()
+    expect(await screen.findByText('Action unavailable')).toBeInTheDocument()
+    expect(screen.getByText(/runtime projection is missing its concurrency marker/i)).toBeInTheDocument()
     expect(executeRuntimeAction).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
@@ -4501,6 +4560,7 @@ describe('RuntimeWorkspace', () => {
         error: {
           code: 'CONFLICT',
           message: 'Runtime action is not currently executable.',
+          requestId: 'action-ref-1',
           details: {
             reason: 'RUNTIME_ACTION_NOT_AVAILABLE',
           },
@@ -4512,7 +4572,11 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
 
-    expect(await screen.findByText(/runtime action is not currently executable/i)).toBeInTheDocument()
+    expect(await screen.findByText('Action failed')).toBeInTheDocument()
+    expect(screen.getByText('Runtime action is not currently executable. Reference: action-ref-1')).toBeInTheDocument()
+    expect(screen.queryByText(/\(Ref: action-ref-1\)/i)).not.toBeInTheDocument()
+    const actionPanel = screen.getByRole('heading', { name: 'Actions' }).closest('.runtime-workspace__action-panel')
+    expect(actionPanel).not.toHaveTextContent('Runtime action is not currently executable.')
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
 
@@ -4616,7 +4680,9 @@ describe('RuntimeWorkspace', () => {
     const acceptTruthButton = screen.getByRole('button', { name: /^accept truth$/i })
     expect(acceptTruthButton).toBeDisabled()
     expect(acceptTruthButton).toHaveAccessibleDescription('Current role or permissions do not allow accepting this section.')
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^compare$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
     expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
@@ -4706,7 +4772,7 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('Read only preview')).toBeInTheDocument()
     selectRuntimeSectionTab('Context')
     expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveAttribute('readonly')
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
     const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
     const governedActions = within(actionScroll).getByRole('group', { name: /governed runtime actions/i })
     const blockedButton = within(governedActions).getByRole('button', { name: /run validation/i })
@@ -4765,7 +4831,9 @@ describe('RuntimeWorkspace', () => {
     const sections = screen.getByRole('main', { name: /guided execution sections/i })
     const sectionCard = within(sections).getByRole('listitem')
     expect(within(sectionCard).getByRole('button', { name: /^generate section$/i })).toBeEnabled()
-    expect(within(sectionCard).getByRole('button', { name: /^regenerate section$/i })).toBeDisabled()
+    const regenerateButton = within(sectionCard).getByRole('button', { name: /^regenerate section$/i })
+    expect(regenerateButton).toBeDisabled()
+    expect(regenerateButton).toHaveAccessibleDescription('Generate this section before regenerating it.')
     expect(within(sectionCard).getByText('Generate this section before regenerating it.')).toBeInTheDocument()
     const sidePanel = screen.getByRole('complementary', { name: /execution intelligence side panel/i })
     expect(within(sidePanel).queryByRole('button', { name: /generate section/i })).not.toBeInTheDocument()
@@ -4825,6 +4893,7 @@ describe('RuntimeWorkspace', () => {
     const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     expect(generateButton).toBeDisabled()
     expect(generateButton).toHaveAccessibleDescription('Accept Intelligence Hub evidence before generating this section.')
+    expect(screen.getByText('Accept Intelligence Hub evidence before generating this section.')).toBeInTheDocument()
     await user.click(generateButton)
 
     expect(executeRuntimeAction).not.toHaveBeenCalled()
@@ -4976,8 +5045,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await openGuidedSection()
 
-    const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     const regenerateButton = screen.getByRole('button', { name: /^regenerate section$/i })
+    const generateButton = screen.getByRole('button', { name: /^generate section$/i })
     expect(generateButton).toBeDisabled()
     expect(generateButton).toHaveAccessibleDescription(
       'Regenerate this section because previous generated content is archived for comparison.',

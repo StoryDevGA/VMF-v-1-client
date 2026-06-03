@@ -4,6 +4,7 @@ import {
   MdBolt,
   MdAdd,
   MdAccountTree,
+  MdArrowForward,
   MdCheckCircle,
   MdClose,
   MdCompareArrows,
@@ -21,7 +22,7 @@ import {
   MdUploadFile,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
-import { Button } from '../../components/Button'
+import { Button, ButtonGroup } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
@@ -34,6 +35,7 @@ import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tooltip } from '../../components/Tooltip'
+import { useToaster } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
@@ -52,7 +54,7 @@ import {
   DISCOVERY_ACQUISITION_PROFILE_OPTIONS,
 } from '../../constants/discoveryAcquisitionProfiles.js'
 import { formatDateOnly, formatDateTimeParts } from '../../utils/dateTime.js'
-import { normalizeError } from '../../utils/errors.js'
+import { normalizeError, stripRequestReference } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
   getExecutionStateVariant,
@@ -1626,6 +1628,7 @@ function RuntimeSection({
   onReviewSectionEvidence,
   onSave,
   onSaveAndNext,
+  onNext,
   onUploadSectionEvidence,
   reviewingSectionEvidenceObjectId = '',
   section,
@@ -1649,6 +1652,7 @@ function RuntimeSection({
   const isDirty = draftValue !== currentValue
   const isSaving = Boolean(disabled)
   const canSave = editable && isDirty && !isSaving
+  const canAdvance = Boolean(onNext || onSaveAndNext) && !isSaving && !executingActionKey
   const generatedContent = stringifyGeneratedContent(section?.generated)
   const acceptedContent = stringifyAcceptedContent(section?.accepted)
   const intelligence = getSectionIntelligence(section)
@@ -1733,6 +1737,12 @@ function RuntimeSection({
   const resolvedFeedback = localError
     ? { variant: 'error', message: localError }
     : feedback
+  const showGenerateAction = Boolean(generateAction)
+  const showRegenerateAction = Boolean(regenerateAction)
+  const showCompareAction = canCompare
+  const showAcceptAction = Boolean(onAcceptSection)
+  const showSaveAction = canSave || isSaving
+  const showNextAction = canAdvance
   const sectionDisplayLabel = getSectionDisplayLabel(section, `Guided item ${section?.key ?? ''}`.trim())
   const suggestedRows = buildProjectionDetailRows(suggestedBullets)
   const supportingEvidenceRows = buildProjectionDetailRows(supportingEvidenceItems)
@@ -1831,11 +1841,16 @@ function RuntimeSection({
     await onSave?.({ section, value })
   }
 
-  const handleSaveAndNext = async () => {
-    const value = parseCurrentDraftValue()
-    if (value === undefined) return
+  const handleNext = async () => {
+    if (canSave) {
+      const value = parseCurrentDraftValue()
+      if (value === undefined) return
 
-    await onSaveAndNext?.({ section, value })
+      await onSaveAndNext?.({ section, value })
+      return
+    }
+
+    await onNext?.({ section })
   }
 
   const handleSectionEvidenceFilesChange = async (event) => {
@@ -2308,8 +2323,14 @@ function RuntimeSection({
                 {resolvedFeedback.message}
               </Status>
             ) : null}
-            <div className="runtime-workspace__section-actions">
-              {generateAction ? (
+            <ButtonGroup
+              align="end"
+              stackOnMobile
+              fullWidthOnMobile
+              className="runtime-workspace__section-actions"
+              aria-label={`${sectionDisplayLabel} actions`}
+            >
+              {showGenerateAction ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -2323,7 +2344,7 @@ function RuntimeSection({
                   {generateLabel}
                 </Button>
               ) : null}
-              {regenerateAction ? (
+              {showRegenerateAction ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -2337,55 +2358,61 @@ function RuntimeSection({
                   {regenerateLabel}
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={!canCompare}
-                leftIcon={<MdCompareArrows aria-hidden="true" />}
-                onClick={() => {
-                  setShowCompare((current) => !current)
-                  setActiveSectionContentTab(2)
-                }}
-              >
-                Compare
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={Boolean(acceptDisabledReason)}
-                loading={isAcceptingSection}
-                aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
-                leftIcon={<MdCheckCircle aria-hidden="true" />}
-                onClick={() => onAcceptSection?.({ section })}
-              >
-                Accept Truth
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                disabled={!canSave}
-                leftIcon={<MdSave aria-hidden="true" />}
-              >
-                {isSaving ? 'Saving' : 'Save'}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                disabled={!canSave}
-                leftIcon={<MdSave aria-hidden="true" />}
-                onClick={handleSaveAndNext}
-              >
-                Save & Next
-              </Button>
-            </div>
+              {showCompareAction ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<MdCompareArrows aria-hidden="true" />}
+                  onClick={() => {
+                    setShowCompare((current) => !current)
+                    setActiveSectionContentTab(2)
+                  }}
+                >
+                  Compare
+                </Button>
+              ) : null}
+              {showAcceptAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(acceptDisabledReason)}
+                  loading={isAcceptingSection}
+                  aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
+                  leftIcon={<MdCheckCircle aria-hidden="true" />}
+                  onClick={() => onAcceptSection?.({ section })}
+                >
+                  Accept Truth
+                </Button>
+              ) : null}
+              {showSaveAction ? (
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={!canSave}
+                  leftIcon={<MdSave aria-hidden="true" />}
+                >
+                  {isSaving ? 'Saving' : 'Save'}
+                </Button>
+              ) : null}
+              {showNextAction ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<MdArrowForward aria-hidden="true" />}
+                  onClick={handleNext}
+                >
+                  Next
+                </Button>
+              ) : null}
+            </ButtonGroup>
             {[
-              { action: generateAction, id: generateReasonId, reason: generateDisabledReason },
-              { action: regenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
-              { action: true, id: acceptReasonId, reason: acceptDisabledReason },
+              { action: showGenerateAction, id: generateReasonId, reason: generateDisabledReason },
+              { action: showRegenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
+              { action: showAcceptAction, id: acceptReasonId, reason: acceptDisabledReason },
             ].map(({ action, id, reason }) => (
               action && reason ? (
                 <p
@@ -3777,7 +3804,13 @@ function DiscoverySection({
               {feedback.message}
             </Status>
           ) : null}
-          <div className="runtime-workspace__section-actions" aria-label={`${INTELLIGENCE_HUB_LABEL} actions`}>
+          <ButtonGroup
+            align="end"
+            stackOnMobile
+            fullWidthOnMobile
+            className="runtime-workspace__section-actions"
+            aria-label={`${INTELLIGENCE_HUB_LABEL} actions`}
+          >
             <Button
               type="submit"
               variant="primary"
@@ -3825,7 +3858,7 @@ function DiscoverySection({
             >
               Clear {INTELLIGENCE_HUB_LABEL}
             </Button>
-          </div>
+          </ButtonGroup>
           <Dialog
             open={showResetWarning}
             onClose={() => {
@@ -3911,6 +3944,7 @@ function RuntimeWorkspace() {
   const navigate = useNavigate()
   const location = useLocation()
   const { runtimeInstanceId = '' } = useParams()
+  const { addToast } = useToaster()
   const {
     data: rendererResponse,
     isLoading,
@@ -3937,7 +3971,6 @@ function RuntimeWorkspace() {
   const [reviewingSectionEvidenceObjectId, setReviewingSectionEvidenceObjectId] = useState('')
   const [uploadingSectionEvidencePath, setUploadingSectionEvidencePath] = useState('')
   const [executingActionKey, setExecutingActionKey] = useState('')
-  const [actionFeedback, setActionFeedback] = useState(null)
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
   const [showEvidenceSources, setShowEvidenceSources] = useState(false)
   const [showWarningDetails, setShowWarningDetails] = useState(false)
@@ -4416,6 +4449,10 @@ function RuntimeWorkspace() {
       return
     }
 
+    handleNextSection({ section })
+  }
+
+  const handleNextSection = ({ section }) => {
     const currentIndex = sections.findIndex((candidate) =>
       (candidate?.sectionKey || candidate?.key) === (section?.sectionKey || section?.key),
     )
@@ -4586,9 +4623,10 @@ function RuntimeWorkspace() {
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
-      setActionFeedback({
+      addToast({
+        title: 'Action unavailable',
+        description: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
         variant: 'error',
-        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
       })
       return
     }
@@ -4600,7 +4638,6 @@ function RuntimeWorkspace() {
     }
 
     setExecutingActionKey(actionKey)
-    setActionFeedback(null)
 
     try {
       await executeRuntimeAction({
@@ -4608,16 +4645,22 @@ function RuntimeWorkspace() {
         actionKey,
         body: { expectedUpdatedAt, ...actionBody },
       }).unwrap()
-      setActionFeedback({
+      addToast({
+        title: 'Action completed',
+        description: action?.successMessage || 'Runtime action completed.',
         variant: 'success',
-        message: action?.successMessage || 'Runtime action completed.',
       })
       await refetch()
     } catch (actionError) {
       const normalizedError = normalizeError(actionError)
-      setActionFeedback({
+      const errorDescription = stripRequestReference(normalizedError.message)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      addToast({
+        title: 'Action failed',
+        description: `${errorDescription}${requestReference}`,
         variant: 'error',
-        message: normalizedError.message,
       })
     } finally {
       setExecutingActionKey('')
@@ -4718,11 +4761,7 @@ function RuntimeWorkspace() {
         <Card.Body className="runtime-workspace__action-panel-body">
           <div className="runtime-workspace__action-panel-heading">
             <h2>Actions</h2>
-            {actionFeedback ? (
-              <Status variant={actionFeedback.variant} size="sm" showIcon>
-                {actionFeedback.message}
-              </Status>
-            ) : actionGateStatus ? (
+            {actionGateStatus ? (
               <Status
                 variant={actionGateStatus.variant}
                 size="sm"
@@ -4965,6 +5004,7 @@ function RuntimeWorkspace() {
                 generationActions={sectionActionByKey}
                 onAcceptSection={handleAcceptSection}
                 onExecuteSectionAction={handleExecuteSectionAction}
+                onNext={handleNextSection}
                 onReviewSectionEvidence={handleReviewSectionEvidence}
                 onSave={handleSaveSection}
                 onSaveAndNext={handleSaveSectionAndNext}

@@ -563,13 +563,6 @@
   transform: translate(-50%, 0);
 }
 
-.runtime-workspace__section-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-}
-
 .runtime-workspace__reset-warning {
   display: grid;
   gap: var(--spacing-sm);

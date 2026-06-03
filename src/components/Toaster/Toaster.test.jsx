@@ -14,7 +14,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dialog } from '../Dialog'
-import { ToasterProvider, useToaster } from './Toaster'
+import { ToasterProvider } from './Toaster'
+import { useToaster } from './useToaster'
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function showModalMock() {
@@ -37,6 +38,29 @@ function TestHarness({ duration = 1000 }) {
       onClick={() => addToast({ title: 'Saved', description: 'Profile updated', variant: 'success', duration })}
     >
       Add Toast
+    </button>
+  )
+}
+
+function VariantToastHarness({ variant = 'warning', duration }) {
+  const { addToast } = useToaster()
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const toast = {
+          title: `${variant} toast`,
+          description: 'Requires acknowledgement',
+          variant,
+        }
+        if (duration !== undefined) {
+          toast.duration = duration
+        }
+        addToast(toast)
+      }}
+    >
+      Add {variant} Toast
     </button>
   )
 }
@@ -94,6 +118,75 @@ describe('Toaster', () => {
         await vi.advanceTimersByTimeAsync(600)
       })
       expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps warning toasts visible until manually dismissed', async () => {
+    vi.useFakeTimers()
+    try {
+      renderWithToaster(<VariantToastHarness variant="warning" />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add warning Toast' }))
+      expect(screen.getByText('warning toast')).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(screen.getByText('warning toast')).toBeInTheDocument()
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /dismiss notification/i }))
+      })
+      expect(screen.queryByText('warning toast')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps error toasts visible until manually dismissed', async () => {
+    vi.useFakeTimers()
+    try {
+      renderWithToaster(<VariantToastHarness variant="error" />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add error Toast' }))
+      expect(screen.getByText('error toast')).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(screen.getByText('error toast')).toBeInTheDocument()
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /dismiss notification/i }))
+      })
+      expect(screen.queryByText('error toast')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('honors explicit warning and error toast durations', async () => {
+    vi.useFakeTimers()
+    try {
+      renderWithToaster(
+        <>
+          <VariantToastHarness variant="warning" duration={500} />
+          <VariantToastHarness variant="error" duration={500} />
+        </>,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add warning Toast' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Add error Toast' }))
+      expect(screen.getByText('warning toast')).toBeInTheDocument()
+      expect(screen.getByText('error toast')).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600)
+      })
+      expect(screen.queryByText('warning toast')).not.toBeInTheDocument()
+      expect(screen.queryByText('error toast')).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

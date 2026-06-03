@@ -26,6 +26,34 @@
 
 import './Button.css'
 
+export function ButtonGroup({
+  children,
+  align = 'start',
+  gap = 'sm',
+  stackOnMobile = false,
+  fullWidthOnMobile = false,
+  className = '',
+  role = 'group',
+  ...props
+}) {
+  const classNames = [
+    'btn-group',
+    `btn-group--align-${align}`,
+    `btn-group--gap-${gap}`,
+    stackOnMobile && 'btn-group--stack-mobile',
+    fullWidthOnMobile && 'btn-group--full-width-mobile',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className={classNames} role={role} {...props}>
+      {children}
+    </div>
+  )
+}
+
 export function Button({
   children,
   leftIcon,

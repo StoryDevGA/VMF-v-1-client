@@ -4,5 +4,5 @@
  * Allows importing as: import { Button } from '@/components/Button'
  */
 
-export { Button } from './Button'
+export { Button, ButtonGroup } from './Button'
 export { default } from './Button'

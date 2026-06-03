@@ -204,6 +204,15 @@ export const appendRequestReference = (message, requestId) => {
 }
 
 /**
+ * Remove a trailing support request reference from primary user-facing copy.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+export const stripRequestReference = (message) =>
+  String(message ?? '').replace(/\s*\(Ref:\s*[^)]+\)\s*$/i, '').trim()
+
+/**
  * Derive normalized step-up error signal from code/message.
  *
  * @param {{ code?: string, message?: string } | undefined} err

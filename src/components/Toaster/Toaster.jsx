@@ -12,14 +12,14 @@
  * addToast({ title: 'Saved', description: 'Profile updated', variant: 'success' })
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MdClose } from 'react-icons/md'
+import { ToasterContext } from './ToasterContext'
 import './Toaster.css'
 
-const ToasterContext = createContext(null)
-
 const variants = ['info', 'success', 'warning', 'error']
+const persistentVariants = new Set(['warning', 'error'])
 
 function getActiveDialogToastHost() {
   if (typeof document === 'undefined') return null
@@ -77,11 +77,14 @@ export function ToasterProvider({
         return next
       })
 
-      const timeout = window.setTimeout(
-        () => removeToast(id),
-        toastDuration ?? duration
-      )
-      timersRef.current.set(id, timeout)
+      const shouldAutoDismiss = toastDuration !== undefined || !persistentVariants.has(normalizedVariant)
+      if (shouldAutoDismiss) {
+        const timeout = window.setTimeout(
+          () => removeToast(id),
+          toastDuration ?? duration
+        )
+        timersRef.current.set(id, timeout)
+      }
 
       return id
     },
@@ -89,9 +92,10 @@ export function ToasterProvider({
   )
 
   useEffect(() => {
+    const timers = timersRef.current
     return () => {
-      timersRef.current.forEach((timer) => window.clearTimeout(timer))
-      timersRef.current.clear()
+      timers.forEach((timer) => window.clearTimeout(timer))
+      timers.clear()
     }
   }, [])
 
@@ -161,14 +165,6 @@ export function ToasterProvider({
       {activePortalHost ? createPortal(toasterMarkup, activePortalHost) : toasterMarkup}
     </ToasterContext.Provider>
   )
-}
-
-export function useToaster() {
-  const context = useContext(ToasterContext)
-  if (!context) {
-    throw new Error('useToaster must be used within a ToasterProvider')
-  }
-  return context
 }
 
 export default ToasterProvider

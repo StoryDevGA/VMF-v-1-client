@@ -15,6 +15,7 @@ import {
   getErrorMessage,
   formatRetryAfter,
   normalizeError,
+  stripRequestReference,
   isAuthError,
   isAuthzError,
   isTenantDisabledError,
@@ -89,6 +90,13 @@ describe('errors', () => {
 
     it('floors fractional seconds', () => {
       expect(formatRetryAfter(12.9)).toBe('12s')
+    })
+  })
+
+  describe('stripRequestReference', () => {
+    it('removes trailing support references from primary display copy', () => {
+      expect(stripRequestReference('Validation error (Ref: req-123)')).toBe('Validation error')
+      expect(stripRequestReference('Validation error')).toBe('Validation error')
     })
   })
 
