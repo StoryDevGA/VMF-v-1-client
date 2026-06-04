@@ -195,6 +195,29 @@ const buildSectionDocumentSource = async (file) => {
 const formatDocumentSize = (sizeBytes = 0) =>
   `${Math.max(1, Math.round((Number(sizeBytes) || 0) / 1024))} KB`
 
+const DOCUMENT_EXTRACTION_STORAGE_NOTE = 'Original documents are not stored. Only extracted evidence and source details are retained.'
+const DOCUMENT_EXTRACTION_HELPER_TEXT = 'PDF, DOCX, TXT, MD, or CSV. Files are used only to extract evidence; originals are not stored.'
+
+function DocumentStorageTooltip({ id }) {
+  return (
+    <Tooltip
+      id={id}
+      content={DOCUMENT_EXTRACTION_STORAGE_NOTE}
+      position="top"
+      align="start"
+      className="runtime-workspace__action-tooltip runtime-workspace__document-storage-tooltip"
+    >
+      <button
+        type="button"
+        className="runtime-workspace__document-storage-tooltip-trigger"
+        aria-label="Document storage note"
+      >
+        <MdInfoOutline className="runtime-workspace__action-icon runtime-workspace__action-icon--info" aria-hidden="true" />
+      </button>
+    </Tooltip>
+  )
+}
+
 function SelectedDocumentUploadList({ ariaLabel, documents = [] }) {
   if (!Array.isArray(documents) || documents.length === 0) return null
 
@@ -213,10 +236,10 @@ function SelectedDocumentUploadList({ ariaLabel, documents = [] }) {
           </span>
           <span className="runtime-workspace__document-upload-copy">
             <strong>{documentSource.fileName}</strong>
-            <span>{`${formatDocumentSize(documentSource.sizeBytes)} staged for upload`}</span>
+            <span>{`${formatDocumentSize(documentSource.sizeBytes)} staged for extraction`}</span>
           </span>
           <Badge variant="success" size="sm" pill outline>
-            Ready for ingestion
+            Ready to extract
           </Badge>
         </li>
       ))}
@@ -991,7 +1014,7 @@ const getSourceRegistryGroupKey = (source = {}) => {
 
 const SOURCE_REGISTRY_GROUP_LABELS = Object.freeze({
   website: 'Website Sources',
-  document: 'Uploaded Documents',
+  document: 'Document Sources',
   discovery: `${INTELLIGENCE_HUB_LABEL} Sources`,
 })
 
@@ -1168,6 +1191,94 @@ const buildProjectionDetailRows = (items = EMPTY_ARRAY) => (
     : EMPTY_ARRAY
 )
 
+const buildCompareValueGroups = (value, fallbackTitle = 'Comparison Value') => {
+  const text = String(value || '').trim()
+  if (!text) {
+    return [{
+      id: `${fallbackTitle}-empty`,
+      title: fallbackTitle,
+      icon: MdCompareArrows,
+      iconVariant: 'compare',
+      badgeVariant: 'neutral',
+      rows: [{
+        id: `${fallbackTitle}-empty-row`,
+        title: 'No content',
+        meta: 'No comparison content is available.',
+      }],
+    }]
+  }
+
+  const blocks = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+  const groups = []
+  let activeGroup = null
+
+  const ensureGroup = (title = fallbackTitle) => {
+    if (!activeGroup) {
+      activeGroup = {
+        id: `${fallbackTitle}-${groups.length}-${title}`,
+        title,
+        icon: MdCompareArrows,
+        iconVariant: 'compare',
+        badgeVariant: 'info',
+        rows: [],
+      }
+      groups.push(activeGroup)
+    }
+
+    return activeGroup
+  }
+
+  blocks.forEach((block) => {
+    const isBullet = /^-\s+/.test(block)
+    const isLikelyHeading = blocks.length > 1
+      && !isBullet
+      && block.length <= 80
+      && !/[.!?]$/.test(block)
+      && !block.includes('\n')
+
+    if (isLikelyHeading) {
+      activeGroup = {
+        id: `${fallbackTitle}-${groups.length}-${block}`,
+        title: block,
+        icon: MdCompareArrows,
+        iconVariant: 'compare',
+        badgeVariant: 'info',
+        rows: [],
+      }
+      groups.push(activeGroup)
+      return
+    }
+
+    const group = ensureGroup()
+    const cleanedBlock = block.replace(/^-\s+/, '').trim()
+    const rowParts = splitInsightListItem(cleanedBlock)
+    const rowTitle = rowParts.label
+      ? normalizeInsightLabel(rowParts.label)
+      : isBullet
+        ? cleanedBlock
+        : group.rows.length === 0
+          ? 'Summary'
+          : 'Detail'
+
+    group.rows.push({
+      id: `${group.id}-${group.rows.length}-${cleanedBlock}`,
+      title: rowTitle,
+      meta: rowParts.label ? rowParts.detail : isBullet ? '' : cleanedBlock,
+    })
+  })
+
+  return groups
+    .map((group) => ({
+      ...group,
+      badgeLabel: '',
+    }))
+    .filter((group) => group.rows.length > 0)
+}
+
 function SourceRegistryGroupList({ groups = EMPTY_ARRAY }) {
   if (!Array.isArray(groups) || groups.length === 0) return null
 
@@ -1250,6 +1361,65 @@ function SectionDetailRows({ rows = EMPTY_ARRAY, ariaLabel = '', className = '' 
                 {badgeLabel}
               </Badge>
             ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SectionDetailGroupList({
+  groups = EMPTY_ARRAY,
+  ariaLabel = '',
+  className = '',
+}) {
+  if (!Array.isArray(groups) || groups.length === 0) return null
+
+  const resolvedClassName = [
+    'runtime-workspace__section-detail-groups',
+    className,
+  ].filter(Boolean).join(' ')
+  const listProps = ariaLabel
+    ? { role: 'list', 'aria-label': ariaLabel }
+    : {}
+
+  return (
+    <div className={resolvedClassName} {...listProps}>
+      {groups.map((group) => {
+        const GroupIcon = group.icon || MdInfoOutline
+        const rows = Array.isArray(group.rows) ? group.rows : EMPTY_ARRAY
+        const badgeLabel = String(group.badgeLabel || '').trim()
+
+        if (rows.length === 0) return null
+
+        return (
+          <div
+            className="runtime-workspace__section-detail-group"
+            key={group.id || group.title}
+            role={ariaLabel ? 'listitem' : undefined}
+          >
+            <div className="runtime-workspace__section-detail-group-header">
+              <span
+                className={`runtime-workspace__section-detail-group-icon${
+                  group.iconVariant ? ` runtime-workspace__section-detail-group-icon--${group.iconVariant}` : ''
+                }`}
+                aria-hidden="true"
+              >
+                <GroupIcon />
+              </span>
+              <h4>{group.title}</h4>
+              {badgeLabel ? (
+                <Badge
+                  variant={group.badgeVariant || 'neutral'}
+                  size="sm"
+                  pill
+                  outline
+                >
+                  {badgeLabel}
+                </Badge>
+              ) : null}
+            </div>
+            <SectionDetailRows rows={rows} className="runtime-workspace__section-detail-rows--grouped" />
           </div>
         )
       })}
@@ -1704,7 +1874,10 @@ function RuntimeSection({
   const regenerateAction = generationActions[SECTION_ACTION_KEYS.REGENERATE_SECTION] || null
   const generateLabel = getRuntimeActionLabel(generateAction, 'Generate')
   const regenerateLabel = getRuntimeActionLabel(regenerateAction, 'Regenerate')
-  const generateDisabledReason = getSectionActionDisabledReason({
+  const unsavedContextReason = canSave
+    ? 'Save context changes before generating or accepting truth.'
+    : ''
+  const generateDisabledReason = unsavedContextReason || getSectionActionDisabledReason({
     action: generateAction,
     actionKey: SECTION_ACTION_KEYS.GENERATE_SECTION,
     editable,
@@ -1713,7 +1886,7 @@ function RuntimeSection({
     hasGenerationBaseline,
     section,
   })
-  const regenerateDisabledReason = getSectionActionDisabledReason({
+  const regenerateDisabledReason = unsavedContextReason || getSectionActionDisabledReason({
     action: regenerateAction,
     actionKey: SECTION_ACTION_KEYS.REGENERATE_SECTION,
     editable,
@@ -1725,7 +1898,8 @@ function RuntimeSection({
   const generateReasonId = `${section.key}-generate-section-reason`
   const regenerateReasonId = `${section.key}-regenerate-section-reason`
   const acceptReasonId = `${section.key}-accept-section-reason`
-  const acceptDisabledReason = getAcceptSectionDisabledReason({
+  const unsavedContextReasonId = `${section.key}-context-save-reason`
+  const acceptDisabledReason = unsavedContextReason || getAcceptSectionDisabledReason({
     acceptedIsCurrent,
     editable,
     executingActionKey,
@@ -1741,7 +1915,6 @@ function RuntimeSection({
   const showRegenerateAction = Boolean(regenerateAction)
   const showCompareAction = canCompare
   const showAcceptAction = Boolean(onAcceptSection)
-  const showSaveAction = canSave || isSaving
   const showNextAction = canAdvance
   const sectionDisplayLabel = getSectionDisplayLabel(section, `Guided item ${section?.key ?? ''}`.trim())
   const suggestedRows = buildProjectionDetailRows(suggestedBullets)
@@ -1816,6 +1989,76 @@ function RuntimeSection({
       meta: previousAcceptedContent || 'No previous accepted truth revision',
     },
   ]
+  const compareGroups = compareRows.map((row) => ({
+    ...row,
+    groups: buildCompareValueGroups(row.meta, row.title),
+  }))
+  const suggestedDetailGroups = suggestedRows.length > 0
+    ? [
+      {
+        id: 'suggested-evidence-themes',
+        title: 'Evidence Themes',
+        icon: MdSource,
+        iconVariant: 'evidence',
+        badgeLabel: `${suggestedRows.length} item${suggestedRows.length === 1 ? '' : 's'}`,
+        badgeVariant: 'primary',
+        rows: suggestedRows,
+      },
+    ]
+    : EMPTY_ARRAY
+  const generatedInsightGroups = [
+    ...generatedInsightSections.map((generatedSection, index) => {
+      const generatedRows = buildProjectionDetailRows(generatedSection.bullets)
+      const body = String(generatedSection.body || '').trim()
+      const rows = [
+        ...(body ? [{
+          id: `generated-section-${index}-summary`,
+          title: 'Summary',
+          meta: body,
+        }] : []),
+        ...generatedRows,
+      ]
+
+      return {
+        id: `generated-section-${index}-${generatedSection.heading || 'generated-insight'}`,
+        title: generatedSection.heading || 'Generated Theme',
+        icon: MdBolt,
+        iconVariant: 'generated',
+        badgeLabel: '',
+        badgeVariant: 'primary',
+        rows,
+      }
+    }),
+    ...(supportingEvidenceRows.length > 0 ? [{
+      id: 'supporting-evidence',
+      title: supportingEvidenceProjection.title || 'Supporting Evidence',
+      icon: MdFactCheck,
+      iconVariant: 'evidence',
+      badgeLabel: `${supportingEvidenceRows.length} item${supportingEvidenceRows.length === 1 ? '' : 's'}`,
+      badgeVariant: 'success',
+      rows: supportingEvidenceRows,
+    }] : []),
+    ...(boundaryRows.length > 0 ? [{
+      id: 'generation-boundaries',
+      title: boundariesProjection.title || 'Boundaries / Not Assumed',
+      icon: MdOutlineWarningAmber,
+      iconVariant: 'boundary',
+      badgeLabel: `${boundaryRows.length} item${boundaryRows.length === 1 ? '' : 's'}`,
+      badgeVariant: 'warning',
+      rows: boundaryRows,
+    }] : []),
+  ].filter((group) => Array.isArray(group.rows) && group.rows.length > 0)
+  const acceptedTruthGroups = [
+    {
+      id: 'accepted-truth-current',
+      title: 'Accepted Truth',
+      icon: MdFactCheck,
+      iconVariant: 'truth',
+      badgeLabel: formatRuntimeTokenLabel(section?.state?.status || (acceptedContent ? 'ACCEPTED' : 'DRAFT')),
+      badgeVariant: getTokenStatusVariant(section?.state?.status || (acceptedContent ? 'ACCEPTED' : 'DRAFT')),
+      rows: acceptedTruthRows,
+    },
+  ]
 
   const handleChange = (event) => {
     setLocalError('')
@@ -1839,6 +2082,11 @@ function RuntimeSection({
     if (value === undefined) return
 
     await onSave?.({ section, value })
+  }
+
+  const handleDiscardContextChanges = () => {
+    setLocalError('')
+    setDraftValue(currentValue)
   }
 
   const handleNext = async () => {
@@ -1911,6 +2159,7 @@ function RuntimeSection({
     <section
       className="runtime-workspace__section-panel runtime-workspace__insight-card"
       aria-label={`Suggested from ${INTELLIGENCE_HUB_LABEL}`}
+      tabIndex={0}
     >
       <div className="runtime-workspace__insight-header">
         <div>
@@ -1922,8 +2171,8 @@ function RuntimeSection({
       </div>
       {suggestedBullets.length > 0 || suggestedProjection.summary ? (
         <>
-          {suggestedRows.length > 0 ? (
-            <SectionDetailRows rows={suggestedRows} ariaLabel="Evidence themes" />
+          {suggestedDetailGroups.length > 0 ? (
+            <SectionDetailGroupList groups={suggestedDetailGroups} ariaLabel="Evidence themes" />
           ) : null}
           {suggestedProjection.evidenceScope ? (
             <p className="runtime-workspace__insight-note">
@@ -1951,15 +2200,53 @@ function RuntimeSection({
         disabled={isSaving}
         onChange={handleChange}
       />
+      {editable ? (
+        <div className="runtime-workspace__context-save-bar">
+          <p id={unsavedContextReasonId}>
+            {canSave || isSaving
+              ? 'Save context changes before generating or accepting truth.'
+              : 'No unsaved context changes.'}
+          </p>
+          <ButtonGroup
+            align="start"
+            stackOnMobile
+            fullWidthOnMobile
+            className="runtime-workspace__context-save-actions"
+            aria-label={`${sectionDisplayLabel} context changes`}
+          >
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={!canSave}
+              leftIcon={<MdSave aria-hidden="true" />}
+            >
+              {isSaving ? 'Saving' : 'Save Changes'}
+            </Button>
+            {canSave || isSaving ? (
+            <Button
+              type="button"
+              variant="warning"
+              size="sm"
+              disabled={isSaving}
+              leftIcon={<MdClose aria-hidden="true" />}
+              onClick={handleDiscardContextChanges}
+            >
+              Discard
+            </Button>
+            ) : null}
+          </ButtonGroup>
+        </div>
+      ) : null}
     </section>
   )
 
   const sectionEvidenceUploadDisabledReason = !editable
-    ? section?.readonlyReason || 'Current role or permissions do not allow section evidence upload.'
+    ? section?.readonlyReason || 'Current role or permissions do not allow section evidence extraction.'
     : isSaving
-      ? 'Wait for the section save to finish before uploading evidence.'
+      ? 'Wait for the section save to finish before extracting evidence.'
       : isUploadingSectionEvidence
-        ? 'Section evidence upload is already running.'
+        ? 'Section evidence extraction is already running.'
         : sectionDocumentUploadPreparing
           ? 'Wait for selected documents to finish preparing.'
           : sectionDocumentUploadError
@@ -1971,6 +2258,15 @@ function RuntimeSection({
     && editable
     && !isSaving
   const sectionEvidenceUploadReasonId = `${section.key}-section-evidence-upload-reason`
+  const sectionEvidenceReviewSummary = sectionEvidenceObjects.length > 0
+    ? `${sectionEvidenceObjects.length} evidence object${sectionEvidenceObjects.length === 1 ? '' : 's'}: ${
+      Number(sectionEvidence.acceptedEvidenceObjectCount || 0)
+    } accepted, ${
+      Number(sectionEvidence.pendingEvidenceObjectCount || 0)
+    } pending, ${
+      Number(sectionEvidence.rejectedEvidenceObjectCount || 0)
+    } rejected`
+    : ''
   const sectionEvidencePanel = (
     <section className="runtime-workspace__section-panel" aria-label="Section evidence">
       <div className="runtime-workspace__section-evidence-heading">
@@ -1987,9 +2283,12 @@ function RuntimeSection({
 
       <div className="runtime-workspace__document-upload">
         <div className="runtime-workspace__document-upload-field">
-          <span id={`${section.key}-section-documents-label`} className="runtime-workspace__document-upload-label">
-            Supporting Files
-          </span>
+          <div className="runtime-workspace__document-upload-label-row">
+            <span id={`${section.key}-section-documents-label`} className="runtime-workspace__document-upload-label">
+              Supporting Files
+            </span>
+            <DocumentStorageTooltip id={`${section.key}-section-documents-storage-note`} />
+          </div>
           <input
             ref={sectionDocumentInputRef}
             id={`${section.key}-section-documents`}
@@ -2039,12 +2338,12 @@ function RuntimeSection({
               leftIcon={<MdUploadFile aria-hidden="true" />}
               onClick={handleSectionEvidenceUpload}
             >
-              Upload
+              Extract Evidence
             </Button>
           ) : null}
         </div>
         <span className="input-helper" id={`${section.key}-section-documents-helper`}>
-          PDF, DOCX, TXT, MD, or CSV.
+          {DOCUMENT_EXTRACTION_HELPER_TEXT}
         </span>
         {sectionDocumentUploadPreparing ? (
           <Status variant="info" size="sm" showIcon>Preparing selected documents</Status>
@@ -2080,67 +2379,89 @@ function RuntimeSection({
           ))}
         </ul>
       ) : (
-        <Status variant="neutral" size="sm" showIcon>No section files uploaded</Status>
+        <Status variant="neutral" size="sm" showIcon>No section files added</Status>
       )}
 
       {sectionEvidenceObjects.length > 0 ? (
-        <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects" aria-label="Section evidence objects">
-          {sectionEvidenceObjects.map((evidenceObject) => {
-            const evidenceObjectId = String(evidenceObject?.evidenceObjectId || '').trim()
-            const reviewStatus = String(evidenceObject?.reviewStatus || 'PENDING').trim().toUpperCase()
-            const reviewDisabled = !editable || isSaving || Boolean(reviewingSectionEvidenceObjectId)
-            const reviewingThisObject = reviewingSectionEvidenceObjectId === evidenceObjectId
+        <div className="runtime-workspace__section-evidence-review">
+          <p className="runtime-workspace__section-evidence-summary">
+            {sectionEvidenceReviewSummary}
+          </p>
+          <div
+            className="runtime-workspace__section-evidence-scroll"
+            role="region"
+            aria-label="Section evidence objects review"
+            tabIndex={0}
+          >
+            <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects" aria-label="Section evidence objects">
+              {sectionEvidenceObjects.map((evidenceObject) => {
+                const evidenceObjectId = String(evidenceObject?.evidenceObjectId || '').trim()
+                const reviewStatus = String(evidenceObject?.reviewStatus || 'PENDING').trim().toUpperCase()
+                const reviewDisabled = !editable || isSaving || Boolean(reviewingSectionEvidenceObjectId)
+                const reviewingThisObject = reviewingSectionEvidenceObjectId === evidenceObjectId
+                const evidenceSnippet = String(
+                  evidenceObject?.snippet
+                    || evidenceObject?.evidenceSnippet
+                    || '',
+                ).trim()
 
-            return (
-              <li key={evidenceObjectId || `${evidenceObject.sourceId}-${evidenceObject.category}`}>
-                <div className="runtime-workspace__evidence-object-heading">
-                  <div>
-                    <strong>{evidenceObject.category || evidenceObject.coverageArea || 'Section Evidence'}</strong>
-                    <span>{[
-                      evidenceObject.coverageArea,
-                      evidenceObject.sourceFileName,
-                    ].filter(Boolean).join(' / ')}</span>
-                  </div>
-                  <Badge variant={getTokenStatusVariant(reviewStatus)} size="sm" pill outline>
-                    {formatRuntimeTokenLabel(reviewStatus)}
-                  </Badge>
-                </div>
-                <div className="runtime-workspace__evidence-object-actions">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={reviewDisabled || reviewStatus === 'ACCEPTED'}
-                    loading={reviewingThisObject}
-                    leftIcon={<MdCheckCircle aria-hidden="true" />}
-                    onClick={() => onReviewSectionEvidence?.({
-                      section,
-                      evidenceObjectId,
-                      reviewStatus: 'ACCEPTED',
-                    })}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    disabled={reviewDisabled || reviewStatus === 'REJECTED'}
-                    loading={reviewingThisObject}
-                    leftIcon={<MdClose aria-hidden="true" />}
-                    onClick={() => onReviewSectionEvidence?.({
-                      section,
-                      evidenceObjectId,
-                      reviewStatus: 'REJECTED',
-                    })}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+                return (
+                  <li key={evidenceObjectId || `${evidenceObject.sourceId}-${evidenceObject.category}`}>
+                    <div className="runtime-workspace__evidence-object-heading">
+                      <div>
+                        <strong>{evidenceObject.category || evidenceObject.coverageArea || 'Section Evidence'}</strong>
+                        <span>{[
+                          evidenceObject.coverageArea,
+                          evidenceObject.sourceFileName,
+                        ].filter(Boolean).join(' / ')}</span>
+                        {evidenceSnippet ? (
+                          <p className="runtime-workspace__evidence-object-snippet">
+                            {normalizeIntelligenceHubDisplayText(evidenceSnippet)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Badge variant={getTokenStatusVariant(reviewStatus)} size="sm" pill outline>
+                        {formatRuntimeTokenLabel(reviewStatus)}
+                      </Badge>
+                    </div>
+                    <div className="runtime-workspace__evidence-object-actions">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewDisabled || reviewStatus === 'ACCEPTED'}
+                        loading={reviewingThisObject}
+                        leftIcon={<MdCheckCircle aria-hidden="true" />}
+                        onClick={() => onReviewSectionEvidence?.({
+                          section,
+                          evidenceObjectId,
+                          reviewStatus: 'ACCEPTED',
+                        })}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        disabled={reviewDisabled || reviewStatus === 'REJECTED'}
+                        loading={reviewingThisObject}
+                        leftIcon={<MdClose aria-hidden="true" />}
+                        onClick={() => onReviewSectionEvidence?.({
+                          section,
+                          evidenceObjectId,
+                          reviewStatus: 'REJECTED',
+                        })}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
       ) : null}
     </section>
   )
@@ -2149,6 +2470,7 @@ function RuntimeSection({
     <section
       className="runtime-workspace__section-panel runtime-workspace__insight-card"
       aria-label="Generated content"
+      tabIndex={0}
     >
       <div className="runtime-workspace__insight-header">
         <div>
@@ -2158,46 +2480,8 @@ function RuntimeSection({
           </p>
         </div>
       </div>
-      {generatedInsightSections.length > 0 ? (
-        <div className="runtime-workspace__generated-zones">
-          {generatedInsightSections.map((generatedSection) => {
-            const generatedRows = buildProjectionDetailRows(generatedSection.bullets)
-
-            return (
-              <div
-                className="runtime-workspace__generated-zone"
-                key={generatedSection.heading || generatedSection.body}
-              >
-                {generatedSection.heading ? <h4>{generatedSection.heading}</h4> : null}
-                {generatedSection.body ? (
-                  <p className="runtime-workspace__insight-body">{generatedSection.body}</p>
-                ) : null}
-                {generatedRows.length > 0 ? (
-                  <SectionDetailRows
-                    rows={generatedRows}
-                    ariaLabel={`${generatedSection.heading || 'Generated insight'} points`}
-                  />
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
-      {supportingEvidenceItems.length > 0 ? (
-        <div className="runtime-workspace__insight-group runtime-workspace__insight-group--evidence">
-          <div className="runtime-workspace__insight-group-header">
-            <h4>{supportingEvidenceProjection.title || 'Supporting Evidence'}</h4>
-          </div>
-          <SectionDetailRows rows={supportingEvidenceRows} ariaLabel="Supporting evidence" />
-        </div>
-      ) : null}
-      {boundaryItems.length > 0 ? (
-        <div className="runtime-workspace__insight-group runtime-workspace__insight-group--boundary">
-          <div className="runtime-workspace__insight-group-header">
-            <h4>{boundariesProjection.title || 'Boundaries / Not Assumed'}</h4>
-          </div>
-          <SectionDetailRows rows={boundaryRows} ariaLabel="Generation boundaries" />
-        </div>
+      {generatedInsightGroups.length > 0 ? (
+        <SectionDetailGroupList groups={generatedInsightGroups} ariaLabel="Generated insight groups" />
       ) : null}
       {truthEligibilityMessage ? (
         <p className="runtime-workspace__insight-note">
@@ -2208,9 +2492,9 @@ function RuntimeSection({
   )
 
   const acceptedTruthPanel = (
-    <section className="runtime-workspace__section-panel" aria-label="Accepted truth">
+    <section className="runtime-workspace__section-panel" aria-label="Accepted truth" tabIndex={0}>
       <h3>Accepted Truth</h3>
-      <SectionDetailRows rows={acceptedTruthRows} />
+      <SectionDetailGroupList groups={acceptedTruthGroups} ariaLabel="Accepted truth groups" />
     </section>
   )
 
@@ -2239,8 +2523,23 @@ function RuntimeSection({
       className="runtime-workspace__compare"
       role="region"
       aria-label="Section truth comparison"
+      tabIndex={0}
     >
-      <SectionDetailRows rows={compareRows} />
+      {compareGroups.map((compareGroup) => (
+        <section
+          className={`runtime-workspace__section-panel runtime-workspace__compare-panel${
+            compareGroup.id.startsWith('previous-') ? ' runtime-workspace__compare-panel--history' : ''
+          }`}
+          key={compareGroup.id}
+          aria-label={compareGroup.title}
+        >
+          <h3>{compareGroup.title}</h3>
+          <SectionDetailGroupList
+            groups={compareGroup.groups}
+            ariaLabel={`${compareGroup.title} comparison details`}
+          />
+        </section>
+      ))}
     </div>
   ) : null
 
@@ -2260,7 +2559,7 @@ function RuntimeSection({
       >
         <TabView.Tab label="Overview">
           <div className="runtime-workspace__section-tab-panel">
-            <div className="runtime-workspace__section-panels">
+            <div className="runtime-workspace__section-panels runtime-workspace__section-panels--overview">
               {suggestedFromIntelligencePanel}
               {generatedInsightPanel}
             </div>
@@ -2268,7 +2567,7 @@ function RuntimeSection({
         </TabView.Tab>
         <TabView.Tab label="Context">
           <div className="runtime-workspace__section-tab-panel">
-            <div className="runtime-workspace__section-panels">
+            <div className="runtime-workspace__section-panels runtime-workspace__section-panels--context">
               {additionalContextPanel}
               {sectionEvidencePanel}
             </div>
@@ -2276,7 +2575,7 @@ function RuntimeSection({
         </TabView.Tab>
         <TabView.Tab label="Truth">
           <div className="runtime-workspace__section-tab-panel">
-            <div className="runtime-workspace__section-panels">
+            <div className="runtime-workspace__section-panels runtime-workspace__section-panels--truth">
               {acceptedTruthPanel}
             </div>
             {compareContent}
@@ -2386,17 +2685,6 @@ function RuntimeSection({
                   Accept Truth
                 </Button>
               ) : null}
-              {showSaveAction ? (
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  disabled={!canSave}
-                  leftIcon={<MdSave aria-hidden="true" />}
-                >
-                  {isSaving ? 'Saving' : 'Save'}
-                </Button>
-              ) : null}
               {showNextAction ? (
                 <Button
                   type="button"
@@ -2413,8 +2701,9 @@ function RuntimeSection({
               { action: showGenerateAction, id: generateReasonId, reason: generateDisabledReason },
               { action: showRegenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
               { action: showAcceptAction, id: acceptReasonId, reason: acceptDisabledReason },
-            ].map(({ action, id, reason }) => (
-              action && reason ? (
+            ].map(({ action, id, reason }) => {
+              const shouldShowReason = action && reason
+              return shouldShowReason ? (
                 <p
                   key={id}
                   id={id}
@@ -2423,7 +2712,7 @@ function RuntimeSection({
                   {reason}
                 </p>
               ) : null
-            ))}
+            })}
             {validationMessages.length > 0 ? (
               <ul className="runtime-workspace__validation-list" aria-label={`${sectionDisplayLabel} validation messages`}>
                 {validationMessages.map((message, index) => (
@@ -2921,7 +3210,7 @@ function DiscoverySection({
       setDraftDocumentSources(documentSources)
     } catch (err) {
       setDraftDocumentSources([])
-      setDocumentUploadError(err?.message || 'One or more documents could not be prepared for ingestion.')
+      setDocumentUploadError(err?.message || 'One or more documents could not be prepared for extraction.')
     } finally {
       documentUploadPreparingRef.current = false
       setDocumentUploadPreparing(false)
@@ -3565,9 +3854,12 @@ function DiscoverySection({
                       </div>
                       <div className="runtime-workspace__document-upload">
                         <div className="runtime-workspace__document-upload-field">
-                          <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
-                            Upload Documents
-                          </span>
+                          <div className="runtime-workspace__document-upload-label-row">
+                            <span id="runtime-discovery-documents-label" className="runtime-workspace__document-upload-label">
+                              Document Sources
+                            </span>
+                            <DocumentStorageTooltip id="runtime-discovery-documents-storage-note" />
+                          </div>
                           <input
                             ref={discoveryDocumentInputRef}
                             id="runtime-discovery-documents"
@@ -3613,14 +3905,14 @@ function DiscoverySection({
                               size="sm"
                               disabled={saving || isBuildExecuting}
                               loading={saving || isBuildExecuting}
-                              aria-label={`Upload ${INTELLIGENCE_HUB_LABEL} documents`}
+                              aria-label={`Extract ${INTELLIGENCE_HUB_LABEL} document evidence`}
                               leftIcon={<MdUploadFile aria-hidden="true" />}
                             >
-                              Upload
+                              Extract Evidence
                             </Button>
                           ) : null}
                           <span className="input-helper" id="runtime-discovery-documents-helper">
-                            PDF, DOCX, TXT, MD, or CSV. Raw document text is not stored in the evidence pack.
+                            {DOCUMENT_EXTRACTION_HELPER_TEXT}
                           </span>
                         </div>
                         {documentUploadPreparing ? (
@@ -3636,7 +3928,7 @@ function DiscoverySection({
                       </div>
                       <Status variant={draftDocumentSources.length > 0 ? 'success' : 'neutral'} size="sm" showIcon>
                         {draftDocumentSources.length > 0
-                          ? `${draftDocumentSources.length} selected document${draftDocumentSources.length === 1 ? '' : 's'} staged for upload`
+                          ? `${draftDocumentSources.length} selected document${draftDocumentSources.length === 1 ? '' : 's'} staged for extraction`
                           : `Select documents and build ${INTELLIGENCE_HUB_EVIDENCE_LABEL} from the action bar.`}
                       </Status>
                     </section>
@@ -3881,7 +4173,7 @@ function DiscoverySection({
                 <MdOutlineWarningAmber aria-hidden="true" />
                 <div>
                   <p id="discovery-reset-warning-copy">
-                    This clears {INTELLIGENCE_HUB_INPUTS_LABEL}, uploaded document registry, evidence objects,
+                    This clears {INTELLIGENCE_HUB_INPUTS_LABEL}, document registry, evidence objects,
                     accepted evidence, generated section intelligence, and accepted section truth
                     for this runtime. The audit log will record who cleared it.
                   </p>
@@ -4535,7 +4827,7 @@ function RuntimeWorkspace() {
       }).unwrap()
       setSectionFeedback(runtimePath, {
         variant: 'success',
-        message: 'Supporting files uploaded.',
+        message: 'Evidence extracted.',
       })
       await refetch()
       return true
