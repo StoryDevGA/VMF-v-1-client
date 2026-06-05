@@ -147,6 +147,12 @@ export const buildUpdateRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, body
   body,
 })
 
+export const buildClearRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence/clear`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildReviewRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, evidenceObjectId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence/${
     encodeURIComponent(String(evidenceObjectId ?? '').trim())
@@ -210,6 +216,7 @@ export const getResetRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInv
 export const getReviewRuntimeDiscoveryEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getClearRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getRebuildRuntimeIntelligenceGraphInvalidationTags = getMutateRuntimeStateInvalidationTags
 
@@ -300,6 +307,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getUpdateRuntimeSectionEvidenceInvalidationTags,
     }),
 
+    clearRuntimeSectionEvidence: build.mutation({
+      query: buildClearRuntimeSectionEvidenceQuery,
+      invalidatesTags: getClearRuntimeSectionEvidenceInvalidationTags,
+    }),
+
     reviewRuntimeSectionEvidence: build.mutation({
       query: buildReviewRuntimeSectionEvidenceQuery,
       invalidatesTags: getReviewRuntimeSectionEvidenceInvalidationTags,
@@ -333,6 +345,7 @@ export const {
   useRebuildRuntimeIntelligenceGraphMutation,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useClearRuntimeSectionEvidenceMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,

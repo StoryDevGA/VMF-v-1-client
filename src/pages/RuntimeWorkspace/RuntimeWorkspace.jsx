@@ -39,6 +39,7 @@ import { useToaster } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
@@ -197,6 +198,42 @@ const formatDocumentSize = (sizeBytes = 0) =>
 
 const DOCUMENT_EXTRACTION_STORAGE_NOTE = 'Original documents are not stored. Only extracted evidence and source details are retained.'
 const DOCUMENT_EXTRACTION_HELPER_TEXT = 'PDF, DOCX, TXT, MD, or CSV. Files are used only to extract evidence; originals are not stored.'
+const PDF_UNREADABLE_TEXT_ERROR_PREFIX = 'PDF document did not contain readable extractable text'
+const PDF_UNREADABLE_TEXT_HELPER = 'This PDF has no readable text layer. Use an OCR/searchable PDF, DOCX, TXT, MD, or CSV.'
+
+const getNestedDetailMessage = (details) => {
+  if (!details || typeof details !== 'object') return ''
+
+  const stack = [details]
+  while (stack.length > 0) {
+    const current = stack.shift()
+    if (!current || typeof current !== 'object') continue
+
+    if (typeof current.message === 'string' && current.message.trim()) {
+      return current.message.trim()
+    }
+
+    stack.push(...Object.values(current).filter((value) => value && typeof value === 'object'))
+  }
+
+  return ''
+}
+
+const formatSectionSupportingFileError = (error) => {
+  const normalizedError = normalizeError(error)
+  const nestedMessage =
+    getNestedDetailMessage(normalizedError.details?.ingestionError)
+    || getNestedDetailMessage(normalizedError.details)
+  const baseMessage = stripRequestReference(nestedMessage || normalizedError.message)
+  const message = baseMessage.startsWith(PDF_UNREADABLE_TEXT_ERROR_PREFIX)
+    ? PDF_UNREADABLE_TEXT_HELPER
+    : baseMessage
+  const requestReference = normalizedError.requestId
+    ? ` Reference: ${normalizedError.requestId}`
+    : ''
+
+  return `${message}${requestReference}`
+}
 
 function DocumentStorageTooltip({ id }) {
   return (
@@ -1798,6 +1835,7 @@ function RuntimeSection({
   id,
   onExecuteSectionAction,
   onAcceptSection,
+  onClearSectionEvidence,
   onReviewSectionEvidence,
   onSave,
   onSaveAndNext,
@@ -1806,6 +1844,7 @@ function RuntimeSection({
   reviewingSectionEvidenceObjectId = '',
   section,
   showRuntimePath = false,
+  clearingSectionEvidencePath = '',
   uploadingSectionEvidencePath = '',
 }) {
   const validationMessages = Array.isArray(section?.validationMessages)
@@ -1819,6 +1858,7 @@ function RuntimeSection({
   const [sectionDocumentSources, setSectionDocumentSources] = useState([])
   const [sectionDocumentUploadError, setSectionDocumentUploadError] = useState('')
   const [sectionDocumentUploadPreparing, setSectionDocumentUploadPreparing] = useState(false)
+  const [showSectionEvidenceClearWarning, setShowSectionEvidenceClearWarning] = useState(false)
   const sectionDocumentUploadPreparingRef = useRef(false)
   const sectionDocumentInputRef = useRef(null)
   const editable = Boolean(section?.editable)
@@ -1853,6 +1893,11 @@ function RuntimeSection({
   const sectionEvidenceObjects = Array.isArray(sectionEvidence.evidenceObjects) ? sectionEvidence.evidenceObjects : []
   const sectionEvidenceStatus = sectionEvidence.status || 'EMPTY'
   const isUploadingSectionEvidence = uploadingSectionEvidencePath === section?.runtimePath
+  const isClearingSectionEvidence = clearingSectionEvidencePath === section?.runtimePath
+  const sectionEvidenceHasPersisted = sectionEvidenceDocuments.length > 0
+    || sectionEvidenceObjects.length > 0
+    || Number(sectionEvidence.documentCount || 0) > 0
+    || Number(sectionEvidence.evidenceObjectCount || 0) > 0
   const scopedEvidenceSummary = scopedEvidenceView?.summary
     || formatProjectionSummary(scopedEvidenceView)
   const acceptedIsCurrent = isAcceptedGeneratedCurrent({
@@ -2165,6 +2210,13 @@ function RuntimeSection({
     }
   }
 
+  const handleClearPersistedSectionEvidence = async () => {
+    const cleared = await onClearSectionEvidence?.({ section })
+    if (cleared) {
+      setShowSectionEvidenceClearWarning(false)
+    }
+  }
+
   const suggestedFromIntelligencePanel = (
     <section
       className="runtime-workspace__section-panel runtime-workspace__insight-card"
@@ -2277,6 +2329,25 @@ function RuntimeSection({
       Number(sectionEvidence.rejectedEvidenceObjectCount || 0)
     } rejected`
     : ''
+  const clearSectionEvidenceDisabledReason = !editable
+    ? section?.readonlyReason || 'Current role or permissions do not allow section evidence cleanup.'
+    : isSaving
+      ? 'Wait for the section save to finish before clearing evidence.'
+      : isUploadingSectionEvidence
+        ? 'Wait for section evidence extraction to finish before clearing evidence.'
+      : isClearingSectionEvidence
+        ? 'Section evidence cleanup is already running.'
+        : reviewingSectionEvidenceObjectId
+          ? 'Wait for the section evidence review to finish before clearing evidence.'
+          : ''
+  const canClearSectionEvidence = sectionEvidenceHasPersisted
+    && editable
+    && !isSaving
+    && !isUploadingSectionEvidence
+    && !isClearingSectionEvidence
+    && !reviewingSectionEvidenceObjectId
+  const clearSectionEvidenceTitleId = `${section.key}-section-evidence-clear-title`
+  const clearSectionEvidenceCopyId = `${section.key}-section-evidence-clear-copy`
   const sectionEvidencePanel = (
     <section className="runtime-workspace__section-panel" aria-label="Section evidence">
       <div className="runtime-workspace__section-evidence-heading">
@@ -2286,10 +2357,34 @@ function RuntimeSection({
             <span>{`${sectionEvidence.documentCount || 0} document${Number(sectionEvidence.documentCount || 0) === 1 ? '' : 's'} / ${sectionEvidence.evidenceObjectCount || 0} evidence object${Number(sectionEvidence.evidenceObjectCount || 0) === 1 ? '' : 's'}`}</span>
           </p>
         </div>
-        <Badge variant={getTokenStatusVariant(sectionEvidenceStatus)} size="sm" pill outline>
-          {formatRuntimeTokenLabel(sectionEvidenceStatus)}
-        </Badge>
+        <div className="runtime-workspace__section-evidence-heading-actions">
+          <Badge variant={getTokenStatusVariant(sectionEvidenceStatus)} size="sm" pill outline>
+            {formatRuntimeTokenLabel(sectionEvidenceStatus)}
+          </Badge>
+          {sectionEvidenceHasPersisted ? (
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              disabled={!canClearSectionEvidence}
+              loading={isClearingSectionEvidence}
+              aria-describedby={clearSectionEvidenceDisabledReason ? `${section.key}-section-evidence-clear-reason` : undefined}
+              leftIcon={<MdDelete aria-hidden="true" />}
+              onClick={() => setShowSectionEvidenceClearWarning(true)}
+            >
+              Clear Section Evidence
+            </Button>
+          ) : null}
+        </div>
       </div>
+      {clearSectionEvidenceDisabledReason && sectionEvidenceHasPersisted ? (
+        <p
+          id={`${section.key}-section-evidence-clear-reason`}
+          className="runtime-workspace__action-disabled-reason"
+        >
+          {clearSectionEvidenceDisabledReason}
+        </p>
+      ) : null}
 
       <div className="runtime-workspace__document-upload">
         <div className="runtime-workspace__document-upload-field">
@@ -2473,6 +2568,60 @@ function RuntimeSection({
           </div>
         </div>
       ) : null}
+      <Dialog
+        open={showSectionEvidenceClearWarning}
+        onClose={() => {
+          if (!isClearingSectionEvidence) setShowSectionEvidenceClearWarning(false)
+        }}
+        size="sm"
+        closeOnBackdropClick={!isClearingSectionEvidence}
+        closeOnEscape={!isClearingSectionEvidence}
+        showCloseButton={!isClearingSectionEvidence}
+        className="runtime-workspace__section-evidence-clear-dialog"
+        role="alertdialog"
+        aria-labelledby={clearSectionEvidenceTitleId}
+        aria-describedby={clearSectionEvidenceCopyId}
+      >
+        <Dialog.Header>
+          <h2 id={clearSectionEvidenceTitleId}>Clear section evidence?</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="runtime-workspace__reset-warning-copy">
+            <MdOutlineWarningAmber aria-hidden="true" />
+            <div>
+              <p id={clearSectionEvidenceCopyId}>
+                This clears extracted supporting files and evidence objects for {sectionDisplayLabel}.
+                Intelligence Hub evidence is unchanged. Accepted truth may need regeneration.
+              </p>
+            </div>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <div className="runtime-workspace__reset-warning-actions">
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              leftIcon={<MdDelete aria-hidden="true" />}
+              disabled={!canClearSectionEvidence}
+              loading={isClearingSectionEvidence}
+              onClick={handleClearPersistedSectionEvidence}
+            >
+              Clear Evidence
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon={<MdClose aria-hidden="true" />}
+              disabled={isClearingSectionEvidence}
+              onClick={() => setShowSectionEvidenceClearWarning(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 
@@ -4458,6 +4607,7 @@ function RuntimeWorkspace() {
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
+  const [clearRuntimeSectionEvidence] = useClearRuntimeSectionEvidenceMutation()
   const [resetRuntimeDiscovery] = useResetRuntimeDiscoveryMutation()
   const [reviewRuntimeDiscoveryEvidence] = useReviewRuntimeDiscoveryEvidenceMutation()
   const [reviewRuntimeSectionEvidence] = useReviewRuntimeSectionEvidenceMutation()
@@ -4469,6 +4619,7 @@ function RuntimeWorkspace() {
   const [savingDiscovery, setSavingDiscovery] = useState(false)
   const [reviewingEvidenceObjectId, setReviewingEvidenceObjectId] = useState('')
   const [reviewingSectionEvidenceObjectId, setReviewingSectionEvidenceObjectId] = useState('')
+  const [clearingSectionEvidencePath, setClearingSectionEvidencePath] = useState('')
   const [uploadingSectionEvidencePath, setUploadingSectionEvidencePath] = useState('')
   const [executingActionKey, setExecutingActionKey] = useState('')
   const [discoveryFeedback, setDiscoveryFeedback] = useState(null)
@@ -5040,14 +5191,58 @@ function RuntimeWorkspace() {
       await refetch()
       return true
     } catch (uploadError) {
-      const normalizedError = normalizeError(uploadError)
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: formatSectionSupportingFileError(uploadError),
+      })
+      return false
+    } finally {
+      setUploadingSectionEvidencePath('')
+    }
+  }
+
+  const handleClearSectionEvidence = async ({ section }) => {
+    const runtimePath = section?.runtimePath
+    if (!runtimePath) return false
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    setClearingSectionEvidencePath(runtimePath)
+    setSectionFeedback(runtimePath, null)
+
+    try {
+      await clearRuntimeSectionEvidence({
+        runtimeInstanceId,
+        body: {
+          runtimePath,
+          sectionKey: section?.sectionKey || section?.key,
+          confirmClear: true,
+          expectedUpdatedAt,
+          reason: 'USER_REQUESTED_SECTION_EVIDENCE_CLEAR',
+        },
+      }).unwrap()
+      setSectionFeedback(runtimePath, {
+        variant: 'success',
+        message: 'Section evidence cleared.',
+      })
+      await refetch()
+      return true
+    } catch (clearError) {
+      const normalizedError = normalizeError(clearError)
       setSectionFeedback(runtimePath, {
         variant: 'error',
         message: normalizedError.message,
       })
       return false
     } finally {
-      setUploadingSectionEvidencePath('')
+      setClearingSectionEvidencePath('')
     }
   }
 
@@ -5503,6 +5698,7 @@ function RuntimeWorkspace() {
                 feedback={sectionFeedbackByPath[activeSection.runtimePath]}
                 generationActions={sectionActionByKey}
                 onAcceptSection={handleAcceptSection}
+                onClearSectionEvidence={handleClearSectionEvidence}
                 onExecuteSectionAction={handleExecuteSectionAction}
                 onNext={handleNextSection}
                 onReviewSectionEvidence={handleReviewSectionEvidence}
@@ -5510,6 +5706,7 @@ function RuntimeWorkspace() {
                 onSaveAndNext={handleSaveSectionAndNext}
                 onUploadSectionEvidence={handleUploadSectionEvidence}
                 reviewingSectionEvidenceObjectId={reviewingSectionEvidenceObjectId}
+                clearingSectionEvidencePath={clearingSectionEvidencePath}
                 showRuntimePath={showRuntimePaths}
                 uploadingSectionEvidencePath={uploadingSectionEvidencePath}
               />

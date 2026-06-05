@@ -541,6 +541,16 @@
   text-align: center;
 }
 
+.runtime-workspace__section-feedback.status {
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.runtime-workspace__section-feedback .status__text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .runtime-workspace__action-tooltip .tooltip__bubble {
   min-width: calc(var(--spacing-3xl) * 3.5);
   max-width: calc(var(--spacing-3xl) * 5);
@@ -572,7 +582,8 @@
   background-color: color-mix(in srgb, var(--color-error) 10%, var(--color-background));
 }
 
-.runtime-workspace__reset-dialog .runtime-workspace__reset-warning-copy {
+.runtime-workspace__reset-dialog .runtime-workspace__reset-warning-copy,
+.runtime-workspace__section-evidence-clear-dialog .runtime-workspace__reset-warning-copy {
   border: var(--border-width-thin) solid color-mix(in srgb, var(--color-error) 52%, transparent);
   border-radius: var(--border-radius-md);
   padding: var(--spacing-sm);
@@ -1700,7 +1711,7 @@
   min-width: 0;
 }
 
-.runtime-workspace__section-evidence-heading > div {
+.runtime-workspace__section-evidence-heading > div:not(.runtime-workspace__section-evidence-heading-actions) {
   display: grid;
   gap: var(--spacing-2xs);
   min-width: 0;
@@ -1709,6 +1720,15 @@
 .runtime-workspace__section-evidence-heading .badge {
   flex: 0 0 auto;
   max-width: 100%;
+}
+
+.runtime-workspace__section-evidence-heading-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .runtime-workspace__section-panel h3 {
@@ -1753,6 +1773,13 @@
 
 .runtime-workspace__section-panel .runtime-workspace__section-note {
   color: var(--color-text-secondary);
+}
+
+.runtime-workspace__section-panel .runtime-workspace__reset-warning-copy p {
+  overflow: visible;
+  max-height: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .runtime-workspace__generated-zones,
@@ -2393,6 +2420,18 @@
   .runtime-workspace__intelligence-detail-row > .badge {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .runtime-workspace__section-evidence-heading {
+    display: grid;
+  }
+
+  .runtime-workspace__section-evidence-heading-actions {
+    justify-content: stretch;
+  }
+
+  .runtime-workspace__section-evidence-heading-actions .btn {
+    width: 100%;
   }
 
   .runtime-workspace__document-upload-item {

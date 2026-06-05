@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAcceptRuntimeDiscoveryQuery,
   buildAcceptRuntimeSectionQuery,
+  buildClearRuntimeSectionEvidenceQuery,
   buildCreateRuntimeInstanceQuery,
   buildExecuteRuntimeActionQuery,
   buildMutateRuntimeStateQuery,
@@ -23,6 +24,7 @@ import {
   DEFAULT_RUNTIME_INSTANCE_TYPE,
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
+  getClearRuntimeSectionEvidenceInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getExecuteRuntimeActionInvalidationTags,
   getMutateRuntimeStateInvalidationTags,
@@ -39,6 +41,7 @@ import {
   runtimeInstanceListTag,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeInstanceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
@@ -78,6 +81,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('resetRuntimeDiscovery')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('reviewRuntimeDiscoveryEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeSectionEvidence')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('clearRuntimeSectionEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('reviewRuntimeSectionEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeSection')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('executeRuntimeAction')
@@ -101,6 +105,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useResetRuntimeDiscoveryMutation).toBe('function')
     expect(typeof useReviewRuntimeDiscoveryEvidenceMutation).toBe('function')
     expect(typeof useUpdateRuntimeSectionEvidenceMutation).toBe('function')
+    expect(typeof useClearRuntimeSectionEvidenceMutation).toBe('function')
     expect(typeof useReviewRuntimeSectionEvidenceMutation).toBe('function')
     expect(typeof useAcceptRuntimeSectionMutation).toBe('function')
     expect(typeof useExecuteRuntimeActionMutation).toBe('function')
@@ -124,6 +129,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.resetRuntimeDiscovery.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.reviewRuntimeDiscoveryEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeSectionEvidence.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.clearRuntimeSectionEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.reviewRuntimeSectionEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeSection.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.executeRuntimeAction.initiate).toBe('function')
@@ -328,6 +334,26 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildClearRuntimeSectionEvidenceQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        runtimePath: 'framework_state.sections.value_drivers',
+        sectionKey: 'value_drivers',
+        confirmClear: true,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'USER_REQUESTED_SECTION_EVIDENCE_CLEAR',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/section-evidence/clear',
+      method: 'PATCH',
+      body: {
+        runtimePath: 'framework_state.sections.value_drivers',
+        sectionKey: 'value_drivers',
+        confirmClear: true,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'USER_REQUESTED_SECTION_EVIDENCE_CLEAR',
+      },
+    })
     expect(buildAcceptRuntimeSectionQuery({
       runtimeInstanceId: 'value narrative/001',
       body: {
@@ -477,6 +503,19 @@ describe('runtimeInstanceApi', () => {
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
     expect(getReviewRuntimeSectionEvidenceInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getClearRuntimeSectionEvidenceInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',

@@ -6,6 +6,7 @@ import { ToasterProvider } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeRendererQuery,
@@ -21,6 +22,7 @@ import RuntimeWorkspace from './RuntimeWorkspace'
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
+  useClearRuntimeSectionEvidenceMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
   useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
@@ -49,6 +51,8 @@ const reviewRuntimeSectionEvidence = vi.fn()
 const unwrapReviewRuntimeSectionEvidence = vi.fn()
 const updateRuntimeSectionEvidence = vi.fn()
 const unwrapUpdateRuntimeSectionEvidence = vi.fn()
+const clearRuntimeSectionEvidence = vi.fn()
+const unwrapClearRuntimeSectionEvidence = vi.fn()
 const acceptRuntimeSection = vi.fn()
 const unwrapAcceptSection = vi.fn()
 
@@ -261,6 +265,8 @@ describe('RuntimeWorkspace', () => {
     unwrapReviewRuntimeSectionEvidence.mockReset()
     updateRuntimeSectionEvidence.mockReset()
     unwrapUpdateRuntimeSectionEvidence.mockReset()
+    clearRuntimeSectionEvidence.mockReset()
+    unwrapClearRuntimeSectionEvidence.mockReset()
     acceptRuntimeSection.mockReset()
     unwrapAcceptSection.mockReset()
     window.confirm = vi.fn(() => true)
@@ -280,10 +286,13 @@ describe('RuntimeWorkspace', () => {
     reviewRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapReviewRuntimeSectionEvidence })
     unwrapUpdateRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'PENDING_REVIEW' } } } })
     updateRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapUpdateRuntimeSectionEvidence })
+    unwrapClearRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'EMPTY' } } } })
+    clearRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapClearRuntimeSectionEvidence })
     unwrapAcceptSection.mockResolvedValue({ data: { section: { accepted: { content: 'Accepted final.' } } } })
     acceptRuntimeSection.mockReturnValue({ unwrap: unwrapAcceptSection })
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
+    useClearRuntimeSectionEvidenceMutation.mockReturnValue([clearRuntimeSectionEvidence, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
     useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
@@ -3176,6 +3185,53 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i })).toBeInTheDocument()
   })
 
+  it('shows readable PDF extraction guidance for section supporting file ingestion failures', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Section supporting file ingestion failed.',
+          requestId: 'mq1148a1-y2xvd8',
+          details: {
+            runtimePath: 'framework_state.sections.customer_problem',
+            sectionKey: 'customer_problem',
+            ingestionError: {
+              name: 'Error',
+              message: 'PDF document did not contain readable extractable text. Scanned, image-only, or text-map-free PDFs require OCR and are not supported yet.',
+            },
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const pdfDocument = new File(
+      ['%PDF-1.7 unreadable test content'],
+      'scanned-brief.pdf',
+      { type: 'application/pdf' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), pdfDocument)
+    expect(await within(sectionEvidenceRegion).findByText('scanned-brief.pdf')).toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
+
+    expect(updateRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(
+      /this PDF has no readable text layer\. use an OCR\/searchable PDF, DOCX, TXT, MD, or CSV\. Reference: mq1148a1-y2xvd8/i,
+    )).toBeInTheDocument()
+    expect(screen.queryByText(/Section supporting file ingestion failed\. \(Ref: mq1148a1-y2xvd8\)/i)).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText('scanned-brief.pdf')).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i })).toBeInTheDocument()
+  })
+
   it('reviews projected section evidence objects with meaningful extracted snippets', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -3261,6 +3317,237 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section evidence accepted/i)).toBeInTheDocument()
+  })
+
+  it('clears persisted section evidence after explicit confirmation', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'ACCEPTED',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 1,
+                pendingEvidenceObjectCount: 0,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'old-targeting-notes.pdf',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Targeting',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'ACCEPTED',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'old-targeting-notes.pdf',
+                    snippet: 'Certified services teams support enterprise onboarding.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const clearButton = within(sectionEvidenceRegion).getByRole('button', { name: /^clear section evidence$/i })
+    expect(clearButton).toHaveClass('btn--danger', 'btn--sm')
+    await user.click(clearButton)
+
+    const clearDialog = await screen.findByRole('alertdialog', { name: /clear section evidence/i })
+    expect(within(clearDialog).getByText(/intelligence hub evidence is unchanged/i)).toBeInTheDocument()
+    await user.click(within(clearDialog).getByRole('button', { name: /^cancel$/i }))
+    expect(clearRuntimeSectionEvidence).not.toHaveBeenCalled()
+
+    await user.click(clearButton)
+    const reopenedDialog = await screen.findByRole('alertdialog', { name: /clear section evidence/i })
+    await user.click(within(reopenedDialog).getByRole('button', { name: /^clear evidence$/i }))
+
+    expect(clearRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        confirmClear: true,
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'USER_REQUESTED_SECTION_EVIDENCE_CLEAR',
+      },
+    })
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(updateRuntimeSectionEvidence).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/section evidence cleared/i)).toBeInTheDocument()
+  })
+
+  it('keeps clear section evidence disabled while section evidence extraction is running', async () => {
+    const user = userEvent.setup()
+    let resolveSectionEvidenceUpload
+    unwrapUpdateRuntimeSectionEvidence.mockReturnValueOnce(new Promise((resolve) => {
+      resolveSectionEvidenceUpload = resolve
+    }))
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'ACCEPTED',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 1,
+                pendingEvidenceObjectCount: 0,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'old-targeting-notes.pdf',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Targeting',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'ACCEPTED',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'old-targeting-notes.pdf',
+                    snippet: 'Certified services teams support enterprise onboarding.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const sectionDocument = new File(
+      ['Customer teams need governed workflow automation for value narratives.'],
+      'section-notes.txt',
+      { type: 'text/plain' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), sectionDocument)
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
+
+    await waitFor(() => {
+      expect(within(sectionEvidenceRegion).getByRole('button', { name: /^clear section evidence$/i }))
+        .toBeDisabled()
+    })
+    expect(within(sectionEvidenceRegion).getByText(/wait for section evidence extraction to finish before clearing evidence/i))
+      .toBeInTheDocument()
+
+    resolveSectionEvidenceUpload({ data: { section: { sectionEvidence: { status: 'PENDING_REVIEW' } } } })
+    await waitFor(() => expect(refetchRenderer).toHaveBeenCalled())
+  })
+
+  it('shows normalized clear section evidence errors without success refetch', async () => {
+    const user = userEvent.setup()
+    unwrapClearRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'There is no section evidence to clear.',
+          details: {
+            reason: 'RUNTIME_ACTION_NOT_AVAILABLE',
+          },
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'ACCEPTED',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 1,
+                pendingEvidenceObjectCount: 0,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'old-targeting-notes.pdf',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Targeting',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'ACCEPTED',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'old-targeting-notes.pdf',
+                    snippet: 'Certified services teams support enterprise onboarding.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^clear section evidence$/i }))
+    const clearDialog = await screen.findByRole('alertdialog', { name: /clear section evidence/i })
+    await user.click(within(clearDialog).getByRole('button', { name: /^clear evidence$/i }))
+
+    expect(clearRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(/there is no section evidence to clear/i)).toBeInTheDocument()
+    expect(screen.queryByText(/section evidence cleared/i)).not.toBeInTheDocument()
   })
 
   it('rejects projected section evidence objects with the danger button variant', async () => {
