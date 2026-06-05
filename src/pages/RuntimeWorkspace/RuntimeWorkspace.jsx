@@ -2104,6 +2104,13 @@ function RuntimeSection({
     await onNext?.({ section })
   }
 
+  const handleAcceptTruth = async () => {
+    const accepted = await onAcceptSection?.({ section })
+    if (accepted) {
+      setActiveSectionContentTab(2)
+    }
+  }
+
   const handleSectionEvidenceFilesChange = async (event) => {
     const files = Array.from(event.target.files || [])
     setSectionDocumentUploadError('')
@@ -2683,7 +2690,7 @@ function RuntimeSection({
                   loading={isAcceptingSection}
                   aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
                   leftIcon={<MdCheckCircle aria-hidden="true" />}
-                  onClick={() => onAcceptSection?.({ section })}
+                  onClick={handleAcceptTruth}
                 >
                   Accept Truth
                 </Button>
@@ -4082,8 +4089,12 @@ function DiscoverySection({
               </div>
             </TabView.Tab>
             <TabView.Tab label="Sources">
-              <div className="runtime-workspace__section-panels">
-                <section className="runtime-workspace__section-panel" aria-label="Source registry">
+              <div className="runtime-workspace__section-panels runtime-workspace__section-panels--sources">
+                <section
+                  className="runtime-workspace__section-panel"
+                  aria-label="Source registry"
+                  tabIndex={0}
+                >
                   <h3>Source Registry</h3>
                   <p>
                     {sourceRegistrySummaryText || 'No source registry entries are projected for this runtime yet.'}
@@ -4093,7 +4104,11 @@ function DiscoverySection({
                   ) : null}
                 </section>
                 {showSources ? (
-                  <section className="runtime-workspace__section-panel" aria-label="Evidence sources">
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__section-panel--evidence-sources"
+                    aria-label="Evidence sources"
+                    tabIndex={0}
+                  >
                     <h3>Evidence Sources</h3>
                     {evidenceDetailLoading ? (
                       <Status variant="info" size="sm" showIcon>Loading sources</Status>

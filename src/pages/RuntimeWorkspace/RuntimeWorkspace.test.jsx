@@ -1169,7 +1169,13 @@ describe('RuntimeWorkspace', () => {
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )
+    const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
+    expect(sourceRegistry.closest('.runtime-workspace__section-panels'))
+      .toHaveClass('runtime-workspace__section-panels--sources')
+    expect(sourceRegistry).toHaveAttribute('tabindex', '0')
     const sourceRegion = screen.getByRole('region', { name: /evidence sources/i })
+    expect(sourceRegion).toHaveClass('runtime-workspace__section-panel--evidence-sources')
+    expect(sourceRegion).toHaveAttribute('tabindex', '0')
     expect(within(sourceRegion).getByText('companyWebsite')).toBeInTheDocument()
     expect(within(sourceRegion).getByText(/USER_PROVIDED_WEBSITE \/ USER_PROVIDED \/ https:\/\/acme\.example/)).toBeInTheDocument()
     expect(within(sourceRegion).queryByText(/competitor/i)).not.toBeInTheDocument()
@@ -3504,6 +3510,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
     await user.click(screen.getByRole('button', { name: /accept truth/i }))
 
     expect(acceptRuntimeSection).toHaveBeenCalledWith({
@@ -3516,6 +3523,7 @@ describe('RuntimeWorkspace', () => {
     })
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section accepted as governed truth/i)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Truth' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('keeps section acceptance disabled without generated content', async () => {
@@ -3952,10 +3960,12 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
     await user.click(screen.getByRole('button', { name: /accept truth/i }))
 
     expect(await screen.findByText(/runtime section cannot be accepted/i)).toBeInTheDocument()
     expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('saves the active section before advancing to the next guided section', async () => {

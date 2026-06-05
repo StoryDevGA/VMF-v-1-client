@@ -701,6 +701,21 @@
   outline-offset: var(--spacing-2xs);
 }
 
+.runtime-workspace__section-panels--sources > .runtime-workspace__section-panel,
+.runtime-workspace__section-panel--evidence-sources {
+  align-content: start;
+  overflow: auto;
+  max-height: min(32rem, 56vh);
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.runtime-workspace__section-panels--sources > .runtime-workspace__section-panel:focus-visible,
+.runtime-workspace__section-panel--evidence-sources:focus-visible {
+  outline: var(--border-width-medium) solid var(--color-border-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
 .runtime-workspace__intelligence-context-column {
   display: grid;
   align-content: start;
