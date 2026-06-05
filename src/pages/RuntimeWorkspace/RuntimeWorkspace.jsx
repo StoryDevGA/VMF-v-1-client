@@ -832,6 +832,9 @@ const hasDiscoveryHealthSummary = (summary) =>
     ),
   )
 
+const hasIntelligenceGraphSummary = (summary) =>
+  Boolean(summary && typeof summary === 'object' && !Array.isArray(summary))
+
 const formatDiscoveryEvidenceObjectSummary = (summary = {}) => {
   const evidenceObjectCount = getSummaryCount(summary, 'evidenceObjectCount')
   if (evidenceObjectCount === 0) return ''
@@ -3041,6 +3044,30 @@ function DiscoverySection({
   const healthMissingAreas = Array.isArray(discoveryHealth.missingAreas)
     ? discoveryHealth.missingAreas.map(formatRuntimeTokenLabel).filter(Boolean)
     : []
+  const intelligenceGraph = hasIntelligenceGraphSummary(discovery?.intelligenceGraph)
+    ? discovery.intelligenceGraph
+    : {}
+  const graphAvailable = intelligenceGraph.available === true
+  const graphBuild = intelligenceGraph.build && typeof intelligenceGraph.build === 'object'
+    ? intelligenceGraph.build
+    : {}
+  const graphHealth = intelligenceGraph.health && typeof intelligenceGraph.health === 'object'
+    ? intelligenceGraph.health
+    : {}
+  const graphCoverage = intelligenceGraph.coverage && typeof intelligenceGraph.coverage === 'object'
+    ? intelligenceGraph.coverage
+    : {}
+  const graphDependencies = intelligenceGraph.dependencies && typeof intelligenceGraph.dependencies === 'object'
+    ? intelligenceGraph.dependencies
+    : {}
+  const graphQuality = intelligenceGraph.quality && typeof intelligenceGraph.quality === 'object'
+    ? intelligenceGraph.quality
+    : {}
+  const graphMissingAreas = Array.isArray(intelligenceGraph.missingAreas)
+    ? intelligenceGraph.missingAreas.map(formatRuntimeTokenLabel).filter(Boolean)
+    : Array.isArray(graphCoverage.missingDomains)
+      ? graphCoverage.missingDomains.map(formatRuntimeTokenLabel).filter(Boolean)
+      : []
   const sourceCount = sourceRegistrySummary.count || Number(discovery?.lineageSummary?.sourceCount || 0)
   const builderMode = String(discovery?.lineageSummary?.builderMode || '').trim()
   const discoveryResetSummary = getDiscoveryResetSummary({ activity, discovery })
@@ -3313,6 +3340,42 @@ function DiscoverySection({
         })
         .filter((area) => area.areaLabel && area.areaLabel !== '--')
     : []
+  const graphCoverageDomainRows = Array.isArray(graphCoverage.domains)
+    ? graphCoverage.domains
+        .map((domain) => {
+          const connectedEvidenceCount = Number.isFinite(Number(domain?.connectedEvidenceCount))
+            ? Number(domain.connectedEvidenceCount)
+            : 0
+          const acceptedEvidenceCount = Number.isFinite(Number(domain?.acceptedEvidenceCount))
+            ? Number(domain.acceptedEvidenceCount)
+            : 0
+          const pendingEvidenceCount = Number.isFinite(Number(domain?.pendingEvidenceCount))
+            ? Number(domain.pendingEvidenceCount)
+            : 0
+          const lowQualityEvidenceCount = Number.isFinite(Number(domain?.lowQualityEvidenceCount))
+            ? Number(domain.lowQualityEvidenceCount)
+            : 0
+          const rejectedEvidenceCount = Number.isFinite(Number(domain?.rejectedEvidenceCount))
+            ? Number(domain.rejectedEvidenceCount)
+            : 0
+          const evidenceCount = acceptedEvidenceCount + pendingEvidenceCount + lowQualityEvidenceCount + rejectedEvidenceCount
+          const progressValue = evidenceCount > 0
+            ? Math.max(0, Math.min(100, Math.round((connectedEvidenceCount / evidenceCount) * 100)))
+            : 0
+          return {
+            areaLabel: formatRuntimeTokenLabel(domain?.domain || ''),
+            connectedEvidenceCount,
+            evidenceCount,
+            progressValue,
+            progressText: evidenceCount > 0
+              ? `${connectedEvidenceCount} connected of ${evidenceCount} evidence object${evidenceCount === 1 ? '' : 's'}`
+              : 'No connected evidence objects',
+            state: domain?.state,
+            stateMeta: getCoverageAreaStateMeta(domain?.state),
+          }
+        })
+        .filter((domain) => domain.areaLabel && domain.areaLabel !== '--')
+    : []
   const intelligenceLastUpdatedAt = discoveryHealth.lastAcquisitionDate || discovery?.acceptedAt || discovery?.updatedAt || ''
   const intelligenceLastUpdatedParts = formatDateTimeParts(intelligenceLastUpdatedAt)
   const intelligenceLastUpdatedLabel = intelligenceLastUpdatedAt
@@ -3448,6 +3511,88 @@ function DiscoverySection({
         : 'No missing areas are currently projected.',
       badgeLabel: healthMissingAreas.length > 0 ? `${healthMissingAreas.length} missing` : 'Clear',
       badgeVariant: healthMissingAreas.length > 0 ? 'warning' : 'success',
+    },
+  ]
+  const graphHealthRows = [
+    {
+      id: 'graph-health-state',
+      icon: graphAvailable && graphHealth.state === 'HEALTHY' ? MdCheckCircle : MdOutlineWarningAmber,
+      iconVariant: graphAvailable && graphHealth.state === 'HEALTHY' ? 'success' : 'warning',
+      title: graphAvailable ? `Graph ${formatRuntimeTokenLabel(graphHealth.state || 'UNKNOWN')}` : 'Graph not built yet',
+      meta: graphAvailable
+        ? `${Number(graphBuild.nodeCount || 0)} nodes / ${Number(graphBuild.edgeCount || 0)} relationships.`
+        : 'The Intelligence Graph has not been projected for this runtime yet.',
+      badgeLabel: graphAvailable ? formatRuntimeTokenLabel(graphBuild.status || 'UNKNOWN') : 'Unavailable',
+      badgeVariant: graphAvailable ? (graphHealth.state === 'HEALTHY' ? 'success' : 'warning') : 'neutral',
+    },
+    {
+      id: 'graph-health-quality',
+      icon: MdFactCheck,
+      title: 'Evidence Quality',
+      meta: graphAvailable
+        ? `${Number(graphQuality.orphanEvidenceCount || 0)} orphan, ${
+          Number(graphQuality.lowQualityEvidenceCount || 0)
+        } low quality, ${Number(graphQuality.unclassifiedEvidenceCount || 0)} unclassified.`
+        : 'Evidence quality states will appear after the graph is rebuilt.',
+      badgeLabel: graphAvailable ? `${Number(graphHealth.acceptedEvidenceCount || 0)} accepted` : '',
+      badgeVariant: graphAvailable ? 'info' : 'neutral',
+    },
+    {
+      id: 'graph-health-coverage',
+      icon: MdDonutLarge,
+      title: graphAvailable ? `Domain coverage ${Number(graphCoverage.coveragePercent || 0)}%` : 'Domain coverage unavailable',
+      meta: graphAvailable
+        ? `${Number(graphCoverage.coveredDomainCount || 0)} of ${Number(graphCoverage.totalDomainCount || 0)} domains connected.`
+        : 'Evidence Domain Coverage is not projected yet.',
+      badgeLabel: graphAvailable ? `${Number(graphCoverage.coveragePercent || 0)}%` : '',
+      badgeVariant: graphAvailable ? 'info' : 'neutral',
+    },
+  ]
+  const graphDependencyRows = [
+    {
+      id: 'graph-section-dependencies',
+      icon: MdAccountTree,
+      title: graphAvailable
+        ? `${Number(graphDependencies.sectionDependencyCount || 0)} section dependenc${
+          Number(graphDependencies.sectionDependencyCount || 0) === 1 ? 'y' : 'ies'
+        }`
+        : 'Dependencies unavailable',
+      meta: graphAvailable
+        ? Number(graphDependencies.missingDependencyTruthCount || 0) > 0
+          ? `${Number(graphDependencies.missingDependencyTruthCount || 0)} dependencies are missing accepted truth.`
+          : 'No missing dependency truth is projected.'
+        : 'Section dependency relationships will appear after the graph is rebuilt.',
+      badgeLabel: graphAvailable && Number(graphDependencies.missingDependencyTruthCount || 0) > 0
+        ? `${Number(graphDependencies.missingDependencyTruthCount || 0)} missing`
+        : graphAvailable
+          ? 'Clear'
+          : '',
+      badgeVariant: graphAvailable
+        ? Number(graphDependencies.missingDependencyTruthCount || 0) > 0 ? 'warning' : 'success'
+        : 'neutral',
+    },
+  ]
+  const graphMissingAreaRows = [
+    {
+      id: 'graph-missing-areas',
+      icon: graphMissingAreas.length > 0 ? MdOutlineWarningAmber : MdCheckCircle,
+      iconVariant: graphMissingAreas.length > 0 ? 'warning' : 'success',
+      title: graphAvailable
+        ? graphMissingAreas.length > 0
+          ? 'Missing domains'
+          : 'No missing domains'
+        : 'Missing domains unavailable',
+      meta: graphAvailable
+        ? graphMissingAreas.length > 0
+          ? graphMissingAreas.join(', ')
+          : 'All graph coverage domains are currently connected.'
+        : 'Missing domain analysis will appear after the graph is rebuilt.',
+      badgeLabel: graphAvailable
+        ? graphMissingAreas.length > 0
+          ? `${graphMissingAreas.length} missing`
+          : 'Clear'
+        : '',
+      badgeVariant: graphMissingAreas.length > 0 ? 'warning' : 'success',
     },
   ]
   const scopedEvidenceRows = [
@@ -4065,10 +4210,58 @@ function DiscoverySection({
                   <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
                   <IntelligenceDetailRows rows={coverageHealthRows} />
                 </section>
+                <section className="runtime-workspace__section-panel" aria-label="Intelligence graph health">
+                  <h3>Intelligence Graph Health</h3>
+                  <IntelligenceDetailRows rows={graphHealthRows} />
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label="Evidence domain coverage">
+                  <h3>Evidence Domain Coverage</h3>
+                  {graphCoverageDomainRows.length > 0 ? (
+                    <ul className="runtime-workspace__coverage-heatmap">
+                      {graphCoverageDomainRows.map((area) => {
+                        const CoverageStateIcon = area.stateMeta.icon
+                        return (
+                          <li key={area.areaLabel}>
+                            <span className="runtime-workspace__coverage-heatmap-label">{area.areaLabel}</span>
+                            <ProgressBar
+                              ariaLabel={`${area.areaLabel}: ${area.stateMeta.label}, ${area.progressText}`}
+                              ariaValueText={area.progressText}
+                              className="runtime-workspace__coverage-heatmap-progress"
+                              size="sm"
+                              value={area.progressValue}
+                              variant={area.stateMeta.progressVariant}
+                            />
+                            <span
+                              className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
+                              aria-label={`${area.areaLabel} graph coverage status: ${area.stateMeta.description}`}
+                              title={area.stateMeta.description}
+                            >
+                              <CoverageStateIcon aria-hidden="true" focusable="false" />
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <p>
+                      {graphAvailable
+                        ? 'No Evidence Domain Coverage rows are projected for this runtime yet.'
+                        : 'Evidence Domain Coverage will appear after the Intelligence Graph is rebuilt.'}
+                    </p>
+                  )}
+                </section>
               </div>
             </TabView.Tab>
             <TabView.Tab label="Governance">
               <div className="runtime-workspace__section-panels">
+                <section className="runtime-workspace__section-panel" aria-label="Intelligence graph dependencies">
+                  <h3>Dependencies</h3>
+                  <IntelligenceDetailRows rows={graphDependencyRows} />
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label="Intelligence graph missing areas">
+                  <h3>Missing Areas</h3>
+                  <IntelligenceDetailRows rows={graphMissingAreaRows} />
+                </section>
                 <section className="runtime-workspace__section-panel" aria-label="Scoped evidence views">
                   <h3>Scoped Evidence Views</h3>
                   <IntelligenceDetailRows rows={scopedEvidenceRows} />

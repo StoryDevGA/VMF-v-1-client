@@ -2094,6 +2094,121 @@ describe('RuntimeWorkspace', () => {
     expect(within(discoveryHealth).getByText(/Source Backed confidence/i)).toBeInTheDocument()
   })
 
+  it('renders Intelligence Graph summaries without exposing raw graph internals', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            ...rendererPayload.discovery,
+            intelligenceGraph: {
+              available: true,
+              graphVersion: '2.1',
+              graphHash: 'sha256:graph-hash',
+              build: {
+                status: 'VALID',
+                trigger: 'EXPLICIT_REBUILD',
+                builtAt: '2026-06-05T10:00:00.000Z',
+                nodeCount: 12,
+                edgeCount: 14,
+                sourceHash: 'sha256:source-hash',
+              },
+              health: {
+                state: 'WARNING',
+                acceptedEvidenceCount: 3,
+                orphanEvidenceCount: 1,
+                lowQualityEvidenceCount: 0,
+                unclassifiedEvidenceCount: 1,
+                missingDomainCount: 8,
+                dependencyCount: 1,
+                contradictionCount: 0,
+              },
+              coverage: {
+                coverageModel: 'EVIDENCE_DOMAIN_COVERAGE',
+                coveragePercent: 20,
+                coveredDomainCount: 2,
+                totalDomainCount: 10,
+                missingDomains: ['Proof', 'Economics'],
+                domains: [
+                  {
+                    domain: 'Company',
+                    state: 'ADEQUATE',
+                    acceptedEvidenceCount: 1,
+                    connectedEvidenceCount: 1,
+                    pendingEvidenceCount: 0,
+                    rejectedEvidenceCount: 0,
+                    lowQualityEvidenceCount: 0,
+                  },
+                  {
+                    domain: 'Economics',
+                    state: 'MISSING',
+                    acceptedEvidenceCount: 0,
+                    connectedEvidenceCount: 0,
+                    pendingEvidenceCount: 0,
+                    rejectedEvidenceCount: 0,
+                    lowQualityEvidenceCount: 0,
+                  },
+                ],
+              },
+              dependencies: {
+                sectionDependencyCount: 1,
+                missingDependencyTruthCount: 0,
+                sections: [
+                  {
+                    sectionKey: 'value_drivers',
+                    dependencySectionKeys: ['customer_problem'],
+                    missingDependencyTruthKeys: [],
+                  },
+                ],
+              },
+              missingAreas: ['Proof', 'Economics'],
+              quality: {
+                orphanEvidenceCount: 1,
+                lowQualityEvidenceCount: 0,
+                unclassifiedEvidenceCount: 1,
+              },
+              nodes: [
+                {
+                  nodeId: 'raw-node-id-should-not-render',
+                  textContent: 'raw graph text should not render',
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    selectIntelligenceHubTab('Coverage')
+    const graphHealth = screen.getByRole('region', { name: /intelligence graph health/i })
+    expect(within(graphHealth).getByText(/Graph Warning/i)).toBeInTheDocument()
+    expect(within(graphHealth).getByText(/12 nodes \/ 14 relationships/i)).toBeInTheDocument()
+    expect(within(graphHealth).getByText(/1 orphan, 0 low quality, 1 unclassified/i)).toBeInTheDocument()
+    expect(within(graphHealth).getByText(/Domain coverage 20%/i)).toBeInTheDocument()
+
+    const domainCoverage = screen.getByRole('region', { name: /evidence domain coverage/i })
+    expect(within(domainCoverage).getByText('Company')).toBeInTheDocument()
+    expect(within(domainCoverage).getByLabelText(/Company graph coverage status: Adequate accepted evidence coverage/i))
+      .toBeInTheDocument()
+
+    selectIntelligenceHubTab('Governance')
+    const graphDependencies = screen.getByRole('region', { name: /intelligence graph dependencies/i })
+    expect(within(graphDependencies).getByText(/1 section dependency/i)).toBeInTheDocument()
+    expect(within(graphDependencies).getByText(/No missing dependency truth is projected/i)).toBeInTheDocument()
+
+    const graphMissingAreas = screen.getByRole('region', { name: /intelligence graph missing areas/i })
+    expect(within(graphMissingAreas).getByText(/Proof, Economics/i)).toBeInTheDocument()
+    expect(screen.queryByText(/raw-node-id-should-not-render/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/raw graph text should not render/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /graph explorer/i })).not.toBeInTheDocument()
+  })
+
   it('keeps accepted evidence summary separate from accepted section truth copy', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {

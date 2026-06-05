@@ -84,6 +84,31 @@ export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeEvidenceQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/evidence`
 
+export const buildRuntimeIntelligenceGraphQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph`
+
+export const buildRuntimeIntelligenceGraphHealthQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph/health`
+
+export const buildRuntimeIntelligenceGraphCoverageQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph/coverage`
+
+export const buildRuntimeIntelligenceGraphNodeLineageQuery = ({ runtimeInstanceId, nodeId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph/nodes/${
+    encodeURIComponent(String(nodeId ?? '').trim())
+  }/lineage`
+
+export const buildRuntimeIntelligenceGraphSectionDependenciesQuery = ({ runtimeInstanceId, sectionKey }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph/sections/${
+    encodeURIComponent(String(sectionKey ?? '').trim())
+  }/dependencies`
+
+export const buildRebuildRuntimeIntelligenceGraphQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/intelligence-graph/rebuild`,
+  method: 'POST',
+  body,
+})
+
 export const buildMutateRuntimeStateQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/data`,
   method: 'PATCH',
@@ -186,6 +211,7 @@ export const getReviewRuntimeDiscoveryEvidenceInvalidationTags = getMutateRuntim
 export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getRebuildRuntimeIntelligenceGraphInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -214,9 +240,39 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeRendererTags,
     }),
 
+    getRuntimeIntelligenceGraph: build.query({
+      query: buildRuntimeIntelligenceGraphQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
+    getRuntimeIntelligenceGraphHealth: build.query({
+      query: buildRuntimeIntelligenceGraphHealthQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
+    getRuntimeIntelligenceGraphCoverage: build.query({
+      query: buildRuntimeIntelligenceGraphCoverageQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
+    getRuntimeIntelligenceGraphNodeLineage: build.query({
+      query: buildRuntimeIntelligenceGraphNodeLineageQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
+    getRuntimeIntelligenceGraphSectionDependencies: build.query({
+      query: buildRuntimeIntelligenceGraphSectionDependenciesQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
     mutateRuntimeState: build.mutation({
       query: buildMutateRuntimeStateQuery,
       invalidatesTags: getMutateRuntimeStateInvalidationTags,
+    }),
+
+    rebuildRuntimeIntelligenceGraph: build.mutation({
+      query: buildRebuildRuntimeIntelligenceGraphQuery,
+      invalidatesTags: getRebuildRuntimeIntelligenceGraphInvalidationTags,
     }),
 
     updateRuntimeDiscoveryInputs: build.mutation({
@@ -267,8 +323,14 @@ export const {
   useCreateRuntimeInstanceMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeEvidenceQuery,
+  useGetRuntimeIntelligenceGraphQuery,
+  useGetRuntimeIntelligenceGraphCoverageQuery,
+  useGetRuntimeIntelligenceGraphHealthQuery,
+  useGetRuntimeIntelligenceGraphNodeLineageQuery,
+  useGetRuntimeIntelligenceGraphSectionDependenciesQuery,
   useGetRuntimeRendererQuery,
   useMutateRuntimeStateMutation,
+  useRebuildRuntimeIntelligenceGraphMutation,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useResetRuntimeDiscoveryMutation,

@@ -10,8 +10,14 @@ import {
   buildRuntimeEvidenceQuery,
   buildRuntimeRendererQuery,
   buildResetRuntimeDiscoveryQuery,
+  buildRebuildRuntimeIntelligenceGraphQuery,
   buildReviewRuntimeDiscoveryEvidenceQuery,
   buildReviewRuntimeSectionEvidenceQuery,
+  buildRuntimeIntelligenceGraphCoverageQuery,
+  buildRuntimeIntelligenceGraphHealthQuery,
+  buildRuntimeIntelligenceGraphNodeLineageQuery,
+  buildRuntimeIntelligenceGraphQuery,
+  buildRuntimeIntelligenceGraphSectionDependenciesQuery,
   buildUpdateRuntimeDiscoveryInputsQuery,
   buildUpdateRuntimeSectionEvidenceQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
@@ -24,6 +30,7 @@ import {
   getRuntimeInstanceListTags,
   getRuntimeRendererTags,
   getResetRuntimeDiscoveryInvalidationTags,
+  getRebuildRuntimeIntelligenceGraphInvalidationTags,
   getReviewRuntimeDiscoveryEvidenceInvalidationTags,
   getReviewRuntimeSectionEvidenceInvalidationTags,
   getUpdateRuntimeDiscoveryInputsInvalidationTags,
@@ -36,10 +43,16 @@ import {
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeIntelligenceGraphCoverageQuery,
+  useGetRuntimeIntelligenceGraphHealthQuery,
+  useGetRuntimeIntelligenceGraphNodeLineageQuery,
+  useGetRuntimeIntelligenceGraphQuery,
+  useGetRuntimeIntelligenceGraphSectionDependenciesQuery,
   useGetRuntimeRendererQuery,
   useListRuntimeInstancesQuery,
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
+  useRebuildRuntimeIntelligenceGraphMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,
@@ -52,8 +65,14 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeEvidence')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraph')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphHealth')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphCoverage')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphNodeLineage')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphSectionDependencies')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('mutateRuntimeState')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('rebuildRuntimeIntelligenceGraph')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeDiscoveryInputs')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeDiscovery')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('resetRuntimeDiscovery')
@@ -69,8 +88,14 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
     expect(typeof useGetRuntimeEvidenceQuery).toBe('function')
+    expect(typeof useGetRuntimeIntelligenceGraphQuery).toBe('function')
+    expect(typeof useGetRuntimeIntelligenceGraphHealthQuery).toBe('function')
+    expect(typeof useGetRuntimeIntelligenceGraphCoverageQuery).toBe('function')
+    expect(typeof useGetRuntimeIntelligenceGraphNodeLineageQuery).toBe('function')
+    expect(typeof useGetRuntimeIntelligenceGraphSectionDependenciesQuery).toBe('function')
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
     expect(typeof useMutateRuntimeStateMutation).toBe('function')
+    expect(typeof useRebuildRuntimeIntelligenceGraphMutation).toBe('function')
     expect(typeof useUpdateRuntimeDiscoveryInputsMutation).toBe('function')
     expect(typeof useAcceptRuntimeDiscoveryMutation).toBe('function')
     expect(typeof useResetRuntimeDiscoveryMutation).toBe('function')
@@ -86,8 +111,14 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeEvidence.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraph.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphHealth.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphCoverage.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphNodeLineage.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphSectionDependencies.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.mutateRuntimeState.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.rebuildRuntimeIntelligenceGraph.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeDiscoveryInputs.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeDiscovery.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.resetRuntimeDiscovery.initiate).toBe('function')
@@ -136,6 +167,34 @@ describe('runtimeInstanceApi', () => {
       .toBe('/runtime-instances/value%20narrative%2F001/renderer')
     expect(buildRuntimeEvidenceQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/evidence')
+    expect(buildRuntimeIntelligenceGraphQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/intelligence-graph')
+    expect(buildRuntimeIntelligenceGraphHealthQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/intelligence-graph/health')
+    expect(buildRuntimeIntelligenceGraphCoverageQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/intelligence-graph/coverage')
+    expect(buildRuntimeIntelligenceGraphNodeLineageQuery({
+      runtimeInstanceId: 'value narrative/001',
+      nodeId: 'evidence:company/source',
+    })).toBe('/runtime-instances/value%20narrative%2F001/intelligence-graph/nodes/evidence%3Acompany%2Fsource/lineage')
+    expect(buildRuntimeIntelligenceGraphSectionDependenciesQuery({
+      runtimeInstanceId: 'value narrative/001',
+      sectionKey: 'value_drivers',
+    })).toBe('/runtime-instances/value%20narrative%2F001/intelligence-graph/sections/value_drivers/dependencies')
+    expect(buildRebuildRuntimeIntelligenceGraphQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        trigger: 'EXPLICIT_REBUILD',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/intelligence-graph/rebuild',
+      method: 'POST',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        trigger: 'EXPLICIT_REBUILD',
+      },
+    })
     expect(buildMutateRuntimeStateQuery({
       runtimeInstanceId: 'value narrative/001',
       body: {
@@ -431,6 +490,19 @@ describe('runtimeInstanceApi', () => {
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
     expect(getAcceptRuntimeSectionInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getRebuildRuntimeIntelligenceGraphInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',
