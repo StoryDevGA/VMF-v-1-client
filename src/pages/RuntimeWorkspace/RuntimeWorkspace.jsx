@@ -46,6 +46,7 @@ import {
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useReviewAllRuntimeSectionEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
@@ -81,8 +82,10 @@ const DISCOVERY_DOCUMENT_ACCEPT = [
   '.docx',
   '.md',
   '.pdf',
+  '.pptx',
   '.txt',
   'application/pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/csv',
   'text/markdown',
@@ -90,6 +93,7 @@ const DISCOVERY_DOCUMENT_ACCEPT = [
 ].join(',')
 const DISCOVERY_DOCUMENT_MAX_COUNT = 5
 const DISCOVERY_DOCUMENT_MAX_BYTES = 2500000
+const DISCOVERY_PPTX_DOCUMENT_MAX_BYTES = 40000000
 const DISCOVERY_WEBSITE_SOURCE_MAX_COUNT = 10
 
 const buildEmptyDiscoveryDraftInputs = () => ({
@@ -142,15 +146,26 @@ const isSupportedDiscoveryDocument = (file) => {
     '.docx',
     '.md',
     '.pdf',
+    '.pptx',
     '.txt',
   ].includes(extension) || [
     'application/pdf',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'text/csv',
     'text/markdown',
     'text/plain',
   ].includes(mimeType)
 }
+
+const isPptxDiscoveryDocument = (file) => {
+  const mimeType = String(file?.type || '').trim().toLowerCase()
+  return getFileExtension(file?.name) === '.pptx'
+    || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+}
+
+const getDiscoveryDocumentMaxBytes = (file) =>
+  isPptxDiscoveryDocument(file) ? DISCOVERY_PPTX_DOCUMENT_MAX_BYTES : DISCOVERY_DOCUMENT_MAX_BYTES
 
 const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader()
@@ -163,7 +178,7 @@ const buildDiscoveryDocumentSource = async (file) => {
   if (!isSupportedDiscoveryDocument(file)) {
     throw new Error(`${file.name} is not a supported ${INTELLIGENCE_HUB_LABEL} document type.`)
   }
-  if (file.size > DISCOVERY_DOCUMENT_MAX_BYTES) {
+  if (file.size > getDiscoveryDocumentMaxBytes(file)) {
     throw new Error(`${file.name} exceeds the ${INTELLIGENCE_HUB_LABEL} document size limit.`)
   }
 
@@ -180,7 +195,7 @@ const buildSectionDocumentSource = async (file) => {
   if (!isSupportedDiscoveryDocument(file)) {
     throw new Error(`${file.name} is not a supported section evidence document type.`)
   }
-  if (file.size > DISCOVERY_DOCUMENT_MAX_BYTES) {
+  if (file.size > getDiscoveryDocumentMaxBytes(file)) {
     throw new Error(`${file.name} exceeds the section evidence document size limit.`)
   }
 
@@ -197,9 +212,13 @@ const formatDocumentSize = (sizeBytes = 0) =>
   `${Math.max(1, Math.round((Number(sizeBytes) || 0) / 1024))} KB`
 
 const DOCUMENT_EXTRACTION_STORAGE_NOTE = 'Original documents are not stored. Only extracted evidence and source details are retained.'
-const DOCUMENT_EXTRACTION_HELPER_TEXT = 'PDF, DOCX, TXT, MD, or CSV. Files are used only to extract evidence; originals are not stored.'
+const DOCUMENT_EXTRACTION_HELPER_TEXT = 'PDF, PPTX, DOCX, TXT, MD, or CSV. Files are used only to extract evidence; originals are not stored.'
 const PDF_UNREADABLE_TEXT_ERROR_PREFIX = 'PDF document did not contain readable extractable text'
-const PDF_UNREADABLE_TEXT_HELPER = 'This PDF has no readable text layer. Use an OCR/searchable PDF, DOCX, TXT, MD, or CSV.'
+const PDF_UNREADABLE_TEXT_HELPER = 'This PDF has no readable text layer. Use an OCR/searchable PDF, PPTX, DOCX, TXT, MD, or CSV.'
+const PPTX_UNREADABLE_TEXT_ERROR_PREFIX = 'PowerPoint document did not contain readable extractable slide text or speaker notes'
+const PPTX_UNREADABLE_TEXT_HELPER = 'This PowerPoint file has no extractable slide text or speaker notes. Use a PPTX with selectable text.'
+const PPTX_MALFORMED_ERROR_PREFIX = 'PowerPoint file is not a valid PPTX package'
+const PPTX_MALFORMED_HELPER = 'We could not extract this presentation. Confirm that it is a valid PPTX file.'
 
 const getNestedDetailMessage = (details) => {
   if (!details || typeof details !== 'object') return ''
@@ -227,7 +246,11 @@ const formatSectionSupportingFileError = (error) => {
   const baseMessage = stripRequestReference(nestedMessage || normalizedError.message)
   const message = baseMessage.startsWith(PDF_UNREADABLE_TEXT_ERROR_PREFIX)
     ? PDF_UNREADABLE_TEXT_HELPER
-    : baseMessage
+    : baseMessage.startsWith(PPTX_UNREADABLE_TEXT_ERROR_PREFIX)
+      ? PPTX_UNREADABLE_TEXT_HELPER
+      : baseMessage.startsWith(PPTX_MALFORMED_ERROR_PREFIX)
+        ? PPTX_MALFORMED_HELPER
+      : baseMessage
   const requestReference = normalizedError.requestId
     ? ` Reference: ${normalizedError.requestId}`
     : ''
@@ -1836,6 +1859,7 @@ function RuntimeSection({
   onExecuteSectionAction,
   onAcceptSection,
   onClearSectionEvidence,
+  onReviewAllSectionEvidence,
   onReviewSectionEvidence,
   onSave,
   onSaveAndNext,
@@ -1894,6 +1918,7 @@ function RuntimeSection({
   const sectionEvidenceStatus = sectionEvidence.status || 'EMPTY'
   const isUploadingSectionEvidence = uploadingSectionEvidencePath === section?.runtimePath
   const isClearingSectionEvidence = clearingSectionEvidencePath === section?.runtimePath
+  const isReviewingAllSectionEvidence = reviewingSectionEvidenceObjectId === `all:${section?.runtimePath}`
   const sectionEvidenceHasPersisted = sectionEvidenceDocuments.length > 0
     || sectionEvidenceObjects.length > 0
     || Number(sectionEvidence.documentCount || 0) > 0
@@ -2329,6 +2354,23 @@ function RuntimeSection({
       Number(sectionEvidence.rejectedEvidenceObjectCount || 0)
     } rejected`
     : ''
+  const reviewAllSectionEvidenceDisabledReason = !editable
+    ? section?.readonlyReason || 'Current role or permissions do not allow section evidence review.'
+    : isSaving
+      ? 'Wait for the section save to finish before accepting evidence.'
+      : isUploadingSectionEvidence
+        ? 'Wait for section evidence extraction to finish before accepting evidence.'
+        : isClearingSectionEvidence
+          ? 'Wait for section evidence cleanup to finish before accepting evidence.'
+          : reviewingSectionEvidenceObjectId
+            ? 'Wait for the section evidence review to finish before accepting more evidence.'
+            : ''
+  const canReviewAllSectionEvidence = editable
+    && !isSaving
+    && !isUploadingSectionEvidence
+    && !isClearingSectionEvidence
+    && !reviewingSectionEvidenceObjectId
+  const reviewAllSectionEvidenceReasonId = `${section.key}-section-evidence-review-all-reason`
   const clearSectionEvidenceDisabledReason = !editable
     ? section?.readonlyReason || 'Current role or permissions do not allow section evidence cleanup.'
     : isSaving
@@ -2337,6 +2379,8 @@ function RuntimeSection({
         ? 'Wait for section evidence extraction to finish before clearing evidence.'
       : isClearingSectionEvidence
         ? 'Section evidence cleanup is already running.'
+        : isReviewingAllSectionEvidence
+          ? 'Section evidence bulk review is already running.'
         : reviewingSectionEvidenceObjectId
           ? 'Wait for the section evidence review to finish before clearing evidence.'
           : ''
@@ -2345,6 +2389,7 @@ function RuntimeSection({
     && !isSaving
     && !isUploadingSectionEvidence
     && !isClearingSectionEvidence
+    && !isReviewingAllSectionEvidence
     && !reviewingSectionEvidenceObjectId
   const clearSectionEvidenceTitleId = `${section.key}-section-evidence-clear-title`
   const clearSectionEvidenceCopyId = `${section.key}-section-evidence-clear-copy`
@@ -2489,9 +2534,33 @@ function RuntimeSection({
 
       {sectionEvidenceObjects.length > 0 ? (
         <div className="runtime-workspace__section-evidence-review">
-          <p className="runtime-workspace__section-evidence-summary">
-            {sectionEvidenceReviewSummary}
-          </p>
+          <div className="runtime-workspace__section-evidence-review-header">
+            <p className="runtime-workspace__section-evidence-summary">
+              {sectionEvidenceReviewSummary}
+            </p>
+            {Number(sectionEvidence.pendingEvidenceObjectCount || 0) > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!canReviewAllSectionEvidence}
+                loading={isReviewingAllSectionEvidence}
+                aria-describedby={reviewAllSectionEvidenceDisabledReason ? reviewAllSectionEvidenceReasonId : undefined}
+                leftIcon={<MdCheckCircle aria-hidden="true" />}
+                onClick={() => onReviewAllSectionEvidence?.({ section })}
+              >
+                Accept All
+              </Button>
+            ) : null}
+          </div>
+          {reviewAllSectionEvidenceDisabledReason && Number(sectionEvidence.pendingEvidenceObjectCount || 0) > 0 ? (
+            <p
+              id={reviewAllSectionEvidenceReasonId}
+              className="runtime-workspace__action-disabled-reason"
+            >
+              {reviewAllSectionEvidenceDisabledReason}
+            </p>
+          ) : null}
           <div
             className="runtime-workspace__section-evidence-scroll"
             role="region"
@@ -4610,6 +4679,7 @@ function RuntimeWorkspace() {
   const [clearRuntimeSectionEvidence] = useClearRuntimeSectionEvidenceMutation()
   const [resetRuntimeDiscovery] = useResetRuntimeDiscoveryMutation()
   const [reviewRuntimeDiscoveryEvidence] = useReviewRuntimeDiscoveryEvidenceMutation()
+  const [reviewAllRuntimeSectionEvidence] = useReviewAllRuntimeSectionEvidenceMutation()
   const [reviewRuntimeSectionEvidence] = useReviewRuntimeSectionEvidenceMutation()
   const [updateRuntimeSectionEvidence] = useUpdateRuntimeSectionEvidenceMutation()
   const [updateRuntimeDiscoveryInputs] = useUpdateRuntimeDiscoveryInputsMutation()
@@ -5044,6 +5114,20 @@ function RuntimeWorkspace() {
   const handleSaveSection = async ({ section, value, saveAndNext = false }) => {
     const runtimePath = section?.runtimePath
     if (!runtimePath) return false
+    if (uploadingSectionEvidencePath === runtimePath) {
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: 'Wait for section evidence extraction to finish before accepting evidence.',
+      })
+      return false
+    }
+    if (clearingSectionEvidencePath === runtimePath) {
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: 'Wait for section evidence cleanup to finish before accepting evidence.',
+      })
+      return false
+    }
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
     if (!expectedUpdatedAt) {
@@ -5290,6 +5374,57 @@ function RuntimeWorkspace() {
       setSectionFeedback(runtimePath, {
         variant: 'success',
         message: reviewStatus === 'REJECTED' ? 'Section evidence rejected.' : 'Section evidence accepted.',
+      })
+      await refetch()
+      return true
+    } catch (reviewError) {
+      const normalizedError = normalizeError(reviewError)
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: normalizedError.message,
+      })
+      return false
+    } finally {
+      reviewingSectionEvidenceObjectIdRef.current = ''
+      setReviewingSectionEvidenceObjectId('')
+    }
+  }
+
+  const handleReviewAllSectionEvidence = async ({ section }) => {
+    if (reviewingSectionEvidenceObjectIdRef.current) {
+      return false
+    }
+
+    const runtimePath = section?.runtimePath
+    if (!runtimePath) return false
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      setSectionFeedback(runtimePath, {
+        variant: 'error',
+        message: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+      })
+      return false
+    }
+
+    const reviewToken = `all:${runtimePath}`
+    reviewingSectionEvidenceObjectIdRef.current = reviewToken
+    setReviewingSectionEvidenceObjectId(reviewToken)
+    setSectionFeedback(runtimePath, null)
+
+    try {
+      await reviewAllRuntimeSectionEvidence({
+        runtimeInstanceId,
+        body: {
+          runtimePath,
+          sectionKey: section?.sectionKey || section?.key,
+          reviewStatus: 'ACCEPTED',
+          expectedUpdatedAt,
+        },
+      }).unwrap()
+      setSectionFeedback(runtimePath, {
+        variant: 'success',
+        message: 'Pending section evidence accepted.',
       })
       await refetch()
       return true
@@ -5701,6 +5836,7 @@ function RuntimeWorkspace() {
                 onClearSectionEvidence={handleClearSectionEvidence}
                 onExecuteSectionAction={handleExecuteSectionAction}
                 onNext={handleNextSection}
+                onReviewAllSectionEvidence={handleReviewAllSectionEvidence}
                 onReviewSectionEvidence={handleReviewSectionEvidence}
                 onSave={handleSaveSection}
                 onSaveAndNext={handleSaveSectionAndNext}

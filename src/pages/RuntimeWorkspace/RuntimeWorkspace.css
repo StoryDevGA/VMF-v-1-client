@@ -2000,6 +2000,15 @@
   min-width: 0;
 }
 
+.runtime-workspace__section-evidence-review-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .runtime-workspace__section-panel .runtime-workspace__section-evidence-summary {
   overflow: visible;
   max-height: none;

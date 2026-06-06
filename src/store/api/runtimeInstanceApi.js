@@ -161,6 +161,12 @@ export const buildReviewRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, evid
   body,
 })
 
+export const buildReviewAllRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence/review-all`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildAcceptRuntimeSectionQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-acceptance`,
   method: 'PATCH',
@@ -218,6 +224,7 @@ export const getAcceptRuntimeSectionInvalidationTags = getMutateRuntimeStateInva
 export const getUpdateRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getClearRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getReviewAllRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getRebuildRuntimeIntelligenceGraphInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
@@ -317,6 +324,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getReviewRuntimeSectionEvidenceInvalidationTags,
     }),
 
+    reviewAllRuntimeSectionEvidence: build.mutation({
+      query: buildReviewAllRuntimeSectionEvidenceQuery,
+      invalidatesTags: getReviewAllRuntimeSectionEvidenceInvalidationTags,
+    }),
+
     acceptRuntimeSection: build.mutation({
       query: buildAcceptRuntimeSectionQuery,
       invalidatesTags: getAcceptRuntimeSectionInvalidationTags,
@@ -349,6 +361,7 @@ export const {
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
+  useReviewAllRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
   useExecuteRuntimeActionMutation,

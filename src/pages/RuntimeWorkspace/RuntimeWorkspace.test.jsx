@@ -13,6 +13,7 @@ import {
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useReviewAllRuntimeSectionEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
@@ -29,6 +30,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useMutateRuntimeStateMutation: vi.fn(),
   useResetRuntimeDiscoveryMutation: vi.fn(),
   useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
+  useReviewAllRuntimeSectionEvidenceMutation: vi.fn(),
   useReviewRuntimeSectionEvidenceMutation: vi.fn(),
   useUpdateRuntimeSectionEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
@@ -49,6 +51,8 @@ const reviewRuntimeDiscoveryEvidence = vi.fn()
 const unwrapReviewDiscoveryEvidence = vi.fn()
 const reviewRuntimeSectionEvidence = vi.fn()
 const unwrapReviewRuntimeSectionEvidence = vi.fn()
+const reviewAllRuntimeSectionEvidence = vi.fn()
+const unwrapReviewAllRuntimeSectionEvidence = vi.fn()
 const updateRuntimeSectionEvidence = vi.fn()
 const unwrapUpdateRuntimeSectionEvidence = vi.fn()
 const clearRuntimeSectionEvidence = vi.fn()
@@ -263,6 +267,8 @@ describe('RuntimeWorkspace', () => {
     unwrapReviewDiscoveryEvidence.mockReset()
     reviewRuntimeSectionEvidence.mockReset()
     unwrapReviewRuntimeSectionEvidence.mockReset()
+    reviewAllRuntimeSectionEvidence.mockReset()
+    unwrapReviewAllRuntimeSectionEvidence.mockReset()
     updateRuntimeSectionEvidence.mockReset()
     unwrapUpdateRuntimeSectionEvidence.mockReset()
     clearRuntimeSectionEvidence.mockReset()
@@ -284,6 +290,8 @@ describe('RuntimeWorkspace', () => {
     reviewRuntimeDiscoveryEvidence.mockReturnValue({ unwrap: unwrapReviewDiscoveryEvidence })
     unwrapReviewRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'ACCEPTED' } } } })
     reviewRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapReviewRuntimeSectionEvidence })
+    unwrapReviewAllRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'ACCEPTED' } } } })
+    reviewAllRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapReviewAllRuntimeSectionEvidence })
     unwrapUpdateRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'PENDING_REVIEW' } } } })
     updateRuntimeSectionEvidence.mockReturnValue({ unwrap: unwrapUpdateRuntimeSectionEvidence })
     unwrapClearRuntimeSectionEvidence.mockResolvedValue({ data: { section: { sectionEvidence: { status: 'EMPTY' } } } })
@@ -296,6 +304,7 @@ describe('RuntimeWorkspace', () => {
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
     useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
+    useReviewAllRuntimeSectionEvidenceMutation.mockReturnValue([reviewAllRuntimeSectionEvidence, { isLoading: false }])
     useReviewRuntimeSectionEvidenceMutation.mockReturnValue([reviewRuntimeSectionEvidence, { isLoading: false }])
     useUpdateRuntimeSectionEvidenceMutation.mockReturnValue([updateRuntimeSectionEvidence, { isLoading: false }])
     useGetRuntimeEvidenceQuery.mockReturnValue({
@@ -3097,14 +3106,15 @@ describe('RuntimeWorkspace', () => {
       'Original documents are not stored. Only extracted evidence and source details are retained.',
     )).toBeInTheDocument()
     const sectionDocument = new File(
-      ['Customer teams need governed workflow automation for value narratives.'],
-      'section-notes.txt',
-      { type: 'text/plain' },
+      [new Uint8Array(3_000_000).fill(65)],
+      'section-notes.pptx',
+      { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
     )
+    expect(sectionDocument.size).toBeGreaterThan(2500000)
 
     const sectionFileInput = within(sectionEvidenceRegion).getByLabelText('Supporting Files')
     await user.upload(sectionFileInput, sectionDocument)
-    expect(await within(sectionEvidenceRegion).findByText('section-notes.txt')).toBeInTheDocument()
+    expect(await within(sectionEvidenceRegion).findByText('section-notes.pptx')).toBeInTheDocument()
     expect(sectionFileInput).toBeDisabled()
     const selectedSectionDocuments = within(sectionEvidenceRegion).getByRole('list', {
       name: /selected section supporting files/i,
@@ -3115,13 +3125,13 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionEvidenceRegion).queryByText(/^select files$/i)).not.toBeInTheDocument()
 
     await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^cancel$/i }))
-    expect(within(sectionEvidenceRegion).queryByText('section-notes.txt')).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).queryByText('section-notes.pptx')).not.toBeInTheDocument()
     expect(within(sectionEvidenceRegion).queryByRole('button', { name: /^extract evidence$/i })).not.toBeInTheDocument()
     expect(within(sectionEvidenceRegion).getByText(/^select files$/i)).toBeInTheDocument()
     expect(sectionFileInput).not.toBeDisabled()
 
     await user.upload(sectionFileInput, sectionDocument)
-    expect(await within(sectionEvidenceRegion).findByText('section-notes.txt')).toBeInTheDocument()
+    expect(await within(sectionEvidenceRegion).findByText('section-notes.pptx')).toBeInTheDocument()
     await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
 
     expect(updateRuntimeSectionEvidence).toHaveBeenCalledWith({
@@ -3131,11 +3141,13 @@ describe('RuntimeWorkspace', () => {
         sectionKey: 'customer_problem',
         documentSources: [
           expect.objectContaining({
-            fileName: 'section-notes.txt',
-            mimeType: 'text/plain',
+            fileName: 'section-notes.pptx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             assetType: 'SECTION_SUPPORTING_FILE',
             sizeBytes: sectionDocument.size,
-            contentBase64: expect.stringMatching(/^data:text\/plain;base64,/),
+            contentBase64: expect.stringMatching(
+              /^data:application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation;base64,/,
+            ),
           }),
         ],
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
@@ -3225,11 +3237,104 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeSectionEvidence).toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
     expect(await screen.findByText(
-      /this PDF has no readable text layer\. use an OCR\/searchable PDF, DOCX, TXT, MD, or CSV\. Reference: mq1148a1-y2xvd8/i,
+      /this PDF has no readable text layer\. use an OCR\/searchable PDF, PPTX, DOCX, TXT, MD, or CSV\. Reference: mq1148a1-y2xvd8/i,
     )).toBeInTheDocument()
     expect(screen.queryByText(/Section supporting file ingestion failed\. \(Ref: mq1148a1-y2xvd8\)/i)).not.toBeInTheDocument()
     expect(within(sectionEvidenceRegion).getByText('scanned-brief.pdf')).toBeInTheDocument()
     expect(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i })).toBeInTheDocument()
+  })
+
+  it('shows readable PowerPoint extraction guidance for section supporting file ingestion failures', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Section supporting file ingestion failed.',
+          requestId: 'pptx-ref-1',
+          details: {
+            runtimePath: 'framework_state.sections.customer_problem',
+            sectionKey: 'customer_problem',
+            ingestionError: {
+              name: 'Error',
+              message: 'PowerPoint document did not contain readable extractable slide text or speaker notes.',
+            },
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const pptxDocument = new File(
+      ['image only deck placeholder'],
+      'image-only-deck.pptx',
+      { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), pptxDocument)
+    expect(await within(sectionEvidenceRegion).findByText('image-only-deck.pptx')).toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
+
+    expect(updateRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(
+      /this PowerPoint file has no extractable slide text or speaker notes\. use a PPTX with selectable text\. Reference: pptx-ref-1/i,
+    )).toBeInTheDocument()
+    expect(screen.queryByText(/Section supporting file ingestion failed\. \(Ref: pptx-ref-1\)/i)).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText('image-only-deck.pptx')).toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i })).toBeInTheDocument()
+  })
+
+  it('shows malformed PowerPoint guidance for invalid PPTX packages', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Section supporting file ingestion failed.',
+          requestId: 'pptx-malformed-ref-1',
+          details: {
+            runtimePath: 'framework_state.sections.customer_problem',
+            sectionKey: 'customer_problem',
+            ingestionError: {
+              name: 'Error',
+              message: 'PowerPoint file is not a valid PPTX package.',
+            },
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const pptxDocument = new File(
+      ['not actually a pptx'],
+      'renamed-binary.pptx',
+      { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), pptxDocument)
+    expect(await within(sectionEvidenceRegion).findByText('renamed-binary.pptx')).toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
+
+    expect(updateRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(
+      /we could not extract this presentation\. confirm that it is a valid PPTX file\. Reference: pptx-malformed-ref-1/i,
+    )).toBeInTheDocument()
+    expect(screen.queryByText(/use a PPTX with selectable text/i)).not.toBeInTheDocument()
+    expect(within(sectionEvidenceRegion).getByText('renamed-binary.pptx')).toBeInTheDocument()
   })
 
   it('reviews projected section evidence objects with meaningful extracted snippets', async () => {
@@ -3317,6 +3422,167 @@ describe('RuntimeWorkspace', () => {
     expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section evidence accepted/i)).toBeInTheDocument()
+  })
+
+  it('accepts all pending section evidence with one governed bulk action', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 3,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 2,
+                rejectedEvidenceObjectCount: 1,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 3,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                    snippet: 'Governed proposal workflows reduce manual effort for commercial teams.',
+                  },
+                  {
+                    evidenceObjectId: 'section_evidence_2',
+                    category: 'Services',
+                    coverageArea: 'Services',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                    snippet: 'Service teams automate onboarding support.',
+                  },
+                  {
+                    evidenceObjectId: 'section_evidence_3',
+                    category: 'Proof',
+                    coverageArea: 'Proof',
+                    reviewStatus: 'REJECTED',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                    snippet: 'Rejected evidence remains rejected.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    expect(within(sectionEvidenceRegion).getByText('3 evidence objects: 0 accepted, 2 pending, 1 rejected')).toBeInTheDocument()
+
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^accept all$/i }))
+
+    expect(reviewAllRuntimeSectionEvidence).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        sectionKey: 'customer_problem',
+        reviewStatus: 'ACCEPTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(reviewRuntimeSectionEvidence).not.toHaveBeenCalled()
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(await screen.findByText(/pending section evidence accepted/i)).toBeInTheDocument()
+  })
+
+  it('disables accept all while section evidence extraction is running', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeSectionEvidence.mockReturnValue(new Promise(() => {}))
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                    snippet: 'Governed proposal workflows reduce manual effort for commercial teams.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    const sectionDocument = new File(
+      ['Customer teams need governed workflow automation for value narratives.'],
+      'new-section-notes.txt',
+      { type: 'text/plain' },
+    )
+
+    await user.upload(within(sectionEvidenceRegion).getByLabelText('Supporting Files'), sectionDocument)
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^extract evidence$/i }))
+
+    const acceptAllButton = within(sectionEvidenceRegion).getByRole('button', { name: /^accept all$/i })
+    expect(acceptAllButton).toBeDisabled()
+    expect(within(sectionEvidenceRegion).getByText(
+      /wait for section evidence extraction to finish before accepting evidence/i,
+    )).toBeInTheDocument()
+
+    await user.click(acceptAllButton)
+    expect(reviewAllRuntimeSectionEvidence).not.toHaveBeenCalled()
   })
 
   it('clears persisted section evidence after explicit confirmation', async () => {
@@ -3698,6 +3964,75 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).not.toHaveBeenCalled()
     expect(await screen.findByText(/section evidence object was not found/i)).toBeInTheDocument()
     expect(screen.queryByText(/section evidence accepted/i)).not.toBeInTheDocument()
+  })
+
+  it('shows normalized accept-all section evidence errors without success refetch', async () => {
+    const user = userEvent.setup()
+    unwrapReviewAllRuntimeSectionEvidence.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'No pending section evidence is available to accept.',
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              sectionEvidence: {
+                status: 'PENDING_REVIEW',
+                documentCount: 1,
+                evidenceObjectCount: 1,
+                acceptedEvidenceObjectCount: 0,
+                pendingEvidenceObjectCount: 1,
+                rejectedEvidenceObjectCount: 0,
+                documents: [
+                  {
+                    sectionDocumentId: 'section_document_1',
+                    fileName: 'section-notes.txt',
+                    status: 'PROCESSED',
+                    sizeBytes: 1200,
+                    evidenceObjectsGenerated: 1,
+                  },
+                ],
+                evidenceObjects: [
+                  {
+                    evidenceObjectId: 'section_evidence_1',
+                    category: 'Value Drivers',
+                    coverageArea: 'Decision Context',
+                    reviewStatus: 'PENDING',
+                    sourceType: 'SECTION_UPLOADED_DOCUMENT',
+                    sourceFileName: 'section-notes.txt',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Context')
+
+    const sectionEvidenceRegion = screen.getByRole('region', { name: 'Section evidence' })
+    await user.click(within(sectionEvidenceRegion).getByRole('button', { name: /^accept all$/i }))
+
+    expect(reviewAllRuntimeSectionEvidence).toHaveBeenCalled()
+    expect(reviewRuntimeSectionEvidence).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(/no pending section evidence is available to accept/i)).toBeInTheDocument()
+    expect(screen.queryByText(/pending section evidence accepted/i)).not.toBeInTheDocument()
   })
 
   it('keeps section evidence upload and review disabled for read-only sections', async () => {

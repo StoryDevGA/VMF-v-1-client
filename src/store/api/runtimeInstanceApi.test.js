@@ -13,6 +13,7 @@ import {
   buildResetRuntimeDiscoveryQuery,
   buildRebuildRuntimeIntelligenceGraphQuery,
   buildReviewRuntimeDiscoveryEvidenceQuery,
+  buildReviewAllRuntimeSectionEvidenceQuery,
   buildReviewRuntimeSectionEvidenceQuery,
   buildRuntimeIntelligenceGraphCoverageQuery,
   buildRuntimeIntelligenceGraphHealthQuery,
@@ -34,6 +35,7 @@ import {
   getResetRuntimeDiscoveryInvalidationTags,
   getRebuildRuntimeIntelligenceGraphInvalidationTags,
   getReviewRuntimeDiscoveryEvidenceInvalidationTags,
+  getReviewAllRuntimeSectionEvidenceInvalidationTags,
   getReviewRuntimeSectionEvidenceInvalidationTags,
   getUpdateRuntimeDiscoveryInputsInvalidationTags,
   getUpdateRuntimeSectionEvidenceInvalidationTags,
@@ -57,6 +59,7 @@ import {
   useResetRuntimeDiscoveryMutation,
   useRebuildRuntimeIntelligenceGraphMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useReviewAllRuntimeSectionEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
@@ -83,6 +86,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('updateRuntimeSectionEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('clearRuntimeSectionEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('reviewRuntimeSectionEvidence')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('reviewAllRuntimeSectionEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('acceptRuntimeSection')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('executeRuntimeAction')
   })
@@ -107,6 +111,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useUpdateRuntimeSectionEvidenceMutation).toBe('function')
     expect(typeof useClearRuntimeSectionEvidenceMutation).toBe('function')
     expect(typeof useReviewRuntimeSectionEvidenceMutation).toBe('function')
+    expect(typeof useReviewAllRuntimeSectionEvidenceMutation).toBe('function')
     expect(typeof useAcceptRuntimeSectionMutation).toBe('function')
     expect(typeof useExecuteRuntimeActionMutation).toBe('function')
   })
@@ -131,6 +136,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeSectionEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.clearRuntimeSectionEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.reviewRuntimeSectionEvidence.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.reviewAllRuntimeSectionEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.acceptRuntimeSection.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.executeRuntimeAction.initiate).toBe('function')
   })
@@ -334,6 +340,24 @@ describe('runtimeInstanceApi', () => {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
+    expect(buildReviewAllRuntimeSectionEvidenceQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        runtimePath: 'framework_state.sections.value_drivers',
+        sectionKey: 'value_drivers',
+        reviewStatus: 'ACCEPTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/section-evidence/review-all',
+      method: 'PATCH',
+      body: {
+        runtimePath: 'framework_state.sections.value_drivers',
+        sectionKey: 'value_drivers',
+        reviewStatus: 'ACCEPTED',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
     expect(buildClearRuntimeSectionEvidenceQuery({
       runtimeInstanceId: 'value narrative/001',
       body: {
@@ -503,6 +527,19 @@ describe('runtimeInstanceApi', () => {
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])
     expect(getReviewRuntimeSectionEvidenceInvalidationTags({
+      data: {
+        runtimeInstance: {
+          id: 'runtime-1',
+          runtimeInstanceKey: 'value-narrative-001',
+          runtimeType: 'VALUE_NARRATIVE',
+        },
+      },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+    expect(getReviewAllRuntimeSectionEvidenceInvalidationTags({
       data: {
         runtimeInstance: {
           id: 'runtime-1',
