@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ProgressBar } from './ProgressBar'
+import { getProgressBarValueTint } from './progressBarValueTone.js'
 
 describe('ProgressBar Component', () => {
   it('renders an accessible progressbar with default props', () => {
@@ -70,6 +71,23 @@ describe('ProgressBar Component', () => {
     expect(root).toHaveClass('progress-bar--metric')
     expect(root).toHaveClass('progress-bar--lg')
     expect(root).toHaveClass('custom-progress')
+  })
+
+  it('can tone the fill from a lighter shade to the variant base color by value', () => {
+    const { container, rerender } = render(<ProgressBar value={40} valueTone variant="success" />)
+
+    expect(container.firstChild).toHaveClass('progress-bar--value-tone')
+    expect(container.firstChild).toHaveStyle('--progress-bar-value-tint: 42%')
+
+    rerender(<ProgressBar value={100} valueTone variant="success" />)
+
+    expect(container.firstChild).toHaveStyle('--progress-bar-value-tint: 0%')
+  })
+
+  it('exports the same value tint calculation for adjacent visual affordances', () => {
+    expect(getProgressBarValueTint(40)).toBe('42%')
+    expect(getProgressBarValueTint(100)).toBe('0%')
+    expect(getProgressBarValueTint(-10)).toBe('70%')
   })
 
   it('falls back to default classes for unsupported variant and size values', () => {

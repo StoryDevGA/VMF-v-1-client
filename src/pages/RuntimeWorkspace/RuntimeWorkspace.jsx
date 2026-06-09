@@ -28,7 +28,7 @@ import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
-import { ProgressBar } from '../../components/ProgressBar'
+import { ProgressBar, getProgressBarValueTint } from '../../components/ProgressBar'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -52,6 +52,7 @@ import {
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
 import {
+  DISCOVERY_ACQUISITION_PROFILE_GUIDANCE,
   DISCOVERY_ACQUISITION_PROFILES,
   DISCOVERY_ACQUISITION_PROFILE_OPTIONS,
 } from '../../constants/discoveryAcquisitionProfiles.js'
@@ -338,9 +339,12 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
   LOW: 'warning',
   MEDIUM: 'info',
   HIGH: 'success',
+  MODERATE: 'info',
   NONE: 'neutral',
   NO_GENERATED_CONTENT: 'neutral',
   NO_SECTION_DEPENDENCIES: 'neutral',
+  NOT_READY: 'warning',
+  PARTIALLY_READY: 'info',
   PASSED: 'success',
   READY: 'success',
   REGENERATION_REQUIRED: 'warning',
@@ -892,6 +896,9 @@ const hasDiscoveryHealthSummary = (summary) =>
       || getSummaryCount(summary, 'evidenceObjectCount') > 0
       || getSummaryCount(summary, 'sourceCount') > 0
       || (Array.isArray(summary.missingAreas) && summary.missingAreas.length > 0)
+      || (summary.readiness && typeof summary.readiness === 'object' && !Array.isArray(summary.readiness))
+      || (Array.isArray(summary.signalCandidates) && summary.signalCandidates.length > 0)
+      || (Array.isArray(summary.contradictionCandidates) && summary.contradictionCandidates.length > 0)
     ),
   )
 
@@ -909,6 +916,55 @@ const formatDiscoveryEvidenceObjectSummary = (summary = {}) => {
   return `${evidenceObjectCount} evidence object${evidenceObjectCount === 1 ? '' : 's'}: ${
     acceptedCount
   } accepted, ${pendingCount} pending review, ${rejectedCount} rejected.`
+}
+
+const formatDiscoveryHealthReasonList = (reasons = []) =>
+  reasons.map(formatRuntimeTokenLabel).filter(Boolean).join(', ')
+
+const formatDiscoveryReadinessSummary = (readiness = {}) => {
+  const blockers = Array.isArray(readiness.blockerReasons) ? readiness.blockerReasons : []
+  const warnings = Array.isArray(readiness.warningReasons) ? readiness.warningReasons : []
+
+  if (blockers.length > 0) return `Blocked by ${formatDiscoveryHealthReasonList(blockers)}.`
+  if (warnings.length > 0) return `Watch ${formatDiscoveryHealthReasonList(warnings)}.`
+  return 'No readiness blockers are projected.'
+}
+
+const formatDiscoverySignalSummary = (signal = {}) => {
+  const evidenceObjectCount = getSummaryCount(signal, 'evidenceObjectCount')
+  const acceptedEvidenceCount = getSummaryCount(signal, 'acceptedEvidenceCount')
+  const pendingReviewCount = getSummaryCount(signal, 'pendingReviewCount')
+  const sourceCount = getSummaryCount(signal, 'sourceCount')
+  return `${formatRuntimeTokenLabel(signal.signalStrength || 'UNKNOWN')} signal: ${
+    evidenceObjectCount
+  } evidence object${evidenceObjectCount === 1 ? '' : 's'}, ${
+    acceptedEvidenceCount
+  } accepted, ${pendingReviewCount} pending, ${sourceCount} source${sourceCount === 1 ? '' : 's'}.`
+}
+
+const getAcquisitionProfileGuidance = (profile) =>
+  DISCOVERY_ACQUISITION_PROFILE_GUIDANCE[String(profile || '').trim().toUpperCase()]
+  || DISCOVERY_ACQUISITION_PROFILE_GUIDANCE[DISCOVERY_ACQUISITION_PROFILES.STANDARD]
+
+const getDiscoveryAcquisitionEffectiveness = ({ discovery, evidenceDetail }) => {
+  const candidates = [
+    discovery?.acquisitionEffectiveness,
+    discovery?.acquisition?.effectiveness,
+    evidenceDetail?.acquisitionEffectiveness,
+    evidenceDetail?.discovery?.acquisitionEffectiveness,
+  ]
+  return candidates.find((candidate) =>
+    candidate && typeof candidate === 'object' && !Array.isArray(candidate)) || {}
+}
+
+const formatInputRecommendationList = (values = [], limit = 4) => {
+  const labels = Array.isArray(values)
+    ? values.map((value) => String(value || '').trim()).filter(Boolean)
+    : []
+  if (labels.length === 0) return 'No input recommendations projected.'
+  const visibleLabels = labels.slice(0, limit)
+  const overflowCount = labels.length - visibleLabels.length
+  return `${visibleLabels.join(', ')}${overflowCount > 0 ? `, +${overflowCount} more` : ''}`
 }
 
 const formatSourceRegistryTypeLabel = (value) => {
@@ -3291,6 +3347,56 @@ function DiscoverySection({
   const healthMissingAreas = Array.isArray(discoveryHealth.missingAreas)
     ? discoveryHealth.missingAreas.map(formatRuntimeTokenLabel).filter(Boolean)
     : []
+  const discoveryReadiness = discoveryHealth.readiness
+    && typeof discoveryHealth.readiness === 'object'
+    && !Array.isArray(discoveryHealth.readiness)
+    ? discoveryHealth.readiness
+    : null
+  const discoveryReadinessState = String(discoveryReadiness?.state || '').trim().toUpperCase()
+  const discoveryReadinessLabel = discoveryReadinessState
+    ? formatRuntimeTokenLabel(discoveryReadinessState)
+    : 'Not projected'
+  const discoveryReadinessSummary = discoveryReadiness
+    ? formatDiscoveryReadinessSummary(discoveryReadiness)
+    : 'Discovery readiness is not projected for this runtime yet.'
+  const discoveryReadinessCoverage = Number.isFinite(Number(discoveryReadiness?.coveragePercent))
+    ? `${Number(discoveryReadiness.coveragePercent)}% coverage`
+    : healthCoveragePercent !== null
+      ? `${healthCoveragePercent}% coverage`
+      : 'Coverage pending'
+  const discoveryReadinessContradictionCount = getSummaryCount(discoveryReadiness, 'contradictionCount')
+  const signalCandidateRows = Array.isArray(discoveryHealth.signalCandidates)
+    ? discoveryHealth.signalCandidates
+        .map((signal) => ({
+          id: signal?.signalId || `${signal?.domain || 'signal'}-${signal?.signalStrength || 'UNKNOWN'}`,
+          domain: formatRuntimeTokenLabel(signal?.domain || ''),
+          summary: formatDiscoverySignalSummary(signal),
+          signalStrength: signal?.signalStrength || 'UNKNOWN',
+        }))
+        .filter((signal) => signal.domain && signal.domain !== '--')
+        .slice(0, 5)
+    : []
+  const selectedProfileGuidance = getAcquisitionProfileGuidance(acquisitionProfile)
+  const acquisitionEffectiveness = getDiscoveryAcquisitionEffectiveness({ discovery, evidenceDetail })
+  const acquisitionEffectivenessMetrics = acquisitionEffectiveness.metrics
+    && typeof acquisitionEffectiveness.metrics === 'object'
+    && !Array.isArray(acquisitionEffectiveness.metrics)
+    ? acquisitionEffectiveness.metrics
+    : {}
+  const acquisitionEffectivenessMissingInputs = Array.isArray(acquisitionEffectiveness.missingRecommendedInputs)
+    ? acquisitionEffectiveness.missingRecommendedInputs.map(formatRuntimeTokenLabel).filter(Boolean)
+    : []
+  const acquisitionEffectivenessMissingDomains = Array.isArray(acquisitionEffectiveness.missingDomains)
+    ? acquisitionEffectiveness.missingDomains.map(formatRuntimeTokenLabel).filter(Boolean)
+    : []
+  const acquisitionEffectivenessCoverage = Number.isFinite(Number(acquisitionEffectivenessMetrics.coveragePercent))
+    ? Number(acquisitionEffectivenessMetrics.coveragePercent)
+    : healthCoveragePercent
+  const acquisitionEffectivenessQuality = String(acquisitionEffectiveness.qualityLabel || '').trim()
+  const acquisitionEffectivenessReadiness = String(acquisitionEffectivenessMetrics.readinessState || '').trim().toUpperCase()
+  const acquisitionEffectivenessProfileLabel = acquisitionEffectiveness.label || getDiscoveryAcquisitionLabel(
+    acquisitionEffectiveness.profile || persistedAcquisitionProfile,
+  )
   const intelligenceGraph = hasIntelligenceGraphSummary(discovery?.intelligenceGraph)
     ? discovery.intelligenceGraph
     : {}
@@ -3768,6 +3874,64 @@ function DiscoverySection({
       badgeVariant: healthMissingAreas.length > 0 ? 'warning' : 'success',
     },
   ]
+  const acquisitionQualityRows = [
+    {
+      id: 'acquisition-quality-profile',
+      icon: MdBolt,
+      title: `${acquisitionEffectivenessProfileLabel} effectiveness`,
+      meta: acquisitionEffectivenessQuality
+        ? `${acquisitionEffectivenessQuality} acquisition quality.`
+        : 'Acquisition quality is measured after evidence is built.',
+      badgeLabel: acquisitionEffectivenessQuality || 'Pending',
+      badgeVariant: acquisitionEffectivenessQuality === 'Strong' || acquisitionEffectivenessQuality === 'Good'
+        ? 'success'
+        : acquisitionEffectivenessQuality === 'Developing'
+          ? 'info'
+          : acquisitionEffectivenessQuality === 'Limited'
+            ? 'warning'
+            : 'neutral',
+    },
+    {
+      id: 'acquisition-quality-metrics',
+      icon: MdFactCheck,
+      title: acquisitionEffectivenessCoverage !== null && acquisitionEffectivenessCoverage !== undefined
+        ? `Coverage ${acquisitionEffectivenessCoverage}%`
+        : 'Coverage not projected',
+      meta: `${getSummaryCount(acquisitionEffectivenessMetrics, 'sourceCount')} sources / ${
+        getSummaryCount(acquisitionEffectivenessMetrics, 'evidenceObjectCount')
+      } evidence objects / ${formatRuntimeTokenLabel(acquisitionEffectivenessMetrics.confidence || 'UNKNOWN')} confidence.`,
+      badgeLabel: acquisitionEffectivenessReadiness
+        ? formatRuntimeTokenLabel(acquisitionEffectivenessReadiness)
+        : '',
+      badgeVariant: getTokenStatusVariant(acquisitionEffectivenessReadiness),
+    },
+    {
+      id: 'acquisition-quality-missing-inputs',
+      icon: acquisitionEffectivenessMissingInputs.length > 0 ? MdOutlineWarningAmber : MdCheckCircle,
+      iconVariant: acquisitionEffectivenessMissingInputs.length > 0 ? 'warning' : 'success',
+      title: acquisitionEffectivenessMissingInputs.length > 0
+        ? 'Recommended next input'
+        : 'Recommended inputs covered',
+      meta: acquisitionEffectivenessMissingInputs.length > 0
+        ? formatInputRecommendationList(acquisitionEffectivenessMissingInputs, 5)
+        : 'No recommended input gap is projected for this evidence pack.',
+      badgeLabel: acquisitionEffectivenessMissingInputs.length > 0
+        ? `${acquisitionEffectivenessMissingInputs.length} missing`
+        : 'Clear',
+      badgeVariant: acquisitionEffectivenessMissingInputs.length > 0 ? 'warning' : 'success',
+    },
+    ...(acquisitionEffectivenessMissingDomains.length > 0
+      ? [{
+        id: 'acquisition-quality-missing-domains',
+        icon: MdOutlineWarningAmber,
+        iconVariant: 'warning',
+        title: 'Missing domains',
+        meta: formatInputRecommendationList(acquisitionEffectivenessMissingDomains, 5),
+        badgeLabel: `${acquisitionEffectivenessMissingDomains.length} missing`,
+        badgeVariant: 'warning',
+      }]
+      : []),
+  ]
   const graphHealthRows = [
     {
       id: 'graph-health-state',
@@ -4053,14 +4217,16 @@ function DiscoverySection({
                                 ariaValueText={area.progressText}
                                 className="runtime-workspace__coverage-heatmap-progress"
                                 size="sm"
+                                valueTone
                                 value={area.progressValue}
-                                variant={area.stateMeta.progressVariant}
+                                variant="success"
                               />
-                              <span
-                                className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
-                                aria-label={`${area.areaLabel} coverage status: ${area.stateMeta.description}`}
-                                title={area.stateMeta.description}
-                              >
+                            <span
+                              className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
+                              style={{ '--runtime-workspace-coverage-icon-color': `color-mix(in srgb, var(--color-success), white ${getProgressBarValueTint(area.progressValue)})` }}
+                              aria-label={`${area.areaLabel} coverage status: ${area.stateMeta.description}`}
+                              title={area.stateMeta.description}
+                            >
                                 <CoverageStateIcon aria-hidden="true" focusable="false" />
                               </span>
                             </li>
@@ -4154,6 +4320,19 @@ function DiscoverySection({
                           options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
                           disabled={disabled || isInspectionMode}
                         />
+                        <section className="runtime-workspace__profile-guidance" aria-label="Acquisition profile guidance">
+                          <p>{selectedProfileGuidance.summary}</p>
+                          <dl className="runtime-workspace__compact-definition-list">
+                            <div>
+                              <dt>Minimum recommended</dt>
+                              <dd>{formatInputRecommendationList(selectedProfileGuidance.minimumRecommendedInputs)}</dd>
+                            </div>
+                            <div>
+                              <dt>Additional useful</dt>
+                              <dd>{formatInputRecommendationList(selectedProfileGuidance.additionalUsefulInputs)}</dd>
+                            </div>
+                          </dl>
+                        </section>
                       </div>
                       <div
                         className="runtime-workspace__input-group runtime-workspace__website-sources"
@@ -4498,6 +4677,65 @@ function DiscoverySection({
                   <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
                   <IntelligenceDetailRows rows={coverageHealthRows} />
                 </section>
+                <section className="runtime-workspace__section-panel" aria-label="Acquisition quality">
+                  <h3>Acquisition Quality</h3>
+                  <IntelligenceDetailRows rows={acquisitionQualityRows} />
+                  {acquisitionEffectiveness.recommendedNextInput ? (
+                    <p className="runtime-workspace__section-note">
+                      Recommended next input: {acquisitionEffectiveness.recommendedNextInput}
+                    </p>
+                  ) : null}
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label="Discovery readiness">
+                  <div className="runtime-workspace__evidence-acceptance-summary-header">
+                    <div>
+                      <h3>Discovery Readiness</h3>
+                      <p className="runtime-workspace__evidence-acceptance-summary-lede">
+                        {discoveryReadinessSummary}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={getTokenStatusVariant(discoveryReadinessState)}
+                      size="sm"
+                      pill
+                      outline
+                      icon={discoveryReadinessState === 'READY'
+                        ? <MdCheckCircle aria-hidden="true" />
+                        : <MdOutlineWarningAmber aria-hidden="true" />}
+                    >
+                      {discoveryReadinessLabel}
+                    </Badge>
+                  </div>
+                  <ul className="runtime-workspace__projection-list runtime-workspace__projection-list--compact">
+                    <li>{discoveryReadinessCoverage}</li>
+                    <li>
+                      {getSummaryCount(discoveryReadiness, 'acceptedEvidenceCount')} accepted / {getSummaryCount(discoveryReadiness, 'pendingReviewCount')} pending evidence objects
+                    </li>
+                    <li>
+                      {discoveryReadinessContradictionCount === 0
+                        ? 'No contradiction candidates projected'
+                        : `${discoveryReadinessContradictionCount} contradiction candidate${discoveryReadinessContradictionCount === 1 ? '' : 's'} projected`}
+                    </li>
+                  </ul>
+                </section>
+                <section className="runtime-workspace__section-panel" aria-label="Signal candidates">
+                  <h3>Signal Candidates</h3>
+                  {signalCandidateRows.length > 0 ? (
+                    <ul className="runtime-workspace__plain-list">
+                      {signalCandidateRows.map((signal) => (
+                        <li key={signal.id}>
+                          <strong>{signal.domain}</strong>
+                          <span>{signal.summary}</span>
+                          <Badge variant={getTokenStatusVariant(signal.signalStrength)} size="sm" pill outline>
+                            {formatRuntimeTokenLabel(signal.signalStrength)}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No signal candidates are projected for this runtime yet.</p>
+                  )}
+                </section>
                 <section className="runtime-workspace__section-panel" aria-label="Intelligence graph health">
                   <h3>Intelligence Graph Health</h3>
                   <IntelligenceDetailRows rows={graphHealthRows} />
@@ -4516,11 +4754,13 @@ function DiscoverySection({
                               ariaValueText={area.progressText}
                               className="runtime-workspace__coverage-heatmap-progress"
                               size="sm"
+                              valueTone
                               value={area.progressValue}
-                              variant={area.stateMeta.progressVariant}
+                              variant="success"
                             />
                             <span
                               className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
+                              style={{ '--runtime-workspace-coverage-icon-color': `color-mix(in srgb, var(--color-success), white ${getProgressBarValueTint(area.progressValue)})` }}
                               aria-label={`${area.areaLabel} graph coverage status: ${area.stateMeta.description}`}
                               title={area.stateMeta.description}
                             >

@@ -5,7 +5,8 @@
  */
 
 .progress-bar {
-  --progress-bar-fill: var(--color-action-primary);
+  --progress-bar-fill-base: var(--color-action-primary);
+  --progress-bar-fill: var(--progress-bar-fill-base);
   --progress-bar-track: var(--color-border-subtle);
   --progress-bar-height: var(--spacing-sm);
 
@@ -75,21 +76,25 @@
 }
 
 .progress-bar--metric {
-  --progress-bar-fill: var(--color-metric-accent);
+  --progress-bar-fill-base: var(--color-metric-accent);
 }
 
 .progress-bar--success {
-  --progress-bar-fill: var(--color-success);
+  --progress-bar-fill-base: var(--color-success);
 }
 
 .progress-bar--warning {
-  --progress-bar-fill: var(--color-warning);
+  --progress-bar-fill-base: var(--color-warning);
 }
 
 .progress-bar--danger {
-  --progress-bar-fill: var(--color-error);
+  --progress-bar-fill-base: var(--color-error);
 }
 
 .progress-bar--info {
-  --progress-bar-fill: var(--color-info);
+  --progress-bar-fill-base: var(--color-info);
+}
+
+.progress-bar--value-tone {
+  --progress-bar-fill: color-mix(in srgb, var(--progress-bar-fill-base), white var(--progress-bar-value-tint, 0%));
 }

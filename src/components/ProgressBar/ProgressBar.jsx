@@ -8,6 +8,7 @@
  */
 
 import './ProgressBar.css'
+import { getProgressBarValueTint } from './progressBarValueTone.js'
 
 const VARIANTS = new Set(['primary', 'metric', 'success', 'warning', 'danger', 'info'])
 const SIZES = new Set(['sm', 'md', 'lg'])
@@ -38,8 +39,10 @@ export function ProgressBar({
   label = '',
   max = 100,
   size = 'md',
+  style,
   value = 0,
   valueLabel = '',
+  valueTone = false,
   variant = 'primary',
   ...props
 }) {
@@ -65,17 +68,23 @@ export function ProgressBar({
     progressAttributes['aria-valuetext'] = resolvedAriaValueText
   }
 
+  const shouldUseValueTone = valueTone && resolvedValue !== undefined
+  const valueToneStyle = shouldUseValueTone
+    ? { '--progress-bar-value-tint': getProgressBarValueTint(resolvedValue, resolvedMax) }
+    : {}
+
   const classNames = [
     'progress-bar',
     `progress-bar--${resolvedVariant}`,
     `progress-bar--${resolvedSize}`,
+    shouldUseValueTone ? 'progress-bar--value-tone' : '',
     className,
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <div className={classNames} {...props}>
+    <div className={classNames} style={{ ...valueToneStyle, ...style }} {...props}>
       {(resolvedLabel || resolvedValueLabel) && (
         <div className="progress-bar__header">
           {resolvedLabel && <span className="progress-bar__label">{resolvedLabel}</span>}

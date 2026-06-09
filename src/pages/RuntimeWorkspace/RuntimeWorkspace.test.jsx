@@ -1864,6 +1864,49 @@ describe('RuntimeWorkspace', () => {
               coveragePercent: 40,
               confidence: 'STANDARD',
               missingAreas: ['PROOF', 'ECONOMICS'],
+              readiness: {
+                state: 'NOT_READY',
+                coveragePercent: 40,
+                acceptedEvidenceCount: 0,
+                pendingReviewCount: 5,
+                contradictionCount: 0,
+                blockerReasons: ['NO_ACCEPTED_EVIDENCE'],
+                warningReasons: ['EVIDENCE_REVIEW_PENDING'],
+              },
+              signalCandidates: [
+                {
+                  signalId: 'signal-company',
+                  domain: 'Company',
+                  signalStrength: 'MODERATE',
+                  evidenceObjectCount: 2,
+                  acceptedEvidenceCount: 0,
+                  pendingReviewCount: 2,
+                  sourceCount: 2,
+                },
+              ],
+            },
+            acquisitionEffectiveness: {
+              profile: 'STANDARD',
+              label: 'Standard Acquisition',
+              summary: 'Good for quick discovery.',
+              qualityLabel: 'Developing',
+              minimumRecommendedInputs: [
+                'Website URL',
+                'Company name',
+                'Product / offer',
+                'Notes or document',
+              ],
+              additionalUsefulInputs: ['Market / region', 'Uploaded document'],
+              missingRecommendedInputs: ['Customer proof'],
+              recommendedNextInput: 'Add Customer proof.',
+              metrics: {
+                sourceCount: 5,
+                evidenceObjectCount: 5,
+                coveragePercent: 40,
+                confidence: 'STANDARD',
+                readinessState: 'NOT_READY',
+              },
+              missingDomains: ['Proof', 'Economics'],
             },
             scopedViews: {},
           },
@@ -1888,6 +1931,13 @@ describe('RuntimeWorkspace', () => {
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
     expect(within(sourceRegistry).getByText(/5 registered sources: Website, Intelligence Hub Notes/i)).toBeInTheDocument()
 
+    selectIntelligenceHubTab('Context')
+    const profileGuidance = screen.getByRole('region', { name: /acquisition profile guidance/i })
+    expect(within(profileGuidance).getByText(/Good for quick discovery/i)).toBeInTheDocument()
+    expect(within(profileGuidance).getByText(/Website URL, Company name, Product \/ offer, Notes or document/i))
+      .toBeInTheDocument()
+    expect(within(profileGuidance).getByText(/Market \/ region, Uploaded document/i)).toBeInTheDocument()
+
     selectIntelligenceHubTab('Evidence')
     const evidenceReview = screen.getByRole('region', { name: /evidence review/i })
     expect(within(evidenceReview).getByText(/5 evidence objects: 0 accepted, 5 pending review, 0 rejected/i))
@@ -1899,6 +1949,22 @@ describe('RuntimeWorkspace', () => {
     expect(within(discoveryHealth).getByText(/Standard confidence/i)).toBeInTheDocument()
     expect(within(discoveryHealth).getByText(/Missing areas/i)).toBeInTheDocument()
     expect(within(discoveryHealth).getByText(/Proof, Economics/i)).toBeInTheDocument()
+    const acquisitionQuality = screen.getByRole('region', { name: /acquisition quality/i })
+    expect(within(acquisitionQuality).getByText(/Standard Acquisition effectiveness/i)).toBeInTheDocument()
+    expect(within(acquisitionQuality).getByText(/Developing acquisition quality/i)).toBeInTheDocument()
+    expect(within(acquisitionQuality).getByText(/5 sources \/ 5 evidence objects \/ Standard confidence/i))
+      .toBeInTheDocument()
+    expect(within(acquisitionQuality).getByText(/Recommended next input: Add Customer proof/i))
+      .toBeInTheDocument()
+    const discoveryReadiness = screen.getByRole('region', { name: /discovery readiness/i })
+    expect(within(discoveryReadiness).getByText(/Not Ready/i)).toBeInTheDocument()
+    expect(within(discoveryReadiness).getByText(/Blocked by No Accepted Evidence/i)).toBeInTheDocument()
+    expect(within(discoveryReadiness).getByText(/0 accepted \/ 5 pending evidence objects/i)).toBeInTheDocument()
+    expect(within(discoveryReadiness).getByText(/No contradiction candidates projected/i)).toBeInTheDocument()
+    const signalCandidates = screen.getByRole('region', { name: /signal candidates/i })
+    expect(within(signalCandidates).getByText('Company')).toBeInTheDocument()
+    expect(within(signalCandidates).getByText(/Moderate signal: 2 evidence objects, 0 accepted, 2 pending, 2 sources/i))
+      .toBeInTheDocument()
   })
 
   it('groups website sources and uploaded documents in the source registry', () => {
@@ -2093,6 +2159,25 @@ describe('RuntimeWorkspace', () => {
     })
     expect(companyCoverageProgress).toHaveAttribute('value', '67')
     expect(companyCoverageProgress).toHaveAttribute('aria-valuetext', '2 accepted of 3 evidence objects')
+    expect(companyCoverageProgress.closest('.progress-bar'))
+      .toHaveClass('progress-bar--success', 'progress-bar--value-tone')
+    expect(companyCoverageProgress.closest('.progress-bar'))
+      .toHaveStyle('--progress-bar-value-tint: 23%')
+    expect(within(coverageHeatmap).getByLabelText(/Company coverage status: Strong accepted evidence coverage/i))
+      .toHaveStyle('--runtime-workspace-coverage-icon-color: color-mix(in srgb, var(--color-success), white 23%)')
+
+    const productsCoverageProgress = within(coverageHeatmap).getByRole('progressbar', {
+      name: /Products: Adequate, 1 accepted of 2 evidence objects/i,
+    })
+    expect(productsCoverageProgress).toHaveAttribute('value', '50')
+    expect(productsCoverageProgress.closest('.progress-bar'))
+      .toHaveClass('progress-bar--success', 'progress-bar--value-tone')
+    expect(productsCoverageProgress.closest('.progress-bar'))
+      .toHaveStyle('--progress-bar-value-tint: 35%')
+    expect(within(coverageHeatmap).getByLabelText(/Products coverage status: Adequate accepted evidence coverage/i))
+      .toHaveStyle('--runtime-workspace-coverage-icon-color: color-mix(in srgb, var(--color-success), white 35%)')
+    expect(productsCoverageProgress.closest('.progress-bar').style.getPropertyValue('--progress-bar-value-tint'))
+      .not.toEqual(companyCoverageProgress.closest('.progress-bar').style.getPropertyValue('--progress-bar-value-tint'))
 
     const evidenceAcceptanceSummary = screen.getByRole('region', { name: /evidence acceptance summary/i })
     expect(within(evidenceAcceptanceSummary).getByText('Pending')).toBeInTheDocument()

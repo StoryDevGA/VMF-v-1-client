@@ -991,19 +991,19 @@
 }
 
 .runtime-workspace__coverage-heatmap-state--strong {
-  color: var(--color-success);
+  color: var(--runtime-workspace-coverage-icon-color, var(--color-success));
 }
 
 .runtime-workspace__coverage-heatmap-state--adequate {
-  color: var(--color-warning);
+  color: var(--runtime-workspace-coverage-icon-color, var(--color-warning));
 }
 
 .runtime-workspace__coverage-heatmap-state--weak {
-  color: var(--color-error);
+  color: var(--runtime-workspace-coverage-icon-color, var(--color-error));
 }
 
 .runtime-workspace__coverage-heatmap-state--missing {
-  color: var(--color-error);
+  color: var(--runtime-workspace-coverage-icon-color, var(--color-error));
 }
 
 .runtime-workspace__intelligence-truth-list {
@@ -1157,6 +1157,53 @@
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__profile-guidance,
+.runtime-workspace__compact-definition-list {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.runtime-workspace__profile-guidance {
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 72%, transparent);
+  border-radius: var(--border-radius-sm);
+  background-color: color-mix(in srgb, var(--color-surface-muted) 48%, transparent);
+}
+
+.runtime-workspace__profile-guidance p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.runtime-workspace__compact-definition-list {
+  margin: 0;
+}
+
+.runtime-workspace__compact-definition-list div {
+  display: grid;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.runtime-workspace__compact-definition-list dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__compact-definition-list dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
 }
 
 .runtime-workspace__input-field-grid {
