@@ -2588,7 +2588,7 @@ describe('RuntimeWorkspace', () => {
 
     renderRuntimeWorkspace()
 
-    const lifecycleReasons = screen.getAllByText(/runtime lifecycle truth is approved or published/i)
+    const lifecycleReasons = screen.getAllByText(/runtime lifecycle truth is approved, published, or locked/i)
     const refreshButton = screen.getByRole('button', { name: /refresh evidence pack/i })
     const acceptEvidenceButton = screen.getByRole('button', { name: /accept evidence/i })
     const clearDiscoveryButton = screen.getByRole('button', { name: /clear intelligence hub/i })
@@ -4146,6 +4146,8 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section accepted as governed truth/i)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Truth' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: /^save & next$/i })).toBeEnabled()
+    expect(mutateRuntimeState).not.toHaveBeenCalled()
   })
 
   it('keeps section acceptance disabled without generated content', async () => {
@@ -4153,7 +4155,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^save & next$/i })).toBeEnabled()
   })
 
   it('keeps section acceptance disabled when generated intelligence is not truth eligible', async () => {
@@ -4650,7 +4652,13 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams need a shared governed narrative.')
-    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    const saveAndNextButton = screen.getByRole('button', { name: /^save & next$/i })
+    expect(saveAndNextButton).toBeEnabled()
+    expect(saveAndNextButton).toHaveAttribute(
+      'title',
+      'Save unsaved additional context and continue to the next guided section.',
+    )
+    await user.click(saveAndNextButton)
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -4714,7 +4722,13 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    const saveAndNextButton = screen.getByRole('button', { name: /^save & next$/i })
+    expect(saveAndNextButton).toBeEnabled()
+    expect(saveAndNextButton).toHaveAttribute(
+      'title',
+      'Continue to the next guided section. Generated or accepted truth is already persisted.',
+    )
+    await user.click(saveAndNextButton)
 
     expect(mutateRuntimeState).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
@@ -4748,7 +4762,7 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Final section update.')
-    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -5483,6 +5497,14 @@ describe('RuntimeWorkspace', () => {
             state: 'LOCKED',
             ready: true,
             locked: true,
+            sectionTruth: {
+              state: 'SECTION_TRUTH_BLOCKED',
+              publishEligible: false,
+              lockEligible: false,
+              requiredSectionCount: 1,
+              readySectionCount: 0,
+              blockingSectionCount: 1,
+            },
           },
           publish: {
             state: 'PUBLISHED',
@@ -5536,6 +5558,21 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
+
+    const guidedSections = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(guidedSections).getByText(/locked runtime truth is frozen for inspection/i)).toBeInTheDocument()
+    expect(within(guidedSections).queryByRole('button', { name: /build evidence pack/i })).not.toBeInTheDocument()
+    expect(within(guidedSections).queryByRole('button', { name: /refresh evidence pack/i })).not.toBeInTheDocument()
+    expect(within(guidedSections).queryByRole('button', { name: /accept evidence/i })).not.toBeInTheDocument()
+    expect(within(guidedSections).queryByRole('button', { name: /clear intelligence hub/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /customer problem locked/i })).toBeInTheDocument()
+    expect(screen.getByText('Section Truth Locked')).toBeInTheDocument()
+
+    selectIntelligenceHubTab('Context')
+    expect(within(guidedSections).getByLabelText('Company Name')).toBeDisabled()
+    expect(within(guidedSections).queryByRole('button', { name: /add url/i })).not.toBeInTheDocument()
+    expect(within(guidedSections).queryByText('Select Files')).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     const summary = screen.getByRole('list', { name: /execution workspace summary/i })
@@ -5546,7 +5583,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(certifiedTruth).getByText('runtime-trut...34567890')).toBeInTheDocument()
     expect(within(certifiedTruth).getByText('runtime-trut...87654321')).toBeInTheDocument()
     expect(within(certifiedTruth).getByText('runtime-repl...90abcdef')).toBeInTheDocument()
-    expect(screen.getByText('Read only preview')).toBeInTheDocument()
+    expect(screen.getAllByText('Locked Inspection Mode').length).toBeGreaterThanOrEqual(1)
     selectRuntimeSectionTab('Context')
     expect(screen.getByLabelText('Customer Problem', { exact: true })).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()

@@ -346,6 +346,7 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
   REGENERATION_REQUIRED: 'warning',
   SATISFIED: 'success',
   SECTION_TRUTH_BLOCKED: 'warning',
+  SECTION_TRUTH_LOCKED: 'success',
   SECTION_TRUTH_NOT_CONFIGURED: 'warning',
   SECTION_TRUTH_READY: 'success',
   UNPUBLISHED: 'neutral',
@@ -374,7 +375,9 @@ const DISCOVERY_ACTION_KEYS = Object.freeze({
 
 const DISCOVERY_ACTION_KEY_SET = new Set(Object.values(DISCOVERY_ACTION_KEYS))
 const IMMUTABLE_RUNTIME_LIFECYCLE_STAGES = new Set(['APPROVED', 'PUBLISHED', 'LOCKED'])
-const IMMUTABLE_RUNTIME_DISCOVERY_REASON = 'Runtime lifecycle truth is approved or published and cannot be directly mutated.'
+const IMMUTABLE_RUNTIME_DISCOVERY_REASON = 'Runtime lifecycle truth is approved, published, or locked and cannot be directly mutated.'
+const LOCKED_RUNTIME_INSPECTION_REASON =
+  'Locked runtimes are read-only. Create a revision before changing discovery or section truth.'
 
 const DISCOVERY_NAV_KEY = 'discovery'
 const ACTIVITY_PREVIEW_LIMIT = 3
@@ -1596,8 +1599,15 @@ const formatProjectionSummary = (value) => {
   return String(value)
 }
 
-const getSectionNavigationStatus = (section) => {
+const getSectionDisplayStatus = (section, { lockedInspection = false } = {}) => {
   const stateStatus = String(section?.state?.status ?? '').trim()
+  if (lockedInspection) return 'LOCKED'
+  if (stateStatus) return stateStatus
+  return ''
+}
+
+const getSectionNavigationStatus = (section, options = {}) => {
+  const stateStatus = getSectionDisplayStatus(section, options)
   if (stateStatus) return formatRuntimeTokenLabel(stateStatus)
   const hasInput = hasRuntimeValue(section?.value)
   const hasGenerated = hasRuntimeValue(section?.generated?.content ?? section?.generated)
@@ -1856,6 +1866,7 @@ function RuntimeSection({
   feedback = null,
   generationActions = {},
   id,
+  lockedInspection = false,
   onExecuteSectionAction,
   onAcceptSection,
   onClearSectionEvidence,
@@ -1989,7 +2000,14 @@ function RuntimeSection({
   const showCompareAction = canCompare
   const showAcceptAction = Boolean(onAcceptSection)
   const showNextAction = canAdvance
+  const nextActionLabel = editable ? 'Save & Next' : 'Next'
+  const nextActionTitle = canSave
+    ? 'Save unsaved additional context and continue to the next guided section.'
+    : generatedContent || acceptedContent
+      ? 'Continue to the next guided section. Generated or accepted truth is already persisted.'
+      : 'Continue to the next guided section without marking this section complete.'
   const sectionDisplayLabel = getSectionDisplayLabel(section, `Guided item ${section?.key ?? ''}`.trim())
+  const sectionDisplayStatus = getSectionDisplayStatus(section, { lockedInspection })
   const suggestedRows = buildProjectionDetailRows(suggestedBullets)
   const supportingEvidenceRows = buildProjectionDetailRows(supportingEvidenceItems)
   const boundaryRows = buildProjectionDetailRows(boundaryItems)
@@ -2728,8 +2746,8 @@ function RuntimeSection({
 
   const stateAndReviewContent = (
     <div className="runtime-workspace__section-state-row" aria-label="State and review">
-      <Status variant={getTokenStatusVariant(section?.state?.status)} size="sm" showIcon>
-        {formatRuntimeTokenLabel(section?.state?.status || 'DRAFT')}
+      <Status variant={getTokenStatusVariant(sectionDisplayStatus || 'DRAFT')} size="sm" showIcon>
+        {formatRuntimeTokenLabel(sectionDisplayStatus || 'DRAFT')}
         {Number(section?.state?.revisionCount || 0) > 0
           ? `, ${section.state.revisionCount} revision${section.state.revisionCount === 1 ? '' : 's'}`
           : ''}
@@ -2836,7 +2854,7 @@ function RuntimeSection({
                   <Badge variant="warning" size="sm" pill outline>Required</Badge>
                 ) : null}
                 <Badge variant={editable ? 'success' : 'neutral'} size="sm" pill outline>
-                  {editable ? 'Editable' : 'Read only preview'}
+                  {editable ? 'Editable' : lockedInspection ? 'Locked Inspection Mode' : 'Read only preview'}
                 </Badge>
               </div>
             </div>
@@ -2919,9 +2937,10 @@ function RuntimeSection({
                   variant="primary"
                   size="sm"
                   leftIcon={<MdArrowForward aria-hidden="true" />}
+                  title={nextActionTitle}
                   onClick={handleNext}
                 >
-                  Next
+                  {nextActionLabel}
                 </Button>
               ) : null}
             </ButtonGroup>
@@ -3100,13 +3119,14 @@ function RuntimeProgressSummary({
 function RuntimeSectionNavigation({
   activeKey = DISCOVERY_NAV_KEY,
   discoveryState = 'Evidence Not Ready',
+  lockedInspection = false,
   onSelectDiscovery,
   onSelectSection,
   sections = EMPTY_ARRAY,
 }) {
   const navItems = sections.map((section, index) => {
     const label = getSectionDisplayLabel(section, `Guided item ${index + 1}`)
-    const status = getSectionNavigationStatus(section)
+    const status = getSectionNavigationStatus(section, { lockedInspection })
     const sectionKey = section?.sectionKey || section?.key || getSectionDomId(section, index)
     const displayNumber = index + 1
     return {
@@ -3172,6 +3192,7 @@ function DiscoverySection({
   evidenceDetailLoading = false,
   feedback = null,
   discoveryActions = {},
+  inspectionMode = false,
   mutationDisabledReason = '',
   executingActionKey = '',
   onAcceptDiscovery,
@@ -3222,6 +3243,7 @@ function DiscoverySection({
   const sourceRegistry = getDiscoverySourceRegistry({ discovery, evidenceDetail })
   const sourceRegistryGroups = buildSourceRegistryGroups(sourceRegistry)
   const evidenceObjects = getDiscoveryEvidenceObjects({ discovery, evidenceDetail })
+  const isInspectionMode = Boolean(inspectionMode)
   const rawSourceRegistrySummary = hasSourceRegistrySummary(discovery?.sourceRegistrySummary)
     ? discovery.sourceRegistrySummary
     : hasSourceRegistrySummary(evidenceDetail?.sourceRegistrySummary)
@@ -3345,6 +3367,7 @@ function DiscoverySection({
     && discovery?.evidenceReady === true
     && !isAccepted
     && !needsRefresh
+    && !isInspectionMode
     && !disabled
     && !mutationDisabledReason
     && (!acceptAction || acceptAction.enabled)
@@ -3360,6 +3383,7 @@ function DiscoverySection({
   const showDiscoveryDocumentUploadButton = draftDocumentSources.length > 0
     && !documentUploadError
     && !documentUploadPreparing
+    && !isInspectionMode
     && !disabled
     && !buildDisabledReason
   const evidenceReviewInFlight = Boolean(reviewingEvidenceObjectId)
@@ -3374,6 +3398,7 @@ function DiscoverySection({
     })
   const hasDiscoveryStateToReset = hasPersistedDiscoveryStateToReset || hasLocalDiscoveryDraftToClear
   const canResetDiscovery = hasDiscoveryStateToReset
+    && !isInspectionMode
     && !disabled
     && !mutationDisabledReason
     && !saving
@@ -3479,6 +3504,7 @@ function DiscoverySection({
 
   const handleRefreshEvidence = async (event) => {
     event.preventDefault()
+    if (isInspectionMode) return false
     if (documentUploadPreparingRef.current || documentUploadPreparing) {
       setDocumentUploadError('Wait for selected documents to finish preparing before refreshing evidence.')
       return false
@@ -3500,6 +3526,7 @@ function DiscoverySection({
   }
 
   const handleAcceptDiscovery = async () => {
+    if (isInspectionMode) return
     await onAcceptDiscovery?.()
   }
 
@@ -3512,6 +3539,7 @@ function DiscoverySection({
   }
 
   const handleClearDiscoveryClick = () => {
+    if (isInspectionMode) return
     if (hasPersistedDiscoveryStateToReset) {
       setShowResetWarning(true)
       return
@@ -3521,6 +3549,7 @@ function DiscoverySection({
   }
 
   const handleResetDiscovery = async () => {
+    if (isInspectionMode) return
     const reset = await onResetDiscovery?.()
     if (reset) {
       clearLocalDiscoveryDraft()
@@ -3528,6 +3557,7 @@ function DiscoverySection({
   }
 
   const handleReviewEvidenceObject = (evidenceObject, reviewStatus) => async () => {
+    if (isInspectionMode) return
     await onReviewEvidenceObject?.({
       evidenceObjectId: evidenceObject.evidenceObjectId,
       reviewStatus,
@@ -3890,9 +3920,17 @@ function DiscoverySection({
             </div>
             <div className="runtime-workspace__section-badges">
               <Badge variant="info" size="sm" pill outline>Section 0</Badge>
+              {isInspectionMode ? (
+                <Badge variant="success" size="sm" pill outline>Locked Inspection Mode</Badge>
+              ) : null}
               <Badge variant="neutral" size="sm" pill outline>{discoveryState}</Badge>
             </div>
           </div>
+          {isInspectionMode ? (
+            <Status variant="success" size="sm" showIcon>
+              Locked runtime truth is frozen for inspection. Create a revision before changing discovery evidence or section truth.
+            </Status>
+          ) : null}
           <TabView
             activeTab={activeIntelligenceHubTab}
             onTabChange={setActiveIntelligenceHubTab}
@@ -4114,7 +4152,7 @@ function DiscoverySection({
                           value={acquisitionProfile}
                           onChange={handleAcquisitionProfileChange}
                           options={DISCOVERY_ACQUISITION_PROFILE_OPTIONS}
-                          disabled={disabled}
+                          disabled={disabled || isInspectionMode}
                         />
                       </div>
                       <div
@@ -4124,17 +4162,19 @@ function DiscoverySection({
                       >
                         <div className="runtime-workspace__input-group-heading runtime-workspace__website-sources-heading">
                           <h4 id="runtime-discovery-website-sources-label">Website Sources</h4>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="runtime-workspace__website-source-control"
-                            leftIcon={<MdAdd aria-hidden="true" />}
-                            disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
-                            onClick={handleAddWebsiteSource}
-                          >
-                            Add URL
-                          </Button>
+                          {!isInspectionMode ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="runtime-workspace__website-source-control"
+                              leftIcon={<MdAdd aria-hidden="true" />}
+                              disabled={disabled || (draftInputs.websiteSources || []).length >= DISCOVERY_WEBSITE_SOURCE_MAX_COUNT}
+                              onClick={handleAddWebsiteSource}
+                            >
+                              Add URL
+                            </Button>
+                          ) : null}
                         </div>
                         <div className="runtime-workspace__website-source-list">
                           {(draftInputs.websiteSources || ['']).map((websiteSource, index) => (
@@ -4144,21 +4184,23 @@ function DiscoverySection({
                                 label={`Website Source ${index + 1}`}
                                 value={websiteSource}
                                 onChange={handleWebsiteSourceChange(index)}
-                                disabled={disabled}
+                                disabled={disabled || isInspectionMode}
                                 helperText={index === 0 ? 'Enter the full URL including https://.' : ''}
                               />
-                              <Button
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                className="runtime-workspace__website-source-control"
-                                leftIcon={<MdDelete aria-hidden="true" />}
-                                disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
-                                aria-label={`Remove website source ${index + 1}`}
-                                onClick={handleRemoveWebsiteSource(index)}
-                              >
-                                Remove
-                              </Button>
+                              {!isInspectionMode ? (
+                                <Button
+                                  type="button"
+                                  variant="danger"
+                                  size="sm"
+                                  className="runtime-workspace__website-source-control"
+                                  leftIcon={<MdDelete aria-hidden="true" />}
+                                  disabled={disabled || (draftInputs.websiteSources || []).length <= 1}
+                                  aria-label={`Remove website source ${index + 1}`}
+                                  onClick={handleRemoveWebsiteSource(index)}
+                                >
+                                  Remove
+                                </Button>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -4179,21 +4221,21 @@ function DiscoverySection({
                           label="Company Name"
                           value={draftInputs.companyName}
                           onChange={handleInputChange('companyName')}
-                          disabled={disabled}
+                          disabled={disabled || isInspectionMode}
                         />
                         <Input
                           id="runtime-discovery-market-region"
                           label="Market / Region"
                           value={draftInputs.marketRegion}
                           onChange={handleInputChange('marketRegion')}
-                          disabled={disabled}
+                          disabled={disabled || isInspectionMode}
                         />
                         <Input
                           id="runtime-discovery-target-offer"
                           label="Target Product or Offer"
                           value={draftInputs.targetOffer}
                           onChange={handleInputChange('targetOffer')}
-                          disabled={disabled}
+                          disabled={disabled || isInspectionMode}
                           className="runtime-workspace__input-field--wide"
                         />
                         <Textarea
@@ -4201,7 +4243,7 @@ function DiscoverySection({
                           label="Optional Notes"
                           value={draftInputs.notes}
                           onChange={handleInputChange('notes')}
-                          disabled={disabled}
+                          disabled={disabled || isInspectionMode}
                           rows={4}
                           className="runtime-workspace__input-field--wide"
                         />
@@ -4230,57 +4272,65 @@ function DiscoverySection({
                             </span>
                             <DocumentStorageTooltip id="runtime-discovery-documents-storage-note" />
                           </div>
-                          <input
-                            ref={discoveryDocumentInputRef}
-                            id="runtime-discovery-documents"
-                            type="file"
-                            className="runtime-workspace__document-upload-input sr-only"
-                            accept={DISCOVERY_DOCUMENT_ACCEPT}
-                            multiple
-                            onChange={handleDocumentUploadChange}
-                            disabled={disabled || saving || draftDocumentSources.length > 0 || documentUploadPreparing}
-                            aria-labelledby="runtime-discovery-documents-label"
-                            aria-describedby="runtime-discovery-documents-helper"
-                          />
-                          {draftDocumentSources.length > 0 ? (
-                            <Button
-                              type="button"
-                              variant="warning"
-                              size="sm"
-                              className="runtime-workspace__document-upload-cancel"
-                              disabled={saving || isBuildExecuting}
-                              leftIcon={<MdClose aria-hidden="true" />}
-                              onClick={handleClearDiscoveryDocuments}
-                            >
-                              Cancel
-                            </Button>
+                          {isInspectionMode ? (
+                            <Status variant="neutral" size="sm" showIcon>
+                              Source documents are frozen for locked runtime inspection.
+                            </Status>
                           ) : (
-                            <label
-                              htmlFor="runtime-discovery-documents"
-                              className={`btn btn--outline btn--sm runtime-workspace__document-upload-button${
-                                disabled || saving || documentUploadPreparing
-                                  ? ' runtime-workspace__document-upload-button--disabled'
-                                  : ''
-                              }`}
-                              aria-disabled={disabled || saving || documentUploadPreparing}
-                            >
-                              <MdUploadFile aria-hidden="true" />
-                              Select Files
-                            </label>
+                            <>
+                              <input
+                                ref={discoveryDocumentInputRef}
+                                id="runtime-discovery-documents"
+                                type="file"
+                                className="runtime-workspace__document-upload-input sr-only"
+                                accept={DISCOVERY_DOCUMENT_ACCEPT}
+                                multiple
+                                onChange={handleDocumentUploadChange}
+                                disabled={disabled || saving || draftDocumentSources.length > 0 || documentUploadPreparing}
+                                aria-labelledby="runtime-discovery-documents-label"
+                                aria-describedby="runtime-discovery-documents-helper"
+                              />
+                              {draftDocumentSources.length > 0 ? (
+                                <Button
+                                  type="button"
+                                  variant="warning"
+                                  size="sm"
+                                  className="runtime-workspace__document-upload-cancel"
+                                  disabled={saving || isBuildExecuting}
+                                  leftIcon={<MdClose aria-hidden="true" />}
+                                  onClick={handleClearDiscoveryDocuments}
+                                >
+                                  Cancel
+                                </Button>
+                              ) : (
+                                <label
+                                  htmlFor="runtime-discovery-documents"
+                                  className={`btn btn--outline btn--sm runtime-workspace__document-upload-button${
+                                    disabled || saving || documentUploadPreparing
+                                      ? ' runtime-workspace__document-upload-button--disabled'
+                                      : ''
+                                  }`}
+                                  aria-disabled={disabled || saving || documentUploadPreparing}
+                                >
+                                  <MdUploadFile aria-hidden="true" />
+                                  Select Files
+                                </label>
+                              )}
+                              {showDiscoveryDocumentUploadButton ? (
+                                <Button
+                                  type="submit"
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={saving || isBuildExecuting}
+                                  loading={saving || isBuildExecuting}
+                                  aria-label={`Extract ${INTELLIGENCE_HUB_LABEL} document evidence`}
+                                  leftIcon={<MdUploadFile aria-hidden="true" />}
+                                >
+                                  Extract Evidence
+                                </Button>
+                              ) : null}
+                            </>
                           )}
-                          {showDiscoveryDocumentUploadButton ? (
-                            <Button
-                              type="submit"
-                              variant="primary"
-                              size="sm"
-                              disabled={saving || isBuildExecuting}
-                              loading={saving || isBuildExecuting}
-                              aria-label={`Extract ${INTELLIGENCE_HUB_LABEL} document evidence`}
-                              leftIcon={<MdUploadFile aria-hidden="true" />}
-                            >
-                              Extract Evidence
-                            </Button>
-                          ) : null}
                           <span className="input-helper" id="runtime-discovery-documents-helper">
                             {DOCUMENT_EXTRACTION_HELPER_TEXT}
                           </span>
@@ -4297,7 +4347,9 @@ function DiscoverySection({
                         />
                       </div>
                       <Status variant={draftDocumentSources.length > 0 ? 'success' : 'neutral'} size="sm" showIcon>
-                        {draftDocumentSources.length > 0
+                        {isInspectionMode
+                          ? 'Locked runtime inspection uses the frozen evidence snapshot.'
+                          : draftDocumentSources.length > 0
                           ? `${draftDocumentSources.length} selected document${draftDocumentSources.length === 1 ? '' : 's'} staged for extraction`
                           : `Select documents and build ${INTELLIGENCE_HUB_EVIDENCE_LABEL} from the action bar.`}
                       </Status>
@@ -4351,6 +4403,7 @@ function DiscoverySection({
                                 const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
                                 const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
                                 const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
+                                  && !isInspectionMode
                                   && !disabled
                                   && !mutationDisabledReason
                                   && !evidenceReviewInFlight
@@ -4370,32 +4423,34 @@ function DiscoverySection({
                                     <span className="runtime-workspace__section-note">
                                       {[evidenceObject.coverageArea, evidenceObject.sourceId].filter(Boolean).join(' / ')}
                                     </span>
-                                    <div className="runtime-workspace__evidence-object-actions">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        leftIcon={<MdCheckCircle aria-hidden="true" />}
-                                        disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
-                                        loading={isReviewing && reviewStatus !== 'ACCEPTED'}
-                                        aria-label={`Accept evidence object ${actionLabel}`}
-                                        onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
-                                      >
-                                        Accept
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="danger"
-                                        size="sm"
-                                        leftIcon={<MdErrorOutline aria-hidden="true" />}
-                                        disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
-                                        loading={isReviewing && reviewStatus !== 'REJECTED'}
-                                        aria-label={`Reject evidence object ${actionLabel}`}
-                                        onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
-                                      >
-                                        Reject
-                                      </Button>
-                                    </div>
+                                    {!isInspectionMode ? (
+                                      <div className="runtime-workspace__evidence-object-actions">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          leftIcon={<MdCheckCircle aria-hidden="true" />}
+                                          disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
+                                          loading={isReviewing && reviewStatus !== 'ACCEPTED'}
+                                          aria-label={`Accept evidence object ${actionLabel}`}
+                                          onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
+                                        >
+                                          Accept
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="danger"
+                                          size="sm"
+                                          leftIcon={<MdErrorOutline aria-hidden="true" />}
+                                          disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
+                                          loading={isReviewing && reviewStatus !== 'REJECTED'}
+                                          aria-label={`Reject evidence object ${actionLabel}`}
+                                          onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
+                                        >
+                                          Reject
+                                        </Button>
+                                      </div>
+                                    ) : null}
                                   </li>
                                 )
                               })}
@@ -4529,18 +4584,20 @@ function DiscoverySection({
             className="runtime-workspace__section-actions"
             aria-label={`${INTELLIGENCE_HUB_LABEL} actions`}
           >
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              leftIcon={<MdRefresh aria-hidden="true" />}
-              disabled={disabled || Boolean(buildDisabledReason)}
-              loading={saving || isBuildExecuting || documentUploadPreparing}
-              aria-label={buildButtonLabel}
-              aria-describedby={buildDisabledReason ? buildReasonId : undefined}
-            >
-              {buildButtonLabel}
-            </Button>
+            {!isInspectionMode ? (
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                leftIcon={<MdRefresh aria-hidden="true" />}
+                disabled={disabled || Boolean(buildDisabledReason)}
+                loading={saving || isBuildExecuting || documentUploadPreparing}
+                aria-label={buildButtonLabel}
+                aria-describedby={buildDisabledReason ? buildReasonId : undefined}
+              >
+                {buildButtonLabel}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -4552,30 +4609,34 @@ function DiscoverySection({
             >
               {showSources ? 'Hide Sources' : 'View Sources'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              leftIcon={<MdCheckCircle aria-hidden="true" />}
-              disabled={!canAcceptDiscovery}
-              loading={saving || isAcceptExecuting}
-              aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
-              onClick={handleAcceptDiscovery}
-            >
-              Accept Evidence
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              leftIcon={<MdDelete aria-hidden="true" />}
-              disabled={!canResetDiscovery}
-              loading={saving && showResetWarning}
-              aria-describedby={resetDisabledReason ? resetReasonId : undefined}
-              onClick={handleClearDiscoveryClick}
-            >
-              Clear {INTELLIGENCE_HUB_LABEL}
-            </Button>
+            {!isInspectionMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<MdCheckCircle aria-hidden="true" />}
+                  disabled={!canAcceptDiscovery}
+                  loading={saving || isAcceptExecuting}
+                  aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
+                  onClick={handleAcceptDiscovery}
+                >
+                  Accept Evidence
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  leftIcon={<MdDelete aria-hidden="true" />}
+                  disabled={!canResetDiscovery}
+                  loading={saving && showResetWarning}
+                  aria-describedby={resetDisabledReason ? resetReasonId : undefined}
+                  onClick={handleClearDiscoveryClick}
+                >
+                  Clear {INTELLIGENCE_HUB_LABEL}
+                </Button>
+              </>
+            ) : null}
           </ButtonGroup>
           <Dialog
             open={showResetWarning}
@@ -4740,7 +4801,18 @@ function RuntimeWorkspace() {
   const discoveryState = getDiscoveryState(renderer)
   const lifecycleStage = normalizeRuntimeActionToken(renderer?.lifecycle?.stage)
   const isRuntimeLifecycleImmutable = IMMUTABLE_RUNTIME_LIFECYCLE_STAGES.has(lifecycleStage)
-  const discoveryMutationDisabledReason = isRuntimeLifecycleImmutable ? IMMUTABLE_RUNTIME_DISCOVERY_REASON : ''
+  const isRuntimeLockedForInspection = Boolean(
+    renderer?.lock?.locked
+    || runtimeInstance?.lockedAt
+    || normalizeRuntimeActionToken(renderer?.lock?.state) === 'LOCKED'
+    || normalizeRuntimeActionToken(renderer?.lifecycle?.runtimeStatus || runtimeInstance?.status) === 'LOCKED'
+    || lifecycleStage === 'LOCKED',
+  )
+  const discoveryMutationDisabledReason = isRuntimeLockedForInspection
+    ? LOCKED_RUNTIME_INSPECTION_REASON
+    : isRuntimeLifecycleImmutable
+      ? IMMUTABLE_RUNTIME_DISCOVERY_REASON
+      : ''
   const {
     data: evidenceResponse,
     isFetching: isFetchingEvidence,
@@ -4778,7 +4850,9 @@ function RuntimeWorkspace() {
   const validationState = renderer?.validation?.state ?? 'UNKNOWN'
   const actionGateStatus = getRuntimeActionGateStatus(validationState)
   const readinessState = renderer?.readiness?.state ?? 'DRAFT'
-  const sectionTruthState = renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
+  const sectionTruthState = isRuntimeLockedForInspection
+    ? 'SECTION_TRUTH_LOCKED'
+    : renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
   const publishState = renderer?.publish?.state ?? 'UNKNOWN'
   const lockState = renderer?.lock?.state ?? 'UNKNOWN'
   const publishSnapshot = renderer?.publish?.snapshot || {}
@@ -5810,6 +5884,7 @@ function RuntimeWorkspace() {
               evidenceDetailLoading={isFetchingEvidence}
               executingActionKey={executingActionKey}
               feedback={discoveryFeedback}
+              inspectionMode={isRuntimeLockedForInspection}
               mutationDisabledReason={discoveryMutationDisabledReason}
               onAcceptDiscovery={handleAcceptDiscovery}
               onResetDiscovery={handleResetDiscovery}
@@ -5832,6 +5907,7 @@ function RuntimeWorkspace() {
                 executingActionKey={executingActionKey}
                 feedback={sectionFeedbackByPath[activeSection.runtimePath]}
                 generationActions={sectionActionByKey}
+                lockedInspection={isRuntimeLockedForInspection}
                 onAcceptSection={handleAcceptSection}
                 onClearSectionEvidence={handleClearSectionEvidence}
                 onExecuteSectionAction={handleExecuteSectionAction}
@@ -5869,7 +5945,8 @@ function RuntimeWorkspace() {
               </div>
               <RuntimeSectionNavigation
                 activeKey={activeWorkspaceKey}
-                discoveryState={discoveryState}
+                discoveryState={isRuntimeLockedForInspection ? 'Locked Inspection' : discoveryState}
+                lockedInspection={isRuntimeLockedForInspection}
                 onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
                 onSelectSection={handleSelectSection}
                 sections={sections}
