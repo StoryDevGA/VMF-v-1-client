@@ -9,6 +9,7 @@ import {
   MdClose,
   MdCompareArrows,
   MdDelete,
+  MdDownload,
   MdDonutLarge,
   MdErrorOutline,
   MdFactCheck,
@@ -17,6 +18,7 @@ import {
   MdOutlineHistory,
   MdRefresh,
   MdSave,
+  MdArticle,
   MdOutlineWarningAmber,
   MdSource,
   MdUploadFile,
@@ -42,7 +44,11 @@ import {
   useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
+  useCreateRuntimeOutputRequestMutation,
+  useGenerateRuntimeOutputRequestMutation,
+  useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
+  useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
@@ -384,6 +390,8 @@ const LOCKED_RUNTIME_INSPECTION_REASON =
   'Locked runtimes are read-only. Create a revision before changing discovery or section truth.'
 
 const DISCOVERY_NAV_KEY = 'discovery'
+const OUTPUT_LAB_NAV_KEY = 'output_lab'
+const OUTPUT_LAB_LABEL = 'Output Lab'
 const ACTIVITY_PREVIEW_LIMIT = 3
 const SIGNAL_PREVIEW_LIMIT = 3
 const WARNING_PREVIEW_LIMIT = 1
@@ -3177,7 +3185,9 @@ function RuntimeSectionNavigation({
   discoveryState = 'Evidence Not Ready',
   lockedInspection = false,
   onSelectDiscovery,
+  onSelectOutputLab,
   onSelectSection,
+  outputLabState = 'Not Ready',
   sections = EMPTY_ARRAY,
 }) {
   const navItems = sections.map((section, index) => {
@@ -3232,9 +3242,311 @@ function RuntimeSectionNavigation({
             </button>
           </li>
           {navItems.map(renderNavigationItem)}
+          <li>
+            <button
+              type="button"
+              className={[
+                'runtime-workspace__section-nav-button',
+                activeKey === OUTPUT_LAB_NAV_KEY && 'runtime-workspace__section-nav-button--active',
+              ].filter(Boolean).join(' ')}
+              aria-current={activeKey === OUTPUT_LAB_NAV_KEY ? 'step' : undefined}
+              onClick={onSelectOutputLab}
+            >
+              <span><MdArticle aria-hidden="true" /></span>
+              <strong title={OUTPUT_LAB_LABEL}>{OUTPUT_LAB_LABEL}</strong>
+              <small>{outputLabState}</small>
+            </button>
+          </li>
         </ol>
       </div>
     </nav>
+  )
+}
+
+const getOutputLabPayload = (response) => response?.data ?? response ?? null
+
+const getOutputLabAssetId = (asset = {}) =>
+  String(asset.outputAssetId || asset.id || asset._id || '').trim()
+
+const getOutputLabReadinessLabel = (outputLab, { loading = false, error = null } = {}) => {
+  if (loading) return 'Loading'
+  if (error) return 'Unavailable'
+  const readiness = outputLab?.readiness || {}
+  if (readiness.canGenerate === true) {
+    return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
+  }
+  return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Not Ready'
+}
+
+function OutputLabSection({
+  error = null,
+  exportingAssetKey = '',
+  generating = false,
+  loading = false,
+  onExportAsset,
+  onGenerateOutput,
+  outputLab = null,
+  selectedOutputTypeKey = '',
+  setSelectedOutputTypeKey,
+}) {
+  const [activeOutputLabTab, setActiveOutputLabTab] = useState(0)
+  const definitions = Array.isArray(outputLab?.definitions) ? outputLab.definitions : EMPTY_ARRAY
+  const readiness = outputLab?.readiness || {}
+  const blockers = Array.isArray(readiness.blockers) ? readiness.blockers : EMPTY_ARRAY
+  const warnings = Array.isArray(readiness.warnings) ? readiness.warnings : EMPTY_ARRAY
+  const assets = Array.isArray(outputLab?.assets) ? outputLab.assets : EMPTY_ARRAY
+  const requests = Array.isArray(outputLab?.requests) ? outputLab.requests : EMPTY_ARRAY
+  const activeOutputTypeKey = selectedOutputTypeKey || definitions[0]?.outputTypeKey || ''
+  const activeDefinition = definitions.find((definition) => definition.outputTypeKey === activeOutputTypeKey)
+    || definitions[0]
+    || null
+  const canGenerate = readiness.canGenerate === true
+  const generateDisabledReason = !activeDefinition
+    ? 'No output definitions are available.'
+    : !canGenerate
+      ? blockers[0]?.message || readiness.summary || 'Output Lab generation is blocked.'
+      : ''
+  const readyVariant = canGenerate
+    ? getTokenStatusVariant(readiness.state || 'READY')
+    : 'error'
+  const requestSummary = requests.length > 0
+    ? `${requests.length} request${requests.length === 1 ? '' : 's'}`
+    : 'No requests'
+  const assetSummary = assets.length > 0
+    ? `${assets.length} asset${assets.length === 1 ? '' : 's'}`
+    : 'No assets'
+  const readinessPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--output-lab-readiness"
+      aria-label="Output Lab readiness"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Readiness</h3>
+        <Status variant={readyVariant} size="sm" showIcon>
+          {formatRuntimeTokenLabel(readiness.state || 'UNKNOWN')}
+        </Status>
+      </div>
+      <SectionDetailRows
+        ariaLabel="Output Lab readiness details"
+        rows={[
+          {
+            id: 'accepted-truth',
+            title: 'Accepted Truth',
+            meta: `${readiness.acceptedTruthCount ?? 0}/${readiness.requiredTruthCount ?? 0}`,
+          },
+          {
+            id: 'canonical-output',
+            title: 'Canonical Output',
+            meta: readiness.outputEligibility?.outputEligible ? 'Eligible' : 'Not eligible',
+          },
+          {
+            id: 'lock-snapshot',
+            title: 'Lock Snapshot',
+            meta: formatRuntimeIdentifier(readiness.outputEligibility?.lockSnapshotId),
+          },
+          {
+            id: 'replay-anchor',
+            title: 'Replay Anchor',
+            meta: formatRuntimeIdentifier(readiness.outputEligibility?.replayAnchorId),
+          },
+          {
+            id: 'graph',
+            title: 'Graph',
+            meta: readiness.graph?.available ? 'Available' : 'Unavailable',
+          },
+        ]}
+      />
+      {blockers.length > 0 ? (
+        <ul className="runtime-workspace__output-lab-message-list" aria-label="Output Lab blockers">
+          {blockers.map((blocker) => (
+            <li key={blocker.code || blocker.message}>
+              <MdErrorOutline aria-hidden="true" />
+              <span>{blocker.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {warnings.length > 0 ? (
+        <ul className="runtime-workspace__output-lab-message-list" aria-label="Output Lab warnings">
+          {warnings.map((warning) => (
+            <li key={warning.code || warning.message}>
+              <MdOutlineWarningAmber aria-hidden="true" />
+              <span>{warning.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  )
+  const compositionPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--output-lab-composition"
+      aria-label="Output composition"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Composition</h3>
+        <Badge variant="neutral" size="sm" pill outline>{requestSummary}</Badge>
+      </div>
+      <Select
+        id="runtime-output-lab-output-type"
+        label="Output Type"
+        value={activeOutputTypeKey}
+        disabled={generating || definitions.length === 0}
+        options={definitions.map((definition) => ({
+          value: definition.outputTypeKey,
+          label: definition.label,
+        }))}
+        onChange={(event) => setSelectedOutputTypeKey(event.target.value)}
+      />
+      {activeDefinition ? (
+        <p className="runtime-workspace__section-note">{activeDefinition.description}</p>
+      ) : null}
+      <ButtonGroup
+        align="end"
+        stackOnMobile
+        fullWidthOnMobile
+        className="runtime-workspace__output-lab-actions"
+        aria-label="Output Lab composition actions"
+      >
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          leftIcon={<MdBolt aria-hidden="true" />}
+          disabled={generating || Boolean(generateDisabledReason)}
+          aria-describedby={generateDisabledReason ? 'runtime-output-lab-generate-reason' : undefined}
+          onClick={() => onGenerateOutput?.(activeOutputTypeKey)}
+        >
+          {generating ? 'Generating' : 'Generate'}
+        </Button>
+      </ButtonGroup>
+      {generateDisabledReason ? (
+        <p id="runtime-output-lab-generate-reason" className="runtime-workspace__action-disabled-reason">
+          {generateDisabledReason}
+        </p>
+      ) : null}
+    </section>
+  )
+  const outputsPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--output-lab-assets"
+      aria-label="Generated outputs"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Generated Outputs</h3>
+        <Badge variant={assets.length > 0 ? 'success' : 'neutral'} size="sm" pill outline>{assetSummary}</Badge>
+      </div>
+      {assets.length > 0 ? (
+        <ul className="runtime-workspace__plain-list runtime-workspace__output-lab-asset-list" aria-label="Generated output assets">
+          {assets.map((asset, assetIndex) => {
+            const assetId = getOutputLabAssetId(asset)
+            const assetStatus = formatRuntimeTokenLabel(asset.status || 'UNKNOWN')
+            const exportable = asset.exportable !== false && !asset.stale
+            const assetKey = assetId || `${asset.outputTypeKey || 'output'}-${assetIndex}`
+            return (
+              <li key={assetKey} className="runtime-workspace__output-lab-asset">
+                <div>
+                  <strong>{asset.outputTypeLabel || formatRuntimeTokenLabel(asset.outputTypeKey)}</strong>
+                  <span>{assetStatus}</span>
+                </div>
+                <ButtonGroup className="runtime-workspace__output-lab-export-actions">
+                  {['MARKDOWN', 'JSON'].map((format) => {
+                    const exportKey = `${assetId}:${format}`
+                    return (
+                      <Button
+                        key={format}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<MdDownload aria-hidden="true" />}
+                        disabled={!assetId || !exportable || exportingAssetKey === exportKey}
+                        onClick={() => onExportAsset?.({ asset, format })}
+                      >
+                        {format === 'MARKDOWN' ? 'Markdown' : 'JSON'}
+                      </Button>
+                    )
+                  })}
+                </ButtonGroup>
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <Status variant="neutral" size="sm" showIcon>No generated outputs</Status>
+      )}
+    </section>
+  )
+
+  return (
+    <Card variant="default" className="runtime-workspace__section-card runtime-workspace__output-lab">
+      <Card.Body className="runtime-workspace__section-body">
+        <div className="runtime-workspace__section-heading">
+          <div>
+            <h2>{OUTPUT_LAB_LABEL}</h2>
+            <p className="runtime-workspace__section-note">
+              {readiness.summary || 'Governed output validation for the current runtime.'}
+            </p>
+          </div>
+          <div className="runtime-workspace__section-badges">
+            <Badge variant={canGenerate ? 'success' : 'danger'} size="sm" pill outline>
+              {getOutputLabReadinessLabel(outputLab, { loading, error })}
+            </Badge>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="runtime-workspace__output-lab-state" role="status">
+            <Spinner size="md" aria-label="Loading Output Lab" />
+          </div>
+        ) : null}
+
+        {error ? (
+          <Status variant="error" size="sm" showIcon>
+            {stripRequestReference(error.message)}
+          </Status>
+        ) : null}
+
+        <div
+          className="runtime-workspace__section-tabs-region"
+          role="region"
+          aria-label="Output Lab workspace"
+        >
+          <TabView
+            activeTab={activeOutputLabTab}
+            onTabChange={setActiveOutputLabTab}
+            variant="default"
+            size="sm"
+            className="runtime-workspace__section-tabs runtime-workspace__output-lab-tabs"
+            aria-label="Output Lab sections"
+          >
+            <TabView.Tab label="Readiness">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
+                  {readinessPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Composition">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
+                  {compositionPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Outputs">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
+                  {outputsPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -4974,7 +5286,20 @@ function RuntimeWorkspace() {
     { runtimeInstanceId },
     { skip: !runtimeInstanceId },
   )
+  const {
+    data: outputLabResponse,
+    isLoading: isLoadingOutputLab,
+    isFetching: isFetchingOutputLab,
+    error: outputLabQueryError,
+    refetch: refetchOutputLab,
+  } = useGetRuntimeOutputLabQuery(
+    { runtimeInstanceId },
+    { skip: !runtimeInstanceId },
+  )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
+  const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
+  const [generateRuntimeOutputRequest, { isLoading: isGeneratingOutputRequest }] = useGenerateRuntimeOutputRequestMutation()
+  const [exportRuntimeOutputAsset] = useLazyExportRuntimeOutputAssetQuery()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
   const [clearRuntimeSectionEvidence] = useClearRuntimeSectionEvidenceMutation()
@@ -5000,11 +5325,16 @@ function RuntimeWorkspace() {
   const [showAllActivity, setShowAllActivity] = useState(false)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
+  const [selectedOutputTypeKey, setSelectedOutputTypeKey] = useState('')
+  const [exportingOutputAssetKey, setExportingOutputAssetKey] = useState('')
   const hasAutoSelectedInitialSection = useRef(false)
   const reviewingEvidenceObjectIdRef = useRef('')
   const reviewingSectionEvidenceObjectIdRef = useRef('')
 
   const renderer = getRendererPayload(rendererResponse)
+  const outputLab = getOutputLabPayload(outputLabResponse)
+  const outputLabError = outputLabQueryError ? normalizeError(outputLabQueryError) : null
+  const outputLabDefinitions = Array.isArray(outputLab?.definitions) ? outputLab.definitions : EMPTY_ARRAY
   const runtimeInstance = renderer?.runtimeInstance ?? {}
   const sections = Array.isArray(renderer?.sections) ? renderer.sections : EMPTY_ARRAY
   const actions = Array.isArray(renderer?.actions) ? renderer.actions : EMPTY_ARRAY
@@ -5163,13 +5493,17 @@ function RuntimeWorkspace() {
     (section?.sectionKey || section?.key) === activeWorkspaceKey,
   )
   const activeSectionIndex = matchedActiveSectionIndex >= 0 ? matchedActiveSectionIndex : 0
-  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY
+  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
   const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
+  const outputLabState = getOutputLabReadinessLabel(outputLab, {
+    loading: isLoadingOutputLab || isFetchingOutputLab,
+    error: outputLabError,
+  })
 
   useEffect(() => {
-    if (activeWorkspaceKey === DISCOVERY_NAV_KEY) return
+    if (activeWorkspaceKey === DISCOVERY_NAV_KEY || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY) return
     const hasActiveSection = sections.some((section) =>
       (section?.sectionKey || section?.key) === activeWorkspaceKey,
     )
@@ -5180,6 +5514,7 @@ function RuntimeWorkspace() {
 
   useEffect(() => {
     if (hasAutoSelectedInitialSection.current) return
+    if (activeWorkspaceKey === OUTPUT_LAB_NAV_KEY) return
     if (activeWorkspaceKey !== DISCOVERY_NAV_KEY) {
       hasAutoSelectedInitialSection.current = true
       return
@@ -5191,6 +5526,14 @@ function RuntimeWorkspace() {
       setActiveWorkspaceKey(firstSectionKey)
     }
   }, [activeWorkspaceKey, discovery?.accepted, discoveryState, sections])
+
+  useEffect(() => {
+    if (selectedOutputTypeKey) return
+    const firstOutputTypeKey = outputLabDefinitions[0]?.outputTypeKey
+    if (firstOutputTypeKey) {
+      setSelectedOutputTypeKey(firstOutputTypeKey)
+    }
+  }, [outputLabDefinitions, selectedOutputTypeKey])
 
   const handleBack = () => {
     navigate(getRuntimeWorkspaceBackTarget(location.state))
@@ -5818,6 +6161,109 @@ function RuntimeWorkspace() {
     })
   }
 
+  const handleGenerateOutput = async (outputTypeKey) => {
+    const normalizedOutputTypeKey = String(outputTypeKey || '').trim().toUpperCase()
+    if (!normalizedOutputTypeKey) {
+      addToast({
+        title: 'Output unavailable',
+        description: 'Select an output type before generating.',
+        variant: 'error',
+      })
+      return
+    }
+
+    try {
+      const requestResponse = await createRuntimeOutputRequest({
+        runtimeInstanceId,
+        body: { outputTypeKey: normalizedOutputTypeKey },
+      }).unwrap()
+      const outputRequest = getOutputLabPayload(requestResponse)
+      const outputRequestId = outputRequest?.outputRequestId
+      if (!outputRequestId) {
+        throw new Error('Output request was created without a request identifier.')
+      }
+
+      await generateRuntimeOutputRequest({
+        runtimeInstanceId,
+        outputRequestId,
+        body: {},
+      }).unwrap()
+      addToast({
+        title: 'Output generated',
+        description: 'Governed output is ready to export.',
+        variant: 'success',
+      })
+      Promise.resolve(refetchOutputLab?.()).catch((refetchError) => {
+        console.warn('Output Lab refetch failed after successful generation.', refetchError)
+      })
+    } catch (outputError) {
+      const normalizedError = normalizeError(outputError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      addToast({
+        title: 'Output failed',
+        description: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+        variant: 'error',
+      })
+    }
+  }
+
+  const handleExportOutputAsset = async ({ asset, format }) => {
+    const outputAssetId = getOutputLabAssetId(asset)
+    const normalizedFormat = String(format || '').trim().toUpperCase()
+    if (!outputAssetId || !normalizedFormat) {
+      addToast({
+        title: 'Export error',
+        description: 'Output asset is not ready to export.',
+        variant: 'error',
+      })
+      return
+    }
+
+    const exportKey = `${outputAssetId}:${normalizedFormat}`
+    setExportingOutputAssetKey(exportKey)
+
+    try {
+      const exportResponse = await exportRuntimeOutputAsset({
+        runtimeInstanceId,
+        outputAssetId,
+        format: normalizedFormat,
+      }).unwrap()
+      const exportedAsset = getOutputLabPayload(exportResponse)
+      const exportContent = typeof exportedAsset?.content === 'string'
+        ? exportedAsset.content
+        : JSON.stringify(exportedAsset?.content ?? {}, null, 2)
+      const filename = exportedAsset?.filename || `${runtimeDisplayId || 'runtime'}-output-lab.${normalizedFormat === 'JSON' ? 'json' : 'md'}`
+      const mimeType = exportedAsset?.mimeType || (normalizedFormat === 'JSON' ? 'application/json' : 'text/markdown')
+      const objectUrl = URL.createObjectURL(new Blob([exportContent], { type: mimeType }))
+      const downloadLink = document.createElement('a')
+      downloadLink.href = objectUrl
+      downloadLink.download = filename
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      URL.revokeObjectURL(objectUrl)
+      addToast({
+        title: 'Export ready',
+        description: filename,
+        variant: 'success',
+      })
+    } catch (exportError) {
+      const normalizedError = normalizeError(exportError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      addToast({
+        title: 'Export failed',
+        description: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+        variant: 'error',
+      })
+    } finally {
+      setExportingOutputAssetKey('')
+    }
+  }
+
   if (isLoading) {
     return (
       <section className="runtime-workspace container" aria-label="Execution workspace">
@@ -6135,6 +6581,18 @@ function RuntimeWorkspace() {
               saving={savingDiscovery}
               showSources={showEvidenceSources}
             />
+          ) : activeWorkspaceKey === OUTPUT_LAB_NAV_KEY ? (
+            <OutputLabSection
+              error={outputLabError}
+              exportingAssetKey={exportingOutputAssetKey}
+              generating={isCreatingOutputRequest || isGeneratingOutputRequest}
+              loading={isLoadingOutputLab || isFetchingOutputLab}
+              onExportAsset={handleExportOutputAsset}
+              onGenerateOutput={handleGenerateOutput}
+              outputLab={outputLab}
+              selectedOutputTypeKey={selectedOutputTypeKey}
+              setSelectedOutputTypeKey={setSelectedOutputTypeKey}
+            />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
               <RuntimeSection
@@ -6188,7 +6646,9 @@ function RuntimeWorkspace() {
                 discoveryState={isRuntimeLockedForInspection ? 'Locked Inspection' : discoveryState}
                 lockedInspection={isRuntimeLockedForInspection}
                 onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
+                onSelectOutputLab={() => setActiveWorkspaceKey(OUTPUT_LAB_NAV_KEY)}
                 onSelectSection={handleSelectSection}
+                outputLabState={outputLabState}
                 sections={sections}
               />
             </Card.Body>

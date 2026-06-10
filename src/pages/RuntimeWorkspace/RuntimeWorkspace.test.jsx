@@ -7,9 +7,13 @@ import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useClearRuntimeSectionEvidenceMutation,
+  useCreateRuntimeOutputRequestMutation,
   useExecuteRuntimeActionMutation,
+  useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeEvidenceQuery,
+  useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
+  useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
@@ -24,9 +28,13 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
   useClearRuntimeSectionEvidenceMutation: vi.fn(),
+  useCreateRuntimeOutputRequestMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
+  useGenerateRuntimeOutputRequestMutation: vi.fn(),
   useGetRuntimeEvidenceQuery: vi.fn(),
+  useGetRuntimeOutputLabQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
+  useLazyExportRuntimeOutputAssetQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
   useResetRuntimeDiscoveryMutation: vi.fn(),
   useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
@@ -37,10 +45,17 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
 }))
 
 const refetchRenderer = vi.fn()
+const refetchOutputLab = vi.fn()
 const mutateRuntimeState = vi.fn()
 const unwrapMutation = vi.fn()
 const executeRuntimeAction = vi.fn()
 const unwrapAction = vi.fn()
+const createRuntimeOutputRequest = vi.fn()
+const unwrapCreateRuntimeOutputRequest = vi.fn()
+const generateRuntimeOutputRequest = vi.fn()
+const unwrapGenerateRuntimeOutputRequest = vi.fn()
+const exportRuntimeOutputAsset = vi.fn()
+const unwrapExportRuntimeOutputAsset = vi.fn()
 const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
@@ -188,6 +203,65 @@ const rendererPayload = {
   },
 }
 
+const outputLabPayload = {
+  contractVersion: 'output-lab.v1',
+  definitions: [
+    {
+      outputTypeKey: 'EXECUTIVE_BRIEF',
+      label: 'Executive Brief',
+      description: 'A concise executive outcome summary built from locked VMF truth.',
+      supportedFormats: ['MARKDOWN', 'JSON'],
+    },
+  ],
+  readiness: {
+    state: 'BLOCKED',
+    canGenerate: false,
+    summary: 'Locked canonical runtime truth is required before Output Lab generation.',
+    blockers: [
+      {
+        code: 'RUNTIME_NOT_LOCKED',
+        message: 'Locked canonical runtime truth is required before Output Lab generation.',
+      },
+    ],
+    warnings: [],
+    acceptedTruthCount: 0,
+    requiredTruthCount: 1,
+    outputEligibility: {
+      outputEligible: false,
+      lockSnapshotId: '',
+      replayAnchorId: '',
+    },
+    graph: {
+      available: false,
+    },
+  },
+  requests: [],
+  assets: [],
+}
+
+const readyOutputLabPayload = {
+  ...outputLabPayload,
+  readiness: {
+    state: 'READY',
+    canGenerate: true,
+    summary: 'Output Lab can generate governed output from locked canonical runtime truth.',
+    blockers: [],
+    warnings: [],
+    acceptedTruthCount: 4,
+    requiredTruthCount: 4,
+    outputEligibility: {
+      outputEligible: true,
+      lockSnapshotId: 'runtime-truth-lock-output-lab-fixture',
+      replayAnchorId: 'runtime-replay-anchor-output-lab',
+    },
+    graph: {
+      available: true,
+      graphVersion: '2.2',
+      graphHash: 'sha256:graph-hash',
+    },
+  },
+}
+
 function VmfRouteProbe() {
   const location = useLocation()
   return (
@@ -253,10 +327,17 @@ function buildRuntimeSection(index, label) {
 describe('RuntimeWorkspace', () => {
   beforeEach(() => {
     refetchRenderer.mockReset()
+    refetchOutputLab.mockReset()
     mutateRuntimeState.mockReset()
     unwrapMutation.mockReset()
     executeRuntimeAction.mockReset()
     unwrapAction.mockReset()
+    createRuntimeOutputRequest.mockReset()
+    unwrapCreateRuntimeOutputRequest.mockReset()
+    generateRuntimeOutputRequest.mockReset()
+    unwrapGenerateRuntimeOutputRequest.mockReset()
+    exportRuntimeOutputAsset.mockReset()
+    unwrapExportRuntimeOutputAsset.mockReset()
     updateRuntimeDiscoveryInputs.mockReset()
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
@@ -276,10 +357,26 @@ describe('RuntimeWorkspace', () => {
     acceptRuntimeSection.mockReset()
     unwrapAcceptSection.mockReset()
     window.confirm = vi.fn(() => true)
+    URL.createObjectURL = vi.fn(() => 'blob:output-lab-export')
+    URL.revokeObjectURL = vi.fn()
+    HTMLAnchorElement.prototype.click = vi.fn()
     unwrapMutation.mockResolvedValue({ data: { mutation: { runtimePath: 'framework_state.sections.customer_problem' } } })
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
     unwrapAction.mockResolvedValue({ data: { action: { actionKey: 'SUBMIT_FOR_REVIEW' } } })
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
+    unwrapCreateRuntimeOutputRequest.mockResolvedValue({ data: { outputRequestId: 'out_req_test' } })
+    createRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapCreateRuntimeOutputRequest })
+    unwrapGenerateRuntimeOutputRequest.mockResolvedValue({ data: { outputAssetId: 'out_asset_test' } })
+    generateRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapGenerateRuntimeOutputRequest })
+    unwrapExportRuntimeOutputAsset.mockResolvedValue({
+      data: {
+        format: 'MARKDOWN',
+        filename: 'value-narrative-001-executive-brief.md',
+        mimeType: 'text/markdown',
+        content: '# Executive Brief',
+      },
+    })
+    exportRuntimeOutputAsset.mockReturnValue({ unwrap: unwrapExportRuntimeOutputAsset })
     unwrapDiscoveryInputs.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
@@ -301,7 +398,9 @@ describe('RuntimeWorkspace', () => {
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useClearRuntimeSectionEvidenceMutation.mockReturnValue([clearRuntimeSectionEvidence, { isLoading: false }])
+    useCreateRuntimeOutputRequestMutation.mockReturnValue([createRuntimeOutputRequest, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
+    useGenerateRuntimeOutputRequestMutation.mockReturnValue([generateRuntimeOutputRequest, { isLoading: false }])
     useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
     useReviewRuntimeDiscoveryEvidenceMutation.mockReturnValue([reviewRuntimeDiscoveryEvidence, { isLoading: false }])
     useReviewAllRuntimeSectionEvidenceMutation.mockReturnValue([reviewAllRuntimeSectionEvidence, { isLoading: false }])
@@ -312,6 +411,14 @@ describe('RuntimeWorkspace', () => {
       isFetching: false,
       error: null,
     })
+    useGetRuntimeOutputLabQuery.mockReturnValue({
+      data: { data: outputLabPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutputLab,
+    })
+    useLazyExportRuntimeOutputAssetQuery.mockReturnValue([exportRuntimeOutputAsset, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -428,6 +535,168 @@ describe('RuntimeWorkspace', () => {
     expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
     expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('renders Output Lab as blocked when locked canonical output eligibility is missing', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace()
+
+    expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    await user.click(screen.getByRole('button', { name: /output lab/i }))
+
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(main).getByRole('heading', { name: /^output lab$/i })).toBeInTheDocument()
+    expect(within(main).getByRole('tablist', { name: /output lab sections/i })).toBeInTheDocument()
+    expect(within(main).getByRole('tab', { name: /readiness/i })).toHaveAttribute('aria-selected', 'true')
+    expect(within(main).getAllByText('Locked canonical runtime truth is required before Output Lab generation.').length)
+      .toBeGreaterThanOrEqual(1)
+    expect(within(main).getByRole('region', { name: /output lab readiness/i })).toHaveTextContent('Not eligible')
+
+    await user.click(within(main).getByRole('tab', { name: /composition/i }))
+    expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
+  })
+
+  it('generates governed Output Lab output and downloads Markdown exports', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeOutputLabQuery.mockReturnValue({
+      data: {
+        data: {
+          ...readyOutputLabPayload,
+          assets: [
+            {
+              outputAssetId: 'out_asset_test',
+              outputTypeKey: 'EXECUTIVE_BRIEF',
+              outputTypeLabel: 'Executive Brief',
+              status: 'GENERATED',
+              exportable: true,
+              stale: false,
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutputLab,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /output lab/i }))
+
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(main).getByRole('tablist', { name: /output lab sections/i })).toBeInTheDocument()
+    await user.click(within(main).getByRole('tab', { name: /composition/i }))
+    await user.click(within(main).getByRole('button', { name: /^generate$/i }))
+
+    await waitFor(() => {
+      expect(createRuntimeOutputRequest).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        body: { outputTypeKey: 'EXECUTIVE_BRIEF' },
+      })
+    })
+    expect(generateRuntimeOutputRequest).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outputRequestId: 'out_req_test',
+      body: {},
+    })
+    expect(refetchOutputLab).toHaveBeenCalled()
+
+    await user.click(within(main).getByRole('tab', { name: /outputs/i }))
+    await user.click(within(main).getByRole('button', { name: /^markdown$/i }))
+
+    expect(exportRuntimeOutputAsset).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outputAssetId: 'out_asset_test',
+      format: 'MARKDOWN',
+    })
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:output-lab-export')
+  })
+
+  it('keeps generated output success visible when Output Lab refetch fails', async () => {
+    const user = userEvent.setup()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      refetchOutputLab.mockRejectedValueOnce(new Error('refetch timed out'))
+      useGetRuntimeOutputLabQuery.mockReturnValue({
+        data: { data: readyOutputLabPayload },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: refetchOutputLab,
+      })
+
+      renderRuntimeWorkspace()
+      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      const main = screen.getByRole('main', { name: /guided execution sections/i })
+      await user.click(within(main).getByRole('tab', { name: /composition/i }))
+      await user.click(within(main).getByRole('button', { name: /^generate$/i }))
+
+      expect(await screen.findByText('Output generated')).toBeInTheDocument()
+      expect(screen.getByText('Governed output is ready to export.')).toBeInTheDocument()
+      expect(screen.queryByText('Output failed')).not.toBeInTheDocument()
+      await waitFor(() => {
+        expect(warnSpy).toHaveBeenCalledWith(
+          'Output Lab refetch failed after successful generation.',
+          expect.any(Error),
+        )
+      })
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('renders output assets with stable keys when generated asset ids are missing', async () => {
+    const user = userEvent.setup()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      useGetRuntimeOutputLabQuery.mockReturnValue({
+        data: {
+          data: {
+            ...readyOutputLabPayload,
+            assets: [
+              {
+                outputAssetId: '',
+                outputTypeKey: 'EXECUTIVE_BRIEF',
+                outputTypeLabel: 'Executive Brief',
+                status: 'GENERATED',
+                exportable: true,
+                stale: false,
+              },
+              {
+                outputAssetId: '',
+                outputTypeKey: 'EXECUTIVE_BRIEF',
+                outputTypeLabel: 'Executive Brief',
+                status: 'GENERATED',
+                exportable: true,
+                stale: false,
+              },
+            ],
+          },
+        },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: refetchOutputLab,
+      })
+
+      renderRuntimeWorkspace()
+      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      const main = screen.getByRole('main', { name: /guided execution sections/i })
+      await user.click(within(main).getByRole('tab', { name: /outputs/i }))
+
+      const assetList = within(main).getByRole('list', { name: /generated output assets/i })
+      expect(within(assetList).getAllByText('Executive Brief')).toHaveLength(2)
+      expect(errorSpy.mock.calls.some((call) =>
+        call.some((item) => String(item).includes('Encountered two children with the same key')),
+      )).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('counts accepted section truth toward required progress when section input is empty', () => {

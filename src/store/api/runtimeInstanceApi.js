@@ -81,6 +81,50 @@ export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
 
+export const buildRuntimeOutputLabQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab`
+
+export const buildRuntimeOutputLabReadinessQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/readiness`
+
+export const buildRuntimeOutputLabDefinitionsQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/definitions`
+
+export const buildCreateRuntimeOutputRequestQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/requests`,
+  method: 'POST',
+  body,
+})
+
+export const buildGenerateRuntimeOutputRequestQuery = ({ runtimeInstanceId, outputRequestId, body = {} }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/requests/${
+    encodeURIComponent(String(outputRequestId ?? '').trim())
+  }/generate`,
+  method: 'POST',
+  body,
+})
+
+export const buildRuntimeOutputAssetsQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/assets`
+
+export const buildRuntimeOutputAssetQuery = ({ runtimeInstanceId, outputAssetId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/assets/${
+    encodeURIComponent(String(outputAssetId ?? '').trim())
+  }`
+
+export const buildPublishRuntimeOutputAssetQuery = ({ runtimeInstanceId, outputAssetId, body = {} }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/assets/${
+    encodeURIComponent(String(outputAssetId ?? '').trim())
+  }/publish`,
+  method: 'POST',
+  body,
+})
+
+export const buildExportRuntimeOutputAssetQuery = ({ runtimeInstanceId, outputAssetId, format }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/assets/${
+    encodeURIComponent(String(outputAssetId ?? '').trim())
+  }/export/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`
+
 export const buildRuntimeEvidenceQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/evidence`
 
@@ -226,6 +270,9 @@ export const getClearRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeSt
 export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewAllRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getRebuildRuntimeIntelligenceGraphInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getCreateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getGenerateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getPublishRuntimeOutputAssetInvalidationTags = getMutateRuntimeStateInvalidationTags
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -247,6 +294,51 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeRenderer: build.query({
       query: buildRuntimeRendererQuery,
       providesTags: getRuntimeRendererTags,
+    }),
+
+    getRuntimeOutputLab: build.query({
+      query: buildRuntimeOutputLabQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutputLabReadiness: build.query({
+      query: buildRuntimeOutputLabReadinessQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutputLabDefinitions: build.query({
+      query: buildRuntimeOutputLabDefinitionsQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    createRuntimeOutputRequest: build.mutation({
+      query: buildCreateRuntimeOutputRequestQuery,
+      invalidatesTags: getCreateRuntimeOutputRequestInvalidationTags,
+    }),
+
+    generateRuntimeOutputRequest: build.mutation({
+      query: buildGenerateRuntimeOutputRequestQuery,
+      invalidatesTags: getGenerateRuntimeOutputRequestInvalidationTags,
+    }),
+
+    getRuntimeOutputAssets: build.query({
+      query: buildRuntimeOutputAssetsQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutputAsset: build.query({
+      query: buildRuntimeOutputAssetQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    publishRuntimeOutputAsset: build.mutation({
+      query: buildPublishRuntimeOutputAssetQuery,
+      invalidatesTags: getPublishRuntimeOutputAssetInvalidationTags,
+    }),
+
+    exportRuntimeOutputAsset: build.query({
+      query: buildExportRuntimeOutputAssetQuery,
+      providesTags: getRuntimeInstanceDetailTags,
     }),
 
     getRuntimeEvidence: build.query({
@@ -347,12 +439,21 @@ export const {
   useCreateRuntimeInstanceMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeEvidenceQuery,
+  useGetRuntimeOutputAssetQuery,
+  useGetRuntimeOutputAssetsQuery,
+  useGetRuntimeOutputLabQuery,
+  useGetRuntimeOutputLabDefinitionsQuery,
+  useGetRuntimeOutputLabReadinessQuery,
   useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeIntelligenceGraphCoverageQuery,
   useGetRuntimeIntelligenceGraphHealthQuery,
   useGetRuntimeIntelligenceGraphNodeLineageQuery,
   useGetRuntimeIntelligenceGraphSectionDependenciesQuery,
   useGetRuntimeRendererQuery,
+  useCreateRuntimeOutputRequestMutation,
+  useGenerateRuntimeOutputRequestMutation,
+  useLazyExportRuntimeOutputAssetQuery,
+  usePublishRuntimeOutputAssetMutation,
   useMutateRuntimeStateMutation,
   useRebuildRuntimeIntelligenceGraphMutation,
   useAcceptRuntimeDiscoveryMutation,
