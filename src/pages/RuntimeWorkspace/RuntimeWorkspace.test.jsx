@@ -2837,6 +2837,13 @@ describe('RuntimeWorkspace', () => {
                 evidenceProduced: 8,
                 url: 'https://acme.example/product',
               },
+              {
+                sourceId: 'document_strategy',
+                sourceType: 'UPLOADED_DOCUMENT',
+                fileName: 'strategy-notes.pdf',
+                documentStatus: 'EXTRACTED',
+                evidenceProduced: 1,
+              },
             ],
             evidenceObjects: [
               {
@@ -2853,6 +2860,14 @@ describe('RuntimeWorkspace', () => {
                 category: 'Services',
                 coverageArea: 'Services',
                 extractedFact: 'Website heading: Advisory services for delivery pressure.',
+                reviewStatus: 'PENDING',
+              },
+              {
+                evidenceObjectId: 'evidence_document_fixture',
+                sourceId: 'document_strategy',
+                category: 'Proof',
+                coverageArea: 'Proof',
+                extractedFact: 'Document finding: Customer proof is available.',
                 reviewStatus: 'PENDING',
               },
               {
@@ -2882,9 +2897,14 @@ describe('RuntimeWorkspace', () => {
       .toBeInTheDocument()
     expect(within(evidenceSources).getByText('Services / https://acme.example/product')).toBeInTheDocument()
     expect(within(evidenceSources).queryByText(/Services \/ website_acme/i)).not.toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Document finding: Customer proof is available.')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Proof / strategy-notes.pdf')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Intelligence Hub note: governed narrative generation is required.'))
       .toBeInTheDocument()
     expect(within(evidenceSources).queryByText(/Discovery note/i)).not.toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Website')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Document')).toBeInTheDocument()
+    expect(within(evidenceSources).getAllByText('Input').length).toBeGreaterThan(0)
 
     await user.click(within(evidenceSources).getByRole('button', {
       name: /reject evidence object evidence_companyWebsite_fixture/i,

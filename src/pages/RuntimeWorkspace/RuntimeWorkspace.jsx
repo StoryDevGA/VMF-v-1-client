@@ -1198,6 +1198,14 @@ const SOURCE_REGISTRY_GROUP_LABELS = Object.freeze({
   discovery: `${INTELLIGENCE_HUB_LABEL} Sources`,
 })
 
+const EVIDENCE_OBJECT_SOURCE_KIND_LABELS = Object.freeze({
+  website: 'Website',
+  document: 'Document',
+  discovery: 'Input',
+})
+
+const EVIDENCE_OBJECT_SOURCE_KIND_ORDER = Object.freeze(['discovery', 'website', 'document'])
+
 const COVERAGE_AREA_STATE_META = Object.freeze({
   STRONG: {
     label: 'Strong',
@@ -1296,6 +1304,44 @@ const formatEvidenceObjectSourceLabel = ({ evidenceObject = {}, sourceRegistryBy
     : normalizeIntelligenceHubDisplayText(evidenceObject.sourceLabel)
       || normalizeIntelligenceHubDisplayText(evidenceObject.sourceFileName)
       || ''
+}
+
+const getEvidenceObjectSourceKind = ({ evidenceObject = {}, sourceRegistryById = {} } = {}) => {
+  const sourceId = String(evidenceObject.sourceId || '').trim()
+  const source = sourceRegistryById[sourceId]
+  if (source) return getSourceRegistryGroupKey(source)
+  const sourceType = String(evidenceObject.sourceType || evidenceObject.type || '').trim().toUpperCase()
+  const acquisitionMethod = String(evidenceObject.acquisitionMethod || '').trim().toUpperCase()
+  if (sourceType === 'UPLOADED_DOCUMENT' || acquisitionMethod === 'DOCUMENT_INGESTION') return 'document'
+  if (sourceType === 'WEBSITE' || acquisitionMethod === 'WEBSITE_ACQUISITION' || sourceId.startsWith('website_')) {
+    return 'website'
+  }
+  return 'discovery'
+}
+
+const formatEvidenceObjectSourceKindLabel = (sourceKind) =>
+  EVIDENCE_OBJECT_SOURCE_KIND_LABELS[sourceKind] || EVIDENCE_OBJECT_SOURCE_KIND_LABELS.discovery
+
+const buildEvidenceObjectSourceGroups = ({ evidenceObjects = [], sourceRegistryById = {} } = {}) => {
+  const groupsByKind = evidenceObjects.reduce((groups, evidenceObject) => {
+    const sourceKind = getEvidenceObjectSourceKind({ evidenceObject, sourceRegistryById })
+    const existingGroup = groups[sourceKind] || {
+      key: sourceKind,
+      label: formatEvidenceObjectSourceKindLabel(sourceKind),
+      evidenceObjects: [],
+    }
+    return {
+      ...groups,
+      [sourceKind]: {
+        ...existingGroup,
+        evidenceObjects: [...existingGroup.evidenceObjects, evidenceObject],
+      },
+    }
+  }, {})
+
+  return EVIDENCE_OBJECT_SOURCE_KIND_ORDER
+    .map((sourceKind) => groupsByKind[sourceKind])
+    .filter(Boolean)
 }
 
 const formatLineageSourceTitle = (source = {}) =>
@@ -3681,6 +3727,7 @@ function DiscoverySection({
   const sourceRegistryById = buildSourceRegistryLookup(sourceRegistry)
   const sourceRegistryGroups = buildSourceRegistryGroups(sourceRegistry)
   const evidenceObjects = getDiscoveryEvidenceObjects({ discovery, evidenceDetail })
+  const evidenceObjectSourceGroups = buildEvidenceObjectSourceGroups({ evidenceObjects, sourceRegistryById })
   const isInspectionMode = Boolean(inspectionMode)
   const rawSourceRegistrySummary = hasSourceRegistrySummary(discovery?.sourceRegistrySummary)
     ? discovery.sourceRegistrySummary
@@ -5003,68 +5050,89 @@ function DiscoverySection({
                         <div>
                           <h4>Evidence Objects</h4>
                           {evidenceObjects.length > 0 ? (
-                            <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects">
-                              {evidenceObjects.map((evidenceObject) => {
-                                const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
-                                const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
-                                const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
-                                const sourceLabel = formatEvidenceObjectSourceLabel({
-                                  evidenceObject,
-                                  sourceRegistryById,
-                                })
-                                const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
-                                  && !isInspectionMode
-                                  && !disabled
-                                  && !mutationDisabledReason
-                                  && !evidenceReviewInFlight
-
-                                return (
-                                  <li key={evidenceObject.evidenceObjectId || evidenceObject.lineageRef}>
-                                    <div className="runtime-workspace__evidence-object-heading">
-                                      <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
-                                      <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
-                                        {formatRuntimeTokenLabel(reviewStatus)}
-                                      </Badge>
-                                    </div>
+                            <div className="runtime-workspace__evidence-object-groups">
+                              {evidenceObjectSourceGroups.map((sourceGroup) => (
+                                <section
+                                  key={sourceGroup.key}
+                                  className={`runtime-workspace__evidence-object-group runtime-workspace__evidence-object-group--${sourceGroup.key}`}
+                                  aria-label={`${sourceGroup.label} evidence objects`}
+                                >
+                                  <div className="runtime-workspace__evidence-object-group-header">
+                                    <span className="runtime-workspace__evidence-source-chip">
+                                      {sourceGroup.label}
+                                    </span>
                                     <span>
-                                      {normalizeIntelligenceHubDisplayText(evidenceObject.extractedFact)
-                                        || 'No extracted fact text is available.'}
+                                      {`${sourceGroup.evidenceObjects.length} finding${sourceGroup.evidenceObjects.length === 1 ? '' : 's'}`}
                                     </span>
-                                    <span className="runtime-workspace__section-note">
-                                      {[evidenceObject.coverageArea, sourceLabel].filter(Boolean).join(' / ')}
-                                    </span>
-                                    {!isInspectionMode ? (
-                                      <div className="runtime-workspace__evidence-object-actions">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          leftIcon={<MdCheckCircle aria-hidden="true" />}
-                                          disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
-                                          loading={isReviewing && reviewStatus !== 'ACCEPTED'}
-                                          aria-label={`Accept evidence object ${actionLabel}`}
-                                          onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
+                                  </div>
+                                  <ul className="runtime-workspace__plain-list runtime-workspace__plain-list--evidence-objects">
+                                    {sourceGroup.evidenceObjects.map((evidenceObject) => {
+                                      const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
+                                      const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
+                                      const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
+                                      const sourceLabel = formatEvidenceObjectSourceLabel({
+                                        evidenceObject,
+                                        sourceRegistryById,
+                                      })
+                                      const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
+                                        && !isInspectionMode
+                                        && !disabled
+                                        && !mutationDisabledReason
+                                        && !evidenceReviewInFlight
+
+                                      return (
+                                        <li
+                                          key={evidenceObject.evidenceObjectId || evidenceObject.lineageRef}
+                                          className="runtime-workspace__evidence-object"
                                         >
-                                          Accept
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="danger"
-                                          size="sm"
-                                          leftIcon={<MdErrorOutline aria-hidden="true" />}
-                                          disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
-                                          loading={isReviewing && reviewStatus !== 'REJECTED'}
-                                          aria-label={`Reject evidence object ${actionLabel}`}
-                                          onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
-                                        >
-                                          Reject
-                                        </Button>
-                                      </div>
-                                    ) : null}
-                                  </li>
-                                )
-                              })}
-                            </ul>
+                                          <div className="runtime-workspace__evidence-object-heading">
+                                            <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
+                                            <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
+                                              {formatRuntimeTokenLabel(reviewStatus)}
+                                            </Badge>
+                                          </div>
+                                          <span>
+                                            {normalizeIntelligenceHubDisplayText(evidenceObject.extractedFact)
+                                              || 'No extracted fact text is available.'}
+                                          </span>
+                                          <span className="runtime-workspace__section-note">
+                                            {[evidenceObject.coverageArea, sourceLabel].filter(Boolean).join(' / ')}
+                                          </span>
+                                          {!isInspectionMode ? (
+                                            <div className="runtime-workspace__evidence-object-actions">
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                leftIcon={<MdCheckCircle aria-hidden="true" />}
+                                                disabled={!canReviewEvidenceObject || reviewStatus === 'ACCEPTED'}
+                                                loading={isReviewing && reviewStatus !== 'ACCEPTED'}
+                                                aria-label={`Accept evidence object ${actionLabel}`}
+                                                onClick={handleReviewEvidenceObject(evidenceObject, 'ACCEPTED')}
+                                              >
+                                                Accept
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="danger"
+                                                size="sm"
+                                                leftIcon={<MdErrorOutline aria-hidden="true" />}
+                                                disabled={!canReviewEvidenceObject || reviewStatus === 'REJECTED'}
+                                                loading={isReviewing && reviewStatus !== 'REJECTED'}
+                                                aria-label={`Reject evidence object ${actionLabel}`}
+                                                onClick={handleReviewEvidenceObject(evidenceObject, 'REJECTED')}
+                                              >
+                                                Reject
+                                              </Button>
+                                            </div>
+                                          ) : null}
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                </section>
+                              ))}
+                            </div>
                           ) : (
                             <p>No reviewable evidence objects are available for this evidence pack.</p>
                           )}
@@ -5084,7 +5152,7 @@ function DiscoverySection({
                         ) : null}
                       </div>
                     ) : (
-                      <p>No source lineage is available for this evidence pack.</p>
+                      <p>No source or evidence detail is available for this evidence pack.</p>
                     )}
                   </section>
                 ) : null}
