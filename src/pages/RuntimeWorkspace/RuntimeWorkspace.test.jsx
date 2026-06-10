@@ -1716,6 +1716,76 @@ describe('RuntimeWorkspace', () => {
     expect(await screen.findByText(/Intelligence Hub evidence refreshed/i)).toBeInTheDocument()
   })
 
+  it('shows the nested Intelligence Hub document ingestion cause when extraction fails', async () => {
+    const user = userEvent.setup()
+    unwrapDiscoveryInputs.mockRejectedValueOnce({
+      status: 422,
+      data: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Document ingestion could not produce governed evidence.',
+          requestId: 'mq8bynyv-6vtfi3',
+          details: {
+            reason: 'DOCUMENT_INGESTION_FAILED',
+            acquisitionProfile: 'STANDARD',
+            acquisitionStatus: 'FAILED',
+            acquisitionError: 'Uploaded document customer-brief.pdf did not produce reviewable evidence.',
+          },
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Context')
+
+    const discoveryDocuments = screen.getByRole('region', { name: /intelligence hub document context/i })
+    const discoveryDocument = new File(
+      ['%PDF-1.7 unreadable deployment fixture'],
+      'customer-brief.pdf',
+      { type: 'application/pdf' },
+    )
+
+    await user.upload(within(discoveryDocuments).getByLabelText('Document Sources'), discoveryDocument)
+    expect(await within(discoveryDocuments).findByText('customer-brief.pdf')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    await user.click(within(discoveryDocuments).getByRole('button', { name: /extract intelligence hub document evidence/i }))
+
+    expect(updateRuntimeDiscoveryInputs).toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+    expect(await screen.findByText(
+      /Uploaded document customer-brief\.pdf did not produce reviewable evidence\. Reference: mq8bynyv-6vtfi3/i,
+    )).toBeInTheDocument()
+    expect(screen.queryByText(/Document ingestion could not produce governed evidence\. \(Ref: mq8bynyv-6vtfi3\)/i))
+      .not.toBeInTheDocument()
+    expect(within(discoveryDocuments).getByText('customer-brief.pdf')).toBeInTheDocument()
+  })
+
   it('blocks evidence refresh while selected discovery documents are still preparing', async () => {
     const OriginalFileReader = window.FileReader
     window.FileReader = class PendingFileReader {

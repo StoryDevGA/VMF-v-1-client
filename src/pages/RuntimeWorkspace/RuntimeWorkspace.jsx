@@ -226,6 +226,8 @@ const PPTX_UNREADABLE_TEXT_ERROR_PREFIX = 'PowerPoint document did not contain r
 const PPTX_UNREADABLE_TEXT_HELPER = 'This PowerPoint file has no extractable slide text or speaker notes. Use a PPTX with selectable text.'
 const PPTX_MALFORMED_ERROR_PREFIX = 'PowerPoint file is not a valid PPTX package'
 const PPTX_MALFORMED_HELPER = 'We could not extract this presentation. Confirm that it is a valid PPTX file.'
+const DOCUMENT_INGESTION_FAILED_REASON = 'DOCUMENT_INGESTION_FAILED'
+const DOCUMENT_INGESTION_FAILED_MESSAGE = 'Document ingestion could not produce governed evidence.'
 
 const getNestedDetailMessage = (details) => {
   if (!details || typeof details !== 'object') return ''
@@ -263,6 +265,40 @@ const formatSectionSupportingFileError = (error) => {
     : ''
 
   return `${message}${requestReference}`
+}
+
+const formatDocumentIngestionMessage = (message) => {
+  if (message.startsWith(PDF_UNREADABLE_TEXT_ERROR_PREFIX)) {
+    return PDF_UNREADABLE_TEXT_HELPER
+  }
+  if (message.startsWith(PPTX_UNREADABLE_TEXT_ERROR_PREFIX)) {
+    return PPTX_UNREADABLE_TEXT_HELPER
+  }
+  if (message.startsWith(PPTX_MALFORMED_ERROR_PREFIX)) {
+    return PPTX_MALFORMED_HELPER
+  }
+  return message
+}
+
+const formatIntelligenceHubEvidenceError = (error) => {
+  const normalizedError = normalizeError(error)
+  const acquisitionError = typeof normalizedError.details?.acquisitionError === 'string'
+    ? normalizedError.details.acquisitionError.trim()
+    : ''
+  const isDocumentIngestionError =
+    normalizedError.details?.reason === DOCUMENT_INGESTION_FAILED_REASON
+    || stripRequestReference(normalizedError.message) === DOCUMENT_INGESTION_FAILED_MESSAGE
+
+  if (!isDocumentIngestionError) {
+    return normalizedError.message
+  }
+
+  const baseMessage = stripRequestReference(acquisitionError || normalizedError.message)
+  const requestReference = normalizedError.requestId
+    ? ` Reference: ${normalizedError.requestId}`
+    : ''
+
+  return `${formatDocumentIngestionMessage(baseMessage)}${requestReference}`
 }
 
 function DocumentStorageTooltip({ id }) {
@@ -5791,10 +5827,9 @@ function RuntimeWorkspace() {
       await refetch()
       return true
     } catch (discoveryError) {
-      const normalizedError = normalizeError(discoveryError)
       setDiscoveryFeedback({
         variant: 'error',
-        message: normalizedError.message,
+        message: formatIntelligenceHubEvidenceError(discoveryError),
       })
       return false
     } finally {
