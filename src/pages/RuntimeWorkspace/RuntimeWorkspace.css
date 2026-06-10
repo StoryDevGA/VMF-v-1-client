@@ -1075,6 +1075,17 @@
   white-space: nowrap;
 }
 
+.runtime-workspace__section-panel .runtime-workspace__accepted-coverage-summary {
+  overflow: visible;
+  max-height: none;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .runtime-workspace__coverage-heatmap li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
@@ -1145,11 +1156,15 @@
   justify-self: start;
 }
 
-.runtime-workspace__evidence-acceptance-summary-lede {
+.runtime-workspace__section-panel .runtime-workspace__evidence-acceptance-summary-lede {
+  overflow: visible;
+  max-height: none;
   margin: var(--spacing-xs) 0 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .runtime-workspace__evidence-acceptance-summary-list {
@@ -1289,6 +1304,75 @@
 }
 
 .runtime-workspace__profile-guidance p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.runtime-workspace__acquisition-readiness {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-data-blue) 34%, var(--color-card-border));
+  border-radius: var(--border-radius-sm);
+  background-color: color-mix(in srgb, var(--color-data-blue) 7%, var(--color-surface));
+}
+
+.runtime-workspace__acquisition-readiness-heading {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.runtime-workspace__acquisition-readiness-heading h5 {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__acquisition-readiness-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--spacing-xs);
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.runtime-workspace__acquisition-readiness-item {
+  display: flex;
+  gap: var(--spacing-2xs);
+  align-items: center;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__acquisition-readiness-item svg {
+  flex: 0 0 auto;
+  color: var(--color-data-blue);
+  font-size: var(--font-size-md);
+}
+
+.runtime-workspace__acquisition-readiness-item--complete {
+  color: var(--color-text-primary);
+}
+
+.runtime-workspace__acquisition-readiness-item--complete svg {
+  color: var(--color-success);
+}
+
+.runtime-workspace__acquisition-readiness p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);

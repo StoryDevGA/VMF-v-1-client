@@ -1507,6 +1507,63 @@ describe('RuntimeWorkspace', () => {
     expect(viewSources).toHaveAttribute('aria-describedby', reason.id)
   })
 
+  it('blocks evidence refresh with visible required context guidance until acquisition context is complete', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'INPUT_REQUIRED',
+            },
+            inputComplete: false,
+            evidenceReady: false,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {
+              companyName: 'Acme',
+              marketRegion: 'UK enterprise',
+              websiteSources: ['https://acme.example'],
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Context')
+
+    const readiness = screen.getByRole('region', { name: /acquisition readiness/i })
+    expect(within(readiness).getByText('Required before extraction')).toBeInTheDocument()
+    expect(within(readiness).getByText('Incomplete')).toBeInTheDocument()
+    expect(within(readiness).getByText(/Add Target product or offer before building evidence/i)).toBeInTheDocument()
+    expect(within(readiness).getByText('Website URL')).toBeInTheDocument()
+    expect(within(readiness).getByText('Company name')).toBeInTheDocument()
+    expect(within(readiness).getByText('Market / region')).toBeInTheDocument()
+    expect(within(readiness).getByText('Target product or offer')).toBeInTheDocument()
+
+    const buildButton = screen.getByRole('button', { name: /build evidence pack/i })
+    const reason = document.getElementById('discovery-build-disabled-reason')
+    expect(buildButton).toBeDisabled()
+    expect(reason).toHaveTextContent(/Add Target product or offer before building evidence/i)
+    expect(buildButton).toHaveAttribute('aria-describedby', reason.id)
+    fireEvent.submit(buildButton.closest('form'))
+    expect(updateRuntimeDiscoveryInputs).not.toHaveBeenCalled()
+
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+
+    expect(within(readiness).getByText('Ready')).toBeInTheDocument()
+    expect(within(readiness).getByText(/Evidence extraction is ready to run with the current context/i))
+      .toBeInTheDocument()
+    expect(buildButton).toBeEnabled()
+  })
+
   it('refreshes discovery evidence through the discovery inputs endpoint', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -2416,6 +2473,10 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     const coverageHeatmap = screen.getByRole('region', { name: /coverage heatmap/i })
+    expect(within(coverageHeatmap).getByRole('heading', { name: 'Accepted Coverage Heatmap' })).toBeInTheDocument()
+    expect(within(coverageHeatmap).getByText(
+      '11 extracted evidence objects are pending review. Review and accept evidence to reveal the accepted coverage heatmap.',
+    )).toBeInTheDocument()
     expect(within(coverageHeatmap).getByText('Company')).toBeInTheDocument()
     expect(within(coverageHeatmap).getByText('Industries')).toBeInTheDocument()
     expect(within(coverageHeatmap).getByLabelText(/Company coverage status: Strong accepted evidence coverage/i))
@@ -2470,6 +2531,65 @@ describe('RuntimeWorkspace', () => {
     const discoveryHealth = screen.getByRole('region', { name: /intelligence hub health/i })
     expect(within(discoveryHealth).getByText(/coverage 70%/i)).toBeInTheDocument()
     expect(within(discoveryHealth).getByText(/Source Backed confidence/i)).toBeInTheDocument()
+  })
+
+  it('hides accepted coverage progress until evidence has been accepted', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: {
+              status: 'EVIDENCE_READY',
+            },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            evidenceObjectSummary: {
+              evidenceObjectCount: 4,
+              acceptedEvidenceCount: 0,
+              pendingReviewCount: 4,
+              rejectedEvidenceCount: 0,
+            },
+            discoveryHealth: {
+              coveragePercent: 50,
+              confidence: 'SOURCE_BACKED',
+              missingAreas: ['PROOF'],
+              coverageAreas: [
+                {
+                  area: 'Company',
+                  state: 'WEAK',
+                  evidenceCount: 3,
+                  acceptedEvidenceCount: 0,
+                },
+                {
+                  area: 'Services',
+                  state: 'WEAK',
+                  evidenceCount: 1,
+                  acceptedEvidenceCount: 0,
+                },
+              ],
+            },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    const coverageHeatmap = screen.getByRole('region', { name: /accepted coverage heatmap/i })
+    expect(within(coverageHeatmap).getByText(
+      '4 extracted evidence objects are pending review. Review and accept evidence to reveal the accepted coverage heatmap.',
+    )).toBeInTheDocument()
+    expect(within(coverageHeatmap).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(coverageHeatmap).queryByText('Company')).not.toBeInTheDocument()
+    expect(within(coverageHeatmap).queryByText(/Coverage 50%/i)).not.toBeInTheDocument()
   })
 
   it('renders Intelligence Graph summaries without exposing raw graph internals', () => {
@@ -2709,6 +2829,14 @@ describe('RuntimeWorkspace', () => {
                 evidenceProduced: 1,
                 url: 'https://acme.example',
               },
+              {
+                sourceId: 'website_acme',
+                sourceType: 'WEBSITE',
+                label: 'Website Source',
+                acquisitionStatus: 'ACQUIRED',
+                evidenceProduced: 8,
+                url: 'https://acme.example/product',
+              },
             ],
             evidenceObjects: [
               {
@@ -2717,6 +2845,14 @@ describe('RuntimeWorkspace', () => {
                 category: 'Company',
                 coverageArea: 'Company',
                 extractedFact: 'Company website: https://acme.example',
+                reviewStatus: 'PENDING',
+              },
+              {
+                evidenceObjectId: 'evidence_website_fixture',
+                sourceId: 'website_acme',
+                category: 'Services',
+                coverageArea: 'Services',
+                extractedFact: 'Website heading: Advisory services for delivery pressure.',
                 reviewStatus: 'PENDING',
               },
               {
@@ -2742,6 +2878,10 @@ describe('RuntimeWorkspace', () => {
     expect(within(evidenceSources).getByRole('heading', { name: 'Intelligence Hub Sources (1)' })).toBeInTheDocument()
     expect(within(evidenceSources).getByText('https://acme.example')).toBeInTheDocument()
     expect(within(evidenceSources).getByText('Company website: https://acme.example')).toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Website heading: Advisory services for delivery pressure.'))
+      .toBeInTheDocument()
+    expect(within(evidenceSources).getByText('Services / https://acme.example/product')).toBeInTheDocument()
+    expect(within(evidenceSources).queryByText(/Services \/ website_acme/i)).not.toBeInTheDocument()
     expect(within(evidenceSources).getByText('Intelligence Hub note: governed narrative generation is required.'))
       .toBeInTheDocument()
     expect(within(evidenceSources).queryByText(/Discovery note/i)).not.toBeInTheDocument()
@@ -3223,8 +3363,12 @@ describe('RuntimeWorkspace', () => {
     selectIntelligenceHubTab('Context')
 
     const refreshButton = screen.getByRole('button', { name: /build evidence pack/i })
-    expect(refreshButton).toBeEnabled()
+    expect(refreshButton).toBeDisabled()
+    await user.type(screen.getByLabelText('Website Source 1'), 'https://acme.example')
     await user.type(screen.getByLabelText('Company Name'), 'Acme')
+    await user.type(screen.getByLabelText('Market / Region'), 'UK enterprise')
+    await user.type(screen.getByLabelText('Target Product or Offer'), 'Managed proposal platform')
+    expect(refreshButton).toBeEnabled()
     await user.click(refreshButton)
 
     expect(updateRuntimeDiscoveryInputs).toHaveBeenCalledWith(expect.objectContaining({
@@ -3232,7 +3376,11 @@ describe('RuntimeWorkspace', () => {
       body: expect.objectContaining({
         acquisitionProfile: 'STANDARD',
         inputs: expect.objectContaining({
+          companyWebsite: 'https://acme.example',
           companyName: 'Acme',
+          marketRegion: 'UK enterprise',
+          targetOffer: 'Managed proposal platform',
+          websiteSources: ['https://acme.example'],
         }),
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       }),

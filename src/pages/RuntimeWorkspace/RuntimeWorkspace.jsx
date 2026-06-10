@@ -1096,6 +1096,56 @@ const getDiscoveryEvidenceObjects = ({ discovery, evidenceDetail }) => {
   return EMPTY_ARRAY
 }
 
+const DISCOVERY_REQUIRED_CONTEXT_FIELDS = Object.freeze([
+  {
+    key: 'websiteSources',
+    label: 'Website URL',
+    isComplete: (draftInputs = {}) => Array.isArray(draftInputs.websiteSources)
+      && draftInputs.websiteSources.some((source) => String(source || '').trim()),
+  },
+  {
+    key: 'companyName',
+    label: 'Company name',
+    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.companyName || '').trim()),
+  },
+  {
+    key: 'marketRegion',
+    label: 'Market / region',
+    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.marketRegion || '').trim()),
+  },
+  {
+    key: 'targetOffer',
+    label: 'Target product or offer',
+    isComplete: (draftInputs = {}) => Boolean(String(draftInputs.targetOffer || '').trim()),
+  },
+])
+
+const formatDiscoveryRequiredContextList = (values = []) => {
+  const labels = values.map((value) => String(value || '').trim()).filter(Boolean)
+  if (labels.length <= 1) return labels[0] || ''
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
+}
+
+const buildDiscoveryContextReadiness = (draftInputs = {}) => {
+  const rows = DISCOVERY_REQUIRED_CONTEXT_FIELDS.map((field) => ({
+    key: field.key,
+    label: field.label,
+    complete: field.isComplete(draftInputs),
+  }))
+  const missingRows = rows.filter((row) => !row.complete)
+  const missingLabels = missingRows.map((row) => row.label)
+
+  return {
+    complete: missingRows.length === 0,
+    missingLabels,
+    reason: missingLabels.length > 0
+      ? `Add ${formatDiscoveryRequiredContextList(missingLabels)} before building evidence.`
+      : '',
+    rows,
+  }
+}
+
 const normalizeWebsiteSourceDrafts = (inputValues = {}) => {
   const explicitSources = Array.isArray(inputValues.websiteSources)
     ? inputValues.websiteSources
@@ -1228,6 +1278,25 @@ const formatSourceRegistryEntryTitle = (source = {}) =>
   || normalizeIntelligenceHubDisplayText(source.fieldKey)
   || source.sourceId
   || 'Source'
+
+const buildSourceRegistryLookup = (sourceRegistry = []) =>
+  sourceRegistry.reduce((lookup, source) => {
+    const sourceId = String(source?.sourceId || '').trim()
+    if (!sourceId) return lookup
+    return {
+      ...lookup,
+      [sourceId]: source,
+    }
+  }, {})
+
+const formatEvidenceObjectSourceLabel = ({ evidenceObject = {}, sourceRegistryById = {} } = {}) => {
+  const source = sourceRegistryById[String(evidenceObject.sourceId || '').trim()]
+  return source
+    ? formatSourceRegistryEntryTitle(source)
+    : normalizeIntelligenceHubDisplayText(evidenceObject.sourceLabel)
+      || normalizeIntelligenceHubDisplayText(evidenceObject.sourceFileName)
+      || ''
+}
 
 const formatLineageSourceTitle = (source = {}) =>
   normalizeIntelligenceHubDisplayText(source.label)
@@ -3609,6 +3678,7 @@ function DiscoverySection({
     keys: evidenceSummaryKeys,
   })
   const sourceRegistry = getDiscoverySourceRegistry({ discovery, evidenceDetail })
+  const sourceRegistryById = buildSourceRegistryLookup(sourceRegistry)
   const sourceRegistryGroups = buildSourceRegistryGroups(sourceRegistry)
   const evidenceObjects = getDiscoveryEvidenceObjects({ discovery, evidenceDetail })
   const isInspectionMode = Boolean(inspectionMode)
@@ -3770,11 +3840,13 @@ function DiscoverySection({
     || null
   const acceptAction = discoveryActions[DISCOVERY_ACTION_KEYS.ACCEPT_EVIDENCE] || null
   const buildButtonLabel = hasEvidence ? 'Refresh Evidence Pack' : 'Build Evidence Pack'
+  const contextReadiness = buildDiscoveryContextReadiness(draftInputs)
   const documentBuildDisabledReason = documentUploadPreparing
     ? 'Wait for selected documents to finish preparing before refreshing evidence.'
     : documentUploadError
   const buildDisabledReason = mutationDisabledReason
     || documentBuildDisabledReason
+    || contextReadiness.reason
     || (buildAction && !buildAction.enabled
       ? buildAction.disabledReason || `${INTELLIGENCE_HUB_EVIDENCE_LABEL} action is currently unavailable.`
       : '')
@@ -3928,6 +4000,7 @@ function DiscoverySection({
       return false
     }
     if (documentUploadError) return false
+    if (!contextReadiness.complete) return false
 
     const refreshed = await onRefreshEvidence?.({
       acquisitionProfile,
@@ -4013,6 +4086,7 @@ function DiscoverySection({
         })
         .filter((area) => area.areaLabel && area.areaLabel !== '--')
     : []
+  const hasAcceptedCoverage = coverageAreaRows.some((area) => area.acceptedEvidenceCount > 0)
   const graphCoverageDomainRows = Array.isArray(graphCoverage.domains)
     ? graphCoverage.domains
         .map((domain) => {
@@ -4515,9 +4589,14 @@ function DiscoverySection({
                       <p>{sourceRegistrySummaryText || 'No recent source registry entries are projected yet.'}</p>
                     )}
                   </section>
-                  <section className="runtime-workspace__section-panel" aria-label="Coverage heatmap">
-                    <h3>Coverage Heatmap</h3>
-                    {coverageAreaRows.length > 0 ? (
+                  <section className="runtime-workspace__section-panel" aria-label="Accepted coverage heatmap">
+                    <h3>Accepted Coverage Heatmap</h3>
+                    <p className="runtime-workspace__accepted-coverage-summary">
+                      {evidenceObjectSummary.pendingReviewCount > 0
+                        ? `${evidenceObjectSummary.pendingReviewCount} extracted evidence object${evidenceObjectSummary.pendingReviewCount === 1 ? '' : 's'} ${evidenceObjectSummary.pendingReviewCount === 1 ? 'is' : 'are'} pending review. Review and accept evidence to reveal the accepted coverage heatmap.`
+                        : 'Shows accepted evidence coverage only. New extracted evidence appears here after review.'}
+                    </p>
+                    {coverageAreaRows.length > 0 && hasAcceptedCoverage ? (
                       <ul className="runtime-workspace__coverage-heatmap">
                         {coverageAreaRows.map((area) => {
                           const CoverageStateIcon = area.stateMeta.icon
@@ -4545,7 +4624,7 @@ function DiscoverySection({
                           )
                         })}
                       </ul>
-                    ) : (
+                    ) : coverageAreaRows.length > 0 ? null : (
                       <>
                         <p>
                           {healthCoveragePercent !== null
@@ -4644,6 +4723,42 @@ function DiscoverySection({
                               <dd>{formatInputRecommendationList(selectedProfileGuidance.additionalUsefulInputs)}</dd>
                             </div>
                           </dl>
+                        </section>
+                        <section className="runtime-workspace__acquisition-readiness" aria-label="Acquisition readiness">
+                          <div className="runtime-workspace__acquisition-readiness-heading">
+                            <h5>Required before extraction</h5>
+                            <Badge
+                              variant={contextReadiness.complete ? 'success' : 'warning'}
+                              size="sm"
+                              pill
+                              outline
+                            >
+                              {contextReadiness.complete ? 'Ready' : 'Incomplete'}
+                            </Badge>
+                          </div>
+                          <ul className="runtime-workspace__acquisition-readiness-list">
+                            {contextReadiness.rows.map((row) => {
+                              const RowIcon = row.complete ? MdCheckCircle : MdErrorOutline
+                              return (
+                                <li
+                                  key={row.key}
+                                  className={`runtime-workspace__acquisition-readiness-item${
+                                    row.complete ? ' runtime-workspace__acquisition-readiness-item--complete' : ''
+                                  }`}
+                                >
+                                  <RowIcon aria-hidden="true" />
+                                  <span>{row.label}</span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                          {!contextReadiness.complete ? (
+                            <Status variant="warning" size="sm" showIcon>
+                              {contextReadiness.reason}
+                            </Status>
+                          ) : (
+                            <p>Evidence extraction is ready to run with the current context.</p>
+                          )}
                         </section>
                       </div>
                       <div
@@ -4893,6 +5008,10 @@ function DiscoverySection({
                                 const reviewStatus = String(evidenceObject.reviewStatus || 'PENDING').trim().toUpperCase()
                                 const isReviewing = reviewingEvidenceObjectId === evidenceObject.evidenceObjectId
                                 const actionLabel = getEvidenceObjectActionLabel(evidenceObject)
+                                const sourceLabel = formatEvidenceObjectSourceLabel({
+                                  evidenceObject,
+                                  sourceRegistryById,
+                                })
                                 const canReviewEvidenceObject = Boolean(evidenceObject.evidenceObjectId)
                                   && !isInspectionMode
                                   && !disabled
@@ -4912,7 +5031,7 @@ function DiscoverySection({
                                         || 'No extracted fact text is available.'}
                                     </span>
                                     <span className="runtime-workspace__section-note">
-                                      {[evidenceObject.coverageArea, evidenceObject.sourceId].filter(Boolean).join(' / ')}
+                                      {[evidenceObject.coverageArea, sourceLabel].filter(Boolean).join(' / ')}
                                     </span>
                                     {!isInspectionMode ? (
                                       <div className="runtime-workspace__evidence-object-actions">
