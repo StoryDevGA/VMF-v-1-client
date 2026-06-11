@@ -534,11 +534,11 @@
 
 .runtime-workspace__action-disabled-reason {
   margin: 0;
-  max-width: calc(var(--spacing-3xl) * 5);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-normal);
-  text-align: center;
+  text-align: left;
+  text-wrap: pretty;
 }
 
 .runtime-workspace__section-feedback.status {
@@ -1935,6 +1935,52 @@
   justify-content: flex-start;
 }
 
+.runtime-workspace__section-command-strip {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+  max-width: calc(var(--spacing-3xl) * 14);
+  margin-inline: auto;
+  gap: var(--spacing-xs);
+  padding-block-end: var(--spacing-sm);
+  border-bottom: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 64%, transparent);
+}
+
+.runtime-workspace__section-command-cell {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.runtime-workspace__section-command-cell--nav {
+  min-width: calc(var(--spacing-md) * 2.25);
+}
+
+.runtime-workspace__section-command-cell--nav:first-child {
+  justify-items: start;
+}
+
+.runtime-workspace__section-command-cell--nav:last-child {
+  justify-items: end;
+}
+
+.runtime-workspace__section-command-cell > .btn {
+  max-width: 100%;
+}
+
+.runtime-workspace__section-command-cell .runtime-workspace__action-disabled-reason {
+  width: calc(var(--spacing-3xl) * 2.7);
+  max-width: 100%;
+  padding-top: var(--spacing-xs);
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 70%, transparent);
+  text-align: center;
+}
+
 .runtime-workspace__document-upload-list--selected {
   display: grid;
   gap: var(--spacing-2xs);
@@ -2835,6 +2881,35 @@
   }
 
   .runtime-workspace__section-evidence-heading-actions .btn {
+    width: 100%;
+  }
+
+  .runtime-workspace__section-command-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    max-width: none;
+    margin-inline: 0;
+    justify-content: stretch;
+    gap: var(--spacing-sm);
+  }
+
+  .runtime-workspace__section-command-cell {
+    justify-items: stretch;
+  }
+
+  .runtime-workspace__section-command-cell--nav:first-child,
+  .runtime-workspace__section-command-cell--nav:last-child {
+    justify-items: stretch;
+  }
+
+  .runtime-workspace__section-command-cell > .btn {
+    width: 100%;
+    min-height: calc(var(--spacing-md) * 2.75);
+  }
+
+  .runtime-workspace__section-command-cell .runtime-workspace__action-disabled-reason {
     width: 100%;
   }
 

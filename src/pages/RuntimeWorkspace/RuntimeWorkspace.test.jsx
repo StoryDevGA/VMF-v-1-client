@@ -4743,7 +4743,7 @@ describe('RuntimeWorkspace', () => {
     expect(refetchRenderer).toHaveBeenCalled()
     expect(await screen.findByText(/section accepted as governed truth/i)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Truth' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('button', { name: /^save & next$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled()
     expect(mutateRuntimeState).not.toHaveBeenCalled()
   })
 
@@ -4752,7 +4752,7 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^save & next$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled()
   })
 
   it('keeps section acceptance disabled when generated intelligence is not truth eligible', async () => {
@@ -5249,13 +5249,18 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Proposal teams need a shared governed narrative.')
-    const saveAndNextButton = screen.getByRole('button', { name: /^save & next$/i })
-    expect(saveAndNextButton).toBeEnabled()
-    expect(saveAndNextButton).toHaveAttribute(
+    const actionGroup = screen.getByRole('group', { name: /customer problem actions/i })
+    expect(actionGroup).toHaveClass('runtime-workspace__section-command-strip')
+    const actionButtons = within(actionGroup).getAllByRole('button')
+    expect(actionButtons[0]).toHaveAttribute('aria-label', 'Previous')
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    expect(nextButton).toBeEnabled()
+    expect(nextButton).toHaveClass('btn--icon-only')
+    expect(nextButton).toHaveAttribute(
       'title',
       'Save unsaved additional context and continue to the next guided section.',
     )
-    await user.click(saveAndNextButton)
+    await user.click(nextButton)
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -5319,13 +5324,13 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
-    const saveAndNextButton = screen.getByRole('button', { name: /^save & next$/i })
-    expect(saveAndNextButton).toBeEnabled()
-    expect(saveAndNextButton).toHaveAttribute(
+    const nextButton = screen.getByRole('button', { name: /^next$/i })
+    expect(nextButton).toBeEnabled()
+    expect(nextButton).toHaveAttribute(
       'title',
       'Continue to the next guided section. Generated or accepted truth is already persisted.',
     )
-    await user.click(saveAndNextButton)
+    await user.click(nextButton)
 
     expect(mutateRuntimeState).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
@@ -5359,7 +5364,7 @@ describe('RuntimeWorkspace', () => {
     const field = screen.getByLabelText('Customer Problem', { exact: true })
     await user.clear(field)
     await user.type(field, 'Final section update.')
-    await user.click(screen.getByRole('button', { name: /^save & next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
 
     expect(mutateRuntimeState).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
@@ -5369,6 +5374,105 @@ describe('RuntimeWorkspace', () => {
         value: 'Final section update.',
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
         saveAndNext: true,
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
+    expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('saves the active section before returning to the previous guided section', async () => {
+    const user = userEvent.setup()
+    unwrapMutation.mockResolvedValueOnce({
+      data: {
+        mutation: {
+          runtimePath: 'framework_state.sections.value_drivers',
+        },
+      },
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            rendererPayload.sections[0],
+            {
+              key: 'value_drivers',
+              runtimePath: 'framework_state.sections.value_drivers',
+              label: 'Value Drivers',
+              control: 'TEXTAREA',
+              required: true,
+              value: 'Existing value drivers.',
+              editable: true,
+              validationMessages: [],
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /2 value drivers input captured/i }))
+
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Value Drivers', { exact: true })
+    await user.clear(field)
+    await user.type(field, 'Governed output should focus on repeatable commercial value.')
+    const previousButton = screen.getByRole('button', { name: /^previous$/i })
+    expect(previousButton).toBeEnabled()
+    expect(previousButton).toHaveClass('btn--icon-only')
+    expect(previousButton).toHaveAttribute(
+      'title',
+      'Save unsaved additional context and return to the previous guided section.',
+    )
+    await user.click(previousButton)
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.value_drivers',
+        operation: 'WRITE',
+        value: 'Governed output should focus on repeatable commercial value.',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+      },
+    })
+    expect(refetchRenderer).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Customer Problem' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 customer problem draft/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('saves the first guided section before returning to Intelligence Hub', async () => {
+    const user = userEvent.setup()
+    unwrapMutation.mockResolvedValueOnce({
+      data: {
+        mutation: {
+          runtimePath: 'framework_state.sections.customer_problem',
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+
+    selectRuntimeSectionTab('Context')
+    const field = screen.getByLabelText('Customer Problem', { exact: true })
+    await user.clear(field)
+    await user.type(field, 'First section context should save before returning.')
+    await user.click(screen.getByRole('button', { name: /^previous$/i }))
+
+    expect(mutateRuntimeState).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      body: {
+        runtimePath: 'framework_state.sections.customer_problem',
+        operation: 'WRITE',
+        value: 'First section context should save before returning.',
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
@@ -6387,6 +6491,13 @@ describe('RuntimeWorkspace', () => {
 
     await user.type(field, ' GARY')
 
+    const actionGroup = screen.getByRole('group', { name: /customer problem actions/i })
+    expect(actionGroup).toHaveClass('runtime-workspace__section-command-strip')
+    const visibleReasons = within(actionGroup).getAllByText('Save context changes before generating or accepting truth.')
+    expect(visibleReasons).toHaveLength(3)
+    visibleReasons.forEach((reason) => {
+      expect(reason.closest('.runtime-workspace__section-command-cell')).not.toBeNull()
+    })
     expect(within(contextRegion).getByRole('group', { name: /customer problem context changes/i })).toBeInTheDocument()
     expect(within(contextRegion).getByRole('button', { name: /^save changes$/i })).toBeEnabled()
     expect(within(contextRegion).getByRole('button', { name: /^discard$/i })).toBeEnabled()

@@ -4,6 +4,7 @@ import {
   MdBolt,
   MdAdd,
   MdAccountTree,
+  MdArrowBack,
   MdArrowForward,
   MdCheckCircle,
   MdClose,
@@ -2108,10 +2109,12 @@ function RuntimeSection({
   onExecuteSectionAction,
   onAcceptSection,
   onClearSectionEvidence,
+  onPrevious,
   onReviewAllSectionEvidence,
   onReviewSectionEvidence,
   onSave,
   onSaveAndNext,
+  onSaveAndPrevious,
   onNext,
   onUploadSectionEvidence,
   reviewingSectionEvidenceObjectId = '',
@@ -2138,7 +2141,10 @@ function RuntimeSection({
   const isDirty = draftValue !== currentValue
   const isSaving = Boolean(disabled)
   const canSave = editable && isDirty && !isSaving
-  const canAdvance = Boolean(onNext || onSaveAndNext) && !isSaving && !executingActionKey
+  const canSaveAndNavigateBackward = Boolean(onSaveAndPrevious || (onSave && onPrevious))
+  const canSaveAndNavigateForward = Boolean(onSaveAndNext || (onSave && onNext))
+  const canNavigateBackward = (canSave ? canSaveAndNavigateBackward : Boolean(onPrevious)) && !isSaving && !executingActionKey
+  const canNavigateForward = (canSave ? canSaveAndNavigateForward : Boolean(onNext)) && !isSaving && !executingActionKey
   const generatedContent = stringifyGeneratedContent(section?.generated)
   const acceptedContent = stringifyAcceptedContent(section?.accepted)
   const intelligence = getSectionIntelligence(section)
@@ -2237,8 +2243,11 @@ function RuntimeSection({
   const showRegenerateAction = Boolean(regenerateAction)
   const showCompareAction = canCompare
   const showAcceptAction = Boolean(onAcceptSection)
-  const showNextAction = canAdvance
-  const nextActionLabel = editable ? 'Save & Next' : 'Next'
+  const showPreviousAction = canNavigateBackward
+  const showNextAction = canNavigateForward
+  const previousActionTitle = canSave
+    ? 'Save unsaved additional context and return to the previous guided section.'
+    : 'Return to the previous guided section.'
   const nextActionTitle = canSave
     ? 'Save unsaved additional context and continue to the next guided section.'
     : generatedContent || acceptedContent
@@ -2423,11 +2432,55 @@ function RuntimeSection({
       const value = parseCurrentDraftValue()
       if (value === undefined) return
 
-      await onSaveAndNext?.({ section, value })
+      if (onSaveAndNext) {
+        await onSaveAndNext({ section, value })
+        return
+      }
+
+      if (onSave && onNext) {
+        const saved = await onSave({ section, value })
+        if (saved) await onNext({ section })
+        return
+      }
+
+      setLocalError('Save this section before continuing.')
       return
     }
 
-    await onNext?.({ section })
+    if (onNext) {
+      await onNext({ section })
+      return
+    }
+
+    setLocalError('Next section navigation is unavailable.')
+  }
+
+  const handlePrevious = async () => {
+    if (canSave) {
+      const value = parseCurrentDraftValue()
+      if (value === undefined) return
+
+      if (onSaveAndPrevious) {
+        await onSaveAndPrevious({ section, value })
+        return
+      }
+
+      if (onSave && onPrevious) {
+        const saved = await onSave({ section, value })
+        if (saved) await onPrevious({ section })
+        return
+      }
+
+      setLocalError('Save this section before returning to the previous section.')
+      return
+    }
+
+    if (onPrevious) {
+      await onPrevious({ section })
+      return
+    }
+
+    setLocalError('Previous section navigation is unavailable.')
   }
 
   const handleAcceptTruth = async () => {
@@ -3106,98 +3159,123 @@ function RuntimeSection({
                 {resolvedFeedback.message}
               </Status>
             ) : null}
-            <ButtonGroup
-              align="end"
-              stackOnMobile
-              fullWidthOnMobile
-              className="runtime-workspace__section-actions"
+            <div
+              className="runtime-workspace__section-command-strip"
+              role="group"
               aria-label={`${sectionDisplayLabel} actions`}
             >
+              {showPreviousAction ? (
+                <div className="runtime-workspace__section-command-cell runtime-workspace__section-command-cell--nav">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    iconOnly
+                    leftIcon={<MdArrowBack aria-hidden="true" />}
+                    aria-label="Previous"
+                    title={previousActionTitle}
+                    onClick={handlePrevious}
+                  >
+                    <span className="sr-only">Previous</span>
+                  </Button>
+                </div>
+              ) : null}
               {showGenerateAction ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={Boolean(generateDisabledReason)}
-                  loading={executingActionKey === SECTION_ACTION_KEYS.GENERATE_SECTION}
-                  aria-describedby={generateDisabledReason ? generateReasonId : undefined}
-                  leftIcon={<MdBolt aria-hidden="true" />}
-                  onClick={() => onExecuteSectionAction?.({ action: generateAction, section })}
-                >
-                  {generateLabel}
-                </Button>
+                <div className="runtime-workspace__section-command-cell">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(generateDisabledReason)}
+                    loading={executingActionKey === SECTION_ACTION_KEYS.GENERATE_SECTION}
+                    aria-describedby={generateDisabledReason ? generateReasonId : undefined}
+                    leftIcon={<MdBolt aria-hidden="true" />}
+                    onClick={() => onExecuteSectionAction?.({ action: generateAction, section })}
+                  >
+                    {generateLabel}
+                  </Button>
+                  {generateDisabledReason ? (
+                    <p id={generateReasonId} className="runtime-workspace__action-disabled-reason">
+                      {generateDisabledReason}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               {showRegenerateAction ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={Boolean(regenerateDisabledReason)}
-                  loading={executingActionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION}
-                  aria-describedby={regenerateDisabledReason ? regenerateReasonId : undefined}
-                  leftIcon={<MdRefresh aria-hidden="true" />}
-                  onClick={() => onExecuteSectionAction?.({ action: regenerateAction, section })}
-                >
-                  {regenerateLabel}
-                </Button>
+                <div className="runtime-workspace__section-command-cell">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(regenerateDisabledReason)}
+                    loading={executingActionKey === SECTION_ACTION_KEYS.REGENERATE_SECTION}
+                    aria-describedby={regenerateDisabledReason ? regenerateReasonId : undefined}
+                    leftIcon={<MdRefresh aria-hidden="true" />}
+                    onClick={() => onExecuteSectionAction?.({ action: regenerateAction, section })}
+                  >
+                    {regenerateLabel}
+                  </Button>
+                  {regenerateDisabledReason ? (
+                    <p id={regenerateReasonId} className="runtime-workspace__action-disabled-reason">
+                      {regenerateDisabledReason}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               {showCompareAction ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<MdCompareArrows aria-hidden="true" />}
-                  onClick={() => {
-                    setShowCompare((current) => !current)
-                    setActiveSectionContentTab(2)
-                  }}
-                >
-                  Compare
-                </Button>
+                <div className="runtime-workspace__section-command-cell">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<MdCompareArrows aria-hidden="true" />}
+                    onClick={() => {
+                      setShowCompare((current) => !current)
+                      setActiveSectionContentTab(2)
+                    }}
+                  >
+                    Compare
+                  </Button>
+                </div>
               ) : null}
               {showAcceptAction ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={Boolean(acceptDisabledReason)}
-                  loading={isAcceptingSection}
-                  aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
-                  leftIcon={<MdCheckCircle aria-hidden="true" />}
-                  onClick={handleAcceptTruth}
-                >
-                  Accept Truth
-                </Button>
+                <div className="runtime-workspace__section-command-cell">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(acceptDisabledReason)}
+                    loading={isAcceptingSection}
+                    aria-describedby={acceptDisabledReason ? acceptReasonId : undefined}
+                    leftIcon={<MdCheckCircle aria-hidden="true" />}
+                    onClick={handleAcceptTruth}
+                  >
+                    Accept Truth
+                  </Button>
+                  {acceptDisabledReason ? (
+                    <p id={acceptReasonId} className="runtime-workspace__action-disabled-reason">
+                      {acceptDisabledReason}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               {showNextAction ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<MdArrowForward aria-hidden="true" />}
-                  title={nextActionTitle}
-                  onClick={handleNext}
-                >
-                  {nextActionLabel}
-                </Button>
+                <div className="runtime-workspace__section-command-cell runtime-workspace__section-command-cell--nav">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    iconOnly
+                    leftIcon={<MdArrowForward aria-hidden="true" />}
+                    aria-label="Next"
+                    title={nextActionTitle}
+                    onClick={handleNext}
+                  >
+                    <span className="sr-only">Next</span>
+                  </Button>
+                </div>
               ) : null}
-            </ButtonGroup>
-            {[
-              { action: showGenerateAction, id: generateReasonId, reason: generateDisabledReason },
-              { action: showRegenerateAction, id: regenerateReasonId, reason: regenerateDisabledReason },
-              { action: showAcceptAction, id: acceptReasonId, reason: acceptDisabledReason },
-            ].map(({ action, id, reason }) => {
-              const shouldShowReason = action && reason
-              return shouldShowReason ? (
-                <p
-                  key={id}
-                  id={id}
-                  className="runtime-workspace__action-disabled-reason"
-                >
-                  {reason}
-                </p>
-              ) : null
-            })}
+            </div>
             {validationMessages.length > 0 ? (
               <ul className="runtime-workspace__validation-list" aria-label={`${sectionDisplayLabel} validation messages`}>
                 {validationMessages.map((message, index) => (
@@ -6101,6 +6179,13 @@ function RuntimeWorkspace() {
     handleNextSection({ section })
   }
 
+  const handleSaveSectionAndPrevious = async ({ section, value }) => {
+    const mutationResult = await handleSaveSection({ section, value })
+    if (!mutationResult) return
+
+    handlePreviousSection({ section })
+  }
+
   const handleNextSection = ({ section }) => {
     const currentIndex = sections.findIndex((candidate) =>
       (candidate?.sectionKey || candidate?.key) === (section?.sectionKey || section?.key),
@@ -6108,6 +6193,18 @@ function RuntimeWorkspace() {
     const nextSection = sections[currentIndex + 1]
     if (nextSection) {
       setActiveWorkspaceKey(nextSection.sectionKey || nextSection.key)
+      return
+    }
+    setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
+  }
+
+  const handlePreviousSection = ({ section }) => {
+    const currentIndex = sections.findIndex((candidate) =>
+      (candidate?.sectionKey || candidate?.key) === (section?.sectionKey || section?.key),
+    )
+    const previousSection = sections[currentIndex - 1]
+    if (previousSection) {
+      setActiveWorkspaceKey(previousSection.sectionKey || previousSection.key)
       return
     }
     setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
@@ -6921,10 +7018,12 @@ function RuntimeWorkspace() {
                 onClearSectionEvidence={handleClearSectionEvidence}
                 onExecuteSectionAction={handleExecuteSectionAction}
                 onNext={handleNextSection}
+                onPrevious={handlePreviousSection}
                 onReviewAllSectionEvidence={handleReviewAllSectionEvidence}
                 onReviewSectionEvidence={handleReviewSectionEvidence}
                 onSave={handleSaveSection}
                 onSaveAndNext={handleSaveSectionAndNext}
+                onSaveAndPrevious={handleSaveSectionAndPrevious}
                 onUploadSectionEvidence={handleUploadSectionEvidence}
                 reviewingSectionEvidenceObjectId={reviewingSectionEvidenceObjectId}
                 clearingSectionEvidencePath={clearingSectionEvidencePath}
