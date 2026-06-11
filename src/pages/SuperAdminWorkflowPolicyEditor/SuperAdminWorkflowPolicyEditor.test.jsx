@@ -625,7 +625,9 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
 
   it('warns before leaving the editor with unsaved changes', async () => {
     const user = userEvent.setup()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => {
+      throw new Error('Native confirm should not be used by the workflow policy editor')
+    })
     renderWorkflowPolicyEditorRoutes([
       '/super-admin/runtime-control/workflow-policies/policy-vmf-publish/edit',
     ])
@@ -637,13 +639,28 @@ describe('SuperAdminWorkflowPolicyEditor page', () => {
     await user.type(nameInput, 'VMF Unsaved Gate')
 
     await user.click(screen.getByRole('button', { name: /cancel/i }))
-    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved workflow policy changes?')
+    const keepEditingDialog = await screen.findByRole('dialog', {
+      name: /discard workflow policy changes/i,
+    })
+    expect(within(keepEditingDialog).getByText('Discard unsaved workflow policy changes?')).toBeInTheDocument()
+    expect(within(keepEditingDialog).getByText('Unsaved editor changes will be lost.')).toBeInTheDocument()
+    expect(confirmSpy).not.toHaveBeenCalled()
+
+    await user.click(within(keepEditingDialog).getByRole('button', { name: /keep editing/i }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /discard workflow policy changes/i })).not.toBeInTheDocument()
+    })
     expect(screen.getByRole('heading', { name: /basic information/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /cancel/i }))
+    const discardDialog = await screen.findByRole('dialog', {
+      name: /discard workflow policy changes/i,
+    })
+    await user.click(within(discardDialog).getByRole('button', { name: /discard changes/i }))
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /workflow policies/i })).toBeInTheDocument()
     })
+    expect(confirmSpy).not.toHaveBeenCalled()
 
     confirmSpy.mockRestore()
   })

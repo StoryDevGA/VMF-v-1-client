@@ -421,8 +421,8 @@ describe('Dashboard page', () => {
 
     expect(primaryActionCard).not.toBeNull()
     expect(within(primaryActionCard).getByText('New Package')).toBeInTheDocument()
-    expect(within(primaryActionCard).getByText('Active')).toBeInTheDocument()
-    expect(within(primaryActionCard).getByText('Draft')).toBeInTheDocument()
+    expect(within(primaryActionCard).getByText('Runtime Active')).toBeInTheDocument()
+    expect(within(primaryActionCard).getByText('Truth Draft')).toBeInTheDocument()
     expect(within(primaryActionCard).getByText(/value narrative 2\.3\.569357 - updated 18 may 2026/i))
       .toBeInTheDocument()
     expect(within(primaryActionCard).queryByText('Open the Value Narrative workspace to continue.'))
@@ -650,6 +650,53 @@ describe('Dashboard page', () => {
 
     expect(within(actionPanel).getByText('1 instance locked in latest 50')).toBeInTheDocument()
     expect(within(actionPanel).getAllByText(/in latest 50$/)).toHaveLength(3)
+  })
+
+  it('renders repeated locked runtime badges without duplicate React key warnings', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-locked',
+            runtimeInstanceKey: 'value-narrative-locked',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Canonical Runtime',
+            status: 'LOCKED',
+            lockStatus: 'LOCKED',
+            readinessState: 'LOCKED',
+            framework_state: {
+              lifecycle: { stage: 'LOCKED' },
+              readiness: { state: 'LOCKED' },
+            },
+            updatedAt: '2026-05-25T11:48:00.000Z',
+          },
+        ],
+        meta: { page: 1, pageSize: 50, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    try {
+      renderDashboard()
+
+      const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+      const runtimeLink = within(actionPanel)
+        .getByRole('link', { name: /continue canonical runtime open workspace/i })
+
+      expect(runtimeLink).toBeInTheDocument()
+      expect(within(runtimeLink).getByText('Runtime Locked')).toBeInTheDocument()
+      expect(within(runtimeLink).getByText('Truth Locked')).toBeInTheDocument()
+      expect(within(runtimeLink).getByText('Readiness Locked')).toBeInTheDocument()
+      expect(within(runtimeLink).queryByText(/^Locked$/)).not.toBeInTheDocument()
+      expect(consoleError.mock.calls.some((call) =>
+        String(call[0] ?? '').includes('Encountered two children with the same key')))
+        .toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('styles runtime health from readiness instead of execution state', () => {

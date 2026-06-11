@@ -5,6 +5,7 @@ import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -696,6 +697,7 @@ function WorkflowPolicyEditor() {
   const [testConsoleError, setTestConsoleError] = useState('')
   const [testConsoleResult, setTestConsoleResult] = useState(null)
   const [selectedRuntimePathRows, setSelectedRuntimePathRows] = useState({})
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const skipUnsavedPromptRef = useRef(false)
 
   const {
@@ -1143,13 +1145,21 @@ function WorkflowPolicyEditor() {
   }
 
   const handleBack = () => {
-    if (
-      hasUnsavedChanges
-      && !window.confirm('Discard unsaved workflow policy changes?')
-    ) {
+    if (hasUnsavedChanges) {
+      setDiscardConfirmOpen(true)
       return
     }
 
+    navigateToWorkflowPolicies()
+  }
+
+  const handleCancelDiscardChanges = () => {
+    setDiscardConfirmOpen(false)
+  }
+
+  const handleConfirmDiscardChanges = () => {
+    setDiscardConfirmOpen(false)
+    skipUnsavedPromptRef.current = true
     navigateToWorkflowPolicies()
   }
 
@@ -3430,6 +3440,18 @@ function WorkflowPolicyEditor() {
           </Card>
         ) : null}
       </Fieldset>
+      <ConfirmationDialog
+        open={discardConfirmOpen}
+        eyebrow="Unsaved changes"
+        title="Discard Workflow Policy Changes"
+        message="Discard unsaved workflow policy changes?"
+        detail="Unsaved editor changes will be lost."
+        confirmLabel="Discard Changes"
+        cancelLabel="Keep Editing"
+        variant="warning"
+        onCancel={handleCancelDiscardChanges}
+        onConfirm={handleConfirmDiscardChanges}
+      />
     </section>
   )
 }

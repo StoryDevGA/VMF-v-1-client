@@ -26,6 +26,7 @@ import {
 import { Badge } from '../../components/Badge'
 import { Button, ButtonGroup } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
@@ -428,6 +429,7 @@ const LOCKED_RUNTIME_INSPECTION_REASON =
 const DISCOVERY_NAV_KEY = 'discovery'
 const OUTPUT_LAB_NAV_KEY = 'output_lab'
 const OUTPUT_LAB_LABEL = 'Output Lab'
+const OUTPUT_LAB_DOWNLOAD_CLEANUP_DELAY_MS = 1000
 const ACTIVITY_PREVIEW_LIMIT = 3
 const SIGNAL_PREVIEW_LIMIT = 3
 const WARNING_PREVIEW_LIMIT = 1
@@ -539,6 +541,27 @@ const getAcceptSectionDisabledReason = ({
 const getDefaultConfirmationMessage = (action) => {
   const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'this runtime action').trim()
   return `Confirm ${label}?`
+}
+
+const getDefaultConfirmationTitle = (action) => {
+  const label = String(action?.buttonLabel || action?.governedAction || action?.actionKey || 'Runtime Action').trim()
+  return `Confirm ${label}`
+}
+
+const getRuntimeActionKey = (action) =>
+  normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+
+const findRuntimeActionByKey = (actions, actionKey) => {
+  const normalizedActionKey = normalizeRuntimeActionToken(actionKey)
+  if (!normalizedActionKey) return null
+  return actions.find((action) => getRuntimeActionKey(action) === normalizedActionKey) || null
+}
+
+const getRuntimeActionConfirmationVariant = (action) => {
+  const actionKey = getRuntimeActionKey(action)
+  if (['ARCHIVE', 'DELETE', 'DELETE_RUNTIME'].includes(actionKey)) return 'danger'
+  if (['LOCK_RUNTIME', 'RETURN_TO_DRAFT'].includes(actionKey)) return 'warning'
+  return 'default'
 }
 
 const getRuntimeActionGateStatus = (validationState) => {
@@ -5550,6 +5573,7 @@ function RuntimeWorkspace() {
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
   const [selectedOutputTypeKey, setSelectedOutputTypeKey] = useState('')
   const [exportingOutputAssetKey, setExportingOutputAssetKey] = useState('')
+  const [pendingRuntimeAction, setPendingRuntimeAction] = useState(null)
   const hasAutoSelectedInitialSection = useRef(false)
   const reviewingEvidenceObjectIdRef = useRef('')
   const reviewingSectionEvidenceObjectIdRef = useRef('')
@@ -5562,22 +5586,22 @@ function RuntimeWorkspace() {
   const sections = Array.isArray(renderer?.sections) ? renderer.sections : EMPTY_ARRAY
   const actions = Array.isArray(renderer?.actions) ? renderer.actions : EMPTY_ARRAY
   const sectionActionByKey = actions.reduce((acc, action) => {
-    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+    const actionKey = getRuntimeActionKey(action)
     if (SECTION_ACTION_KEY_SET.has(actionKey)) {
       acc[actionKey] = action
     }
     return acc
   }, {})
   const discoveryActionByKey = actions.reduce((acc, action) => {
-    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+    const actionKey = getRuntimeActionKey(action)
     if (DISCOVERY_ACTION_KEY_SET.has(actionKey)) {
       acc[actionKey] = action
     }
     return acc
   }, {})
   const sidePanelActions = actions.filter((action) =>
-    !SECTION_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey))
-    && !DISCOVERY_ACTION_KEY_SET.has(normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)),
+    !SECTION_ACTION_KEY_SET.has(getRuntimeActionKey(action))
+    && !DISCOVERY_ACTION_KEY_SET.has(getRuntimeActionKey(action)),
   )
   const signals = Array.isArray(renderer?.signals) ? renderer.signals : EMPTY_ARRAY
   const signalItems = signals.filter((signal) => getSignalSummary(signal))
@@ -5628,6 +5652,17 @@ function RuntimeWorkspace() {
     : configWarningGroups.slice(0, WARNING_PREVIEW_LIMIT)
   const showRuntimePaths = String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
   const appError = error ? normalizeError(error) : null
+  const pendingRuntimeActionConfig = pendingRuntimeAction?.actionKey
+    ? findRuntimeActionByKey(actions, pendingRuntimeAction.actionKey)
+    : null
+  const pendingRuntimeActionEnabled = Boolean(pendingRuntimeActionConfig?.enabled)
+
+  useEffect(() => {
+    if (!pendingRuntimeAction?.actionKey) return
+    if (!pendingRuntimeActionConfig || !pendingRuntimeActionEnabled) {
+      setPendingRuntimeAction(null)
+    }
+  }, [pendingRuntimeAction?.actionKey, pendingRuntimeActionConfig, pendingRuntimeActionEnabled])
 
   const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
   const executionState = getRuntimeExecutionState(runtimeInstance)
@@ -6326,8 +6361,8 @@ function RuntimeWorkspace() {
     setActiveWorkspaceKey(section.sectionKey || section.key)
   }
 
-  const handleExecuteAction = async (action, actionBody = {}) => {
-    const actionKey = normalizeRuntimeActionToken(action?.governedAction || action?.actionKey)
+  const executeGovernedRuntimeAction = async (action, actionBody = {}) => {
+    const actionKey = getRuntimeActionKey(action)
     if (!actionKey || !action?.enabled) return
 
     const expectedUpdatedAt = runtimeInstance?.updatedAt
@@ -6337,12 +6372,6 @@ function RuntimeWorkspace() {
         description: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
         variant: 'error',
       })
-      return
-    }
-
-    const confirmationMessage = String(action?.confirmationMessage ?? '').trim()
-      || getDefaultConfirmationMessage(action)
-    if (action?.requiresConfirmation && !window.confirm(confirmationMessage)) {
       return
     }
 
@@ -6374,6 +6403,44 @@ function RuntimeWorkspace() {
     } finally {
       setExecutingActionKey('')
     }
+  }
+
+  const handleExecuteAction = async (action, actionBody = {}) => {
+    const actionKey = getRuntimeActionKey(action)
+    if (!actionKey || !action?.enabled) return
+
+    const expectedUpdatedAt = runtimeInstance?.updatedAt
+    if (!expectedUpdatedAt) {
+      addToast({
+        title: 'Action unavailable',
+        description: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+        variant: 'error',
+      })
+      return
+    }
+
+    if (action?.requiresConfirmation) {
+      setPendingRuntimeAction({ actionKey, actionBody })
+      return
+    }
+
+    await executeGovernedRuntimeAction(action, actionBody)
+  }
+
+  const handleCancelRuntimeActionConfirmation = () => {
+    if (executingActionKey) return
+    setPendingRuntimeAction(null)
+  }
+
+  const handleConfirmRuntimeAction = async () => {
+    if (!pendingRuntimeAction?.actionKey) return
+    const action = findRuntimeActionByKey(actions, pendingRuntimeAction.actionKey)
+    if (!action?.enabled) {
+      setPendingRuntimeAction(null)
+      return
+    }
+    await executeGovernedRuntimeAction(action, pendingRuntimeAction.actionBody)
+    setPendingRuntimeAction(null)
   }
 
   const handleExecuteSectionAction = async ({ action, section }) => {
@@ -6462,10 +6529,14 @@ function RuntimeWorkspace() {
       const downloadLink = document.createElement('a')
       downloadLink.href = objectUrl
       downloadLink.download = filename
+      downloadLink.rel = 'noopener'
+      downloadLink.style.display = 'none'
       document.body.appendChild(downloadLink)
       downloadLink.click()
-      downloadLink.remove()
-      URL.revokeObjectURL(objectUrl)
+      window.setTimeout(() => {
+        downloadLink.remove()
+        URL.revokeObjectURL(objectUrl)
+      }, OUTPUT_LAB_DOWNLOAD_CLEANUP_DELAY_MS)
       addToast({
         title: 'Export ready',
         description: filename,
@@ -6485,6 +6556,24 @@ function RuntimeWorkspace() {
       setExportingOutputAssetKey('')
     }
   }
+
+  const pendingRuntimeActionKey = normalizeRuntimeActionToken(
+    pendingRuntimeActionConfig?.governedAction || pendingRuntimeActionConfig?.actionKey,
+  )
+  const pendingRuntimeActionLabel = pendingRuntimeActionConfig
+    ? getRuntimeActionLabel(pendingRuntimeActionConfig, pendingRuntimeActionKey || 'Runtime Action')
+    : 'Runtime Action'
+  const pendingRuntimeActionTitle = pendingRuntimeActionConfig
+    ? String(pendingRuntimeActionConfig.confirmationTitle ?? '').trim()
+      || getDefaultConfirmationTitle(pendingRuntimeActionConfig)
+    : 'Confirm Runtime Action'
+  const pendingRuntimeActionMessage = pendingRuntimeActionConfig
+    ? String(pendingRuntimeActionConfig.confirmationMessage ?? '').trim()
+      || getDefaultConfirmationMessage(pendingRuntimeActionConfig)
+    : ''
+  const pendingRuntimeActionLoading = Boolean(
+    pendingRuntimeActionKey && executingActionKey === pendingRuntimeActionKey,
+  )
 
   if (isLoading) {
     return (
@@ -6967,6 +7056,18 @@ function RuntimeWorkspace() {
 
         </aside>
       </div>
+      <ConfirmationDialog
+        open={Boolean(pendingRuntimeActionConfig && pendingRuntimeActionEnabled)}
+        title={pendingRuntimeActionTitle}
+        message={pendingRuntimeActionMessage}
+        detail={`Runtime: ${runtimeHeaderContext}`}
+        eyebrow="Governed runtime action"
+        confirmLabel={pendingRuntimeActionLabel}
+        variant={getRuntimeActionConfirmationVariant(pendingRuntimeActionConfig)}
+        loading={pendingRuntimeActionLoading}
+        onCancel={handleCancelRuntimeActionConfirmation}
+        onConfirm={handleConfirmRuntimeAction}
+      />
     </section>
   )
 }

@@ -356,7 +356,9 @@ describe('RuntimeWorkspace', () => {
     unwrapClearRuntimeSectionEvidence.mockReset()
     acceptRuntimeSection.mockReset()
     unwrapAcceptSection.mockReset()
-    window.confirm = vi.fn(() => true)
+    window.confirm = vi.fn(() => {
+      throw new Error('Native confirm should not be used for Runtime Workspace actions.')
+    })
     URL.createObjectURL = vi.fn(() => 'blob:output-lab-export')
     URL.revokeObjectURL = vi.fn()
     HTMLAnchorElement.prototype.click = vi.fn()
@@ -614,7 +616,10 @@ describe('RuntimeWorkspace', () => {
     })
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:output-lab-export')
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:output-lab-export')
+    }, { timeout: 2000 })
   })
 
   it('keeps generated output success visible when Output Lab refetch fails', async () => {
@@ -5714,7 +5719,14 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
 
-    expect(window.confirm).toHaveBeenCalledWith('Submit this framework for review?')
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Confirm Submit for Review' })
+    expect(within(confirmationDialog).getByText('Governed runtime action')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('Submit this framework for review?')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('Runtime: Acme Value Narrative')).toBeInTheDocument()
+    expect(window.confirm).not.toHaveBeenCalled()
+
+    await user.click(within(confirmationDialog).getByRole('button', { name: /submit for review/i }))
+
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       actionKey: 'SUBMIT_FOR_REVIEW',
@@ -5867,6 +5879,45 @@ describe('RuntimeWorkspace', () => {
     expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeEnabled()
   })
 
+  it('closes a pending confirmation when the renderer disables that governed action before confirm', async () => {
+    const user = userEvent.setup()
+    const view = renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /submit for review/i }))
+    expect(await screen.findByRole('dialog', { name: 'Confirm Submit for Review' })).toBeInTheDocument()
+
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          actions: [
+            {
+              ...rendererPayload.actions[0],
+              enabled: false,
+              disabledReason: 'Runtime must be marked ready again before review.',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    view.rerender(runtimeWorkspaceTree())
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Confirm Submit for Review' })).not.toBeInTheDocument()
+    })
+    const actionScroll = screen.getByRole('region', { name: /governed runtime actions scroll region/i })
+    const governedActions = within(actionScroll).getByRole('group', { name: /^governed runtime actions$/i })
+    expect(within(governedActions).getByRole('button', { name: /submit for review/i })).toBeDisabled()
+    expect(within(governedActions).getAllByText('Runtime must be marked ready again before review.')).not.toHaveLength(0)
+    expect(executeRuntimeAction).not.toHaveBeenCalled()
+    expect(refetchRenderer).not.toHaveBeenCalled()
+  })
+
   it('uses a default confirmation message when required confirmation has no seeded message', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -5892,19 +5943,30 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
 
-    expect(window.confirm).toHaveBeenCalledWith('Confirm Submit for Review?')
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Confirm Submit for Review' })
+    expect(within(confirmationDialog).getByText('Confirm Submit for Review?')).toBeInTheDocument()
+    expect(window.confirm).not.toHaveBeenCalled()
+
+    await user.click(within(confirmationDialog).getByRole('button', { name: /submit for review/i }))
+
     expect(executeRuntimeAction).toHaveBeenCalled()
   })
 
   it('does not execute or refetch when action confirmation is cancelled', async () => {
     const user = userEvent.setup()
-    window.confirm = vi.fn(() => false)
 
     renderRuntimeWorkspace()
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
 
-    expect(window.confirm).toHaveBeenCalledWith('Submit this framework for review?')
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Confirm Submit for Review' })
+    expect(within(confirmationDialog).getByText('Submit this framework for review?')).toBeInTheDocument()
+    await user.click(within(confirmationDialog).getByRole('button', { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Confirm Submit for Review' })).not.toBeInTheDocument()
+    })
+    expect(window.confirm).not.toHaveBeenCalled()
     expect(executeRuntimeAction).not.toHaveBeenCalled()
     expect(refetchRenderer).not.toHaveBeenCalled()
   })
@@ -5954,6 +6016,8 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     await user.click(screen.getByRole('button', { name: /submit for review/i }))
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Confirm Submit for Review' })
+    await user.click(within(confirmationDialog).getByRole('button', { name: /submit for review/i }))
 
     expect(await screen.findByText('Action failed')).toBeInTheDocument()
     expect(screen.getByText('Runtime action is not currently executable. Reference: action-ref-1')).toBeInTheDocument()

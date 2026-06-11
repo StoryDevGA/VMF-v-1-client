@@ -735,6 +735,47 @@
   justify-content: flex-end;
 }
 
+.runtime-workspace__output-lab-export-actions {
+  justify-content: flex-start;
+}
+
+.runtime-workspace__output-lab-export-actions .btn {
+  min-height: calc(var(--spacing-md) * 2);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 82%, transparent);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  background-color: color-mix(in srgb, var(--color-background) 76%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.runtime-workspace__output-lab-export-actions .btn:hover:not(:disabled),
+.runtime-workspace__output-lab-export-actions .btn:focus-visible:not(:disabled) {
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-action-primary) 42%, var(--color-card-border));
+  background-color: color-mix(in srgb, var(--color-action-primary) 10%, transparent);
+  color: var(--color-action-primary);
+}
+
+.runtime-workspace__output-lab-export-actions .btn:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border));
+  background-color: color-mix(in srgb, var(--color-action-primary) 14%, transparent);
+}
+
+.runtime-workspace__output-lab-export-actions .btn:disabled {
+  border-color: color-mix(in srgb, var(--color-card-border) 60%, transparent);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.runtime-workspace__output-lab-export-actions .btn__content,
+.runtime-workspace__output-lab-export-actions .btn__content--hidden,
+.runtime-workspace__output-lab-export-actions .btn__icon,
+.runtime-workspace__output-lab-export-actions .btn svg {
+  color: inherit;
+}
+
 .runtime-workspace__output-lab-message-list {
   display: grid;
   gap: var(--spacing-xs);
@@ -772,7 +813,7 @@
   padding-block: var(--spacing-sm);
 }
 
-.runtime-workspace__output-lab-asset > div {
+.runtime-workspace__output-lab-asset > div:not(.runtime-workspace__output-lab-export-actions) {
   display: grid;
   gap: var(--spacing-2xs);
   min-width: 0;

@@ -504,11 +504,43 @@ function DashboardSectionCard({
   )
 }
 
+const getDashboardBadgeKey = (badge, index) => [
+  badge?.key,
+  badge?.id,
+  badge?.label,
+  badge?.variant,
+  index,
+].map((part) => String(part ?? '').trim()).filter(Boolean).join('-')
+
+const getDashboardVisibleBadges = (badges) =>
+  (Array.isArray(badges) ? badges : [])
+    .filter((badge) => String(badge?.label ?? '').trim())
+
+const getDashboardReadinessBadge = (badge) => {
+  if (!badge) return null
+  const label = String(badge.label ?? '').trim()
+  const normalizedLabel = normalizeDashboardToken(label)
+
+  if (['DRAFT', 'VALIDATED', 'READY', 'APPROVED', 'PUBLISHED', 'LOCKED'].includes(normalizedLabel)) {
+    return {
+      ...badge,
+      key: badge.key || 'runtime-readiness',
+      label: `Readiness ${formatRuntimeTokenLabel(normalizedLabel)}`,
+    }
+  }
+
+  return {
+    ...badge,
+    key: badge.key || 'runtime-attention',
+  }
+}
+
 function RuntimeActionCard({ action, primary = false }) {
   const Icon = action.icon
   const displayTitle = String(action.title ?? '').replace(/^Continue\s+/i, '')
   const linkLabel = [action.title, action.label].filter(Boolean).join(' ')
   const commandLabel = primary ? 'Continue' : action.label
+  const visibleBadges = getDashboardVisibleBadges(action.badges)
   const cardClassName = [
     'dashboard__launch-item',
     'dashboard__launch-item--action',
@@ -537,11 +569,11 @@ function RuntimeActionCard({ action, primary = false }) {
             </span>
             <div className="dashboard__continue-heading">
               <h3 className="dashboard__continue-title">{displayTitle}</h3>
-              {Array.isArray(action.badges) && action.badges.length > 0 ? (
+              {visibleBadges.length > 0 ? (
                 <div className="dashboard__continue-status" aria-label="Runtime state">
-                  {action.badges.map((badge) => (
+                  {visibleBadges.map((badge, index) => (
                     <Badge
-                      key={`${badge.label}-${badge.variant}`}
+                      key={getDashboardBadgeKey(badge, index)}
                       variant={badge.variant}
                       size="sm"
                       pill
@@ -581,11 +613,11 @@ function RuntimeActionCard({ action, primary = false }) {
           </span>
           <div className="dashboard__continue-heading">
             <h3 className="dashboard__continue-title">{displayTitle}</h3>
-            {Array.isArray(action.badges) && action.badges.length > 0 ? (
+            {visibleBadges.length > 0 ? (
               <div className="dashboard__continue-status" aria-label="Runtime state">
-                {action.badges.map((badge) => (
+                {visibleBadges.map((badge, index) => (
                   <Badge
-                    key={`${badge.label}-${badge.variant}`}
+                    key={getDashboardBadgeKey(badge, index)}
                     variant={badge.variant}
                     size="sm"
                     pill
@@ -1123,7 +1155,7 @@ function Dashboard() {
     const runtimeTypeLabel = formatRuntimeTokenLabel(primaryRuntimeInstance?.runtimeType ?? 'VALUE_NARRATIVE')
     const runtimeStatus = getRuntimeLifecycleStatus(primaryRuntimeInstance)
     const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(primaryRuntimeInstance)
-    const reviewBadge = getRuntimeReviewBadge(primaryRuntimeInstance)
+    const reviewBadge = getDashboardReadinessBadge(getRuntimeReviewBadge(primaryRuntimeInstance))
     const runtimeInstanceId = getRuntimeInstanceRouteId(primaryRuntimeInstance) || runtimeName
     const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
     const packageSummary = [
@@ -1136,11 +1168,13 @@ function Dashboard() {
         actionKey: 'OPEN_RUNTIME_INSTANCE',
         badges: [
           {
-            label: formatRuntimeTokenLabel(runtimeStatus),
+            key: 'runtime-status',
+            label: `Runtime ${formatRuntimeTokenLabel(runtimeStatus)}`,
             variant: getRuntimeStatusVariant(runtimeStatus),
           },
           {
-            label: formatRuntimeTokenLabel(frameworkLifecycle),
+            key: 'truth-lifecycle',
+            label: `Truth ${formatRuntimeTokenLabel(frameworkLifecycle)}`,
             variant: getRuntimeStatusVariant(frameworkLifecycle),
           },
           reviewBadge,

@@ -1,0 +1,134 @@
+.confirmation-dialog.dialog {
+  border-color: color-mix(in srgb, var(--color-card-border) 92%, transparent);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+}
+
+.confirmation-dialog__header.dialog__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--spacing-sm);
+  align-items: start;
+  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md);
+  padding-right: calc(var(--spacing-lg) + var(--spacing-xl) + var(--spacing-xs));
+  border-bottom-color: color-mix(in srgb, var(--color-card-border) 76%, transparent);
+}
+
+.confirmation-dialog__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--spacing-md) * 2.25);
+  height: calc(var(--spacing-md) * 2.25);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-action-primary) 32%, transparent);
+  border-radius: var(--border-radius-full);
+  background-color: color-mix(in srgb, var(--color-action-primary) 10%, transparent);
+  color: var(--color-action-primary);
+}
+
+.confirmation-dialog__icon--warning {
+  border-color: color-mix(in srgb, var(--color-warning) 44%, transparent);
+  background-color: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
+}
+
+.confirmation-dialog__icon--danger {
+  border-color: color-mix(in srgb, var(--color-error) 42%, transparent);
+  background-color: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+}
+
+.confirmation-dialog__icon svg {
+  width: var(--font-size-xl);
+  height: var(--font-size-xl);
+}
+
+.confirmation-dialog__heading {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.confirmation-dialog__eyebrow {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+}
+
+.confirmation-dialog__header h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.confirmation-dialog__body.dialog__body {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.confirmation-dialog__body p {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.confirmation-dialog__body .confirmation-dialog__detail {
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 70%, transparent);
+  padding-top: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.confirmation-dialog__footer.dialog__footer {
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+  border-top-color: color-mix(in srgb, var(--color-card-border) 76%, transparent);
+}
+
+.confirmation-dialog__footer .btn--outline {
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 82%, transparent);
+  background-color: color-mix(in srgb, var(--color-background) 72%, transparent);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+}
+
+.confirmation-dialog__footer .btn--outline:hover:not(:disabled),
+.confirmation-dialog__footer .btn--outline:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-card-border-hover) 92%, transparent);
+  background-color: color-mix(in srgb, var(--color-background-secondary) 76%, transparent);
+  color: var(--color-text-primary);
+}
+
+.confirmation-dialog__footer .btn--outline:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-card-border-active) 92%, transparent);
+  background-color: color-mix(in srgb, var(--color-background-secondary) 86%, transparent);
+}
+
+@media (max-width: 767px) {
+  .confirmation-dialog__header.dialog__header {
+    padding: var(--spacing-md);
+    padding-right: calc(var(--spacing-md) + var(--spacing-xl) + var(--spacing-xs));
+  }
+
+  .confirmation-dialog__body.dialog__body,
+  .confirmation-dialog__footer.dialog__footer {
+    padding-inline: var(--spacing-md);
+  }
+
+  .confirmation-dialog__footer.dialog__footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .confirmation-dialog__footer .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
