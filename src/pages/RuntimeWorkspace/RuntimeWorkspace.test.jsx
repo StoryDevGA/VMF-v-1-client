@@ -8,6 +8,7 @@ import {
   useAcceptRuntimeSectionMutation,
   useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeOutputRequestMutation,
+  useCreateRuntimeRevisionMutation,
   useExecuteRuntimeActionMutation,
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeEvidenceQuery,
@@ -29,6 +30,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeSectionMutation: vi.fn(),
   useClearRuntimeSectionEvidenceMutation: vi.fn(),
   useCreateRuntimeOutputRequestMutation: vi.fn(),
+  useCreateRuntimeRevisionMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
   useGenerateRuntimeOutputRequestMutation: vi.fn(),
   useGetRuntimeEvidenceQuery: vi.fn(),
@@ -52,6 +54,8 @@ const executeRuntimeAction = vi.fn()
 const unwrapAction = vi.fn()
 const createRuntimeOutputRequest = vi.fn()
 const unwrapCreateRuntimeOutputRequest = vi.fn()
+const createRuntimeRevision = vi.fn()
+const unwrapCreateRuntimeRevision = vi.fn()
 const generateRuntimeOutputRequest = vi.fn()
 const unwrapGenerateRuntimeOutputRequest = vi.fn()
 const exportRuntimeOutputAsset = vi.fn()
@@ -334,6 +338,8 @@ describe('RuntimeWorkspace', () => {
     unwrapAction.mockReset()
     createRuntimeOutputRequest.mockReset()
     unwrapCreateRuntimeOutputRequest.mockReset()
+    createRuntimeRevision.mockReset()
+    unwrapCreateRuntimeRevision.mockReset()
     generateRuntimeOutputRequest.mockReset()
     unwrapGenerateRuntimeOutputRequest.mockReset()
     exportRuntimeOutputAsset.mockReset()
@@ -368,6 +374,14 @@ describe('RuntimeWorkspace', () => {
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
     unwrapCreateRuntimeOutputRequest.mockResolvedValue({ data: { outputRequestId: 'out_req_test' } })
     createRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapCreateRuntimeOutputRequest })
+    unwrapCreateRuntimeRevision.mockResolvedValue({
+      data: {
+        id: 'runtime-revision-2',
+        runtimeInstanceKey: 'value-narrative-001-rev-2',
+        runtimeType: 'VALUE_NARRATIVE',
+      },
+    })
+    createRuntimeRevision.mockReturnValue({ unwrap: unwrapCreateRuntimeRevision })
     unwrapGenerateRuntimeOutputRequest.mockResolvedValue({ data: { outputAssetId: 'out_asset_test' } })
     generateRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapGenerateRuntimeOutputRequest })
     unwrapExportRuntimeOutputAsset.mockResolvedValue({
@@ -401,6 +415,7 @@ describe('RuntimeWorkspace', () => {
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useClearRuntimeSectionEvidenceMutation.mockReturnValue([clearRuntimeSectionEvidence, { isLoading: false }])
     useCreateRuntimeOutputRequestMutation.mockReturnValue([createRuntimeOutputRequest, { isLoading: false }])
+    useCreateRuntimeRevisionMutation.mockReturnValue([createRuntimeRevision, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
     useGenerateRuntimeOutputRequestMutation.mockReturnValue([generateRuntimeOutputRequest, { isLoading: false }])
     useResetRuntimeDiscoveryMutation.mockReturnValue([resetRuntimeDiscovery, { isLoading: false }])
@@ -537,6 +552,253 @@ describe('RuntimeWorkspace', () => {
     expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
     expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it('creates a runtime revision from the renderer revision contract', async () => {
+    const user = userEvent.setup()
+    const lockedRevisionRenderer = {
+      ...rendererPayload,
+      runtimeInstance: {
+        ...rendererPayload.runtimeInstance,
+        status: 'LOCKED',
+      },
+      lifecycle: {
+        stage: 'LOCKED',
+        runtimeStatus: 'LOCKED',
+      },
+      publish: {
+        state: 'PUBLISHED',
+        published: true,
+        snapshot: {
+          snapshotId: 'publish-snapshot-1',
+          snapshotHash: 'sha256:publish',
+        },
+        outputEligibility: {
+          outputEligible: true,
+        },
+      },
+      lock: {
+        state: 'LOCKED',
+        locked: true,
+        snapshot: {
+          snapshotId: 'lock-snapshot-1',
+          snapshotHash: 'sha256:lock',
+        },
+        replayAnchor: {
+          replayAnchorId: 'replay-anchor-1',
+          replayAnchorHash: 'sha256:replay',
+        },
+      },
+      revision: {
+        contractVersion: 'runtime-revision.v1',
+        revisionNumber: 1,
+        rootRuntimeId: 'runtime-1',
+        rootRuntimeInstanceKey: 'value-narrative-001',
+        parentRuntimeId: null,
+        parentRuntimeInstanceKey: '',
+        lineage: [
+          {
+            runtimeInstanceId: 'runtime-1',
+            runtimeInstanceKey: 'value-narrative-001',
+            revisionNumber: 1,
+            relationship: 'CURRENT',
+            status: 'LOCKED',
+            lifecycleStage: 'LOCKED',
+          },
+        ],
+        createRevision: {
+          enabled: true,
+          disabledReason: '',
+          expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        },
+        sourceProof: {
+          publishSnapshotId: 'publish-snapshot-1',
+          lockSnapshotId: 'lock-snapshot-1',
+          replayAnchorId: 'replay-anchor-1',
+        },
+      },
+    }
+
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: lockedRevisionRenderer },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('heading', { name: 'Revision History' })).toBeInTheDocument()
+    expect(screen.getByText('Current R1')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /create revision/i }))
+    const dialog = screen.getByRole('dialog', { name: /create revision/i })
+    await user.type(within(dialog).getByLabelText(/revision reason/i), 'Refresh for Q3 launch')
+    await user.click(within(dialog).getByRole('button', { name: /create revision/i }))
+
+    await waitFor(() => {
+      expect(createRuntimeRevision).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        body: {
+          expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+          reason: 'Refresh for Q3 launch',
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
+        { runtimeInstanceId: 'value-narrative-001-rev-2' },
+        { skip: false },
+      )
+    })
+  })
+
+  it('renders revision history runtime rows as workspace links', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            status: 'LOCKED',
+          },
+          revision: {
+            contractVersion: 'runtime-revision.v1',
+            revisionNumber: 1,
+            lineage: [
+              {
+                runtimeInstanceId: 'runtime-1',
+                runtimeInstanceKey: 'value-narrative-001',
+                revisionNumber: 1,
+                relationship: 'CURRENT',
+                status: 'LOCKED',
+                lifecycleStage: 'LOCKED',
+              },
+              {
+                runtimeInstanceId: 'runtime-2',
+                runtimeInstanceKey: 'value-narrative-001-rev-2',
+                revisionNumber: 2,
+                relationship: 'CHILD',
+                status: 'ACTIVE',
+                lifecycleStage: 'DRAFT',
+              },
+            ],
+            createRevision: {
+              enabled: false,
+              disabledReason: 'A revision already exists for this locked runtime.',
+              expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+              existingChildRuntimeInstanceKey: 'value-narrative-001-rev-2',
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const revisionHistory = screen.getByRole('list', { name: /runtime revision history/i })
+    expect(within(revisionHistory).getByRole('link', { name: 'Current R1' }))
+      .toHaveAttribute('href', '/app/runtime/value-narrative-001')
+    expect(within(revisionHistory).getByRole('link', { name: 'Child R2' }))
+      .toHaveAttribute('href', '/app/runtime/value-narrative-001-rev-2')
+  })
+
+  it('clears revision reason when the create revision dialog is closed', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            status: 'LOCKED',
+          },
+          lifecycle: {
+            stage: 'LOCKED',
+            runtimeStatus: 'LOCKED',
+          },
+          publish: {
+            state: 'PUBLISHED',
+            published: true,
+            snapshot: {
+              snapshotId: 'publish-snapshot-1',
+              snapshotHash: 'sha256:publish',
+            },
+          },
+          lock: {
+            state: 'LOCKED',
+            locked: true,
+            snapshot: {
+              snapshotId: 'lock-snapshot-1',
+              snapshotHash: 'sha256:lock',
+            },
+            replayAnchor: {
+              replayAnchorId: 'replay-anchor-1',
+              replayAnchorHash: 'sha256:replay',
+            },
+          },
+          revision: {
+            contractVersion: 'runtime-revision.v1',
+            revisionNumber: 1,
+            lineage: [],
+            createRevision: {
+              enabled: true,
+              disabledReason: '',
+              expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    await user.click(screen.getByRole('button', { name: /create revision/i }))
+    let dialog = screen.getByRole('dialog', { name: /create revision/i })
+    await user.type(within(dialog).getByLabelText(/revision reason/i), 'Stale reason')
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
+
+    await user.click(screen.getByRole('button', { name: /create revision/i }))
+    dialog = screen.getByRole('dialog', { name: /create revision/i })
+    expect(within(dialog).getByLabelText(/revision reason/i)).toHaveValue('')
+  })
+
+  it('shows renderer-projected revision disabled reasons', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            contractVersion: 'runtime-revision.v1',
+            revisionNumber: 1,
+            lineage: [],
+            createRevision: {
+              enabled: false,
+              disabledReason: 'Lock snapshot and replay anchor proof are required before creating a revision.',
+              expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('button', { name: /create revision/i })).toBeDisabled()
+    expect(screen.getByText('Lock snapshot and replay anchor proof are required before creating a revision.')).toBeInTheDocument()
   })
 
   it('renders Output Lab as blocked when locked canonical output eligibility is missing', async () => {

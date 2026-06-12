@@ -1904,6 +1904,12 @@ describe('MaintainVmfs', () => {
     const desktopActionsGrid = getCssDeclarations('.maintain-vmfs__continue-grid', {
       after: '@media (min-width: 768px)',
     })
+    const tabletActionsGrid = getCssDeclarations('.maintain-vmfs__continue-grid', {
+      after: '@media (min-width: 768px) and (max-width: 1023px)',
+    })
+    const tabletPrimaryCard = getCssDeclarations('.maintain-vmfs__continue-card--primary', {
+      after: '@media (min-width: 768px) and (max-width: 1023px)',
+    })
     const mobilePrimaryCard = getCssDeclarations('.maintain-vmfs__continue-card--primary', {
       after: '@media (max-width: 768px)',
     })
@@ -1913,6 +1919,12 @@ describe('MaintainVmfs', () => {
 
     expect(desktopActionsGrid).toEqual(expect.objectContaining({
       'grid-template-columns': 'minmax(0, 2fr) repeat(3, minmax(12rem, 1fr))',
+    }))
+    expect(tabletActionsGrid).toEqual(expect.objectContaining({
+      'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
+    }))
+    expect(tabletPrimaryCard).toEqual(expect.objectContaining({
+      'grid-column': '1 / -1',
     }))
     expect(mobilePrimaryCard).toEqual(expect.objectContaining({
       'grid-template-columns': 'minmax(0, 1fr)',

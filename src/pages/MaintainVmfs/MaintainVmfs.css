@@ -968,6 +968,16 @@
 
 }
 
+@media (min-width: 768px) and (max-width: 1023px) {
+  .maintain-vmfs__continue-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .maintain-vmfs__continue-card--primary {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 768px) {
   .maintain-vmfs__continue-card--primary {
     grid-template-columns: minmax(0, 1fr);

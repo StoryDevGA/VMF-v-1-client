@@ -71,6 +71,12 @@ export const buildCreateRuntimeInstanceQuery = ({ body }) => ({
   body,
 })
 
+export const buildCreateRuntimeRevisionQuery = ({ runtimeInstanceId, body }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/revisions`,
+  method: 'POST',
+  body,
+})
+
 export const getCreateRuntimeInstanceInvalidationTags = (_result, _error, { body } = {}) => [
   runtimeInstanceListTag(body?.runtimeType || DEFAULT_RUNTIME_INSTANCE_TYPE),
 ]
@@ -259,6 +265,21 @@ export const getMutateRuntimeStateInvalidationTags = (result, _error, { runtimeI
   ]
 }
 
+export const getCreateRuntimeRevisionInvalidationTags = (result, _error, { runtimeInstanceId } = {}) => {
+  const runtimeInstance = result?.data
+    ?? result?.runtimeInstance
+    ?? null
+  const runtimeType = runtimeInstance?.runtimeType ?? DEFAULT_RUNTIME_INSTANCE_TYPE
+
+  return [
+    ...buildRuntimeInstanceTags([
+      String(runtimeInstanceId ?? '').trim(),
+      ...getRuntimeInstanceCacheIds(runtimeInstance),
+    ].filter(Boolean).filter((id, index, ids) => ids.indexOf(id) === index)),
+    runtimeInstanceListTag(runtimeType),
+  ]
+}
+
 export const getExecuteRuntimeActionInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getUpdateRuntimeDiscoveryInputsInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getAcceptRuntimeDiscoveryInvalidationTags = getMutateRuntimeStateInvalidationTags
@@ -284,6 +305,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     createRuntimeInstance: build.mutation({
       query: buildCreateRuntimeInstanceQuery,
       invalidatesTags: getCreateRuntimeInstanceInvalidationTags,
+    }),
+
+    createRuntimeRevision: build.mutation({
+      query: buildCreateRuntimeRevisionQuery,
+      invalidatesTags: getCreateRuntimeRevisionInvalidationTags,
     }),
 
     getRuntimeInstance: build.query({
@@ -437,6 +463,7 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 export const {
   useListRuntimeInstancesQuery,
   useCreateRuntimeInstanceMutation,
+  useCreateRuntimeRevisionMutation,
   useGetRuntimeInstanceQuery,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeOutputAssetQuery,

@@ -32,6 +32,7 @@ import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { Link } from '../../components/Link'
 import { ProgressBar, getProgressBarValueTint } from '../../components/ProgressBar'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
@@ -47,6 +48,7 @@ import {
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
   useCreateRuntimeOutputRequestMutation,
+  useCreateRuntimeRevisionMutation,
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
@@ -72,6 +74,7 @@ import {
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
   getRuntimeLifecycleStatus,
+  getRuntimeWorkspaceRoute,
   getRuntimeStatusVariant,
 } from '../../utils/runtimeWorkspace.js'
 import './RuntimeWorkspace.css'
@@ -1645,6 +1648,18 @@ function SectionDetailRows({ rows = EMPTY_ARRAY, ariaLabel = '', className = '' 
       {rows.map((row) => {
         const badgeLabel = String(row.badgeLabel || '').trim()
         const hasMeta = row.meta !== null && row.meta !== undefined && row.meta !== ''
+        const title = row.to ? (
+          <Link
+            to={row.to}
+            variant="primary"
+            underline="hover"
+            className="runtime-workspace__section-detail-link"
+          >
+            {row.title}
+          </Link>
+        ) : (
+          <strong>{row.title}</strong>
+        )
 
         return (
           <div
@@ -1653,7 +1668,7 @@ function SectionDetailRows({ rows = EMPTY_ARRAY, ariaLabel = '', className = '' 
             role={ariaLabel ? 'listitem' : undefined}
           >
             <span className="runtime-workspace__section-detail-copy">
-              <strong>{row.title}</strong>
+              {title}
               {hasMeta ? <span>{row.meta}</span> : null}
             </span>
             {badgeLabel ? (
@@ -5622,6 +5637,7 @@ function RuntimeWorkspace() {
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
+  const [createRuntimeRevision, { isLoading: isCreatingRuntimeRevision }] = useCreateRuntimeRevisionMutation()
   const [generateRuntimeOutputRequest, { isLoading: isGeneratingOutputRequest }] = useGenerateRuntimeOutputRequestMutation()
   const [exportRuntimeOutputAsset] = useLazyExportRuntimeOutputAssetQuery()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
@@ -5652,6 +5668,8 @@ function RuntimeWorkspace() {
   const [selectedOutputTypeKey, setSelectedOutputTypeKey] = useState('')
   const [exportingOutputAssetKey, setExportingOutputAssetKey] = useState('')
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState(null)
+  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false)
+  const [revisionReason, setRevisionReason] = useState('')
   const hasAutoSelectedInitialSection = useRef(false)
   const reviewingEvidenceObjectIdRef = useRef('')
   const reviewingSectionEvidenceObjectIdRef = useRef('')
@@ -5765,6 +5783,14 @@ function RuntimeWorkspace() {
   const lockSnapshot = renderer?.lock?.snapshot || {}
   const replayAnchor = renderer?.lock?.replayAnchor || renderer?.lock?.anchor || {}
   const outputEligibility = renderer?.lock?.outputEligibility || renderer?.publish?.outputEligibility || {}
+  const revisionProjection = renderer?.revision || {}
+  const createRevisionProjection = revisionProjection?.createRevision || {}
+  const revisionLineage = Array.isArray(revisionProjection?.lineage) ? revisionProjection.lineage : EMPTY_ARRAY
+  const createRevisionDisabledReason = String(createRevisionProjection.disabledReason || '').trim()
+  const canCreateRevision = Boolean(createRevisionProjection.enabled)
+  const createRevisionExpectedUpdatedAt = createRevisionProjection.expectedUpdatedAt || runtimeInstance?.updatedAt || ''
+  const hasRevisionContract = Boolean(revisionProjection?.contractVersion)
+  const hasRuntimeActionCommands = sidePanelActions.length > 0 || hasRevisionContract
   const hasCertifiedTruthState = Boolean(
     renderer?.publish?.published
     || renderer?.lock?.locked
@@ -6540,6 +6566,59 @@ function RuntimeWorkspace() {
     setPendingRuntimeAction(null)
   }
 
+  const handleOpenRevisionDialog = () => {
+    if (!canCreateRevision) return
+    setRevisionDialogOpen(true)
+  }
+
+  const handleCloseRevisionDialog = () => {
+    if (isCreatingRuntimeRevision) return
+    setRevisionDialogOpen(false)
+    setRevisionReason('')
+  }
+
+  const handleCreateRevision = async () => {
+    if (!canCreateRevision) return
+
+    if (!createRevisionExpectedUpdatedAt) {
+      addToast({
+        title: 'Revision unavailable',
+        description: 'Runtime projection is missing its concurrency marker. Refresh and try again.',
+        variant: 'error',
+      })
+      return
+    }
+
+    try {
+      const response = await createRuntimeRevision({
+        runtimeInstanceId,
+        body: {
+          expectedUpdatedAt: createRevisionExpectedUpdatedAt,
+          reason: revisionReason.trim(),
+        },
+      }).unwrap()
+      const revisionRuntimeInstance = response?.data ?? response
+      setRevisionDialogOpen(false)
+      setRevisionReason('')
+      addToast({
+        title: 'Revision created',
+        description: 'A new editable runtime draft is ready.',
+        variant: 'success',
+      })
+      navigate(getRuntimeWorkspaceRoute(revisionRuntimeInstance))
+    } catch (revisionError) {
+      const normalizedError = normalizeError(revisionError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      addToast({
+        title: 'Revision failed',
+        description: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+        variant: 'error',
+      })
+    }
+  }
+
   const handleExecuteSectionAction = async ({ action, section }) => {
     await handleExecuteAction(action, {
       runtimePath: section?.runtimePath,
@@ -6770,7 +6849,7 @@ function RuntimeWorkspace() {
               </Status>
             ) : null}
           </div>
-          {sidePanelActions.length > 0 ? (
+          {hasRuntimeActionCommands ? (
             <HorizontalScroll
               className="runtime-workspace__action-scroll"
               ariaLabel="Governed runtime actions scroll region"
@@ -6790,6 +6869,19 @@ function RuntimeWorkspace() {
                     onExecute={handleExecuteAction}
                   />
                 ))}
+                {hasRevisionContract ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<MdAccountTree aria-hidden="true" />}
+                    disabled={!canCreateRevision || Boolean(executingActionKey)}
+                    aria-describedby={createRevisionDisabledReason ? 'runtime-workspace-create-revision-reason' : undefined}
+                    onClick={handleOpenRevisionDialog}
+                  >
+                    Create Revision
+                  </Button>
+                ) : null}
               </div>
             </HorizontalScroll>
           ) : (
@@ -6797,6 +6889,17 @@ function RuntimeWorkspace() {
               No actions available
             </Status>
           )}
+          {hasRevisionContract && createRevisionDisabledReason ? (
+            <Status
+              id="runtime-workspace-create-revision-reason"
+              variant="neutral"
+              size="sm"
+              showIcon
+              className="runtime-workspace__action-panel-status"
+            >
+              {createRevisionDisabledReason}
+            </Status>
+          ) : null}
         </Card.Body>
       </Card>
 
@@ -7115,6 +7218,37 @@ function RuntimeWorkspace() {
             </Card>
           ) : null}
 
+          {hasRevisionContract ? (
+            <Card variant="default" className="runtime-workspace__panel">
+              <Card.Body className="runtime-workspace__panel-body">
+                <div className="runtime-workspace__panel-heading">
+                  <MdAccountTree aria-hidden="true" />
+                  <h2>Revision History</h2>
+                </div>
+                <SectionDetailRows
+                  ariaLabel="Runtime revision history"
+                  rows={revisionLineage.map((item, index) => {
+                    const routeId = String(item.runtimeInstanceKey || item.runtimeInstanceId || '').trim()
+                    return {
+                      id: `${item.relationship || 'revision'}-${item.runtimeInstanceId || routeId || index}`,
+                      title: `${formatRuntimeTokenLabel(item.relationship || 'Revision')} R${item.revisionNumber || 1}`,
+                      meta: [
+                        formatRuntimeIdentifier(routeId),
+                        formatRuntimeTokenLabel(item.lifecycleStage || item.status || ''),
+                      ].filter(Boolean).join(' / '),
+                      to: routeId
+                        ? {
+                          pathname: getRuntimeWorkspaceRoute(routeId),
+                          state: { from: location.pathname },
+                        }
+                        : '',
+                    }
+                  })}
+                />
+              </Card.Body>
+            </Card>
+          ) : null}
+
           {activeSection && activeSectionIntelligence ? (
             <Card variant="default" className="runtime-workspace__panel">
               <Card.Body className="runtime-workspace__panel-body">
@@ -7167,6 +7301,66 @@ function RuntimeWorkspace() {
         onCancel={handleCancelRuntimeActionConfirmation}
         onConfirm={handleConfirmRuntimeAction}
       />
+      <Dialog
+        open={revisionDialogOpen}
+        onClose={handleCloseRevisionDialog}
+        size="sm"
+        closeOnBackdropClick={!isCreatingRuntimeRevision}
+        closeOnEscape={!isCreatingRuntimeRevision}
+        showCloseButton={!isCreatingRuntimeRevision}
+        aria-labelledby="runtime-workspace-create-revision-title"
+        aria-describedby="runtime-workspace-create-revision-copy"
+      >
+        <Dialog.Header>
+          <h2 id="runtime-workspace-create-revision-title">Create Revision</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="runtime-workspace__reset-warning-copy">
+            <MdAccountTree aria-hidden="true" />
+            <div>
+              <p id="runtime-workspace-create-revision-copy">
+                Create a new editable draft from this locked runtime. Published snapshots, lock proof, and replay anchor lineage stay attached to the source.
+              </p>
+              <Textarea
+                label="Revision reason"
+                placeholder="Optional context for this revision"
+                value={revisionReason}
+                rows={4}
+                maxLength={1000}
+                fullWidth
+                disabled={isCreatingRuntimeRevision}
+                helperText={`${revisionReason.length}/1000 characters`}
+                onChange={(event) => setRevisionReason(event.target.value)}
+              />
+            </div>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <div className="runtime-workspace__reset-warning-actions">
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              leftIcon={<MdAccountTree aria-hidden="true" />}
+              loading={isCreatingRuntimeRevision}
+              disabled={!canCreateRevision}
+              onClick={handleCreateRevision}
+            >
+              Create Revision
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon={<MdClose aria-hidden="true" />}
+              disabled={isCreatingRuntimeRevision}
+              onClick={handleCloseRevisionDialog}
+            >
+              Cancel
+            </Button>
+          </div>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   )
 }

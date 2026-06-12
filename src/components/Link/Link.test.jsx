@@ -5,11 +5,21 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { Link } from './Link'
 
 // Wrapper for React Router context
 const RouterWrapper = ({ children }) => <BrowserRouter>{children}</BrowserRouter>
+
+function LocationStateProbe() {
+  const location = useLocation()
+  return (
+    <div>
+      <span>Probe route</span>
+      <span>{location.state?.from || 'no-state'}</span>
+    </div>
+  )
+}
 
 describe('Link Component', () => {
   // ===========================
@@ -44,6 +54,31 @@ describe('Link Component', () => {
         </RouterWrapper>
       )
       expect(screen.getByText('Custom Content')).toBeInTheDocument()
+    })
+
+    it('should preserve router state embedded in object-shaped internal links', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <MemoryRouter initialEntries={['/source']}>
+          <Routes>
+            <Route
+              path="/source"
+              element={(
+                <Link to={{ pathname: '/target', state: { from: '/source' } }}>
+                  Target
+                </Link>
+              )}
+            />
+            <Route path="/target" element={<LocationStateProbe />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await user.click(screen.getByRole('link', { name: 'Target' }))
+
+      expect(screen.getByText('Probe route')).toBeInTheDocument()
+      expect(screen.getByText('/source')).toBeInTheDocument()
     })
   })
 

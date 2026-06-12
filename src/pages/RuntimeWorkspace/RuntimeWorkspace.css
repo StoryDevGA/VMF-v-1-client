@@ -1625,6 +1625,14 @@
   overflow-wrap: anywhere;
 }
 
+.runtime-workspace__section-detail-link.link {
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
 .runtime-workspace__section-detail-copy span {
   min-width: 0;
   color: var(--color-text-secondary);

@@ -44,10 +44,19 @@ export function Link({
   className = '',
   ...props
 }) {
+  const { state: explicitState, ...linkProps } = props
+  const toHasEmbeddedState = to
+    && typeof to === 'object'
+    && Object.prototype.hasOwnProperty.call(to, 'state')
+  const normalizedTo = toHasEmbeddedState
+    ? Object.fromEntries(Object.entries(to).filter(([key]) => key !== 'state'))
+    : to
+  const routerState = toHasEmbeddedState ? to.state : explicitState
+
   // Determine if this is an external link
-  const isExternalDestination = typeof to === 'string' && EXTERNAL_LINK_PATTERN.test(to)
+  const isExternalDestination = typeof normalizedTo === 'string' && EXTERNAL_LINK_PATTERN.test(normalizedTo)
   const isExternal = external || Boolean(href) || isExternalDestination
-  const destination = href || to
+  const destination = href || normalizedTo
 
   // Build class names
   const classNames = [
@@ -74,14 +83,14 @@ export function Link({
       event.preventDefault()
       return
     }
-    props.onClick?.(event)
+    linkProps.onClick?.(event)
   }
 
   // Render external link
   if (isExternal) {
     return (
       <a
-        {...props}
+        {...linkProps}
         href={destination}
         className={classNames}
         onClick={handleClick}
@@ -102,8 +111,9 @@ export function Link({
   // Render internal link (React Router)
   return (
     <RouterLink
-      {...props}
+      {...linkProps}
       to={disabled ? '#' : destination}
+      state={routerState}
       className={classNames}
       onClick={handleClick}
       aria-disabled={disabled}

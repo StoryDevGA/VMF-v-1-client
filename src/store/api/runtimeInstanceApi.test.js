@@ -5,6 +5,7 @@ import {
   buildClearRuntimeSectionEvidenceQuery,
   buildCreateRuntimeInstanceQuery,
   buildCreateRuntimeOutputRequestQuery,
+  buildCreateRuntimeRevisionQuery,
   buildExecuteRuntimeActionQuery,
   buildExportRuntimeOutputAssetQuery,
   buildGenerateRuntimeOutputRequestQuery,
@@ -37,6 +38,7 @@ import {
   getClearRuntimeSectionEvidenceInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getCreateRuntimeOutputRequestInvalidationTags,
+  getCreateRuntimeRevisionInvalidationTags,
   getExecuteRuntimeActionInvalidationTags,
   getGenerateRuntimeOutputRequestInvalidationTags,
   getMutateRuntimeStateInvalidationTags,
@@ -58,6 +60,7 @@ import {
   useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeOutputRequestMutation,
+  useCreateRuntimeRevisionMutation,
   useExecuteRuntimeActionMutation,
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeEvidenceQuery,
@@ -90,6 +93,7 @@ describe('runtimeInstanceApi', () => {
   it('registers expected endpoint definitions', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('listRuntimeInstances')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeRevision')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraph')
@@ -124,6 +128,7 @@ describe('runtimeInstanceApi', () => {
   it('exports runtime instance hooks', () => {
     expect(typeof useListRuntimeInstancesQuery).toBe('function')
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
+    expect(typeof useCreateRuntimeRevisionMutation).toBe('function')
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
     expect(typeof useGetRuntimeEvidenceQuery).toBe('function')
     expect(typeof useGetRuntimeIntelligenceGraphQuery).toBe('function')
@@ -158,6 +163,7 @@ describe('runtimeInstanceApi', () => {
   it('exposes endpoint initiate functions', () => {
     expect(typeof runtimeInstanceApi.endpoints.listRuntimeInstances.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeInstance.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.createRuntimeRevision.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraph.initiate).toBe('function')
@@ -216,6 +222,20 @@ describe('runtimeInstanceApi', () => {
       url: '/runtime-instances',
       method: 'POST',
       body,
+    })
+    expect(buildCreateRuntimeRevisionQuery({
+      runtimeInstanceId: 'value narrative/001',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'Refresh GTM claims',
+      },
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/revisions',
+      method: 'POST',
+      body: {
+        expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
+        reason: 'Refresh GTM claims',
+      },
     })
     expect(buildRuntimeInstanceDetailQuery({ runtimeInstanceId: 'value-narrative-001' }))
       .toBe('/runtime-instances/value-narrative-001')
@@ -514,6 +534,18 @@ describe('runtimeInstanceApi', () => {
     expect(getCreateRuntimeInstanceInvalidationTags(null, null, {
       body: { name: 'Defaulted Value Narrative' },
     })).toEqual([runtimeInstanceListTag(DEFAULT_RUNTIME_INSTANCE_TYPE)])
+    expect(getCreateRuntimeRevisionInvalidationTags({
+      data: {
+        id: 'runtime-revision-2',
+        runtimeInstanceKey: 'value-narrative-001-rev-2',
+        runtimeType: 'VALUE_NARRATIVE',
+      },
+    }, null, { runtimeInstanceId: 'value-narrative-001' })).toEqual([
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      { type: 'RuntimeInstance', id: 'runtime-revision-2' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001-rev-2' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
     expect(getRuntimeInstanceDetailTags({
       data: { id: 'runtime-1', runtimeInstanceKey: 'value-narrative-001' },
     }, null, { runtimeInstanceId: 'value-narrative-001' })).toEqual([
