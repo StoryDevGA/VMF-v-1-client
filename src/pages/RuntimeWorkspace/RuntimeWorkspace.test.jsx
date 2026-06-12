@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
@@ -14,6 +17,7 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
+  useGetRuntimeTruthQualityQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
@@ -36,6 +40,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
+  useGetRuntimeTruthQualityQuery: vi.fn(),
   useLazyExportRuntimeOutputAssetQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
   useResetRuntimeDiscoveryMutation: vi.fn(),
@@ -266,6 +271,88 @@ const readyOutputLabPayload = {
   },
 }
 
+const truthQualityPayload = {
+  contractVersion: 'truth-quality.v1',
+  runtimeInstanceId: 'runtime-1',
+  runtimeInstanceKey: 'value-narrative-001',
+  certification: {
+    level: 'STRATEGIC_TRUTH',
+    levelNumber: 4,
+    label: 'Strategic Truth',
+    summary: 'High coverage, high confidence, diverse source support, and low contradiction risk.',
+  },
+  quality: {
+    coverage: {
+      score: 90,
+      band: 'VERY_HIGH',
+      source: 'DIG_COVERAGE',
+      missingDomains: [],
+    },
+    confidence: {
+      score: 92,
+      band: 'HIGH',
+      acceptedEvidenceCount: 8,
+      acceptedTruthCount: 4,
+      supportingSourceCount: 5,
+      warnings: [],
+    },
+    sourceDiversity: {
+      score: 85,
+      band: 'HIGH',
+      sourceRecordCount: 5,
+      sourceTypeCount: 5,
+      sourceTypes: ['ANALYST_REPORT', 'CUSTOMER_PROOF', 'MARKET_REPORT', 'SALES_DECK', 'WEBSITE'],
+      rawSourceLabel: 'Raw source label must not render.',
+    },
+    contradictionRisk: {
+      level: 'LOW',
+      count: 0,
+      unresolvedCount: 0,
+      blocking: false,
+      source: 'DIG_CONTRADICTIONS',
+    },
+    qualityBand: 'HIGH',
+    knownGaps: [],
+    rawEvidenceSnippet: 'Accepted evidence support must not render.',
+  },
+  graph: {
+    graphVersion: '2.2',
+    graphHash: 'sha256:truth-quality-graph',
+    evaluatedAt: '2026-06-12T15:00:00.000Z',
+    rawGraphSnippet: 'Raw graph snippet must not render.',
+  },
+}
+
+const getBackendTruthCertificationLevelKeys = () => {
+  const constantsPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../VMF-v-1-api/src/constants/runtimeTruthQuality.js',
+  )
+  const constantsSource = readFileSync(constantsPath, 'utf8')
+  const levelsMatch = constantsSource.match(
+    /export const TRUTH_CERTIFICATION_LEVELS = Object\.freeze\(\{([\s\S]*?)\n\}\)/,
+  )
+  expect(levelsMatch).not.toBeNull()
+  return Array
+    .from(levelsMatch[1].matchAll(/^\s{2}([A-Z_]+): Object\.freeze\(\{/gm))
+    .map(([, levelKey]) => levelKey)
+}
+
+const getFrontendTruthCertificationVariantKeys = () => {
+  const workspacePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    './RuntimeWorkspace.jsx',
+  )
+  const workspaceSource = readFileSync(workspacePath, 'utf8')
+  const variantsMatch = workspaceSource.match(
+    /const TRUTH_CERTIFICATION_VARIANTS = Object\.freeze\(\{([\s\S]*?)\n\}\)/,
+  )
+  expect(variantsMatch).not.toBeNull()
+  return Array
+    .from(variantsMatch[1].matchAll(/^\s{2}([A-Z_]+): /gm))
+    .map(([, levelKey]) => levelKey)
+}
+
 function VmfRouteProbe() {
   const location = useLocation()
   return (
@@ -435,6 +522,12 @@ describe('RuntimeWorkspace', () => {
       error: null,
       refetch: refetchOutputLab,
     })
+    useGetRuntimeTruthQualityQuery.mockReturnValue({
+      data: { data: truthQualityPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
     useLazyExportRuntimeOutputAssetQuery.mockReturnValue([exportRuntimeOutputAsset, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
@@ -447,10 +540,20 @@ describe('RuntimeWorkspace', () => {
     })
   })
 
+  it('keeps Truth Certification UI variants aligned with backend certification levels', () => {
+    expect(getFrontendTruthCertificationVariantKeys().sort()).toEqual(
+      getBackendTruthCertificationLevelKeys().sort(),
+    )
+  })
+
   it('renders server-projected runtime sections, actions, signals, activity, and diagnostics', async () => {
     renderRuntimeWorkspace()
 
     expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    expect(useGetRuntimeTruthQualityQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )
@@ -818,6 +921,85 @@ describe('RuntimeWorkspace', () => {
     expect(within(main).getAllByText('Locked canonical runtime truth is required before Output Lab generation.').length)
       .toBeGreaterThanOrEqual(1)
     expect(within(main).getByRole('region', { name: /output lab readiness/i })).toHaveTextContent('Not eligible')
+
+    await user.click(within(main).getByRole('tab', { name: /composition/i }))
+    expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
+  })
+
+  it('renders Truth Certification in Output Lab without exposing raw evidence or graph payloads', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /output lab/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
+
+    const certification = within(main).getByRole('region', { name: /truth certification/i })
+    expect(within(certification).getAllByText('Strategic Truth').length).toBeGreaterThanOrEqual(1)
+    expect(within(certification).getByRole('progressbar', { name: /truth certification coverage/i }))
+      .toHaveAttribute('value', '90')
+    expect(within(certification).getByRole('list', { name: /truth certification metrics/i }))
+      .toHaveTextContent('High / 8 evidence / 4 truth')
+    expect(within(certification).getByText('High / 5 sources / 5 types')).toBeInTheDocument()
+    expect(within(certification).getByText('Low / 0 unresolved')).toBeInTheDocument()
+    expect(within(certification).getByText(/sha256:truth.*ty-graph/)).toBeInTheDocument()
+    expect(within(certification).getByText('No known certification gaps')).toBeInTheDocument()
+    expect(screen.queryByText('Accepted evidence support must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw graph snippet must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw source label must not render.')).not.toBeInTheDocument()
+  })
+
+  it('warns and falls back when Truth Certification level is not in the governed contract', async () => {
+    const user = userEvent.setup()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      useGetRuntimeTruthQualityQuery.mockReturnValue({
+        data: {
+          data: {
+            ...truthQualityPayload,
+            certification: {
+              ...truthQualityPayload.certification,
+              level: 'EXPERIMENTAL_TRUTH',
+              label: 'Experimental Truth',
+            },
+          },
+        },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+      })
+
+      renderRuntimeWorkspace()
+      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      const main = screen.getByRole('main', { name: /guided execution sections/i })
+      await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
+
+      const certification = within(main).getByRole('region', { name: /truth certification/i })
+      expect(within(certification).getAllByText('Experimental Truth').length).toBeGreaterThanOrEqual(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Unknown Truth Certification level "EXPERIMENTAL_TRUTH" received from the runtime API; using neutral status styling.',
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('renders unavailable Truth Certification state without changing Output Lab generation gates', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeTruthQualityQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /output lab/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+
+    await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
+    expect(within(main).getByRole('region', { name: /truth certification/i }))
+      .toHaveTextContent('Truth Certification unavailable')
 
     await user.click(within(main).getByRole('tab', { name: /composition/i }))
     expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
@@ -6600,6 +6782,9 @@ describe('RuntimeWorkspace', () => {
     const summary = screen.getByRole('list', { name: /execution workspace summary/i })
     expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
     expect(within(summary).getByText('Published')).toBeInTheDocument()
+    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
+    expect(within(guidedPanel).getByRole('heading', { name: /truth certification/i })).toBeInTheDocument()
+    expect(within(guidedPanel).getAllByText('Strategic Truth').length).toBeGreaterThanOrEqual(1)
     const certifiedTruth = screen.getByRole('list', { name: /certified runtime truth/i })
     expect(within(certifiedTruth).getByText('Eligible')).toBeInTheDocument()
     expect(within(certifiedTruth).getByText('runtime-trut...34567890')).toBeInTheDocument()

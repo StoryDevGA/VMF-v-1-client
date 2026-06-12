@@ -87,6 +87,9 @@ export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
 
+export const buildRuntimeTruthQualityQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/truth-quality`
+
 export const buildRuntimeOutputLabQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab`
 
@@ -322,6 +325,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeRendererTags,
     }),
 
+    getRuntimeTruthQuality: build.query({
+      query: buildRuntimeTruthQualityQuery,
+      providesTags: getRuntimeRendererTags,
+    }),
+
     getRuntimeOutputLab: build.query({
       query: buildRuntimeOutputLabQuery,
       providesTags: getRuntimeInstanceDetailTags,
@@ -471,6 +479,7 @@ export const {
   useGetRuntimeOutputLabQuery,
   useGetRuntimeOutputLabDefinitionsQuery,
   useGetRuntimeOutputLabReadinessQuery,
+  useGetRuntimeTruthQualityQuery,
   useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeIntelligenceGraphCoverageQuery,
   useGetRuntimeIntelligenceGraphHealthQuery,

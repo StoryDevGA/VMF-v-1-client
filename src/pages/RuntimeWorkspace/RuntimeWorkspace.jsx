@@ -52,6 +52,7 @@ import {
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
+  useGetRuntimeTruthQualityQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
   useResetRuntimeDiscoveryMutation,
@@ -3532,6 +3533,229 @@ function RuntimeSectionNavigation({
 
 const getOutputLabPayload = (response) => response?.data ?? response ?? null
 
+const getTruthQualityPayload = (response) => response?.data ?? response ?? null
+
+const TRUTH_CERTIFICATION_VARIANTS = Object.freeze({
+  STRATEGIC_TRUTH: 'success',
+  CERTIFIED_TRUTH: 'success',
+  EVIDENCE_SUPPORTED: 'warning',
+  EVIDENCE_PRESENT: 'warning',
+  UNCERTIFIED: 'error',
+})
+
+const UNKNOWN_TRUTH_CERTIFICATION_LEVELS = new Set()
+
+const TRUTH_QUALITY_BAND_VARIANTS = Object.freeze({
+  VERY_HIGH: 'success',
+  HIGH: 'success',
+  MEDIUM: 'warning',
+  LOW: 'warning',
+  NONE: 'error',
+})
+
+const TRUTH_CONTRADICTION_RISK_VARIANTS = Object.freeze({
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'error',
+  BLOCKING: 'error',
+})
+
+const warnUnknownTruthCertificationLevel = (level) => {
+  const normalizedLevel = normalizeRuntimeActionToken(level)
+  if (
+    !import.meta.env?.DEV
+    || !normalizedLevel
+    || TRUTH_CERTIFICATION_VARIANTS[normalizedLevel]
+    || UNKNOWN_TRUTH_CERTIFICATION_LEVELS.has(normalizedLevel)
+  ) {
+    return
+  }
+  UNKNOWN_TRUTH_CERTIFICATION_LEVELS.add(normalizedLevel)
+  console.warn(
+    `Unknown Truth Certification level "${normalizedLevel}" received from the runtime API; using neutral status styling.`,
+  )
+}
+
+const getTruthCertificationVariant = (level) => {
+  const normalizedLevel = normalizeRuntimeActionToken(level)
+  const variant = TRUTH_CERTIFICATION_VARIANTS[normalizedLevel]
+  if (variant) return variant
+  warnUnknownTruthCertificationLevel(normalizedLevel)
+  return 'neutral'
+}
+
+const getTruthQualityBandVariant = (band) =>
+  TRUTH_QUALITY_BAND_VARIANTS[normalizeRuntimeActionToken(band)] || 'neutral'
+
+const getTruthContradictionRiskVariant = (risk) =>
+  TRUTH_CONTRADICTION_RISK_VARIANTS[normalizeRuntimeActionToken(risk)] || 'neutral'
+
+const formatTruthQualityScore = (value, suffix = '') => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '--'
+  return `${Math.round(numeric)}${suffix}`
+}
+
+const formatTruthQualitySourceDiversity = (sourceDiversity = {}) => {
+  const sourceCount = Number(sourceDiversity.sourceRecordCount || 0)
+  const sourceTypeCount = Number(sourceDiversity.sourceTypeCount || 0)
+  const sourceLabel = `${sourceCount} source${sourceCount === 1 ? '' : 's'}`
+  const typeLabel = `${sourceTypeCount} type${sourceTypeCount === 1 ? '' : 's'}`
+  return `${formatRuntimeTokenLabel(sourceDiversity.band || 'UNKNOWN')} / ${sourceLabel} / ${typeLabel}`
+}
+
+const formatTruthQualityConfidence = (confidence = {}) => {
+  const evidenceCount = Number(confidence.acceptedEvidenceCount || 0)
+  const truthCount = Number(confidence.acceptedTruthCount || 0)
+  return `${formatRuntimeTokenLabel(confidence.band || 'UNKNOWN')} / ${evidenceCount} evidence / ${truthCount} truth`
+}
+
+const buildTruthQualityRows = (truthQuality = {}) => {
+  const quality = truthQuality?.quality || {}
+  const coverage = quality.coverage || {}
+  const confidence = quality.confidence || {}
+  const sourceDiversity = quality.sourceDiversity || {}
+  const contradictionRisk = quality.contradictionRisk || {}
+  const graph = truthQuality?.graph || {}
+
+  return [
+    {
+      id: 'truth-certification-level',
+      title: 'Level',
+      meta: truthQuality?.certification?.label || formatRuntimeTokenLabel(truthQuality?.certification?.level || 'UNCERTIFIED'),
+      badgeLabel: truthQuality?.certification?.levelNumber !== undefined
+        ? `L${truthQuality.certification.levelNumber}`
+        : '',
+      badgeVariant: getTruthCertificationVariant(truthQuality?.certification?.level),
+    },
+    {
+      id: 'truth-certification-coverage',
+      title: 'Coverage',
+      meta: `${formatTruthQualityScore(coverage.score, '%')} / ${formatRuntimeTokenLabel(coverage.band || 'UNKNOWN')}`,
+      badgeLabel: coverage.source ? formatRuntimeTokenLabel(coverage.source) : '',
+      badgeVariant: getTruthQualityBandVariant(coverage.band),
+    },
+    {
+      id: 'truth-certification-confidence',
+      title: 'Confidence',
+      meta: formatTruthQualityConfidence(confidence),
+      badgeLabel: formatTruthQualityScore(confidence.score),
+      badgeVariant: getTruthQualityBandVariant(confidence.band),
+    },
+    {
+      id: 'truth-certification-source-diversity',
+      title: 'Source Diversity',
+      meta: formatTruthQualitySourceDiversity(sourceDiversity),
+      badgeLabel: sourceDiversity.sourceTypes?.length
+        ? `${sourceDiversity.sourceTypes.length} source classes`
+        : '',
+      badgeVariant: getTruthQualityBandVariant(sourceDiversity.band),
+    },
+    {
+      id: 'truth-certification-contradictions',
+      title: 'Contradictions',
+      meta: `${formatRuntimeTokenLabel(contradictionRisk.level || 'UNKNOWN')} / ${
+        Number(contradictionRisk.unresolvedCount || 0)
+      } unresolved`,
+      badgeLabel: `${Number(contradictionRisk.count || 0)} total`,
+      badgeVariant: getTruthContradictionRiskVariant(contradictionRisk.level),
+    },
+    {
+      id: 'truth-certification-graph',
+      title: 'DIG Graph',
+      meta: [
+        graph.graphVersion ? `v${graph.graphVersion}` : '',
+        formatRuntimeIdentifier(graph.graphHash),
+      ].filter(Boolean).join(' / ') || 'Unavailable',
+    },
+  ]
+}
+
+function TruthCertificationPanel({
+  error = null,
+  loading = false,
+  truthQuality = null,
+  panel = false,
+  rowsAriaLabel = 'Truth Certification metrics',
+}) {
+  const quality = truthQuality?.quality || {}
+  const coverage = quality.coverage || {}
+  const certification = truthQuality?.certification || {}
+  const knownGaps = Array.isArray(quality.knownGaps) ? quality.knownGaps : EMPTY_ARRAY
+  const certificationLabel = certification.label || formatRuntimeTokenLabel(certification.level || 'UNCERTIFIED')
+  const certificationVariant = getTruthCertificationVariant(certification.level)
+  const coverageVariant = getTruthQualityBandVariant(coverage.band)
+  const resolvedClassName = [
+    panel ? 'runtime-workspace__section-panel runtime-workspace__section-panel--truth-certification' : '',
+    'runtime-workspace__truth-certification',
+  ].filter(Boolean).join(' ')
+
+  return (
+    <section
+      className={resolvedClassName}
+      aria-label="Truth Certification"
+      tabIndex={panel ? 0 : undefined}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>{panel ? 'Truth Certification' : 'Certification'}</h3>
+        {truthQuality ? (
+          <Status variant={certificationVariant} size="sm" showIcon>
+            {certificationLabel}
+          </Status>
+        ) : null}
+      </div>
+
+      {loading ? (
+        <div className="runtime-workspace__output-lab-state" role="status">
+          <Spinner size="sm" aria-label="Loading Truth Certification" />
+        </div>
+      ) : null}
+
+      {error ? (
+        <Status variant="error" size="sm" showIcon>
+          {stripRequestReference(error.message)}
+        </Status>
+      ) : null}
+
+      {!loading && !error && !truthQuality ? (
+        <Status variant="neutral" size="sm" showIcon>
+          Truth Certification unavailable
+        </Status>
+      ) : null}
+
+      {truthQuality ? (
+        <>
+          <ProgressBar
+            label="Coverage"
+            value={Number(coverage.score || 0)}
+            valueLabel={formatTruthQualityScore(coverage.score, '%')}
+            valueTone
+            variant={coverageVariant === 'error' ? 'danger' : coverageVariant}
+            size="sm"
+            ariaLabel="Truth Certification coverage"
+          />
+          <SectionDetailRows
+            ariaLabel={rowsAriaLabel}
+            rows={buildTruthQualityRows(truthQuality)}
+          />
+          {knownGaps.length > 0 ? (
+            <ul className="runtime-workspace__output-lab-message-list" aria-label="Truth Certification known gaps">
+              {knownGaps.slice(0, 4).map((gap) => (
+                <li key={gap.code || gap.message}>
+                  <MdOutlineWarningAmber aria-hidden="true" />
+                  <span>{gap.message || formatRuntimeTokenLabel(gap.code || 'Known gap')}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Status variant="success" size="sm" showIcon>No known certification gaps</Status>
+          )}
+        </>
+      ) : null}
+    </section>
+  )
+}
+
 const getOutputLabAssetId = (asset = {}) =>
   String(asset.outputAssetId || asset.id || asset._id || '').trim()
 
@@ -3555,6 +3779,9 @@ function OutputLabSection({
   outputLab = null,
   selectedOutputTypeKey = '',
   setSelectedOutputTypeKey,
+  truthQuality = null,
+  truthQualityError = null,
+  truthQualityLoading = false,
 }) {
   const [activeOutputLabTab, setActiveOutputLabTab] = useState(0)
   const definitions = Array.isArray(outputLab?.definitions) ? outputLab.definitions : EMPTY_ARRAY
@@ -3746,6 +3973,14 @@ function OutputLabSection({
       )}
     </section>
   )
+  const truthCertificationPanel = (
+    <TruthCertificationPanel
+      error={truthQualityError}
+      loading={truthQualityLoading}
+      panel
+      truthQuality={truthQuality}
+    />
+  )
 
   return (
     <Card variant="default" className="runtime-workspace__section-card runtime-workspace__output-lab">
@@ -3800,6 +4035,13 @@ function OutputLabSection({
               <div className="runtime-workspace__section-tab-panel">
                 <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
                   {compositionPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Truth Certification">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
+                  {truthCertificationPanel}
                 </div>
               </div>
             </TabView.Tab>
@@ -5635,6 +5877,15 @@ function RuntimeWorkspace() {
     { runtimeInstanceId },
     { skip: !runtimeInstanceId },
   )
+  const {
+    data: truthQualityResponse,
+    isLoading: isLoadingTruthQuality,
+    isFetching: isFetchingTruthQuality,
+    error: truthQualityQueryError,
+  } = useGetRuntimeTruthQualityQuery(
+    { runtimeInstanceId },
+    { skip: !runtimeInstanceId },
+  )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
   const [createRuntimeRevision, { isLoading: isCreatingRuntimeRevision }] = useCreateRuntimeRevisionMutation()
@@ -5677,6 +5928,9 @@ function RuntimeWorkspace() {
   const renderer = getRendererPayload(rendererResponse)
   const outputLab = getOutputLabPayload(outputLabResponse)
   const outputLabError = outputLabQueryError ? normalizeError(outputLabQueryError) : null
+  const truthQuality = getTruthQualityPayload(truthQualityResponse)
+  const truthQualityError = truthQualityQueryError ? normalizeError(truthQualityQueryError) : null
+  const truthQualityLoading = isLoadingTruthQuality || isFetchingTruthQuality
   const outputLabDefinitions = Array.isArray(outputLab?.definitions) ? outputLab.definitions : EMPTY_ARRAY
   const runtimeInstance = renderer?.runtimeInstance ?? {}
   const sections = Array.isArray(renderer?.sections) ? renderer.sections : EMPTY_ARRAY
@@ -5797,6 +6051,12 @@ function RuntimeWorkspace() {
     || publishSnapshot.snapshotId
     || lockSnapshot.snapshotId
     || replayAnchor.replayAnchorId,
+  )
+  const hasTruthCertificationState = Boolean(
+    hasCertifiedTruthState
+    || truthQuality
+    || truthQualityLoading
+    || truthQualityError,
   )
   const summaryItems = [
     {
@@ -7103,6 +7363,9 @@ function RuntimeWorkspace() {
               outputLab={outputLab}
               selectedOutputTypeKey={selectedOutputTypeKey}
               setSelectedOutputTypeKey={setSelectedOutputTypeKey}
+              truthQuality={truthQuality}
+              truthQualityError={truthQualityError}
+              truthQualityLoading={truthQualityLoading}
             />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
@@ -7182,38 +7445,45 @@ function RuntimeWorkspace() {
             </Card.Body>
           </Card>
 
-          {hasCertifiedTruthState ? (
+          {hasTruthCertificationState ? (
             <Card variant="default" className="runtime-workspace__panel">
               <Card.Body className="runtime-workspace__panel-body">
                 <div className="runtime-workspace__panel-heading">
                   <MdCheckCircle aria-hidden="true" />
-                  <h2>Certified Truth</h2>
+                  <h2>Truth Certification</h2>
                 </div>
-                <SectionDetailRows
-                  ariaLabel="Certified runtime truth"
-                  rows={[
-                    {
-                      id: 'output-eligibility',
-                      title: 'Output',
-                      meta: outputEligibility.outputEligible ? 'Eligible' : 'Not eligible',
-                    },
-                    {
-                      id: 'publish-snapshot',
-                      title: 'Publish Snapshot',
-                      meta: formatRuntimeIdentifier(publishSnapshot.snapshotId),
-                    },
-                    {
-                      id: 'lock-snapshot',
-                      title: 'Lock Snapshot',
-                      meta: formatRuntimeIdentifier(lockSnapshot.snapshotId),
-                    },
-                    {
-                      id: 'replay-anchor',
-                      title: 'Replay Anchor',
-                      meta: formatRuntimeIdentifier(replayAnchor.replayAnchorId),
-                    },
-                  ]}
+                <TruthCertificationPanel
+                  error={truthQualityError}
+                  loading={truthQualityLoading}
+                  truthQuality={truthQuality}
                 />
+                {hasCertifiedTruthState ? (
+                  <SectionDetailRows
+                    ariaLabel="Certified runtime truth"
+                    rows={[
+                      {
+                        id: 'output-eligibility',
+                        title: 'Output',
+                        meta: outputEligibility.outputEligible ? 'Eligible' : 'Not eligible',
+                      },
+                      {
+                        id: 'publish-snapshot',
+                        title: 'Publish Snapshot',
+                        meta: formatRuntimeIdentifier(publishSnapshot.snapshotId),
+                      },
+                      {
+                        id: 'lock-snapshot',
+                        title: 'Lock Snapshot',
+                        meta: formatRuntimeIdentifier(lockSnapshot.snapshotId),
+                      },
+                      {
+                        id: 'replay-anchor',
+                        title: 'Replay Anchor',
+                        meta: formatRuntimeIdentifier(replayAnchor.replayAnchorId),
+                      },
+                    ]}
+                  />
+                ) : null}
               </Card.Body>
             </Card>
           ) : null}

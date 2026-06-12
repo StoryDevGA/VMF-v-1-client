@@ -703,8 +703,19 @@
 
 .runtime-workspace__section-panel--output-lab-readiness,
 .runtime-workspace__section-panel--output-lab-composition,
-.runtime-workspace__section-panel--output-lab-assets {
+.runtime-workspace__section-panel--output-lab-assets,
+.runtime-workspace__section-panel--truth-certification {
   gap: var(--spacing-sm);
+}
+
+.runtime-workspace__truth-certification {
+  display: grid;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.runtime-workspace__truth-certification .progress-bar {
+  min-width: 0;
 }
 
 .runtime-workspace__output-lab-panel-heading {

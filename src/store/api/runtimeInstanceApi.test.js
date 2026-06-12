@@ -20,6 +20,7 @@ import {
   buildRuntimeOutputLabQuery,
   buildRuntimeOutputLabReadinessQuery,
   buildRuntimeRendererQuery,
+  buildRuntimeTruthQualityQuery,
   buildResetRuntimeDiscoveryQuery,
   buildRebuildRuntimeIntelligenceGraphQuery,
   buildReviewRuntimeDiscoveryEvidenceQuery,
@@ -76,6 +77,7 @@ import {
   useGetRuntimeOutputLabQuery,
   useGetRuntimeOutputLabReadinessQuery,
   useGetRuntimeRendererQuery,
+  useGetRuntimeTruthQualityQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useListRuntimeInstancesQuery,
   useMutateRuntimeStateMutation,
@@ -102,6 +104,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphNodeLineage')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphSectionDependencies')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeRenderer')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeTruthQuality')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutputLab')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutputLabReadiness')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutputLabDefinitions')
@@ -137,6 +140,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeIntelligenceGraphNodeLineageQuery).toBe('function')
     expect(typeof useGetRuntimeIntelligenceGraphSectionDependenciesQuery).toBe('function')
     expect(typeof useGetRuntimeRendererQuery).toBe('function')
+    expect(typeof useGetRuntimeTruthQualityQuery).toBe('function')
     expect(typeof useGetRuntimeOutputLabQuery).toBe('function')
     expect(typeof useGetRuntimeOutputLabReadinessQuery).toBe('function')
     expect(typeof useGetRuntimeOutputLabDefinitionsQuery).toBe('function')
@@ -172,6 +176,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphNodeLineage.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphSectionDependencies.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeRenderer.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeTruthQuality.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutputLab.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutputLabReadiness.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutputLabDefinitions.initiate).toBe('function')
@@ -245,6 +250,8 @@ describe('runtimeInstanceApi', () => {
       .toBe('/runtime-instances/value-narrative-001/renderer')
     expect(buildRuntimeRendererQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/renderer')
+    expect(buildRuntimeTruthQualityQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/truth-quality')
     expect(buildRuntimeOutputLabQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/output-lab')
     expect(buildRuntimeOutputLabReadinessQuery({ runtimeInstanceId: 'value narrative/001' }))
