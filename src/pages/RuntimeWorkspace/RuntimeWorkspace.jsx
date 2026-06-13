@@ -3577,7 +3577,7 @@ const warnUnknownTruthCertificationLevel = (level) => {
   }
   UNKNOWN_TRUTH_CERTIFICATION_LEVELS.add(normalizedLevel)
   console.warn(
-    `Unknown Truth Certification level "${normalizedLevel}" received from the runtime API; using neutral status styling.`,
+    `Unknown Truth Quality certification level "${normalizedLevel}" received from the runtime API; using neutral status styling.`,
   )
 }
 
@@ -3681,7 +3681,7 @@ function TruthCertificationPanel({
   loading = false,
   truthQuality = null,
   panel = false,
-  rowsAriaLabel = 'Truth Certification metrics',
+  rowsAriaLabel = 'Truth Quality metrics',
 }) {
   const quality = truthQuality?.quality || {}
   const coverage = quality.coverage || {}
@@ -3698,11 +3698,11 @@ function TruthCertificationPanel({
   return (
     <section
       className={resolvedClassName}
-      aria-label="Truth Certification"
+      aria-label="Truth Quality"
       tabIndex={panel ? 0 : undefined}
     >
       <div className="runtime-workspace__output-lab-panel-heading">
-        <h3>{panel ? 'Truth Certification' : 'Certification'}</h3>
+        <h3>{panel ? 'Truth Quality' : 'Quality'}</h3>
         {truthQuality ? (
           <Status variant={certificationVariant} size="sm" showIcon>
             {certificationLabel}
@@ -3712,7 +3712,7 @@ function TruthCertificationPanel({
 
       {loading ? (
         <div className="runtime-workspace__output-lab-state" role="status">
-          <Spinner size="sm" aria-label="Loading Truth Certification" />
+          <Spinner size="sm" aria-label="Loading Truth Quality" />
         </div>
       ) : null}
 
@@ -3724,7 +3724,7 @@ function TruthCertificationPanel({
 
       {!loading && !error && !truthQuality ? (
         <Status variant="neutral" size="sm" showIcon>
-          Truth Certification unavailable
+          Truth Quality unavailable
         </Status>
       ) : null}
 
@@ -3737,14 +3737,14 @@ function TruthCertificationPanel({
             valueTone
             variant={coverageVariant === 'error' ? 'danger' : coverageVariant}
             size="sm"
-            ariaLabel="Truth Certification coverage"
+            ariaLabel="Truth Quality coverage"
           />
           <SectionDetailRows
             ariaLabel={rowsAriaLabel}
             rows={buildTruthQualityRows(truthQuality)}
           />
           {knownGaps.length > 0 ? (
-            <ul className="runtime-workspace__output-lab-message-list" aria-label="Truth Certification known gaps">
+            <ul className="runtime-workspace__output-lab-message-list" aria-label="Truth Quality known gaps">
               {knownGaps.slice(0, 4).map((gap) => (
                 <li key={gap.code || gap.message}>
                   <MdOutlineWarningAmber aria-hidden="true" />
@@ -3753,7 +3753,7 @@ function TruthCertificationPanel({
               ))}
             </ul>
           ) : (
-            <Status variant="success" size="sm" showIcon>No known certification gaps</Status>
+            <Status variant="success" size="sm" showIcon>No known quality gaps</Status>
           )}
         </>
       ) : null}
@@ -4043,7 +4043,7 @@ function OutputLabSection({
                 </div>
               </div>
             </TabView.Tab>
-            <TabView.Tab label="Truth Certification">
+            <TabView.Tab label="Truth Quality">
               <div className="runtime-workspace__section-tab-panel">
                 <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
                   {truthCertificationPanel}
@@ -7484,7 +7484,7 @@ function RuntimeWorkspace() {
               <Card.Body className="runtime-workspace__panel-body">
                 <div className="runtime-workspace__panel-heading">
                   <MdCheckCircle aria-hidden="true" />
-                  <h2>Truth Certification</h2>
+                  <h2>Truth Quality</h2>
                 </div>
                 <TruthCertificationPanel
                   error={truthQualityError}

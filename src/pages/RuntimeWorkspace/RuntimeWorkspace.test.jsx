@@ -632,7 +632,7 @@ describe('RuntimeWorkspace', () => {
     })
   })
 
-  it('keeps Truth Certification UI variants aligned with backend certification levels', () => {
+  it('keeps Truth Quality UI variants aligned with backend certification levels', () => {
     expect(getFrontendTruthCertificationVariantKeys().sort()).toEqual(
       getBackendTruthCertificationLevelKeys().sort(),
     )
@@ -1018,30 +1018,30 @@ describe('RuntimeWorkspace', () => {
     expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
   })
 
-  it('renders Truth Certification in Output Lab without exposing raw evidence or graph payloads', async () => {
+  it('renders Truth Quality in Output Lab without exposing raw evidence or graph payloads', async () => {
     const user = userEvent.setup()
     renderRuntimeWorkspace()
 
     await user.click(screen.getByRole('button', { name: /output lab/i }))
     const main = screen.getByRole('main', { name: /guided execution sections/i })
-    await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
+    await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
 
-    const certification = within(main).getByRole('region', { name: /truth certification/i })
+    const certification = within(main).getByRole('region', { name: /truth quality/i })
     expect(within(certification).getAllByText('Strategic Truth').length).toBeGreaterThanOrEqual(1)
-    expect(within(certification).getByRole('progressbar', { name: /truth certification coverage/i }))
+    expect(within(certification).getByRole('progressbar', { name: /truth quality coverage/i }))
       .toHaveAttribute('value', '90')
-    expect(within(certification).getByRole('list', { name: /truth certification metrics/i }))
+    expect(within(certification).getByRole('list', { name: /truth quality metrics/i }))
       .toHaveTextContent('High / 8 evidence / 4 truth')
     expect(within(certification).getByText('High / 5 sources / 5 types')).toBeInTheDocument()
     expect(within(certification).getByText('Low / 0 unresolved')).toBeInTheDocument()
     expect(within(certification).getByText(/sha256:truth.*ty-graph/)).toBeInTheDocument()
-    expect(within(certification).getByText('No known certification gaps')).toBeInTheDocument()
+    expect(within(certification).getByText('No known quality gaps')).toBeInTheDocument()
     expect(screen.queryByText('Accepted evidence support must not render.')).not.toBeInTheDocument()
     expect(screen.queryByText('Raw graph snippet must not render.')).not.toBeInTheDocument()
     expect(screen.queryByText('Raw source label must not render.')).not.toBeInTheDocument()
   })
 
-  it('warns and falls back when Truth Certification level is not in the governed contract', async () => {
+  it('warns and falls back when Truth Quality certification level is not in the governed contract', async () => {
     const user = userEvent.setup()
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
@@ -1064,19 +1064,19 @@ describe('RuntimeWorkspace', () => {
       renderRuntimeWorkspace()
       await user.click(screen.getByRole('button', { name: /output lab/i }))
       const main = screen.getByRole('main', { name: /guided execution sections/i })
-      await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
+      await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
 
-      const certification = within(main).getByRole('region', { name: /truth certification/i })
+      const certification = within(main).getByRole('region', { name: /truth quality/i })
       expect(within(certification).getAllByText('Experimental Truth').length).toBeGreaterThanOrEqual(1)
       expect(warnSpy).toHaveBeenCalledWith(
-        'Unknown Truth Certification level "EXPERIMENTAL_TRUTH" received from the runtime API; using neutral status styling.',
+        'Unknown Truth Quality certification level "EXPERIMENTAL_TRUTH" received from the runtime API; using neutral status styling.',
       )
     } finally {
       warnSpy.mockRestore()
     }
   })
 
-  it('renders unavailable Truth Certification state without changing Output Lab generation gates', async () => {
+  it('renders unavailable Truth Quality state without changing Output Lab generation gates', async () => {
     const user = userEvent.setup()
     useGetRuntimeTruthQualityQuery.mockReturnValue({
       data: null,
@@ -1089,9 +1089,9 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /output lab/i }))
     const main = screen.getByRole('main', { name: /guided execution sections/i })
 
-    await user.click(within(main).getByRole('tab', { name: /truth certification/i }))
-    expect(within(main).getByRole('region', { name: /truth certification/i }))
-      .toHaveTextContent('Truth Certification unavailable')
+    await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
+    expect(within(main).getByRole('region', { name: /truth quality/i }))
+      .toHaveTextContent('Truth Quality unavailable')
 
     await user.click(within(main).getByRole('tab', { name: /composition/i }))
     expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
@@ -6935,7 +6935,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
     expect(within(summary).getByText('Published')).toBeInTheDocument()
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
-    expect(within(guidedPanel).getByRole('heading', { name: /truth certification/i })).toBeInTheDocument()
+    expect(within(guidedPanel).getByRole('heading', { name: /truth quality/i })).toBeInTheDocument()
     expect(within(guidedPanel).getAllByText('Strategic Truth').length).toBeGreaterThanOrEqual(1)
     const certifiedTruth = screen.getByRole('list', { name: /certified runtime truth/i })
     expect(within(certifiedTruth).getByText('Eligible')).toBeInTheDocument()
