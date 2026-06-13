@@ -1,6 +1,8 @@
 .runtime-workspace {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-md);
+  min-width: 0;
   padding-block: var(--spacing-xl);
 }
 
@@ -56,7 +58,9 @@
 
 .runtime-workspace__hero-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-xl);
+  min-width: 0;
   padding: var(--spacing-lg);
 }
 
@@ -230,9 +234,10 @@
 
 .runtime-workspace__layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-md);
   align-items: start;
+  min-width: 0;
 }
 
 .runtime-workspace__main {
@@ -682,8 +687,9 @@
 .runtime-workspace__section-panels,
 .runtime-workspace__compare {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-sm);
+  min-width: 0;
 }
 
 .runtime-workspace__output-lab .runtime-workspace__section-heading {
@@ -962,6 +968,159 @@
   padding-top: var(--spacing-sm);
 }
 
+.runtime-workspace__coverage-tab-layout {
+  align-items: start;
+  gap: var(--spacing-md);
+}
+
+.runtime-workspace__coverage-tab-layout > .runtime-workspace__coverage-tab-panel {
+  align-content: start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+}
+
+.runtime-workspace__coverage-tab-panel--domain,
+.runtime-workspace__coverage-tab-panel--graph {
+  gap: var(--spacing-md);
+}
+
+.runtime-workspace__coverage-tab-panel--domain .runtime-workspace__coverage-heat-grid,
+.runtime-workspace__coverage-tab-panel--graph .runtime-graph-panel__canvas {
+  min-width: 0;
+}
+
+.runtime-workspace__coverage-diagnostics,
+.runtime-workspace__coverage-graph-layout {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.runtime-workspace__coverage-diagnostics {
+  overflow: hidden;
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 82%, transparent);
+  border-radius: var(--border-radius-md);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-background-secondary) 82%, transparent),
+      color-mix(in srgb, var(--color-background) 94%, transparent)
+    );
+}
+
+.runtime-workspace__coverage-diagnostics-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-md);
+}
+
+.runtime-workspace__coverage-diagnostics-header h3,
+.runtime-workspace__coverage-diagnostic h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+  text-transform: none;
+}
+
+.runtime-workspace__coverage-diagnostics-header h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runtime-workspace__coverage-diagnostics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 76%, transparent);
+}
+
+.runtime-workspace__coverage-diagnostic {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-md);
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 64%, transparent);
+}
+
+.runtime-workspace__coverage-diagnostic:first-child {
+  border-top: 0;
+}
+
+.runtime-workspace__coverage-diagnostic h3 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-rows {
+  margin-top: 0;
+}
+
+.runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-row {
+  padding-block: var(--spacing-xs);
+}
+
+.runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-copy span,
+.runtime-workspace__coverage-signal-list span,
+.runtime-workspace__coverage-diagnostic .runtime-workspace__section-note,
+.runtime-workspace__coverage-diagnostic .runtime-workspace__projection-list--compact {
+  color: color-mix(in srgb, var(--color-text-secondary) 92%, transparent);
+  line-height: var(--line-height-normal);
+}
+
+.runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-copy span,
+.runtime-workspace__coverage-signal-list span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.runtime-workspace__coverage-diagnostic .runtime-workspace__section-note {
+  margin-top: 0;
+  padding-top: var(--spacing-xs);
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 48%, transparent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.runtime-workspace__coverage-signal-list {
+  gap: var(--spacing-xs);
+}
+
+.runtime-workspace__coverage-signal-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 58%, transparent);
+  padding-block: var(--spacing-xs);
+}
+
+.runtime-workspace__coverage-signal-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.runtime-workspace__coverage-signal-list .badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+}
+
+.runtime-workspace__coverage-graph-layout {
+  gap: var(--spacing-md);
+}
+
+.runtime-workspace__coverage-graph-layout > .runtime-workspace__coverage-tab-panel,
+.runtime-workspace__coverage-graph-layout > .runtime-graph-panel {
+  align-content: start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+}
+
 .runtime-workspace__intelligence-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -973,6 +1132,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-sm);
+  align-items: start;
   min-width: 0;
 }
 
@@ -2771,7 +2931,7 @@
   }
 
   .runtime-workspace__intelligence-overview-panels {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .runtime-workspace__intelligence-overview-panels > .runtime-workspace__section-panel:last-child:nth-child(odd) {
@@ -2785,6 +2945,53 @@
   .runtime-workspace__intelligence-tabs .tabview__panel > .runtime-workspace__section-panels > .runtime-workspace__section-panel:last-child:nth-child(odd),
   .runtime-workspace__intelligence-tab-panel > .runtime-workspace__section-panels > .runtime-workspace__section-panel:last-child:nth-child(odd) {
     grid-column: 1 / -1;
+  }
+
+  .runtime-workspace__coverage-tab-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .runtime-workspace__coverage-tab-layout > .runtime-workspace__coverage-tab-panel--domain,
+  .runtime-workspace__coverage-diagnostics,
+  .runtime-workspace__coverage-graph-layout {
+    grid-column: 1 / -1;
+  }
+
+  .runtime-workspace__coverage-diagnostics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .runtime-workspace__coverage-diagnostic {
+    grid-template-columns:
+      minmax(calc(var(--spacing-3xl) * 2), 0.38fr)
+      minmax(0, 1fr);
+    column-gap: var(--spacing-lg);
+    padding-block: var(--spacing-sm);
+  }
+
+  .runtime-workspace__coverage-diagnostic > h3,
+  .runtime-workspace__coverage-diagnostic > .runtime-workspace__evidence-acceptance-summary-header {
+    align-self: start;
+  }
+
+  .runtime-workspace__coverage-diagnostic > .runtime-workspace__intelligence-detail-rows,
+  .runtime-workspace__coverage-diagnostic > .runtime-workspace__projection-list,
+  .runtime-workspace__coverage-diagnostic > .runtime-workspace__coverage-signal-list,
+  .runtime-workspace__coverage-diagnostic > p {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .runtime-workspace__coverage-diagnostic .runtime-workspace__intelligence-detail-row > .badge {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
   }
 
   .runtime-workspace__compare {
@@ -2816,13 +3023,22 @@
   }
 
   .runtime-workspace__intelligence-overview-panels {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .runtime-workspace__intelligence-tabs .tabview__panel > .runtime-workspace__intelligence-overview-panels > .runtime-workspace__section-panel:last-child:nth-child(odd),
   .runtime-workspace__intelligence-tab-panel > .runtime-workspace__intelligence-overview-panels > .runtime-workspace__section-panel:last-child:nth-child(odd),
   .runtime-workspace__intelligence-overview-panels > .runtime-workspace__section-panel:last-child:nth-child(odd) {
     grid-column: auto;
+  }
+
+  .runtime-workspace__coverage-graph-layout {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .runtime-workspace__coverage-tab-panel--graph-health {
+    position: static;
   }
 
   .runtime-workspace__layout {

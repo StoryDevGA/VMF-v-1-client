@@ -1,0 +1,202 @@
+.coverage-heat-grid {
+  display: grid;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.coverage-heat-grid__description,
+.coverage-heat-grid__empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.coverage-heat-grid__list,
+.coverage-heat-grid__legend {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coverage-heat-grid__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.coverage-heat-grid__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--spacing-sm);
+  align-content: center;
+  align-items: center;
+  min-width: 0;
+}
+
+.coverage-heat-grid__tile {
+  --coverage-heat-border: color-mix(in srgb, var(--color-border) 70%, transparent);
+  --coverage-heat-background: color-mix(in srgb, var(--color-background-tertiary) 72%, transparent);
+  --coverage-heat-color: var(--color-text-secondary);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--spacing-xl) + var(--spacing-sm));
+  min-width: calc(var(--spacing-xl) + var(--spacing-sm));
+  height: calc(var(--spacing-xl) + var(--spacing-sm));
+  border: var(--border-width-thin) solid var(--coverage-heat-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--coverage-heat-background);
+  color: var(--coverage-heat-color);
+}
+
+.coverage-heat-grid__tile--intensity-high,
+.coverage-heat-grid__legend-swatch--high {
+  --coverage-heat-border: color-mix(in srgb, var(--color-success) 42%, transparent);
+  --coverage-heat-background: color-mix(in srgb, var(--color-success) 24%, var(--color-background-secondary));
+  --coverage-heat-color: var(--color-success);
+}
+
+.coverage-heat-grid__tile--intensity-medium,
+.coverage-heat-grid__legend-swatch--medium {
+  --coverage-heat-border: color-mix(in srgb, var(--color-warning) 42%, transparent);
+  --coverage-heat-background: color-mix(in srgb, var(--color-warning) 20%, var(--color-background-secondary));
+  --coverage-heat-color: var(--color-warning);
+}
+
+.coverage-heat-grid__tile--intensity-low,
+.coverage-heat-grid__legend-swatch--low {
+  --coverage-heat-border: color-mix(in srgb, var(--color-error) 38%, transparent);
+  --coverage-heat-background: color-mix(in srgb, var(--color-error) 14%, var(--color-background-secondary));
+  --coverage-heat-color: var(--color-error);
+}
+
+.coverage-heat-grid__tile--intensity-empty,
+.coverage-heat-grid__legend-swatch--empty {
+  --coverage-heat-border: color-mix(in srgb, var(--color-border) 70%, transparent);
+  --coverage-heat-background: color-mix(in srgb, var(--color-background-tertiary) 72%, transparent);
+  --coverage-heat-color: var(--color-text-secondary);
+}
+
+.coverage-heat-grid__tile-value {
+  color: currentColor;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.coverage-heat-grid__copy {
+  display: grid;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.coverage-heat-grid__label {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.coverage-heat-grid__meta {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.coverage-heat-grid__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  min-height: calc(var(--spacing-lg) + var(--spacing-xs));
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-info) 34%, transparent);
+  border-radius: var(--border-radius-pill);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.coverage-heat-grid__state--strong {
+  border-color: color-mix(in srgb, var(--color-success) 34%, transparent);
+  color: var(--color-success);
+}
+
+.coverage-heat-grid__state--adequate {
+  border-color: color-mix(in srgb, var(--color-warning) 34%, transparent);
+  color: var(--color-warning);
+}
+
+.coverage-heat-grid__state--weak,
+.coverage-heat-grid__state--missing {
+  border-color: color-mix(in srgb, var(--color-error) 34%, transparent);
+  color: var(--color-error);
+}
+
+.coverage-heat-grid__legend {
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: var(--spacing-xs) var(--spacing-sm);
+  align-items: center;
+  justify-content: start;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.coverage-heat-grid__legend li {
+  display: inline-flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  min-width: 0;
+}
+
+.coverage-heat-grid__legend-swatch {
+  width: var(--spacing-sm);
+  height: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--coverage-heat-border, color-mix(in srgb, var(--color-border) 70%, transparent));
+  border-radius: var(--border-radius-sm);
+  background: var(--coverage-heat-background, color-mix(in srgb, var(--color-background-tertiary) 72%, transparent));
+  flex: 0 0 auto;
+}
+
+@media (max-width: 639px) {
+  .coverage-heat-grid__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coverage-heat-grid__row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: start;
+    align-items: start;
+  }
+
+  .coverage-heat-grid__state {
+    grid-column: 1 / -1;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .coverage-heat-grid__legend {
+    grid-template-columns: repeat(2, minmax(0, auto));
+  }
+}
+
+@media (forced-colors: active) {
+  .coverage-heat-grid__row,
+  .coverage-heat-grid__tile,
+  .coverage-heat-grid__state,
+  .coverage-heat-grid__legend-swatch {
+    border-color: CanvasText;
+  }
+}

@@ -15,6 +15,7 @@ import {
   useExecuteRuntimeActionMutation,
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeEvidenceQuery,
+  useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
@@ -38,6 +39,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useExecuteRuntimeActionMutation: vi.fn(),
   useGenerateRuntimeOutputRequestMutation: vi.fn(),
   useGetRuntimeEvidenceQuery: vi.fn(),
+  useGetRuntimeIntelligenceGraphQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useGetRuntimeTruthQualityQuery: vi.fn(),
@@ -50,6 +52,90 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useUpdateRuntimeSectionEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
+
+vi.mock('../../components/RuntimeGraphPanel', async () => {
+  const React = await import('react')
+
+  const formatTokenLabel = (value) =>
+    String(value || '')
+      .trim()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+  const getSafeNodeLabel = (node = {}) => {
+    const nodeType = String(node.nodeType || '').trim().toUpperCase()
+    const typeLabel = node.entityDisplayName || formatTokenLabel(node.nodeType) || 'Graph Node'
+    if (nodeType === 'SOURCE' || nodeType === 'EVIDENCE') return typeLabel
+    return node.label || typeLabel
+  }
+
+  const MockRuntimeGraphPanel = ({ className = '', error = null, graph = null, loading = false }) => {
+    const visibleNodes = Array.isArray(graph?.nodes)
+      ? graph.nodes.filter((node) => node?.customerVisible !== false && node?.nodeId)
+      : []
+    const visibleNodeIds = new Set(visibleNodes.map((node) => node.nodeId))
+    const visibleEdges = Array.isArray(graph?.edges)
+      ? graph.edges.filter((edge) =>
+        edge?.customerVisible !== false
+        && visibleNodeIds.has(edge?.fromNodeId)
+        && visibleNodeIds.has(edge?.toNodeId))
+      : []
+
+    return React.createElement(
+      'section',
+      {
+        className,
+        role: 'region',
+        'aria-label': 'Runtime intelligence graph',
+      },
+      [
+        React.createElement('h3', { key: 'title' }, 'Runtime Intelligence Graph'),
+        loading
+          ? React.createElement('p', { key: 'loading' }, 'Loading graph projection...')
+          : null,
+        error
+          ? React.createElement('p', { key: 'error' }, 'Graph projection is unavailable right now.')
+          : null,
+        graph?.available
+          ? React.createElement(
+            'p',
+            { key: 'summary' },
+            `${visibleNodes.length} graph nodes / ${visibleEdges.length} graph relationships`,
+          )
+          : React.createElement(
+            'p',
+            { key: 'empty' },
+            'Rebuild the Intelligence Graph to project runtime nodes and relationships.',
+          ),
+        React.createElement(
+          'ul',
+          { key: 'nodes', 'aria-label': 'Runtime intelligence graph test nodes' },
+          visibleNodes.map((node) => React.createElement(
+            'li',
+            { key: node.nodeId },
+            getSafeNodeLabel(node),
+          )),
+        ),
+        React.createElement(
+          'ul',
+          { key: 'edges', 'aria-label': 'Runtime intelligence graph test relationships' },
+          visibleEdges.map((edge) => React.createElement(
+            'li',
+            { key: edge.edgeId },
+            edge.relationshipDisplayName || formatTokenLabel(edge.edgeType),
+          )),
+        ),
+      ],
+    )
+  }
+
+  return {
+    default: MockRuntimeGraphPanel,
+    RuntimeGraphPanel: MockRuntimeGraphPanel,
+  }
+})
 
 const refetchRenderer = vi.fn()
 const refetchOutputLab = vi.fn()
@@ -512,6 +598,12 @@ describe('RuntimeWorkspace', () => {
     useUpdateRuntimeSectionEvidenceMutation.mockReturnValue([updateRuntimeSectionEvidence, { isLoading: false }])
     useGetRuntimeEvidenceQuery.mockReturnValue({
       data: null,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeIntelligenceGraphQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
       isFetching: false,
       error: null,
     })
@@ -3002,31 +3094,15 @@ describe('RuntimeWorkspace', () => {
       .toBeInTheDocument()
     expect(within(coverageHeatmap).getByLabelText(/Economics coverage status: No accepted evidence coverage/i))
       .toBeInTheDocument()
-    expect(within(coverageHeatmap).getAllByRole('progressbar')).toHaveLength(6)
-    const companyCoverageProgress = within(coverageHeatmap).getByRole('progressbar', {
-      name: /Company: Strong, 2 accepted of 3 evidence objects/i,
-    })
-    expect(companyCoverageProgress).toHaveAttribute('value', '67')
-    expect(companyCoverageProgress).toHaveAttribute('aria-valuetext', '2 accepted of 3 evidence objects')
-    expect(companyCoverageProgress.closest('.progress-bar'))
-      .toHaveClass('progress-bar--success', 'progress-bar--value-tone')
-    expect(companyCoverageProgress.closest('.progress-bar'))
-      .toHaveStyle('--progress-bar-value-tint: 23%')
-    expect(within(coverageHeatmap).getByLabelText(/Company coverage status: Strong accepted evidence coverage/i))
-      .toHaveStyle('--runtime-workspace-coverage-icon-color: color-mix(in srgb, var(--color-success), white 23%)')
-
-    const productsCoverageProgress = within(coverageHeatmap).getByRole('progressbar', {
-      name: /Products: Adequate, 1 accepted of 2 evidence objects/i,
-    })
-    expect(productsCoverageProgress).toHaveAttribute('value', '50')
-    expect(productsCoverageProgress.closest('.progress-bar'))
-      .toHaveClass('progress-bar--success', 'progress-bar--value-tone')
-    expect(productsCoverageProgress.closest('.progress-bar'))
-      .toHaveStyle('--progress-bar-value-tint: 35%')
+    const heatGrid = within(coverageHeatmap).getByRole('region', { name: /accepted coverage heat grid/i })
+    expect(within(heatGrid).getByText('67%')).toBeInTheDocument()
+    expect(within(heatGrid).getByText('2 accepted of 3 evidence objects')).toBeInTheDocument()
+    expect(within(heatGrid).getByText('50%')).toBeInTheDocument()
+    expect(within(heatGrid).getByText('1 accepted of 2 evidence objects')).toBeInTheDocument()
+    expect(within(heatGrid).getByRole('list', { name: /accepted coverage heat grid legend/i }))
+      .toBeInTheDocument()
     expect(within(coverageHeatmap).getByLabelText(/Products coverage status: Adequate accepted evidence coverage/i))
-      .toHaveStyle('--runtime-workspace-coverage-icon-color: color-mix(in srgb, var(--color-success), white 35%)')
-    expect(productsCoverageProgress.closest('.progress-bar').style.getPropertyValue('--progress-bar-value-tint'))
-      .not.toEqual(companyCoverageProgress.closest('.progress-bar').style.getPropertyValue('--progress-bar-value-tint'))
+      .toBeInTheDocument()
 
     const evidenceAcceptanceSummary = screen.getByRole('region', { name: /evidence acceptance summary/i })
     expect(within(evidenceAcceptanceSummary).getByText('Pending')).toBeInTheDocument()
@@ -3111,7 +3187,59 @@ describe('RuntimeWorkspace', () => {
     expect(within(coverageHeatmap).queryByText(/Coverage 50%/i)).not.toBeInTheDocument()
   })
 
-  it('renders Intelligence Graph summaries without exposing raw graph internals', () => {
+  it('renders Intelligence Graph summaries without exposing raw graph internals', async () => {
+    useGetRuntimeIntelligenceGraphQuery.mockReturnValue({
+      data: {
+        data: {
+          available: true,
+          graphVersion: '2.2',
+          nodes: [
+            {
+              nodeId: 'source-node-id-should-not-render',
+              nodeType: 'SOURCE',
+              entityDisplayName: 'Source',
+              label: 'Raw source label should not render',
+              textContent: 'raw source graph text should not render',
+            },
+            {
+              nodeId: 'evidence-node-id-should-not-render',
+              nodeType: 'EVIDENCE',
+              entityDisplayName: 'Evidence',
+              label: 'Raw evidence label should not render',
+              textContent: 'raw graph text should not render',
+            },
+            {
+              nodeId: 'section-truth-node-id-should-not-render',
+              nodeType: 'SECTION_TRUTH',
+              entityDisplayName: 'Section Truth',
+              label: 'Customer Problem Accepted Truth',
+              sectionKey: 'customer_problem',
+            },
+          ],
+          edges: [
+            {
+              edgeId: 'edge-1',
+              edgeType: 'SOURCE_PRODUCES_EVIDENCE',
+              relationshipDisplayName: 'Source Produces Evidence',
+              fromNodeId: 'source-node-id-should-not-render',
+              toNodeId: 'evidence-node-id-should-not-render',
+              customerVisible: true,
+            },
+            {
+              edgeId: 'edge-2',
+              edgeType: 'INTELLIGENCE_SUPPORTS_SECTION_TRUTH',
+              relationshipDisplayName: 'Intelligence Supports Section Truth',
+              fromNodeId: 'evidence-node-id-should-not-render',
+              toNodeId: 'section-truth-node-id-should-not-render',
+              customerVisible: true,
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -3203,15 +3331,35 @@ describe('RuntimeWorkspace', () => {
     renderRuntimeWorkspace()
 
     selectIntelligenceHubTab('Coverage')
+    await waitFor(() => {
+      expect(useGetRuntimeIntelligenceGraphQuery).toHaveBeenLastCalledWith(
+        { runtimeInstanceId: 'value-narrative-001' },
+        { skip: false },
+      )
+    })
+    const runtimeGraph = await screen.findByRole('region', { name: /runtime intelligence graph/i })
+    expect(within(runtimeGraph).getByText(/3 graph nodes \/ 2 graph relationships/i)).toBeInTheDocument()
+    expect(within(runtimeGraph).getByText('Source')).toBeInTheDocument()
+    expect(within(runtimeGraph).getByText('Evidence')).toBeInTheDocument()
+    expect(within(runtimeGraph).getByText('Customer Problem Accepted Truth')).toBeInTheDocument()
+    expect(within(runtimeGraph).getByText('Source Produces Evidence')).toBeInTheDocument()
+    expect(within(runtimeGraph).getByText('Intelligence Supports Section Truth')).toBeInTheDocument()
+    expect(runtimeGraph).toHaveClass('runtime-workspace__coverage-tab-panel--graph')
+
     const graphHealth = screen.getByRole('region', { name: /intelligence graph health/i })
     expect(within(graphHealth).getByText(/Graph Warning/i)).toBeInTheDocument()
     expect(within(graphHealth).getByText(/12 nodes \/ 14 relationships/i)).toBeInTheDocument()
     expect(within(graphHealth).getByText(/1 orphan, 0 low quality, 1 unclassified/i)).toBeInTheDocument()
     expect(within(graphHealth).getByText(/Domain coverage 20%/i)).toBeInTheDocument()
 
-    const domainCoverage = screen.getByRole('region', { name: /evidence domain coverage/i })
+    const domainCoverage = screen.getByRole('region', { name: 'Evidence domain coverage' })
+    const coverageLayout = domainCoverage.closest('.runtime-workspace__coverage-tab-layout')
+    expect(coverageLayout).toBeInTheDocument()
+    expect(coverageLayout.firstElementChild).toBe(domainCoverage)
     expect(within(domainCoverage).getByText('Company')).toBeInTheDocument()
     expect(within(domainCoverage).getByLabelText(/Company graph coverage status: Adequate accepted evidence coverage/i))
+      .toBeInTheDocument()
+    expect(within(domainCoverage).getByRole('region', { name: /evidence domain coverage heat grid/i }))
       .toBeInTheDocument()
 
     selectIntelligenceHubTab('Governance')
@@ -3223,7 +3371,11 @@ describe('RuntimeWorkspace', () => {
     expect(within(graphMissingAreas).getByText(/Proof, Economics/i)).toBeInTheDocument()
     expect(screen.queryByText(/raw-node-id-should-not-render/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/raw graph text should not render/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /graph explorer/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/source-node-id-should-not-render/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/evidence-node-id-should-not-render/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Raw source label should not render/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Raw evidence label should not render/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/raw source graph text should not render/i)).not.toBeInTheDocument()
   })
 
   it('keeps accepted evidence summary separate from accepted section truth copy', () => {

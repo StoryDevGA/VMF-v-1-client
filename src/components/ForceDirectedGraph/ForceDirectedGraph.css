@@ -1,0 +1,448 @@
+.force-directed-graph {
+  display: grid;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.force-directed-graph__description,
+.force-directed-graph__empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.force-directed-graph__type-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.force-directed-graph__type-strip .force-directed-graph__legend-item {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, auto) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 1.75rem;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 54%, transparent);
+  border-radius: var(--border-radius-pill);
+  background-color: color-mix(in srgb, var(--color-background-secondary) 72%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
+}
+
+.force-directed-graph__type-strip strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.force-directed-graph__body {
+  display: grid;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.force-directed-graph__canvas {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 54%, transparent);
+  border-radius: var(--border-radius-sm);
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-border) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(135deg, color-mix(in srgb, var(--color-background-secondary) 88%, var(--color-background)) 0%, color-mix(in srgb, var(--color-background-tertiary) 50%, var(--color-background)) 100%);
+  background-size: 22px 22px, 22px 22px, auto;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+}
+
+.force-directed-graph__canvas::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-data-blue) 7%, transparent), transparent 24%, transparent 76%, color-mix(in srgb, var(--color-warning) 7%, transparent)),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--color-text-primary) 4%, transparent), transparent 58%);
+}
+
+.force-directed-graph__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 20rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.force-directed-graph__link {
+  stroke: color-mix(in srgb, var(--color-border) 62%, transparent);
+  stroke-linecap: round;
+  stroke-width: 1.7;
+  transition: stroke var(--transition-fast), stroke-width var(--transition-fast), opacity var(--transition-fast);
+}
+
+.force-directed-graph__link--selected {
+  stroke: color-mix(in srgb, var(--color-text-primary) 56%, var(--color-data-blue));
+  stroke-width: 3;
+}
+
+.force-directed-graph__node {
+  --node-accent: var(--color-info);
+  --node-fill: color-mix(in srgb, var(--color-info) 12%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-info) 18%, transparent);
+  cursor: grab;
+  outline: none;
+  transition: opacity var(--transition-fast);
+}
+
+.force-directed-graph__node--dragging {
+  cursor: grabbing;
+}
+
+.force-directed-graph__node--source {
+  --node-accent: var(--color-primary-300);
+  --node-fill: color-mix(in srgb, var(--color-primary-300) 14%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-primary-300) 18%, transparent);
+}
+
+.force-directed-graph__node--evidence {
+  --node-accent: var(--color-success);
+  --node-fill: color-mix(in srgb, var(--color-success) 16%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-success) 18%, transparent);
+}
+
+.force-directed-graph__node--intelligence {
+  --node-accent: var(--color-warning);
+  --node-fill: color-mix(in srgb, var(--color-warning) 13%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-warning) 18%, transparent);
+}
+
+.force-directed-graph__node--signal {
+  --node-accent: var(--color-data-blue);
+  --node-fill: color-mix(in srgb, var(--color-data-blue) 14%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-data-blue) 18%, transparent);
+}
+
+.force-directed-graph__node--section-truth,
+.force-directed-graph__node--published-truth,
+.force-directed-graph__node--canonical-truth {
+  --node-accent: color-mix(in srgb, var(--color-success) 72%, var(--color-info));
+  --node-fill: color-mix(in srgb, var(--color-success) 18%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-success) 22%, transparent);
+}
+
+.force-directed-graph__node--output-reference,
+.force-directed-graph__node--reasoning-consumer {
+  --node-accent: var(--color-primary-300);
+  --node-fill: color-mix(in srgb, var(--color-primary-300) 15%, var(--color-background-tertiary));
+  --node-halo: color-mix(in srgb, var(--color-primary-300) 20%, transparent);
+}
+
+.force-directed-graph__node-core {
+  fill: var(--node-fill);
+  stroke: color-mix(in srgb, var(--node-accent) 82%, var(--color-border));
+  stroke-width: 2;
+  transition: fill var(--transition-fast), stroke var(--transition-fast), stroke-width var(--transition-fast);
+}
+
+.force-directed-graph__node-halo {
+  fill: var(--node-halo);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast), r var(--transition-fast);
+}
+
+.force-directed-graph__node--selected .force-directed-graph__node-core,
+.force-directed-graph__node--previewed .force-directed-graph__node-core {
+  fill: color-mix(in srgb, var(--node-accent) 24%, var(--color-background-tertiary));
+  stroke: color-mix(in srgb, var(--node-accent) 88%, white);
+  stroke-width: 3;
+}
+
+.force-directed-graph__node--selected .force-directed-graph__node-halo,
+.force-directed-graph__node--previewed .force-directed-graph__node-halo {
+  opacity: 1;
+}
+
+.force-directed-graph__node--dragging .force-directed-graph__node-core {
+  fill: color-mix(in srgb, var(--node-accent) 34%, var(--color-background-tertiary));
+  stroke: color-mix(in srgb, var(--node-accent) 86%, white);
+  stroke-width: 4;
+}
+
+.force-directed-graph__node--dragging .force-directed-graph__node-halo {
+  opacity: 1;
+}
+
+.force-directed-graph__node--connected .force-directed-graph__node-core {
+  fill: color-mix(in srgb, var(--node-accent) 20%, var(--color-background-tertiary));
+  stroke-width: 2.5;
+}
+
+.force-directed-graph__node--muted {
+  opacity: 0.28;
+}
+
+.force-directed-graph__node--muted .force-directed-graph__node-label {
+  opacity: 0;
+}
+
+.force-directed-graph__node:focus-visible .force-directed-graph__node-core {
+  stroke: var(--color-border-focus);
+  stroke-width: 4;
+}
+
+.force-directed-graph__node-label {
+  fill: color-mix(in srgb, var(--color-text-primary) 82%, var(--node-accent));
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.force-directed-graph__node--selected .force-directed-graph__node-label,
+.force-directed-graph__node--connected .force-directed-graph__node-label {
+  fill: var(--color-text-primary);
+}
+
+.force-directed-graph__node-kicker {
+  fill: color-mix(in srgb, var(--color-text-secondary) 78%, var(--node-accent));
+  font-size: 0.55rem;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+}
+
+.force-directed-graph__detail {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-md);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 48%, transparent);
+  border-radius: var(--border-radius-sm);
+  background-color: color-mix(in srgb, var(--color-background-secondary) 76%, var(--color-background));
+}
+
+.force-directed-graph__detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.force-directed-graph__detail h4,
+.force-directed-graph__detail p,
+.force-directed-graph__detail dl,
+.force-directed-graph__legend,
+.force-directed-graph__connection-list {
+  margin: 0;
+}
+
+.force-directed-graph__detail h4 {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.force-directed-graph__detail p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.force-directed-graph__detail-type {
+  display: inline-flex;
+  justify-self: start;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-info) 44%, transparent);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+}
+
+.force-directed-graph__detail-kicker {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-transform: uppercase;
+}
+
+.force-directed-graph__detail-type--source {
+  border-color: color-mix(in srgb, var(--color-primary-300) 58%, transparent);
+  color: color-mix(in srgb, var(--color-primary-300) 78%, var(--color-text-primary));
+}
+
+.force-directed-graph__detail-type--evidence {
+  border-color: color-mix(in srgb, var(--color-success) 58%, transparent);
+  color: color-mix(in srgb, var(--color-success) 76%, var(--color-text-primary));
+}
+
+.force-directed-graph__detail-type--intelligence {
+  border-color: color-mix(in srgb, var(--color-warning) 58%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text-primary));
+}
+
+.force-directed-graph__detail-type--signal {
+  border-color: color-mix(in srgb, var(--color-data-blue) 58%, transparent);
+  color: color-mix(in srgb, var(--color-data-blue) 76%, var(--color-text-primary));
+}
+
+.force-directed-graph__detail-type--section-truth,
+.force-directed-graph__detail-type--published-truth,
+.force-directed-graph__detail-type--canonical-truth {
+  border-color: color-mix(in srgb, var(--color-success) 62%, transparent);
+  color: color-mix(in srgb, var(--color-success) 80%, var(--color-text-primary));
+}
+
+.force-directed-graph__detail dl {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.force-directed-graph__detail dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 38%, transparent);
+}
+
+.force-directed-graph__detail dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.force-directed-graph__detail dd {
+  margin: 0;
+  color: var(--color-data-blue);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.force-directed-graph__legend,
+.force-directed-graph__connection-list {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: 0;
+  list-style: none;
+}
+
+.force-directed-graph__legend-item,
+.force-directed-graph__connection-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
+}
+
+.force-directed-graph__legend strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.force-directed-graph__legend-swatch,
+.force-directed-graph__connection-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: var(--border-width-thin) solid var(--color-info);
+  border-radius: var(--border-radius-pill);
+  background-color: color-mix(in srgb, var(--color-info) 18%, transparent);
+}
+
+.force-directed-graph__legend-swatch--source,
+.force-directed-graph__connection-dot--source {
+  border-color: var(--color-primary-300);
+  background-color: color-mix(in srgb, var(--color-primary-300) 22%, transparent);
+}
+
+.force-directed-graph__legend-swatch--evidence,
+.force-directed-graph__connection-dot--evidence {
+  border-color: var(--color-success);
+  background-color: color-mix(in srgb, var(--color-success) 22%, transparent);
+}
+
+.force-directed-graph__legend-swatch--intelligence,
+.force-directed-graph__connection-dot--intelligence {
+  border-color: var(--color-warning);
+  background-color: color-mix(in srgb, var(--color-warning) 22%, transparent);
+}
+
+.force-directed-graph__legend-swatch--signal,
+.force-directed-graph__connection-dot--signal {
+  border-color: var(--color-data-blue);
+  background-color: color-mix(in srgb, var(--color-data-blue) 22%, transparent);
+}
+
+.force-directed-graph__legend-swatch--section-truth,
+.force-directed-graph__legend-swatch--published-truth,
+.force-directed-graph__legend-swatch--canonical-truth,
+.force-directed-graph__connection-dot--section-truth,
+.force-directed-graph__connection-dot--published-truth,
+.force-directed-graph__connection-dot--canonical-truth {
+  border-color: color-mix(in srgb, var(--color-success) 72%, var(--color-info));
+  background-color: color-mix(in srgb, var(--color-success) 24%, transparent);
+}
+
+.force-directed-graph__legend-swatch--output-reference,
+.force-directed-graph__legend-swatch--reasoning-consumer,
+.force-directed-graph__connection-dot--output-reference,
+.force-directed-graph__connection-dot--reasoning-consumer {
+  border-color: var(--color-primary-300);
+  background-color: color-mix(in srgb, var(--color-primary-300) 22%, transparent);
+}
+
+@media (min-width: 768px) {
+  .force-directed-graph__body {
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 0.3fr);
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 639px) {
+  .force-directed-graph__svg {
+    min-height: 16rem;
+  }
+
+  .force-directed-graph__detail {
+    padding: var(--spacing-sm);
+  }
+}
+
+@media (forced-colors: active) {
+  .force-directed-graph__canvas,
+  .force-directed-graph__detail,
+  .force-directed-graph__detail-type,
+  .force-directed-graph__detail dl div {
+    border-color: CanvasText;
+  }
+
+  .force-directed-graph__link,
+  .force-directed-graph__link--selected,
+  .force-directed-graph__node circle {
+    stroke: CanvasText;
+  }
+}

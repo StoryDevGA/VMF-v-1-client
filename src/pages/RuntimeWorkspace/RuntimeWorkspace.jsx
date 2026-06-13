@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdBolt,
@@ -28,12 +28,13 @@ import { Badge } from '../../components/Badge'
 import { Button, ButtonGroup } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ConfirmationDialog } from '../../components/ConfirmationDialog'
+import { CoverageHeatGrid } from '../../components/CoverageHeatGrid'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Link } from '../../components/Link'
-import { ProgressBar, getProgressBarValueTint } from '../../components/ProgressBar'
+import { ProgressBar } from '../../components/ProgressBar'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -50,6 +51,7 @@ import {
   useCreateRuntimeOutputRequestMutation,
   useCreateRuntimeRevisionMutation,
   useGenerateRuntimeOutputRequestMutation,
+  useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
@@ -81,6 +83,7 @@ import {
 import './RuntimeWorkspace.css'
 
 const EMPTY_ARRAY = Object.freeze([])
+const RuntimeGraphPanel = lazy(() => import('../../components/RuntimeGraphPanel'))
 const RUNTIME_WORKSPACE_BACK_FALLBACK = '/app/workspaces/vmf'
 const DISCOVERY_INPUT_LABELS = Object.freeze({
   companyWebsite: 'Company website',
@@ -3535,6 +3538,8 @@ const getOutputLabPayload = (response) => response?.data ?? response ?? null
 
 const getTruthQualityPayload = (response) => response?.data ?? response ?? null
 
+const getRuntimeIntelligenceGraphPayload = (response) => response?.data ?? response ?? null
+
 const TRUTH_CERTIFICATION_VARIANTS = Object.freeze({
   STRATEGIC_TRUTH: 'success',
   CERTIFIED_TRUTH: 'success',
@@ -4078,6 +4083,7 @@ function DiscoverySection({
   onRefreshEvidence,
   onToggleSources,
   reviewingEvidenceObjectId = '',
+  runtimeInstanceId = '',
   saving = false,
   showSources = false,
 }) {
@@ -4102,6 +4108,21 @@ function DiscoverySection({
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
   const [showResetWarning, setShowResetWarning] = useState(false)
   const [activeIntelligenceHubTab, setActiveIntelligenceHubTab] = useState(INTELLIGENCE_HUB_TAB_INDEXES.OVERVIEW)
+  const graphProjectionEnabled = Boolean(runtimeInstanceId)
+    && activeIntelligenceHubTab === INTELLIGENCE_HUB_TAB_INDEXES.COVERAGE
+  const {
+    data: runtimeGraphResponse,
+    isLoading: isLoadingRuntimeGraph,
+    isFetching: isFetchingRuntimeGraph,
+    error: runtimeGraphQueryError,
+  } = useGetRuntimeIntelligenceGraphQuery(
+    { runtimeInstanceId },
+    { skip: !graphProjectionEnabled },
+  )
+  const runtimeGraph = getRuntimeIntelligenceGraphPayload(runtimeGraphResponse)
+  const runtimeGraphError = runtimeGraphQueryError ? normalizeError(runtimeGraphQueryError) : null
+  const runtimeGraphLoading = graphProjectionEnabled && (isLoadingRuntimeGraph || isFetchingRuntimeGraph)
+  const showRuntimeGraphPanel = graphProjectionEnabled && Boolean(runtimeGraph || runtimeGraphError || runtimeGraphLoading)
   const documentUploadPreparingRef = useRef(false)
   const discoveryDocumentInputRef = useRef(null)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
@@ -5038,33 +5059,11 @@ function DiscoverySection({
                         : 'Shows accepted evidence coverage only. New extracted evidence appears here after review.'}
                     </p>
                     {coverageAreaRows.length > 0 && hasAcceptedCoverage ? (
-                      <ul className="runtime-workspace__coverage-heatmap">
-                        {coverageAreaRows.map((area) => {
-                          const CoverageStateIcon = area.stateMeta.icon
-                          return (
-                            <li key={area.areaLabel}>
-                              <span className="runtime-workspace__coverage-heatmap-label">{area.areaLabel}</span>
-                              <ProgressBar
-                                ariaLabel={`${area.areaLabel}: ${area.stateMeta.label}, ${area.progressText}`}
-                                ariaValueText={area.progressText}
-                                className="runtime-workspace__coverage-heatmap-progress"
-                                size="sm"
-                                valueTone
-                                value={area.progressValue}
-                                variant="success"
-                              />
-                            <span
-                              className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
-                              style={{ '--runtime-workspace-coverage-icon-color': `color-mix(in srgb, var(--color-success), white ${getProgressBarValueTint(area.progressValue)})` }}
-                              aria-label={`${area.areaLabel} coverage status: ${area.stateMeta.description}`}
-                              title={area.stateMeta.description}
-                            >
-                                <CoverageStateIcon aria-hidden="true" focusable="false" />
-                              </span>
-                            </li>
-                          )
-                        })}
-                      </ul>
+                      <CoverageHeatGrid
+                        ariaLabel="Accepted coverage heat grid"
+                        className="runtime-workspace__coverage-heat-grid"
+                        rows={coverageAreaRows}
+                      />
                     ) : coverageAreaRows.length > 0 ? null : (
                       <>
                         <p>
@@ -5565,104 +5564,23 @@ function DiscoverySection({
               </div>
             </TabView.Tab>
             <TabView.Tab label="Coverage">
-              <div className="runtime-workspace__section-panels">
-                <section className="runtime-workspace__section-panel" aria-label={`${INTELLIGENCE_HUB_LABEL} health`}>
-                  <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
-                  <IntelligenceDetailRows rows={coverageHealthRows} />
-                </section>
-                <section className="runtime-workspace__section-panel" aria-label="Acquisition quality">
-                  <h3>Acquisition Quality</h3>
-                  <IntelligenceDetailRows rows={acquisitionQualityRows} />
-                  {acquisitionEffectiveness.recommendedNextInput ? (
-                    <p className="runtime-workspace__section-note">
-                      Recommended next input: {acquisitionEffectiveness.recommendedNextInput}
-                    </p>
-                  ) : null}
-                </section>
-                <section className="runtime-workspace__section-panel" aria-label="Discovery readiness">
-                  <div className="runtime-workspace__evidence-acceptance-summary-header">
-                    <div>
-                      <h3>Discovery Readiness</h3>
-                      <p className="runtime-workspace__evidence-acceptance-summary-lede">
-                        {discoveryReadinessSummary}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={getTokenStatusVariant(discoveryReadinessState)}
-                      size="sm"
-                      pill
-                      outline
-                      icon={discoveryReadinessState === 'READY'
-                        ? <MdCheckCircle aria-hidden="true" />
-                        : <MdOutlineWarningAmber aria-hidden="true" />}
-                    >
-                      {discoveryReadinessLabel}
-                    </Badge>
-                  </div>
-                  <ul className="runtime-workspace__projection-list runtime-workspace__projection-list--compact">
-                    <li>{discoveryReadinessCoverage}</li>
-                    <li>
-                      {getSummaryCount(discoveryReadiness, 'acceptedEvidenceCount')} accepted / {getSummaryCount(discoveryReadiness, 'pendingReviewCount')} pending evidence objects
-                    </li>
-                    <li>
-                      {discoveryReadinessContradictionCount === 0
-                        ? 'No contradiction candidates projected'
-                        : `${discoveryReadinessContradictionCount} contradiction candidate${discoveryReadinessContradictionCount === 1 ? '' : 's'} projected`}
-                    </li>
-                  </ul>
-                </section>
-                <section className="runtime-workspace__section-panel" aria-label="Signal candidates">
-                  <h3>Signal Candidates</h3>
-                  {signalCandidateRows.length > 0 ? (
-                    <ul className="runtime-workspace__plain-list">
-                      {signalCandidateRows.map((signal) => (
-                        <li key={signal.id}>
-                          <strong>{signal.domain}</strong>
-                          <span>{signal.summary}</span>
-                          <Badge variant={getTokenStatusVariant(signal.signalStrength)} size="sm" pill outline>
-                            {formatRuntimeTokenLabel(signal.signalStrength)}
-                          </Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No signal candidates are projected for this runtime yet.</p>
-                  )}
-                </section>
-                <section className="runtime-workspace__section-panel" aria-label="Intelligence graph health">
-                  <h3>Intelligence Graph Health</h3>
-                  <IntelligenceDetailRows rows={graphHealthRows} />
-                </section>
-                <section className="runtime-workspace__section-panel" aria-label="Evidence domain coverage">
+              <div className="runtime-workspace__section-panels runtime-workspace__coverage-tab-layout">
+                <section
+                  className="runtime-workspace__section-panel runtime-workspace__coverage-tab-panel runtime-workspace__coverage-tab-panel--domain"
+                  aria-label="Evidence domain coverage"
+                >
                   <h3>Evidence Domain Coverage</h3>
                   {graphCoverageDomainRows.length > 0 ? (
-                    <ul className="runtime-workspace__coverage-heatmap">
-                      {graphCoverageDomainRows.map((area) => {
-                        const CoverageStateIcon = area.stateMeta.icon
-                        return (
-                          <li key={area.areaLabel}>
-                            <span className="runtime-workspace__coverage-heatmap-label">{area.areaLabel}</span>
-                            <ProgressBar
-                              ariaLabel={`${area.areaLabel}: ${area.stateMeta.label}, ${area.progressText}`}
-                              ariaValueText={area.progressText}
-                              className="runtime-workspace__coverage-heatmap-progress"
-                              size="sm"
-                              valueTone
-                              value={area.progressValue}
-                              variant="success"
-                            />
-                            <span
-                              className={`runtime-workspace__coverage-heatmap-state runtime-workspace__coverage-heatmap-state--${area.stateMeta.className}`}
-                              style={{ '--runtime-workspace-coverage-icon-color': `color-mix(in srgb, var(--color-success), white ${getProgressBarValueTint(area.progressValue)})` }}
-                              aria-label={`${area.areaLabel} graph coverage status: ${area.stateMeta.description}`}
-                              title={area.stateMeta.description}
-                            >
-                              <CoverageStateIcon aria-hidden="true" focusable="false" />
-                            </span>
-                          </li>
-                        )
-                      })}
-                    </ul>
+                    <CoverageHeatGrid
+                      ariaLabel="Evidence domain coverage heat grid"
+                      className="runtime-workspace__coverage-heat-grid"
+                      rows={graphCoverageDomainRows.map((area) => ({
+                        ...area,
+                        stateDescription: area.stateMeta.description,
+                        stateLabel: area.stateMeta.label,
+                      }))}
+                      statusLabel="graph coverage"
+                    />
                   ) : (
                     <p>
                       {graphAvailable
@@ -5671,6 +5589,121 @@ function DiscoverySection({
                     </p>
                   )}
                 </section>
+                <section className="runtime-workspace__coverage-diagnostics" aria-label="Coverage diagnostics">
+                  <div className="runtime-workspace__coverage-diagnostics-header">
+                    <h3>Coverage Diagnostics</h3>
+                    <Badge variant={getTokenStatusVariant(discoveryReadinessState)} size="sm" pill outline>
+                      {discoveryReadinessLabel}
+                    </Badge>
+                  </div>
+                  <div className="runtime-workspace__coverage-diagnostics-grid">
+                    <section
+                      className="runtime-workspace__coverage-diagnostic runtime-workspace__coverage-diagnostic--health"
+                      aria-label={`${INTELLIGENCE_HUB_LABEL} health`}
+                    >
+                      <h3>{INTELLIGENCE_HUB_LABEL} Health</h3>
+                      <IntelligenceDetailRows rows={coverageHealthRows} />
+                    </section>
+                    <section
+                      className="runtime-workspace__coverage-diagnostic runtime-workspace__coverage-diagnostic--acquisition"
+                      aria-label="Acquisition quality"
+                    >
+                      <h3>Acquisition Quality</h3>
+                      <IntelligenceDetailRows rows={acquisitionQualityRows} />
+                      {acquisitionEffectiveness.recommendedNextInput ? (
+                        <p className="runtime-workspace__section-note">
+                          Recommended next input: {acquisitionEffectiveness.recommendedNextInput}
+                        </p>
+                      ) : null}
+                    </section>
+                    <section
+                      className="runtime-workspace__coverage-diagnostic runtime-workspace__coverage-diagnostic--readiness"
+                      aria-label="Discovery readiness"
+                    >
+                      <div className="runtime-workspace__evidence-acceptance-summary-header">
+                        <div>
+                          <h3>Discovery Readiness</h3>
+                          <p className="runtime-workspace__evidence-acceptance-summary-lede">
+                            {discoveryReadinessSummary}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={getTokenStatusVariant(discoveryReadinessState)}
+                          size="sm"
+                          pill
+                          outline
+                          icon={discoveryReadinessState === 'READY'
+                            ? <MdCheckCircle aria-hidden="true" />
+                            : <MdOutlineWarningAmber aria-hidden="true" />}
+                        >
+                          {discoveryReadinessLabel}
+                        </Badge>
+                      </div>
+                      <ul className="runtime-workspace__projection-list runtime-workspace__projection-list--compact">
+                        <li>{discoveryReadinessCoverage}</li>
+                        <li>
+                          {getSummaryCount(discoveryReadiness, 'acceptedEvidenceCount')} accepted / {getSummaryCount(discoveryReadiness, 'pendingReviewCount')} pending evidence objects
+                        </li>
+                        <li>
+                          {discoveryReadinessContradictionCount === 0
+                            ? 'No contradiction candidates projected'
+                            : `${discoveryReadinessContradictionCount} contradiction candidate${discoveryReadinessContradictionCount === 1 ? '' : 's'} projected`}
+                        </li>
+                      </ul>
+                    </section>
+                    <section
+                      className="runtime-workspace__coverage-diagnostic runtime-workspace__coverage-diagnostic--signals"
+                      aria-label="Signal candidates"
+                    >
+                      <h3>Signal Candidates</h3>
+                      {signalCandidateRows.length > 0 ? (
+                        <ul className="runtime-workspace__plain-list runtime-workspace__coverage-signal-list">
+                          {signalCandidateRows.map((signal) => (
+                            <li key={signal.id}>
+                              <strong>{signal.domain}</strong>
+                              <span>{signal.summary}</span>
+                              <Badge variant={getTokenStatusVariant(signal.signalStrength)} size="sm" pill outline>
+                                {formatRuntimeTokenLabel(signal.signalStrength)}
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No signal candidates are projected for this runtime yet.</p>
+                      )}
+                    </section>
+                  </div>
+                </section>
+                <div className="runtime-workspace__coverage-graph-layout">
+                  {showRuntimeGraphPanel ? (
+                    <Suspense
+                      fallback={(
+                        <section
+                          className="runtime-workspace__section-panel runtime-workspace__coverage-tab-panel runtime-workspace__coverage-tab-panel--graph"
+                          role="region"
+                          aria-label="Runtime intelligence graph"
+                        >
+                          <h3>Runtime Intelligence Graph</h3>
+                          <p>Loading graph projection...</p>
+                        </section>
+                      )}
+                    >
+                      <RuntimeGraphPanel
+                        className="runtime-workspace__section-panel runtime-workspace__graph-panel runtime-workspace__coverage-tab-panel runtime-workspace__coverage-tab-panel--graph"
+                        error={runtimeGraphError}
+                        graph={runtimeGraph}
+                        loading={runtimeGraphLoading}
+                      />
+                    </Suspense>
+                  ) : null}
+                  <section
+                    className="runtime-workspace__section-panel runtime-workspace__coverage-tab-panel runtime-workspace__coverage-tab-panel--graph-health"
+                    aria-label="Intelligence graph health"
+                  >
+                    <h3>Intelligence Graph Health</h3>
+                    <IntelligenceDetailRows rows={graphHealthRows} />
+                  </section>
+                </div>
               </div>
             </TabView.Tab>
             <TabView.Tab label="Governance">
@@ -7349,6 +7382,7 @@ function RuntimeWorkspace() {
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
               onToggleSources={() => setShowEvidenceSources((current) => !current)}
               reviewingEvidenceObjectId={reviewingEvidenceObjectId}
+              runtimeInstanceId={runtimeInstanceId}
               saving={savingDiscovery}
               showSources={showEvidenceSources}
             />
