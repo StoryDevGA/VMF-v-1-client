@@ -850,6 +850,7 @@ describe('Router', () => {
         'runtime-control/ui-contracts',
         'runtime-control/ui-contracts/new',
         'runtime-control/ui-contracts/:uiContractId',
+        'runtime-control/knowledge-packs',
         'invitations',
         'license-levels',
         'roles',

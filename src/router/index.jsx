@@ -43,6 +43,9 @@ const SuperAdminFrameworkPackageEditor = lazy(
 const SuperAdminUiContracts = lazy(
   () => import('../pages/SuperAdminUiContracts'),
 )
+const SuperAdminOutcomeKnowledgePacks = lazy(
+  () => import('../pages/SuperAdminOutcomeKnowledgePacks'),
+)
 const SuperAdminUiContractEditor = lazy(
   () => import('../pages/SuperAdminUiContracts').then((module) => ({ default: module.SuperAdminUiContractEditor })),
 )
@@ -362,6 +365,10 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/ui-contracts/:uiContractId',
                   element: <SuperAdminUiContractEditor />,
+                },
+                {
+                  path: 'runtime-control/knowledge-packs',
+                  element: <SuperAdminOutcomeKnowledgePacks />,
                 },
               ]
             : []),

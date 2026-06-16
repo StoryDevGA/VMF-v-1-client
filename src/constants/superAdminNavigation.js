@@ -40,7 +40,7 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages', 'uiContracts']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages', 'uiContracts', 'knowledgePacks']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
@@ -53,6 +53,7 @@ const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'workflowPolicies',
   'frameworkPackages',
   'uiContracts',
+  'knowledgePacks',
 ])
 
 const SUPER_ADMIN_DASHBOARD_GROUP_CATALOG = Object.freeze({
@@ -215,6 +216,16 @@ const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       canonical: 'UI Contracts',
       legacyNav: 'UI Contracts',
       phase1aNav: 'UI Contracts',
+    }),
+  }),
+  knowledgePacks: Object.freeze({
+    key: 'knowledge-packs',
+    to: '/super-admin/runtime-control/knowledge-packs',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Knowledge Packs',
+      legacyNav: 'Knowledge Packs',
+      phase1aNav: 'Knowledge Packs',
     }),
   }),
   agents: Object.freeze({
@@ -431,9 +442,9 @@ function buildRuntimeControlDashboardGroup() {
       : 'Planned next',
     helperCopy: runtimeControlEnabled
       ? hasPlannedModuleRouteKeys
-        ? 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, and Framework Packages are now live from the Runtime Control dashboard.'
+        ? 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, Framework Packages, UI Contracts, and Knowledge Packs are now live from the Runtime Control dashboard.'
         : 'All Runtime Control catalogue surfaces are now live.'
-      : 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, and Framework Packages stay queued until the Runtime Control route group is enabled.',
+      : 'Framework Registry, Runtime Paths, Skill Roles, Skills, Agents, Workflow Policies, Framework Packages, UI Contracts, and Knowledge Packs stay queued until the Runtime Control route group is enabled.',
   }
 }
 

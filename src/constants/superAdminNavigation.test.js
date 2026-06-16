@@ -57,6 +57,8 @@ describe('superAdminNavigation', () => {
       'Agents',
       'Workflow Policies',
       'Framework Packages',
+      'UI Contracts',
+      'Knowledge Packs',
     ])
     expect(entries[2].links.map((link) => link.label)).toEqual([
       'Monitoring',
@@ -107,6 +109,8 @@ describe('superAdminNavigation', () => {
       'Agents',
       'Workflow Policies',
       'Framework Packages',
+      'UI Contracts',
+      'Knowledge Packs',
     ])
     expect(groups[1].upcomingLinks.map((link) => link.label)).toEqual([])
   })

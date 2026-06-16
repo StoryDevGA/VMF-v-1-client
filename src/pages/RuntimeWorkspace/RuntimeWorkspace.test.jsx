@@ -10,6 +10,7 @@ import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useClearRuntimeSectionEvidenceMutation,
+  useCreateRuntimeOutcomeSessionMutation,
   useCreateRuntimeOutputRequestMutation,
   useCreateRuntimeRevisionMutation,
   useExecuteRuntimeActionMutation,
@@ -17,14 +18,24 @@ import {
   useGetRuntimeEvidenceQuery,
   useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeOutputLabQuery,
+  useGetRuntimeOutcomeStudioQuery,
+  useGetRuntimeOutcomeStudioReadinessQuery,
+  useGetRuntimeOutcomeSessionQuery,
+  useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
+  useGenerateRuntimeOutcomeResponseMutation,
+  useLazyExportRuntimeOutcomeAssetQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
+  usePublishRuntimeOutcomeAssetMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useReviewAllRuntimeSectionEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
+  useSubmitRuntimeOutcomeMessageMutation,
+  useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -34,6 +45,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
   useClearRuntimeSectionEvidenceMutation: vi.fn(),
+  useCreateRuntimeOutcomeSessionMutation: vi.fn(),
   useCreateRuntimeOutputRequestMutation: vi.fn(),
   useCreateRuntimeRevisionMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
@@ -41,14 +53,24 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeEvidenceQuery: vi.fn(),
   useGetRuntimeIntelligenceGraphQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
+  useGetRuntimeOutcomeStudioQuery: vi.fn(),
+  useGetRuntimeOutcomeStudioReadinessQuery: vi.fn(),
+  useGetRuntimeOutcomeSessionQuery: vi.fn(),
+  useLazyGetRuntimeOutcomeAssetQuery: vi.fn(),
+  useLazyGetRuntimeOutcomeAssetPreviewQuery: vi.fn(),
   useGetRuntimeRendererQuery: vi.fn(),
   useGetRuntimeTruthQualityQuery: vi.fn(),
+  useGenerateRuntimeOutcomeResponseMutation: vi.fn(),
+  useLazyExportRuntimeOutcomeAssetQuery: vi.fn(),
   useLazyExportRuntimeOutputAssetQuery: vi.fn(),
   useMutateRuntimeStateMutation: vi.fn(),
+  usePublishRuntimeOutcomeAssetMutation: vi.fn(),
   useResetRuntimeDiscoveryMutation: vi.fn(),
   useReviewRuntimeDiscoveryEvidenceMutation: vi.fn(),
   useReviewAllRuntimeSectionEvidenceMutation: vi.fn(),
   useReviewRuntimeSectionEvidenceMutation: vi.fn(),
+  useSubmitRuntimeOutcomeMessageMutation: vi.fn(),
+  useUpdateRuntimeOutcomeSessionFromLatestTruthMutation: vi.fn(),
   useUpdateRuntimeSectionEvidenceMutation: vi.fn(),
   useUpdateRuntimeDiscoveryInputsMutation: vi.fn(),
 }))
@@ -139,10 +161,22 @@ vi.mock('../../components/RuntimeGraphPanel', async () => {
 
 const refetchRenderer = vi.fn()
 const refetchOutputLab = vi.fn()
+const refetchOutcomeStudio = vi.fn()
+const refetchOutcomeStudioSession = vi.fn()
 const mutateRuntimeState = vi.fn()
 const unwrapMutation = vi.fn()
 const executeRuntimeAction = vi.fn()
 const unwrapAction = vi.fn()
+const createRuntimeOutcomeSession = vi.fn()
+const unwrapCreateRuntimeOutcomeSession = vi.fn()
+const submitRuntimeOutcomeMessage = vi.fn()
+const unwrapSubmitRuntimeOutcomeMessage = vi.fn()
+const generateRuntimeOutcomeResponse = vi.fn()
+const unwrapGenerateRuntimeOutcomeResponse = vi.fn()
+const updateRuntimeOutcomeSessionFromLatestTruth = vi.fn()
+const unwrapUpdateRuntimeOutcomeSessionFromLatestTruth = vi.fn()
+const getRuntimeOutcomeAssetDetail = vi.fn()
+const getRuntimeOutcomeAssetPreview = vi.fn()
 const createRuntimeOutputRequest = vi.fn()
 const unwrapCreateRuntimeOutputRequest = vi.fn()
 const createRuntimeRevision = vi.fn()
@@ -151,6 +185,10 @@ const generateRuntimeOutputRequest = vi.fn()
 const unwrapGenerateRuntimeOutputRequest = vi.fn()
 const exportRuntimeOutputAsset = vi.fn()
 const unwrapExportRuntimeOutputAsset = vi.fn()
+const exportRuntimeOutcomeAsset = vi.fn()
+const unwrapExportRuntimeOutcomeAsset = vi.fn()
+const publishRuntimeOutcomeAsset = vi.fn()
+const unwrapPublishRuntimeOutcomeAsset = vi.fn()
 const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
@@ -409,6 +447,299 @@ const truthQualityPayload = {
   },
 }
 
+const outcomeStudioPayload = {
+  contractVersion: 'outcome-studio.v1',
+  phase: 'FOUNDATION_READINESS_ONLY',
+  readiness: {
+    state: 'BLOCKED',
+    canStartSession: false,
+    canReason: false,
+    summary: 'Outcome Studio requires active Outcome Studio knowledge pack bindings before sessions can start.',
+    blockers: [
+      {
+        code: 'ARL_PACK_MISSING',
+        source: 'KNOWLEDGE_PACK_REGISTRY',
+        message: 'Adaptive Reasoning Layer must be active before Outcome Studio sessions can start.',
+      },
+      {
+        code: 'RL_PACK_MISSING',
+        source: 'KNOWLEDGE_PACK_REGISTRY',
+        message: 'Rendering Layer must be active before Outcome Studio sessions can start.',
+      },
+      {
+        code: 'OUTPUT_SCHEMA_PACK_MISSING',
+        source: 'KNOWLEDGE_PACK_REGISTRY',
+        message: 'Output Schemas must be active before Outcome Studio sessions can start.',
+      },
+      {
+        code: 'TRUTH_CERTIFICATION_PACK_MISSING',
+        source: 'KNOWLEDGE_PACK_REGISTRY',
+        message: 'Truth Certification must be active before Outcome Studio sessions can start.',
+      },
+    ],
+    warnings: [],
+    outputLab: {
+      state: 'READY',
+      canGenerate: true,
+      summary: 'Output Lab can generate governed output from locked canonical runtime truth.',
+    },
+    knowledgePacks: {
+      status: 'BLOCKED',
+      mode: 'REGISTRY_RESOLUTION',
+      activeCount: 0,
+      requiredCount: 5,
+      sourceOnlyCount: 2,
+    },
+    safetyGates: {
+      status: 'BLOCKED',
+      mode: 'PRE_GENERATION_READINESS',
+      responseGenerationAvailable: false,
+      passedCount: 2,
+      blockedCount: 3,
+      totalCount: 5,
+    },
+  },
+  truthBinding: {
+    status: 'PROJECTED',
+    mode: 'CERTIFIED_RUNTIME_TRUTH',
+    runtimeInstanceId: 'runtime-1',
+    runtimeInstanceKey: 'value-narrative-001',
+    certification: {
+      level: 'STRATEGIC_TRUTH',
+      levelNumber: 4,
+      label: 'Strategic Truth',
+      summary: 'High coverage, high confidence, diverse source support, and low contradiction risk.',
+    },
+    qualityBand: 'HIGH',
+    graph: {
+      graphVersion: '2.2',
+      graphHash: 'sha256:truth-quality-graph',
+      evaluatedAt: '2026-06-05T10:12:00.000Z',
+    },
+    truthSignature: {
+      status: 'PROJECTED',
+      mode: 'PROJECTED_FROM_RUNTIME_EVIDENCE',
+      persistence: 'NOT_PERSISTED',
+      currentness: 'CURRENT',
+      evidence: {
+        runtimeInstanceId: 'runtime-1',
+        runtimeInstanceKey: 'value-narrative-001',
+        certificationLevel: 'STRATEGIC_TRUTH',
+        certificationLabel: 'Strategic Truth',
+        qualityBand: 'HIGH',
+        sourceOutputAssetId: 'out_asset_test',
+        sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+        publishSnapshotId: 'runtime-truth-publish-output-lab-fixture',
+        publishSnapshotHash: 'publish-output-lab-hash',
+        lockSnapshotId: 'runtime-truth-lock-output-lab-fixture',
+        lockSnapshotHash: 'lock-output-lab-hash',
+        replayAnchorId: 'runtime-replay-anchor-output-lab',
+        replayAnchorHash: 'replay-anchor-output-lab-hash',
+        graphVersion: '2.2',
+        graphHash: 'sha256:truth-quality-graph',
+        evaluatedAt: '2026-06-05T10:12:00.000Z',
+      },
+      missingEvidence: [],
+    },
+    sourceOutput: {
+      outputAssetId: 'out_asset_test',
+      outputTypeKey: 'EXECUTIVE_BRIEF',
+      outputTypeLabel: 'Executive Brief',
+      status: 'GENERATED',
+      stale: false,
+      exportable: true,
+      supportedFormats: ['MARKDOWN', 'JSON'],
+      markdown: 'Raw generated output must not render.',
+      safeJson: {
+        prompt: 'Raw prompt payload must not render.',
+      },
+      sourceSnapshot: {
+        lockSnapshotId: 'runtime-truth-lock-output-lab-fixture',
+        replayAnchorId: 'runtime-replay-anchor-output-lab',
+        graphHash: 'sha256:graph-hash',
+      },
+    },
+  },
+  safetyGates: {
+    status: 'BLOCKED',
+    mode: 'PRE_GENERATION_READINESS',
+    responseGenerationAvailable: false,
+    passedCount: 2,
+    blockedCount: 3,
+    totalCount: 5,
+    summary: 'Outcome Studio can preserve governed prompts when session readiness passes, but response generation remains blocked until all pre-generation gates pass.',
+    gates: [
+      {
+        code: 'SOURCE_OUTPUT_BOUND',
+        label: 'Source Output Binding',
+        status: 'PASSED',
+        message: 'A governed Output Lab source asset is bound for the session.',
+      },
+      {
+        code: 'TRUTH_SIGNATURE_BOUND',
+        label: 'Truth Signature Binding',
+        status: 'PASSED',
+        message: 'Certified Runtime Truth can be bound to the session.',
+      },
+      {
+        code: 'KNOWLEDGE_PACKS_BOUND',
+        label: 'Knowledge Pack Binding',
+        status: 'BLOCKED',
+        message: 'All required Outcome Studio knowledge packs must be active before runtime reasoning.',
+        blockerReason: 'KNOWLEDGE_PACK_BINDING_MISSING',
+      },
+      {
+        code: 'PROMPT_PERSISTENCE_READY',
+        label: 'Prompt Persistence',
+        status: 'BLOCKED',
+        message: 'Prompt persistence remains blocked until the session readiness gate passes.',
+        blockerReason: 'OUTCOME_SESSION_BLOCKED',
+      },
+      {
+        code: 'RESPONSE_GENERATION_ENGINE',
+        label: 'Response Generation Engine',
+        status: 'BLOCKED',
+        message: 'Assistant response generation is blocked until source, truth, knowledge-pack, and session gates pass.',
+        blockerReason: 'PRE_GENERATION_GATES_BLOCKED',
+      },
+    ],
+  },
+  packBinding: {
+    status: 'BLOCKED',
+    mode: 'REGISTRY_RESOLUTION',
+    summary: 'Knowledge Pack Registry activation is required before Outcome Studio sessions can start.',
+    activePacks: [],
+    sourceBundle: {
+      status: 'SOURCE_ONLY',
+      sourcePath: 'docs/product-specs/source-artifacts/2026-06-15-governed-outcome-studio-oes-002/knowledge-packs-v1/',
+      starterPacks: [
+        {
+          packType: 'ARL',
+          packKey: 'adaptive-reasoning-layer',
+          label: 'Adaptive Reasoning Layer',
+          sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
+        },
+        {
+          packType: 'RL',
+          packKey: 'rendering-layer',
+          label: 'Rendering Layer',
+          sourceFilename: 'rendering-layer-v1.yaml',
+        },
+        {
+          packType: 'OUTPUT_SCHEMA',
+          packKey: 'output-schemas-pack',
+          label: 'Output Schemas',
+          sourceFilename: 'output-schemas-pack-v1.yaml',
+        },
+        {
+          packType: 'TRUTH_CERTIFICATION',
+          packKey: 'truth-certification-pack',
+          label: 'Truth Certification',
+          sourceFilename: 'truth-certification-pack-v1.yaml',
+        },
+        {
+          packType: 'OUTPUT_TYPE_DEFINITION',
+          packKey: 'outcome-output-types',
+          label: 'Outcome Output Types',
+          sourceFilename: 'outcome-output-types-v1.yaml',
+        },
+      ],
+    },
+    requiredPacks: [
+      {
+        packType: 'ARL',
+        packKey: 'adaptive-reasoning-layer',
+        label: 'Adaptive Reasoning Layer',
+        status: 'SOURCE_ONLY',
+        runtimeBindable: false,
+        sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
+      },
+      {
+        packType: 'RL',
+        packKey: 'rendering-layer',
+        label: 'Rendering Layer',
+        status: 'SOURCE_ONLY',
+        runtimeBindable: false,
+        sourceFilename: 'rendering-layer-v1.yaml',
+      },
+      {
+        packType: 'OUTPUT_SCHEMA',
+        packKey: 'output-schemas-pack',
+        label: 'Output Schemas',
+        status: 'SOURCE_ONLY',
+        runtimeBindable: false,
+        sourceFilename: 'output-schemas-pack-v1.yaml',
+      },
+      {
+        packType: 'TRUTH_CERTIFICATION',
+        packKey: 'truth-certification-pack',
+        label: 'Truth Certification',
+        status: 'SOURCE_ONLY',
+        runtimeBindable: false,
+        sourceFilename: 'truth-certification-pack-v1.yaml',
+      },
+      {
+        packType: 'OUTPUT_TYPE_DEFINITION',
+        packKey: 'outcome-output-types',
+        label: 'Outcome Output Types',
+        status: 'SOURCE_ONLY',
+        runtimeBindable: false,
+        sourceFilename: 'outcome-output-types-v1.yaml',
+      },
+    ],
+  },
+  conversation: {
+    enabled: false,
+    disabledReason: 'Outcome Studio requires active Outcome Studio knowledge pack bindings before sessions can start.',
+    promptMaxLength: 2000,
+    allowedActions: [],
+  },
+  sourceOutputs: [],
+  sessions: [],
+  assets: [],
+}
+
+const buildReadyOutcomeStudioSafetyGates = ({ responseGenerationAvailable = false } = {}) => ({
+  ...outcomeStudioPayload.safetyGates,
+  status: responseGenerationAvailable ? 'PASSED' : 'BLOCKED',
+  responseGenerationAvailable,
+  passedCount: responseGenerationAvailable ? 5 : 4,
+  blockedCount: responseGenerationAvailable ? 0 : 1,
+  summary: responseGenerationAvailable
+    ? 'All Outcome Studio safety gates are passed.'
+    : 'Outcome Studio can preserve governed prompts when session readiness passes, but response generation remains blocked until all pre-generation gates pass.',
+  gates: outcomeStudioPayload.safetyGates.gates.map((gate) => {
+    if (gate.code === 'KNOWLEDGE_PACKS_BOUND') {
+      return {
+        code: gate.code,
+        label: gate.label,
+        status: 'PASSED',
+        message: 'All required Outcome Studio knowledge packs are active for runtime binding.',
+      }
+    }
+
+    if (gate.code === 'PROMPT_PERSISTENCE_READY') {
+      return {
+        code: gate.code,
+        label: gate.label,
+        status: 'PASSED',
+        message: 'Customer prompts can be persisted against an active governed session.',
+      }
+    }
+
+    if (gate.code === 'RESPONSE_GENERATION_ENGINE' && responseGenerationAvailable) {
+      return {
+        code: gate.code,
+        label: gate.label,
+        status: 'PASSED',
+        message: 'Governed response generation can run for active current sessions.',
+      }
+    }
+
+    return gate
+  }),
+})
+
 const getBackendTruthCertificationLevelKeys = () => {
   const constantsPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -505,10 +836,22 @@ describe('RuntimeWorkspace', () => {
   beforeEach(() => {
     refetchRenderer.mockReset()
     refetchOutputLab.mockReset()
+    refetchOutcomeStudio.mockReset()
+    refetchOutcomeStudioSession.mockReset()
     mutateRuntimeState.mockReset()
     unwrapMutation.mockReset()
     executeRuntimeAction.mockReset()
     unwrapAction.mockReset()
+    createRuntimeOutcomeSession.mockReset()
+    unwrapCreateRuntimeOutcomeSession.mockReset()
+    submitRuntimeOutcomeMessage.mockReset()
+    unwrapSubmitRuntimeOutcomeMessage.mockReset()
+    generateRuntimeOutcomeResponse.mockReset()
+    unwrapGenerateRuntimeOutcomeResponse.mockReset()
+    updateRuntimeOutcomeSessionFromLatestTruth.mockReset()
+    unwrapUpdateRuntimeOutcomeSessionFromLatestTruth.mockReset()
+    getRuntimeOutcomeAssetDetail.mockReset()
+    getRuntimeOutcomeAssetPreview.mockReset()
     createRuntimeOutputRequest.mockReset()
     unwrapCreateRuntimeOutputRequest.mockReset()
     createRuntimeRevision.mockReset()
@@ -517,6 +860,10 @@ describe('RuntimeWorkspace', () => {
     unwrapGenerateRuntimeOutputRequest.mockReset()
     exportRuntimeOutputAsset.mockReset()
     unwrapExportRuntimeOutputAsset.mockReset()
+    exportRuntimeOutcomeAsset.mockReset()
+    unwrapExportRuntimeOutcomeAsset.mockReset()
+    publishRuntimeOutcomeAsset.mockReset()
+    unwrapPublishRuntimeOutcomeAsset.mockReset()
     updateRuntimeDiscoveryInputs.mockReset()
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
@@ -545,6 +892,33 @@ describe('RuntimeWorkspace', () => {
     mutateRuntimeState.mockReturnValue({ unwrap: unwrapMutation })
     unwrapAction.mockResolvedValue({ data: { action: { actionKey: 'SUBMIT_FOR_REVIEW' } } })
     executeRuntimeAction.mockReturnValue({ unwrap: unwrapAction })
+    unwrapCreateRuntimeOutcomeSession.mockResolvedValue({ data: { sessionId: 'outcome_session_test' } })
+    createRuntimeOutcomeSession.mockReturnValue({ unwrap: unwrapCreateRuntimeOutcomeSession })
+    unwrapSubmitRuntimeOutcomeMessage.mockResolvedValue({ data: { messageId: 'out_msg_test' } })
+    submitRuntimeOutcomeMessage.mockReturnValue({ unwrap: unwrapSubmitRuntimeOutcomeMessage })
+    unwrapGenerateRuntimeOutcomeResponse.mockResolvedValue({ data: { messageId: 'out_msg_test' } })
+    generateRuntimeOutcomeResponse.mockReturnValue({ unwrap: unwrapGenerateRuntimeOutcomeResponse })
+    unwrapUpdateRuntimeOutcomeSessionFromLatestTruth.mockResolvedValue({
+      data: {
+        sessionId: 'out_sess_active_fixture',
+        truthSignatureId: 'truth_sig_updated_fixture',
+        truthSignature: {
+          currentness: 'CURRENT',
+        },
+      },
+    })
+    updateRuntimeOutcomeSessionFromLatestTruth.mockReturnValue({
+      unwrap: unwrapUpdateRuntimeOutcomeSessionFromLatestTruth,
+    })
+    unwrapPublishRuntimeOutcomeAsset.mockResolvedValue({
+      data: {
+        outcomeAssetId: 'outcome_asset_existing_fixture',
+        status: 'PUBLISHED',
+      },
+    })
+    publishRuntimeOutcomeAsset.mockReturnValue({
+      unwrap: unwrapPublishRuntimeOutcomeAsset,
+    })
     unwrapCreateRuntimeOutputRequest.mockResolvedValue({ data: { outputRequestId: 'out_req_test' } })
     createRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapCreateRuntimeOutputRequest })
     unwrapCreateRuntimeRevision.mockResolvedValue({
@@ -566,6 +940,15 @@ describe('RuntimeWorkspace', () => {
       },
     })
     exportRuntimeOutputAsset.mockReturnValue({ unwrap: unwrapExportRuntimeOutputAsset })
+    unwrapExportRuntimeOutcomeAsset.mockResolvedValue({
+      data: {
+        format: 'MARKDOWN',
+        filename: 'value-narrative-001-governed-board-narrative.md',
+        mimeType: 'text/markdown',
+        content: '# Governed Board Narrative',
+      },
+    })
+    exportRuntimeOutcomeAsset.mockReturnValue({ unwrap: unwrapExportRuntimeOutcomeAsset })
     unwrapDiscoveryInputs.mockResolvedValue({ data: { discovery: { state: { status: 'EVIDENCE_READY' } } } })
     updateRuntimeDiscoveryInputs.mockReturnValue({ unwrap: unwrapDiscoveryInputs })
     unwrapAcceptDiscovery.mockResolvedValue({ data: { discovery: { state: { status: 'ACCEPTED' } } } })
@@ -587,6 +970,13 @@ describe('RuntimeWorkspace', () => {
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
     useClearRuntimeSectionEvidenceMutation.mockReturnValue([clearRuntimeSectionEvidence, { isLoading: false }])
+    useCreateRuntimeOutcomeSessionMutation.mockReturnValue([createRuntimeOutcomeSession, { isLoading: false }])
+    useSubmitRuntimeOutcomeMessageMutation.mockReturnValue([submitRuntimeOutcomeMessage, { isLoading: false }])
+    useGenerateRuntimeOutcomeResponseMutation.mockReturnValue([generateRuntimeOutcomeResponse, { isLoading: false }])
+    useUpdateRuntimeOutcomeSessionFromLatestTruthMutation.mockReturnValue([
+      updateRuntimeOutcomeSessionFromLatestTruth,
+      { isLoading: false },
+    ])
     useCreateRuntimeOutputRequestMutation.mockReturnValue([createRuntimeOutputRequest, { isLoading: false }])
     useCreateRuntimeRevisionMutation.mockReturnValue([createRuntimeRevision, { isLoading: false }])
     useExecuteRuntimeActionMutation.mockReturnValue([executeRuntimeAction, { isLoading: false }])
@@ -614,14 +1004,52 @@ describe('RuntimeWorkspace', () => {
       error: null,
       refetch: refetchOutputLab,
     })
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: outcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: outcomeStudioPayload.readiness },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+    useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([
+      getRuntimeOutcomeAssetDetail,
+      {
+        data: null,
+        isFetching: false,
+        error: null,
+      },
+    ])
+    useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([
+      getRuntimeOutcomeAssetPreview,
+      {
+        data: null,
+        isFetching: false,
+        error: null,
+      },
+    ])
     useGetRuntimeTruthQualityQuery.mockReturnValue({
       data: { data: truthQualityPayload },
       isLoading: false,
       isFetching: false,
       error: null,
     })
+    useLazyExportRuntimeOutcomeAssetQuery.mockReturnValue([exportRuntimeOutcomeAsset, { isLoading: false }])
     useLazyExportRuntimeOutputAssetQuery.mockReturnValue([exportRuntimeOutputAsset, { isLoading: false }])
     useMutateRuntimeStateMutation.mockReturnValue([mutateRuntimeState, { isLoading: false }])
+    usePublishRuntimeOutcomeAssetMutation.mockReturnValue([publishRuntimeOutcomeAsset, { isLoading: false }])
     useUpdateRuntimeDiscoveryInputsMutation.mockReturnValue([updateRuntimeDiscoveryInputs, { isLoading: false }])
     useGetRuntimeRendererQuery.mockReturnValue({
       data: { data: rendererPayload },
@@ -1016,6 +1444,1211 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(within(main).getByRole('tab', { name: /composition/i }))
     expect(within(main).getByRole('button', { name: /^generate$/i })).toBeDisabled()
+  })
+
+  it('renders Outcome Studio as a blocked governed reasoning surface', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace()
+
+    expect(useGetRuntimeOutcomeStudioReadinessQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    expect(useGetRuntimeOutcomeStudioQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: true },
+    )
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+
+    expect(useGetRuntimeOutcomeStudioQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    expect(within(main).getByRole('heading', { name: /^outcome studio$/i })).toBeInTheDocument()
+    expect(within(main).getByRole('tablist', { name: /outcome studio sections/i })).toBeInTheDocument()
+    const readinessRegion = within(main).getByRole('region', { name: /outcome studio readiness/i })
+    expect(readinessRegion)
+      .toHaveTextContent('Adaptive Reasoning Layer must be active before Outcome Studio sessions can start.')
+    expect(readinessRegion)
+      .toHaveTextContent('Rendering Layer must be active before Outcome Studio sessions can start.')
+    expect(readinessRegion)
+      .toHaveTextContent('Output Schemas must be active before Outcome Studio sessions can start.')
+    expect(readinessRegion)
+      .toHaveTextContent('Truth Certification must be active before Outcome Studio sessions can start.')
+    expect(readinessRegion)
+      .toHaveTextContent('0 active / 5 required')
+    expect(readinessRegion)
+      .toHaveTextContent('5 source-only starter packs')
+    expect(readinessRegion)
+      .toHaveTextContent('2 passed / 5 gates')
+    const safetyGates = within(readinessRegion).getByRole('list', { name: /outcome studio safety gates/i })
+    expect(safetyGates).toHaveTextContent('Source Output Binding')
+    expect(safetyGates).toHaveTextContent('Truth Signature Binding')
+    expect(safetyGates).toHaveTextContent('Knowledge Pack Binding')
+    expect(safetyGates).toHaveTextContent('Prompt Persistence')
+    expect(safetyGates).toHaveTextContent('Response Generation Engine')
+    expect(safetyGates).toHaveTextContent('Assistant response generation is blocked until source, truth, knowledge-pack, and session gates pass.')
+    expect(safetyGates).toHaveTextContent('Pre Generation Gates Blocked')
+    expect(readinessRegion)
+      .toHaveTextContent('output-schemas-pack-v1.yaml')
+    expect(readinessRegion)
+      .toHaveTextContent('truth-certification-pack-v1.yaml')
+
+    await user.click(within(main).getByRole('tab', { name: /truth binding/i }))
+    const truthBinding = within(main).getByRole('region', { name: /outcome studio truth binding/i })
+    expect(within(truthBinding).getByText('Strategic Truth')).toBeInTheDocument()
+    expect(truthBinding).toHaveTextContent('runtime-trut...-fixture')
+    expect(truthBinding).toHaveTextContent('runtime-repl...tput-lab')
+    expect(within(truthBinding).getByRole('region', { name: /outcome studio truth signature projection/i }))
+      .toHaveTextContent('Current')
+    expect(within(truthBinding).getByRole('list', { name: /outcome studio truth signature evidence/i }))
+      .toHaveTextContent('Projected From Runtime Evidence')
+    expect(within(truthBinding).getByRole('list', { name: /outcome studio truth signature evidence/i }))
+      .toHaveTextContent('out_asset_test')
+    const truthUpdateButton = within(truthBinding).getByRole('button', { name: /update from latest truth/i })
+    expect(truthUpdateButton).toBeDisabled()
+    const truthUpdateReason = document.getElementById(truthUpdateButton.getAttribute('aria-describedby'))
+    expect(truthUpdateReason).toHaveTextContent(
+      'Update from latest truth requires an active Outcome Studio session.',
+    )
+    expect(truthBinding).toHaveTextContent('Asset out_asset_test')
+    expect(truthBinding).toHaveTextContent('Formats MARKDOWN, JSON')
+
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    expect(within(main).getByRole('textbox', { name: /prompt/i })).toBeDisabled()
+    const startSessionButton = within(main).getByRole('button', { name: /start session/i })
+    expect(startSessionButton).toBeDisabled()
+    await user.click(startSessionButton)
+    expect(createRuntimeOutcomeSession).not.toHaveBeenCalled()
+    expect(within(main).getAllByText(
+      'Outcome Studio requires active Outcome Studio knowledge pack bindings before sessions can start.',
+    ).length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('Raw generated output must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw prompt payload must not render.')).not.toBeInTheDocument()
+  })
+
+  it('submits Outcome Studio session starts only when readiness allows it', async () => {
+    const user = userEvent.setup()
+    const readyOutcomeStudioPayload = {
+      ...outcomeStudioPayload,
+      readiness: {
+        ...outcomeStudioPayload.readiness,
+        state: 'READY',
+        canStartSession: true,
+        canReason: false,
+        summary: 'Outcome Studio can start governed sessions; response generation remains blocked until all pre-generation gates pass.',
+        blockers: [],
+        safetyGates: {
+          ...outcomeStudioPayload.readiness.safetyGates,
+          passedCount: 4,
+          blockedCount: 1,
+        },
+      },
+      safetyGates: buildReadyOutcomeStudioSafetyGates(),
+      conversation: {
+        ...outcomeStudioPayload.conversation,
+        enabled: true,
+        disabledReason: '',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload.readiness },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    await user.type(within(main).getByRole('textbox', { name: /prompt/i }), 'Draft the governed outcome.')
+    await user.click(within(main).getByRole('button', { name: /start session/i }))
+
+    await waitFor(() => {
+      expect(createRuntimeOutcomeSession).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        body: {
+          sourceOutputAssetId: 'out_asset_test',
+          prompt: 'Draft the governed outcome.',
+        },
+      })
+    })
+    expect(await within(main).findByText('Outcome Studio session started.')).toBeInTheDocument()
+    expect(refetchOutcomeStudio).toHaveBeenCalled()
+  })
+
+  it('renders Outcome Studio prompt history and submits prompts for active sessions', async () => {
+    const user = userEvent.setup()
+    const activeSession = {
+      sessionId: 'out_sess_active_fixture',
+      status: 'ACTIVE',
+      sourceOutputAssetId: 'out_asset_test',
+      sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+      sourceOutputTypeLabel: 'Executive Brief',
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+        boundAt: '2026-06-15T08:20:00.000Z',
+      },
+      prompt: 'Initial governed prompt.',
+      startedAt: '2026-06-15T08:20:00.000Z',
+      lastActivityAt: '2026-06-15T08:24:00.000Z',
+    }
+    const readyOutcomeStudioPayload = {
+      ...outcomeStudioPayload,
+      readiness: {
+        ...outcomeStudioPayload.readiness,
+        state: 'READY',
+        canStartSession: true,
+        canReason: true,
+        summary: 'Outcome Studio can start governed sessions.',
+        blockers: [],
+        safetyGates: {
+          ...outcomeStudioPayload.readiness.safetyGates,
+          responseGenerationAvailable: true,
+          passedCount: 5,
+          blockedCount: 0,
+        },
+      },
+      safetyGates: buildReadyOutcomeStudioSafetyGates({ responseGenerationAvailable: true }),
+      packBinding: {
+        ...outcomeStudioPayload.packBinding,
+        status: 'BOUND',
+        activePacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+        requiredPacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+      },
+      conversation: {
+        ...outcomeStudioPayload.conversation,
+        enabled: true,
+        disabledReason: '',
+      },
+      sessions: [activeSession],
+    }
+    const sessionDetail = {
+      ...activeSession,
+      truthSignature: {
+        status: 'PROJECTED',
+        currentness: 'CURRENT',
+      },
+      messages: [
+        {
+          messageId: 'out_msg_existing_fixture',
+          sessionId: 'out_sess_active_fixture',
+          role: 'USER',
+          status: 'SUBMITTED',
+          responseStatus: 'PENDING_RESPONSE',
+          prompt: 'Existing governed prompt.',
+          submittedAt: '2026-06-15T08:24:00.000Z',
+          sourceOutput: {
+            markdown: 'Raw message source Markdown must not render.',
+          },
+          generatedResponse: 'Raw generated response must not render.',
+        },
+      ],
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload.readiness },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: { data: sessionDetail },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001', sessionId: 'out_sess_active_fixture' },
+      { skip: false },
+    )
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    const sessionRegion = within(main).getByRole('region', { name: /outcome studio active session/i })
+    expect(sessionRegion).toHaveTextContent('Executive Brief')
+    expect(sessionRegion).toHaveTextContent('5 active / 5 required')
+    const history = within(sessionRegion).getByRole('list', { name: /outcome studio prompt history/i })
+    expect(history).toHaveTextContent('Existing governed prompt.')
+    expect(history).toHaveTextContent('Pending Response')
+    expect(history).toHaveTextContent('Ready for governed response generation.')
+    const generateResponseButton = within(history).getByRole('button', { name: /generate response/i })
+    expect(generateResponseButton).toBeEnabled()
+    expect(screen.queryByText('Raw message source Markdown must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw generated response must not render.')).not.toBeInTheDocument()
+
+    await user.click(generateResponseButton)
+
+    await waitFor(() => {
+      expect(generateRuntimeOutcomeResponse).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        sessionId: 'out_sess_active_fixture',
+        messageId: 'out_msg_existing_fixture',
+        body: {},
+      })
+    })
+    expect(await within(main).findByText('Outcome Studio response generated.')).toBeInTheDocument()
+
+    const promptInput = within(main).getByRole('textbox', { name: /prompt/i })
+    const submitButton = within(main).getByRole('button', { name: /submit prompt/i })
+    expect(promptInput).toBeEnabled()
+    expect(submitButton).toBeDisabled()
+
+    await user.type(promptInput, 'Continue the governed outcome.')
+    expect(submitButton).toBeEnabled()
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(submitRuntimeOutcomeMessage).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        sessionId: 'out_sess_active_fixture',
+        body: {
+          prompt: 'Continue the governed outcome.',
+        },
+      })
+    })
+    expect(await within(main).findByText('Outcome Studio prompt submitted.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(promptInput).toHaveValue('')
+    })
+    expect(refetchOutcomeStudioSession).toHaveBeenCalled()
+    expect(refetchOutcomeStudio).toHaveBeenCalled()
+  })
+
+  it('blocks Outcome Studio prompt and response actions when active session truth is out of date', async () => {
+    const user = userEvent.setup()
+    const activeSession = {
+      sessionId: 'out_sess_active_fixture',
+      status: 'ACTIVE',
+      sourceOutputAssetId: 'out_asset_test',
+      sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+      sourceOutputTypeLabel: 'Executive Brief',
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      truthSignature: {
+        status: 'PROJECTED',
+        currentness: 'OUT_OF_DATE',
+      },
+    }
+    const readyOutcomeStudioPayload = {
+      ...outcomeStudioPayload,
+      readiness: {
+        ...outcomeStudioPayload.readiness,
+        state: 'READY',
+        canStartSession: true,
+        canReason: false,
+        blockers: [],
+        safetyGates: {
+          ...outcomeStudioPayload.readiness.safetyGates,
+          passedCount: 4,
+          blockedCount: 1,
+        },
+      },
+      truthBinding: {
+        ...outcomeStudioPayload.truthBinding,
+        truthSignature: {
+          ...outcomeStudioPayload.truthBinding.truthSignature,
+          currentness: 'OUT_OF_DATE',
+        },
+      },
+      safetyGates: buildReadyOutcomeStudioSafetyGates(),
+      packBinding: {
+        ...outcomeStudioPayload.packBinding,
+        status: 'BOUND',
+        activePacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+        requiredPacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+      },
+      conversation: {
+        ...outcomeStudioPayload.conversation,
+        enabled: true,
+        disabledReason: '',
+      },
+      sessions: [activeSession],
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload.readiness },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...activeSession,
+          messages: [
+            {
+              messageId: 'out_msg_existing_fixture',
+              sessionId: 'out_sess_active_fixture',
+              role: 'USER',
+              status: 'SUBMITTED',
+              responseStatus: 'PENDING_RESPONSE',
+              prompt: 'Existing governed prompt.',
+              submittedAt: '2026-06-15T08:24:00.000Z',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+
+    const history = within(main).getByRole('list', { name: /outcome studio prompt history/i })
+    expect(history).toHaveTextContent('Existing governed prompt.')
+    expect(history).toHaveTextContent('Response generation is blocked until the session truth signature is current.')
+    const generateResponseButton = within(history).getByRole('button', { name: /generate response/i })
+    expect(generateResponseButton).toBeDisabled()
+    expect(generateResponseButton).toHaveAccessibleDescription(
+      'Response generation is blocked until the session truth signature is current.',
+    )
+
+    const promptInput = within(main).getByRole('textbox', { name: /prompt/i })
+    const submitButton = within(main).getByRole('button', { name: /submit prompt/i })
+    expect(promptInput).toBeDisabled()
+    expect(submitButton).toBeDisabled()
+    expect(submitButton).toHaveAccessibleDescription(
+      'Prompt submission is blocked until the session truth signature is current.',
+    )
+    expect(within(main).getAllByText('Prompt submission is blocked until the session truth signature is current.')).toHaveLength(2)
+
+    await user.click(submitButton)
+    expect(submitRuntimeOutcomeMessage).not.toHaveBeenCalled()
+    await user.click(generateResponseButton)
+    expect(generateRuntimeOutcomeResponse).not.toHaveBeenCalled()
+  })
+
+  it('enables Outcome Studio update from latest truth for an out-of-date active session', async () => {
+    const user = userEvent.setup()
+    const activeSession = {
+      sessionId: 'out_sess_active_fixture',
+      status: 'ACTIVE',
+      sourceOutputAssetId: 'out_asset_test',
+      sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+      sourceOutputTypeLabel: 'Executive Brief',
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      truthSignature: {
+        truthSignatureId: 'truth_sig_existing_fixture',
+        status: 'PROJECTED',
+        currentness: 'OUT_OF_DATE',
+      },
+    }
+    const readyOutcomeStudioPayload = {
+      ...outcomeStudioPayload,
+      readiness: {
+        ...outcomeStudioPayload.readiness,
+        state: 'READY',
+        canStartSession: true,
+        blockers: [],
+      },
+      truthBinding: {
+        ...outcomeStudioPayload.truthBinding,
+        truthSignature: {
+          ...outcomeStudioPayload.truthBinding.truthSignature,
+          currentness: 'OUT_OF_DATE',
+        },
+      },
+      sessions: [activeSession],
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...activeSession,
+          messages: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /truth binding/i }))
+    const truthBinding = within(main).getByRole('region', { name: /outcome studio truth binding/i })
+    const truthUpdateButton = within(truthBinding).getByRole('button', { name: /update from latest truth/i })
+
+    expect(truthUpdateButton).toBeEnabled()
+    expect(truthUpdateButton).toHaveAccessibleDescription(
+      'Update from latest truth is available for this out-of-date session.',
+    )
+
+    await user.click(truthUpdateButton)
+
+    await waitFor(() => {
+      expect(updateRuntimeOutcomeSessionFromLatestTruth).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        sessionId: 'out_sess_active_fixture',
+        body: {},
+      })
+    })
+    expect(await within(main).findByText('Outcome Studio truth binding updated.')).toBeInTheDocument()
+    expect(refetchOutcomeStudioSession).toHaveBeenCalled()
+    expect(refetchOutcomeStudio).toHaveBeenCalled()
+  })
+
+  it('surfaces Outcome Studio update-from-latest-truth failures without enabling prompt actions', async () => {
+    const user = userEvent.setup()
+    unwrapUpdateRuntimeOutcomeSessionFromLatestTruth.mockRejectedValueOnce({
+      status: 500,
+      data: {
+        error: {
+          code: 'OUTCOME_TRUTH_UPDATE_AUDIT_FAILED',
+          message: 'Outcome Studio truth update audit could not be persisted.',
+          requestId: 'req-truth-update',
+        },
+      },
+    })
+    const activeSession = {
+      sessionId: 'out_sess_active_fixture',
+      status: 'ACTIVE',
+      sourceOutputAssetId: 'out_asset_test',
+      sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+      sourceOutputTypeLabel: 'Executive Brief',
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      truthSignature: {
+        truthSignatureId: 'truth_sig_existing_fixture',
+        status: 'PROJECTED',
+        currentness: 'OUT_OF_DATE',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          readiness: {
+            ...outcomeStudioPayload.readiness,
+            state: 'READY',
+            canStartSession: true,
+            blockers: [],
+          },
+          truthBinding: {
+            ...outcomeStudioPayload.truthBinding,
+            truthSignature: {
+              ...outcomeStudioPayload.truthBinding.truthSignature,
+              currentness: 'OUT_OF_DATE',
+            },
+          },
+          sessions: [activeSession],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...activeSession,
+          messages: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /truth binding/i }))
+    await user.click(within(main).getByRole('button', { name: /update from latest truth/i }))
+
+    expect(await within(main).findByText(/Outcome Studio truth update audit could not be persisted/)).toBeInTheDocument()
+    expect(refetchOutcomeStudioSession).not.toHaveBeenCalled()
+    expect(refetchOutcomeStudio).not.toHaveBeenCalled()
+
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    const promptInput = within(main).getByRole('textbox', { name: /prompt/i })
+    const submitButton = within(main).getByRole('button', { name: /submit prompt/i })
+    expect(promptInput).toBeDisabled()
+    expect(submitButton).toBeDisabled()
+  })
+
+  it('renders Outcome Studio asset metadata without exposing generated content or export controls', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+        hiddenInternals: 'Raw outcome asset truth internals must not render.',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+        activePacks: [
+          {
+            packKey: 'arl-core',
+            sourceBundle: 'Raw outcome asset pack source must not render.',
+          },
+        ],
+      },
+      sourceOutput: {
+        markdown: 'Raw outcome asset source Markdown must not render.',
+      },
+      customerContent: {
+        markdown: 'Raw outcome asset customer content must not render.',
+      },
+      lineageSummary: {
+        parentVersionId: 'outcome_asset_version_previous_fixture',
+        promptAssembly: 'Raw outcome asset prompt assembly must not render.',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+    const assetList = within(assetPanel).getByRole('list', { name: /outcome studio outcome assets/i })
+
+    expect(assetList).toHaveTextContent('Governed Board Narrative')
+    expect(assetList).toHaveTextContent('Board Narrative')
+    expect(assetList).toHaveTextContent('Generated')
+    expect(assetList).toHaveTextContent('Version 2')
+    expect(assetList).toHaveTextContent('Parent outcome_asse..._fixture')
+    expect(assetList).toHaveTextContent('Truth Current')
+    expect(assetList).toHaveTextContent('Packs 5/5')
+    expect(within(assetPanel).queryByRole('button', { name: /^markdown$/i })).not.toBeInTheDocument()
+    expect(within(assetPanel).queryByRole('button', { name: /^json$/i })).not.toBeInTheDocument()
+    expect(within(assetPanel).queryByRole('button', { name: /^docx$/i })).not.toBeInTheDocument()
+    expect(within(assetPanel).queryByRole('button', { name: /^pdf$/i })).not.toBeInTheDocument()
+    const publishButton = within(assetPanel).getByRole('button', { name: /^publish$/i })
+    expect(publishButton).toBeDisabled()
+    const publishReason = document.getElementById(publishButton.getAttribute('aria-describedby'))
+    expect(publishReason).toHaveTextContent('Publish is blocked until a persisted current version is available.')
+    expect(exportRuntimeOutcomeAsset).not.toHaveBeenCalled()
+    expect(screen.queryByText('Raw outcome asset truth internals must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset pack source must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset source Markdown must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset customer content must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset prompt assembly must not render.')).not.toBeInTheDocument()
+  })
+
+  it('downloads governed Outcome Studio Markdown exports from persisted current versions', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+        activePacks: [
+          {
+            packKey: 'arl-core',
+            sourceBundle: 'Raw outcome asset pack source must not render.',
+          },
+        ],
+      },
+      customerContent: {
+        markdown: 'Raw outcome asset customer content must not render.',
+      },
+      lineageSummary: {
+        parentVersionId: 'outcome_asset_version_previous_fixture',
+        promptAssembly: 'Raw outcome asset prompt assembly must not render.',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+
+    await user.click(within(assetPanel).getByRole('button', { name: /^markdown$/i }))
+
+    expect(exportRuntimeOutcomeAsset).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      format: 'MARKDOWN',
+    })
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+    const publishButton = within(assetPanel).getByRole('button', { name: /^publish$/i })
+    expect(publishButton).toBeEnabled()
+    await user.click(publishButton)
+    expect(publishRuntimeOutcomeAsset).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      body: {},
+    })
+    await within(main).findByText('Outcome Studio asset published.')
+    expect(refetchOutcomeStudio).toHaveBeenCalled()
+    const docxButton = within(assetPanel).getByRole('button', { name: /^docx$/i })
+    const pdfButton = within(assetPanel).getByRole('button', { name: /^pdf$/i })
+    expect(docxButton).toBeEnabled()
+    expect(pdfButton).toBeEnabled()
+    expect(assetPanel).not.toHaveTextContent(/safe rendering and QA pipeline/i)
+    unwrapExportRuntimeOutcomeAsset.mockResolvedValueOnce({
+      data: {
+        format: 'PDF',
+        filename: 'value-narrative-001-governed-board-narrative.pdf',
+        mimeType: 'application/pdf',
+        encoding: 'base64',
+        contentBase64: 'JVBERi0xLjQ=',
+      },
+    })
+    await user.click(pdfButton)
+    expect(exportRuntimeOutcomeAsset).toHaveBeenLastCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      format: 'PDF',
+    })
+    expect(exportRuntimeOutcomeAsset).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('Raw outcome asset customer content must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset pack source must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw outcome asset prompt assembly must not render.')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:output-lab-export')
+    }, { timeout: 2000 })
+  })
+
+  it('shows a governed export failure when Outcome Studio binary export content is malformed', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    unwrapExportRuntimeOutcomeAsset.mockResolvedValueOnce({
+      data: {
+        format: 'PDF',
+        filename: 'malformed.pdf',
+        mimeType: 'application/pdf',
+        encoding: 'base64',
+        contentBase64: 'not valid base64 %%%',
+      },
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+
+    await user.click(within(assetPanel).getByRole('button', { name: /^pdf$/i }))
+
+    await screen.findByText('Outcome export failed')
+    expect(screen.getByText('Export content could not be decoded.')).toBeInTheDocument()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+  })
+
+  it('loads sanitized Outcome Studio asset version metadata without rendering generated content', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      lineageSummary: {
+        parentVersionId: 'outcome_asset_version_previous_fixture',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([
+      getRuntimeOutcomeAssetDetail,
+      {
+        data: {
+          data: {
+            ...outcomeAsset,
+            customerContent: {
+              markdown: 'Raw generated customer body must not render.',
+            },
+            sourceOutput: {
+              markdown: 'Raw source output body must not render.',
+            },
+            knowledgePackBinding: {
+              ...outcomeAsset.knowledgePackBinding,
+              activePacks: [
+                {
+                  packKey: 'arl-core',
+                  sourceBundle: 'Raw pack source must not render.',
+                },
+              ],
+            },
+            versions: [
+              {
+                outcomeAssetVersionId: 'outcome_asset_version_existing_fixture',
+                versionNumber: 2,
+                status: 'CURRENT',
+                contentAvailable: true,
+                generatedAt: '2026-06-15T08:34:00.000Z',
+                truthSignature: {
+                  status: 'BOUND',
+                  currentness: 'CURRENT',
+                },
+                warnings: ['Review by account owner before external use.'],
+                limitations: ['No quantified ROI evidence.'],
+                customerContent: {
+                  markdown: 'Raw version customer body must not render.',
+                },
+                promptAssembly: 'Raw prompt assembly must not render.',
+              },
+            ],
+          },
+        },
+        isFetching: false,
+        error: null,
+      },
+    ])
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+
+    await user.click(within(assetPanel).getByRole('button', { name: /^view versions$/i }))
+
+    expect(getRuntimeOutcomeAssetDetail).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+    })
+    const versionRegion = within(assetPanel).getByRole('region', {
+      name: /outcome studio asset version metadata/i,
+    })
+    expect(versionRegion).toHaveTextContent('Asset Version Metadata')
+    expect(versionRegion).toHaveTextContent('Governed Board Narrative')
+    expect(versionRegion).toHaveTextContent('1 versions')
+    expect(versionRegion).toHaveTextContent('Version 2')
+    expect(versionRegion).toHaveTextContent('Truth Current')
+    expect(versionRegion).toHaveTextContent('Content available')
+    expect(versionRegion).toHaveTextContent('Warnings 1')
+    expect(versionRegion).toHaveTextContent('Limitations 1')
+    expect(screen.queryByText('Raw generated customer body must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw source output body must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw pack source must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw version customer body must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw prompt assembly must not render.')).not.toBeInTheDocument()
+  })
+
+  it('renders governed Outcome Studio generated body preview without using export or raw internals', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([
+      getRuntimeOutcomeAssetPreview,
+      {
+        data: {
+          data: {
+            outcomeAssetId: 'outcome_asset_existing_fixture',
+            outcomeAssetVersionId: 'outcome_asset_version_existing_fixture',
+            title: 'Governed Board Narrative',
+            versionNumber: 2,
+            status: 'CURRENT',
+            previewAvailable: true,
+            markdown: [
+              '# Governed Board Narrative',
+              '',
+              'Customer-facing generated body.',
+              '',
+              '## Evidence Themes',
+              '',
+              '- Certified runtime truth only',
+              '- No hidden reasoning',
+              '',
+              '<script>Raw preview script must not execute.</script>',
+            ].join('\n'),
+            sections: [
+              {
+                key: 'executive-narrative',
+                label: 'Executive Narrative',
+                body: 'Customer-facing section body.',
+                hiddenReasoning: 'Raw preview section internals must not render.',
+              },
+            ],
+            truthSignature: {
+              status: 'BOUND',
+              currentness: 'CURRENT',
+            },
+            customerContent: {
+              rawInternal: 'Raw preview customer content object must not render.',
+            },
+            sourceOutput: {
+              markdown: 'Raw preview source Markdown must not render.',
+            },
+            knowledgePackBinding: {
+              sourceBundle: 'Raw preview pack source must not render.',
+            },
+            generatedAt: '2026-06-15T08:34:00.000Z',
+          },
+        },
+        isFetching: false,
+        error: null,
+      },
+    ])
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+
+    await user.click(within(assetPanel).getByRole('button', { name: /^view versions$/i }))
+
+    expect(getRuntimeOutcomeAssetPreview).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+    })
+    expect(exportRuntimeOutcomeAsset).not.toHaveBeenCalled()
+    const previewRegion = within(assetPanel).getByRole('region', {
+      name: /outcome studio generated body preview/i,
+    })
+    expect(previewRegion).toHaveTextContent('Generated Body Preview')
+    expect(previewRegion).toHaveTextContent('Available')
+    expect(previewRegion).toHaveTextContent('2 / Current')
+    expect(within(previewRegion).getByRole('heading', { name: 'Governed Board Narrative' })).toBeInTheDocument()
+    expect(previewRegion).toHaveTextContent('Customer-facing generated body.')
+    expect(within(previewRegion).getByRole('heading', { name: 'Evidence Themes' })).toBeInTheDocument()
+    expect(within(previewRegion).getByText('Certified runtime truth only')).toBeInTheDocument()
+    expect(within(previewRegion).getByText('No hidden reasoning')).toBeInTheDocument()
+    expect(previewRegion.querySelector('script')).not.toBeInTheDocument()
+    expect(previewRegion).toHaveTextContent('<script>Raw preview script must not execute.</script>')
+    expect(within(previewRegion).getByRole('list', { name: /outcome studio generated body sections/i }))
+      .toHaveTextContent('Executive Narrative')
+    expect(previewRegion).toHaveTextContent('Customer-facing section body.')
+    expect(screen.queryByText('Raw preview section internals must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw preview customer content object must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw preview source Markdown must not render.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw preview pack source must not render.')).not.toBeInTheDocument()
+  })
+
+  it('renders Outcome Studio generated body preview blockers without export attempts', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'CURRENT',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([
+      getRuntimeOutcomeAssetPreview,
+      {
+        data: null,
+        isFetching: false,
+        error: {
+          status: 409,
+          data: {
+            error: {
+              code: 'CONFLICT',
+              message: 'Outcome Studio asset preview requires current certified runtime truth.',
+              details: {
+                reason: 'OUTCOME_ASSET_PREVIEW_BLOCKED',
+              },
+            },
+          },
+        },
+      },
+    ])
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+
+    await user.click(within(assetPanel).getByRole('button', { name: /^view versions$/i }))
+
+    expect(getRuntimeOutcomeAssetPreview).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+    })
+    expect(exportRuntimeOutcomeAsset).not.toHaveBeenCalled()
+    const previewRegion = within(assetPanel).getByRole('region', {
+      name: /outcome studio generated body preview/i,
+    })
+    expect(previewRegion).toHaveTextContent('Unavailable')
+    expect(previewRegion).toHaveTextContent(
+      'Outcome Studio asset preview requires current certified runtime truth.',
+    )
+  })
+
+  it('blocks Outcome Studio exports when asset truth is out of date', async () => {
+    const user = userEvent.setup()
+    const outcomeAsset = {
+      outcomeAssetId: 'outcome_asset_existing_fixture',
+      title: 'Governed Board Narrative',
+      outputTypeKey: 'BOARD_NARRATIVE',
+      outputTypeLabel: 'Board Narrative',
+      status: 'GENERATED',
+      currentVersionId: 'outcome_asset_version_existing_fixture',
+      currentVersionNumber: 2,
+      generatedAt: '2026-06-15T08:32:00.000Z',
+      truthSignature: {
+        status: 'BOUND',
+        currentness: 'OUT_OF_DATE',
+      },
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      lineageSummary: {
+        parentVersionId: 'outcome_asset_version_previous_fixture',
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...outcomeStudioPayload,
+          assets: [outcomeAsset],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /assets/i }))
+    const assetPanel = within(main).getByRole('region', { name: /outcome studio assets/i })
+    const assetList = within(assetPanel).getByRole('list', { name: /outcome studio outcome assets/i })
+
+    expect(assetList).toHaveTextContent('Truth Out Of Date')
+    expect(assetList).toHaveTextContent('Export is blocked until the outcome asset truth signature is current.')
+    const markdownButton = within(assetPanel).getByRole('button', { name: /^markdown$/i })
+    const jsonButton = within(assetPanel).getByRole('button', { name: /^json$/i })
+    expect(markdownButton).toBeDisabled()
+    expect(jsonButton).toBeDisabled()
+    expect(markdownButton).toHaveAccessibleDescription(
+      'Export is blocked until the outcome asset truth signature is current.',
+    )
+
+    await user.click(markdownButton)
+    await user.click(jsonButton)
+    expect(exportRuntimeOutcomeAsset).not.toHaveBeenCalled()
   })
 
   it('renders Truth Quality in Output Lab without exposing raw evidence or graph payloads', async () => {

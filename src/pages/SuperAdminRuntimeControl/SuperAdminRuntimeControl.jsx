@@ -10,6 +10,7 @@ import {
   MdKey,
   MdLabel,
   MdPalette,
+  MdSchema,
   MdRule,
   MdSmartToy,
   MdTune,
@@ -78,6 +79,12 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
     taskKey: 'FE-14',
     Icon: MdPalette,
   },
+  {
+    routeKey: 'knowledgePacks',
+    description: 'Version starter Outcome Studio packs and activate runtime bindings without editing ARL/RL sources in-app.',
+    taskKey: 'OES-002A',
+    Icon: MdSchema,
+  },
 ]).map((module) => ({
   ...module,
   route: getSuperAdminRoute(module.routeKey),
@@ -142,9 +149,9 @@ function SuperAdminRuntimeControl() {
               Current delivery state
             </h2>
             <p className="super-admin-runtime-control__hero-note-copy">
-              Framework Registry, Framework Packages, Agents, Skills, and Workflow Policies are
-              now live as the Runtime Control catalogue pages while the legacy System
-              Versioning route stays available.
+              Framework Registry, Framework Packages, UI Contracts, Knowledge Packs, Agents,
+              Skills, and Workflow Policies are now live as Runtime Control catalogue pages
+              while the legacy System Versioning route stays available.
             </p>
           </div>
         </Card.Body>

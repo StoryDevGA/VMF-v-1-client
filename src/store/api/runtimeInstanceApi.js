@@ -99,6 +99,93 @@ export const buildRuntimeOutputLabReadinessQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeOutputLabDefinitionsQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/definitions`
 
+export const buildRuntimeOutcomeStudioQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio`
+
+export const buildRuntimeOutcomeStudioReadinessQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/readiness`
+
+export const buildCreateRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, body = {} }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions`,
+  method: 'POST',
+  body,
+})
+
+export const buildRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, sessionId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }`
+
+export const buildUpdateRuntimeOutcomeSessionFromLatestTruthQuery = ({
+  runtimeInstanceId,
+  sessionId,
+  body = {},
+}) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/update-from-latest-truth`,
+  method: 'POST',
+  body,
+})
+
+export const buildRuntimeOutcomeSessionAssetsQuery = ({ runtimeInstanceId, sessionId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/assets`
+
+export const buildRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }`
+
+export const buildRuntimeOutcomeAssetPreviewQuery = ({ runtimeInstanceId, outcomeAssetId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/preview`
+
+export const buildRuntimeOutcomeAssetVersionQuery = ({
+  runtimeInstanceId,
+  outcomeAssetId,
+  outcomeAssetVersionId,
+}) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/versions/${encodeURIComponent(String(outcomeAssetVersionId ?? '').trim())}`
+
+export const buildPublishRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, body = {} }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/publish`,
+  method: 'POST',
+  body,
+})
+
+export const buildExportRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, format }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/export/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`
+
+export const buildSubmitRuntimeOutcomeMessageQuery = ({ runtimeInstanceId, sessionId, body = {} }) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/messages`,
+  method: 'POST',
+  body,
+})
+
+export const buildGenerateRuntimeOutcomeResponseQuery = ({
+  runtimeInstanceId,
+  sessionId,
+  messageId,
+  body = {},
+}) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/messages/${encodeURIComponent(String(messageId ?? '').trim())}/generate-response`,
+  method: 'POST',
+  body,
+})
+
 export const buildCreateRuntimeOutputRequestQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/requests`,
   method: 'POST',
@@ -294,6 +381,11 @@ export const getClearRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeSt
 export const getReviewRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getReviewAllRuntimeSectionEvidenceInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getRebuildRuntimeIntelligenceGraphInvalidationTags = getMutateRuntimeStateInvalidationTags
+export const getCreateRuntimeOutcomeSessionInvalidationTags = getRuntimeInstanceDetailTags
+export const getSubmitRuntimeOutcomeMessageInvalidationTags = getRuntimeInstanceDetailTags
+export const getGenerateRuntimeOutcomeResponseInvalidationTags = getRuntimeInstanceDetailTags
+export const getUpdateRuntimeOutcomeSessionFromLatestTruthInvalidationTags = getRuntimeInstanceDetailTags
+export const getPublishRuntimeOutcomeAssetInvalidationTags = getRuntimeInstanceDetailTags
 export const getCreateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getGenerateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getPublishRuntimeOutputAssetInvalidationTags = getMutateRuntimeStateInvalidationTags
@@ -343,6 +435,71 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeOutputLabDefinitions: build.query({
       query: buildRuntimeOutputLabDefinitionsQuery,
       providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeStudio: build.query({
+      query: buildRuntimeOutcomeStudioQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeStudioReadiness: build.query({
+      query: buildRuntimeOutcomeStudioReadinessQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    createRuntimeOutcomeSession: build.mutation({
+      query: buildCreateRuntimeOutcomeSessionQuery,
+      invalidatesTags: getCreateRuntimeOutcomeSessionInvalidationTags,
+    }),
+
+    getRuntimeOutcomeSession: build.query({
+      query: buildRuntimeOutcomeSessionQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeSessionAssets: build.query({
+      query: buildRuntimeOutcomeSessionAssetsQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeAsset: build.query({
+      query: buildRuntimeOutcomeAssetQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeAssetPreview: build.query({
+      query: buildRuntimeOutcomeAssetPreviewQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeOutcomeAssetVersion: build.query({
+      query: buildRuntimeOutcomeAssetVersionQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    publishRuntimeOutcomeAsset: build.mutation({
+      query: buildPublishRuntimeOutcomeAssetQuery,
+      invalidatesTags: getPublishRuntimeOutcomeAssetInvalidationTags,
+    }),
+
+    exportRuntimeOutcomeAsset: build.query({
+      query: buildExportRuntimeOutcomeAssetQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    submitRuntimeOutcomeMessage: build.mutation({
+      query: buildSubmitRuntimeOutcomeMessageQuery,
+      invalidatesTags: getSubmitRuntimeOutcomeMessageInvalidationTags,
+    }),
+
+    generateRuntimeOutcomeResponse: build.mutation({
+      query: buildGenerateRuntimeOutcomeResponseQuery,
+      invalidatesTags: getGenerateRuntimeOutcomeResponseInvalidationTags,
+    }),
+
+    updateRuntimeOutcomeSessionFromLatestTruth: build.mutation({
+      query: buildUpdateRuntimeOutcomeSessionFromLatestTruthQuery,
+      invalidatesTags: getUpdateRuntimeOutcomeSessionFromLatestTruthInvalidationTags,
     }),
 
     createRuntimeOutputRequest: build.mutation({
@@ -479,6 +636,20 @@ export const {
   useGetRuntimeOutputLabQuery,
   useGetRuntimeOutputLabDefinitionsQuery,
   useGetRuntimeOutputLabReadinessQuery,
+  useGetRuntimeOutcomeStudioQuery,
+  useGetRuntimeOutcomeStudioReadinessQuery,
+  useGetRuntimeOutcomeSessionQuery,
+  useGetRuntimeOutcomeSessionAssetsQuery,
+  useGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeAssetPreviewQuery,
+  useGetRuntimeOutcomeAssetVersionQuery,
+  usePublishRuntimeOutcomeAssetMutation,
+  useLazyExportRuntimeOutcomeAssetQuery,
+  useCreateRuntimeOutcomeSessionMutation,
+  useSubmitRuntimeOutcomeMessageMutation,
+  useGenerateRuntimeOutcomeResponseMutation,
+  useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
   useGetRuntimeTruthQualityQuery,
   useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeIntelligenceGraphCoverageQuery,

@@ -16,6 +16,7 @@ import {
   MdFactCheck,
   MdInfoOutline,
   MdInventory2,
+  MdLockOutline,
   MdOutlineHistory,
   MdRefresh,
   MdSave,
@@ -48,19 +49,30 @@ import {
   useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
+  useCreateRuntimeOutcomeSessionMutation,
   useCreateRuntimeOutputRequestMutation,
   useCreateRuntimeRevisionMutation,
   useGenerateRuntimeOutputRequestMutation,
   useGetRuntimeIntelligenceGraphQuery,
   useGetRuntimeOutputLabQuery,
+  useGetRuntimeOutcomeStudioQuery,
+  useGetRuntimeOutcomeStudioReadinessQuery,
+  useGetRuntimeOutcomeSessionQuery,
+  useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
+  useGenerateRuntimeOutcomeResponseMutation,
+  useLazyExportRuntimeOutcomeAssetQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useMutateRuntimeStateMutation,
+  usePublishRuntimeOutcomeAssetMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
   useReviewAllRuntimeSectionEvidenceMutation,
   useReviewRuntimeSectionEvidenceMutation,
+  useSubmitRuntimeOutcomeMessageMutation,
+  useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
   useUpdateRuntimeSectionEvidenceMutation,
   useUpdateRuntimeDiscoveryInputsMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -436,8 +448,12 @@ const LOCKED_RUNTIME_INSPECTION_REASON =
 
 const DISCOVERY_NAV_KEY = 'discovery'
 const OUTPUT_LAB_NAV_KEY = 'output_lab'
+const OUTCOME_STUDIO_NAV_KEY = 'outcome_studio'
 const OUTPUT_LAB_LABEL = 'Output Lab'
+const OUTCOME_STUDIO_LABEL = 'Outcome Studio'
 const OUTPUT_LAB_DOWNLOAD_CLEANUP_DELAY_MS = 1000
+const OUTCOME_STUDIO_IMPLEMENTED_EXPORT_FORMATS = Object.freeze(['MARKDOWN', 'JSON', 'DOCX', 'PDF'])
+const OUTCOME_STUDIO_BLOCKED_EXPORT_FORMATS = Object.freeze([])
 const ACTIVITY_PREVIEW_LIMIT = 3
 const SIGNAL_PREVIEW_LIMIT = 3
 const WARNING_PREVIEW_LIMIT = 1
@@ -888,6 +904,90 @@ const stringifyAcceptedContent = (accepted) => {
   if (!accepted) return ''
   if (typeof accepted.content === 'string') return accepted.content
   return stringifyValue(accepted.content ?? accepted)
+}
+
+const normalizePreviewMarkdownLine = (line = '') =>
+  String(line || '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim()
+
+const parseGovernedMarkdownPreview = (markdown = '') => {
+  const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n')
+  const blocks = []
+  let paragraphLines = []
+  let listItems = []
+  let listOrdered = false
+
+  const flushParagraph = () => {
+    const text = normalizePreviewMarkdownLine(paragraphLines.join(' '))
+    if (text) {
+      blocks.push({
+        type: 'paragraph',
+        text,
+      })
+    }
+    paragraphLines = []
+  }
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({
+        type: listOrdered ? 'ordered-list' : 'unordered-list',
+        items: listItems,
+      })
+    }
+    listItems = []
+    listOrdered = false
+  }
+
+  lines.forEach((line) => {
+    const rawLine = String(line || '')
+    const trimmedLine = rawLine.trim()
+
+    if (!trimmedLine) {
+      flushParagraph()
+      flushList()
+      return
+    }
+
+    const headingMatch = trimmedLine.match(/^(#{1,3})\s+(.+)$/)
+    if (headingMatch) {
+      flushParagraph()
+      flushList()
+      blocks.push({
+        type: 'heading',
+        level: headingMatch[1].length,
+        text: normalizePreviewMarkdownLine(headingMatch[2]),
+      })
+      return
+    }
+
+    const bulletMatch = trimmedLine.match(/^[-*]\s+(.+)$/)
+    const orderedMatch = trimmedLine.match(/^\d+[.)]\s+(.+)$/)
+    if (bulletMatch || orderedMatch) {
+      flushParagraph()
+      const isOrdered = Boolean(orderedMatch)
+      if (listItems.length > 0 && listOrdered !== isOrdered) {
+        flushList()
+      }
+      listOrdered = isOrdered
+      const listText = normalizePreviewMarkdownLine((bulletMatch || orderedMatch)[1])
+      if (listText) listItems.push(listText)
+      return
+    }
+
+    flushList()
+    paragraphLines.push(trimmedLine)
+  })
+
+  flushParagraph()
+  flushList()
+
+  return blocks
 }
 
 const isAcceptedGeneratedCurrent = ({ accepted, generated }) => {
@@ -3456,8 +3556,10 @@ function RuntimeSectionNavigation({
   discoveryState = 'Evidence Not Ready',
   lockedInspection = false,
   onSelectDiscovery,
+  onSelectOutcomeStudio,
   onSelectOutputLab,
   onSelectSection,
+  outcomeStudioState = 'Not Ready',
   outputLabState = 'Not Ready',
   sections = EMPTY_ARRAY,
 }) {
@@ -3528,6 +3630,21 @@ function RuntimeSectionNavigation({
               <small>{outputLabState}</small>
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              className={[
+                'runtime-workspace__section-nav-button',
+                activeKey === OUTCOME_STUDIO_NAV_KEY && 'runtime-workspace__section-nav-button--active',
+              ].filter(Boolean).join(' ')}
+              aria-current={activeKey === OUTCOME_STUDIO_NAV_KEY ? 'step' : undefined}
+              onClick={onSelectOutcomeStudio}
+            >
+              <span><MdAccountTree aria-hidden="true" /></span>
+              <strong title={OUTCOME_STUDIO_LABEL}>{OUTCOME_STUDIO_LABEL}</strong>
+              <small>{outcomeStudioState}</small>
+            </button>
+          </li>
         </ol>
       </div>
     </nav>
@@ -3535,6 +3652,79 @@ function RuntimeSectionNavigation({
 }
 
 const getOutputLabPayload = (response) => response?.data ?? response ?? null
+
+const getOutcomeStudioPayload = (response) => response?.data ?? response ?? null
+
+const decodeBase64Content = (value = '') => {
+  let binary = ''
+  try {
+    binary = window.atob(String(value || ''))
+  } catch {
+    throw new Error('Export content could not be decoded.')
+  }
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes
+}
+
+const getOutcomeStudioSessionId = (session) => String(session?.sessionId ?? session?.id ?? session?._id ?? '').trim()
+
+const getActiveOutcomeStudioSession = (outcomeStudio) => {
+  const sessions = Array.isArray(outcomeStudio?.sessions) ? outcomeStudio.sessions : EMPTY_ARRAY
+  return sessions.find((session) => normalizeRuntimeActionToken(session?.status) === 'ACTIVE')
+    || sessions[0]
+    || null
+}
+
+const getOutcomeStudioMessages = (session) =>
+  (Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY)
+    .filter((message) => String(message?.prompt ?? '').trim())
+
+const refetchOutcomeStudioQueries = async (...refetchers) => {
+  const pendingRefetches = refetchers
+    .filter((refetcher) => typeof refetcher === 'function')
+    .map((refetcher) => refetcher())
+
+  if (pendingRefetches.length === 0) return
+
+  const results = await Promise.allSettled(pendingRefetches)
+  results
+    .filter((result) => result.status === 'rejected')
+    .forEach((result) => {
+      console.warn('Outcome Studio refetch failed after mutation.', result.reason)
+    })
+}
+
+const getOutcomeStudioAssetId = (asset = {}) =>
+  String(asset.outcomeAssetId || asset.assetId || asset.id || asset._id || '').trim()
+
+const getOutcomeStudioMessageVariant = (message) => {
+  const responseStatus = normalizeRuntimeActionToken(message?.responseStatus)
+  if (responseStatus === 'PENDING_RESPONSE') return 'warning'
+  if (responseStatus === 'RESPONSE_READY' || responseStatus === 'COMPLETED') return 'success'
+  if (responseStatus === 'FAILED' || responseStatus === 'BLOCKED') return 'error'
+  return getTokenStatusVariant(message?.status || responseStatus || 'SUBMITTED')
+}
+
+const getOutcomeStudioResponseGenerationGate = (safetyGates = {}) =>
+  (Array.isArray(safetyGates.gates) ? safetyGates.gates : EMPTY_ARRAY)
+    .find((gate) => normalizeRuntimeActionToken(gate?.code) === 'RESPONSE_GENERATION_ENGINE')
+    || null
+
+const getOutcomeStudioResponseGenerationDisabledReason = ({
+  conversation = {},
+  readiness = {},
+  safetyGates = {},
+} = {}) => {
+  const responseGate = getOutcomeStudioResponseGenerationGate(safetyGates)
+  return responseGate?.message
+    || safetyGates.summary
+    || conversation.disabledReason
+    || readiness.summary
+    || 'Assistant response generation is blocked until the governed reasoning engine is implemented.'
+}
 
 const getTruthQualityPayload = (response) => response?.data ?? response ?? null
 
@@ -3769,6 +3959,16 @@ const getOutputLabReadinessLabel = (outputLab, { loading = false, error = null }
   if (error) return 'Unavailable'
   const readiness = outputLab?.readiness || {}
   if (readiness.canGenerate === true) {
+    return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
+  }
+  return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Not Ready'
+}
+
+const getOutcomeStudioReadinessLabel = (outcomeStudio, { loading = false, error = null } = {}) => {
+  if (loading) return 'Loading'
+  if (error) return 'Unavailable'
+  const readiness = outcomeStudio?.readiness || {}
+  if (readiness.canStartSession === true) {
     return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
   }
   return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Not Ready'
@@ -4054,6 +4254,1041 @@ function OutputLabSection({
               <div className="runtime-workspace__section-tab-panel">
                 <div className="runtime-workspace__section-panels runtime-workspace__section-panels--output-lab">
                   {outputsPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+          </TabView>
+        </div>
+      </Card.Body>
+    </Card>
+  )
+}
+
+function OutcomeStudioSection({
+  activeSession = null,
+  assetDetail = null,
+  assetDetailError = null,
+  assetDetailLoading = false,
+  assetPreview = null,
+  assetPreviewError = null,
+  assetPreviewLoading = false,
+  creatingSession = false,
+  error = null,
+  feedback = null,
+  exportingAssetKey = '',
+  generatingResponse = false,
+  loading = false,
+  onExportAsset,
+  onGenerateResponse,
+  onPublishAsset,
+  onStartSession,
+  onSubmitPrompt,
+  onUpdateFromLatestTruth,
+  onViewAssetVersions,
+  outcomeStudio = null,
+  selectedAssetId = '',
+  sessionDetail = null,
+  sessionError = null,
+  sessionLoading = false,
+  publishingAssetKey = '',
+  submittingPrompt = false,
+  updatingTruth = false,
+}) {
+  const [activeOutcomeStudioTab, setActiveOutcomeStudioTab] = useState(0)
+  const [promptDraft, setPromptDraft] = useState('')
+  const readiness = outcomeStudio?.readiness || {}
+  const truthBinding = outcomeStudio?.truthBinding || {}
+  const truthSignature = truthBinding.truthSignature || {}
+  const truthSignatureEvidence = truthSignature.evidence || {}
+  const missingSignatureEvidence = Array.isArray(truthSignature.missingEvidence)
+    ? truthSignature.missingEvidence
+    : EMPTY_ARRAY
+  const packBinding = outcomeStudio?.packBinding || {}
+  const safetyGates = outcomeStudio?.safetyGates || {}
+  const conversation = outcomeStudio?.conversation || {}
+  const blockers = Array.isArray(readiness.blockers) ? readiness.blockers : EMPTY_ARRAY
+  const warnings = Array.isArray(readiness.warnings) ? readiness.warnings : EMPTY_ARRAY
+  const safetyGateRows = Array.isArray(safetyGates.gates) ? safetyGates.gates : EMPTY_ARRAY
+  const requiredPacks = Array.isArray(packBinding.requiredPacks) ? packBinding.requiredPacks : EMPTY_ARRAY
+  const outcomeAssets = Array.isArray(sessionDetail?.assets)
+    ? sessionDetail.assets
+    : Array.isArray(outcomeStudio?.assets)
+      ? outcomeStudio.assets
+      : EMPTY_ARRAY
+  const selectedOutcomeAssetId = String(selectedAssetId || '').trim()
+  const selectedOutcomeAsset = outcomeAssets.find((asset) =>
+    getOutcomeStudioAssetId(asset) === selectedOutcomeAssetId)
+  const selectedAssetDetail = assetDetail
+    && getOutcomeStudioAssetId(assetDetail) === selectedOutcomeAssetId
+      ? assetDetail
+      : null
+  const selectedAssetPreview = assetPreview
+    && getOutcomeStudioAssetId(assetPreview) === selectedOutcomeAssetId
+      ? assetPreview
+      : null
+  const selectedAssetVersions = Array.isArray(selectedAssetDetail?.versions)
+    ? selectedAssetDetail.versions
+    : EMPTY_ARRAY
+  const sourceOnlyPacks = requiredPacks.filter((pack) => pack.status === 'SOURCE_ONLY')
+  const sourceOutput = truthBinding.sourceOutput || (
+    Array.isArray(outcomeStudio?.sourceOutputs) ? outcomeStudio.sourceOutputs[0] : null
+  )
+  const sourceSnapshot = sourceOutput?.sourceSnapshot || {}
+  const activeSessionId = getOutcomeStudioSessionId(sessionDetail) || getOutcomeStudioSessionId(activeSession)
+  const activeSessionStatus = normalizeRuntimeActionToken(sessionDetail?.status || activeSession?.status)
+  const hasActiveSession = Boolean(activeSessionId) && activeSessionStatus === 'ACTIVE'
+  const sessionTruthSignature = sessionDetail?.truthSignature || activeSession?.truthSignature || truthSignature
+  const sessionTruthCurrentness = normalizeRuntimeActionToken(
+    sessionTruthSignature?.currentness || sessionTruthSignature?.status || 'UNKNOWN',
+  )
+  const sessionTruthNotCurrent = hasActiveSession
+    && !sessionLoading
+    && !sessionError
+    && sessionTruthCurrentness !== 'CURRENT'
+  const sessionMessages = getOutcomeStudioMessages(sessionDetail)
+  const responseGenerationAvailable = safetyGates.responseGenerationAvailable === true
+    || readiness.safetyGates?.responseGenerationAvailable === true
+  const responseGenerationDisabledReason = getOutcomeStudioResponseGenerationDisabledReason({
+    conversation,
+    readiness,
+    safetyGates,
+  })
+  const truthUpdateReasonId = 'runtime-outcome-studio-truth-update-reason'
+  const canUpdateTruth = hasActiveSession
+    && !sessionLoading
+    && !sessionError
+    && sessionTruthNotCurrent
+    && !updatingTruth
+  const truthUpdateDisabledReason = hasActiveSession
+    ? sessionTruthNotCurrent
+      ? 'Update from latest truth is available for this out-of-date session.'
+      : 'Update from latest truth is available only when the session truth signature is out of date.'
+    : 'Update from latest truth requires an active Outcome Studio session.'
+  const promptTruthReasonId = 'runtime-outcome-studio-prompt-truth-reason'
+  const promptTruthDisabledReason = 'Prompt submission is blocked until the session truth signature is current.'
+  const responseTruthDisabledReason = 'Response generation is blocked until the session truth signature is current.'
+  const canStartSession = readiness.canStartSession === true
+  const canSubmitPrompt = hasActiveSession
+    && !sessionLoading
+    && !sessionError
+    && !sessionTruthNotCurrent
+    && !submittingPrompt
+  const conversationStateLabel = hasActiveSession ? 'Active Session' : canStartSession ? 'Available' : 'Blocked'
+  const conversationStateVariant = hasActiveSession || canStartSession ? 'success' : 'danger'
+  const disabledReason = conversation.disabledReason
+    || readiness.summary
+    || 'Outcome Studio sessions are not available.'
+  const promptDisabled = hasActiveSession
+    ? submittingPrompt || sessionTruthNotCurrent
+    : !canStartSession || creatingSession
+  const promptHelperText = hasActiveSession
+    ? sessionTruthNotCurrent
+      ? promptTruthDisabledReason
+      : `${String(promptDraft || '').length}/${Number(conversation.promptMaxLength) || 2000}`
+    : disabledReason
+  const promptMaxLength = Number(conversation.promptMaxLength) || 2000
+  const readinessVariant = canStartSession
+    ? getTokenStatusVariant(readiness.state || 'READY')
+    : 'error'
+  const packSummary = requiredPacks.length > 0
+    ? `${packBinding.activePacks?.length || 0} active / ${requiredPacks.length} required`
+    : 'No packs'
+  const packSourceSummary = sourceOnlyPacks.length > 0
+    ? `${sourceOnlyPacks.length} source-only starter pack${sourceOnlyPacks.length === 1 ? '' : 's'}`
+    : 'No starter packs'
+  const safetyGateSummary = Number(safetyGates.totalCount) > 0
+    ? `${Number(safetyGates.passedCount) || 0} passed / ${Number(safetyGates.totalCount) || 0} gates`
+    : 'Not projected'
+  const assetSummary = outcomeAssets.length > 0
+    ? `${outcomeAssets.length} asset${outcomeAssets.length === 1 ? '' : 's'}`
+    : 'No assets'
+  const handleSubmitPrompt = async () => {
+    const normalizedPrompt = String(promptDraft || '').trim()
+    if (!canSubmitPrompt || !normalizedPrompt) return
+
+    const submitted = await onSubmitPrompt?.({
+      prompt: normalizedPrompt,
+      sessionId: activeSessionId,
+    })
+    if (submitted) {
+      setPromptDraft('')
+    }
+  }
+  const handleUpdateFromLatestTruth = async () => {
+    if (!canUpdateTruth) return
+    await onUpdateFromLatestTruth?.({ sessionId: activeSessionId })
+  }
+  const readinessPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--outcome-studio-readiness"
+      aria-label="Outcome Studio readiness"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Readiness</h3>
+        <Status variant={readinessVariant} size="sm" showIcon>
+          {formatRuntimeTokenLabel(readiness.state || 'UNKNOWN')}
+        </Status>
+      </div>
+      <SectionDetailRows
+        ariaLabel="Outcome Studio readiness details"
+        rows={[
+          {
+            id: 'source-output',
+            title: 'Source Output',
+            meta: sourceOutput
+              ? sourceOutput.outputTypeLabel || formatRuntimeTokenLabel(sourceOutput.outputTypeKey)
+              : 'Missing',
+          },
+          {
+            id: 'knowledge-packs',
+            title: 'Knowledge Packs',
+            meta: packSummary,
+          },
+          {
+            id: 'pack-sources',
+            title: 'Pack Sources',
+            meta: packSourceSummary,
+          },
+          {
+            id: 'output-lab',
+            title: 'Output Lab',
+            meta: formatRuntimeTokenLabel(readiness.outputLab?.state || 'UNKNOWN'),
+          },
+          {
+            id: 'conversation',
+            title: 'Conversation',
+            meta: canStartSession ? 'Available' : 'Blocked',
+          },
+          {
+            id: 'safety-gates',
+            title: 'Safety Gates',
+            meta: safetyGateSummary,
+          },
+        ]}
+      />
+      {blockers.length > 0 ? (
+        <ul className="runtime-workspace__output-lab-message-list" aria-label="Outcome Studio blockers">
+          {blockers.map((blocker) => (
+            <li key={`${blocker.source || 'outcome'}-${blocker.code || blocker.message}`}>
+              <MdErrorOutline aria-hidden="true" />
+              <span>{blocker.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {warnings.length > 0 ? (
+        <ul className="runtime-workspace__output-lab-message-list" aria-label="Outcome Studio warnings">
+          {warnings.map((warning) => (
+            <li key={`${warning.source || 'outcome'}-${warning.code || warning.message}`}>
+              <MdOutlineWarningAmber aria-hidden="true" />
+              <span>{warning.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {safetyGateRows.length > 0 ? (
+        <ul className="runtime-workspace__plain-list runtime-workspace__outcome-studio-pack-list" aria-label="Outcome Studio safety gates">
+          {safetyGateRows.map((gate) => {
+            const gatePassed = normalizeRuntimeActionToken(gate.status) === 'PASSED'
+            return (
+              <li key={gate.code || gate.label}>
+                <div>
+                  <strong>{gate.label}</strong>
+                  <span>{gate.message}</span>
+                  {gate.blockerReason ? (
+                    <span>{formatRuntimeTokenLabel(gate.blockerReason)}</span>
+                  ) : null}
+                </div>
+                <Badge
+                  variant={gatePassed ? 'success' : 'danger'}
+                  size="sm"
+                  pill
+                  outline
+                  icon={gatePassed ? <MdCheckCircle /> : <MdErrorOutline />}
+                >
+                  {formatRuntimeTokenLabel(gate.status || 'UNKNOWN')}
+                </Badge>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+      {requiredPacks.length > 0 ? (
+        <ul className="runtime-workspace__plain-list runtime-workspace__outcome-studio-pack-list" aria-label="Outcome Studio required knowledge packs">
+          {requiredPacks.map((pack) => (
+            <li key={`${pack.packType}-${pack.packKey}`}>
+              <div>
+                <strong>{pack.label}</strong>
+                <span>
+                  {pack.packType} / {formatRuntimeTokenLabel(pack.status || 'MISSING')}
+                  {pack.runtimeBindable ? ' / Runtime bindable' : ' / Not runtime bindable'}
+                </span>
+                {pack.sourceFilename ? (
+                  <span>{pack.sourceFilename}</span>
+                ) : null}
+              </div>
+              <Badge
+                variant={pack.runtimeBindable ? 'success' : pack.status === 'SOURCE_ONLY' ? 'warning' : 'danger'}
+                size="sm"
+                pill
+                outline
+              >
+                {formatRuntimeTokenLabel(pack.status || 'MISSING')}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  )
+  const truthBindingPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--outcome-studio-truth"
+      aria-label="Outcome Studio truth binding"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Truth Binding</h3>
+        <Badge variant={truthBinding.status === 'PROJECTED' ? 'success' : 'danger'} size="sm" pill outline>
+          {formatRuntimeTokenLabel(truthBinding.status || 'BLOCKED')}
+        </Badge>
+      </div>
+      <SectionDetailRows
+        ariaLabel="Outcome Studio truth binding details"
+        rows={[
+          {
+            id: 'certification',
+            title: 'Certification',
+            meta: truthBinding.certification?.label || 'Unavailable',
+          },
+          {
+            id: 'quality-band',
+            title: 'Quality Band',
+            meta: formatRuntimeTokenLabel(truthBinding.qualityBand || 'UNKNOWN'),
+          },
+          {
+            id: 'graph',
+            title: 'Graph',
+            meta: formatRuntimeIdentifier(truthBinding.graph?.graphHash),
+          },
+          {
+            id: 'truth-signature',
+            title: 'Truth Signature',
+            meta: `${formatRuntimeTokenLabel(truthSignature.status || 'BLOCKED')} / ${formatRuntimeTokenLabel(truthSignature.persistence || 'NOT_PERSISTED')}`,
+          },
+          {
+            id: 'currentness',
+            title: 'Currentness',
+            meta: formatRuntimeTokenLabel(truthSignature.currentness || 'BLOCKED'),
+          },
+          {
+            id: 'lock-snapshot',
+            title: 'Lock Snapshot',
+            meta: formatRuntimeIdentifier(truthSignatureEvidence.lockSnapshotId || sourceSnapshot.lockSnapshotId),
+          },
+          {
+            id: 'replay-anchor',
+            title: 'Replay Anchor',
+            meta: formatRuntimeIdentifier(truthSignatureEvidence.replayAnchorId || sourceSnapshot.replayAnchorId),
+          },
+        ]}
+      />
+      <div className="runtime-workspace__outcome-studio-truth-action-region">
+        <ButtonGroup
+          className="runtime-workspace__outcome-studio-truth-actions"
+          aria-label="Outcome Studio truth actions"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            leftIcon={<MdRefresh aria-hidden="true" />}
+            disabled={!canUpdateTruth}
+            loading={updatingTruth}
+            aria-describedby={truthUpdateReasonId}
+            onClick={handleUpdateFromLatestTruth}
+          >
+            {updatingTruth ? 'Updating Truth...' : 'Update from Latest Truth'}
+          </Button>
+        </ButtonGroup>
+        <p id={truthUpdateReasonId} className="runtime-workspace__action-disabled-reason">
+          {truthUpdateDisabledReason}
+        </p>
+      </div>
+      <div
+        className="runtime-workspace__outcome-studio-truth-signature"
+        role="region"
+        aria-label="Outcome Studio truth signature projection"
+      >
+        <div className="runtime-workspace__output-lab-panel-heading">
+          <h4>Truth Signature Projection</h4>
+          <Badge variant={truthSignature.status === 'PROJECTED' ? 'success' : 'danger'} size="sm" pill outline>
+            {formatRuntimeTokenLabel(truthSignature.currentness || truthSignature.status || 'BLOCKED')}
+          </Badge>
+        </div>
+        <SectionDetailRows
+          ariaLabel="Outcome Studio truth signature evidence"
+          rows={[
+            {
+              id: 'signature-mode',
+              title: 'Mode',
+              meta: formatRuntimeTokenLabel(truthSignature.mode || 'PROJECTED_FROM_RUNTIME_EVIDENCE'),
+            },
+            {
+              id: 'source-asset',
+              title: 'Source Asset',
+              meta: formatRuntimeIdentifier(truthSignatureEvidence.sourceOutputAssetId),
+            },
+            {
+              id: 'publish-snapshot',
+              title: 'Publish Snapshot',
+              meta: formatRuntimeIdentifier(truthSignatureEvidence.publishSnapshotId),
+            },
+            {
+              id: 'graph-version',
+              title: 'Graph Version',
+              meta: truthSignatureEvidence.graphVersion || '--',
+            },
+          ]}
+        />
+        {missingSignatureEvidence.length > 0 ? (
+          <ul className="runtime-workspace__output-lab-message-list" aria-label="Outcome Studio missing truth signature evidence">
+            {missingSignatureEvidence.map((item) => (
+              <li key={item.key || item.label}>
+                <MdErrorOutline aria-hidden="true" />
+                <span>{item.label} is required before a truth signature can be projected.</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {sourceOutput ? (
+        <div className="runtime-workspace__outcome-studio-source">
+          <strong>{sourceOutput.outputTypeLabel || formatRuntimeTokenLabel(sourceOutput.outputTypeKey)}</strong>
+          <span>{formatRuntimeTokenLabel(sourceOutput.status)} / {sourceOutput.exportable ? 'Exportable' : 'Not exportable'}</span>
+          <span>Asset {formatRuntimeIdentifier(sourceOutput.outputAssetId)}</span>
+          <span>Formats {(sourceOutput.supportedFormats || []).join(', ') || 'None'}</span>
+        </div>
+      ) : (
+        <Status variant="error" size="sm" showIcon>Governed source output missing</Status>
+      )}
+    </section>
+  )
+  const conversationPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--outcome-studio-conversation"
+      aria-label="Outcome Studio conversation"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Conversation</h3>
+        <Badge variant={conversationStateVariant} size="sm" pill outline>
+          {conversationStateLabel}
+        </Badge>
+      </div>
+      {activeSessionId ? (
+        <div
+          className="runtime-workspace__outcome-studio-session"
+          role="region"
+          aria-label="Outcome Studio active session"
+        >
+          <div className="runtime-workspace__output-lab-panel-heading">
+            <h4>Active Session</h4>
+            <Badge variant={hasActiveSession ? 'success' : 'warning'} size="sm" pill outline>
+              {formatRuntimeTokenLabel(activeSessionStatus || 'UNKNOWN')}
+            </Badge>
+          </div>
+          <SectionDetailRows
+            ariaLabel="Outcome Studio active session details"
+            rows={[
+              {
+                id: 'session-id',
+                title: 'Session',
+                meta: formatRuntimeIdentifier(activeSessionId),
+              },
+              {
+                id: 'session-source',
+                title: 'Source Output',
+                meta: sessionDetail?.sourceOutputTypeLabel
+                  || activeSession?.sourceOutputTypeLabel
+                  || sourceOutput?.outputTypeLabel
+                  || formatRuntimeTokenLabel(sourceOutput?.outputTypeKey)
+                  || 'Unavailable',
+              },
+              {
+                id: 'session-pack-binding',
+                title: 'Knowledge Packs',
+                meta: `${sessionDetail?.knowledgePackBinding?.activeCount ?? activeSession?.knowledgePackBinding?.activeCount ?? 0} active / ${
+                  sessionDetail?.knowledgePackBinding?.requiredCount ?? activeSession?.knowledgePackBinding?.requiredCount ?? requiredPacks.length
+                } required`,
+              },
+            ]}
+          />
+          {sessionLoading ? (
+            <div className="runtime-workspace__output-lab-state" role="status">
+              <Spinner size="sm" aria-label="Loading Outcome Studio prompt history" />
+            </div>
+          ) : null}
+          {sessionError ? (
+            <Status variant="error" size="sm" showIcon>
+              {stripRequestReference(sessionError.message)}
+            </Status>
+          ) : null}
+          {!sessionLoading && !sessionError && sessionMessages.length > 0 ? (
+            <ul
+              className="runtime-workspace__outcome-studio-message-list"
+              aria-label="Outcome Studio prompt history"
+            >
+              {sessionMessages.map((message, messageIndex) => {
+                const submittedAt = formatActivityTime(message.submittedAt || message.createdAt)
+                const messageId = String(message.messageId || '').trim()
+                const responseStatus = normalizeRuntimeActionToken(message.responseStatus || message.status)
+                const pendingResponse = responseStatus === 'PENDING_RESPONSE'
+                const responseReasonId = `runtime-outcome-studio-response-reason-${messageIndex}`
+                const canGenerateResponse = hasActiveSession
+                  && pendingResponse
+                  && !sessionTruthNotCurrent
+                  && responseGenerationAvailable
+                  && Boolean(messageId)
+                const responseActionDisabled = !canGenerateResponse || generatingResponse
+                const responseActionReason = !messageId
+                  ? 'Persisted message identity is required before response generation can run.'
+                  : sessionTruthNotCurrent
+                    ? responseTruthDisabledReason
+                  : responseGenerationAvailable
+                    ? 'Ready for governed response generation.'
+                    : responseGenerationDisabledReason
+                return (
+                  <li key={message.messageId || `${message.sessionId}-${message.createdAt}-${message.prompt}`}>
+                    <div>
+                      <strong>{message.prompt}</strong>
+                      <span>
+                        {formatRuntimeTokenLabel(message.role || 'USER')}
+                        {submittedAt ? ` / ${submittedAt}` : ''}
+                      </span>
+                      {pendingResponse ? (
+                        <span id={responseReasonId}>
+                          {responseActionReason}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="runtime-workspace__outcome-studio-message-actions">
+                      <Badge variant={getOutcomeStudioMessageVariant(message)} size="sm" pill outline>
+                        {formatRuntimeTokenLabel(message.responseStatus || message.status || 'SUBMITTED')}
+                      </Badge>
+                      {pendingResponse ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<MdBolt aria-hidden="true" />}
+                          disabled={responseActionDisabled}
+                          loading={canGenerateResponse && generatingResponse}
+                          aria-describedby={responseActionDisabled ? responseReasonId : undefined}
+                          onClick={() => onGenerateResponse?.({
+                            messageId,
+                            sessionId: activeSessionId,
+                          })}
+                        >
+                          Generate Response
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+          {!sessionLoading && !sessionError && sessionMessages.length === 0 ? (
+            <p className="runtime-workspace__action-disabled-reason">No prompts have been submitted for this session.</p>
+          ) : null}
+        </div>
+      ) : null}
+      <Textarea
+        id="runtime-outcome-studio-prompt"
+        label="Prompt"
+        placeholder="Outcome Studio prompt"
+        value={promptDraft}
+        disabled={promptDisabled}
+        fullWidth
+        helperText={promptHelperText}
+        maxLength={promptMaxLength}
+        onChange={(event) => setPromptDraft(event.target.value)}
+        resize="vertical"
+        rows={5}
+      />
+      <ButtonGroup
+        align="end"
+        stackOnMobile
+        fullWidthOnMobile
+        className="runtime-workspace__output-lab-actions"
+        aria-label="Outcome Studio session actions"
+      >
+        {hasActiveSession ? (
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            leftIcon={<MdBolt aria-hidden="true" />}
+            disabled={!canSubmitPrompt || !String(promptDraft || '').trim()}
+            loading={submittingPrompt}
+            onClick={handleSubmitPrompt}
+            aria-describedby={sessionTruthNotCurrent ? promptTruthReasonId : undefined}
+          >
+            Submit Prompt
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            leftIcon={<MdBolt aria-hidden="true" />}
+            disabled={!canStartSession || creatingSession}
+            loading={creatingSession}
+            onClick={() => onStartSession?.({
+              prompt: promptDraft,
+              sourceOutputAssetId: sourceOutput?.outputAssetId,
+            })}
+            aria-describedby={!canStartSession ? 'runtime-outcome-studio-session-reason' : undefined}
+          >
+            Start Session
+          </Button>
+        )}
+      </ButtonGroup>
+      {feedback?.message ? (
+        <Status
+          variant={feedback.variant === 'error' ? 'error' : 'success'}
+          size="sm"
+          showIcon
+          className="runtime-workspace__outcome-studio-feedback"
+        >
+          {feedback.message}
+        </Status>
+      ) : null}
+      {sessionTruthNotCurrent ? (
+        <p id={promptTruthReasonId} className="runtime-workspace__action-disabled-reason">
+          {promptTruthDisabledReason}
+        </p>
+      ) : null}
+      {!canStartSession ? (
+        <p id="runtime-outcome-studio-session-reason" className="runtime-workspace__action-disabled-reason">
+          {disabledReason}
+        </p>
+      ) : null}
+    </section>
+  )
+  const assetsPanel = (
+    <section
+      className="runtime-workspace__section-panel runtime-workspace__section-panel--outcome-studio-assets"
+      aria-label="Outcome Studio assets"
+      tabIndex={0}
+    >
+      <div className="runtime-workspace__output-lab-panel-heading">
+        <h3>Assets</h3>
+        <Badge variant={outcomeAssets.length > 0 ? 'info' : 'neutral'} size="sm" pill outline>
+          {assetSummary}
+        </Badge>
+      </div>
+      {outcomeAssets.length > 0 ? (
+        <ul
+          className="runtime-workspace__plain-list runtime-workspace__outcome-studio-asset-list"
+          aria-label="Outcome Studio outcome assets"
+        >
+          {outcomeAssets.map((asset, assetIndex) => {
+            const assetId = getOutcomeStudioAssetId(asset)
+            const assetStatus = normalizeRuntimeActionToken(asset.status || 'UNKNOWN')
+            const versionNumber = Number(asset.currentVersionNumber)
+            const knowledgePackBinding = asset.knowledgePackBinding || {}
+            const truthSignature = asset.truthSignature || {}
+            const lineageSummary = asset.lineageSummary || {}
+            const assetKey = assetId || `${asset.outputTypeKey || 'outcome'}-${assetIndex}`
+            const generatedAt = formatActivityTime(asset.generatedAt || asset.createdAt)
+            const currentVersionId = String(asset.currentVersionId || '').trim()
+            const truthCurrentness = normalizeRuntimeActionToken(
+              truthSignature.currentness || truthSignature.status || 'UNKNOWN',
+            )
+            const hasCurrentVersion = Boolean(assetId && currentVersionId)
+            const exportBlockedByTruth = hasCurrentVersion && truthCurrentness !== 'CURRENT'
+            const exportable = hasCurrentVersion && !exportBlockedByTruth
+            const published = assetStatus === 'PUBLISHED'
+            const publishBlockedByTruth = hasCurrentVersion && truthCurrentness !== 'CURRENT'
+            const publishable = hasCurrentVersion && !published && !publishBlockedByTruth
+            const publishing = publishingAssetKey === assetId
+            const publishReasonId = `runtime-outcome-studio-publish-reason-${assetIndex}`
+            const implementedExportReasonId = `runtime-outcome-studio-export-reason-${assetIndex}`
+            const blockedExportReasonId = `runtime-outcome-studio-blocked-export-reason-${assetIndex}`
+            return (
+              <li key={assetKey}>
+                <div>
+                  <strong>{asset.title || asset.outputTypeLabel || formatRuntimeTokenLabel(asset.outputTypeKey)}</strong>
+                  <span>
+                    {asset.outputTypeLabel || formatRuntimeTokenLabel(asset.outputTypeKey)}
+                    {generatedAt ? ` / ${generatedAt}` : ''}
+                  </span>
+                  <span>Asset {formatRuntimeIdentifier(assetId)}</span>
+                  <span>
+                    Version {Number.isFinite(versionNumber) && versionNumber > 0 ? versionNumber : '--'}
+                    {lineageSummary.parentVersionId ? ` / Parent ${formatRuntimeIdentifier(lineageSummary.parentVersionId)}` : ''}
+                  </span>
+                  <span>
+                    Truth {formatRuntimeTokenLabel(truthCurrentness)}
+                    {' / '}
+                    Packs {knowledgePackBinding.activeCount ?? 0}/{knowledgePackBinding.requiredCount ?? requiredPacks.length}
+                  </span>
+                  <div className="runtime-workspace__outcome-studio-asset-action-region">
+                    <ButtonGroup
+                      className="runtime-workspace__outcome-studio-asset-actions"
+                      aria-label={`Outcome Studio actions for ${asset.title || asset.outputTypeLabel || 'asset'}`}
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<MdLockOutline aria-hidden="true" />}
+                        disabled={!publishable || publishing}
+                        loading={publishing}
+                        aria-describedby={!publishable ? publishReasonId : undefined}
+                        onClick={() => {
+                          if (publishable) onPublishAsset?.({ asset })
+                        }}
+                      >
+                        {publishing ? 'Publishing' : 'Publish'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<MdOutlineHistory aria-hidden="true" />}
+                        disabled={!assetId || assetDetailLoading}
+                        onClick={() => onViewAssetVersions?.({ asset })}
+                      >
+                        View Versions
+                      </Button>
+                      {hasCurrentVersion ? (
+                        OUTCOME_STUDIO_IMPLEMENTED_EXPORT_FORMATS.map((format) => {
+                          const exportKey = `${assetId}:${format}`
+                          return (
+                            <Button
+                              key={format}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              leftIcon={<MdDownload aria-hidden="true" />}
+                              disabled={!exportable || exportingAssetKey === exportKey}
+                              loading={exportingAssetKey === exportKey}
+                              aria-describedby={!exportable ? implementedExportReasonId : undefined}
+                              onClick={() => {
+                                if (exportable) onExportAsset?.({ asset, format })
+                              }}
+                            >
+                              {format === 'MARKDOWN' ? 'Markdown' : format}
+                            </Button>
+                          )
+                        })
+                      ) : null}
+                      {OUTCOME_STUDIO_BLOCKED_EXPORT_FORMATS.map((format) => (
+                        <Button
+                          key={format}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<MdLockOutline aria-hidden="true" />}
+                          disabled
+                          aria-describedby={blockedExportReasonId}
+                        >
+                          {format}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                    {!hasCurrentVersion ? (
+                      <span>Export unavailable: current version missing</span>
+                    ) : null}
+                    {exportBlockedByTruth ? (
+                      <p id={implementedExportReasonId} className="runtime-workspace__action-disabled-reason">
+                        Export is blocked until the outcome asset truth signature is current.
+                      </p>
+                    ) : null}
+                    {!publishable ? (
+                      <p id={publishReasonId} className="runtime-workspace__action-disabled-reason">
+                        {published
+                          ? 'Publish is complete for this outcome asset.'
+                          : publishBlockedByTruth
+                            ? 'Publish is blocked until the outcome asset truth signature is current.'
+                            : 'Publish is blocked until a persisted current version is available.'}
+                      </p>
+                    ) : null}
+                    {OUTCOME_STUDIO_BLOCKED_EXPORT_FORMATS.length > 0 ? (
+                      <p id={blockedExportReasonId} className="runtime-workspace__action-disabled-reason">
+                        Some export formats are unavailable for this governed asset.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <Badge variant={getTokenStatusVariant(assetStatus)} size="sm" pill outline>
+                  {formatRuntimeTokenLabel(assetStatus)}
+                </Badge>
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <Status variant="neutral" size="sm" showIcon>No outcome assets</Status>
+      )}
+      {selectedOutcomeAssetId ? (
+        <div
+          className="runtime-workspace__outcome-studio-version-detail"
+          role="region"
+          aria-label="Outcome Studio asset version metadata"
+        >
+          <div className="runtime-workspace__output-lab-panel-heading">
+            <h4>Asset Version Metadata</h4>
+            <Badge variant={assetDetailError ? 'danger' : 'neutral'} size="sm" pill outline>
+              {assetDetailLoading ? 'Loading' : `${selectedAssetVersions.length} versions`}
+            </Badge>
+          </div>
+          <span>
+            {selectedAssetDetail?.title
+              || selectedOutcomeAsset?.title
+              || selectedOutcomeAsset?.outputTypeLabel
+              || 'Selected outcome asset'}
+          </span>
+          {assetDetailLoading ? (
+            <div className="runtime-workspace__output-lab-state" role="status">
+              <Spinner size="sm" aria-label="Loading Outcome Studio asset versions" />
+            </div>
+          ) : null}
+          {assetDetailError ? (
+            <Status variant="error" size="sm" showIcon>
+              {stripRequestReference(assetDetailError.message)}
+            </Status>
+          ) : null}
+          {!assetDetailLoading && !assetDetailError && selectedAssetVersions.length > 0 ? (
+            <ul
+              className="runtime-workspace__plain-list runtime-workspace__outcome-studio-version-list"
+              aria-label="Outcome Studio asset versions"
+            >
+              {selectedAssetVersions.map((version) => {
+                const versionId = String(version.outcomeAssetVersionId || '').trim()
+                const versionNumber = Number(version.versionNumber || 0)
+                const truthCurrentness = normalizeRuntimeActionToken(
+                  version.truthSignature?.currentness || version.truthSignature?.status || 'UNKNOWN',
+                )
+                const generatedAt = formatActivityTime(version.generatedAt || version.createdAt)
+                const warningsCount = Array.isArray(version.warnings) ? version.warnings.length : 0
+                const limitationsCount = Array.isArray(version.limitations) ? version.limitations.length : 0
+                return (
+                  <li key={versionId || `${selectedOutcomeAssetId}-${versionNumber}`}>
+                    <div>
+                      <strong>
+                        Version {Number.isFinite(versionNumber) && versionNumber > 0 ? versionNumber : '--'}
+                      </strong>
+                      <span>{versionId ? `Version ${formatRuntimeIdentifier(versionId)}` : 'Version id unavailable'}</span>
+                      <span>
+                        {formatRuntimeTokenLabel(version.status || 'UNKNOWN')}
+                        {' / Truth '}
+                        {formatRuntimeTokenLabel(truthCurrentness)}
+                        {generatedAt ? ` / ${generatedAt}` : ''}
+                      </span>
+                      <span>
+                        {version.contentAvailable ? 'Content available' : 'Content unavailable'}
+                        {' / '}
+                        Warnings {warningsCount}
+                        {' / '}
+                        Limitations {limitationsCount}
+                      </span>
+                    </div>
+                    <Badge variant={getTokenStatusVariant(version.status || truthCurrentness)} size="sm" pill outline>
+                      {formatRuntimeTokenLabel(version.status || 'UNKNOWN')}
+                    </Badge>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+          {!assetDetailLoading && !assetDetailError && selectedAssetDetail && selectedAssetVersions.length === 0 ? (
+            <Status variant="neutral" size="sm" showIcon>No persisted versions</Status>
+          ) : null}
+          <div
+            className="runtime-workspace__outcome-studio-asset-preview"
+            role="region"
+            aria-label="Outcome Studio generated body preview"
+          >
+            <div className="runtime-workspace__output-lab-panel-heading">
+              <h4>Generated Body Preview</h4>
+              <Badge variant={assetPreviewError ? 'danger' : selectedAssetPreview?.previewAvailable ? 'success' : 'neutral'} size="sm" pill outline>
+                {assetPreviewLoading ? 'Loading' : selectedAssetPreview?.previewAvailable ? 'Available' : 'Unavailable'}
+              </Badge>
+            </div>
+            {assetPreviewLoading ? (
+              <div className="runtime-workspace__output-lab-state" role="status">
+                <Spinner size="sm" aria-label="Loading Outcome Studio generated body preview" />
+              </div>
+            ) : null}
+            {assetPreviewError ? (
+              <Status variant="error" size="sm" showIcon>
+                {stripRequestReference(assetPreviewError.message)}
+              </Status>
+            ) : null}
+            {!assetPreviewLoading && !assetPreviewError && selectedAssetPreview ? (
+              <>
+                <SectionDetailRows
+                  ariaLabel="Outcome Studio generated body preview details"
+                  rows={[
+                    {
+                      id: 'preview-version',
+                      title: 'Version',
+                      meta: `${selectedAssetPreview.versionNumber || '--'} / ${formatRuntimeTokenLabel(selectedAssetPreview.status || 'UNKNOWN')}`,
+                    },
+                    {
+                      id: 'preview-truth',
+                      title: 'Truth',
+                      meta: formatRuntimeTokenLabel(
+                        selectedAssetPreview.truthSignature?.currentness
+                        || selectedAssetPreview.truthSignature?.status
+                        || 'UNKNOWN',
+                      ),
+                    },
+                    {
+                      id: 'preview-generated-at',
+                      title: 'Generated',
+                      meta: formatActivityTime(selectedAssetPreview.generatedAt) || '--',
+                    },
+                  ]}
+                />
+                {selectedAssetPreview.markdown ? (
+                  <div
+                    className="runtime-workspace__outcome-studio-preview-document"
+                    aria-label="Outcome Studio governed document preview"
+                  >
+                    {parseGovernedMarkdownPreview(selectedAssetPreview.markdown).map((block, blockIndex) => {
+                      const blockKey = `${selectedOutcomeAssetId}-preview-block-${blockIndex}`
+                      if (block.type === 'heading') {
+                        const HeadingTag = block.level === 1 ? 'h3' : 'h4'
+                        return (
+                          <HeadingTag
+                            key={blockKey}
+                            className={`runtime-workspace__outcome-studio-preview-heading runtime-workspace__outcome-studio-preview-heading--level-${block.level}`}
+                          >
+                            {block.text}
+                          </HeadingTag>
+                        )
+                      }
+                      if (block.type === 'ordered-list' || block.type === 'unordered-list') {
+                        const ListTag = block.type === 'ordered-list' ? 'ol' : 'ul'
+                        return (
+                          <ListTag
+                            key={blockKey}
+                            className="runtime-workspace__outcome-studio-preview-list"
+                          >
+                            {block.items.map((item, itemIndex) => (
+                              <li key={`${blockKey}-item-${itemIndex}`}>{item}</li>
+                            ))}
+                          </ListTag>
+                        )
+                      }
+                      return (
+                        <p key={blockKey} className="runtime-workspace__outcome-studio-preview-paragraph">
+                          {block.text}
+                        </p>
+                      )
+                    })}
+                  </div>
+                ) : null}
+                {Array.isArray(selectedAssetPreview.sections) && selectedAssetPreview.sections.length > 0 ? (
+                  <ul
+                    className="runtime-workspace__plain-list runtime-workspace__outcome-studio-preview-sections"
+                    aria-label="Outcome Studio generated body sections"
+                  >
+                    {selectedAssetPreview.sections.map((section, sectionIndex) => (
+                      <li key={section.key || `${selectedOutcomeAssetId}-preview-section-${sectionIndex}`}>
+                        <strong>{section.label || `Section ${sectionIndex + 1}`}</strong>
+                        {section.body ? <span>{section.body}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : null}
+            {!assetPreviewLoading && !assetPreviewError && !selectedAssetPreview ? (
+              <Status variant="neutral" size="sm" showIcon>Select an asset with a current version to load the preview.</Status>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <p className="runtime-workspace__action-disabled-reason">
+        Preview, export, and publish are available only for eligible persisted current versions with current Truth Signature evidence.
+      </p>
+    </section>
+  )
+
+  return (
+    <Card variant="default" className="runtime-workspace__section-card runtime-workspace__outcome-studio">
+      <Card.Body className="runtime-workspace__section-body">
+        <div className="runtime-workspace__section-heading">
+          <div>
+            <h2>{OUTCOME_STUDIO_LABEL}</h2>
+            <p className="runtime-workspace__section-note">
+              {readiness.summary || 'Governed conversational reasoning for certified runtime truth.'}
+            </p>
+          </div>
+          <div className="runtime-workspace__section-badges">
+            <Badge variant={canStartSession ? 'success' : 'danger'} size="sm" pill outline>
+              {getOutcomeStudioReadinessLabel(outcomeStudio, { loading, error })}
+            </Badge>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="runtime-workspace__output-lab-state" role="status">
+            <Spinner size="md" aria-label="Loading Outcome Studio" />
+          </div>
+        ) : null}
+
+        {error ? (
+          <Status variant="error" size="sm" showIcon>
+            {stripRequestReference(error.message)}
+          </Status>
+        ) : null}
+
+        <div
+          className="runtime-workspace__section-tabs-region"
+          role="region"
+          aria-label="Outcome Studio workspace"
+        >
+          <TabView
+            activeTab={activeOutcomeStudioTab}
+            onTabChange={setActiveOutcomeStudioTab}
+            variant="default"
+            size="sm"
+            className="runtime-workspace__section-tabs runtime-workspace__outcome-studio-tabs"
+            aria-label="Outcome Studio sections"
+          >
+            <TabView.Tab label="Readiness">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--outcome-studio">
+                  {readinessPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Truth Binding">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--outcome-studio">
+                  {truthBindingPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Conversation">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--outcome-studio">
+                  {conversationPanel}
+                </div>
+              </div>
+            </TabView.Tab>
+            <TabView.Tab label="Assets">
+              <div className="runtime-workspace__section-tab-panel">
+                <div className="runtime-workspace__section-panels runtime-workspace__section-panels--outcome-studio">
+                  {assetsPanel}
                 </div>
               </div>
             </TabView.Tab>
@@ -5890,6 +7125,7 @@ function RuntimeWorkspace() {
   const location = useLocation()
   const { runtimeInstanceId = '' } = useParams()
   const { addToast } = useToaster()
+  const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
   const {
     data: rendererResponse,
     isLoading,
@@ -5911,6 +7147,25 @@ function RuntimeWorkspace() {
     { skip: !runtimeInstanceId },
   )
   const {
+    data: outcomeStudioReadinessResponse,
+    isLoading: isLoadingOutcomeStudioReadiness,
+    isFetching: isFetchingOutcomeStudioReadiness,
+    error: outcomeStudioReadinessQueryError,
+  } = useGetRuntimeOutcomeStudioReadinessQuery(
+    { runtimeInstanceId },
+    { skip: !runtimeInstanceId },
+  )
+  const {
+    data: outcomeStudioResponse,
+    isLoading: isLoadingOutcomeStudio,
+    isFetching: isFetchingOutcomeStudio,
+    error: outcomeStudioQueryError,
+    refetch: refetchOutcomeStudio,
+  } = useGetRuntimeOutcomeStudioQuery(
+    { runtimeInstanceId },
+    { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTCOME_STUDIO_NAV_KEY },
+  )
+  const {
     data: truthQualityResponse,
     isLoading: isLoadingTruthQuality,
     isFetching: isFetchingTruthQuality,
@@ -5920,10 +7175,43 @@ function RuntimeWorkspace() {
     { skip: !runtimeInstanceId },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
+  const [createRuntimeOutcomeSession, { isLoading: isCreatingOutcomeSession }] = useCreateRuntimeOutcomeSessionMutation()
+  const [
+    submitRuntimeOutcomeMessage,
+    { isLoading: isSubmittingOutcomePrompt },
+  ] = useSubmitRuntimeOutcomeMessageMutation()
+  const [
+    generateRuntimeOutcomeResponse,
+    { isLoading: isGeneratingOutcomeResponse },
+  ] = useGenerateRuntimeOutcomeResponseMutation()
+  const [
+    updateRuntimeOutcomeSessionFromLatestTruth,
+    { isLoading: isUpdatingOutcomeTruth },
+  ] = useUpdateRuntimeOutcomeSessionFromLatestTruthMutation()
+  const [
+    publishRuntimeOutcomeAsset,
+  ] = usePublishRuntimeOutcomeAssetMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
   const [createRuntimeRevision, { isLoading: isCreatingRuntimeRevision }] = useCreateRuntimeRevisionMutation()
   const [generateRuntimeOutputRequest, { isLoading: isGeneratingOutputRequest }] = useGenerateRuntimeOutputRequestMutation()
   const [exportRuntimeOutputAsset] = useLazyExportRuntimeOutputAssetQuery()
+  const [exportRuntimeOutcomeAsset] = useLazyExportRuntimeOutcomeAssetQuery()
+  const [
+    getRuntimeOutcomeAssetDetail,
+    {
+      data: outcomeAssetDetailResponse,
+      isFetching: isFetchingOutcomeAssetDetail,
+      error: outcomeAssetDetailQueryError,
+    },
+  ] = useLazyGetRuntimeOutcomeAssetQuery()
+  const [
+    getRuntimeOutcomeAssetPreview,
+    {
+      data: outcomeAssetPreviewResponse,
+      isFetching: isFetchingOutcomeAssetPreview,
+      error: outcomeAssetPreviewQueryError,
+    },
+  ] = useLazyGetRuntimeOutcomeAssetPreviewQuery()
   const [acceptRuntimeDiscovery] = useAcceptRuntimeDiscoveryMutation()
   const [acceptRuntimeSection] = useAcceptRuntimeSectionMutation()
   const [clearRuntimeSectionEvidence] = useClearRuntimeSectionEvidenceMutation()
@@ -5948,9 +7236,12 @@ function RuntimeWorkspace() {
   const [showAllSignals, setShowAllSignals] = useState(false)
   const [showAllActivity, setShowAllActivity] = useState(false)
   const [sectionFeedbackByPath, setSectionFeedbackByPath] = useState({})
-  const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(DISCOVERY_NAV_KEY)
   const [selectedOutputTypeKey, setSelectedOutputTypeKey] = useState('')
+  const [outcomeStudioFeedback, setOutcomeStudioFeedback] = useState(null)
   const [exportingOutputAssetKey, setExportingOutputAssetKey] = useState('')
+  const [exportingOutcomeAssetKey, setExportingOutcomeAssetKey] = useState('')
+  const [publishingOutcomeAssetKey, setPublishingOutcomeAssetKey] = useState('')
+  const [selectedOutcomeAssetId, setSelectedOutcomeAssetId] = useState('')
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState(null)
   const [revisionDialogOpen, setRevisionDialogOpen] = useState(false)
   const [revisionReason, setRevisionReason] = useState('')
@@ -5961,6 +7252,40 @@ function RuntimeWorkspace() {
   const renderer = getRendererPayload(rendererResponse)
   const outputLab = getOutputLabPayload(outputLabResponse)
   const outputLabError = outputLabQueryError ? normalizeError(outputLabQueryError) : null
+  const outcomeStudioReadiness = getOutcomeStudioPayload(outcomeStudioReadinessResponse)
+  const outcomeStudioReadinessError = outcomeStudioReadinessQueryError
+    ? normalizeError(outcomeStudioReadinessQueryError)
+    : null
+  const outcomeStudio = getOutcomeStudioPayload(outcomeStudioResponse)
+  const outcomeStudioError = outcomeStudioQueryError ? normalizeError(outcomeStudioQueryError) : null
+  const activeOutcomeStudioSession = getActiveOutcomeStudioSession(outcomeStudio)
+  const activeOutcomeStudioSessionId = getOutcomeStudioSessionId(activeOutcomeStudioSession)
+  const {
+    data: outcomeStudioSessionResponse,
+    isLoading: isLoadingOutcomeStudioSession,
+    isFetching: isFetchingOutcomeStudioSession,
+    error: outcomeStudioSessionQueryError,
+    refetch: refetchOutcomeStudioSession,
+  } = useGetRuntimeOutcomeSessionQuery(
+    { runtimeInstanceId, sessionId: activeOutcomeStudioSessionId },
+    {
+      skip: !runtimeInstanceId
+        || activeWorkspaceKey !== OUTCOME_STUDIO_NAV_KEY
+        || !activeOutcomeStudioSessionId,
+    },
+  )
+  const outcomeStudioSession = getOutcomeStudioPayload(outcomeStudioSessionResponse)
+  const outcomeStudioSessionError = outcomeStudioSessionQueryError
+    ? normalizeError(outcomeStudioSessionQueryError)
+    : null
+  const outcomeAssetDetail = getOutcomeStudioPayload(outcomeAssetDetailResponse)
+  const outcomeAssetDetailError = outcomeAssetDetailQueryError
+    ? normalizeError(outcomeAssetDetailQueryError)
+    : null
+  const outcomeAssetPreview = getOutcomeStudioPayload(outcomeAssetPreviewResponse)
+  const outcomeAssetPreviewError = outcomeAssetPreviewQueryError
+    ? normalizeError(outcomeAssetPreviewQueryError)
+    : null
   const truthQuality = getTruthQualityPayload(truthQualityResponse)
   const truthQualityError = truthQualityQueryError ? normalizeError(truthQualityQueryError) : null
   const truthQualityLoading = isLoadingTruthQuality || isFetchingTruthQuality
@@ -6148,7 +7473,9 @@ function RuntimeWorkspace() {
     (section?.sectionKey || section?.key) === activeWorkspaceKey,
   )
   const activeSectionIndex = matchedActiveSectionIndex >= 0 ? matchedActiveSectionIndex : 0
-  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
+  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY
+    || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
+    || activeWorkspaceKey === OUTCOME_STUDIO_NAV_KEY
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
   const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
@@ -6156,9 +7483,19 @@ function RuntimeWorkspace() {
     loading: isLoadingOutputLab || isFetchingOutputLab,
     error: outputLabError,
   })
+  const outcomeStudioState = getOutcomeStudioReadinessLabel({
+    readiness: outcomeStudio?.readiness || outcomeStudioReadiness,
+  }, {
+    loading: isLoadingOutcomeStudioReadiness || isFetchingOutcomeStudioReadiness,
+    error: outcomeStudioReadinessError,
+  })
 
   useEffect(() => {
-    if (activeWorkspaceKey === DISCOVERY_NAV_KEY || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY) return
+    if (
+      activeWorkspaceKey === DISCOVERY_NAV_KEY
+      || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
+      || activeWorkspaceKey === OUTCOME_STUDIO_NAV_KEY
+    ) return
     const hasActiveSection = sections.some((section) =>
       (section?.sectionKey || section?.key) === activeWorkspaceKey,
     )
@@ -6170,6 +7507,7 @@ function RuntimeWorkspace() {
   useEffect(() => {
     if (hasAutoSelectedInitialSection.current) return
     if (activeWorkspaceKey === OUTPUT_LAB_NAV_KEY) return
+    if (activeWorkspaceKey === OUTCOME_STUDIO_NAV_KEY) return
     if (activeWorkspaceKey !== DISCOVERY_NAV_KEY) {
       hasAutoSelectedInitialSection.current = true
       return
@@ -6967,6 +8305,196 @@ function RuntimeWorkspace() {
     }
   }
 
+  const handleStartOutcomeSession = async ({
+    prompt = '',
+    sourceOutputAssetId = '',
+  } = {}) => {
+    if (!runtimeInstanceId) return
+
+    const normalizedPrompt = String(prompt || '').trim()
+    const normalizedSourceOutputAssetId = String(sourceOutputAssetId || '').trim()
+    setOutcomeStudioFeedback(null)
+
+    try {
+      await createRuntimeOutcomeSession({
+        runtimeInstanceId,
+        body: {
+          ...(normalizedSourceOutputAssetId ? { sourceOutputAssetId: normalizedSourceOutputAssetId } : {}),
+          ...(normalizedPrompt ? { prompt: normalizedPrompt } : {}),
+        },
+      }).unwrap()
+      await refetchOutcomeStudioQueries(refetchOutcomeStudio)
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio session started.',
+      })
+    } catch (sessionError) {
+      const normalizedError = normalizeError(sessionError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+    }
+  }
+
+  const handleSubmitOutcomePrompt = async ({
+    prompt = '',
+    sessionId = '',
+  } = {}) => {
+    const normalizedPrompt = String(prompt || '').trim()
+    const normalizedSessionId = String(sessionId || '').trim()
+    if (!runtimeInstanceId || !normalizedSessionId || !normalizedPrompt) return false
+
+    setOutcomeStudioFeedback(null)
+
+    try {
+      await submitRuntimeOutcomeMessage({
+        runtimeInstanceId,
+        sessionId: normalizedSessionId,
+        body: {
+          prompt: normalizedPrompt,
+        },
+      }).unwrap()
+      await refetchOutcomeStudioQueries(refetchOutcomeStudioSession, refetchOutcomeStudio)
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio prompt submitted.',
+      })
+      return true
+    } catch (promptError) {
+      const normalizedError = normalizeError(promptError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+      return false
+    }
+  }
+
+  const handleGenerateOutcomeResponse = async ({
+    sessionId = '',
+    messageId = '',
+  } = {}) => {
+    const normalizedSessionId = String(sessionId || '').trim()
+    const normalizedMessageId = String(messageId || '').trim()
+    if (!runtimeInstanceId || !normalizedSessionId || !normalizedMessageId) return false
+
+    setOutcomeStudioFeedback(null)
+
+    try {
+      await generateRuntimeOutcomeResponse({
+        runtimeInstanceId,
+        sessionId: normalizedSessionId,
+        messageId: normalizedMessageId,
+        body: {},
+      }).unwrap()
+      await refetchOutcomeStudioQueries(refetchOutcomeStudioSession, refetchOutcomeStudio)
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio response generated.',
+      })
+      return true
+    } catch (responseError) {
+      const normalizedError = normalizeError(responseError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+      return false
+    }
+  }
+
+  const handleUpdateOutcomeSessionFromLatestTruth = async ({
+    sessionId = '',
+  } = {}) => {
+    const normalizedSessionId = String(sessionId || '').trim()
+    if (!runtimeInstanceId || !normalizedSessionId) return false
+
+    setOutcomeStudioFeedback(null)
+
+    try {
+      await updateRuntimeOutcomeSessionFromLatestTruth({
+        runtimeInstanceId,
+        sessionId: normalizedSessionId,
+        body: {},
+      }).unwrap()
+      await refetchOutcomeStudioQueries(refetchOutcomeStudioSession, refetchOutcomeStudio)
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio truth binding updated.',
+      })
+      return true
+    } catch (truthUpdateError) {
+      const normalizedError = normalizeError(truthUpdateError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+      return false
+    }
+  }
+
+  const handlePublishOutcomeAsset = async ({ asset } = {}) => {
+    const outcomeAssetId = getOutcomeStudioAssetId(asset)
+    const currentVersionId = String(asset?.currentVersionId || '').trim()
+    if (!runtimeInstanceId || !outcomeAssetId || !currentVersionId) {
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: 'Outcome asset publish requires a persisted current version.',
+      })
+      return false
+    }
+
+    setOutcomeStudioFeedback(null)
+    setPublishingOutcomeAssetKey(outcomeAssetId)
+
+    try {
+      await publishRuntimeOutcomeAsset({
+        runtimeInstanceId,
+        outcomeAssetId,
+        body: {},
+      }).unwrap()
+      await refetchOutcomeStudioQueries(
+        refetchOutcomeStudio,
+        selectedOutcomeAssetId === outcomeAssetId
+          ? () => getRuntimeOutcomeAssetDetail?.({
+            runtimeInstanceId,
+            outcomeAssetId,
+          })
+          : null,
+      )
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio asset published.',
+      })
+      return true
+    } catch (publishError) {
+      const normalizedError = normalizeError(publishError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+      return false
+    } finally {
+      setPublishingOutcomeAssetKey('')
+    }
+  }
+
   const handleExportOutputAsset = async ({ asset, format }) => {
     const outputAssetId = getOutputLabAssetId(asset)
     const normalizedFormat = String(format || '').trim().toUpperCase()
@@ -7024,6 +8552,92 @@ function RuntimeWorkspace() {
     } finally {
       setExportingOutputAssetKey('')
     }
+  }
+
+  const handleExportOutcomeAsset = async ({ asset, format }) => {
+    const outcomeAssetId = getOutcomeStudioAssetId(asset)
+    const normalizedFormat = String(format || '').trim().toUpperCase()
+    const currentVersionId = String(asset?.currentVersionId || '').trim()
+    if (!outcomeAssetId || !currentVersionId || !normalizedFormat) {
+      addToast({
+        title: 'Export error',
+        description: 'Outcome asset export requires a persisted current version.',
+        variant: 'error',
+      })
+      return
+    }
+
+    const exportKey = `${outcomeAssetId}:${normalizedFormat}`
+    setExportingOutcomeAssetKey(exportKey)
+
+    try {
+      const exportResponse = await exportRuntimeOutcomeAsset({
+        runtimeInstanceId,
+        outcomeAssetId,
+        format: normalizedFormat,
+      }).unwrap()
+      const exportedAsset = getOutputLabPayload(exportResponse)
+      const exportContent = exportedAsset?.encoding === 'base64' && exportedAsset?.contentBase64
+        ? decodeBase64Content(exportedAsset.contentBase64)
+        : typeof exportedAsset?.content === 'string'
+          ? exportedAsset.content
+          : JSON.stringify(exportedAsset?.content ?? {}, null, 2)
+      const extensionByFormat = {
+        JSON: 'json',
+        DOCX: 'docx',
+        PDF: 'pdf',
+      }
+      const fallbackExtension = extensionByFormat[normalizedFormat] || 'md'
+      const filename = exportedAsset?.filename || `${runtimeDisplayId || 'runtime'}-outcome-studio.${fallbackExtension}`
+      const mimeType = exportedAsset?.mimeType || (normalizedFormat === 'JSON' ? 'application/json' : 'text/markdown')
+      const objectUrl = URL.createObjectURL(new Blob([exportContent], { type: mimeType }))
+      const downloadLink = document.createElement('a')
+      downloadLink.href = objectUrl
+      downloadLink.download = filename
+      downloadLink.rel = 'noopener'
+      downloadLink.style.display = 'none'
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      window.setTimeout(() => {
+        downloadLink.remove()
+        URL.revokeObjectURL(objectUrl)
+      }, OUTPUT_LAB_DOWNLOAD_CLEANUP_DELAY_MS)
+      addToast({
+        title: 'Outcome export ready',
+        description: filename,
+        variant: 'success',
+      })
+    } catch (exportError) {
+      const normalizedError = normalizeError(exportError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      addToast({
+        title: 'Outcome export failed',
+        description: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+        variant: 'error',
+      })
+    } finally {
+      setExportingOutcomeAssetKey('')
+    }
+  }
+
+  const handleViewOutcomeAssetVersions = ({ asset } = {}) => {
+    const outcomeAssetId = getOutcomeStudioAssetId(asset)
+    if (!runtimeInstanceId || !outcomeAssetId) return
+    setSelectedOutcomeAssetId(outcomeAssetId)
+    Promise.resolve(getRuntimeOutcomeAssetDetail({
+      runtimeInstanceId,
+      outcomeAssetId,
+    })).catch((detailError) => {
+      console.warn('Outcome Studio asset detail fetch failed.', detailError)
+    })
+    Promise.resolve(getRuntimeOutcomeAssetPreview({
+      runtimeInstanceId,
+      outcomeAssetId,
+    })).catch((previewError) => {
+      console.warn('Outcome Studio asset preview fetch failed.', previewError)
+    })
   }
 
   const pendingRuntimeActionKey = normalizeRuntimeActionToken(
@@ -7401,6 +9015,37 @@ function RuntimeWorkspace() {
               truthQualityError={truthQualityError}
               truthQualityLoading={truthQualityLoading}
             />
+          ) : activeWorkspaceKey === OUTCOME_STUDIO_NAV_KEY ? (
+            <OutcomeStudioSection
+              activeSession={activeOutcomeStudioSession}
+              assetDetail={outcomeAssetDetail}
+              assetDetailError={outcomeAssetDetailError}
+              assetDetailLoading={isFetchingOutcomeAssetDetail}
+              assetPreview={outcomeAssetPreview}
+              assetPreviewError={outcomeAssetPreviewError}
+              assetPreviewLoading={isFetchingOutcomeAssetPreview}
+              creatingSession={isCreatingOutcomeSession}
+              error={outcomeStudioError}
+              exportingAssetKey={exportingOutcomeAssetKey}
+              feedback={outcomeStudioFeedback}
+              generatingResponse={isGeneratingOutcomeResponse}
+              loading={isLoadingOutcomeStudio || isFetchingOutcomeStudio}
+              onExportAsset={handleExportOutcomeAsset}
+              onGenerateResponse={handleGenerateOutcomeResponse}
+              onPublishAsset={handlePublishOutcomeAsset}
+              onStartSession={handleStartOutcomeSession}
+              onSubmitPrompt={handleSubmitOutcomePrompt}
+              onUpdateFromLatestTruth={handleUpdateOutcomeSessionFromLatestTruth}
+              onViewAssetVersions={handleViewOutcomeAssetVersions}
+              outcomeStudio={outcomeStudio}
+              selectedAssetId={selectedOutcomeAssetId}
+              sessionDetail={outcomeStudioSession}
+              sessionError={outcomeStudioSessionError}
+              sessionLoading={isLoadingOutcomeStudioSession || isFetchingOutcomeStudioSession}
+              publishingAssetKey={publishingOutcomeAssetKey}
+              submittingPrompt={isSubmittingOutcomePrompt}
+              updatingTruth={isUpdatingOutcomeTruth}
+            />
           ) : activeSection ? (
             <ul className="runtime-workspace__section-list" aria-label="Runtime section cards">
               <RuntimeSection
@@ -7456,8 +9101,10 @@ function RuntimeWorkspace() {
                 discoveryState={isRuntimeLockedForInspection ? 'Locked Inspection' : discoveryState}
                 lockedInspection={isRuntimeLockedForInspection}
                 onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
+                onSelectOutcomeStudio={() => setActiveWorkspaceKey(OUTCOME_STUDIO_NAV_KEY)}
                 onSelectOutputLab={() => setActiveWorkspaceKey(OUTPUT_LAB_NAV_KEY)}
                 onSelectSection={handleSelectSection}
+                outcomeStudioState={outcomeStudioState}
                 outputLabState={outputLabState}
                 sections={sections}
               />

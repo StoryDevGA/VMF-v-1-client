@@ -692,7 +692,8 @@
   min-width: 0;
 }
 
-.runtime-workspace__output-lab .runtime-workspace__section-heading {
+.runtime-workspace__output-lab .runtime-workspace__section-heading,
+.runtime-workspace__outcome-studio .runtime-workspace__section-heading {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
 }
@@ -702,16 +703,47 @@
   justify-items: start;
 }
 
-.runtime-workspace__section-panels--output-lab {
+.runtime-workspace__section-panels--output-lab,
+.runtime-workspace__section-panels--outcome-studio {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
+  width: 100%;
+}
+
+.runtime-workspace__section-panels--outcome-studio {
+  justify-items: stretch;
+}
+
+.runtime-workspace__section-panels--outcome-studio > .runtime-workspace__section-panel {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+}
+
+.runtime-workspace__outcome-studio .runtime-workspace__section-tabs-region,
+.runtime-workspace__outcome-studio .runtime-workspace__section-tabs,
+.runtime-workspace__outcome-studio .runtime-workspace__section-tab-panel,
+.runtime-workspace__outcome-studio .tabview__content,
+.runtime-workspace__outcome-studio .tabview__panel {
+  width: 100%;
+  min-width: 0;
 }
 
 .runtime-workspace__section-panel--output-lab-readiness,
 .runtime-workspace__section-panel--output-lab-composition,
 .runtime-workspace__section-panel--output-lab-assets,
+.runtime-workspace__section-panel--outcome-studio-readiness,
+.runtime-workspace__section-panel--outcome-studio-truth,
+.runtime-workspace__section-panel--outcome-studio-conversation,
+.runtime-workspace__section-panel--outcome-studio-assets,
 .runtime-workspace__section-panel--truth-certification {
   gap: var(--spacing-sm);
+}
+
+.runtime-workspace__section-panel--outcome-studio-readiness,
+.runtime-workspace__section-panel--outcome-studio-truth,
+.runtime-workspace__section-panel--outcome-studio-conversation,
+.runtime-workspace__section-panel--outcome-studio-assets {
+  width: 100%;
 }
 
 .runtime-workspace__truth-certification {
@@ -741,7 +773,10 @@
 }
 
 .runtime-workspace__output-lab-actions,
-.runtime-workspace__output-lab-export-actions {
+.runtime-workspace__output-lab-export-actions,
+.runtime-workspace__outcome-studio-asset-actions,
+.runtime-workspace__outcome-studio-export-actions,
+.runtime-workspace__outcome-studio-truth-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
@@ -752,7 +787,10 @@
   justify-content: flex-end;
 }
 
-.runtime-workspace__output-lab-export-actions {
+.runtime-workspace__output-lab-export-actions,
+.runtime-workspace__outcome-studio-asset-actions,
+.runtime-workspace__outcome-studio-export-actions,
+.runtime-workspace__outcome-studio-truth-actions {
   justify-content: flex-start;
 }
 
@@ -857,6 +895,198 @@
 .runtime-workspace__output-lab-asset:first-child {
   border-top: 0;
   padding-top: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list,
+.runtime-workspace__outcome-studio-asset-list,
+.runtime-workspace__outcome-studio-asset-preview,
+.runtime-workspace__outcome-studio-version-detail,
+.runtime-workspace__outcome-studio-version-list,
+.runtime-workspace__outcome-studio-message-list,
+.runtime-workspace__outcome-studio-session,
+.runtime-workspace__outcome-studio-source,
+.runtime-workspace__outcome-studio-truth-signature {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list li,
+.runtime-workspace__outcome-studio-asset-list li,
+.runtime-workspace__outcome-studio-asset-preview,
+.runtime-workspace__outcome-studio-version-detail,
+.runtime-workspace__outcome-studio-version-list li,
+.runtime-workspace__outcome-studio-message-list li,
+.runtime-workspace__outcome-studio-session,
+.runtime-workspace__outcome-studio-source,
+.runtime-workspace__outcome-studio-truth-signature {
+  border-top: var(--border-width-thin) solid var(--color-card-border);
+  padding-top: var(--spacing-xs);
+}
+
+.runtime-workspace__outcome-studio-pack-list li,
+.runtime-workspace__outcome-studio-asset-list li,
+.runtime-workspace__outcome-studio-version-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-xs);
+  align-items: start;
+}
+
+.runtime-workspace__outcome-studio-message-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-workspace__outcome-studio-message-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-xs);
+  align-items: start;
+}
+
+.runtime-workspace__outcome-studio-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.runtime-workspace__outcome-studio-asset-action-region,
+.runtime-workspace__outcome-studio-truth-action-region {
+  display: grid;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list li > div,
+.runtime-workspace__outcome-studio-asset-list li > div,
+.runtime-workspace__outcome-studio-message-list li > div {
+  display: grid;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list li:first-child,
+.runtime-workspace__outcome-studio-asset-list li:first-child,
+.runtime-workspace__outcome-studio-version-list li:first-child,
+.runtime-workspace__outcome-studio-message-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list strong,
+.runtime-workspace__outcome-studio-asset-list strong,
+.runtime-workspace__outcome-studio-asset-preview h4,
+.runtime-workspace__outcome-studio-preview-sections strong,
+.runtime-workspace__outcome-studio-version-list strong,
+.runtime-workspace__outcome-studio-message-list strong,
+.runtime-workspace__outcome-studio-session h4,
+.runtime-workspace__outcome-studio-source strong,
+.runtime-workspace__outcome-studio-truth-signature h4,
+.runtime-workspace__outcome-studio-version-detail h4 {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.runtime-workspace__outcome-studio-session h4,
+.runtime-workspace__outcome-studio-asset-preview h4,
+.runtime-workspace__outcome-studio-truth-signature h4,
+.runtime-workspace__outcome-studio-version-detail h4 {
+  margin: 0;
+}
+
+.runtime-workspace__outcome-studio-pack-list span,
+.runtime-workspace__outcome-studio-asset-list span,
+.runtime-workspace__outcome-studio-version-detail span,
+.runtime-workspace__outcome-studio-version-list span,
+.runtime-workspace__outcome-studio-message-list span,
+.runtime-workspace__outcome-studio-source span {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.runtime-workspace__outcome-studio-preview-document {
+  display: grid;
+  gap: var(--spacing-xs);
+  overflow: auto;
+  max-height: min(24rem, 44vh);
+  margin: 0;
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 78%, transparent);
+  border-radius: var(--border-radius-sm);
+  padding: var(--spacing-sm);
+  background-color: color-mix(in srgb, var(--color-background) 80%, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.runtime-workspace__outcome-studio-preview-heading,
+.runtime-workspace__outcome-studio-preview-paragraph,
+.runtime-workspace__outcome-studio-preview-list {
+  min-width: 0;
+  margin: 0;
+}
+
+.runtime-workspace__outcome-studio-preview-heading {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.runtime-workspace__outcome-studio-preview-heading--level-1 {
+  font-size: var(--font-size-lg);
+}
+
+.runtime-workspace__outcome-studio-preview-heading--level-2,
+.runtime-workspace__outcome-studio-preview-heading--level-3 {
+  font-size: var(--font-size-md);
+}
+
+.runtime-workspace__outcome-studio-preview-paragraph,
+.runtime-workspace__outcome-studio-preview-list {
+  color: var(--color-text-secondary);
+}
+
+.runtime-workspace__outcome-studio-preview-list {
+  display: grid;
+  gap: var(--spacing-3xs);
+  padding-left: var(--spacing-lg);
+}
+
+.runtime-workspace__outcome-studio-preview-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.runtime-workspace__outcome-studio-preview-sections {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+}
+
+.runtime-workspace__outcome-studio-preview-sections li {
+  display: grid;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+  padding-top: var(--spacing-xs);
+  border-top: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 70%, transparent);
+}
+
+.runtime-workspace__outcome-studio-preview-sections li:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .runtime-workspace__section-panel,
