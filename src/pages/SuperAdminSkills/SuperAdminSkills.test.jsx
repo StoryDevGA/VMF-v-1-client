@@ -8,6 +8,7 @@ import {
   setupRuntimeControlTestEnvironment,
 } from '../../test/runtimeControlPageTestUtils.jsx'
 import { __mutateRuntimeControlApiStateForTests } from '../../store/api/runtimeControlApi.js'
+import { RUNTIME_SKILL_CATEGORY_OPTIONS } from './superAdminSkills.constants.js'
 
 function renderPage(initialRoute = '/super-admin/runtime-control/skills') {
   return renderRuntimeControlPage({
@@ -68,6 +69,20 @@ function addSkillPaginationFixtures() {
 describe('SuperAdminSkills page', () => {
   beforeEach(() => {
     setupRuntimeControlTestEnvironment()
+  })
+
+  it('keeps the skill category dropdown aligned with backend-controlled categories', () => {
+    const categories = new Set(RUNTIME_SKILL_CATEGORY_OPTIONS.map((option) => option.value))
+
+    expect([...categories]).toEqual(expect.arrayContaining([
+      'CONSUMPTION',
+      'ADVISOR',
+      'TRUTH',
+      'EVIDENCE',
+      'RECOMMENDATION',
+      'KNOWLEDGE_PACK',
+      'OUTCOME',
+    ]))
   })
 
   it('renders the catalogue-first skills page and routes create actions to the dedicated editor page', async () => {

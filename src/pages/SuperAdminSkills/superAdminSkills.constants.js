@@ -28,15 +28,42 @@ export const RUNTIME_SKILL_CATEGORY_OPTIONS = Object.freeze([
   { value: 'GOVERNANCE', label: 'Governance' },
   { value: 'QUALITY', label: 'Quality' },
   { value: 'CONSISTENCY', label: 'Consistency' },
+  { value: 'CONSUMPTION', label: 'Consumption' },
   { value: 'COMPLIANCE', label: 'Compliance' },
   { value: 'RISK', label: 'Risk' },
+  { value: 'ADVISOR', label: 'Advisor' },
   { value: 'LIFECYCLE', label: 'Lifecycle' },
+  { value: 'STATE', label: 'State' },
+  { value: 'TRUTH', label: 'Truth' },
+  { value: 'EVIDENCE', label: 'Evidence' },
+  { value: 'RECOMMENDATION', label: 'Recommendation' },
   { value: 'GENERATION', label: 'Generation' },
+  { value: 'KNOWLEDGE_PACK', label: 'Knowledge pack' },
   { value: 'OUTPUT', label: 'Output' },
+  { value: 'OUTCOME', label: 'Outcome' },
   { value: 'ANALYSIS', label: 'Analysis' },
   { value: 'ORCHESTRATION', label: 'Orchestration' },
   { value: 'INTEGRATION', label: 'Integration' },
   { value: 'NOTIFICATION', label: 'Notification' },
+  { value: 'ASSET', label: 'Asset' },
+  { value: 'BOUNDARY', label: 'Boundary' },
+  { value: 'COMMERCIAL', label: 'Commercial' },
+  { value: 'DEAL', label: 'Deal' },
+  { value: 'DECISION', label: 'Decision' },
+  { value: 'DEPENDENCY', label: 'Dependency' },
+  { value: 'DISCOVERY', label: 'Discovery' },
+  { value: 'DSIC', label: 'DSIC' },
+  { value: 'ECONOMICS', label: 'Economics' },
+  { value: 'HFRE', label: 'HFRE' },
+  { value: 'INTEGRITY', label: 'Integrity' },
+  { value: 'POSITIONING', label: 'Positioning' },
+  { value: 'PROOF', label: 'Proof' },
+  { value: 'QUERY', label: 'Query' },
+  { value: 'RENDER', label: 'Render' },
+  { value: 'RUNTIME', label: 'Runtime' },
+  { value: 'SYNCHRONIZATION', label: 'Synchronization' },
+  { value: 'TARGETING', label: 'Targeting' },
+  { value: 'VALUE_DRIVER', label: 'Value driver' },
 ])
 
 export const RUNTIME_SKILL_TYPE_OPTIONS = Object.freeze([
@@ -295,6 +322,7 @@ function normalizeSkillKey(value) {
 
 function normalizeRuntimeSkillCategory(value) {
   const normalized = String(value ?? '').trim().toUpperCase()
+  if (VALID_RUNTIME_SKILL_CATEGORIES.has(normalized)) return normalized
   const migrated = LEGACY_RUNTIME_SKILL_CATEGORY_MAP[normalized] || normalized
   return VALID_RUNTIME_SKILL_CATEGORIES.has(migrated) ? migrated : 'VALIDATION'
 }

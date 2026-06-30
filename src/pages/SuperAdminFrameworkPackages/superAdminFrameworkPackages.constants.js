@@ -66,13 +66,36 @@ export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freez
   { value: 'ON_STAGE_EXIT', label: 'On stage exit' },
   { value: 'ON_APPROVAL', label: 'On approval' },
   { value: 'ON_APPROVE', label: 'On approve' },
+  { value: 'ON_DISCOVERY_SAVE', label: 'On discovery save' },
+  { value: 'ON_GENERATE_TRUTH', label: 'On generate truth' },
+  { value: 'ON_CONTRADICTION_FOUND', label: 'On contradiction found' },
+  { value: 'ON_ECONOMIC_MODEL_SAVE', label: 'On economic model save' },
+  { value: 'ON_COMMERCIAL_MODEL_SAVE', label: 'On commercial model save' },
+  { value: 'ON_DECISION_REVIEW', label: 'On decision review' },
+  { value: 'ON_RECOMMENDATION_GENERATED', label: 'On recommendation generated' },
+  { value: 'ON_OUTPUT_REQUEST', label: 'On output request' },
+  { value: 'ON_ADVISOR_REQUEST', label: 'On advisor request' },
+  { value: 'ON_OUTCOME_REQUEST', label: 'On outcome request' },
+  { value: 'ON_HANDOFF', label: 'On handoff' },
   { value: 'ON_SECTION_BUILD', label: 'On section build' },
   { value: 'ON_SECTION_GENERATE', label: 'On section generate' },
   { value: 'ON_SECTION_REGENERATE', label: 'On section regenerate' },
+  { value: 'ON_TARGETING_COMPLETE', label: 'On targeting complete' },
   { value: 'ON_DISCOVERY_COMPLETE', label: 'On discovery complete' },
+  { value: 'ON_VALUE_DRIVER_COMPLETE', label: 'On value driver complete' },
+  { value: 'ON_DECISION_CONTEXT_COMPLETE', label: 'On decision context complete' },
   { value: 'ON_POSITIONING_COMPLETE', label: 'On positioning complete' },
   { value: 'ON_PROOF_COMPLETE', label: 'On proof complete' },
+  { value: 'ON_ECONOMIC_COMPLETE', label: 'On economic complete' },
   { value: 'ON_ECONOMICS_COMPLETE', label: 'On economics complete' },
+  { value: 'ON_COMMERCIAL_COMPLETE', label: 'On commercial complete' },
+  { value: 'ON_SYNCHRONIZATION_CHECK', label: 'On synchronization check' },
+  { value: 'ON_HANDOFF_READY', label: 'On handoff ready' },
+  { value: 'ON_PACKAGE_VALIDATE', label: 'On package validate' },
+  { value: 'ON_PACKAGE_BUILD', label: 'On package build' },
+  { value: 'ON_POLICY_FAIL', label: 'On policy fail' },
+  { value: 'ON_MUTATION', label: 'On mutation' },
+  { value: 'ON_CONSUMPTION_REQUEST', label: 'On consumption request' },
   { value: 'ON_TRAP_ANALYSIS_COMPLETE', label: 'On trap analysis complete' },
   { value: 'ON_VALIDATE', label: 'On validate' },
   { value: 'ON_DEAL_MODE_REQUEST', label: 'On deal mode request' },
@@ -91,6 +114,7 @@ export const FRAMEWORK_PACKAGE_EXECUTION_MODE_OPTIONS = Object.freeze([
 export const FRAMEWORK_PACKAGE_STATE_MODEL_OPTIONS = Object.freeze([
   { value: 'LIFECYCLE_BASED', label: 'Lifecycle based' },
   { value: 'FREEFORM', label: 'Freeform' },
+  { value: 'RUNTIME_KNOWLEDGE_MODEL', label: 'Runtime knowledge model' },
 ])
 
 export const FRAMEWORK_PACKAGE_STATE_MODEL_REFERENCE_MODES = Object.freeze({
@@ -133,10 +157,20 @@ export const FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS = Object.freeze([
   { value: 'integrity-audit', label: 'Integrity audit' },
   { value: 'validation-audit', label: 'Validation audit' },
   { value: 'state-audit', label: 'State audit' },
+  { value: 'canonical-vmf-report', label: 'Canonical VMF report' },
+  { value: 'dependency-readiness-audit', label: 'Dependency readiness audit' },
+  { value: 'executive-value-brief', label: 'Executive value brief' },
+  { value: 'discovery-truth-summary', label: 'Discovery truth summary' },
+  { value: 'economic-rationale', label: 'Economic rationale' },
+  { value: 'decision-readiness-brief', label: 'Decision readiness brief' },
+  { value: 'outcome-studio-brief', label: 'Outcome Studio brief' },
+  { value: 'commercial-clarity-brief', label: 'Commercial clarity brief' },
 ])
 
 export const FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS = Object.freeze([
   { value: 'developed-executive-technical', label: 'Developed executive + technical' },
+  { value: 'truth-validation-report', label: 'Truth validation report' },
+  { value: 'executive-runtime-brief', label: 'Executive runtime brief' },
 ])
 
 export const FRAMEWORK_PACKAGE_LIFECYCLE_STAGE_OPTIONS = Object.freeze([
