@@ -203,9 +203,9 @@ describe('MaintainVmfs', () => {
           {
             id: 'pkg-1',
             frameworkKey: 'VMF',
-            packageName: 'VMF Runtime Package',
-            packageKey: 'vmf-runtime-package',
-            version: '2.3.1',
+            packageName: 'VMF v3.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-rkm',
+            version: '3.1.0',
             status: 'ACTIVE',
           },
         ],
@@ -222,7 +222,7 @@ describe('MaintainVmfs', () => {
       unwrap: vi.fn().mockResolvedValue({
         data: {
           name: 'Northwind',
-          packageVersion: '2.3.1',
+          packageVersion: '3.1.0',
           runtimeInstanceKey: 'value-narrative-001',
         },
       }),
@@ -743,8 +743,8 @@ describe('MaintainVmfs', () => {
     await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
-      .toHaveDisplayValue('VMF Runtime Package / 2.3.1')
+    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+      .toHaveDisplayValue('VMF v3.1 Runtime Knowledge Model / v3.1.0')
 
     await user.type(
       within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
@@ -773,26 +773,26 @@ describe('MaintainVmfs', () => {
     })
   })
 
-  it('defaults to the default framework package when more than one package is available', async () => {
+  it('defaults to the default VMF version when more than one version is available', async () => {
     const user = userEvent.setup()
 
     frameworkPackageQueryResponse = {
       data: {
         data: [
           {
-            id: 'pkg-1',
-            packageName: 'VMF Runtime Package',
-            packageKey: 'vmf-runtime-package',
-            version: '2.3.1',
+            id: 'pkg-31',
+            packageName: 'VMF v3.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-rkm',
+            version: '3.1.0',
             status: 'ACTIVE',
-            isDefault: true,
           },
           {
-            id: 'pkg-2',
-            packageName: 'VMF Enterprise Package',
-            packageKey: 'vmf-enterprise-package',
-            version: '2.4.0',
+            id: 'pkg-311',
+            packageName: 'VMF v3.1.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-1-rkm',
+            version: '3.1.1',
             status: 'ACTIVE',
+            isDefault: true,
           },
         ],
         meta: { page: 1, totalPages: 1, total: 2 },
@@ -807,8 +807,8 @@ describe('MaintainVmfs', () => {
     await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
-      .toHaveDisplayValue('VMF Runtime Package / 2.3.1')
+    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+      .toHaveDisplayValue('VMF v3.1.1 Runtime Knowledge Model / v3.1.1')
 
     await user.type(
       within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
@@ -827,31 +827,31 @@ describe('MaintainVmfs', () => {
         frameworkKey: 'VMF',
         runtimeType: 'VALUE_NARRATIVE',
         name: 'Northwind',
-        frameworkPackageId: 'pkg-1',
+        frameworkPackageId: 'pkg-311',
       },
     })
   })
 
-  it('allows the user to override the default framework package selection', async () => {
+  it('allows the user to override the default VMF version selection', async () => {
     const user = userEvent.setup()
 
     frameworkPackageQueryResponse = {
       data: {
         data: [
           {
-            id: 'pkg-1',
-            packageName: 'VMF Runtime Package',
-            packageKey: 'vmf-runtime-package',
-            version: '2.3.1',
+            id: 'pkg-31',
+            packageName: 'VMF v3.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-rkm',
+            version: '3.1.0',
             status: 'ACTIVE',
-            isDefault: true,
           },
           {
-            id: 'pkg-2',
-            packageName: 'VMF Enterprise Package',
-            packageKey: 'vmf-enterprise-package',
-            version: '2.4.0',
+            id: 'pkg-311',
+            packageName: 'VMF v3.1.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-1-rkm',
+            version: '3.1.1',
             status: 'ACTIVE',
+            isDefault: true,
           },
         ],
         meta: { page: 1, totalPages: 1, total: 2 },
@@ -866,8 +866,8 @@ describe('MaintainVmfs', () => {
     await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
     await user.selectOptions(
-      within(dialog).getByRole('combobox', { name: /framework package/i }),
-      'pkg-2',
+      within(dialog).getByRole('combobox', { name: /vmf version/i }),
+      'pkg-31',
     )
     await user.type(
       within(dialog).getByLabelText(/name/i, { selector: 'input#vmf-create-name' }),
@@ -886,29 +886,29 @@ describe('MaintainVmfs', () => {
         frameworkKey: 'VMF',
         runtimeType: 'VALUE_NARRATIVE',
         name: 'Northwind',
-        frameworkPackageId: 'pkg-2',
+        frameworkPackageId: 'pkg-31',
       },
     })
   })
 
-  it('requires a selected framework package when multiple packages are available without a default', async () => {
+  it('requires a selected VMF version when multiple versions are available without a default', async () => {
     const user = userEvent.setup()
 
     frameworkPackageQueryResponse = {
       data: {
         data: [
           {
-            id: 'pkg-1',
-            packageName: 'VMF Runtime Package',
-            packageKey: 'vmf-runtime-package',
-            version: '2.3.1',
+            id: 'pkg-31',
+            packageName: 'VMF v3.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-rkm',
+            version: '3.1.0',
             status: 'ACTIVE',
           },
           {
-            id: 'pkg-2',
-            packageName: 'VMF Enterprise Package',
-            packageKey: 'vmf-enterprise-package',
-            version: '2.4.0',
+            id: 'pkg-311',
+            packageName: 'VMF v3.1.1 Runtime Knowledge Model',
+            packageKey: 'standard-package-vmf-3-1-1-rkm',
+            version: '3.1.1',
             status: 'ACTIVE',
           },
         ],
@@ -930,7 +930,7 @@ describe('MaintainVmfs', () => {
     )
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
-    expect(await within(dialog).findByText(/framework package is required/i)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/VMF version is required/i)).toBeInTheDocument()
     expect(createRuntimeInstanceMock).not.toHaveBeenCalled()
   })
 
@@ -1183,20 +1183,20 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity/i }))
       .toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('status', { name: /eligible framework package required/i }))
-      .toHaveTextContent(/no eligible package/i)
-    expect(actionBar).toHaveTextContent(/No eligible package\s*Back\s*2 of 4 left/i)
+    expect(screen.getByRole('status', { name: /eligible VMF version required/i }))
+      .toHaveTextContent(/no eligible version/i)
+    expect(actionBar).toHaveTextContent(/No eligible version\s*Back\s*2 of 4 left/i)
 
     await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
+    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
       .toBeDisabled()
     expect(within(dialog).getByText(/assigned or published for this customer/i))
       .toBeInTheDocument()
     expect(within(dialog).getByText(/available to this customer and runtime-ready/i))
       .toBeInTheDocument()
-    expect(within(dialog).getByText(/assign or publish a package with active deployment evidence/i))
+    expect(within(dialog).getByText(/assign or publish a version with active deployment evidence/i))
       .toBeInTheDocument()
     expect(within(dialog).getByText(/certified dependency lock, active activation, active deployment/i))
       .toBeInTheDocument()
@@ -1315,7 +1315,12 @@ describe('MaintainVmfs', () => {
             lifecycleStatus: 'PUBLISHED',
             frameworkVersion: '2.2',
             frameworkPackageId: 'pkg-vmf-2-2',
-            frameworkPackage: { id: 'pkg-vmf-2-2', name: 'VMF Package 2.2' },
+            frameworkPackage: {
+              id: 'pkg-vmf-2-2',
+              name: 'VMF Package 2.2',
+              status: 'ACTIVE',
+              version: '2.2',
+            },
             completionState: 'NOT_TRACKED',
             validationStatus: 'NOT_RUN',
             lockStatus: 'UNLOCKED',
@@ -1364,7 +1369,15 @@ describe('MaintainVmfs', () => {
 
     const dialog = screen.getByRole('dialog', { name: /viewer vmf details/i })
     expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText('VMF Version')).toBeInTheDocument()
+    expect(within(dialog).getByText('VMF Version Id')).toBeInTheDocument()
+    expect(within(dialog).getByText('VMF Version Status')).toBeInTheDocument()
+    expect(within(dialog).getByText('VMF Version Number')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Framework Package')).not.toBeInTheDocument()
     expect(within(dialog).getByText('VMF Package 2.2')).toBeInTheDocument()
+    expect(within(dialog).getByText('pkg-vmf-2-2')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('ACTIVE').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('2.2').length).toBeGreaterThan(0)
     expect(within(dialog).getByText('Readiness pending')).toBeInTheDocument()
     expect(within(dialog).getByText('Not Started')).toBeInTheDocument()
     expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()

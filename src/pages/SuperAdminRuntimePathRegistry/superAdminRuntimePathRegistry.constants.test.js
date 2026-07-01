@@ -1,14 +1,67 @@
+import { execFileSync } from 'node:child_process'
+import path from 'node:path'
+import process from 'node:process'
+import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  RUNTIME_PATH_REGISTRY_CATEGORIES,
+  RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS,
   RUNTIME_PATH_REGISTRY_DATA_TYPES,
+  RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS,
   RUNTIME_PATH_REGISTRY_OPERATIONS,
+  RUNTIME_PATH_REGISTRY_OPERATION_OPTIONS,
+  RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS,
+  RUNTIME_PATH_REGISTRY_SCOPES,
+  RUNTIME_PATH_REGISTRY_SOURCE_TYPE_OPTIONS,
+  RUNTIME_PATH_REGISTRY_SOURCE_TYPES,
+  RUNTIME_PATH_REGISTRY_STATUS_OPTIONS,
   RUNTIME_PATH_REGISTRY_STATUSES,
+  RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS,
   RUNTIME_PATH_REGISTRY_UI_CONTROLS,
   buildRuntimePathRegistryStableId,
   getRuntimeControlVersionStatusVariant,
   getRuntimePathRegistryStatusVariant,
   validateRuntimePathRegistryForm,
 } from './superAdminRuntimePathRegistry.constants.js'
+
+const testDirname = path.dirname(fileURLToPath(import.meta.url))
+const workspaceRoot = path.resolve(testDirname, '../../../..')
+const apiRuntimePathRegistryModelPath = path.join(
+  workspaceRoot,
+  'VMF-v-1-api/src/models/RuntimePathRegistry.js',
+)
+
+const sortedValues = (values) =>
+  [...values].sort((left, right) => left.localeCompare(right))
+
+const objectValues = (values) => sortedValues(Object.values(values))
+
+const optionValues = (options) =>
+  sortedValues(options.map((option) => option.value).filter(Boolean))
+
+const loadBackendRuntimePathRegistrySnapshot = () => {
+  const script = `
+const runtimePathRegistry = await import(${JSON.stringify(pathToFileURL(apiRuntimePathRegistryModelPath).href)})
+
+process.stdout.write(JSON.stringify({
+  statuses: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_STATUSES),
+  operations: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_OPERATIONS),
+  scopes: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_SCOPES),
+  dataTypes: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_DATA_TYPES),
+  categories: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_CATEGORIES),
+  sourceTypes: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_SOURCE_TYPES),
+  uiControls: Object.values(runtimePathRegistry.RUNTIME_PATH_REGISTRY_UI_CONTROLS),
+}))
+`
+
+  return JSON.parse(
+    execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+  )
+}
 
 const buildValidForm = (overrides = {}) => ({
   pathKey: 'framework_state.lifecycle.stage',
@@ -96,5 +149,55 @@ describe('Runtime Path status variants', () => {
   it('renders draft operational and version statuses as warning/amber', () => {
     expect(getRuntimePathRegistryStatusVariant(RUNTIME_PATH_REGISTRY_STATUSES.DRAFT)).toBe('warning')
     expect(getRuntimeControlVersionStatusVariant('DRAFT')).toBe('warning')
+  })
+})
+
+describe('Runtime Path option contracts', () => {
+  it('keeps Runtime Path Registry constants aligned with backend model registries', () => {
+    const backendRegistries = loadBackendRuntimePathRegistrySnapshot()
+
+    expect(objectValues(RUNTIME_PATH_REGISTRY_STATUSES)).toEqual(
+      sortedValues(backendRegistries.statuses),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_OPERATIONS)).toEqual(
+      sortedValues(backendRegistries.operations),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_SCOPES)).toEqual(
+      sortedValues(backendRegistries.scopes),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_DATA_TYPES)).toEqual(
+      sortedValues(backendRegistries.dataTypes),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_CATEGORIES)).toEqual(
+      sortedValues(backendRegistries.categories),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_SOURCE_TYPES)).toEqual(
+      sortedValues(backendRegistries.sourceTypes),
+    )
+    expect(objectValues(RUNTIME_PATH_REGISTRY_UI_CONTROLS)).toEqual(
+      sortedValues(backendRegistries.uiControls),
+    )
+
+    expect(optionValues(RUNTIME_PATH_REGISTRY_STATUS_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.statuses),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_OPERATION_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.operations),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_SCOPE_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.scopes),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_DATA_TYPE_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.dataTypes),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_CATEGORY_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.categories),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_SOURCE_TYPE_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.sourceTypes),
+    )
+    expect(optionValues(RUNTIME_PATH_REGISTRY_UI_CONTROL_OPTIONS)).toEqual(
+      sortedValues(backendRegistries.uiControls),
+    )
   })
 })

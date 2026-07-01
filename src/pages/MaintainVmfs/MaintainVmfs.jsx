@@ -131,10 +131,10 @@ const VMF_READ_ONLY_REGISTER_GUIDE_ITEMS = [
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER =
-  'No eligible VMF package is assigned or published for this customer.'
+  'No eligible VMF version is assigned or published for this customer.'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_MESSAGE =
-  'The capacity badge shows tenant Value Narrative runtime slots. Creation also requires a VMF framework package that is both available to this customer and runtime-ready. Ask a Super Admin to assign or publish a package with active deployment evidence, or complete the package evidence chain: certified dependency lock, active activation, active deployment, and matching snapshot/hash evidence.'
+  'The capacity badge shows tenant Value Narrative runtime slots. Creation also requires a VMF version that is both available to this customer and runtime-ready. Ask a Super Admin to assign or publish a version with active deployment evidence, or complete the version evidence chain: certified dependency lock, active activation, active deployment, and matching snapshot/hash evidence.'
 
 const getLifecycleVariant = (value) => {
   if (value === 'PUBLISHED') return 'success'
@@ -229,7 +229,8 @@ const getFrameworkPackageId = (frameworkPackage) =>
 const getFrameworkPackageOptionLabel = (frameworkPackage) => {
   const label = getFrameworkPackageLabel({ frameworkPackage })
   const version = String(frameworkPackage?.version ?? '').trim()
-  return version && label !== '--' ? `${label} / ${version}` : label
+  const versionLabel = version && !version.toLowerCase().startsWith('v') ? `v${version}` : version
+  return versionLabel && label !== '--' ? `${label} / ${versionLabel}` : label
 }
 
 const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
@@ -1496,9 +1497,9 @@ function MaintainVmfs() {
         nextErrors.form = runtimeCapacityBlockMessage
       }
       if (!frameworkPackageId) {
-        nextErrors.frameworkPackageId = 'Framework package is required.'
+        nextErrors.frameworkPackageId = 'VMF version is required.'
       } else if (!frameworkPackageOptions.some((option) => option.value === frameworkPackageId)) {
-        nextErrors.frameworkPackageId = 'Select an available framework package.'
+        nextErrors.frameworkPackageId = 'Select an available VMF version.'
       }
 
       if (Object.keys(nextErrors).length > 0) {
@@ -1854,9 +1855,9 @@ function MaintainVmfs() {
                       size="sm"
                       showIcon
                       className="maintain-vmfs__package-status"
-                      aria-label="Eligible framework package required"
+                      aria-label="Eligible VMF version required"
                     >
-                      No eligible package
+                      No eligible version
                     </Status>
                   ) : null}
                   <div className="maintain-vmfs__catalogue-buttons">
@@ -2284,12 +2285,12 @@ function MaintainVmfs() {
             />
             <Select
               id="vmf-create-framework-package"
-              label="Framework Package"
+              label="VMF Version"
               value={createForm.frameworkPackageId}
               placeholder={
                 isFrameworkPackageSelectionLoading
-                  ? 'Loading framework packages...'
-                  : 'Select a framework package'
+                  ? 'Loading VMF versions...'
+                  : 'Select a VMF version'
               }
               options={frameworkPackageOptions}
               onChange={(event) =>
@@ -2301,7 +2302,7 @@ function MaintainVmfs() {
               error={createErrors.frameworkPackageId}
               helperText={
                 frameworkPackageOptions.length > 0
-                  ? 'Select the active runtime-ready package this instance will snapshot at creation.'
+                  ? 'Select the active runtime-ready VMF version this instance will snapshot at creation.'
                   : VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER
               }
               disabled={
@@ -2489,13 +2490,13 @@ function MaintainVmfs() {
             <VmfDetailField label="Framework Version">
               {String(detailsTarget?.frameworkVersion ?? '--').trim() || '--'}
             </VmfDetailField>
-            <VmfDetailField label="Framework Package">
+            <VmfDetailField label="VMF Version">
               {getFrameworkPackageLabel(detailsTarget)}
             </VmfDetailField>
-            <VmfDetailField label="Framework Package Id">
+            <VmfDetailField label="VMF Version Id">
               {String(detailsTarget?.frameworkPackageId ?? '--').trim() || '--'}
             </VmfDetailField>
-            <VmfDetailField label="Framework Package Status">
+            <VmfDetailField label="VMF Version Status">
               <Badge
                 size="sm"
                 variant={getRuntimeStateVariant(getFrameworkPackageDetail(detailsTarget, 'status') || '')}
@@ -2504,7 +2505,7 @@ function MaintainVmfs() {
                 {getFrameworkPackageDetail(detailsTarget, 'status') || '--'}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Framework Package Version">
+            <VmfDetailField label="VMF Version Number">
               {getFrameworkPackageDetail(detailsTarget, 'version')
                 || getFrameworkPackageDetail(detailsTarget, 'frameworkVersion')
                 || '--'}
