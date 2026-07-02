@@ -12,9 +12,13 @@ const {
   deprecateVersionMock,
   detailQueryMock,
   disableVersionMock,
+  importSourceDocumentDraftMock,
   importStarterVersionMock,
   listQueryMock,
   loadContentPreviewMock,
+  manifestListQueryMock,
+  manifestPreviewQueryMock,
+  reasoningContextPreviewQueryMock,
   previewQueryMock,
   rollbackPackMock,
   validateVersionMock,
@@ -26,9 +30,13 @@ const {
   deprecateVersionMock: vi.fn(),
   detailQueryMock: vi.fn(),
   disableVersionMock: vi.fn(),
+  importSourceDocumentDraftMock: vi.fn(),
   importStarterVersionMock: vi.fn(),
   listQueryMock: vi.fn(),
   loadContentPreviewMock: vi.fn(),
+  manifestListQueryMock: vi.fn(),
+  manifestPreviewQueryMock: vi.fn(),
+  reasoningContextPreviewQueryMock: vi.fn(),
   previewQueryMock: vi.fn(),
   rollbackPackMock: vi.fn(),
   validateVersionMock: vi.fn(),
@@ -180,6 +188,105 @@ const defaultPreviewResult = {
   error: null,
 }
 
+const defaultManifestListResult = {
+  data: {
+    data: [
+      {
+        id: 'kpm-outcome-studio-default-1-0-0-global',
+        manifestId: 'kpm-outcome-studio-default-1-0-0-global',
+        manifestKey: 'outcome-studio-default',
+        manifestName: 'Outcome Studio Default Knowledge Manifest',
+        semanticVersion: '1.0.0',
+        status: 'ACTIVE',
+        scopeType: 'GLOBAL',
+        scopeKey: 'GLOBAL',
+        mandatoryPacks: [
+          {
+            packType: 'OUTPUT_SCHEMA',
+            packKey: 'output-schemas-pack',
+            label: 'Output Schemas',
+          },
+        ],
+        optionalPacks: [],
+        validationPacks: [
+          {
+            packType: 'TRUTH_CERTIFICATION',
+            packKey: 'truth-certification-pack',
+            label: 'Truth Certification',
+          },
+        ],
+        blockedPacks: [],
+      },
+    ],
+    meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+  },
+  isLoading: false,
+  isFetching: false,
+  error: null,
+}
+
+const defaultManifestPreviewResult = {
+  data: {
+    data: {
+      binding: {
+        status: 'PROJECTED',
+        summary: 'Knowledge Pack manifest resolved all required packs.',
+        resolution: {
+          activeCount: 2,
+          requiredCount: 1,
+          validationCount: 1,
+          dependencyCount: 1,
+        },
+      },
+    },
+  },
+  isLoading: false,
+  isFetching: false,
+  error: null,
+}
+
+const defaultReasoningContextPreviewResult = {
+  data: {
+    data: {
+      status: 'PROJECTED',
+      previewOnly: true,
+      contentVisible: false,
+      generatedOutput: false,
+      providerExecution: false,
+      context: {
+        resolution: {
+          basePackCount: 1,
+          selectedContextPackCount: 2,
+          validationPackCount: 1,
+          omittedOptionalPackCount: 0,
+        },
+        selectedContextPacks: [
+          {
+            purposeCategory: 'STYLE',
+            packType: 'STYLE',
+            packKey: 'board-reporting-style',
+            label: 'Board Reporting Style',
+          },
+          {
+            purposeCategory: 'DECISION',
+            packType: 'DECISION',
+            packKey: 'investment-committee-decision',
+            label: 'Investment Committee Decision',
+          },
+        ],
+      },
+      safeguards: [
+        'PREVIEW_ONLY_NO_PROVIDER_EXECUTION',
+        'NO_GENERATED_OUTPUT',
+        'NO_PACK_CONTENT_EXPOSED',
+      ],
+    },
+  },
+  isLoading: false,
+  isFetching: false,
+  error: null,
+}
+
 const defaultDetailResult = {
   data: {
     data: {
@@ -284,6 +391,9 @@ vi.mock('../../components/Toaster', () => ({
 vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
   useListOutcomeKnowledgePacksQuery: listQueryMock,
   usePreviewOutcomeKnowledgePackResolutionQuery: previewQueryMock,
+  useListOutcomeKnowledgePackManifestsQuery: manifestListQueryMock,
+  usePreviewOutcomeKnowledgePackManifestResolutionQuery: manifestPreviewQueryMock,
+  usePreviewOutcomeKnowledgePackReasoningContextQuery: reasoningContextPreviewQueryMock,
   useGetOutcomeKnowledgePackQuery: detailQueryMock,
   useGetOutcomeKnowledgePackVersionQuery: versionQueryMock,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery: () => [
@@ -296,6 +406,10 @@ vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
   ],
   useImportOutcomeKnowledgePackStarterVersionMutation: () => [
     importStarterVersionMock,
+    { isLoading: false },
+  ],
+  useImportOutcomeKnowledgePackSourceDocumentDraftMutation: () => [
+    importSourceDocumentDraftMock,
     { isLoading: false },
   ],
   useDeprecateOutcomeKnowledgePackVersionMutation: () => [
@@ -333,6 +447,9 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     vi.clearAllMocks()
     listQueryMock.mockReturnValue(defaultListResult)
     previewQueryMock.mockReturnValue(defaultPreviewResult)
+    manifestListQueryMock.mockReturnValue(defaultManifestListResult)
+    manifestPreviewQueryMock.mockReturnValue(defaultManifestPreviewResult)
+    reasoningContextPreviewQueryMock.mockReturnValue(defaultReasoningContextPreviewResult)
     detailQueryMock.mockReturnValue(defaultDetailResult)
     versionQueryMock.mockReturnValue(defaultVersionResult)
     createVersionMock.mockReturnValue({
@@ -343,6 +460,11 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     importStarterVersionMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
         data: { version: { semanticVersion: '1.0.0' } },
+      }),
+    })
+    importSourceDocumentDraftMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: { pack: { label: 'Execution Translation' } },
       }),
     })
     validateVersionMock.mockReturnValue({
@@ -379,6 +501,8 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /knowledge packs/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /library/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByText(/0 of 5 required packs active/i)).toBeInTheDocument()
     expect(screen.getAllByText('Output Schemas').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Truth Certification').length).toBeGreaterThan(0)
@@ -388,6 +512,135 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .not.toBeInTheDocument()
     expect(screen.getByLabelText(/actions for adaptive-reasoning-layer/i)).not.toBeDisabled()
     expect(screen.getByLabelText(/actions for outcome-output-types/i)).not.toBeDisabled()
+  })
+
+  it('exposes library filters and keeps blank pack creation blocked until the draft contract exists', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(screen.getByLabelText(/^purpose$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^visibility$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^review$/i)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/^purpose$/i), 'OUTPUT')
+    await user.selectOptions(screen.getByLabelText(/^visibility$/i), 'PLATFORM')
+    await user.selectOptions(screen.getByLabelText(/^review$/i), 'DRAFT')
+
+    expect(screen.getAllByText('Output Schemas').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: /create blank pack/i }))
+
+    expect(await screen.findByRole('heading', { name: /create blank pack/i })).toBeInTheDocument()
+    expect(screen.getByText(/needs a draft persistence contract/i)).toBeInTheDocument()
+    expect(screen.getByText(/blank-pack draft persistence/i)).toBeInTheDocument()
+  })
+
+  it('renders manifest rows and previews dependency resolution without exposing pack content', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: /manifests/i }))
+
+    expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Outcome Studio Default Knowledge Manifest')).toBeInTheDocument()
+    expect(screen.getByText(/select a manifest to preview dependency resolution/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^preview$/i }))
+
+    await waitFor(() => {
+      expect(manifestPreviewQueryMock).toHaveBeenLastCalledWith(
+        { manifestId: 'kpm-outcome-studio-default-1-0-0-global' },
+        { skip: false },
+      )
+      expect(reasoningContextPreviewQueryMock).toHaveBeenLastCalledWith(
+        {
+          manifestId: 'kpm-outcome-studio-default-1-0-0-global',
+          outputKey: '',
+        },
+        { skip: false },
+      )
+    })
+    expect(screen.getByLabelText(/manifest resolution preview/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/reasoning context preview/i)).toBeInTheDocument()
+    expect(screen.getByText(/knowledge pack manifest resolved all required packs/i)).toBeInTheDocument()
+    expect(screen.getByText('Board Reporting Style')).toBeInTheDocument()
+    expect(screen.getByText('Investment Committee Decision')).toBeInTheDocument()
+    expect(screen.getByText(/PREVIEW_ONLY_NO_PROVIDER_EXECUTION/)).toBeInTheDocument()
+    expect(screen.getByText('active')).toBeInTheDocument()
+    expect(screen.getAllByText('validation').length).toBeGreaterThan(0)
+  })
+
+  it('creates a draft knowledge pack from source document metadata', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    expect(await screen.findByRole('heading', { name: /import source document/i }))
+      .toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/draft pack type/i), 'ET')
+    await user.type(screen.getByLabelText(/draft pack key/i), 'execution-translation')
+    await user.type(screen.getByLabelText(/draft label/i), 'Execution Translation')
+    await user.clear(screen.getByLabelText(/draft semantic version/i))
+    await user.type(screen.getByLabelText(/draft semantic version/i), '2.8.0')
+    await user.selectOptions(screen.getByLabelText(/purpose category/i), 'OUTPUT')
+    await user.type(screen.getByLabelText(/source authority/i), 'StorylineOS')
+    await user.type(
+      screen.getByLabelText(/source document filename/i),
+      'ET v2.8 Canonical Execution Translation System.md',
+    )
+    fireEvent.change(screen.getByLabelText(/extracted text/i), {
+      target: { value: 'Canonical execution translation source text.' },
+    })
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    await waitFor(() => {
+      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith({
+        packType: 'ET',
+        packKey: 'execution-translation',
+        label: 'Execution Translation',
+        description: '',
+        purposeCategory: 'OUTPUT',
+        semanticVersion: '2.8.0',
+        schemaVersion: '1.0.0',
+        sourceAuthority: 'StorylineOS',
+        executionMode: 'PROVIDER_CONTEXT',
+        visibility: 'PLATFORM',
+        customerId: '',
+        tenantId: '',
+        contentFormat: 'MARKDOWN',
+        sourceDocument: {
+          sourceDocumentId: '',
+          filename: 'ET v2.8 Canonical Execution Translation System.md',
+          contentType: '',
+          fileExtension: '',
+          sourceHash: '',
+        },
+        extractedText: 'Canonical execution translation source text.',
+      })
+    })
+
+    expect(validateVersionMock).not.toHaveBeenCalled()
+    expect(activateVersionMock).not.toHaveBeenCalled()
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Draft imported',
+      variant: 'success',
+    }))
+  })
+
+  it('blocks source document import when required draft fields are missing', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+    await user.click(await screen.findByRole('button', { name: /create draft/i }))
+
+    expect(await screen.findByText('Pack key is required.')).toBeInTheDocument()
+    expect(screen.getByText('Label is required.')).toBeInTheDocument()
+    expect(screen.getByText('Source filename is required.')).toBeInTheDocument()
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
 
   it('opens persisted pack details with version and activation history without loading source content', async () => {

@@ -22,8 +22,12 @@ import {
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
+  useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useImportOutcomeKnowledgePackStarterVersionMutation,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
+  useListOutcomeKnowledgePackManifestsQuery,
+  usePreviewOutcomeKnowledgePackManifestResolutionQuery,
+  usePreviewOutcomeKnowledgePackReasoningContextQuery,
   useListOutcomeKnowledgePacksQuery,
   usePreviewOutcomeKnowledgePackResolutionQuery,
   useRollbackOutcomeKnowledgePackMutation,
@@ -31,8 +35,16 @@ import {
 } from '../../store/api/outcomeKnowledgePacksApi.js'
 import { normalizeError } from '../../utils/errors.js'
 import {
+  EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM,
   EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM,
+  KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS,
+  KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS,
+  KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS,
+  KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS,
+  KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS,
+  KNOWLEDGE_PACK_VISIBILITY_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
+  OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS,
   buildOutcomeKnowledgePackRows,
@@ -119,6 +131,26 @@ function formatDetailValue(value, fallback = 'Not recorded') {
 
 function buildContentPreviewKey({ packId, versionId } = {}) {
   return `${formatDetailValue(packId, '')}:${formatDetailValue(versionId, '')}`
+}
+
+function getFilenameExtension(filename = '') {
+  const normalized = String(filename ?? '').trim().toLowerCase()
+  const extension = normalized.split('.').pop()
+  return extension && extension !== normalized ? extension : ''
+}
+
+function inferSourceFormatFromFilename(filename = '') {
+  const extension = getFilenameExtension(filename)
+  if (extension === 'docx') return 'DOCX'
+  if (extension === 'pdf') return 'PDF'
+  if (extension === 'yaml' || extension === 'yml') return 'YAML'
+  if (extension === 'json') return 'JSON'
+  return 'MARKDOWN'
+}
+
+function shouldReadSourceText(filename = '') {
+  const format = inferSourceFormatFromFilename(filename)
+  return format === 'MARKDOWN' || format === 'YAML' || format === 'JSON'
 }
 
 function getSummaryEntries(summary = {}) {
@@ -672,6 +704,254 @@ function renderVersion(_value, row) {
   )
 }
 
+function KnowledgePackSourceImportDialog({
+  open,
+  form,
+  error,
+  fieldErrors = {},
+  isLoading,
+  onClose,
+  onSubmit,
+  onFormChange,
+  onFileMetadata,
+}) {
+  if (!open) return null
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const filename = file.name
+    const contentFormat = inferSourceFormatFromFilename(filename)
+    const nextMetadata = {
+      filename,
+      contentType: file.type || '',
+      fileExtension: getFilenameExtension(filename),
+      contentFormat,
+      extractedText: '',
+    }
+
+    if (shouldReadSourceText(filename)) {
+      nextMetadata.extractedText = await file.text()
+    }
+
+    onFileMetadata(nextMetadata)
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} size="xl">
+      <form onSubmit={onSubmit} noValidate>
+        <Dialog.Header>
+          <h2>Import Source Document</h2>
+          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
+            Create a draft Knowledge Pack from a governed source document reference.
+          </p>
+        </Dialog.Header>
+        <Dialog.Body className="super-admin-outcome-knowledge-packs__dialog-body">
+          {error ? (
+            <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="super-admin-outcome-knowledge-packs__form-grid">
+            <Select
+              id="knowledge-pack-source-import-pack-type"
+              label="Draft Pack Type"
+              size="sm"
+              value={form.packType}
+              options={OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS.filter((option) => option.value)}
+              onChange={(event) => onFormChange('packType', event.target.value)}
+              error={fieldErrors.packType}
+              required
+            />
+            <Input
+              id="knowledge-pack-source-import-pack-key"
+              label="Draft Pack Key"
+              size="sm"
+              value={form.packKey}
+              onChange={(event) => onFormChange('packKey', event.target.value)}
+              error={fieldErrors.packKey}
+              required
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-label"
+              label="Draft Label"
+              size="sm"
+              value={form.label}
+              onChange={(event) => onFormChange('label', event.target.value)}
+              error={fieldErrors.label}
+              required
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-semantic-version"
+              label="Draft Semantic Version"
+              size="sm"
+              value={form.semanticVersion}
+              onChange={(event) => onFormChange('semanticVersion', event.target.value)}
+              error={fieldErrors.semanticVersion}
+              required
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-schema-version"
+              label="Draft Schema Version"
+              size="sm"
+              value={form.schemaVersion}
+              onChange={(event) => onFormChange('schemaVersion', event.target.value)}
+              error={fieldErrors.schemaVersion}
+              required
+              fullWidth
+            />
+            <Select
+              id="knowledge-pack-source-import-content-format"
+              label="Source Format"
+              size="sm"
+              value={form.contentFormat}
+              options={OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS}
+              onChange={(event) => onFormChange('contentFormat', event.target.value)}
+              error={fieldErrors.contentFormat}
+              required
+            />
+            <Select
+              id="knowledge-pack-source-import-purpose-category"
+              label="Purpose Category"
+              size="sm"
+              value={form.purposeCategory}
+              options={KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS}
+              onChange={(event) => onFormChange('purposeCategory', event.target.value)}
+              error={fieldErrors.purposeCategory}
+            />
+            <Select
+              id="knowledge-pack-source-import-execution-mode"
+              label="Execution Mode"
+              size="sm"
+              value={form.executionMode}
+              options={KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS}
+              onChange={(event) => onFormChange('executionMode', event.target.value)}
+              error={fieldErrors.executionMode}
+            />
+            <Select
+              id="knowledge-pack-source-import-visibility"
+              label="Visibility"
+              size="sm"
+              value={form.visibility}
+              options={KNOWLEDGE_PACK_VISIBILITY_OPTIONS}
+              onChange={(event) => onFormChange('visibility', event.target.value)}
+              error={fieldErrors.visibility}
+            />
+            <Input
+              id="knowledge-pack-source-import-authority"
+              label="Source Authority"
+              size="sm"
+              value={form.sourceAuthority}
+              onChange={(event) => onFormChange('sourceAuthority', event.target.value)}
+              error={fieldErrors.sourceAuthority}
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-customer-id"
+              label="Customer Id"
+              size="sm"
+              value={form.customerId}
+              onChange={(event) => onFormChange('customerId', event.target.value)}
+              error={fieldErrors.customerId}
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-tenant-id"
+              label="Tenant Id"
+              size="sm"
+              value={form.tenantId}
+              onChange={(event) => onFormChange('tenantId', event.target.value)}
+              error={fieldErrors.tenantId}
+              fullWidth
+            />
+          </div>
+
+          <label className="super-admin-outcome-knowledge-packs__file-field">
+            <span>Source document file</span>
+            <input
+              type="file"
+              accept=".md,.markdown,.txt,.yaml,.yml,.json,.docx,.pdf,text/plain,text/markdown,application/json,application/pdf"
+              onChange={handleFileChange}
+              disabled={isLoading}
+            />
+          </label>
+
+          <div className="super-admin-outcome-knowledge-packs__form-grid">
+            <Input
+              id="knowledge-pack-source-import-filename"
+              label="Source Document Filename"
+              size="sm"
+              value={form.filename}
+              onChange={(event) => onFormChange('filename', event.target.value)}
+              error={fieldErrors.filename}
+              required
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-document-id"
+              label="Source Document Id"
+              size="sm"
+              value={form.sourceDocumentId}
+              onChange={(event) => onFormChange('sourceDocumentId', event.target.value)}
+              error={fieldErrors.sourceDocumentId}
+              fullWidth
+            />
+            <Input
+              id="knowledge-pack-source-import-hash"
+              label="Source Hash"
+              size="sm"
+              value={form.sourceHash}
+              onChange={(event) => onFormChange('sourceHash', event.target.value)}
+              error={fieldErrors.sourceHash}
+              fullWidth
+            />
+          </div>
+
+          <Textarea
+            id="knowledge-pack-source-import-description"
+            label="Draft Description"
+            value={form.description}
+            rows={3}
+            resize="vertical"
+            onChange={(event) => onFormChange('description', event.target.value)}
+            error={fieldErrors.description}
+            fullWidth
+          />
+
+          <Textarea
+            id="knowledge-pack-source-import-extracted-text"
+            label="Extracted Text"
+            value={form.extractedText}
+            rows={8}
+            resize="vertical"
+            onChange={(event) => onFormChange('extractedText', event.target.value)}
+            error={fieldErrors.extractedText}
+            helperText="Optional text capture for Markdown, YAML, JSON, and text source documents."
+            fullWidth
+          />
+
+          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
+            Imported source documents are saved as draft packs. Validation and activation stay separate.
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={isLoading}>
+            Create Draft
+          </Button>
+        </Dialog.Footer>
+      </form>
+    </Dialog>
+  )
+}
+
 function KnowledgePackUploadDialog({
   pack,
   form,
@@ -778,12 +1058,189 @@ function KnowledgePackUploadDialog({
   )
 }
 
+function KnowledgePackBlankDraftDialog({ open, onClose }) {
+  return (
+    <Dialog open={open} onClose={onClose} size="md">
+      <Dialog.Header>
+        <h2>Create Blank Pack</h2>
+        <p>
+          This authoring route needs a draft persistence contract before it can save.
+        </p>
+      </Dialog.Header>
+      <Dialog.Body className="super-admin-outcome-knowledge-packs__dialog-body">
+        <p className="super-admin-outcome-knowledge-packs__dialog-copy">
+          Use Import Source Document for governed draft creation in this release.
+        </p>
+        <div className="super-admin-outcome-knowledge-packs__disabled-panel" role="note">
+          <strong>Blocked</strong>
+          <span>
+            Blank-pack draft persistence, review workflow, and audit logging are not available yet.
+          </span>
+        </div>
+      </Dialog.Body>
+      <Dialog.Footer>
+        <Button type="button" variant="primary" onClick={onClose}>
+          Close
+        </Button>
+      </Dialog.Footer>
+    </Dialog>
+  )
+}
+
+function formatManifestStatus(value = '') {
+  return formatKnowledgePackStatus(value)
+}
+
+function ManifestPackCount({ label, count }) {
+  return (
+    <span className="super-admin-outcome-knowledge-packs__manifest-count">
+      <strong>{count}</strong>
+      {label}
+    </span>
+  )
+}
+
+function KnowledgePackReasoningContextPreview({
+  preview,
+  error,
+  isLoading,
+}) {
+  if (isLoading) {
+    return <InlineLoadingState label="Loading reasoning context preview..." />
+  }
+
+  if (error) {
+    return (
+      <div className="super-admin-outcome-knowledge-packs__reasoning-preview-error" role="alert">
+        {error.message}
+      </div>
+    )
+  }
+
+  const context = preview?.context ?? {}
+  const resolution = context.resolution ?? {}
+  const selectedContextPacks = Array.isArray(context.selectedContextPacks)
+    ? context.selectedContextPacks
+    : []
+  const safeguards = Array.isArray(preview?.safeguards) ? preview.safeguards : []
+
+  return (
+    <section className="super-admin-outcome-knowledge-packs__reasoning-preview" aria-label="Reasoning context preview">
+      <div className="super-admin-outcome-knowledge-packs__reasoning-preview-header">
+        <div>
+          <h4>Reasoning Context Preview</h4>
+          <p>Metadata-only assembly. No provider execution or generated output.</p>
+        </div>
+        <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(preview?.status || 'PROJECTED')}>
+          {formatManifestStatus(preview?.status || 'PROJECTED')}
+        </Status>
+      </div>
+      <div className="super-admin-outcome-knowledge-packs__manifest-metrics">
+        <ManifestPackCount label="base" count={Number(resolution.basePackCount ?? 0)} />
+        <ManifestPackCount label="context" count={Number(resolution.selectedContextPackCount ?? 0)} />
+        <ManifestPackCount label="validation" count={Number(resolution.validationPackCount ?? 0)} />
+        <ManifestPackCount label="omitted" count={Number(resolution.omittedOptionalPackCount ?? 0)} />
+      </div>
+      {selectedContextPacks.length > 0 ? (
+        <ul className="super-admin-outcome-knowledge-packs__reasoning-pack-list">
+          {selectedContextPacks.slice(0, 6).map((pack) => (
+            <li key={`${pack.packType}:${pack.packKey}`}>
+              <strong>{pack.purposeCategory || pack.packType}</strong>
+              <span>{pack.label || pack.packKey}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="super-admin-outcome-knowledge-packs__table-note">
+          No optional context packs are selected for this manifest preview.
+        </p>
+      )}
+      {safeguards.length > 0 ? (
+        <p className="super-admin-outcome-knowledge-packs__table-note">
+          Safeguards: {safeguards.join(', ')}
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+function KnowledgePackManifestPreview({
+  manifest,
+  preview,
+  error,
+  isLoading,
+  reasoningPreview,
+  reasoningError,
+  isReasoningLoading,
+}) {
+  if (!manifest) {
+    return (
+      <div className="super-admin-outcome-knowledge-packs__empty-panel">
+        Select a manifest to preview dependency resolution.
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="super-admin-outcome-knowledge-packs__error-panel" role="alert">
+        {error.message}
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return <InlineLoadingState label="Loading manifest preview..." />
+  }
+
+  const binding = preview?.binding ?? {}
+  const resolution = binding.resolution ?? {}
+
+  return (
+    <section className="super-admin-outcome-knowledge-packs__manifest-preview" aria-label="Manifest resolution preview">
+      <div className="super-admin-outcome-knowledge-packs__panel-header">
+        <div>
+          <h3>{manifest.manifestName || manifest.manifestKey}</h3>
+          <p>{manifest.manifestKey} / v{manifest.semanticVersion}</p>
+        </div>
+        <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(binding.status || manifest.status)}>
+          {formatManifestStatus(binding.status || manifest.status)}
+        </Status>
+      </div>
+      <div className="super-admin-outcome-knowledge-packs__manifest-metrics">
+        <ManifestPackCount label="active" count={Number(resolution.activeCount ?? 0)} />
+        <ManifestPackCount label="required" count={Number(resolution.requiredCount ?? 0)} />
+        <ManifestPackCount label="validation" count={Number(resolution.validationCount ?? 0)} />
+        <ManifestPackCount label="dependencies" count={Number(resolution.dependencyCount ?? 0)} />
+      </div>
+      <p className="super-admin-outcome-knowledge-packs__table-note">
+        {binding.summary || 'Preview returns binding metadata only. Pack source content is not shown here.'}
+      </p>
+      <KnowledgePackReasoningContextPreview
+        preview={reasoningPreview}
+        error={reasoningError}
+        isLoading={isReasoningLoading}
+      />
+    </section>
+  )
+}
+
 function SuperAdminOutcomeKnowledgePacks() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
+  const [activeSurface, setActiveSurface] = useState('library')
   const [search, setSearch] = useState('')
   const [packType, setPackType] = useState('')
   const [status, setStatus] = useState('')
+  const [purposeCategory, setPurposeCategory] = useState('')
+  const [visibility, setVisibility] = useState('')
+  const [reviewStatus, setReviewStatus] = useState('')
+  const [isBlankDraftOpen, setIsBlankDraftOpen] = useState(false)
+  const [selectedManifestId, setSelectedManifestId] = useState('')
+  const [isSourceImportOpen, setIsSourceImportOpen] = useState(false)
+  const [sourceImportForm, setSourceImportForm] = useState(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
+  const [sourceImportError, setSourceImportError] = useState('')
+  const [sourceImportFieldErrors, setSourceImportFieldErrors] = useState({})
   const [uploadPack, setUploadPack] = useState(null)
   const [uploadForm, setUploadForm] = useState(EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM)
   const [uploadError, setUploadError] = useState('')
@@ -799,7 +1256,15 @@ function SuperAdminOutcomeKnowledgePacks() {
     page: 1,
     pageSize: OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
   })
+  const manifestsQuery = useListOutcomeKnowledgePackManifestsQuery({
+    page: 1,
+    pageSize: OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
+  })
   const previewQuery = usePreviewOutcomeKnowledgePackResolutionQuery({})
+  const manifestPreviewQuery = usePreviewOutcomeKnowledgePackManifestResolutionQuery(
+    { manifestId: selectedManifestId },
+    { skip: !selectedManifestId },
+  )
   const detailPackId = detailPack?.packId || ''
   const detailQuery = useGetOutcomeKnowledgePackQuery(
     { packId: detailPackId },
@@ -809,6 +1274,8 @@ function SuperAdminOutcomeKnowledgePacks() {
     useCreateOutcomeKnowledgePackVersionMutation()
   const [importStarterVersion, { isLoading: isImportingStarterVersion }] =
     useImportOutcomeKnowledgePackStarterVersionMutation()
+  const [importSourceDocumentDraft, { isLoading: isImportingSourceDocumentDraft }] =
+    useImportOutcomeKnowledgePackSourceDocumentDraftMutation()
   const [validateVersion, { isLoading: isValidatingVersion }] =
     useValidateOutcomeKnowledgePackVersionMutation()
   const [activateVersion, { isLoading: isActivatingVersion }] =
@@ -830,15 +1297,42 @@ function SuperAdminOutcomeKnowledgePacks() {
     requiredPacks: previewData.requiredPacks ?? [],
     starterPacks: sourceBundle.starterPacks ?? [],
   })
-  const filteredRows = filterOutcomeKnowledgePackRows(rows, { search, packType, status })
+  const manifestRows = manifestsQuery.data?.data ?? []
+  const selectedManifest = manifestRows.find((manifest) => manifest.manifestId === selectedManifestId)
+    || manifestRows.find((manifest) => manifest.manifestKey === selectedManifestId)
+    || null
+  const reasoningContextPreviewQuery = usePreviewOutcomeKnowledgePackReasoningContextQuery(
+    {
+      manifestId: selectedManifestId,
+      outputKey: selectedManifest?.outputKey || '',
+    },
+    { skip: !selectedManifestId },
+  )
+  const filteredRows = filterOutcomeKnowledgePackRows(rows, {
+    search,
+    packType,
+    status,
+    purposeCategory,
+    visibility,
+    reviewStatus,
+  })
   const listError = listQuery.error ? normalizeError(listQuery.error) : null
+  const manifestError = manifestsQuery.error ? normalizeError(manifestsQuery.error) : null
   const previewError = previewQuery.error ? normalizeError(previewQuery.error) : null
+  const manifestPreviewError = manifestPreviewQuery.error
+    ? normalizeError(manifestPreviewQuery.error)
+    : null
+  const reasoningContextPreviewError = reasoningContextPreviewQuery.error
+    ? normalizeError(reasoningContextPreviewQuery.error)
+    : null
   const isInitialLoading =
     (listQuery.isLoading || previewQuery.isLoading) && rows.length === 0
+  const isManifestInitialLoading = manifestsQuery.isLoading && manifestRows.length === 0
   const isLifecycleMutating = isDeprecatingVersion || isDisablingVersion || isRollingBackPack
   const isMutating =
     isCreatingVersion
     || isImportingStarterVersion
+    || isImportingSourceDocumentDraft
     || isValidatingVersion
     || isActivatingVersion
     || isLifecycleMutating
@@ -865,6 +1359,44 @@ function SuperAdminOutcomeKnowledgePacks() {
   const unboundRequiredPacks = resolution.unboundRequiredPacks ?? rows
     .filter((row) => row.runtimeBindable !== true)
     .map((row) => ({ label: row.label, packKey: row.packKey, status: row.status }))
+
+  const openSourceImportDialog = useCallback(() => {
+    setIsSourceImportOpen(true)
+    setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
+    setSourceImportError('')
+    setSourceImportFieldErrors({})
+  }, [])
+
+  const closeSourceImportDialog = useCallback(() => {
+    if (isImportingSourceDocumentDraft) return
+    setIsSourceImportOpen(false)
+    setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
+    setSourceImportError('')
+    setSourceImportFieldErrors({})
+  }, [isImportingSourceDocumentDraft])
+
+  const updateSourceImportForm = useCallback((field, value) => {
+    setSourceImportForm((current) => ({ ...current, [field]: value }))
+    setSourceImportFieldErrors((current) => {
+      if (!current[field]) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }, [])
+
+  const handleSourceImportFileMetadata = useCallback((metadata = {}) => {
+    setSourceImportForm((current) => ({
+      ...current,
+      ...metadata,
+    }))
+    setSourceImportFieldErrors((current) => {
+      const next = { ...current }
+      delete next.filename
+      delete next.contentFormat
+      return next
+    })
+  }, [])
 
   const openUploadDialog = useCallback((row) => {
     setUploadPack(row)
@@ -948,6 +1480,83 @@ function SuperAdminOutcomeKnowledgePacks() {
       return next
     })
   }, [])
+
+  const submitSourceImport = useCallback(async (event) => {
+    event.preventDefault()
+
+    const fieldErrors = {}
+    if (!sourceImportForm.packType.trim()) {
+      fieldErrors.packType = 'Pack type is required.'
+    }
+    if (!sourceImportForm.packKey.trim()) {
+      fieldErrors.packKey = 'Pack key is required.'
+    }
+    if (!sourceImportForm.label.trim()) {
+      fieldErrors.label = 'Label is required.'
+    }
+    if (!sourceImportForm.semanticVersion.trim()) {
+      fieldErrors.semanticVersion = 'Semantic version is required.'
+    }
+    if (!sourceImportForm.schemaVersion.trim()) {
+      fieldErrors.schemaVersion = 'Schema version is required.'
+    }
+    if (!sourceImportForm.filename.trim()) {
+      fieldErrors.filename = 'Source filename is required.'
+    }
+    if (sourceImportForm.visibility === 'CUSTOMER' && !sourceImportForm.customerId.trim()) {
+      fieldErrors.customerId = 'Customer Id is required for customer visibility.'
+    }
+    if (sourceImportForm.visibility === 'TENANT' && !sourceImportForm.tenantId.trim()) {
+      fieldErrors.tenantId = 'Tenant Id is required for tenant visibility.'
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setSourceImportFieldErrors(fieldErrors)
+      setSourceImportError('')
+      return
+    }
+
+    try {
+      const res = await importSourceDocumentDraft({
+        packType: sourceImportForm.packType,
+        packKey: sourceImportForm.packKey,
+        label: sourceImportForm.label,
+        description: sourceImportForm.description,
+        purposeCategory: sourceImportForm.purposeCategory,
+        semanticVersion: sourceImportForm.semanticVersion,
+        schemaVersion: sourceImportForm.schemaVersion,
+        sourceAuthority: sourceImportForm.sourceAuthority,
+        executionMode: sourceImportForm.executionMode,
+        visibility: sourceImportForm.visibility,
+        customerId: sourceImportForm.customerId,
+        tenantId: sourceImportForm.tenantId,
+        contentFormat: sourceImportForm.contentFormat,
+        sourceDocument: {
+          sourceDocumentId: sourceImportForm.sourceDocumentId,
+          filename: sourceImportForm.filename,
+          contentType: sourceImportForm.contentType,
+          fileExtension: sourceImportForm.fileExtension,
+          sourceHash: sourceImportForm.sourceHash,
+        },
+        extractedText: sourceImportForm.extractedText,
+      }).unwrap()
+
+      addToast({
+        variant: 'success',
+        title: 'Draft imported',
+        description: `${res?.data?.pack?.label ?? sourceImportForm.label} is ready for review.`,
+      })
+      setIsSourceImportOpen(false)
+      setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
+      setSourceImportError('')
+      setSourceImportFieldErrors({})
+    } catch (err) {
+      const appError = normalizeError(err)
+      setSourceImportFieldErrors({})
+      setSourceImportError(appError.message)
+      addToast({ variant: 'error', title: 'Source import failed', description: appError.message })
+    }
+  }, [addToast, importSourceDocumentDraft, sourceImportForm])
 
   const submitUpload = useCallback(async (event) => {
     event.preventDefault()
@@ -1244,6 +1853,84 @@ function SuperAdminOutcomeKnowledgePacks() {
     ],
   )
 
+  const manifestColumns = useMemo(
+    () => [
+      {
+        key: 'manifestName',
+        label: 'Manifest',
+        mobileLabel: 'Manifest',
+        render: (_value, row) => (
+          <div className="super-admin-outcome-knowledge-packs__summary">
+            <span className="super-admin-outcome-knowledge-packs__summary-name">
+              {row.manifestName || row.manifestKey}
+            </span>
+            <code className="super-admin-outcome-knowledge-packs__key">{row.manifestKey}</code>
+          </div>
+        ),
+      },
+      {
+        key: 'semanticVersion',
+        label: 'Version',
+        mobileLabel: 'Version',
+        width: '112px',
+        render: (value) => <code className="super-admin-outcome-knowledge-packs__key">{value}</code>,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        mobileLabel: 'Status',
+        width: '132px',
+        render: (value) => (
+          <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(value)}>
+            {formatManifestStatus(value)}
+          </Status>
+        ),
+      },
+      {
+        key: 'packSections',
+        label: 'Pack Sections',
+        mobileLabel: 'Pack Sections',
+        render: (_value, row) => (
+          <div className="super-admin-outcome-knowledge-packs__manifest-counts">
+            <ManifestPackCount label="required" count={row.mandatoryPacks?.length || 0} />
+            <ManifestPackCount label="optional" count={row.optionalPacks?.length || 0} />
+            <ManifestPackCount label="validation" count={row.validationPacks?.length || 0} />
+            <ManifestPackCount label="blocked" count={row.blockedPacks?.length || 0} />
+          </div>
+        ),
+      },
+      {
+        key: 'scopeKey',
+        label: 'Scope',
+        mobileLabel: 'Scope',
+        render: (value, row) => (
+          <div className="super-admin-outcome-knowledge-packs__summary">
+            <span>{row.scopeType || 'GLOBAL'}</span>
+            <code className="super-admin-outcome-knowledge-packs__key">{value || 'GLOBAL'}</code>
+          </div>
+        ),
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        mobileLabel: 'Actions',
+        align: 'center',
+        width: '136px',
+        render: (_value, row) => (
+          <Button
+            type="button"
+            variant={selectedManifestId === row.manifestId ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedManifestId(row.manifestId)}
+          >
+            Preview
+          </Button>
+        ),
+      },
+    ],
+    [selectedManifestId],
+  )
+
   return (
     <section
       className="super-admin-outcome-knowledge-packs container"
@@ -1298,10 +1985,50 @@ function SuperAdminOutcomeKnowledgePacks() {
       </Card>
 
       <Fieldset className="super-admin-outcome-knowledge-packs__fieldset">
-        <Fieldset.Legend className="sr-only">Outcome Studio knowledge pack registry</Fieldset.Legend>
+        <Fieldset.Legend className="sr-only">Knowledge Intelligence Library shell</Fieldset.Legend>
         <Card variant="elevated" className="super-admin-outcome-knowledge-packs__card">
           <Card.Body className="super-admin-outcome-knowledge-packs__card-body">
             <div className="super-admin-outcome-knowledge-packs__catalogue-actions">
+              <div className="super-admin-outcome-knowledge-packs__surface-tabs" role="tablist" aria-label="Knowledge library sections">
+                <Button
+                  type="button"
+                  variant={activeSurface === 'library' ? 'primary' : 'outline'}
+                  size="sm"
+                  role="tab"
+                  aria-selected={activeSurface === 'library'}
+                  onClick={() => setActiveSurface('library')}
+                >
+                  Library
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeSurface === 'manifests' ? 'primary' : 'outline'}
+                  size="sm"
+                  role="tab"
+                  aria-selected={activeSurface === 'manifests'}
+                  onClick={() => setActiveSurface('manifests')}
+                >
+                  Manifests
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={openSourceImportDialog}
+                disabled={isMutating}
+              >
+                Import Source Document
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBlankDraftOpen(true)}
+                disabled={isMutating}
+              >
+                Create Blank Pack
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1312,66 +2039,154 @@ function SuperAdminOutcomeKnowledgePacks() {
               </Button>
             </div>
 
-            <div className="super-admin-outcome-knowledge-packs__toolbar">
-              <Input
-                id="outcome-knowledge-packs-search"
-                label="Search"
-                size="sm"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                fullWidth
-              />
-              <Select
-                id="outcome-knowledge-packs-type"
-                label="Pack Type"
-                size="sm"
-                value={packType}
-                options={OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS}
-                onChange={(event) => setPackType(event.target.value)}
-              />
-              <Select
-                id="outcome-knowledge-packs-status"
-                label="Status"
-                size="sm"
-                value={status}
-                options={OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS}
-                onChange={(event) => setStatus(event.target.value)}
-              />
-            </div>
+            {activeSurface === 'library' ? (
+              <div role="tabpanel" aria-label="Knowledge Pack Library">
+                <div className="super-admin-outcome-knowledge-packs__toolbar super-admin-outcome-knowledge-packs__toolbar--expanded">
+                  <Input
+                    id="outcome-knowledge-packs-search"
+                    label="Search"
+                    size="sm"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    fullWidth
+                  />
+                  <Select
+                    id="outcome-knowledge-packs-type"
+                    label="Pack Type"
+                    size="sm"
+                    value={packType}
+                    options={OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS}
+                    onChange={(event) => setPackType(event.target.value)}
+                  />
+                  <Select
+                    id="outcome-knowledge-packs-status"
+                    label="Status"
+                    size="sm"
+                    value={status}
+                    options={OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS}
+                    onChange={(event) => setStatus(event.target.value)}
+                  />
+                  <Select
+                    id="outcome-knowledge-packs-purpose"
+                    label="Purpose"
+                    size="sm"
+                    value={purposeCategory}
+                    options={KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS}
+                    onChange={(event) => setPurposeCategory(event.target.value)}
+                  />
+                  <Select
+                    id="outcome-knowledge-packs-visibility"
+                    label="Visibility"
+                    size="sm"
+                    value={visibility}
+                    options={KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS}
+                    onChange={(event) => setVisibility(event.target.value)}
+                  />
+                  <Select
+                    id="outcome-knowledge-packs-review"
+                    label="Review"
+                    size="sm"
+                    value={reviewStatus}
+                    options={KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS}
+                    onChange={(event) => setReviewStatus(event.target.value)}
+                  />
+                </div>
 
-            {listError || previewError ? (
-              <p className="super-admin-outcome-knowledge-packs__error" role="alert">
-                {(listError || previewError).message}
-              </p>
-            ) : null}
+                {listError || previewError ? (
+                  <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+                    {(listError || previewError).message}
+                  </p>
+                ) : null}
 
-            <p className="super-admin-outcome-knowledge-packs__table-note">
-              Starter import and upload are source-only for all required Outcome Studio packs. Runtime activation remains a separate audited action.
-            </p>
+                <p className="super-admin-outcome-knowledge-packs__table-note">
+                  Starter import and upload are source-only for all required Outcome Studio packs. Runtime activation remains a separate audited action.
+                </p>
 
-            <HorizontalScroll
-              className="super-admin-outcome-knowledge-packs__table-wrap"
-              ariaLabel="Outcome Studio knowledge pack table"
-              gap="sm"
-            >
-              <Table
-                className="super-admin-outcome-knowledge-packs__table"
-                columns={columns}
-                data={filteredRows}
-                loading={isInitialLoading}
-                variant="striped"
-                hoverable
-                emptyMessage="No knowledge packs found."
-                ariaLabel="Outcome Studio knowledge packs"
-              />
-            </HorizontalScroll>
+                <HorizontalScroll
+                  className="super-admin-outcome-knowledge-packs__table-wrap"
+                  ariaLabel="Outcome Studio knowledge pack table"
+                  gap="sm"
+                >
+                  <Table
+                    className="super-admin-outcome-knowledge-packs__table"
+                    columns={columns}
+                    data={filteredRows}
+                    loading={isInitialLoading}
+                    variant="striped"
+                    hoverable
+                    emptyMessage="No knowledge packs found."
+                    ariaLabel="Outcome Studio knowledge packs"
+                  />
+                </HorizontalScroll>
 
-            {(listQuery.isFetching || previewQuery.isFetching) && !isInitialLoading ? (
-              <InlineLoadingState label="Refreshing registry..." />
-            ) : null}
+                {(listQuery.isFetching || previewQuery.isFetching) && !isInitialLoading ? (
+                  <InlineLoadingState label="Refreshing registry..." />
+                ) : null}
+              </div>
+            ) : (
+              <div className="super-admin-outcome-knowledge-packs__manifest-shell" role="tabpanel" aria-label="Knowledge Pack Manifests">
+                {manifestError ? (
+                  <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+                    {manifestError.message}
+                  </p>
+                ) : null}
+
+                <div className="super-admin-outcome-knowledge-packs__manifest-grid">
+                  <HorizontalScroll
+                    className="super-admin-outcome-knowledge-packs__table-wrap"
+                    ariaLabel="Knowledge Pack manifest table"
+                    gap="sm"
+                  >
+                    <Table
+                      className="super-admin-outcome-knowledge-packs__manifest-table"
+                      columns={manifestColumns}
+                      data={manifestRows}
+                      loading={isManifestInitialLoading}
+                      variant="striped"
+                      hoverable
+                      emptyMessage="No manifests found."
+                      ariaLabel="Knowledge Pack manifests"
+                    />
+                  </HorizontalScroll>
+
+                  <KnowledgePackManifestPreview
+                    manifest={selectedManifest}
+                    preview={manifestPreviewQuery.data?.data}
+                    error={manifestPreviewError}
+                    isLoading={manifestPreviewQuery.isLoading || manifestPreviewQuery.isFetching}
+                    reasoningPreview={reasoningContextPreviewQuery.data?.data}
+                    reasoningError={reasoningContextPreviewError}
+                    isReasoningLoading={
+                      reasoningContextPreviewQuery.isLoading || reasoningContextPreviewQuery.isFetching
+                    }
+                  />
+                </div>
+
+                {manifestsQuery.isFetching && !isManifestInitialLoading ? (
+                  <InlineLoadingState label="Refreshing manifests..." />
+                ) : null}
+              </div>
+            )}
           </Card.Body>
         </Card>
       </Fieldset>
+
+      <KnowledgePackBlankDraftDialog
+        open={isBlankDraftOpen}
+        onClose={() => setIsBlankDraftOpen(false)}
+      />
+
+      <KnowledgePackSourceImportDialog
+        open={isSourceImportOpen}
+        form={sourceImportForm}
+        error={sourceImportError}
+        fieldErrors={sourceImportFieldErrors}
+        isLoading={isImportingSourceDocumentDraft}
+        onClose={closeSourceImportDialog}
+        onSubmit={submitSourceImport}
+        onFormChange={updateSourceImportForm}
+        onFileMetadata={handleSourceImportFileMetadata}
+      />
 
       <KnowledgePackUploadDialog
         pack={uploadPack}

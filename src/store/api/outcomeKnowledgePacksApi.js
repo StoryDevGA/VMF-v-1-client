@@ -7,6 +7,10 @@ export const outcomeKnowledgePackResolutionTag = {
   type: 'OutcomeKnowledgePackResolution',
   id: 'CURRENT',
 }
+export const outcomeKnowledgePackManifestListTag = {
+  type: 'OutcomeKnowledgePackManifest',
+  id: 'LIST',
+}
 
 const normalizeText = (value) => String(value ?? '').trim()
 const normalizeToken = (value) => normalizeText(value).toUpperCase()
@@ -80,6 +84,55 @@ export const buildImportOutcomeKnowledgePackStarterVersionQuery = ({ packId }) =
   method: 'POST',
   body: {},
 })
+
+export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
+  packType,
+  packKey,
+  label,
+  description = '',
+  purposeCategory = '',
+  semanticVersion,
+  schemaVersion = '1.0.0',
+  sourceAuthority = '',
+  executionMode = 'PROVIDER_CONTEXT',
+  visibility = 'PLATFORM',
+  customerId = '',
+  tenantId = '',
+  contentFormat = '',
+  sourceDocument = {},
+  extractedText = '',
+} = {}) => {
+  const body = {
+    packType: normalizeToken(packType),
+    packKey: normalizeText(packKey),
+    label: normalizeText(label),
+    semanticVersion: normalizeText(semanticVersion),
+    schemaVersion: normalizeText(schemaVersion) || '1.0.0',
+    executionMode: normalizeToken(executionMode) || 'PROVIDER_CONTEXT',
+    visibility: normalizeToken(visibility) || 'PLATFORM',
+    sourceDocument: {
+      filename: normalizeText(sourceDocument.filename),
+    },
+  }
+
+  appendParam(body, 'description', description)
+  appendParam(body, 'purposeCategory', purposeCategory)
+  appendParam(body, 'sourceAuthority', sourceAuthority)
+  appendParam(body, 'customerId', customerId)
+  appendParam(body, 'tenantId', tenantId)
+  appendParam(body, 'contentFormat', contentFormat)
+  appendParam(body, 'extractedText', extractedText)
+  appendParam(body.sourceDocument, 'sourceDocumentId', sourceDocument.sourceDocumentId)
+  appendParam(body.sourceDocument, 'contentType', sourceDocument.contentType)
+  appendParam(body.sourceDocument, 'fileExtension', sourceDocument.fileExtension)
+  appendParam(body.sourceDocument, 'sourceHash', sourceDocument.sourceHash)
+
+  return {
+    url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/source-document-import`,
+    method: 'POST',
+    body,
+  }
+}
 
 export const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
@@ -185,6 +238,216 @@ export const buildPreviewOutcomeKnowledgePackResolutionQuery = ({
   }
 }
 
+export const buildOutcomeKnowledgePackManifestListQuery = ({
+  page = 1,
+  pageSize = 100,
+  q = '',
+  manifestKey = '',
+  status = '',
+  workspaceType = '',
+  frameworkKey = '',
+  runtimeType = '',
+  packageKey = '',
+  outputKey = '',
+  sortBy = '',
+  sortOrder = '',
+} = {}) => {
+  const params = { page, pageSize }
+
+  appendParam(params, 'q', q)
+  appendParam(params, 'manifestKey', manifestKey)
+  appendParam(params, 'status', status)
+  appendParam(params, 'workspaceType', workspaceType)
+  appendParam(params, 'frameworkKey', frameworkKey)
+  appendParam(params, 'runtimeType', runtimeType)
+  appendParam(params, 'packageKey', packageKey)
+  appendParam(params, 'outputKey', outputKey)
+  appendParam(params, 'sortBy', sortBy)
+  appendParam(params, 'sortOrder', sortOrder)
+
+  return {
+    url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests`,
+    params,
+  }
+}
+
+export const buildOutcomeKnowledgePackManifestDetailQuery = ({ manifestId }) =>
+  `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${encodePathSegment(manifestId)}`
+
+export const buildPreviewOutcomeKnowledgePackManifestResolutionQuery = ({
+  manifestId,
+  frameworkKey = '',
+  runtimeType = '',
+  packageKey = '',
+  packageVersion = '',
+  environmentKey = '',
+} = {}) => {
+  const params = {}
+
+  appendParam(params, 'frameworkKey', frameworkKey)
+  appendParam(params, 'runtimeType', runtimeType)
+  appendParam(params, 'packageKey', packageKey)
+  appendParam(params, 'packageVersion', packageVersion)
+  appendParam(params, 'environmentKey', environmentKey)
+
+  return {
+    url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${
+      encodePathSegment(manifestId)
+    }/resolution-preview`,
+    params,
+  }
+}
+
+export const buildPreviewOutcomeKnowledgePackReasoningContextQuery = ({
+  manifestId,
+  outputKey = '',
+  contextCategories = [],
+  frameworkKey = '',
+  runtimeType = '',
+  packageKey = '',
+  packageVersion = '',
+  environmentKey = '',
+  customerId = '',
+  tenantId = '',
+} = {}) => {
+  const params = {}
+  const normalizedContextCategories = Array.isArray(contextCategories)
+    ? contextCategories.map(normalizeToken).filter(Boolean).join(',')
+    : normalizeText(contextCategories)
+
+  appendParam(params, 'outputKey', outputKey)
+  appendParam(params, 'contextCategories', normalizedContextCategories)
+  appendParam(params, 'frameworkKey', frameworkKey)
+  appendParam(params, 'runtimeType', runtimeType)
+  appendParam(params, 'packageKey', packageKey)
+  appendParam(params, 'packageVersion', packageVersion)
+  appendParam(params, 'environmentKey', environmentKey)
+  appendParam(params, 'customerId', customerId)
+  appendParam(params, 'tenantId', tenantId)
+
+  return {
+    url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${
+      encodePathSegment(manifestId)
+    }/reasoning-context-preview`,
+    params,
+  }
+}
+
+export const buildCompareOutcomeKnowledgePackManifestsQuery = ({
+  manifestId,
+  targetManifestId,
+} = {}) =>
+  `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${
+    encodePathSegment(manifestId)
+  }/compare/${encodePathSegment(targetManifestId)}`
+
+const normalizeManifestPack = (pack = {}) => ({
+  packCategory: normalizeToken(pack.packCategory),
+  purposeCategory: normalizeToken(pack.purposeCategory),
+  packType: normalizeToken(pack.packType),
+  packKey: normalizeText(pack.packKey),
+  label: normalizeText(pack.label),
+  executionMode: normalizeToken(pack.executionMode) || 'PROVIDER_CONTEXT',
+  ...(typeof pack.required === 'boolean' ? { required: pack.required } : {}),
+  dependencyKeys: Array.isArray(pack.dependencyKeys) ? pack.dependencyKeys.map(normalizeText).filter(Boolean) : [],
+  sourceAuthority: normalizeText(pack.sourceAuthority),
+  metadata: pack.metadata && typeof pack.metadata === 'object' ? pack.metadata : {},
+})
+
+const normalizeManifestBody = (
+  body = {},
+  {
+    includeIdentity = true,
+    partial = false,
+  } = {},
+) => {
+  const normalized = {}
+  const assignIfPresent = (key, value) => {
+    if (!partial || Object.prototype.hasOwnProperty.call(body, key)) {
+      normalized[key] = value
+    }
+  }
+
+  assignIfPresent('manifestName', normalizeText(body.manifestName))
+  assignIfPresent('manifestType', normalizeToken(body.manifestType) || 'FRAMEWORK_RUNTIME')
+  assignIfPresent('description', normalizeText(body.description))
+  assignIfPresent('workspaceType', normalizeToken(body.workspaceType) || 'OUTCOME')
+  assignIfPresent('frameworkKey', normalizeToken(body.frameworkKey))
+  assignIfPresent('runtimeType', normalizeToken(body.runtimeType))
+  assignIfPresent('packageKey', normalizeText(body.packageKey))
+  assignIfPresent('outputKey', normalizeText(body.outputKey))
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'mandatoryPacks')) {
+    normalized.mandatoryPacks = Array.isArray(body.mandatoryPacks)
+      ? body.mandatoryPacks.map(normalizeManifestPack)
+      : []
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'optionalPacks')) {
+    normalized.optionalPacks = Array.isArray(body.optionalPacks)
+      ? body.optionalPacks.map(normalizeManifestPack)
+      : []
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'validationPacks')) {
+    normalized.validationPacks = Array.isArray(body.validationPacks)
+      ? body.validationPacks.map(normalizeManifestPack)
+      : []
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'blockedPacks')) {
+    normalized.blockedPacks = Array.isArray(body.blockedPacks)
+      ? body.blockedPacks.map(normalizeManifestPack)
+      : []
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'resolutionPolicy')) {
+    normalized.resolutionPolicy =
+      body.resolutionPolicy && typeof body.resolutionPolicy === 'object'
+        ? body.resolutionPolicy
+        : {}
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'validationPolicy')) {
+    normalized.validationPolicy =
+      body.validationPolicy && typeof body.validationPolicy === 'object'
+        ? body.validationPolicy
+        : {}
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'sourceMetadata')) {
+    normalized.sourceMetadata =
+      body.sourceMetadata && typeof body.sourceMetadata === 'object' ? body.sourceMetadata : {}
+  }
+
+  if (includeIdentity) {
+    normalized.manifestKey = normalizeText(body.manifestKey)
+    normalized.semanticVersion = normalizeText(body.semanticVersion)
+    normalized.scopeType = normalizeToken(body.scopeType) || 'GLOBAL'
+    appendParam(normalized, 'scopeKey', body.scopeKey)
+  }
+
+  return normalized
+}
+
+export const buildCreateOutcomeKnowledgePackManifestQuery = (body = {}) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests`,
+  method: 'POST',
+  body: normalizeManifestBody(body),
+})
+
+export const buildUpdateOutcomeKnowledgePackManifestQuery = ({
+  manifestId,
+  ...body
+} = {}) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${encodePathSegment(manifestId)}`,
+  method: 'PUT',
+  body: normalizeManifestBody(body, { includeIdentity: false, partial: true }),
+})
+
+export const buildCloneOutcomeKnowledgePackManifestQuery = ({
+  manifestId,
+  ...body
+} = {}) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${encodePathSegment(manifestId)}/clone`,
+  method: 'POST',
+  body: normalizeManifestBody(body, { partial: true }),
+})
+
 const getPackCacheIds = (pack) => [
   pack?.id,
   pack?.packId,
@@ -209,10 +472,51 @@ const getPackTags = (_result, _error, { packId }) => [
   { type: 'OutcomeKnowledgePack', id: normalizeText(packId) },
 ]
 
+const getManifestCacheIds = (manifest) => [
+  manifest?.id,
+  manifest?.manifestId,
+  manifest?.manifestKey,
+]
+  .map(normalizeText)
+  .filter(Boolean)
+  .filter((id, index, ids) => ids.indexOf(id) === index)
+
+const getManifestListTags = (result) =>
+  result?.data
+    ? [
+        ...result.data
+          .flatMap(getManifestCacheIds)
+          .map((id) => ({ type: 'OutcomeKnowledgePackManifest', id })),
+        outcomeKnowledgePackManifestListTag,
+      ]
+    : [outcomeKnowledgePackManifestListTag]
+
+const getManifestTags = (_result, _error, { manifestId }) => [
+  outcomeKnowledgePackManifestListTag,
+  { type: 'OutcomeKnowledgePackManifest', id: normalizeText(manifestId) },
+]
+
+const getManifestMutationTags = (_result, _error, { manifestId, manifestKey } = {}) => [
+  outcomeKnowledgePackManifestListTag,
+  outcomeKnowledgePackResolutionTag,
+  ...(normalizeText(manifestId)
+    ? [{ type: 'OutcomeKnowledgePackManifest', id: normalizeText(manifestId) }]
+    : []),
+  ...(normalizeText(manifestKey)
+    ? [{ type: 'OutcomeKnowledgePackManifest', id: normalizeText(manifestKey) }]
+    : []),
+]
+
 const getMutationInvalidationTags = (_result, _error, { packId }) => [
   outcomeKnowledgePackListTag,
   outcomeKnowledgePackResolutionTag,
   { type: 'OutcomeKnowledgePack', id: normalizeText(packId) },
+]
+
+const getSourceDocumentImportInvalidationTags = (_result, _error, { packKey }) => [
+  outcomeKnowledgePackListTag,
+  outcomeKnowledgePackResolutionTag,
+  { type: 'OutcomeKnowledgePack', id: normalizeText(packKey) },
 ]
 
 export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
@@ -247,6 +551,11 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       invalidatesTags: getMutationInvalidationTags,
     }),
 
+    importOutcomeKnowledgePackSourceDocumentDraft: build.mutation({
+      query: buildImportOutcomeKnowledgePackSourceDocumentDraftQuery,
+      invalidatesTags: getSourceDocumentImportInvalidationTags,
+    }),
+
     validateOutcomeKnowledgePackVersion: build.mutation({
       query: buildValidateOutcomeKnowledgePackVersionQuery,
       invalidatesTags: getMutationInvalidationTags,
@@ -276,6 +585,46 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       query: buildPreviewOutcomeKnowledgePackResolutionQuery,
       providesTags: [outcomeKnowledgePackResolutionTag],
     }),
+
+    listOutcomeKnowledgePackManifests: build.query({
+      query: buildOutcomeKnowledgePackManifestListQuery,
+      providesTags: getManifestListTags,
+    }),
+
+    getOutcomeKnowledgePackManifest: build.query({
+      query: buildOutcomeKnowledgePackManifestDetailQuery,
+      providesTags: getManifestTags,
+    }),
+
+    previewOutcomeKnowledgePackManifestResolution: build.query({
+      query: buildPreviewOutcomeKnowledgePackManifestResolutionQuery,
+      providesTags: getManifestTags,
+    }),
+
+    previewOutcomeKnowledgePackReasoningContext: build.query({
+      query: buildPreviewOutcomeKnowledgePackReasoningContextQuery,
+      providesTags: getManifestTags,
+    }),
+
+    compareOutcomeKnowledgePackManifests: build.query({
+      query: buildCompareOutcomeKnowledgePackManifestsQuery,
+      providesTags: getManifestTags,
+    }),
+
+    createOutcomeKnowledgePackManifest: build.mutation({
+      query: buildCreateOutcomeKnowledgePackManifestQuery,
+      invalidatesTags: getManifestMutationTags,
+    }),
+
+    updateOutcomeKnowledgePackManifest: build.mutation({
+      query: buildUpdateOutcomeKnowledgePackManifestQuery,
+      invalidatesTags: getManifestMutationTags,
+    }),
+
+    cloneOutcomeKnowledgePackManifest: build.mutation({
+      query: buildCloneOutcomeKnowledgePackManifestQuery,
+      invalidatesTags: getManifestMutationTags,
+    }),
   }),
   overrideExisting: false,
 })
@@ -287,10 +636,19 @@ export const {
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useCreateOutcomeKnowledgePackVersionMutation,
   useImportOutcomeKnowledgePackStarterVersionMutation,
+  useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useValidateOutcomeKnowledgePackVersionMutation,
   useActivateOutcomeKnowledgePackVersionMutation,
   useRollbackOutcomeKnowledgePackMutation,
   usePreviewOutcomeKnowledgePackResolutionQuery,
+  useListOutcomeKnowledgePackManifestsQuery,
+  useGetOutcomeKnowledgePackManifestQuery,
+  usePreviewOutcomeKnowledgePackManifestResolutionQuery,
+  usePreviewOutcomeKnowledgePackReasoningContextQuery,
+  useCompareOutcomeKnowledgePackManifestsQuery,
+  useCreateOutcomeKnowledgePackManifestMutation,
+  useUpdateOutcomeKnowledgePackManifestMutation,
+  useCloneOutcomeKnowledgePackManifestMutation,
 } = outcomeKnowledgePacksApi
