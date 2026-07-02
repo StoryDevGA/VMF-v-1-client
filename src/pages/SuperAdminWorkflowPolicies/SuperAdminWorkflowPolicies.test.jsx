@@ -11,10 +11,12 @@ import {
   cloneWorkflowPolicy,
   INITIAL_WORKFLOW_POLICY_FORM,
   mapWorkflowPolicyToForm,
+  WORKFLOW_POLICY_APPLIES_TO_OPTIONS,
   WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS,
   WORKFLOW_POLICY_EXECUTION_TYPES,
   WORKFLOW_POLICY_STEP_TYPES,
   WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS,
+  WORKFLOW_POLICY_TYPE_OPTIONS,
   validateWorkflowPolicyForm,
 } from './superAdminWorkflowPolicies.constants.js'
 import {
@@ -30,10 +32,14 @@ const apiWorkflowPolicyModelPath = path.join(
   'VMF-v-1-api/src/models/WorkflowPolicy.js',
 )
 
-const loadBackendGovernedActions = () => {
+const loadBackendWorkflowPolicySnapshot = () => {
   const script = `
 const workflowPolicyModel = await import(${JSON.stringify(pathToFileURL(apiWorkflowPolicyModelPath).href)})
-process.stdout.write(JSON.stringify(Object.values(workflowPolicyModel.WORKFLOW_POLICY_GOVERNED_ACTIONS)))
+process.stdout.write(JSON.stringify({
+  governedActions: Object.values(workflowPolicyModel.WORKFLOW_POLICY_GOVERNED_ACTIONS),
+  policyTypes: Object.values(workflowPolicyModel.WORKFLOW_POLICY_TYPES),
+  appliesTo: Object.values(workflowPolicyModel.WORKFLOW_POLICY_APPLIES_TO),
+}))
 `
 
   return JSON.parse(
@@ -112,7 +118,16 @@ describe('SuperAdminWorkflowPolicies page', () => {
   it('keeps the governed action registry aligned with runtime action sprints', () => {
     const optionValues = WORKFLOW_POLICY_GOVERNED_ACTION_OPTIONS.map((option) => option.value)
 
-    expect(optionValues).toEqual(loadBackendGovernedActions())
+    expect(optionValues).toEqual(loadBackendWorkflowPolicySnapshot().governedActions)
+  })
+
+  it('keeps policy type and applies-to options aligned with the backend model', () => {
+    const snapshot = loadBackendWorkflowPolicySnapshot()
+
+    expect(WORKFLOW_POLICY_TYPE_OPTIONS.map((option) => option.value).filter(Boolean))
+      .toEqual(snapshot.policyTypes)
+    expect(WORKFLOW_POLICY_APPLIES_TO_OPTIONS.map((option) => option.value).filter(Boolean))
+      .toEqual(snapshot.appliesTo)
   })
 
   it('keeps trigger event options aligned with section generation events', () => {
