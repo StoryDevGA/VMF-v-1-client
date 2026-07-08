@@ -61,6 +61,7 @@ export const FRAMEWORK_PACKAGE_WORKFLOW_EXECUTION_CONTEXT_OPTIONS = Object.freez
   { value: 'ON_SAVE', label: 'On save' },
   { value: 'ON_RUN', label: 'On run' },
   { value: 'ON_RUN_VALIDATION', label: 'On run validation' },
+  { value: 'ON_MARK_READY', label: 'On mark ready' },
   { value: 'ON_SUBMIT', label: 'On submit' },
   { value: 'ON_REVIEW_START', label: 'On review start' },
   { value: 'ON_STAGE_ENTER', label: 'On stage enter' },

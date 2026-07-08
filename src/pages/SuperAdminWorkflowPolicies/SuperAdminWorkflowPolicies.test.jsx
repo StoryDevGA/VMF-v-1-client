@@ -134,6 +134,7 @@ describe('SuperAdminWorkflowPolicies page', () => {
     const optionValues = WORKFLOW_POLICY_TRIGGER_EVENT_OPTIONS.map((option) => option.value)
 
     expect(optionValues).toEqual(expect.arrayContaining([
+      'ON_MARK_READY',
       'ON_SECTION_GENERATE',
       'ON_SECTION_REGENERATE',
       'ON_LOCK',
