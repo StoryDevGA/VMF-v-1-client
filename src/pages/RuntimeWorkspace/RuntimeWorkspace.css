@@ -941,7 +941,7 @@
 
 .runtime-workspace__outcome-studio-message-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-xs);
   align-items: start;
 }
@@ -951,8 +951,52 @@
   flex-wrap: wrap;
   gap: var(--spacing-xs);
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
+  max-width: 100%;
+}
+
+.runtime-workspace__outcome-studio-message-actions .status {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.runtime-workspace__outcome-studio-message-actions .btn {
+  min-height: calc(var(--spacing-md) * 2);
+  max-width: 100%;
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 82%, transparent);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  background-color: color-mix(in srgb, var(--color-background) 76%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.runtime-workspace__outcome-studio-message-actions .btn:hover:not(:disabled),
+.runtime-workspace__outcome-studio-message-actions .btn:focus-visible:not(:disabled) {
+  border: var(--border-width-thin) solid color-mix(in srgb, var(--color-action-primary) 42%, var(--color-card-border));
+  background-color: color-mix(in srgb, var(--color-action-primary) 10%, transparent);
+  color: var(--color-action-primary);
+}
+
+.runtime-workspace__outcome-studio-message-actions .btn:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border));
+  background-color: color-mix(in srgb, var(--color-action-primary) 14%, transparent);
+}
+
+.runtime-workspace__outcome-studio-message-actions .btn:disabled {
+  border-color: color-mix(in srgb, var(--color-card-border) 60%, transparent);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.runtime-workspace__outcome-studio-message-actions .btn__content,
+.runtime-workspace__outcome-studio-message-actions .btn__content--hidden,
+.runtime-workspace__outcome-studio-message-actions .btn__icon,
+.runtime-workspace__outcome-studio-message-actions .btn svg {
+  color: inherit;
 }
 
 .runtime-workspace__outcome-studio-asset-action-region,
@@ -964,7 +1008,7 @@
 
 .runtime-workspace__outcome-studio-pack-list li > div,
 .runtime-workspace__outcome-studio-asset-list li > div,
-.runtime-workspace__outcome-studio-message-list li > div {
+.runtime-workspace__outcome-studio-message-list li > div:not(.runtime-workspace__outcome-studio-message-actions) {
   display: grid;
   gap: var(--spacing-3xs);
   min-width: 0;

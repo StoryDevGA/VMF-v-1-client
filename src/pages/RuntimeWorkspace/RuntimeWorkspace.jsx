@@ -675,6 +675,46 @@ const formatRuntimeIdentifier = (value) => {
   return `${normalized.slice(0, 12)}...${normalized.slice(-8)}`
 }
 
+const getOutcomeStudioGrrLineage = (lineage = {}) => {
+  const runtimeStateWrites = lineage?.grrRuntimeStateWrites || {}
+  const certification = lineage?.grrCertification || {}
+  const executionId = String(lineage?.grrExecutionId || '').trim()
+  const artifactId = String(lineage?.grrRuntimeArtifactId || '').trim()
+  const providerMode = normalizeRuntimeActionToken(lineage?.grrProviderMode)
+  const runtimeStateStatus = normalizeRuntimeActionToken(runtimeStateWrites.status)
+  const runtimeStateReason = String(runtimeStateWrites.reason || '').trim()
+  const runtimeArtifactIsCertifiedTruth = certification.runtimeArtifactIsCertifiedTruth === true
+  const hasLineage = Boolean(
+    executionId
+    || artifactId
+    || providerMode
+    || runtimeStateStatus
+    || runtimeStateReason,
+  )
+
+  return {
+    artifactId,
+    executionId,
+    hasLineage,
+    providerMode,
+    runtimeArtifactIsCertifiedTruth,
+    runtimeStateReason,
+    runtimeStateStatus,
+  }
+}
+
+const isGrrProviderUnavailableError = (error) =>
+  normalizeRuntimeActionToken(error?.code) === 'GRR_PROVIDER_UNAVAILABLE'
+  || normalizeRuntimeActionToken(error?.details?.reason) === 'PROVIDER_UNAVAILABLE'
+
+const getOutcomeStudioResponseErrorMessage = (error) => {
+  if (isGrrProviderUnavailableError(error)) {
+    return 'Governed reasoning provider is not configured. Outcome Studio did not create a response or asset.'
+  }
+
+  return stripRequestReference(error?.message)
+}
+
 const normalizeWarningSeverity = (value) => {
   const severity = String(value ?? '').trim().toUpperCase()
   if (severity === 'INFO' || severity === 'WARNING' || severity === 'ERROR' || severity === 'BLOCKER') {
@@ -4902,6 +4942,7 @@ function OutcomeStudioSection({
             const knowledgePackBinding = asset.knowledgePackBinding || {}
             const truthSignature = asset.truthSignature || {}
             const lineageSummary = asset.lineageSummary || {}
+            const grrLineage = getOutcomeStudioGrrLineage(lineageSummary)
             const assetKey = assetId || `${asset.outputTypeKey || 'outcome'}-${assetIndex}`
             const generatedAt = formatActivityTime(asset.generatedAt || asset.createdAt)
             const currentVersionId = String(asset.currentVersionId || '').trim()
@@ -4936,6 +4977,23 @@ function OutcomeStudioSection({
                     {' / '}
                     Packs {knowledgePackBinding.activeCount ?? 0}/{knowledgePackBinding.requiredCount ?? requiredPacks.length}
                   </span>
+                  {grrLineage.hasLineage ? (
+                    <span>
+                      GRR {formatRuntimeIdentifier(grrLineage.executionId)}
+                      {' / Artefact '}
+                      {formatRuntimeIdentifier(grrLineage.artifactId)}
+                      {' / Provider '}
+                      {formatRuntimeTokenLabel(grrLineage.providerMode || 'UNKNOWN')}
+                    </span>
+                  ) : null}
+                  {grrLineage.hasLineage ? (
+                    <span>
+                      Runtime State {formatRuntimeTokenLabel(grrLineage.runtimeStateStatus || 'UNKNOWN')}
+                      {grrLineage.runtimeStateReason ? ` / ${formatRuntimeTokenLabel(grrLineage.runtimeStateReason)}` : ''}
+                      {' / Certified Truth '}
+                      {grrLineage.runtimeArtifactIsCertifiedTruth ? 'Yes' : 'No'}
+                    </span>
+                  ) : null}
                   <div className="runtime-workspace__outcome-studio-asset-action-region">
                     <ButtonGroup
                       className="runtime-workspace__outcome-studio-asset-actions"
@@ -5077,6 +5135,7 @@ function OutcomeStudioSection({
                 const generatedAt = formatActivityTime(version.generatedAt || version.createdAt)
                 const warningsCount = Array.isArray(version.warnings) ? version.warnings.length : 0
                 const limitationsCount = Array.isArray(version.limitations) ? version.limitations.length : 0
+                const grrLineage = getOutcomeStudioGrrLineage(version.lineageSummary || {})
                 return (
                   <li key={versionId || `${selectedOutcomeAssetId}-${versionNumber}`}>
                     <div>
@@ -5097,6 +5156,22 @@ function OutcomeStudioSection({
                         {' / '}
                         Limitations {limitationsCount}
                       </span>
+                      {grrLineage.hasLineage ? (
+                        <span>
+                          GRR {formatRuntimeIdentifier(grrLineage.executionId)}
+                          {' / Artefact '}
+                          {formatRuntimeIdentifier(grrLineage.artifactId)}
+                          {' / Provider '}
+                          {formatRuntimeTokenLabel(grrLineage.providerMode || 'UNKNOWN')}
+                        </span>
+                      ) : null}
+                      {grrLineage.hasLineage ? (
+                        <span>
+                          Runtime State {formatRuntimeTokenLabel(grrLineage.runtimeStateStatus || 'UNKNOWN')}
+                          {' / Certified Truth '}
+                          {grrLineage.runtimeArtifactIsCertifiedTruth ? 'Yes' : 'No'}
+                        </span>
+                      ) : null}
                     </div>
                     <Badge variant={getTokenStatusVariant(version.status || truthCurrentness)} size="sm" pill outline>
                       {formatRuntimeTokenLabel(version.status || 'UNKNOWN')}
@@ -8407,7 +8482,7 @@ function RuntimeWorkspace() {
         : ''
       setOutcomeStudioFeedback({
         variant: 'error',
-        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+        message: `${getOutcomeStudioResponseErrorMessage(normalizedError)}${requestReference}`,
       })
       return false
     }

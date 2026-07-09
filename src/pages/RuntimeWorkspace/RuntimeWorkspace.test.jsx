@@ -1745,6 +1745,125 @@ describe('RuntimeWorkspace', () => {
     expect(refetchOutcomeStudio).toHaveBeenCalled()
   })
 
+  it('surfaces GRR provider-unavailable response generation failures without a success state', async () => {
+    const user = userEvent.setup()
+    const activeSession = {
+      sessionId: 'out_sess_active_fixture',
+      status: 'ACTIVE',
+      sourceOutputAssetId: 'out_asset_test',
+      sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+      sourceOutputTypeLabel: 'Executive Brief',
+      knowledgePackBinding: {
+        status: 'BOUND',
+        activeCount: 5,
+        requiredCount: 5,
+      },
+      truthSignature: {
+        status: 'PROJECTED',
+        currentness: 'CURRENT',
+      },
+    }
+    const readyOutcomeStudioPayload = {
+      ...outcomeStudioPayload,
+      readiness: {
+        ...outcomeStudioPayload.readiness,
+        state: 'READY',
+        canStartSession: true,
+        blockers: [],
+        safetyGates: {
+          ...outcomeStudioPayload.readiness.safetyGates,
+          responseGenerationAvailable: true,
+          passedCount: 5,
+          blockedCount: 0,
+        },
+      },
+      safetyGates: buildReadyOutcomeStudioSafetyGates({ responseGenerationAvailable: true }),
+      packBinding: {
+        ...outcomeStudioPayload.packBinding,
+        status: 'BOUND',
+        activePacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+        requiredPacks: outcomeStudioPayload.packBinding.requiredPacks.map((pack) => ({
+          ...pack,
+          status: 'ACTIVE',
+          runtimeBindable: true,
+        })),
+      },
+      conversation: {
+        ...outcomeStudioPayload.conversation,
+        enabled: true,
+        disabledReason: '',
+      },
+      sessions: [activeSession],
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudio,
+    })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: readyOutcomeStudioPayload.readiness },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...activeSession,
+          messages: [
+            {
+              messageId: 'out_msg_existing_fixture',
+              sessionId: 'out_sess_active_fixture',
+              role: 'USER',
+              status: 'SUBMITTED',
+              responseStatus: 'PENDING_RESPONSE',
+              prompt: 'Existing governed prompt.',
+              submittedAt: '2026-06-15T08:24:00.000Z',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchOutcomeStudioSession,
+    })
+    unwrapGenerateRuntimeOutcomeResponse.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'GRR_PROVIDER_UNAVAILABLE',
+          message: 'Governed reasoning provider execution is not configured.',
+          requestId: 'grr-ref-001',
+          details: {
+            reason: 'PROVIDER_UNAVAILABLE',
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    const history = within(main).getByRole('list', { name: /outcome studio prompt history/i })
+    await user.click(within(history).getByRole('button', { name: /generate response/i }))
+
+    expect(await within(main).findByText(
+      'Governed reasoning provider is not configured. Outcome Studio did not create a response or asset. Reference: grr-ref-001',
+    )).toBeInTheDocument()
+    expect(within(main).queryByText('Outcome Studio response generated.')).not.toBeInTheDocument()
+    expect(refetchOutcomeStudioSession).not.toHaveBeenCalled()
+    expect(refetchOutcomeStudio).not.toHaveBeenCalled()
+  })
+
   it('blocks Outcome Studio prompt and response actions when active session truth is out of date', async () => {
     const user = userEvent.setup()
     const activeSession = {
@@ -2074,6 +2193,16 @@ describe('RuntimeWorkspace', () => {
       },
       lineageSummary: {
         parentVersionId: 'outcome_asset_version_previous_fixture',
+        grrExecutionId: 'grr_exec_runtime_generation_fixture',
+        grrRuntimeArtifactId: 'grr_art_runtime_generation_fixture',
+        grrProviderMode: 'DETERMINISTIC_TEST',
+        grrRuntimeStateWrites: {
+          status: 'NOT_WRITTEN',
+          reason: 'NO_REVIEWED_GRR_RUNTIME_PATH_V1',
+        },
+        grrCertification: {
+          runtimeArtifactIsCertifiedTruth: false,
+        },
         promptAssembly: 'Raw outcome asset prompt assembly must not render.',
       },
     }
@@ -2105,6 +2234,8 @@ describe('RuntimeWorkspace', () => {
     expect(assetList).toHaveTextContent('Parent outcome_asse..._fixture')
     expect(assetList).toHaveTextContent('Truth Current')
     expect(assetList).toHaveTextContent('Packs 5/5')
+    expect(assetList).toHaveTextContent(/GRR grr_exec_run.*Artefact grr_art_run.*Provider Deterministic Test/)
+    expect(assetList).toHaveTextContent('Runtime State Not Written / No Reviewed Grr Runtime Path V1 / Certified Truth No')
     expect(within(assetPanel).queryByRole('button', { name: /^markdown$/i })).not.toBeInTheDocument()
     expect(within(assetPanel).queryByRole('button', { name: /^json$/i })).not.toBeInTheDocument()
     expect(within(assetPanel).queryByRole('button', { name: /^docx$/i })).not.toBeInTheDocument()
@@ -2350,6 +2481,17 @@ describe('RuntimeWorkspace', () => {
                 },
                 warnings: ['Review by account owner before external use.'],
                 limitations: ['No quantified ROI evidence.'],
+                lineageSummary: {
+                  grrExecutionId: 'grr_exec_runtime_generation_fixture',
+                  grrRuntimeArtifactId: 'grr_art_runtime_generation_fixture',
+                  grrProviderMode: 'DETERMINISTIC_TEST',
+                  grrRuntimeStateWrites: {
+                    status: 'NOT_WRITTEN',
+                  },
+                  grrCertification: {
+                    runtimeArtifactIsCertifiedTruth: false,
+                  },
+                },
                 customerContent: {
                   markdown: 'Raw version customer body must not render.',
                 },
@@ -2387,6 +2529,8 @@ describe('RuntimeWorkspace', () => {
     expect(versionRegion).toHaveTextContent('Content available')
     expect(versionRegion).toHaveTextContent('Warnings 1')
     expect(versionRegion).toHaveTextContent('Limitations 1')
+    expect(versionRegion).toHaveTextContent(/GRR grr_exec_run.*Artefact grr_art_run.*Provider Deterministic Test/)
+    expect(versionRegion).toHaveTextContent('Runtime State Not Written / Certified Truth No')
     expect(screen.queryByText('Raw generated customer body must not render.')).not.toBeInTheDocument()
     expect(screen.queryByText('Raw source output body must not render.')).not.toBeInTheDocument()
     expect(screen.queryByText('Raw pack source must not render.')).not.toBeInTheDocument()
