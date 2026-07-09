@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SuperAdminOutcomeKnowledgePacks from './SuperAdminOutcomeKnowledgePacks.jsx'
@@ -21,6 +21,7 @@ const {
   reasoningContextPreviewQueryMock,
   previewQueryMock,
   rollbackPackMock,
+  updateReviewStatusMock,
   validateVersionMock,
   versionQueryMock,
 } = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ const {
   reasoningContextPreviewQueryMock: vi.fn(),
   previewQueryMock: vi.fn(),
   rollbackPackMock: vi.fn(),
+  updateReviewStatusMock: vi.fn(),
   validateVersionMock: vi.fn(),
   versionQueryMock: vi.fn(),
 }))
@@ -428,6 +430,10 @@ vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
     validateVersionMock,
     { isLoading: false },
   ],
+  useUpdateOutcomeKnowledgePackReviewMutation: () => [
+    updateReviewStatusMock,
+    { isLoading: false },
+  ],
   useActivateOutcomeKnowledgePackVersionMutation: () => [
     activateVersionMock,
     { isLoading: false },
@@ -472,6 +478,11 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
         data: { version: { status: 'VALIDATED' } },
       }),
     })
+    updateReviewStatusMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: { version: { reviewStatus: 'APPROVED' } },
+      }),
+    })
     activateVersionMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
         data: { activation: { scopeType: 'GLOBAL' } },
@@ -512,6 +523,189 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .not.toBeInTheDocument()
     expect(screen.getByLabelText(/actions for adaptive-reasoning-layer/i)).not.toBeDisabled()
     expect(screen.getByLabelText(/actions for outcome-output-types/i)).not.toBeDisabled()
+  })
+
+  it('renders imported source-document drafts with honest source-text blocking state', () => {
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            description: 'Enterprise Technology methodology.',
+            status: 'DRAFT',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceDocument: {
+                filename: 'Enterprise Technology.md',
+              },
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    expect(screen.getByText('Enterprise Technology')).toBeInTheDocument()
+    expect(screen.getByText('Source text missing').closest('.status'))
+      .toHaveClass('super-admin-outcome-knowledge-packs__runtime-binding-status')
+    expect(screen.getByText('Enterprise Technology.md')).toBeInTheDocument()
+    expect(screen.getByText('Source document')).toBeInTheDocument()
+    expect(screen.queryByText('No starter source')).not.toBeInTheDocument()
+
+    const actions = screen.getByLabelText('Actions for et')
+    expect(within(actions).getByRole('option', { name: 'View Details' })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: 'Validate blocked - source text missing' }))
+      .toBeDisabled()
+    expect(within(actions).queryByRole('option', { name: 'Activate Version' }))
+      .not.toBeInTheDocument()
+  })
+
+  it('allows persisted source-document drafts to be validated from the row actions', async () => {
+    const user = userEvent.setup()
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            status: 'DRAFT',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceFilename: 'Enterprise Technology.md',
+              contentPersisted: true,
+              sourceDocument: {
+                filename: 'Enterprise Technology.md',
+              },
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    expect(screen.getByText('Source document ready').closest('.status'))
+      .toHaveClass('super-admin-outcome-knowledge-packs__runtime-binding-status')
+
+    await user.selectOptions(screen.getByLabelText('Actions for et'), 'validate')
+
+    await waitFor(() => {
+      expect(validateVersionMock).toHaveBeenCalledWith({
+        packId: 'kp-system-et',
+        versionId: 'kpv-system-et-5-0-0-global',
+      })
+    })
+  })
+
+  it('shows review and activation gates for validated imported source-document drafts', async () => {
+    const user = userEvent.setup()
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            status: 'VALIDATED',
+            reviewStatus: 'DRAFT',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceFilename: 'Enterprise Technology.md',
+              contentPersisted: true,
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    const actions = screen.getByLabelText('Actions for et')
+    expect(within(actions).getByRole('option', { name: 'Submit for Review' })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: 'Activate blocked - review not approved' }))
+      .toBeDisabled()
+
+    await user.selectOptions(actions, 'submit-review')
+
+    await waitFor(() => {
+      expect(updateReviewStatusMock).toHaveBeenCalledWith({
+        packId: 'kp-system-et',
+        versionId: 'kpv-system-et-5-0-0-global',
+        reviewStatus: 'READY_FOR_REVIEW',
+      })
+    })
+  })
+
+  it('allows approved imported source-document drafts to be activated', async () => {
+    const user = userEvent.setup()
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            status: 'VALIDATED',
+            reviewStatus: 'APPROVED',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceFilename: 'Enterprise Technology.md',
+              contentPersisted: true,
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    await user.selectOptions(screen.getByLabelText('Actions for et'), 'activate')
+
+    expect(screen.getByRole('heading', { name: /activate pack version/i })).toBeInTheDocument()
   })
 
   it('exposes library filters and keeps blank pack creation blocked until the draft contract exists', async () => {
@@ -580,19 +774,23 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText(/draft pack type/i), 'ET')
-    await user.type(screen.getByLabelText(/draft pack key/i), 'execution-translation')
-    await user.type(screen.getByLabelText(/draft label/i), 'Execution Translation')
-    await user.clear(screen.getByLabelText(/draft semantic version/i))
-    await user.type(screen.getByLabelText(/draft semantic version/i), '2.8.0')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
     await user.selectOptions(screen.getByLabelText(/purpose category/i), 'OUTPUT')
-    await user.type(screen.getByLabelText(/source authority/i), 'StorylineOS')
-    await user.type(
-      screen.getByLabelText(/source document filename/i),
+    const sourceFile = new File(
+      ['Canonical execution translation source text.'],
       'ET v2.8 Canonical Execution Translation System.md',
+      { type: 'text/markdown' },
     )
-    fireEvent.change(screen.getByLabelText(/extracted text/i), {
-      target: { value: 'Canonical execution translation source text.' },
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue(
+        'Canonical execution translation source text.',
+      )
     })
+    expect(screen.getByRole('button', { name: /advanced\/system metadata/i }))
+      .toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByLabelText(/source hash/i)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /create draft/i }))
 
@@ -603,20 +801,19 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
         label: 'Execution Translation',
         description: '',
         purposeCategory: 'OUTPUT',
-        semanticVersion: '2.8.0',
+        semanticVersion: '1.0.0',
         schemaVersion: '1.0.0',
-        sourceAuthority: 'StorylineOS',
+        sourceAuthority: '',
         executionMode: 'PROVIDER_CONTEXT',
         visibility: 'PLATFORM',
         customerId: '',
         tenantId: '',
         contentFormat: 'MARKDOWN',
         sourceDocument: {
-          sourceDocumentId: '',
           filename: 'ET v2.8 Canonical Execution Translation System.md',
-          contentType: '',
-          fileExtension: '',
-          sourceHash: '',
+          contentType: 'text/markdown',
+          fileExtension: 'md',
+          sizeBytes: sourceFile.size,
         },
         extractedText: 'Canonical execution translation source text.',
       })
@@ -630,6 +827,92 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     }))
   })
 
+  it('creates a draft knowledge pack from a binary source document for server extraction', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'SYSTEM')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Enterprise Technology')
+    await user.selectOptions(screen.getByLabelText(/purpose category/i), 'FRAMEWORK')
+    const sourceFile = new File(
+      ['%PDF-1.4 Enterprise Technology framework assessment governance'],
+      'Enterprise Technology Framework v5.pdf',
+      { type: 'application/pdf' },
+    )
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+
+    await waitFor(() => {
+      const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
+      expect(within(derivedMetadata).getByText('Enterprise Technology Framework v5.pdf')).toBeInTheDocument()
+      expect(within(derivedMetadata).getByText('PDF')).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('')
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    await waitFor(() => {
+      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith({
+        packType: 'SYSTEM',
+        packKey: 'enterprise-technology',
+        label: 'Enterprise Technology',
+        description: '',
+        purposeCategory: 'FRAMEWORK',
+        semanticVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+        sourceAuthority: '',
+        executionMode: 'PROVIDER_CONTEXT',
+        visibility: 'PLATFORM',
+        customerId: '',
+        tenantId: '',
+        contentFormat: 'PDF',
+        sourceDocument: {
+          filename: 'Enterprise Technology Framework v5.pdf',
+          contentType: 'application/pdf',
+          fileExtension: 'pdf',
+          sizeBytes: sourceFile.size,
+          contentBase64: expect.any(String),
+        },
+        extractedText: undefined,
+      })
+    })
+    expect(importSourceDocumentDraftMock.mock.calls[0][0].sourceDocument.contentBase64)
+      .toMatch(/JVBERi0xLjQgRW50ZXJwcmlzZSBUZWNobm9sb2d5/)
+    expect(validateVersionMock).not.toHaveBeenCalled()
+    expect(activateVersionMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces source-document file read failures before draft import', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    const sourceFile = new File(
+      ['Canonical execution translation source text.'],
+      'ET v2.8 Canonical Execution Translation System.md',
+      { type: 'text/markdown' },
+    )
+    Object.defineProperty(sourceFile, 'text', {
+      value: vi.fn().mockRejectedValue(new Error('Disk read failed')),
+    })
+
+    await user.upload(await screen.findByLabelText(/source document file/i), sourceFile)
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+        variant: 'error',
+        title: 'Source file read failed',
+        description: 'Disk read failed',
+      }))
+    })
+    expect(screen.getByText('Unable to read selected source document.')).toBeInTheDocument()
+    expect(screen.getByText('Disk read failed')).toBeInTheDocument()
+    expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('')
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
+  })
+
   it('blocks source document import when required draft fields are missing', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -637,9 +920,9 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.click(screen.getByRole('button', { name: /import source document/i }))
     await user.click(await screen.findByRole('button', { name: /create draft/i }))
 
-    expect(await screen.findByText('Pack key is required.')).toBeInTheDocument()
-    expect(screen.getByText('Label is required.')).toBeInTheDocument()
-    expect(screen.getByText('Source filename is required.')).toBeInTheDocument()
+    expect(await screen.findByText('Label is required.')).toBeInTheDocument()
+    expect(screen.getAllByText('Source filename is required.')).toHaveLength(1)
+    expect(screen.getByText('Extracted text is required for text source imports.')).toBeInTheDocument()
     expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
 
@@ -698,6 +981,75 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByText(/EXECUTIVE_BRIEF/i)).toBeInTheDocument()
     expect(screen.getByText(/source visible/i)).toBeInTheDocument()
     expect(screen.getAllByText(/output-schemas-pack-v1.yaml/i).length).toBeGreaterThan(0)
+  })
+
+  it('blocks binary source-document preview when extracted text was not persisted', async () => {
+    const user = userEvent.setup()
+    const importedPack = {
+      id: 'kp-et-et',
+      packId: 'kp-et-et',
+      packType: 'ET',
+      packKey: 'et',
+      label: 'ET v2.8',
+      description: 'Canonical Execution Translation source document.',
+      status: 'DRAFT',
+      latestVersionId: 'kpv-et-et-1-0-0-global',
+      latestSemanticVersion: '1.0.0',
+      sourceMetadata: {
+        importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+        sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+        sourceFilename: 'ET v2.8 - Canonical Execution Translation System.docx',
+      },
+      authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+      updatedAt: '2026-07-02T08:38:41.378Z',
+    }
+    const importedVersion = {
+      ...importedPack,
+      versionId: 'kpv-et-et-1-0-0-global',
+      semanticVersion: '1.0.0',
+      schemaVersion: '1.0.0',
+      contentFormat: 'DOCX',
+      sourceFilename: 'ET v2.8 - Canonical Execution Translation System.docx',
+      contentHash: 'sha256:source-document-reference',
+      sourceMetadata: {
+        ...importedPack.sourceMetadata,
+        contentPersisted: false,
+      },
+      validationSummary: {
+        status: 'NOT_RUN',
+        mode: 'HUMAN_REVIEW_REQUIRED',
+      },
+    }
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [importedPack],
+      },
+    })
+    detailQueryMock.mockReturnValue({
+      ...defaultDetailResult,
+      data: {
+        data: {
+          ...importedPack,
+          versions: [importedVersion],
+          activations: [],
+        },
+      },
+    })
+    versionQueryMock.mockReturnValue({
+      ...defaultVersionResult,
+      data: { data: importedVersion },
+    })
+
+    renderPage()
+
+    await user.selectOptions(screen.getByLabelText(/actions for et/i), 'details')
+
+    const previewButton = await screen.findByRole('button', { name: /load source preview/i })
+    expect(previewButton).toBeDisabled()
+    expect(screen.getByText(/does not have persisted extracted text/i)).toBeInTheDocument()
+    expect(loadContentPreviewMock).not.toHaveBeenCalled()
   })
 
   it('validates the latest starter version for a source-backed draft pack', async () => {
@@ -836,6 +1188,42 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(contentInput).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText('Semantic version is required.')).toBeInTheDocument()
     expect(screen.getByText('Starter source content must be at least 40 characters.')).toBeInTheDocument()
+    expect(createVersionMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces starter source file read failures before version upload', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(
+      screen.getByLabelText(/actions for truth-certification-pack/i),
+      'upload',
+    )
+
+    expect(await screen.findByRole('heading', { name: /upload starter pack version/i }))
+      .toBeInTheDocument()
+
+    const sourceFile = new File(
+      ['pack:\n  key: truth-certification-pack\n'],
+      'truth-certification-pack-v1.yaml',
+      { type: 'text/yaml' },
+    )
+    Object.defineProperty(sourceFile, 'text', {
+      value: vi.fn().mockRejectedValue(new Error('Starter file unreadable')),
+    })
+
+    await user.upload(screen.getByLabelText(/starter source file/i), sourceFile)
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+        variant: 'error',
+        title: 'Source file read failed',
+        description: 'Starter file unreadable',
+      }))
+    })
+    expect(screen.getByText('Unable to read selected source file.')).toBeInTheDocument()
+    expect(screen.getByText('Starter file unreadable')).toBeInTheDocument()
+    expect(screen.getByLabelText(/source content/i)).toHaveValue('')
     expect(createVersionMock).not.toHaveBeenCalled()
   })
 

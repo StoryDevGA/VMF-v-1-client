@@ -160,10 +160,10 @@ export const EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM = Object.freeze({
 
 export const OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS = Object.freeze([
   Object.freeze({ value: 'MARKDOWN', label: 'Markdown' }),
-  Object.freeze({ value: 'DOCX', label: 'DOCX' }),
-  Object.freeze({ value: 'PDF', label: 'PDF' }),
   Object.freeze({ value: 'YAML', label: 'YAML' }),
   Object.freeze({ value: 'JSON', label: 'JSON' }),
+  Object.freeze({ value: 'DOCX', label: 'DOCX' }),
+  Object.freeze({ value: 'PDF', label: 'PDF' }),
 ])
 
 export const KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS = Object.freeze([
@@ -199,10 +199,9 @@ export const KNOWLEDGE_PACK_VISIBILITY_OPTIONS = Object.freeze([
 export const KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS = Object.freeze([
   Object.freeze({ value: '', label: 'All review states' }),
   Object.freeze({ value: 'DRAFT', label: 'Draft' }),
-  Object.freeze({ value: 'IN_REVIEW', label: 'In Review' }),
+  Object.freeze({ value: 'READY_FOR_REVIEW', label: 'Ready for Review' }),
   Object.freeze({ value: 'APPROVED', label: 'Approved' }),
   Object.freeze({ value: 'REJECTED', label: 'Rejected' }),
-  Object.freeze({ value: 'CHANGES_REQUESTED', label: 'Changes Requested' }),
 ])
 
 export const KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS = Object.freeze([
@@ -229,12 +228,12 @@ export const EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM = Object.freeze({
   customerId: '',
   tenantId: '',
   contentFormat: 'MARKDOWN',
-  sourceDocumentId: '',
   filename: '',
   contentType: '',
   fileExtension: '',
-  sourceHash: '',
   extractedText: '',
+  contentBase64: '',
+  sizeBytes: '',
 })
 
 const normalizeText = (value) => String(value ?? '').trim()
@@ -249,6 +248,11 @@ const SOURCE_BACKED_PACK_KEYS = new Set(
     .filter((pack) => pack.sourceStatus === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY)
     .map(getOutcomeKnowledgePackKey),
 )
+
+const IMPORTED_DRAFT_VALIDATION_STATUSES = new Set([
+  OUTCOME_KNOWLEDGE_PACK_STATUSES.DRAFT,
+  OUTCOME_KNOWLEDGE_PACK_STATUSES.FAILED_VALIDATION,
+])
 
 const byPackKey = (packs = []) => new Map(
   packs
@@ -282,13 +286,20 @@ export function getKnowledgePackStatusVariant(status) {
 
 export function getRuntimeBindingLabel(row = {}) {
   if (row.runtimeBindable === true) return 'Runtime active'
-  if (isSourceBackedKnowledgePack(row)) return 'Starter source only'
+  if (isStarterSourceKnowledgePack(row)) return 'Starter source only'
+  if (isImportedSourceDocument(row)) {
+    if (!row.sourceFilename) return 'Source document missing'
+    return hasPersistedSourceDocumentContent(row) ? 'Source document ready' : 'Source text missing'
+  }
   return 'Source missing'
 }
 
 export function getRuntimeBindingVariant(row = {}) {
   if (row.runtimeBindable === true) return 'success'
-  if (isSourceBackedKnowledgePack(row)) return 'warning'
+  if (isStarterSourceKnowledgePack(row)) return 'warning'
+  if (isImportedSourceDocument(row)) {
+    return row.sourceFilename && hasPersistedSourceDocumentContent(row) ? 'info' : 'danger'
+  }
   return 'danger'
 }
 
@@ -298,35 +309,119 @@ export function isSourceBackedKnowledgePack(row = {}) {
     || SOURCE_BACKED_PACK_KEYS.has(getOutcomeKnowledgePackKey(row))
 }
 
+export function isStarterSourceKnowledgePack(row = {}) {
+  return normalizeToken(row.sourceStatus) === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
+    || SOURCE_BACKED_PACK_KEYS.has(getOutcomeKnowledgePackKey(row))
+}
+
+export function isImportedSourceDocument(row = {}) {
+  return normalizeToken(row.authoringMode) === 'IMPORT_SOURCE_DOCUMENT'
+    && !isStarterSourceKnowledgePack(row)
+}
+
 export function hasKnowledgePackVersion(row = {}) {
   return Boolean(normalizeText(row.latestVersionId || row.versionId))
 }
 
+export function hasPersistedSourceDocumentContent(row = {}) {
+  return Boolean(
+    row.contentPersisted === true
+      || row.sourceMetadata?.contentPersisted === true,
+  )
+}
+
+export function hasImportedSourceDocumentReference(row = {}) {
+  const sourceStatus = normalizeToken(row.sourceStatus || row.sourceMetadata?.sourceStatus)
+  return Boolean(
+    isImportedSourceDocument(row)
+      && row.sourceFilename
+      && (!sourceStatus || sourceStatus === 'SOURCE_DOCUMENT_PRESENT'),
+  )
+}
+
 export function canUploadKnowledgePack(row = {}) {
-  return isSourceBackedKnowledgePack(row)
+  return isStarterSourceKnowledgePack(row)
 }
 
 export function canImportKnowledgePackStarter(row = {}) {
-  return isSourceBackedKnowledgePack(row) && !hasKnowledgePackVersion(row)
+  return isStarterSourceKnowledgePack(row) && !hasKnowledgePackVersion(row)
 }
 
 export function canValidateKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
-  return isSourceBackedKnowledgePack(row)
+  if (isStarterSourceKnowledgePack(row)) {
+    return hasKnowledgePackVersion(row)
+      && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
+      && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+  }
+
+  return isImportedSourceDocument(row)
     && hasKnowledgePackVersion(row)
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+    && IMPORTED_DRAFT_VALIDATION_STATUSES.has(status)
+    && hasImportedSourceDocumentReference(row)
+    && hasPersistedSourceDocumentContent(row)
+}
+
+export function getValidateKnowledgePackDisabledReason(row = {}) {
+  const status = normalizeToken(row.status)
+  if (!isImportedSourceDocument(row) || !IMPORTED_DRAFT_VALIDATION_STATUSES.has(status)) return ''
+  if (!hasKnowledgePackVersion(row)) return 'Validate blocked - version missing'
+  if (!hasImportedSourceDocumentReference(row)) return 'Validate blocked - source document missing'
+  if (!hasPersistedSourceDocumentContent(row)) return 'Validate blocked - source text missing'
+  return ''
+}
+
+export function canSubmitKnowledgePackForReview(row = {}) {
+  const reviewStatus = normalizeToken(row.reviewStatus || 'DRAFT')
+  return isImportedSourceDocument(row)
+    && hasKnowledgePackVersion(row)
+    && normalizeToken(row.status) === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+    && (
+      reviewStatus === 'DRAFT'
+      || reviewStatus === 'REJECTED'
+    )
+}
+
+export function canApproveKnowledgePackReview(row = {}) {
+  return isImportedSourceDocument(row)
+    && hasKnowledgePackVersion(row)
+    && normalizeToken(row.status) === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+    && normalizeToken(row.reviewStatus) === 'READY_FOR_REVIEW'
+}
+
+export function canRejectKnowledgePackReview(row = {}) {
+  return canApproveKnowledgePackReview(row)
 }
 
 export function canActivateKnowledgePack(row = {}) {
-  return isSourceBackedKnowledgePack(row)
-    && hasKnowledgePackVersion(row)
-    && normalizeToken(row.status) === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+  if (!hasKnowledgePackVersion(row)) return false
+  const status = normalizeToken(row.status)
+  if (isStarterSourceKnowledgePack(row)) {
+    return status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+  }
+
+  return isImportedSourceDocument(row)
+    && status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+    && normalizeToken(row.reviewStatus) === 'APPROVED'
+}
+
+export function getActivateKnowledgePackDisabledReason(row = {}) {
+  if (
+    !isImportedSourceDocument(row)
+    || !hasKnowledgePackVersion(row)
+    || normalizeToken(row.status) !== OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+  ) return ''
+
+  if (normalizeToken(row.reviewStatus) !== 'APPROVED') {
+    return 'Activate blocked - review not approved'
+  }
+
+  return ''
 }
 
 export function canDeprecateKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
-  return isSourceBackedKnowledgePack(row)
+  return isStarterSourceKnowledgePack(row)
     && hasKnowledgePackVersion(row)
     && (
       status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
@@ -336,7 +431,7 @@ export function canDeprecateKnowledgePack(row = {}) {
 
 export function canDisableKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
-  return isSourceBackedKnowledgePack(row)
+  return isStarterSourceKnowledgePack(row)
     && hasKnowledgePackVersion(row)
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.DISABLED
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING
@@ -344,7 +439,7 @@ export function canDisableKnowledgePack(row = {}) {
 }
 
 export function canRollbackKnowledgePackVersion({ pack = {}, version = null, activations = [] } = {}) {
-  if (!isSourceBackedKnowledgePack(pack) || !version?.versionId) return false
+  if (!isStarterSourceKnowledgePack(pack) || !version?.versionId) return false
 
   const versionStatus = normalizeToken(version.status)
   if (
@@ -367,8 +462,11 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
       || OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING,
   )
   const runtimeBindable = requiredPack?.runtimeBindable === true
+  const authoringMode = normalizeToken(record?.authoringMode || record?.sourceMetadata?.authoringMode)
   const sourceFilename = normalizeText(
     record?.sourceMetadata?.sourceFilename
+      || record?.sourceMetadata?.sourceDocument?.filename
+      || record?.sourceFilename
       || requiredPack?.sourceFilename
       || sourcePack?.sourceFilename,
   )
@@ -393,8 +491,12 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
     sourceFilename,
     purposeCategory: normalizeToken(record?.purposeCategory || record?.sourceMetadata?.purposeCategory),
     visibility: normalizeToken(record?.visibility || record?.sourceMetadata?.visibility),
-    authoringMode: normalizeToken(record?.authoringMode || record?.sourceMetadata?.authoringMode),
+    authoringMode,
     reviewStatus: normalizeToken(record?.reviewStatus || record?.sourceMetadata?.reviewStatus),
+    contentPersisted: record?.sourceMetadata?.contentPersisted === true,
+    sourceMetadata: record?.sourceMetadata && typeof record.sourceMetadata === 'object'
+      ? record.sourceMetadata
+      : {},
     latestVersionId: normalizeText(
       record?.latestVersionId
         || sourcePack?.latestVersionId

@@ -122,10 +122,12 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   appendParam(body, 'tenantId', tenantId)
   appendParam(body, 'contentFormat', contentFormat)
   appendParam(body, 'extractedText', extractedText)
-  appendParam(body.sourceDocument, 'sourceDocumentId', sourceDocument.sourceDocumentId)
   appendParam(body.sourceDocument, 'contentType', sourceDocument.contentType)
   appendParam(body.sourceDocument, 'fileExtension', sourceDocument.fileExtension)
-  appendParam(body.sourceDocument, 'sourceHash', sourceDocument.sourceHash)
+  appendParam(body.sourceDocument, 'contentBase64', sourceDocument.contentBase64)
+  if (Number.isFinite(Number(sourceDocument.sizeBytes))) {
+    body.sourceDocument.sizeBytes = Number(sourceDocument.sizeBytes)
+  }
 
   return {
     url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/source-document-import`,
@@ -140,6 +142,20 @@ export const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionI
   }/validate`,
   method: 'POST',
   body: {},
+})
+
+export const buildUpdateOutcomeKnowledgePackReviewQuery = ({
+  packId,
+  versionId,
+  reviewStatus,
+}) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
+    encodePathSegment(versionId)
+  }/review`,
+  method: 'POST',
+  body: {
+    reviewStatus: normalizeToken(reviewStatus),
+  },
 })
 
 export const buildActivateOutcomeKnowledgePackVersionQuery = ({
@@ -561,6 +577,11 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       invalidatesTags: getMutationInvalidationTags,
     }),
 
+    updateOutcomeKnowledgePackReview: build.mutation({
+      query: buildUpdateOutcomeKnowledgePackReviewQuery,
+      invalidatesTags: getMutationInvalidationTags,
+    }),
+
     activateOutcomeKnowledgePackVersion: build.mutation({
       query: buildActivateOutcomeKnowledgePackVersionQuery,
       invalidatesTags: getMutationInvalidationTags,
@@ -640,6 +661,7 @@ export const {
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useValidateOutcomeKnowledgePackVersionMutation,
+  useUpdateOutcomeKnowledgePackReviewMutation,
   useActivateOutcomeKnowledgePackVersionMutation,
   useRollbackOutcomeKnowledgePackMutation,
   usePreviewOutcomeKnowledgePackResolutionQuery,

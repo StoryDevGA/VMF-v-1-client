@@ -185,6 +185,18 @@
   min-width: 128px;
 }
 
+.super-admin-outcome-knowledge-packs__runtime-binding-status {
+  max-width: 100%;
+  align-items: flex-start;
+  vertical-align: top;
+}
+
+.super-admin-outcome-knowledge-packs__runtime-binding-status .status__text {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .super-admin-outcome-knowledge-packs__dialog-body {
   display: grid;
   gap: var(--spacing-md);
@@ -218,6 +230,28 @@
 .super-admin-outcome-knowledge-packs__file-field input {
   width: 100%;
   color: var(--color-text-secondary);
+}
+
+.super-admin-outcome-knowledge-packs__field-error {
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.super-admin-outcome-knowledge-packs__derived-source {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.super-admin-outcome-knowledge-packs__advanced {
+  margin-top: var(--spacing-xs);
 }
 
 .super-admin-outcome-knowledge-packs__detail-grid,
@@ -552,6 +586,7 @@
   .super-admin-outcome-knowledge-packs__toolbar,
   .super-admin-outcome-knowledge-packs__toolbar--expanded,
   .super-admin-outcome-knowledge-packs__form-grid,
+  .super-admin-outcome-knowledge-packs__derived-source,
   .super-admin-outcome-knowledge-packs__detail-grid,
   .super-admin-outcome-knowledge-packs__detail-layout,
   .super-admin-outcome-knowledge-packs__manifest-grid {

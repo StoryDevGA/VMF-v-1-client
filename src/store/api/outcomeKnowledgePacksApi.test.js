@@ -20,6 +20,7 @@ import {
   buildPreviewOutcomeKnowledgePackResolutionQuery,
   buildRollbackOutcomeKnowledgePackQuery,
   buildUpdateOutcomeKnowledgePackManifestQuery,
+  buildUpdateOutcomeKnowledgePackReviewQuery,
   buildValidateOutcomeKnowledgePackVersionQuery,
   outcomeKnowledgePacksApi,
   useActivateOutcomeKnowledgePackVersionMutation,
@@ -42,6 +43,7 @@ import {
   usePreviewOutcomeKnowledgePackResolutionQuery,
   useRollbackOutcomeKnowledgePackMutation,
   useUpdateOutcomeKnowledgePackManifestMutation,
+  useUpdateOutcomeKnowledgePackReviewMutation,
   useValidateOutcomeKnowledgePackVersionMutation,
 } from './outcomeKnowledgePacksApi.js'
 
@@ -56,6 +58,7 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints)
       .toHaveProperty('importOutcomeKnowledgePackSourceDocumentDraft')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('validateOutcomeKnowledgePackVersion')
+    expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('updateOutcomeKnowledgePackReview')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('activateOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('deprecateOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('disableOutcomeKnowledgePackVersion')
@@ -80,6 +83,7 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(typeof useImportOutcomeKnowledgePackStarterVersionMutation).toBe('function')
     expect(typeof useImportOutcomeKnowledgePackSourceDocumentDraftMutation).toBe('function')
     expect(typeof useValidateOutcomeKnowledgePackVersionMutation).toBe('function')
+    expect(typeof useUpdateOutcomeKnowledgePackReviewMutation).toBe('function')
     expect(typeof useActivateOutcomeKnowledgePackVersionMutation).toBe('function')
     expect(typeof useDeprecateOutcomeKnowledgePackVersionMutation).toBe('function')
     expect(typeof useDisableOutcomeKnowledgePackVersionMutation).toBe('function')
@@ -178,7 +182,7 @@ describe('outcomeKnowledgePacksApi', () => {
         filename: 'ET v2.8 Canonical Execution Translation System.md',
         contentType: 'text/markdown',
         fileExtension: 'md',
-        sourceHash: 'sha256:et-source',
+        sizeBytes: 25,
       },
       extractedText: 'Extracted ET source text.',
     })).toEqual({
@@ -201,7 +205,43 @@ describe('outcomeKnowledgePacksApi', () => {
           filename: 'ET v2.8 Canonical Execution Translation System.md',
           contentType: 'text/markdown',
           fileExtension: 'md',
-          sourceHash: 'sha256:et-source',
+          sizeBytes: 25,
+        },
+      },
+    })
+
+    expect(buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+      packType: 'system',
+      packKey: 'enterprise-technology',
+      label: 'Enterprise Technology',
+      semanticVersion: '5.0.0',
+      contentFormat: 'PDF',
+      sourceDocument: {
+        filename: 'Enterprise Technology Framework v5.pdf',
+        contentType: 'application/pdf',
+        fileExtension: 'pdf',
+        sizeBytes: 2048,
+        contentBase64: 'JVBERi0xLjQ=',
+      },
+      extractedText: undefined,
+    })).toEqual({
+      url: '/super-admin/outcome-studio/knowledge-packs/source-document-import',
+      method: 'POST',
+      body: {
+        packType: 'SYSTEM',
+        packKey: 'enterprise-technology',
+        label: 'Enterprise Technology',
+        semanticVersion: '5.0.0',
+        schemaVersion: '1.0.0',
+        executionMode: 'PROVIDER_CONTEXT',
+        visibility: 'PLATFORM',
+        contentFormat: 'PDF',
+        sourceDocument: {
+          filename: 'Enterprise Technology Framework v5.pdf',
+          contentType: 'application/pdf',
+          fileExtension: 'pdf',
+          contentBase64: 'JVBERi0xLjQ=',
+          sizeBytes: 2048,
         },
       },
     })
@@ -213,6 +253,16 @@ describe('outcomeKnowledgePacksApi', () => {
       url: '/super-admin/outcome-studio/knowledge-packs/truth-certification-pack/versions/truth-certification-pack%401.0.1/validate',
       method: 'POST',
       body: {},
+    })
+
+    expect(buildUpdateOutcomeKnowledgePackReviewQuery({
+      packId: 'enterprise-technology',
+      versionId: 'enterprise-technology@5.0.0',
+      reviewStatus: 'approved',
+    })).toEqual({
+      url: '/super-admin/outcome-studio/knowledge-packs/enterprise-technology/versions/enterprise-technology%405.0.0/review',
+      method: 'POST',
+      body: { reviewStatus: 'APPROVED' },
     })
 
     expect(buildActivateOutcomeKnowledgePackVersionQuery({
