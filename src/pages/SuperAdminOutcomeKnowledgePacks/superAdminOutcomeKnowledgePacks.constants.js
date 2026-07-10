@@ -42,7 +42,6 @@ export const OUTCOME_KNOWLEDGE_PACK_STATUSES = Object.freeze({
   DISABLED: 'DISABLED',
   FAILED_VALIDATION: 'FAILED_VALIDATION',
   ROLLED_BACK: 'ROLLED_BACK',
-  SOURCE_ONLY: 'SOURCE_ONLY',
   MISSING: 'MISSING',
 })
 
@@ -51,36 +50,26 @@ export const REQUIRED_OUTCOME_KNOWLEDGE_PACKS = Object.freeze([
     packType: OUTCOME_KNOWLEDGE_PACK_TYPES.ARL,
     packKey: 'adaptive-reasoning-layer',
     label: 'Adaptive Reasoning Layer',
-    sourceStatus: OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
   }),
   Object.freeze({
     packType: OUTCOME_KNOWLEDGE_PACK_TYPES.RL,
     packKey: 'rendering-layer',
     label: 'Rendering Layer',
-    sourceStatus: OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    sourceFilename: 'rendering-layer-v1.yaml',
   }),
   Object.freeze({
     packType: OUTCOME_KNOWLEDGE_PACK_TYPES.OUTPUT_SCHEMA,
     packKey: 'output-schemas-pack',
     label: 'Output Schemas',
-    sourceStatus: OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    sourceFilename: 'output-schemas-pack-v1.yaml',
   }),
   Object.freeze({
     packType: OUTCOME_KNOWLEDGE_PACK_TYPES.TRUTH_CERTIFICATION,
     packKey: 'truth-certification-pack',
     label: 'Truth Certification',
-    sourceStatus: OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    sourceFilename: 'truth-certification-pack-v1.yaml',
   }),
   Object.freeze({
     packType: OUTCOME_KNOWLEDGE_PACK_TYPES.OUTPUT_TYPE_DEFINITION,
     packKey: 'outcome-output-types',
     label: 'Outcome Output Types',
-    sourceStatus: OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    sourceFilename: 'outcome-output-types-v1.yaml',
   }),
 ])
 
@@ -126,7 +115,6 @@ const STATUS_LABELS = Object.freeze({
   [OUTCOME_KNOWLEDGE_PACK_STATUSES.DISABLED]: 'Disabled',
   [OUTCOME_KNOWLEDGE_PACK_STATUSES.FAILED_VALIDATION]: 'Failed validation',
   [OUTCOME_KNOWLEDGE_PACK_STATUSES.ROLLED_BACK]: 'Rolled back',
-  [OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY]: 'Source only',
   [OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING]: 'Missing',
 })
 
@@ -144,8 +132,6 @@ export const OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS = Object.freeze([
     OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED,
     OUTCOME_KNOWLEDGE_PACK_STATUSES.DRAFT,
     OUTCOME_KNOWLEDGE_PACK_STATUSES.FAILED_VALIDATION,
-    OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY,
-    OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING,
     OUTCOME_KNOWLEDGE_PACK_STATUSES.DISABLED,
     OUTCOME_KNOWLEDGE_PACK_STATUSES.DEPRECATED,
   ].map((value) => Object.freeze({ value, label: STATUS_LABELS[value] ?? value })),
@@ -243,12 +229,6 @@ const normalizeLower = (value) => normalizeText(value).toLowerCase()
 export const getOutcomeKnowledgePackKey = (pack = {}) =>
   `${normalizeToken(pack.packType)}:${normalizeLower(pack.packKey)}`
 
-const SOURCE_BACKED_PACK_KEYS = new Set(
-  REQUIRED_OUTCOME_KNOWLEDGE_PACKS
-    .filter((pack) => pack.sourceStatus === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY)
-    .map(getOutcomeKnowledgePackKey),
-)
-
 const IMPORTED_DRAFT_VALIDATION_STATUSES = new Set([
   OUTCOME_KNOWLEDGE_PACK_STATUSES.DRAFT,
   OUTCOME_KNOWLEDGE_PACK_STATUSES.FAILED_VALIDATION,
@@ -276,7 +256,6 @@ export function getKnowledgePackStatusVariant(status) {
   if (normalized === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED) return 'info'
   if (
     normalized === OUTCOME_KNOWLEDGE_PACK_STATUSES.DRAFT
-    || normalized === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
     || normalized === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATING
   ) return 'warning'
   if (
@@ -288,7 +267,6 @@ export function getKnowledgePackStatusVariant(status) {
 
 export function getRuntimeBindingLabel(row = {}) {
   if (row.runtimeBindable === true) return 'Runtime active'
-  if (isStarterSourceKnowledgePack(row)) return 'Starter source only'
   if (isImportedSourceDocument(row)) {
     if (!row.sourceFilename) return 'Source document missing'
     return hasPersistedSourceDocumentContent(row) ? 'Source document ready' : 'Source text missing'
@@ -298,7 +276,6 @@ export function getRuntimeBindingLabel(row = {}) {
 
 export function getRuntimeBindingVariant(row = {}) {
   if (row.runtimeBindable === true) return 'success'
-  if (isStarterSourceKnowledgePack(row)) return 'warning'
   if (isImportedSourceDocument(row)) {
     return row.sourceFilename && hasPersistedSourceDocumentContent(row) ? 'info' : 'danger'
   }
@@ -307,18 +284,10 @@ export function getRuntimeBindingVariant(row = {}) {
 
 export function isSourceBackedKnowledgePack(row = {}) {
   return Boolean(row.sourceFilename)
-    || normalizeToken(row.sourceStatus) === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
-    || SOURCE_BACKED_PACK_KEYS.has(getOutcomeKnowledgePackKey(row))
-}
-
-export function isStarterSourceKnowledgePack(row = {}) {
-  return normalizeToken(row.sourceStatus) === OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
-    || SOURCE_BACKED_PACK_KEYS.has(getOutcomeKnowledgePackKey(row))
 }
 
 export function isImportedSourceDocument(row = {}) {
   return normalizeToken(row.authoringMode) === 'IMPORT_SOURCE_DOCUMENT'
-    && !isStarterSourceKnowledgePack(row)
 }
 
 export function hasKnowledgePackVersion(row = {}) {
@@ -368,21 +337,8 @@ export function hasImportedSourceDocumentReference(row = {}) {
   )
 }
 
-export function canUploadKnowledgePack(row = {}) {
-  return isStarterSourceKnowledgePack(row)
-}
-
-export function canImportKnowledgePackStarter(row = {}) {
-  return isStarterSourceKnowledgePack(row) && !hasKnowledgePackVersion(row)
-}
-
 export function canValidateKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
-  if (isStarterSourceKnowledgePack(row)) {
-    return hasKnowledgePackVersion(row)
-      && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
-      && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
-  }
 
   return isImportedSourceDocument(row)
     && hasKnowledgePackVersion(row)
@@ -425,9 +381,6 @@ export function canRejectKnowledgePackReview(row = {}) {
 export function canActivateKnowledgePack(row = {}) {
   if (!hasKnowledgePackVersion(row)) return false
   const status = normalizeToken(row.status)
-  if (isStarterSourceKnowledgePack(row)) {
-    return status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
-  }
 
   return isImportedSourceDocument(row)
     && status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
@@ -457,7 +410,7 @@ export function canDeprecateKnowledgePack(row = {}) {
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
   ) return false
 
-  return isStarterSourceKnowledgePack(row) || isImportedSourceDocument(row)
+  return isImportedSourceDocument(row)
 }
 
 export function canDisableKnowledgePack(row = {}) {
@@ -468,25 +421,20 @@ export function canDisableKnowledgePack(row = {}) {
     return status === OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
   }
 
-  return isStarterSourceKnowledgePack(row)
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.DISABLED
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
+  return false
 }
 
 export function canDeleteKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
   return Boolean(row.isPersisted)
     && row.isSystem !== true
-    && !isStarterSourceKnowledgePack(row)
     && row.runtimeBindable !== true
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING
-    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
 }
 
 export function canRollbackKnowledgePackVersion({ pack = {}, version = null, activations = [] } = {}) {
-  if (!isStarterSourceKnowledgePack(pack) || !version?.versionId) return false
+  if (!isImportedSourceDocument(pack) || !version?.versionId) return false
 
   const versionStatus = normalizeToken(version.status)
   if (
@@ -500,12 +448,10 @@ export function canRollbackKnowledgePackVersion({ pack = {}, version = null, act
   )
 }
 
-const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
+const buildPersistedPackRow = (record, requiredPack) => {
   const status = normalizeToken(
     record?.status
-      || sourcePack?.registryStatus
       || requiredPack?.status
-      || sourcePack?.status
       || OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING,
   )
   const runtimeBindable = requiredPack?.runtimeBindable === true
@@ -515,26 +461,23 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
       || record?.sourceMetadata?.sourceDocument?.filename
       || record?.sourceFilename
       || requiredPack?.sourceFilename
-      || sourcePack?.sourceFilename,
   )
 
   return {
-    id: normalizeText(record?.id || record?.packId || requiredPack?.packKey || sourcePack?.packKey),
+    id: normalizeText(record?.id || record?.packId || requiredPack?.packKey),
     packId: normalizeText(record?.packId || record?.id || requiredPack?.packId || ''),
-    packType: normalizeToken(record?.packType || requiredPack?.packType || sourcePack?.packType),
-    packKey: normalizeLower(record?.packKey || requiredPack?.packKey || sourcePack?.packKey),
-    label: normalizeText(record?.label || requiredPack?.label || sourcePack?.label),
+    packType: normalizeToken(record?.packType || requiredPack?.packType),
+    packKey: normalizeLower(record?.packKey || requiredPack?.packKey),
+    label: normalizeText(record?.label || requiredPack?.label),
     description: normalizeText(record?.description),
     status,
     runtimeBindable,
     runtimeStatus: runtimeBindable ? OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE : status,
     sourceStatus: normalizeToken(
       record?.sourceMetadata?.sourceStatus
-        || requiredPack?.sourceStatus
-        || sourcePack?.sourceStatus
-        || sourcePack?.status,
+        || requiredPack?.sourceStatus,
     ),
-    importStatus: normalizeToken(sourcePack?.importStatus),
+    importStatus: '',
     sourceFilename,
     purposeCategory: normalizeToken(record?.purposeCategory || record?.sourceMetadata?.purposeCategory),
     visibility: normalizeToken(record?.visibility || record?.sourceMetadata?.visibility),
@@ -550,12 +493,10 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
     }),
     latestVersionId: normalizeText(
       record?.latestVersionId
-        || sourcePack?.latestVersionId
         || requiredPack?.versionId,
     ),
     latestSemanticVersion: normalizeText(
       record?.latestSemanticVersion
-        || sourcePack?.latestSemanticVersion
         || requiredPack?.semanticVersion,
     ),
     schemaVersion: normalizeText(requiredPack?.schemaVersion),
@@ -569,26 +510,32 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
 export function buildOutcomeKnowledgePackRows({
   registryPacks = [],
   requiredPacks = [],
-  starterPacks = [],
 } = {}) {
   const requiredRows = requiredPacks.length > 0
     ? requiredPacks
     : REQUIRED_OUTCOME_KNOWLEDGE_PACKS
   const registryByKey = byPackKey(registryPacks)
-  const starterByKey = byPackKey(starterPacks)
   const requiredKeys = new Set(requiredRows.map(getOutcomeKnowledgePackKey))
-  const rows = requiredRows.map((requiredPack) => {
-    const key = getOutcomeKnowledgePackKey(requiredPack)
-    return buildPersistedPackRow(
-      registryByKey.get(key),
-      requiredPack,
-      starterByKey.get(key),
-    )
-  })
+  const rows = requiredRows
+    .map((requiredPack) => {
+      const key = getOutcomeKnowledgePackKey(requiredPack)
+      const registryRecord = registryByKey.get(key)
+      const hasRuntimeBinding = requiredPack?.runtimeBindable === true
+
+      if (!registryRecord && !hasRuntimeBinding) {
+        return null
+      }
+
+      return buildPersistedPackRow(
+        registryRecord,
+        requiredPack,
+      )
+    })
+    .filter(Boolean)
 
   const extraRows = registryPacks
     .filter((record) => !requiredKeys.has(getOutcomeKnowledgePackKey(record)))
-    .map((record) => buildPersistedPackRow(record, null, null))
+    .map((record) => buildPersistedPackRow(record, null))
 
   return [...rows, ...extraRows]
 }

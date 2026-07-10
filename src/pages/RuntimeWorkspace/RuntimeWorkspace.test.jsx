@@ -610,81 +610,44 @@ const outcomeStudioPayload = {
     summary: 'Knowledge Pack Registry activation is required before Outcome Studio sessions can start.',
     activePacks: [],
     sourceBundle: {
-      status: 'SOURCE_ONLY',
-      sourcePath: 'docs/product-specs/source-artifacts/2026-06-15-governed-outcome-studio-oes-002/knowledge-packs-v1/',
-      starterPacks: [
-        {
-          packType: 'ARL',
-          packKey: 'adaptive-reasoning-layer',
-          label: 'Adaptive Reasoning Layer',
-          sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
-        },
-        {
-          packType: 'RL',
-          packKey: 'rendering-layer',
-          label: 'Rendering Layer',
-          sourceFilename: 'rendering-layer-v1.yaml',
-        },
-        {
-          packType: 'OUTPUT_SCHEMA',
-          packKey: 'output-schemas-pack',
-          label: 'Output Schemas',
-          sourceFilename: 'output-schemas-pack-v1.yaml',
-        },
-        {
-          packType: 'TRUTH_CERTIFICATION',
-          packKey: 'truth-certification-pack',
-          label: 'Truth Certification',
-          sourceFilename: 'truth-certification-pack-v1.yaml',
-        },
-        {
-          packType: 'OUTPUT_TYPE_DEFINITION',
-          packKey: 'outcome-output-types',
-          label: 'Outcome Output Types',
-          sourceFilename: 'outcome-output-types-v1.yaml',
-        },
-      ],
+      status: 'RETIRED',
+      sourceDocuments: [],
     },
     requiredPacks: [
       {
         packType: 'ARL',
         packKey: 'adaptive-reasoning-layer',
         label: 'Adaptive Reasoning Layer',
-        status: 'SOURCE_ONLY',
+        status: 'MISSING',
         runtimeBindable: false,
-        sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
       },
       {
         packType: 'RL',
         packKey: 'rendering-layer',
         label: 'Rendering Layer',
-        status: 'SOURCE_ONLY',
+        status: 'MISSING',
         runtimeBindable: false,
-        sourceFilename: 'rendering-layer-v1.yaml',
       },
       {
         packType: 'OUTPUT_SCHEMA',
         packKey: 'output-schemas-pack',
         label: 'Output Schemas',
-        status: 'SOURCE_ONLY',
+        status: 'MISSING',
         runtimeBindable: false,
-        sourceFilename: 'output-schemas-pack-v1.yaml',
       },
       {
         packType: 'TRUTH_CERTIFICATION',
         packKey: 'truth-certification-pack',
         label: 'Truth Certification',
-        status: 'SOURCE_ONLY',
+        status: 'MISSING',
         runtimeBindable: false,
-        sourceFilename: 'truth-certification-pack-v1.yaml',
       },
       {
         packType: 'OUTPUT_TYPE_DEFINITION',
         packKey: 'outcome-output-types',
         label: 'Outcome Output Types',
-        status: 'SOURCE_ONLY',
+        status: 'MISSING',
         runtimeBindable: false,
-        sourceFilename: 'outcome-output-types-v1.yaml',
       },
     ],
   },
@@ -1480,7 +1443,7 @@ describe('RuntimeWorkspace', () => {
     expect(readinessRegion)
       .toHaveTextContent('0 active / 5 required')
     expect(readinessRegion)
-      .toHaveTextContent('5 source-only starter packs')
+      .toHaveTextContent('No source documents')
     expect(readinessRegion)
       .toHaveTextContent('2 passed / 5 gates')
     const safetyGates = within(readinessRegion).getByRole('list', { name: /outcome studio safety gates/i })
@@ -1492,9 +1455,9 @@ describe('RuntimeWorkspace', () => {
     expect(safetyGates).toHaveTextContent('Assistant response generation is blocked until source, truth, knowledge-pack, and session gates pass.')
     expect(safetyGates).toHaveTextContent('Pre Generation Gates Blocked')
     expect(readinessRegion)
-      .toHaveTextContent('output-schemas-pack-v1.yaml')
+      .not.toHaveTextContent('output-schemas-pack-v1.yaml')
     expect(readinessRegion)
-      .toHaveTextContent('truth-certification-pack-v1.yaml')
+      .not.toHaveTextContent('truth-certification-pack-v1.yaml')
 
     await user.click(within(main).getByRole('tab', { name: /truth binding/i }))
     const truthBinding = within(main).getByRole('region', { name: /outcome studio truth binding/i })

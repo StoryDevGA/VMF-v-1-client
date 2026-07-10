@@ -79,12 +79,6 @@ export const buildCreateOutcomeKnowledgePackVersionQuery = ({
   },
 })
 
-export const buildImportOutcomeKnowledgePackStarterVersionQuery = ({ packId }) => ({
-  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/starter-import`,
-  method: 'POST',
-  body: {},
-})
-
 export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   packType,
   packKey,
@@ -567,11 +561,6 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       invalidatesTags: getMutationInvalidationTags,
     }),
 
-    importOutcomeKnowledgePackStarterVersion: build.mutation({
-      query: buildImportOutcomeKnowledgePackStarterVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
     importOutcomeKnowledgePackSourceDocumentDraft: build.mutation({
       query: buildImportOutcomeKnowledgePackSourceDocumentDraftQuery,
       invalidatesTags: getSourceDocumentImportInvalidationTags,
@@ -666,7 +655,6 @@ export const {
   useGetOutcomeKnowledgePackVersionQuery,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useCreateOutcomeKnowledgePackVersionMutation,
-  useImportOutcomeKnowledgePackStarterVersionMutation,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,

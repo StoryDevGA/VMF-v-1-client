@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SuperAdminOutcomeKnowledgePacks from './SuperAdminOutcomeKnowledgePacks.jsx'
@@ -8,13 +8,11 @@ const navigateMock = vi.fn()
 const {
   activateVersionMock,
   addToastMock,
-  createVersionMock,
   deletePackMock,
   deprecateVersionMock,
   detailQueryMock,
   disableVersionMock,
   importSourceDocumentDraftMock,
-  importStarterVersionMock,
   listQueryMock,
   loadContentPreviewMock,
   manifestListQueryMock,
@@ -28,13 +26,11 @@ const {
 } = vi.hoisted(() => ({
   activateVersionMock: vi.fn(),
   addToastMock: vi.fn(),
-  createVersionMock: vi.fn(),
   deletePackMock: vi.fn(),
   deprecateVersionMock: vi.fn(),
   detailQueryMock: vi.fn(),
   disableVersionMock: vi.fn(),
   importSourceDocumentDraftMock: vi.fn(),
-  importStarterVersionMock: vi.fn(),
   listQueryMock: vi.fn(),
   loadContentPreviewMock: vi.fn(),
   manifestListQueryMock: vi.fn(),
@@ -52,94 +48,42 @@ const requiredPacks = [
     packType: 'ARL',
     packKey: 'adaptive-reasoning-layer',
     label: 'Adaptive Reasoning Layer',
-    status: 'SOURCE_ONLY',
+    status: 'MISSING',
     runtimeBindable: false,
-    sourceStatus: 'SOURCE_ONLY',
-    sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
   },
   {
     packType: 'RL',
     packKey: 'rendering-layer',
     label: 'Rendering Layer',
-    status: 'SOURCE_ONLY',
+    status: 'MISSING',
     runtimeBindable: false,
-    sourceStatus: 'SOURCE_ONLY',
-    sourceFilename: 'rendering-layer-v1.yaml',
   },
   {
     packType: 'OUTPUT_SCHEMA',
     packKey: 'output-schemas-pack',
     label: 'Output Schemas',
-    status: 'SOURCE_ONLY',
+    status: 'MISSING',
     runtimeBindable: false,
-    sourceStatus: 'SOURCE_ONLY',
-    sourceFilename: 'output-schemas-pack-v1.yaml',
   },
   {
     packType: 'TRUTH_CERTIFICATION',
     packKey: 'truth-certification-pack',
     label: 'Truth Certification',
-    status: 'SOURCE_ONLY',
+    status: 'MISSING',
     runtimeBindable: false,
-    sourceStatus: 'SOURCE_ONLY',
-    sourceFilename: 'truth-certification-pack-v1.yaml',
   },
   {
     packType: 'OUTPUT_TYPE_DEFINITION',
     packKey: 'outcome-output-types',
     label: 'Outcome Output Types',
-    status: 'SOURCE_ONLY',
+    status: 'MISSING',
     runtimeBindable: false,
-    sourceStatus: 'SOURCE_ONLY',
-    sourceFilename: 'outcome-output-types-v1.yaml',
   },
 ]
 
 const sourceBundle = {
-  status: 'SOURCE_ONLY',
-  sourcePath: 'docs/product-specs/source-artifacts/knowledge-packs-v1/',
-  starterPacks: [
-    {
-      packType: 'ARL',
-      packKey: 'adaptive-reasoning-layer',
-      label: 'Adaptive Reasoning Layer',
-      sourceFilename: 'adaptive-reasoning-layer-v1.yaml',
-      runtimeBindable: false,
-      importStatus: 'NOT_IMPORTED',
-    },
-    {
-      packType: 'RL',
-      packKey: 'rendering-layer',
-      label: 'Rendering Layer',
-      sourceFilename: 'rendering-layer-v1.yaml',
-      runtimeBindable: false,
-      importStatus: 'NOT_IMPORTED',
-    },
-    {
-      packType: 'OUTPUT_SCHEMA',
-      packKey: 'output-schemas-pack',
-      label: 'Output Schemas',
-      sourceFilename: 'output-schemas-pack-v1.yaml',
-      runtimeBindable: false,
-      importStatus: 'NOT_IMPORTED',
-    },
-    {
-      packType: 'TRUTH_CERTIFICATION',
-      packKey: 'truth-certification-pack',
-      label: 'Truth Certification',
-      sourceFilename: 'truth-certification-pack-v1.yaml',
-      runtimeBindable: false,
-      importStatus: 'NOT_IMPORTED',
-    },
-    {
-      packType: 'OUTPUT_TYPE_DEFINITION',
-      packKey: 'outcome-output-types',
-      label: 'Outcome Output Types',
-      sourceFilename: 'outcome-output-types-v1.yaml',
-      runtimeBindable: false,
-      importStatus: 'NOT_IMPORTED',
-    },
-  ],
+  status: 'RETIRED',
+  sourceDocuments: [],
 }
 
 const defaultListResult = {
@@ -151,14 +95,26 @@ const defaultListResult = {
         packType: 'OUTPUT_SCHEMA',
         packKey: 'output-schemas-pack',
         label: 'Output Schemas',
-        description: 'Output schema starter pack for Outcome Studio.',
+        description: 'Output schema knowledge pack for Outcome Studio.',
         status: 'DRAFT',
         latestVersionId: 'output-schemas-pack@1.0.0',
         latestSemanticVersion: '1.0.0',
         sourceMetadata: {
-          sourceStatus: 'SOURCE_ONLY',
-          sourceFilename: 'output-schemas-pack-v1.yaml',
+          importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+          sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+          sourceFilename: 'output-schemas-pack-v1.md',
+          sourceDocumentId: 'kpsrc-output-schema-output-schemas-pack-1-0-0-source-hash',
+          sourceHash: 'sha256:source-hash',
+          contentPersisted: true,
+          sourceDocument: {
+            sourceDocumentId: 'kpsrc-output-schema-output-schemas-pack-1-0-0-source-hash',
+            filename: 'output-schemas-pack-v1.md',
+            fileExtension: 'md',
+            sourceHash: 'sha256:source-hash',
+          },
         },
+        authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+        reviewStatus: 'DRAFT',
         updatedAt: '2026-06-15T09:00:00.000Z',
       },
     ],
@@ -405,14 +361,6 @@ vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
     loadContentPreviewMock,
     { isLoading: false, isFetching: false, error: null },
   ],
-  useCreateOutcomeKnowledgePackVersionMutation: () => [
-    createVersionMock,
-    { isLoading: false },
-  ],
-  useImportOutcomeKnowledgePackStarterVersionMutation: () => [
-    importStarterVersionMock,
-    { isLoading: false },
-  ],
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation: () => [
     importSourceDocumentDraftMock,
     { isLoading: false },
@@ -465,16 +413,6 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     reasoningContextPreviewQueryMock.mockReturnValue(defaultReasoningContextPreviewResult)
     detailQueryMock.mockReturnValue(defaultDetailResult)
     versionQueryMock.mockReturnValue(defaultVersionResult)
-    createVersionMock.mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: { version: { semanticVersion: '1.0.1' } },
-      }),
-    })
-    importStarterVersionMock.mockReturnValue({
-      unwrap: vi.fn().mockResolvedValue({
-        data: { version: { semanticVersion: '1.0.0' } },
-      }),
-    })
     importSourceDocumentDraftMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
         data: { pack: { label: 'Execution Translation' } },
@@ -527,21 +465,34 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     })
   })
 
-  it('renders required packs and exposes source-backed starter actions for all five packs', () => {
+  it('hides missing required placeholders while preserving the runtime blocker', () => {
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [],
+        meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
+      },
+    })
+
     renderPage()
 
     expect(screen.getByRole('heading', { name: /knowledge packs/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /library/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByText(/0 of 5 required packs active/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Output Schemas').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Truth Certification').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Adaptive Reasoning Layer').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Outcome Output Types').length).toBeGreaterThan(0)
+    expect(screen.getByText(/authoring required/i)).toBeInTheDocument()
     expect(screen.queryByText(/starter import and upload are currently available only/i))
       .not.toBeInTheDocument()
-    expect(screen.getByLabelText(/actions for adaptive-reasoning-layer/i)).not.toBeDisabled()
-    expect(screen.getByLabelText(/actions for outcome-output-types/i)).not.toBeDisabled()
+    expect(screen.queryByLabelText(/actions for adaptive-reasoning-layer/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/actions for rendering-layer/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/actions for output-schemas-pack/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/actions for truth-certification-pack/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/actions for outcome-output-types/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /import starter version/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /upload starter version/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /retired starter/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^missing$/i })).not.toBeInTheDocument()
   })
 
   it('renders imported source-document drafts with honest source-text blocking state', () => {
@@ -581,7 +532,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getByText('Source text missing').closest('.status'))
       .toHaveClass('super-admin-outcome-knowledge-packs__runtime-binding-status')
     expect(screen.getByText('Enterprise Technology.md')).toBeInTheDocument()
-    expect(screen.getByText('Source document')).toBeInTheDocument()
+    expect(screen.getAllByText('Source document').length).toBeGreaterThan(0)
     expect(screen.queryByText('No starter source')).not.toBeInTheDocument()
 
     const actions = screen.getByLabelText('Actions for et')
@@ -684,8 +635,9 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     renderPage()
 
-    expect(screen.getByText('Source document ready').closest('.status'))
-      .toHaveClass('super-admin-outcome-knowledge-packs__runtime-binding-status')
+    expect(screen.getAllByText('Source document ready').some((node) =>
+      node.closest('.status')?.classList.contains('super-admin-outcome-knowledge-packs__runtime-binding-status'),
+    )).toBe(true)
 
     await user.selectOptions(screen.getByLabelText('Actions for et'), 'validate')
 
@@ -1016,6 +968,80 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(activateVersionMock).not.toHaveBeenCalled()
   })
 
+  it('blocks source document import when version metadata is not major.minor.patch', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
+    const sourceFile = new File(
+      ['Adaptive reasoning source text.'],
+      'ARL v1.2 Candidate.md',
+      { type: 'text/markdown' },
+    )
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+    await user.click(screen.getByRole('button', { name: /advanced\/system metadata/i }))
+
+    await user.clear(screen.getByLabelText(/semantic version/i))
+    await user.type(screen.getByLabelText(/semantic version/i), '1.2')
+    await user.clear(screen.getByLabelText(/schema version/i))
+    await user.type(screen.getByLabelText(/schema version/i), '1.2')
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    expect(screen.getAllByText('Use major.minor.patch format, for example 1.2.0.'))
+      .toHaveLength(2)
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
+    expect(addToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Source import failed',
+    }))
+  })
+
+  it('maps source document import API field details back into the form', async () => {
+    const user = userEvent.setup()
+    importSourceDocumentDraftMock.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Please check the form for errors.',
+            requestId: 'req-source-import',
+            details: {
+              semanticVersion: 'semanticVersion must use major.minor.patch format',
+              'sourceDocument.filename': 'Source filename has already been used.',
+            },
+          },
+        },
+      }),
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
+    const sourceFile = new File(
+      ['Adaptive reasoning source text.'],
+      'ARL v1.2 Candidate.md',
+      { type: 'text/markdown' },
+    )
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+    await user.click(screen.getByRole('button', { name: /advanced\/system metadata/i }))
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    expect(await screen.findByText('semanticVersion must use major.minor.patch format'))
+      .toBeInTheDocument()
+    expect(screen.getByText('Source filename has already been used.')).toBeInTheDocument()
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Source import failed',
+      description: 'Please check the form for errors. (Ref: req-source-import)',
+    }))
+  })
+
   it('surfaces source-document file read failures before draft import', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -1071,7 +1097,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByRole('heading', { name: /pack details/i })).toBeInTheDocument()
     expect(screen.getAllByText('output-schemas-pack@1.0.0').length).toBeGreaterThan(0)
     expect(screen.getAllByText('sha256:output-schema-content').length).toBeGreaterThan(0)
-    expect(screen.getByText('Not required')).toBeInTheDocument()
+    expect(screen.getAllByText('DRAFT').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /activation history/i })).toBeInTheDocument()
     expect(screen.getByText('PACK_KEY_MATCH')).toBeInTheDocument()
     expect(screen.getByText('Source must declare pack key output-schemas-pack.')).toBeInTheDocument()
@@ -1149,6 +1175,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
         ...importedPack.sourceMetadata,
         contentPersisted: false,
       },
+      authoringMode: undefined,
       validationSummary: {
         status: 'NOT_RUN',
         mode: 'HUMAN_REVIEW_REQUIRED',
@@ -1186,7 +1213,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(loadContentPreviewMock).not.toHaveBeenCalled()
   })
 
-  it('validates the latest starter version for a source-backed draft pack', async () => {
+  it('validates the latest source-document draft version from row actions', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -1207,158 +1234,17 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     }))
   })
 
-  it('imports a source-only starter pack from the governed bundle', async () => {
-    const user = userEvent.setup()
+  it('does not expose retired starter import or upload actions', () => {
     renderPage()
 
-    await user.selectOptions(
-      screen.getByLabelText(/actions for truth-certification-pack/i),
-      'import-starter',
-    )
-
-    expect(await screen.findByRole('heading', { name: /import starter version/i }))
-      .toBeInTheDocument()
-    expect(screen.getAllByText(/runtime activation remains a separate audited action/i).length)
-      .toBeGreaterThan(0)
-    expect(importStarterVersionMock).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: /^import starter$/i }))
-
-    await waitFor(() => {
-      expect(importStarterVersionMock).toHaveBeenCalledWith({
-        packId: 'truth-certification-pack',
-      })
-    })
-    expect(createVersionMock).not.toHaveBeenCalled()
-    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Starter imported',
-      variant: 'success',
-    }))
-  })
-
-  it('cancels starter import confirmation without mutating the registry', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.selectOptions(
-      screen.getByLabelText(/actions for truth-certification-pack/i),
-      'import-starter',
-    )
-
-    expect(await screen.findByRole('heading', { name: /import starter version/i }))
-      .toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
-
-    await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: /import starter version/i }))
-        .not.toBeInTheDocument()
-    })
-    expect(importStarterVersionMock).not.toHaveBeenCalled()
-    expect(createVersionMock).not.toHaveBeenCalled()
-  })
-
-  it('creates a starter pack version from pasted source content', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.selectOptions(
-      screen.getByLabelText(/actions for truth-certification-pack/i),
-      'upload',
-    )
-
-    expect(await screen.findByRole('heading', { name: /upload starter pack version/i }))
-      .toBeInTheDocument()
-
-    await user.clear(screen.getByLabelText(/semantic version/i))
-    await user.type(screen.getByLabelText(/semantic version/i), '1.0.1')
-    fireEvent.change(screen.getByLabelText(/source content/i), {
-      target: {
-        value: [
-          'pack:',
-          '  key: truth-certification-pack',
-          'prohibited: true',
-          'certification_levels:',
-          'blocking_rules:',
-          'warnings:',
-          'CERTIFIED_TRUTH:',
-        ].join('\n'),
-      },
-    })
-
-    await user.click(screen.getByRole('button', { name: /create version/i }))
-
-    await waitFor(() => {
-      expect(createVersionMock).toHaveBeenCalledWith({
-        packId: 'truth-certification-pack',
-        semanticVersion: '1.0.1',
-        schemaVersion: '1.0.0',
-        sourceFilename: 'truth-certification-pack-v1.yaml',
-        content: expect.stringContaining('truth-certification-pack'),
-      })
-    })
-  })
-
-  it('attaches upload validation errors to the relevant fields', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.selectOptions(
-      screen.getByLabelText(/actions for truth-certification-pack/i),
-      'upload',
-    )
-
-    expect(await screen.findByRole('heading', { name: /upload starter pack version/i }))
-      .toBeInTheDocument()
-
-    await user.clear(screen.getByLabelText(/semantic version/i))
-    fireEvent.change(screen.getByLabelText(/source content/i), {
-      target: { value: 'too short' },
-    })
-    await user.click(screen.getByRole('button', { name: /create version/i }))
-
-    const semanticVersionInput = screen.getByLabelText(/semantic version/i)
-    const contentInput = screen.getByLabelText(/source content/i)
-    expect(semanticVersionInput).toHaveAttribute('aria-invalid', 'true')
-    expect(contentInput).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Semantic version is required.')).toBeInTheDocument()
-    expect(screen.getByText('Starter source content must be at least 40 characters.')).toBeInTheDocument()
-    expect(createVersionMock).not.toHaveBeenCalled()
-  })
-
-  it('surfaces starter source file read failures before version upload', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.selectOptions(
-      screen.getByLabelText(/actions for truth-certification-pack/i),
-      'upload',
-    )
-
-    expect(await screen.findByRole('heading', { name: /upload starter pack version/i }))
-      .toBeInTheDocument()
-
-    const sourceFile = new File(
-      ['pack:\n  key: truth-certification-pack\n'],
-      'truth-certification-pack-v1.yaml',
-      { type: 'text/yaml' },
-    )
-    Object.defineProperty(sourceFile, 'text', {
-      value: vi.fn().mockRejectedValue(new Error('Starter file unreadable')),
-    })
-
-    await user.upload(screen.getByLabelText(/starter source file/i), sourceFile)
-
-    await waitFor(() => {
-      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-        variant: 'error',
-        title: 'Source file read failed',
-        description: 'Starter file unreadable',
-      }))
-    })
-    expect(screen.getByText('Unable to read selected source file.')).toBeInTheDocument()
-    expect(screen.getByText('Starter file unreadable')).toBeInTheDocument()
-    expect(screen.getByLabelText(/source content/i)).toHaveValue('')
-    expect(createVersionMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: /import starter version/i }))
+      .not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /upload starter pack version/i }))
+      .not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /import starter version/i }))
+      .not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /upload starter version/i }))
+      .not.toBeInTheDocument()
   })
 
   it('activates a validated pack at GLOBAL scope after confirmation', async () => {
@@ -1371,6 +1257,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
           {
             ...defaultListResult.data.data[0],
             status: 'VALIDATED',
+            reviewStatus: 'APPROVED',
           },
         ],
       },
@@ -1395,7 +1282,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     })
   })
 
-  it('deprecates a validated starter version after confirmation', async () => {
+  it('deprecates a validated source-document version after confirmation', async () => {
     const user = userEvent.setup()
     listQueryMock.mockReturnValue({
       ...defaultListResult,
@@ -1432,7 +1319,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     }))
   })
 
-  it('disables an active starter version after confirmation', async () => {
+  it('disables an active source-document version after confirmation', async () => {
     const user = userEvent.setup()
     listQueryMock.mockReturnValue({
       ...defaultListResult,

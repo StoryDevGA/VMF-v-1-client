@@ -81,7 +81,7 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
   },
   {
     routeKey: 'knowledgePacks',
-    description: 'Version starter Outcome Studio packs and activate runtime bindings without editing ARL/RL sources in-app.',
+    description: 'Import, review, validate, and activate governed Knowledge Packs for Outcome Studio runtime bindings.',
     taskKey: 'OES-002A',
     Icon: MdSchema,
   },

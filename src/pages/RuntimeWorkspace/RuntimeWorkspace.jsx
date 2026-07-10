@@ -4369,7 +4369,7 @@ function OutcomeStudioSection({
   const selectedAssetVersions = Array.isArray(selectedAssetDetail?.versions)
     ? selectedAssetDetail.versions
     : EMPTY_ARRAY
-  const sourceOnlyPacks = requiredPacks.filter((pack) => pack.status === 'SOURCE_ONLY')
+  const sourceDocumentPacks = requiredPacks.filter((pack) => Boolean(pack.sourceFilename))
   const sourceOutput = truthBinding.sourceOutput || (
     Array.isArray(outcomeStudio?.sourceOutputs) ? outcomeStudio.sourceOutputs[0] : null
   )
@@ -4433,9 +4433,9 @@ function OutcomeStudioSection({
   const packSummary = requiredPacks.length > 0
     ? `${packBinding.activePacks?.length || 0} active / ${requiredPacks.length} required`
     : 'No packs'
-  const packSourceSummary = sourceOnlyPacks.length > 0
-    ? `${sourceOnlyPacks.length} source-only starter pack${sourceOnlyPacks.length === 1 ? '' : 's'}`
-    : 'No starter packs'
+  const packSourceSummary = sourceDocumentPacks.length > 0
+    ? `${sourceDocumentPacks.length} source document${sourceDocumentPacks.length === 1 ? '' : 's'}`
+    : 'No source documents'
   const safetyGateSummary = Number(safetyGates.totalCount) > 0
     ? `${Number(safetyGates.passedCount) || 0} passed / ${Number(safetyGates.totalCount) || 0} gates`
     : 'Not projected'
@@ -4569,7 +4569,7 @@ function OutcomeStudioSection({
                 ) : null}
               </div>
               <Badge
-                variant={pack.runtimeBindable ? 'success' : pack.status === 'SOURCE_ONLY' ? 'warning' : 'danger'}
+                variant={pack.runtimeBindable ? 'success' : 'danger'}
                 size="sm"
                 pill
                 outline

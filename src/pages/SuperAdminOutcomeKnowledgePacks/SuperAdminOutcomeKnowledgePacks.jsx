@@ -5,6 +5,7 @@ import { Accordion } from '../../components/Accordion'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
@@ -18,14 +19,12 @@ import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
 import {
   useActivateOutcomeKnowledgePackVersionMutation,
-  useCreateOutcomeKnowledgePackVersionMutation,
   useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
-  useImportOutcomeKnowledgePackStarterVersionMutation,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useListOutcomeKnowledgePackManifestsQuery,
   usePreviewOutcomeKnowledgePackManifestResolutionQuery,
@@ -39,7 +38,6 @@ import {
 import { normalizeError } from '../../utils/errors.js'
 import {
   EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM,
-  EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM,
   KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS,
   KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS,
   KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS,
@@ -56,11 +54,9 @@ import {
   canDeleteKnowledgePack,
   canDeprecateKnowledgePack,
   canDisableKnowledgePack,
-  canImportKnowledgePackStarter,
   canRejectKnowledgePackReview,
   canRollbackKnowledgePackVersion,
   canSubmitKnowledgePackForReview,
-  canUploadKnowledgePack,
   canValidateKnowledgePack,
   filterOutcomeKnowledgePackRows,
   formatKnowledgePackStatus,
@@ -72,7 +68,6 @@ import {
   getValidateKnowledgePackDisabledReason,
   hasKnowledgePackVersion,
   isImportedSourceDocument,
-  isStarterSourceKnowledgePack,
 } from './superAdminOutcomeKnowledgePacks.constants.js'
 import './SuperAdminOutcomeKnowledgePacks.css'
 
@@ -80,6 +75,34 @@ const GLOBAL_SCOPE_COPY =
   'This action activates the version at GLOBAL scope only. Outcome Studio remains blocked until every required pack is active.'
 
 const BINARY_SOURCE_PREVIEW_FORMATS = new Set(['DOCX', 'PDF'])
+const EMPTY_ROWS = Object.freeze([])
+const SOURCE_IMPORT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
+const SOURCE_IMPORT_VERSION_FORMAT_ERROR =
+  'Use major.minor.patch format, for example 1.2.0.'
+const SOURCE_IMPORT_FIELD_ALIASES = Object.freeze({
+  'sourceDocument.filename': 'filename',
+  'sourceDocument.contentBase64': 'filename',
+  'sourceDocument.fileExtension': 'filename',
+  'sourceDocument.contentType': 'filename',
+  'sourceDocument.sizeBytes': 'filename',
+})
+const SOURCE_IMPORT_FIELD_KEYS = new Set([
+  'packType',
+  'packKey',
+  'label',
+  'description',
+  'purposeCategory',
+  'semanticVersion',
+  'schemaVersion',
+  'sourceAuthority',
+  'executionMode',
+  'visibility',
+  'customerId',
+  'tenantId',
+  'contentFormat',
+  'filename',
+  'extractedText',
+])
 
 const EMPTY_CONTENT_PREVIEW_STATE = Object.freeze({
   key: '',
@@ -119,7 +142,7 @@ const LIFECYCLE_ACTION_CONFIG = Object.freeze({
     confirmLabel: 'Rollback',
     toastTitle: 'Rollback complete',
     failureTitle: 'Rollback failed',
-    variant: 'primary',
+    variant: 'default',
     copy: 'Rollback creates a new activation for the selected version and preserves historical session bindings.',
   }),
 })
@@ -164,15 +187,59 @@ function buildContentPreviewKey({ packId, versionId } = {}) {
   return `${formatDetailValue(packId, '')}:${formatDetailValue(versionId, '')}`
 }
 
+function buildRuntimePackKey(pack = {}) {
+  return `${normalizeDetailToken(pack.packType)}:${formatDetailValue(pack.packKey, '').toLowerCase()}`
+}
+
+function normalizeSourceImportFieldError(value) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value)) {
+    return value.map(normalizeSourceImportFieldError).find(Boolean) || ''
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.message === 'string' && value.message.trim()) {
+      return value.message.trim()
+    }
+    return Object.values(value).map(normalizeSourceImportFieldError).find(Boolean) || ''
+  }
+
+  return ''
+}
+
+function mapSourceImportFieldKey(value = '') {
+  const key = String(value ?? '').trim()
+  if (!key) return ''
+  if (SOURCE_IMPORT_FIELD_ALIASES[key]) return SOURCE_IMPORT_FIELD_ALIASES[key]
+
+  const directKey = key.split('.').pop()
+  return SOURCE_IMPORT_FIELD_KEYS.has(directKey) ? directKey : ''
+}
+
+function collectSourceImportFieldErrors(details, prefix = '', fieldErrors = {}) {
+  if (!details || typeof details !== 'object') return fieldErrors
+
+  Object.entries(details).forEach(([key, value]) => {
+    const detailKey = prefix ? `${prefix}.${key}` : key
+    const fieldKey = mapSourceImportFieldKey(detailKey)
+    const message = normalizeSourceImportFieldError(value)
+
+    if (fieldKey && message && !fieldErrors[fieldKey]) {
+      fieldErrors[fieldKey] = message
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      collectSourceImportFieldErrors(value, detailKey, fieldErrors)
+    }
+  })
+
+  return fieldErrors
+}
+
 function normalizeDetailToken(value = '') {
   return String(value ?? '').trim().toUpperCase()
 }
 
 function formatVersionReviewState({ version = {}, pack = {}, activations = [] } = {}) {
-  if (isStarterSourceKnowledgePack(pack)) {
-    return 'Not required'
-  }
-
   const activeActivation = activations.some((activation) =>
     normalizeDetailToken(activation.status) === 'ACTIVE'
     && formatDetailValue(activation.versionId, '') === formatDetailValue(version.versionId, ''),
@@ -189,10 +256,10 @@ function formatVersionReviewState({ version = {}, pack = {}, activations = [] } 
   return formatDetailValue(version.reviewStatus)
 }
 
-function getContentPreviewUnavailableReason(version = {}) {
+function getContentPreviewUnavailableReason({ version = {}, pack = {} } = {}) {
   const contentFormat = normalizeDetailToken(version.contentFormat)
   if (
-    isImportedSourceDocument(version)
+    isImportedSourceDocument(pack)
     && BINARY_SOURCE_PREVIEW_FORMATS.has(contentFormat)
     && version.sourceMetadata?.contentPersisted !== true
   ) {
@@ -361,8 +428,6 @@ function ValidationSummaryValue({ entry }) {
 function KnowledgePackRowActionsMenu({
   row,
   onDetails,
-  onImportStarter,
-  onUpload,
   onValidate,
   onReviewStatusChange,
   onActivate,
@@ -375,17 +440,6 @@ function KnowledgePackRowActionsMenu({
 
   if (canViewKnowledgePackDetail(row)) {
     options.push({ value: 'details', label: 'View Details' })
-  }
-
-  if (canImportKnowledgePackStarter(row)) {
-    options.push({ value: 'import-starter', label: 'Import Starter Version' })
-  }
-
-  if (canUploadKnowledgePack(row)) {
-    options.push({
-      value: 'upload',
-      label: hasKnowledgePackVersion(row) ? 'Upload New Version' : 'Upload Starter Version',
-    })
   }
 
   const validateDisabledReason = getValidateKnowledgePackDisabledReason(row)
@@ -447,8 +501,6 @@ function KnowledgePackRowActionsMenu({
         disabled={disabled || options.length === 0}
         onChange={(event) => {
           if (event.target.value === 'details') onDetails(row)
-          if (event.target.value === 'import-starter') onImportStarter(row)
-          if (event.target.value === 'upload') onUpload(row)
           if (event.target.value === 'validate') onValidate(row)
           if (event.target.value === 'submit-review') {
             onReviewStatusChange(row, 'READY_FOR_REVIEW')
@@ -507,7 +559,7 @@ function VersionSummary({
   }
 
   const validationEntries = getSummaryEntries(version.validationSummary)
-  const contentPreviewUnavailableReason = getContentPreviewUnavailableReason(version)
+  const contentPreviewUnavailableReason = getContentPreviewUnavailableReason({ version, pack })
   const reviewState = formatVersionReviewState({ version, pack, activations })
 
   return (
@@ -757,7 +809,7 @@ function KnowledgePackDetailDialog({
                     detailPack.sourceMetadata?.sourceFilename
                       || detailPack.sourceMetadata?.sourceDocument?.filename
                       || detailPack.sourceFilename,
-                    isImportedSourceDocument(detailPack) ? 'No source document' : 'No starter source',
+                    'No source document',
                   )}
                 </code>
               </DetailItem>
@@ -871,8 +923,8 @@ function renderSource(_value, row) {
   if (row.sourceFilename) {
     return (
       <div className="super-admin-outcome-knowledge-packs__source">
-        <Badge size="sm" variant={isStarterSourceKnowledgePack(row) ? 'warning' : 'info'} pill outline>
-          {isStarterSourceKnowledgePack(row) ? 'Starter' : 'Source document'}
+        <Badge size="sm" variant="info" pill outline>
+          Source document
         </Badge>
         <code className="super-admin-outcome-knowledge-packs__key">{row.sourceFilename}</code>
       </div>
@@ -881,7 +933,7 @@ function renderSource(_value, row) {
 
   return (
     <span className="super-admin-outcome-knowledge-packs__muted">
-      {isImportedSourceDocument(row) ? 'No source document' : 'No starter source'}
+      No source document
     </span>
   )
 }
@@ -1173,120 +1225,6 @@ function KnowledgePackSourceImportDialog({
   )
 }
 
-function KnowledgePackUploadDialog({
-  pack,
-  form,
-  error,
-  fieldErrors = {},
-  isLoading,
-  onClose,
-  onSubmit,
-  onFormChange,
-  onFileText,
-  onFileReadError,
-}) {
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    let content = ''
-    try {
-      content = await readFileText(file)
-    } catch (err) {
-      event.target.value = ''
-      onFileReadError?.(err)
-      return
-    }
-    onFileText({
-      content,
-      sourceFilename: pack?.sourceFilename || file.name,
-    })
-  }
-
-  return (
-    <Dialog open={Boolean(pack)} onClose={onClose} size="lg">
-      <form onSubmit={onSubmit} noValidate>
-        <Dialog.Header>
-          <h2>Upload starter pack version</h2>
-          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
-            {pack?.label ? `${pack.label} accepts the known starter source only.` : ''}
-          </p>
-        </Dialog.Header>
-        <Dialog.Body className="super-admin-outcome-knowledge-packs__dialog-body">
-          {error ? (
-            <p className="super-admin-outcome-knowledge-packs__error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <div className="super-admin-outcome-knowledge-packs__form-grid">
-            <Input
-              id="knowledge-pack-semantic-version"
-              label="Semantic Version"
-              size="sm"
-              value={form.semanticVersion}
-              onChange={(event) => onFormChange('semanticVersion', event.target.value)}
-              error={fieldErrors.semanticVersion}
-              required
-              fullWidth
-            />
-            <Input
-              id="knowledge-pack-schema-version"
-              label="Schema Version"
-              size="sm"
-              value={form.schemaVersion}
-              onChange={(event) => onFormChange('schemaVersion', event.target.value)}
-              error={fieldErrors.schemaVersion}
-              required
-              fullWidth
-            />
-            <Input
-              id="knowledge-pack-source-filename"
-              label="Source Filename"
-              size="sm"
-              value={form.sourceFilename}
-              onChange={(event) => onFormChange('sourceFilename', event.target.value)}
-              error={fieldErrors.sourceFilename}
-              required
-              fullWidth
-            />
-          </div>
-
-          <label className="super-admin-outcome-knowledge-packs__file-field">
-            <span>Starter source file</span>
-            <input
-              type="file"
-              accept=".yaml,.yml,text/yaml,text/plain"
-              onChange={handleFileChange}
-              disabled={isLoading}
-            />
-          </label>
-
-          <Textarea
-            id="knowledge-pack-content"
-            label="Source Content"
-            value={form.content}
-            rows={12}
-            resize="vertical"
-            onChange={(event) => onFormChange('content', event.target.value)}
-            error={fieldErrors.content}
-            helperText="Paste the YAML starter pack content if a file is not selected."
-            required
-            fullWidth
-          />
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={isLoading}>
-            Create Version
-          </Button>
-        </Dialog.Footer>
-      </form>
-    </Dialog>
-  )
-}
-
 function KnowledgePackBlankDraftDialog({ open, onClose }) {
   return (
     <Dialog open={open} onClose={onClose} size="md">
@@ -1479,11 +1417,6 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [sourceImportForm, setSourceImportForm] = useState(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
   const [sourceImportError, setSourceImportError] = useState('')
   const [sourceImportFieldErrors, setSourceImportFieldErrors] = useState({})
-  const [uploadPack, setUploadPack] = useState(null)
-  const [uploadForm, setUploadForm] = useState(EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM)
-  const [uploadError, setUploadError] = useState('')
-  const [uploadFieldErrors, setUploadFieldErrors] = useState({})
-  const [pendingStarterImport, setPendingStarterImport] = useState(null)
   const [pendingActivation, setPendingActivation] = useState(null)
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null)
   const [pendingDeletePack, setPendingDeletePack] = useState(null)
@@ -1509,10 +1442,6 @@ function SuperAdminOutcomeKnowledgePacks() {
     { packId: detailPackId },
     { skip: !detailPackId },
   )
-  const [createVersion, { isLoading: isCreatingVersion }] =
-    useCreateOutcomeKnowledgePackVersionMutation()
-  const [importStarterVersion, { isLoading: isImportingStarterVersion }] =
-    useImportOutcomeKnowledgePackStarterVersionMutation()
   const [importSourceDocumentDraft, { isLoading: isImportingSourceDocumentDraft }] =
     useImportOutcomeKnowledgePackSourceDocumentDraftMutation()
   const [validateVersion, { isLoading: isValidatingVersion }] =
@@ -1533,14 +1462,16 @@ function SuperAdminOutcomeKnowledgePacks() {
     useLazyPreviewOutcomeKnowledgePackVersionContentQuery()
 
   const previewData = previewQuery.data?.data ?? {}
-  const sourceBundle = previewData.sourceBundle ?? listQuery.data?.sourceBundle ?? {}
   const resolution = previewData.resolution ?? {}
-  const rows = buildOutcomeKnowledgePackRows({
-    registryPacks: listQuery.data?.data ?? [],
-    requiredPacks: previewData.requiredPacks ?? [],
-    starterPacks: sourceBundle.starterPacks ?? [],
-  })
-  const manifestRows = manifestsQuery.data?.data ?? []
+  const rows = useMemo(() => {
+    const currentPreviewData = previewQuery.data?.data ?? {}
+
+    return buildOutcomeKnowledgePackRows({
+      registryPacks: listQuery.data?.data ?? EMPTY_ROWS,
+      requiredPacks: currentPreviewData.requiredPacks ?? EMPTY_ROWS,
+    })
+  }, [listQuery.data, previewQuery.data])
+  const manifestRows = manifestsQuery.data?.data ?? EMPTY_ROWS
   const selectedManifest = manifestRows.find((manifest) => manifest.manifestId === selectedManifestId)
     || manifestRows.find((manifest) => manifest.manifestKey === selectedManifestId)
     || null
@@ -1551,14 +1482,14 @@ function SuperAdminOutcomeKnowledgePacks() {
     },
     { skip: !selectedManifestId },
   )
-  const filteredRows = filterOutcomeKnowledgePackRows(rows, {
+  const filteredRows = useMemo(() => filterOutcomeKnowledgePackRows(rows, {
     search,
     packType,
     status,
     purposeCategory,
     visibility,
     reviewStatus,
-  })
+  }), [packType, purposeCategory, reviewStatus, rows, search, status, visibility])
   const listError = listQuery.error ? normalizeError(listQuery.error) : null
   const manifestError = manifestsQuery.error ? normalizeError(manifestsQuery.error) : null
   const previewError = previewQuery.error ? normalizeError(previewQuery.error) : null
@@ -1572,10 +1503,14 @@ function SuperAdminOutcomeKnowledgePacks() {
     (listQuery.isLoading || previewQuery.isLoading) && rows.length === 0
   const isManifestInitialLoading = manifestsQuery.isLoading && manifestRows.length === 0
   const isLifecycleMutating = isDeprecatingVersion || isDisablingVersion || isRollingBackPack
+  const pendingLifecycleConfig = LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action] || null
+  const pendingLifecycleDetail = pendingLifecycleAction
+    ? `${pendingLifecycleAction.row?.label ?? 'Knowledge pack'} version ${
+      pendingLifecycleAction.semanticVersion || pendingLifecycleAction.versionId || 'selected'
+    } at GLOBAL scope.`
+    : ''
   const isMutating =
-    isCreatingVersion
-    || isImportingStarterVersion
-    || isImportingSourceDocumentDraft
+    isImportingSourceDocumentDraft
     || isValidatingVersion
     || isUpdatingReviewStatus
     || isActivatingVersion
@@ -1604,6 +1539,9 @@ function SuperAdminOutcomeKnowledgePacks() {
   const unboundRequiredPacks = resolution.unboundRequiredPacks ?? rows
     .filter((row) => row.runtimeBindable !== true)
     .map((row) => ({ label: row.label, packKey: row.packKey, status: row.status }))
+  const visiblePackKeys = useMemo(() => new Set(rows.map(buildRuntimePackKey)), [rows])
+  const visibleUnboundRequiredPacks = unboundRequiredPacks
+    .filter((pack) => visiblePackKeys.has(buildRuntimePackKey(pack)))
 
   const openSourceImportDialog = useCallback(() => {
     setIsSourceImportOpen(true)
@@ -1658,16 +1596,6 @@ function SuperAdminOutcomeKnowledgePacks() {
     })
   }, [addToast])
 
-  const openUploadDialog = useCallback((row) => {
-    setUploadPack(row)
-    setUploadForm({
-      ...EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM,
-      sourceFilename: row.sourceFilename || '',
-    })
-    setUploadError('')
-    setUploadFieldErrors({})
-  }, [])
-
   const openDetailDialog = useCallback((row) => {
     setDetailPack(row)
     setSelectedVersionId(getVersionId(row) || '')
@@ -1684,23 +1612,6 @@ function SuperAdminOutcomeKnowledgePacks() {
     setSelectedVersionId(versionId)
     setContentPreviewState(EMPTY_CONTENT_PREVIEW_STATE)
   }, [])
-
-  const closeUploadDialog = useCallback(() => {
-    if (isCreatingVersion) return
-    setUploadPack(null)
-    setUploadForm(EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM)
-    setUploadError('')
-    setUploadFieldErrors({})
-  }, [isCreatingVersion])
-
-  const openStarterImportDialog = useCallback((row) => {
-    setPendingStarterImport(row)
-  }, [])
-
-  const closeStarterImportDialog = useCallback(() => {
-    if (isImportingStarterVersion) return
-    setPendingStarterImport(null)
-  }, [isImportingStarterVersion])
 
   const openLifecycleAction = useCallback((action, row, version = null) => {
     setPendingLifecycleAction({
@@ -1726,50 +1637,15 @@ function SuperAdminOutcomeKnowledgePacks() {
     setPendingDeletePack(null)
   }, [isDeletingPack])
 
-  const updateUploadForm = useCallback((field, value) => {
-    setUploadForm((current) => ({ ...current, [field]: value }))
-    setUploadFieldErrors((current) => {
-      if (!current[field]) return current
-      const next = { ...current }
-      delete next[field]
-      return next
-    })
-  }, [])
-
-  const handleUploadFileText = useCallback(({ content, sourceFilename }) => {
-    setUploadForm((current) => ({
-      ...current,
-      content,
-      sourceFilename,
-    }))
-    setUploadFieldErrors((current) => {
-      const next = { ...current }
-      delete next.content
-      delete next.sourceFilename
-      return next
-    })
-  }, [])
-
-  const handleUploadFileReadError = useCallback((err) => {
-    const appError = normalizeError(err)
-    setUploadFieldErrors((current) => ({
-      ...current,
-      content: 'Unable to read selected source file.',
-    }))
-    setUploadError(appError.message)
-    addToast({
-      variant: 'error',
-      title: 'Source file read failed',
-      description: appError.message,
-    })
-  }, [addToast])
-
   const submitSourceImport = useCallback(async (event) => {
     event.preventDefault()
+    if (isImportingSourceDocumentDraft) return
 
     const fieldErrors = {}
     const resolvedPackKey = sourceImportForm.packKey.trim()
       || buildDraftPackKey(sourceImportForm.label)
+    const semanticVersion = sourceImportForm.semanticVersion.trim()
+    const schemaVersion = sourceImportForm.schemaVersion.trim()
 
     if (!sourceImportForm.packType.trim()) {
       fieldErrors.packType = 'Pack type is required.'
@@ -1780,11 +1656,15 @@ function SuperAdminOutcomeKnowledgePacks() {
     if (!sourceImportForm.label.trim()) {
       fieldErrors.label = 'Label is required.'
     }
-    if (!sourceImportForm.semanticVersion.trim()) {
+    if (!semanticVersion) {
       fieldErrors.semanticVersion = 'Semantic version is required.'
+    } else if (!SOURCE_IMPORT_VERSION_PATTERN.test(semanticVersion)) {
+      fieldErrors.semanticVersion = SOURCE_IMPORT_VERSION_FORMAT_ERROR
     }
-    if (!sourceImportForm.schemaVersion.trim()) {
+    if (!schemaVersion) {
       fieldErrors.schemaVersion = 'Schema version is required.'
+    } else if (!SOURCE_IMPORT_VERSION_PATTERN.test(schemaVersion)) {
+      fieldErrors.schemaVersion = SOURCE_IMPORT_VERSION_FORMAT_ERROR
     }
     if (!sourceImportForm.filename.trim()) {
       fieldErrors.filename = 'Source filename is required.'
@@ -1817,8 +1697,8 @@ function SuperAdminOutcomeKnowledgePacks() {
         label: sourceImportForm.label,
         description: sourceImportForm.description,
         purposeCategory: sourceImportForm.purposeCategory,
-        semanticVersion: sourceImportForm.semanticVersion,
-        schemaVersion: sourceImportForm.schemaVersion,
+        semanticVersion,
+        schemaVersion,
         sourceAuthority: sourceImportForm.sourceAuthority,
         executionMode: sourceImportForm.executionMode,
         visibility: sourceImportForm.visibility,
@@ -1848,84 +1728,11 @@ function SuperAdminOutcomeKnowledgePacks() {
       setSourceImportFieldErrors({})
     } catch (err) {
       const appError = normalizeError(err)
-      setSourceImportFieldErrors({})
+      setSourceImportFieldErrors(collectSourceImportFieldErrors(appError.details))
       setSourceImportError(appError.message)
       addToast({ variant: 'error', title: 'Source import failed', description: appError.message })
     }
-  }, [addToast, importSourceDocumentDraft, sourceImportForm])
-
-  const submitUpload = useCallback(async (event) => {
-    event.preventDefault()
-    if (!uploadPack) return
-
-    const fieldErrors = {}
-    if (!uploadForm.semanticVersion.trim()) {
-      fieldErrors.semanticVersion = 'Semantic version is required.'
-    }
-    if (!uploadForm.schemaVersion.trim()) {
-      fieldErrors.schemaVersion = 'Schema version is required.'
-    }
-    if (!uploadForm.sourceFilename.trim()) {
-      fieldErrors.sourceFilename = 'Source filename is required.'
-    }
-    if (uploadForm.content.trim().length < 40) {
-      fieldErrors.content = 'Starter source content must be at least 40 characters.'
-    }
-
-    if (Object.keys(fieldErrors).length > 0) {
-      setUploadFieldErrors(fieldErrors)
-      setUploadError('')
-      return
-    }
-
-    try {
-      const res = await createVersion({
-        packId: getPackActionId(uploadPack),
-        semanticVersion: uploadForm.semanticVersion,
-        schemaVersion: uploadForm.schemaVersion,
-        sourceFilename: uploadForm.sourceFilename,
-        content: uploadForm.content,
-      }).unwrap()
-
-      addToast({
-        variant: 'success',
-        title: 'Version created',
-        description: `Created ${res?.data?.version?.semanticVersion ?? uploadForm.semanticVersion}.`,
-      })
-      setUploadPack(null)
-      setUploadForm(EMPTY_KNOWLEDGE_PACK_UPLOAD_FORM)
-      setUploadError('')
-      setUploadFieldErrors({})
-    } catch (err) {
-      const appError = normalizeError(err)
-      setUploadFieldErrors({})
-      setUploadError(appError.message)
-      addToast({ variant: 'error', title: 'Upload failed', description: appError.message })
-    }
-  }, [addToast, createVersion, uploadForm, uploadPack])
-
-  const confirmStarterImport = useCallback(async () => {
-    if (!pendingStarterImport) return
-
-    try {
-      const res = await importStarterVersion({
-        packId: getPackActionId(pendingStarterImport),
-      }).unwrap()
-      const importedVersion = res?.data?.version?.semanticVersion
-        || pendingStarterImport.latestSemanticVersion
-        || '1.0.0'
-
-      addToast({
-        variant: 'success',
-        title: 'Starter imported',
-        description: `${pendingStarterImport.label} ${importedVersion} is validated and ready for activation.`,
-      })
-      setPendingStarterImport(null)
-    } catch (err) {
-      const appError = normalizeError(err)
-      addToast({ variant: 'error', title: 'Starter import failed', description: appError.message })
-    }
-  }, [addToast, importStarterVersion, pendingStarterImport])
+  }, [addToast, importSourceDocumentDraft, isImportingSourceDocumentDraft, sourceImportForm])
 
   const handleValidateVersion = useCallback(async (row) => {
     const versionId = getVersionId(row)
@@ -2196,8 +2003,6 @@ function SuperAdminOutcomeKnowledgePacks() {
           <KnowledgePackRowActionsMenu
             row={row}
             onDetails={openDetailDialog}
-            onImportStarter={openStarterImportDialog}
-            onUpload={openUploadDialog}
             onValidate={handleValidateVersion}
             onReviewStatusChange={handleReviewStatusChange}
             onActivate={setPendingActivation}
@@ -2216,8 +2021,6 @@ function SuperAdminOutcomeKnowledgePacks() {
       openDetailDialog,
       openDeleteDialog,
       openLifecycleAction,
-      openStarterImportDialog,
-      openUploadDialog,
     ],
   )
 
@@ -2319,7 +2122,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         <div>
           <h1 className="super-admin-outcome-knowledge-packs__title">Knowledge Packs</h1>
           <p className="super-admin-outcome-knowledge-packs__subtitle">
-            Version and activate the starter packs used by Outcome Studio runtime resolution.
+            Import, review, validate, and activate the Knowledge Packs used by Outcome Studio runtime resolution.
           </p>
         </div>
         <Badge
@@ -2348,12 +2151,16 @@ function SuperAdminOutcomeKnowledgePacks() {
             </p>
           </div>
           <div className="super-admin-outcome-knowledge-packs__missing-list" aria-label="Unbound required packs">
-            {unboundRequiredPacks.length > 0 ? (
-              unboundRequiredPacks.slice(0, 5).map((pack) => (
+            {visibleUnboundRequiredPacks.length > 0 ? (
+              visibleUnboundRequiredPacks.slice(0, 5).map((pack) => (
                 <Badge key={`${pack.packType}:${pack.packKey}`} variant="warning" size="sm" pill outline>
                   {pack.label ?? pack.packKey}
                 </Badge>
               ))
+            ) : bindingStatus !== 'PROJECTED' ? (
+              <Badge variant="warning" size="sm" pill outline>
+                Authoring required
+              </Badge>
             ) : (
               <Badge variant="success" size="sm" pill outline>
                 All packs active
@@ -2478,7 +2285,7 @@ function SuperAdminOutcomeKnowledgePacks() {
                 ) : null}
 
                 <p className="super-admin-outcome-knowledge-packs__table-note">
-                  Starter import and upload are source-only for all required Outcome Studio packs. Runtime activation remains a separate audited action.
+                  Use Import Source Document to create governed drafts and new versions. Runtime activation remains a separate audited action.
                 </p>
 
                 <HorizontalScroll
@@ -2568,19 +2375,6 @@ function SuperAdminOutcomeKnowledgePacks() {
         onFileReadError={handleSourceImportFileReadError}
       />
 
-      <KnowledgePackUploadDialog
-        pack={uploadPack}
-        form={uploadForm}
-        error={uploadError}
-        fieldErrors={uploadFieldErrors}
-        isLoading={isCreatingVersion}
-        onClose={closeUploadDialog}
-        onSubmit={submitUpload}
-        onFormChange={updateUploadForm}
-        onFileText={handleUploadFileText}
-        onFileReadError={handleUploadFileReadError}
-      />
-
       <KnowledgePackDetailDialog
         pack={detailPack}
         detail={detailData}
@@ -2600,42 +2394,6 @@ function SuperAdminOutcomeKnowledgePacks() {
         onRollbackVersion={(pack, version) => openLifecycleAction('rollback', pack, version)}
         onClose={closeDetailDialog}
       />
-
-      <Dialog
-        open={Boolean(pendingStarterImport)}
-        onClose={closeStarterImportDialog}
-        size="sm"
-      >
-        <Dialog.Header>
-          <h2>Import starter version?</h2>
-        </Dialog.Header>
-        <Dialog.Body>
-          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
-            Import {pendingStarterImport?.label ?? 'this starter pack'} from the governed OES-002 starter bundle.
-          </p>
-          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
-            This creates a validated starter version only. Runtime activation remains a separate audited action.
-          </p>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={closeStarterImportDialog}
-            disabled={isImportingStarterVersion}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={confirmStarterImport}
-            loading={isImportingStarterVersion}
-          >
-            Import Starter
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
 
       <Dialog
         open={Boolean(pendingActivation)}
@@ -2671,79 +2429,33 @@ function SuperAdminOutcomeKnowledgePacks() {
         </Dialog.Footer>
       </Dialog>
 
-      <Dialog
-        open={Boolean(pendingLifecycleAction)}
-        onClose={closeLifecycleAction}
-        size="sm"
-      >
-        <Dialog.Header>
-          <h2>{LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action]?.title}</h2>
-        </Dialog.Header>
-        <Dialog.Body>
-          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
-            {LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action]?.copy}
-          </p>
-          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
-            {pendingLifecycleAction?.row?.label ?? 'Knowledge pack'} version{' '}
-            {pendingLifecycleAction?.semanticVersion || pendingLifecycleAction?.versionId || 'selected'} at GLOBAL scope.
-          </p>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={closeLifecycleAction}
-            disabled={isLifecycleMutating}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant={LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action]?.variant || 'primary'}
-            onClick={confirmLifecycleAction}
-            loading={isLifecycleMutating}
-          >
-            {LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action]?.confirmLabel}
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
+      {pendingLifecycleConfig ? (
+        <ConfirmationDialog
+          open={Boolean(pendingLifecycleAction)}
+          title={pendingLifecycleConfig.title}
+          message={pendingLifecycleConfig.copy}
+          detail={pendingLifecycleDetail}
+          eyebrow="Knowledge Pack lifecycle"
+          confirmLabel={pendingLifecycleConfig.confirmLabel}
+          variant={pendingLifecycleConfig.variant}
+          loading={isLifecycleMutating}
+          onCancel={closeLifecycleAction}
+          onConfirm={confirmLifecycleAction}
+        />
+      ) : null}
 
-      <Dialog
+      <ConfirmationDialog
         open={Boolean(pendingDeletePack)}
-        onClose={closeDeleteDialog}
-        size="sm"
-      >
-        <Dialog.Header>
-          <h2>Delete knowledge pack?</h2>
-        </Dialog.Header>
-        <Dialog.Body>
-          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
-            Delete {pendingDeletePack?.label ?? 'this knowledge pack'}? This permanently removes the pack,
-            its versions, and its activation records.
-          </p>
-          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
-            Active, system, and manifest-bound packs are blocked by the governed registry.
-          </p>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={closeDeleteDialog}
-            disabled={isDeletingPack}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            onClick={confirmDeletePack}
-            loading={isDeletingPack}
-          >
-            Delete Pack
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
+        title="Delete knowledge pack?"
+        message={`Delete ${pendingDeletePack?.label ?? 'this knowledge pack'}? This permanently removes the pack, its versions, and its activation records.`}
+        detail="Active, system, and manifest-bound packs are blocked by the governed registry."
+        eyebrow="Permanent delete"
+        confirmLabel="Delete Pack"
+        variant="danger"
+        loading={isDeletingPack}
+        onCancel={closeDeleteDialog}
+        onConfirm={confirmDeletePack}
+      />
     </section>
   )
 }

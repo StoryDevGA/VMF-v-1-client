@@ -9,7 +9,6 @@ import {
   buildDeprecateOutcomeKnowledgePackVersionQuery,
   buildDisableOutcomeKnowledgePackVersionQuery,
   buildImportOutcomeKnowledgePackSourceDocumentDraftQuery,
-  buildImportOutcomeKnowledgePackStarterVersionQuery,
   buildOutcomeKnowledgePackManifestDetailQuery,
   buildOutcomeKnowledgePackManifestListQuery,
   buildOutcomeKnowledgePackDetailQuery,
@@ -35,7 +34,6 @@ import {
   useGetOutcomeKnowledgePackManifestQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
-  useImportOutcomeKnowledgePackStarterVersionMutation,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useListOutcomeKnowledgePackManifestsQuery,
@@ -56,7 +54,6 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('getOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('previewOutcomeKnowledgePackVersionContent')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('createOutcomeKnowledgePackVersion')
-    expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('importOutcomeKnowledgePackStarterVersion')
     expect(outcomeKnowledgePacksApi.endpoints)
       .toHaveProperty('importOutcomeKnowledgePackSourceDocumentDraft')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('deleteOutcomeKnowledgePack')
@@ -83,7 +80,6 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(typeof useGetOutcomeKnowledgePackVersionQuery).toBe('function')
     expect(typeof useLazyPreviewOutcomeKnowledgePackVersionContentQuery).toBe('function')
     expect(typeof useCreateOutcomeKnowledgePackVersionMutation).toBe('function')
-    expect(typeof useImportOutcomeKnowledgePackStarterVersionMutation).toBe('function')
     expect(typeof useImportOutcomeKnowledgePackSourceDocumentDraftMutation).toBe('function')
     expect(typeof useDeleteOutcomeKnowledgePackMutation).toBe('function')
     expect(typeof useValidateOutcomeKnowledgePackVersionMutation).toBe('function')
@@ -152,7 +148,7 @@ describe('outcomeKnowledgePacksApi', () => {
       semanticVersion: '1.0.1',
       schemaVersion: '1.0.0',
       sourceFilename: 'truth-certification-pack-v1.yaml',
-      content: 'starter content',
+      content: 'source content',
     })).toEqual({
       url: '/super-admin/outcome-studio/knowledge-packs/truth-certification-pack/versions',
       method: 'POST',
@@ -161,16 +157,8 @@ describe('outcomeKnowledgePacksApi', () => {
         schemaVersion: '1.0.0',
         contentFormat: 'YAML',
         sourceFilename: 'truth-certification-pack-v1.yaml',
-        content: 'starter content',
+        content: 'source content',
       },
-    })
-
-    expect(buildImportOutcomeKnowledgePackStarterVersionQuery({
-      packId: 'truth-certification-pack',
-    })).toEqual({
-      url: '/super-admin/outcome-studio/knowledge-packs/truth-certification-pack/starter-import',
-      method: 'POST',
-      body: {},
     })
 
     expect(buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
