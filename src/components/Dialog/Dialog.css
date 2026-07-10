@@ -20,7 +20,7 @@
   box-shadow: var(--shadow-2xl);
   /* height: auto; */
   max-width: calc(100vw - var(--spacing-lg) * 2);
-  max-height: calc(100vh - var(--spacing-lg) * 2);
+  max-height: calc(100dvh - var(--spacing-lg) * 2);
   min-width: min(calc(var(--spacing-md) * 20), calc(100vw - var(--spacing-lg) * 2));
   overflow: hidden;
 }
@@ -98,7 +98,7 @@
 
 .dialog--full {
   width: calc(100vw - var(--spacing-lg) * 2);
-  height: calc(100vh - var(--spacing-lg) * 2);
+  height: calc(100dvh - var(--spacing-lg) * 2);
 }
 
 /* ===========================
@@ -126,7 +126,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  max-height: calc(100vh - var(--spacing-lg) * 2);
+  max-height: inherit;
 }
 
 .dialog--full .dialog__container {
@@ -213,7 +213,7 @@
    =========================== */
 
 .dialog__body {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   padding: var(--spacing-lg) var(--spacing-xl);
@@ -271,7 +271,7 @@
 @media (max-width: 767px) {
   .dialog {
     max-width: calc(100vw - var(--spacing-md) * 2);
-    max-height: calc(100vh - var(--spacing-md) * 2);
+    max-height: calc(100dvh - var(--spacing-md) * 2);
   }
 
   .dialog--sm,
@@ -283,7 +283,7 @@
 
   .dialog--full {
     width: calc(100vw - var(--spacing-md) * 2);
-    height: calc(100vh - var(--spacing-md) * 2);
+    height: calc(100dvh - var(--spacing-md) * 2);
   }
 
   .dialog__header {

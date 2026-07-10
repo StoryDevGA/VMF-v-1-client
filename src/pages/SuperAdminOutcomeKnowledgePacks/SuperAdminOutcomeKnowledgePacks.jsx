@@ -19,6 +19,7 @@ import { useToaster } from '../../components/Toaster'
 import {
   useActivateOutcomeKnowledgePackVersionMutation,
   useCreateOutcomeKnowledgePackVersionMutation,
+  useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackQuery,
@@ -52,6 +53,7 @@ import {
   buildOutcomeKnowledgePackRows,
   canApproveKnowledgePackReview,
   canActivateKnowledgePack,
+  canDeleteKnowledgePack,
   canDeprecateKnowledgePack,
   canDisableKnowledgePack,
   canImportKnowledgePackStarter,
@@ -164,6 +166,27 @@ function buildContentPreviewKey({ packId, versionId } = {}) {
 
 function normalizeDetailToken(value = '') {
   return String(value ?? '').trim().toUpperCase()
+}
+
+function formatVersionReviewState({ version = {}, pack = {}, activations = [] } = {}) {
+  if (isStarterSourceKnowledgePack(pack)) {
+    return 'Not required'
+  }
+
+  const activeActivation = activations.some((activation) =>
+    normalizeDetailToken(activation.status) === 'ACTIVE'
+    && formatDetailValue(activation.versionId, '') === formatDetailValue(version.versionId, ''),
+  )
+
+  if (
+    activeActivation
+    && normalizeDetailToken(version.reviewStatus) === 'DRAFT'
+    && !isImportedSourceDocument(pack)
+  ) {
+    return 'Not required'
+  }
+
+  return formatDetailValue(version.reviewStatus)
 }
 
 function getContentPreviewUnavailableReason(version = {}) {
@@ -345,6 +368,7 @@ function KnowledgePackRowActionsMenu({
   onActivate,
   onDeprecate,
   onDisable,
+  onDelete,
   disabled = false,
 }) {
   const options = []
@@ -409,6 +433,10 @@ function KnowledgePackRowActionsMenu({
     options.push({ value: 'disable', label: 'Disable Version' })
   }
 
+  if (canDeleteKnowledgePack(row)) {
+    options.push({ value: 'delete', label: 'Delete Pack' })
+  }
+
   return (
     <div className="super-admin-outcome-knowledge-packs__row-actions">
       <Select
@@ -434,6 +462,7 @@ function KnowledgePackRowActionsMenu({
           if (event.target.value === 'activate') onActivate(row)
           if (event.target.value === 'deprecate') onDeprecate(row)
           if (event.target.value === 'disable') onDisable(row)
+          if (event.target.value === 'delete') onDelete(row)
         }}
         aria-label={`Actions for ${row.packKey}`}
       />
@@ -452,6 +481,8 @@ function DetailItem({ label, children }) {
 
 function VersionSummary({
   version,
+  pack,
+  activations,
   isLoading,
   error,
   contentPreview,
@@ -477,6 +508,7 @@ function VersionSummary({
 
   const validationEntries = getSummaryEntries(version.validationSummary)
   const contentPreviewUnavailableReason = getContentPreviewUnavailableReason(version)
+  const reviewState = formatVersionReviewState({ version, pack, activations })
 
   return (
     <div className="super-admin-outcome-knowledge-packs__version-detail">
@@ -487,7 +519,7 @@ function VersionSummary({
           </Status>
         </DetailItem>
         <DetailItem label="Review">
-          {formatDetailValue(version.reviewStatus)}
+          {reviewState}
         </DetailItem>
         <DetailItem label="Semantic version">
           {formatDetailValue(version.semanticVersion)}
@@ -788,6 +820,8 @@ function KnowledgePackDetailDialog({
 
                 <VersionSummary
                   version={selectedVersion}
+                  pack={detailPack}
+                  activations={activations}
                   isLoading={isVersionLoading}
                   error={versionError}
                   contentPreview={contentPreview}
@@ -1370,9 +1404,18 @@ function KnowledgePackManifestPreview({
 }) {
   if (!manifest) {
     return (
-      <div className="super-admin-outcome-knowledge-packs__empty-panel">
-        Select a manifest to preview dependency resolution.
-      </div>
+      <section
+        className="super-admin-outcome-knowledge-packs__manifest-preview super-admin-outcome-knowledge-packs__manifest-preview--empty"
+        aria-label="Manifest preview selection"
+      >
+        <div>
+          <p className="super-admin-outcome-knowledge-packs__empty-kicker">Manifest Preview</p>
+          <h3>Select a manifest</h3>
+          <p className="super-admin-outcome-knowledge-packs__empty-copy">
+            Use Preview on a manifest row to inspect dependency resolution.
+          </p>
+        </div>
+      </section>
     )
   }
 
@@ -1443,6 +1486,7 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [pendingStarterImport, setPendingStarterImport] = useState(null)
   const [pendingActivation, setPendingActivation] = useState(null)
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null)
+  const [pendingDeletePack, setPendingDeletePack] = useState(null)
   const [detailPack, setDetailPack] = useState(null)
   const [selectedVersionId, setSelectedVersionId] = useState('')
   const [contentPreviewState, setContentPreviewState] = useState(EMPTY_CONTENT_PREVIEW_STATE)
@@ -1483,6 +1527,8 @@ function SuperAdminOutcomeKnowledgePacks() {
     useDisableOutcomeKnowledgePackVersionMutation()
   const [rollbackPack, { isLoading: isRollingBackPack }] =
     useRollbackOutcomeKnowledgePackMutation()
+  const [deletePack, { isLoading: isDeletingPack }] =
+    useDeleteOutcomeKnowledgePackMutation()
   const [loadVersionContentPreview] =
     useLazyPreviewOutcomeKnowledgePackVersionContentQuery()
 
@@ -1534,6 +1580,7 @@ function SuperAdminOutcomeKnowledgePacks() {
     || isUpdatingReviewStatus
     || isActivatingVersion
     || isLifecycleMutating
+    || isDeletingPack
   const detailData = detailQuery.data?.data ?? null
   const detailVersions = useMemo(() => detailData?.versions ?? [], [detailData?.versions])
   const effectiveSelectedVersionId = selectedVersionId || detailVersions[0]?.versionId || ''
@@ -1669,6 +1716,15 @@ function SuperAdminOutcomeKnowledgePacks() {
     if (isLifecycleMutating) return
     setPendingLifecycleAction(null)
   }, [isLifecycleMutating])
+
+  const openDeleteDialog = useCallback((row) => {
+    setPendingDeletePack(row)
+  }, [])
+
+  const closeDeleteDialog = useCallback(() => {
+    if (isDeletingPack) return
+    setPendingDeletePack(null)
+  }, [isDeletingPack])
 
   const updateUploadForm = useCallback((field, value) => {
     setUploadForm((current) => ({ ...current, [field]: value }))
@@ -2031,6 +2087,41 @@ function SuperAdminOutcomeKnowledgePacks() {
     rollbackPack,
   ])
 
+  const confirmDeletePack = useCallback(async () => {
+    if (!pendingDeletePack) return
+
+    const packId = getPackActionId(pendingDeletePack)
+
+    try {
+      const response = await deletePack({ packId }).unwrap()
+      const deletedCounts = response?.data?.deletedCounts || {}
+      const deletedSummary = [
+        `${Number(deletedCounts.packs ?? 0)} pack${Number(deletedCounts.packs ?? 0) === 1 ? '' : 's'}`,
+        `${Number(deletedCounts.versions ?? 0)} version${Number(deletedCounts.versions ?? 0) === 1 ? '' : 's'}`,
+        `${Number(deletedCounts.activations ?? 0)} activation${Number(deletedCounts.activations ?? 0) === 1 ? '' : 's'}`,
+      ].join(', ')
+
+      addToast({
+        variant: 'success',
+        title: 'Knowledge pack deleted',
+        description: `${pendingDeletePack.label ?? 'Knowledge pack'} deleted (${deletedSummary}).`,
+      })
+      if (detailPackId && detailPackId === packId) {
+        closeDetailDialog()
+      }
+      setPendingDeletePack(null)
+    } catch (err) {
+      const appError = normalizeError(err)
+      addToast({ variant: 'error', title: 'Delete failed', description: appError.message })
+    }
+  }, [
+    addToast,
+    closeDetailDialog,
+    deletePack,
+    detailPackId,
+    pendingDeletePack,
+  ])
+
   const columns = useMemo(
     () => [
       {
@@ -2112,6 +2203,7 @@ function SuperAdminOutcomeKnowledgePacks() {
             onActivate={setPendingActivation}
             onDeprecate={(row) => openLifecycleAction('deprecate', row)}
             onDisable={(row) => openLifecycleAction('disable', row)}
+            onDelete={openDeleteDialog}
             disabled={isMutating}
           />
         ),
@@ -2122,6 +2214,7 @@ function SuperAdminOutcomeKnowledgePacks() {
       handleReviewStatusChange,
       isMutating,
       openDetailDialog,
+      openDeleteDialog,
       openLifecycleAction,
       openStarterImportDialog,
       openUploadDialog,
@@ -2191,16 +2284,27 @@ function SuperAdminOutcomeKnowledgePacks() {
         mobileLabel: 'Actions',
         align: 'center',
         width: '136px',
-        render: (_value, row) => (
-          <Button
-            type="button"
-            variant={selectedManifestId === row.manifestId ? 'primary' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedManifestId(row.manifestId)}
-          >
-            Preview
-          </Button>
-        ),
+        render: (_value, row) => {
+          const isPreviewOpen = selectedManifestId === row.manifestId
+          const manifestName = row.manifestName || row.manifestKey
+
+          return (
+            <Button
+              type="button"
+              variant={isPreviewOpen ? 'primary' : 'outline'}
+              size="sm"
+              aria-expanded={isPreviewOpen}
+              aria-label={`${isPreviewOpen ? 'Hide preview for' : 'Preview'} ${manifestName}`}
+              onClick={() => {
+                setSelectedManifestId((currentManifestId) => (
+                  currentManifestId === row.manifestId ? '' : row.manifestId
+                ))
+              }}
+            >
+              {isPreviewOpen ? 'Hide' : 'Preview'}
+            </Button>
+          )
+        },
       },
     ],
     [selectedManifestId],
@@ -2600,6 +2704,43 @@ function SuperAdminOutcomeKnowledgePacks() {
             loading={isLifecycleMutating}
           >
             {LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action]?.confirmLabel}
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingDeletePack)}
+        onClose={closeDeleteDialog}
+        size="sm"
+      >
+        <Dialog.Header>
+          <h2>Delete knowledge pack?</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
+            Delete {pendingDeletePack?.label ?? 'this knowledge pack'}? This permanently removes the pack,
+            its versions, and its activation records.
+          </p>
+          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
+            Active, system, and manifest-bound packs are blocked by the governed registry.
+          </p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={closeDeleteDialog}
+            disabled={isDeletingPack}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={confirmDeletePack}
+            loading={isDeletingPack}
+          >
+            Delete Pack
           </Button>
         </Dialog.Footer>
       </Dialog>

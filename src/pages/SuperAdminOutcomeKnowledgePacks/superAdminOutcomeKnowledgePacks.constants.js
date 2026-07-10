@@ -260,6 +260,8 @@ const byPackKey = (packs = []) => new Map(
     .filter(([key]) => key !== ':'),
 )
 
+const TEXT_SOURCE_DOCUMENT_EXTENSIONS = new Set(['json', 'md', 'markdown', 'txt', 'yaml', 'yml'])
+
 export function formatKnowledgePackType(value) {
   return TYPE_LABELS[normalizeToken(value)] ?? normalizeToken(value)
 }
@@ -324,9 +326,36 @@ export function hasKnowledgePackVersion(row = {}) {
 }
 
 export function hasPersistedSourceDocumentContent(row = {}) {
+  const sourceStatus = normalizeToken(row.sourceStatus || row.sourceMetadata?.sourceStatus)
+  const sourceFilename = normalizeText(
+    row.sourceFilename
+      || row.sourceMetadata?.sourceFilename
+      || row.sourceMetadata?.sourceDocument?.filename,
+  )
+  const sourceExtension = normalizeLower(
+    row.fileExtension
+      || row.sourceMetadata?.sourceDocument?.fileExtension
+      || sourceFilename.split('.').pop(),
+  )
+  const sourceDocumentId = normalizeText(
+    row.sourceDocumentId
+      || row.sourceMetadata?.sourceDocumentId
+      || row.sourceMetadata?.sourceDocument?.sourceDocumentId,
+  )
+  const sourceHash = normalizeText(
+    row.sourceHash
+      || row.sourceMetadata?.sourceHash
+      || row.sourceMetadata?.sourceDocument?.sourceHash,
+  )
+
   return Boolean(
     row.contentPersisted === true
-      || row.sourceMetadata?.contentPersisted === true,
+      || row.sourceMetadata?.contentPersisted === true
+      || (
+        sourceStatus === 'SOURCE_DOCUMENT_PRESENT'
+        && TEXT_SOURCE_DOCUMENT_EXTENSIONS.has(sourceExtension)
+        && (sourceDocumentId || sourceHash)
+      ),
   )
 }
 
@@ -421,19 +450,37 @@ export function getActivateKnowledgePackDisabledReason(row = {}) {
 
 export function canDeprecateKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
-  return isStarterSourceKnowledgePack(row)
-    && hasKnowledgePackVersion(row)
-    && (
-      status === OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
-      || status === OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
-    )
+  if (!hasKnowledgePackVersion(row)) return false
+
+  if (
+    status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.VALIDATED
+    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
+  ) return false
+
+  return isStarterSourceKnowledgePack(row) || isImportedSourceDocument(row)
 }
 
 export function canDisableKnowledgePack(row = {}) {
   const status = normalizeToken(row.status)
+  if (!hasKnowledgePackVersion(row)) return false
+
+  if (isImportedSourceDocument(row)) {
+    return status === OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
+  }
+
   return isStarterSourceKnowledgePack(row)
-    && hasKnowledgePackVersion(row)
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.DISABLED
+    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING
+    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
+}
+
+export function canDeleteKnowledgePack(row = {}) {
+  const status = normalizeToken(row.status)
+  return Boolean(row.isPersisted)
+    && row.isSystem !== true
+    && !isStarterSourceKnowledgePack(row)
+    && row.runtimeBindable !== true
+    && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.MISSING
     && status !== OUTCOME_KNOWLEDGE_PACK_STATUSES.SOURCE_ONLY
 }
@@ -492,11 +539,15 @@ const buildPersistedPackRow = (record, requiredPack, sourcePack) => {
     purposeCategory: normalizeToken(record?.purposeCategory || record?.sourceMetadata?.purposeCategory),
     visibility: normalizeToken(record?.visibility || record?.sourceMetadata?.visibility),
     authoringMode,
+    isSystem: record?.isSystem === true,
     reviewStatus: normalizeToken(record?.reviewStatus || record?.sourceMetadata?.reviewStatus),
-    contentPersisted: record?.sourceMetadata?.contentPersisted === true,
     sourceMetadata: record?.sourceMetadata && typeof record.sourceMetadata === 'object'
       ? record.sourceMetadata
       : {},
+    contentPersisted: hasPersistedSourceDocumentContent({
+      sourceStatus: record?.sourceMetadata?.sourceStatus,
+      sourceMetadata: record?.sourceMetadata,
+    }),
     latestVersionId: normalizeText(
       record?.latestVersionId
         || sourcePack?.latestVersionId

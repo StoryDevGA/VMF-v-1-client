@@ -5,6 +5,7 @@ import {
   buildCompareOutcomeKnowledgePackManifestsQuery,
   buildCreateOutcomeKnowledgePackVersionQuery,
   buildCreateOutcomeKnowledgePackManifestQuery,
+  buildDeleteOutcomeKnowledgePackQuery,
   buildDeprecateOutcomeKnowledgePackVersionQuery,
   buildDisableOutcomeKnowledgePackVersionQuery,
   buildImportOutcomeKnowledgePackSourceDocumentDraftQuery,
@@ -28,6 +29,7 @@ import {
   useCompareOutcomeKnowledgePackManifestsQuery,
   useCreateOutcomeKnowledgePackManifestMutation,
   useCreateOutcomeKnowledgePackVersionMutation,
+  useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackManifestQuery,
@@ -57,6 +59,7 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('importOutcomeKnowledgePackStarterVersion')
     expect(outcomeKnowledgePacksApi.endpoints)
       .toHaveProperty('importOutcomeKnowledgePackSourceDocumentDraft')
+    expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('deleteOutcomeKnowledgePack')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('validateOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('updateOutcomeKnowledgePackReview')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('activateOutcomeKnowledgePackVersion')
@@ -82,6 +85,7 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(typeof useCreateOutcomeKnowledgePackVersionMutation).toBe('function')
     expect(typeof useImportOutcomeKnowledgePackStarterVersionMutation).toBe('function')
     expect(typeof useImportOutcomeKnowledgePackSourceDocumentDraftMutation).toBe('function')
+    expect(typeof useDeleteOutcomeKnowledgePackMutation).toBe('function')
     expect(typeof useValidateOutcomeKnowledgePackVersionMutation).toBe('function')
     expect(typeof useUpdateOutcomeKnowledgePackReviewMutation).toBe('function')
     expect(typeof useActivateOutcomeKnowledgePackVersionMutation).toBe('function')
@@ -288,6 +292,13 @@ describe('outcomeKnowledgePacksApi', () => {
   })
 
   it('builds lifecycle mutation requests', () => {
+    expect(buildDeleteOutcomeKnowledgePackQuery({
+      packId: 'kp-system-et',
+    })).toEqual({
+      url: '/super-admin/outcome-studio/knowledge-packs/kp-system-et',
+      method: 'DELETE',
+    })
+
     expect(buildDeprecateOutcomeKnowledgePackVersionQuery({
       packId: 'truth-certification-pack',
       versionId: 'truth-certification-pack@1.0.1',

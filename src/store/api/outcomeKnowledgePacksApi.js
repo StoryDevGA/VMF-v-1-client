@@ -136,6 +136,11 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   }
 }
 
+export const buildDeleteOutcomeKnowledgePackQuery = ({ packId }) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}`,
+  method: 'DELETE',
+})
+
 export const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
     encodePathSegment(versionId)
@@ -572,6 +577,11 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       invalidatesTags: getSourceDocumentImportInvalidationTags,
     }),
 
+    deleteOutcomeKnowledgePack: build.mutation({
+      query: buildDeleteOutcomeKnowledgePackQuery,
+      invalidatesTags: getMutationInvalidationTags,
+    }),
+
     validateOutcomeKnowledgePackVersion: build.mutation({
       query: buildValidateOutcomeKnowledgePackVersionQuery,
       invalidatesTags: getMutationInvalidationTags,
@@ -658,6 +668,7 @@ export const {
   useCreateOutcomeKnowledgePackVersionMutation,
   useImportOutcomeKnowledgePackStarterVersionMutation,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
+  useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useValidateOutcomeKnowledgePackVersionMutation,

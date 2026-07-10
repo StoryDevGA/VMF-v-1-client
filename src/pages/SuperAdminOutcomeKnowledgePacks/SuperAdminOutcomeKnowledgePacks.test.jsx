@@ -9,6 +9,7 @@ const {
   activateVersionMock,
   addToastMock,
   createVersionMock,
+  deletePackMock,
   deprecateVersionMock,
   detailQueryMock,
   disableVersionMock,
@@ -28,6 +29,7 @@ const {
   activateVersionMock: vi.fn(),
   addToastMock: vi.fn(),
   createVersionMock: vi.fn(),
+  deletePackMock: vi.fn(),
   deprecateVersionMock: vi.fn(),
   detailQueryMock: vi.fn(),
   disableVersionMock: vi.fn(),
@@ -302,6 +304,7 @@ const defaultDetailResult = {
           semanticVersion: '1.0.0',
           schemaVersion: '1.0.0',
           status: 'VALIDATED',
+          reviewStatus: 'DRAFT',
           scopeKey: 'GLOBAL',
           sourceFilename: 'output-schemas-pack-v1.yaml',
           contentHash: 'sha256:output-schema-content',
@@ -414,6 +417,10 @@ vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
     importSourceDocumentDraftMock,
     { isLoading: false },
   ],
+  useDeleteOutcomeKnowledgePackMutation: () => [
+    deletePackMock,
+    { isLoading: false },
+  ],
   useDeprecateOutcomeKnowledgePackVersionMutation: () => [
     deprecateVersionMock,
     { isLoading: false },
@@ -471,6 +478,18 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     importSourceDocumentDraftMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({
         data: { pack: { label: 'Execution Translation' } },
+      }),
+    })
+    deletePackMock.mockReturnValue({
+      unwrap: vi.fn().mockResolvedValue({
+        data: {
+          deleted: true,
+          deletedCounts: {
+            packs: 1,
+            versions: 1,
+            activations: 0,
+          },
+        },
       }),
     })
     validateVersionMock.mockReturnValue({
@@ -573,6 +592,60 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .not.toBeInTheDocument()
   })
 
+  it('allows imported draft packs to be hard-deleted from the row actions after confirmation', async () => {
+    const user = userEvent.setup()
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            description: 'Enterprise Technology methodology.',
+            status: 'DRAFT',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceDocument: {
+                filename: 'Enterprise Technology.md',
+              },
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            isSystem: false,
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    const actions = screen.getByLabelText('Actions for et')
+    expect(within(actions).getByRole('option', { name: 'Delete Pack' })).toBeInTheDocument()
+
+    await user.selectOptions(actions, 'delete')
+
+    expect(screen.getByRole('heading', { name: /delete knowledge pack/i })).toBeInTheDocument()
+    expect(screen.getByText(/permanently removes the pack/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Delete Pack' }))
+
+    await waitFor(() => {
+      expect(deletePackMock).toHaveBeenCalledWith({ packId: 'kp-system-et' })
+    })
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      variant: 'success',
+      title: 'Knowledge pack deleted',
+    }))
+  })
+
   it('allows persisted source-document drafts to be validated from the row actions', async () => {
     const user = userEvent.setup()
     listQueryMock.mockReturnValue({
@@ -593,10 +666,13 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
             sourceMetadata: {
               importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
               sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceDocumentId: 'kpsrc-system-et-5-0-0-source-hash',
+              sourceHash: 'sha256:enterprise-technology-source',
               sourceFilename: 'Enterprise Technology.md',
-              contentPersisted: true,
               sourceDocument: {
+                sourceDocumentId: 'kpsrc-system-et-5-0-0-source-hash',
                 filename: 'Enterprise Technology.md',
+                sourceHash: 'sha256:enterprise-technology-source',
               },
             },
             authoringMode: 'IMPORT_SOURCE_DOCUMENT',
@@ -708,6 +784,47 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getByRole('heading', { name: /activate pack version/i })).toBeInTheDocument()
   })
 
+  it('exposes lifecycle actions for active imported source-document packs', () => {
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            status: 'ACTIVE',
+            reviewStatus: 'APPROVED',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceDocumentId: 'kpsrc-system-et-5-0-0-source-hash',
+              sourceHash: 'sha256:enterprise-technology-source',
+              sourceFilename: 'Enterprise Technology.md',
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    const actions = screen.getByLabelText('Actions for et')
+    expect(within(actions).getByRole('option', { name: 'View Details' })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: 'Deprecate Version' })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: 'Disable Version' })).toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: 'Activate Version' }))
+      .not.toBeInTheDocument()
+  })
+
   it('exposes library filters and keeps blank pack creation blocked until the draft contract exists', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -737,9 +854,15 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Outcome Studio Default Knowledge Manifest')).toBeInTheDocument()
-    expect(screen.getByText(/select a manifest to preview dependency resolution/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /select a manifest/i })).toBeInTheDocument()
+    expect(screen.getByText(/use preview on a manifest row to inspect dependency resolution/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /^preview$/i }))
+    const manifestPreviewButton = screen.getByRole('button', {
+      name: /preview outcome studio default knowledge manifest/i,
+    })
+    expect(manifestPreviewButton).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(manifestPreviewButton)
 
     await waitFor(() => {
       expect(manifestPreviewQueryMock).toHaveBeenLastCalledWith(
@@ -762,6 +885,16 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getByText(/PREVIEW_ONLY_NO_PROVIDER_EXECUTION/)).toBeInTheDocument()
     expect(screen.getByText('active')).toBeInTheDocument()
     expect(screen.getAllByText('validation').length).toBeGreaterThan(0)
+
+    const hideManifestPreviewButton = screen.getByRole('button', {
+      name: /hide preview for outcome studio default knowledge manifest/i,
+    })
+    expect(hideManifestPreviewButton).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(hideManifestPreviewButton)
+
+    expect(screen.queryByLabelText(/manifest resolution preview/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /select a manifest/i })).toBeInTheDocument()
   })
 
   it('creates a draft knowledge pack from source document metadata', async () => {
@@ -938,6 +1071,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByRole('heading', { name: /pack details/i })).toBeInTheDocument()
     expect(screen.getAllByText('output-schemas-pack@1.0.0').length).toBeGreaterThan(0)
     expect(screen.getAllByText('sha256:output-schema-content').length).toBeGreaterThan(0)
+    expect(screen.getByText('Not required')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /activation history/i })).toBeInTheDocument()
     expect(screen.getByText('PACK_KEY_MATCH')).toBeInTheDocument()
     expect(screen.getByText('Source must declare pack key output-schemas-pack.')).toBeInTheDocument()
