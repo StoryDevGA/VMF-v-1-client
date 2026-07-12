@@ -9,6 +9,7 @@ import { ToasterProvider } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useApproveRuntimeOutcomeDraftMutation,
   useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeOutcomeSessionMutation,
   useCreateRuntimeOutputRequestMutation,
@@ -44,6 +45,7 @@ import RuntimeWorkspace from './RuntimeWorkspace'
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
+  useApproveRuntimeOutcomeDraftMutation: vi.fn(),
   useClearRuntimeSectionEvidenceMutation: vi.fn(),
   useCreateRuntimeOutcomeSessionMutation: vi.fn(),
   useCreateRuntimeOutputRequestMutation: vi.fn(),
@@ -189,6 +191,8 @@ const exportRuntimeOutcomeAsset = vi.fn()
 const unwrapExportRuntimeOutcomeAsset = vi.fn()
 const publishRuntimeOutcomeAsset = vi.fn()
 const unwrapPublishRuntimeOutcomeAsset = vi.fn()
+const approveRuntimeOutcomeDraft = vi.fn()
+const unwrapApproveRuntimeOutcomeDraft = vi.fn()
 const updateRuntimeDiscoveryInputs = vi.fn()
 const unwrapDiscoveryInputs = vi.fn()
 const acceptRuntimeDiscovery = vi.fn()
@@ -762,6 +766,74 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
   return render(runtimeWorkspaceTree(initialEntry))
 }
 
+function mockActiveOutcomeStudioSession({ drafts = [], truthCurrentness = 'CURRENT' } = {}) {
+  const activeSession = {
+    sessionId: 'out_sess_active_fixture',
+    status: 'ACTIVE',
+    sourceOutputAssetId: 'out_asset_test',
+    sourceOutputTypeKey: 'EXECUTIVE_BRIEF',
+    sourceOutputTypeLabel: 'Executive Brief',
+    knowledgePackBinding: {
+      status: 'BOUND',
+      activeCount: 5,
+      requiredCount: 5,
+    },
+  }
+  const readyOutcomeStudioPayload = {
+    ...outcomeStudioPayload,
+    readiness: {
+      ...outcomeStudioPayload.readiness,
+      state: 'READY',
+      canStartSession: true,
+      canReason: true,
+      blockers: [],
+      safetyGates: {
+        ...outcomeStudioPayload.readiness.safetyGates,
+        responseGenerationAvailable: true,
+        passedCount: 5,
+        blockedCount: 0,
+      },
+    },
+    safetyGates: buildReadyOutcomeStudioSafetyGates({ responseGenerationAvailable: true }),
+    conversation: {
+      ...outcomeStudioPayload.conversation,
+      enabled: true,
+      disabledReason: '',
+    },
+    sessions: [activeSession],
+  }
+  useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+    data: { data: readyOutcomeStudioPayload },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: refetchOutcomeStudio,
+  })
+  useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+    data: { data: readyOutcomeStudioPayload.readiness },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+  })
+  useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+    data: {
+      data: {
+        ...activeSession,
+        truthSignature: {
+          status: 'PROJECTED',
+          currentness: truthCurrentness,
+        },
+        messages: [],
+        drafts,
+      },
+    },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: refetchOutcomeStudioSession,
+  })
+}
+
 function selectIntelligenceHubTab(name) {
   const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
   fireEvent.click(within(discoverySection).getByRole('tab', { name }))
@@ -827,6 +899,8 @@ describe('RuntimeWorkspace', () => {
     unwrapExportRuntimeOutcomeAsset.mockReset()
     publishRuntimeOutcomeAsset.mockReset()
     unwrapPublishRuntimeOutcomeAsset.mockReset()
+    approveRuntimeOutcomeDraft.mockReset()
+    unwrapApproveRuntimeOutcomeDraft.mockReset()
     updateRuntimeDiscoveryInputs.mockReset()
     unwrapDiscoveryInputs.mockReset()
     acceptRuntimeDiscovery.mockReset()
@@ -882,6 +956,27 @@ describe('RuntimeWorkspace', () => {
     publishRuntimeOutcomeAsset.mockReturnValue({
       unwrap: unwrapPublishRuntimeOutcomeAsset,
     })
+    unwrapApproveRuntimeOutcomeDraft.mockResolvedValue({
+      data: {
+        draft: {
+          draftId: 'outcome_draft_existing_fixture',
+          status: 'APPROVED',
+          currentIterationId: 'outcome_draft_iteration_current_fixture',
+        },
+        asset: {
+          outcomeAssetId: 'outcome_asset_existing_fixture',
+          status: 'GENERATED',
+          currentVersionId: 'outcome_asset_version_existing_fixture',
+        },
+        assetVersion: {
+          outcomeAssetVersionId: 'outcome_asset_version_existing_fixture',
+          versionNumber: 1,
+        },
+      },
+    })
+    approveRuntimeOutcomeDraft.mockReturnValue({
+      unwrap: unwrapApproveRuntimeOutcomeDraft,
+    })
     unwrapCreateRuntimeOutputRequest.mockResolvedValue({ data: { outputRequestId: 'out_req_test' } })
     createRuntimeOutputRequest.mockReturnValue({ unwrap: unwrapCreateRuntimeOutputRequest })
     unwrapCreateRuntimeRevision.mockResolvedValue({
@@ -932,6 +1027,7 @@ describe('RuntimeWorkspace', () => {
     acceptRuntimeSection.mockReturnValue({ unwrap: unwrapAcceptSection })
     useAcceptRuntimeDiscoveryMutation.mockReturnValue([acceptRuntimeDiscovery, { isLoading: false }])
     useAcceptRuntimeSectionMutation.mockReturnValue([acceptRuntimeSection, { isLoading: false }])
+    useApproveRuntimeOutcomeDraftMutation.mockReturnValue([approveRuntimeOutcomeDraft, { isLoading: false }])
     useClearRuntimeSectionEvidenceMutation.mockReturnValue([clearRuntimeSectionEvidence, { isLoading: false }])
     useCreateRuntimeOutcomeSessionMutation.mockReturnValue([createRuntimeOutcomeSession, { isLoading: false }])
     useSubmitRuntimeOutcomeMessageMutation.mockReturnValue([submitRuntimeOutcomeMessage, { isLoading: false }])
@@ -1627,6 +1723,29 @@ describe('RuntimeWorkspace', () => {
           generatedResponse: 'Raw generated response must not render.',
         },
       ],
+      drafts: [
+        {
+          draftId: 'outcome_draft_existing_fixture',
+          sessionId: 'out_sess_active_fixture',
+          status: 'ACTIVE',
+          outputTypeKey: 'EXECUTIVE_BRIEF',
+          outputTypeLabel: 'Executive Brief',
+          title: 'Executive Brief Draft',
+          currentIterationId: 'outcome_draft_iteration_current_fixture',
+          currentIterationNumber: 2,
+          truthSignature: {
+            status: 'PROJECTED',
+            currentness: 'CURRENT',
+          },
+          knowledgePackBinding: {
+            activeCount: 5,
+            requiredCount: 5,
+          },
+          customerContent: {
+            markdown: 'Raw draft content must not render.',
+          },
+        },
+      ],
     }
     useGetRuntimeOutcomeStudioQuery.mockReturnValue({
       data: { data: readyOutcomeStudioPayload },
@@ -1665,6 +1784,11 @@ describe('RuntimeWorkspace', () => {
     expect(history).toHaveTextContent('Existing governed prompt.')
     expect(history).toHaveTextContent('Pending Response')
     expect(history).toHaveTextContent('Ready for governed response generation.')
+    const draftRegion = within(sessionRegion).getByRole('region', { name: /outcome studio working drafts/i })
+    expect(draftRegion).toHaveTextContent('Executive Brief Draft')
+    expect(draftRegion).toHaveTextContent('Current iteration 2')
+    expect(draftRegion).toHaveTextContent('Approve this draft to create a governed asset version.')
+    expect(screen.queryByText('Raw draft content must not render.')).not.toBeInTheDocument()
     const generateResponseButton = within(history).getByRole('button', { name: /generate response/i })
     expect(generateResponseButton).toBeEnabled()
     expect(screen.queryByText('Raw message source Markdown must not render.')).not.toBeInTheDocument()
@@ -1706,6 +1830,95 @@ describe('RuntimeWorkspace', () => {
     })
     expect(refetchOutcomeStudioSession).toHaveBeenCalled()
     expect(refetchOutcomeStudio).toHaveBeenCalled()
+
+    const approveDraftButton = within(draftRegion).getByRole('button', { name: /approve draft/i })
+    expect(approveDraftButton).toBeEnabled()
+    await user.click(approveDraftButton)
+
+    await waitFor(() => {
+      expect(approveRuntimeOutcomeDraft).toHaveBeenCalledWith({
+        runtimeInstanceId: 'value-narrative-001',
+        sessionId: 'out_sess_active_fixture',
+        draftId: 'outcome_draft_existing_fixture',
+        body: {},
+      })
+    })
+    expect(await within(main).findByText('Outcome Studio draft approved into a governed asset version.')).toBeInTheDocument()
+  })
+
+  it('renders the Outcome Studio working-draft empty state', async () => {
+    const user = userEvent.setup()
+    mockActiveOutcomeStudioSession({ drafts: [] })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+
+    const draftRegion = within(main).getByRole('region', { name: /outcome studio working drafts/i })
+    expect(within(draftRegion).getByText('No working drafts')).toBeInTheDocument()
+    expect(within(draftRegion).queryByRole('button', { name: /approve draft/i })).not.toBeInTheDocument()
+  })
+
+  it('blocks draft approval when the draft truth signature is not current', async () => {
+    const user = userEvent.setup()
+    mockActiveOutcomeStudioSession({
+      truthCurrentness: 'STALE',
+      drafts: [{
+        draftId: 'outcome_draft_stale_fixture',
+        sessionId: 'out_sess_active_fixture',
+        status: 'ACTIVE',
+        title: 'Stale Executive Brief Draft',
+        currentIterationId: 'outcome_draft_iteration_stale_fixture',
+        currentIterationNumber: 2,
+        truthSignature: { status: 'PROJECTED', currentness: 'STALE' },
+        knowledgePackBinding: { activeCount: 5, requiredCount: 5 },
+      }],
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+
+    const draftRegion = within(main).getByRole('region', { name: /outcome studio working drafts/i })
+    expect(draftRegion).toHaveTextContent('Draft approval is blocked until the draft truth signature is current.')
+    expect(within(draftRegion).getByRole('button', { name: /approve draft/i })).toBeDisabled()
+  })
+
+  it('surfaces draft approval failures without switching to a success state', async () => {
+    const user = userEvent.setup()
+    mockActiveOutcomeStudioSession({
+      drafts: [{
+        draftId: 'outcome_draft_failure_fixture',
+        sessionId: 'out_sess_active_fixture',
+        status: 'ACTIVE',
+        title: 'Executive Brief Draft',
+        currentIterationId: 'outcome_draft_iteration_failure_fixture',
+        currentIterationNumber: 1,
+        truthSignature: { status: 'PROJECTED', currentness: 'CURRENT' },
+        knowledgePackBinding: { activeCount: 5, requiredCount: 5 },
+      }],
+    })
+    unwrapApproveRuntimeOutcomeDraft.mockRejectedValue({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message: 'This draft was already approved.',
+          requestId: 'req-approve-race',
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    await user.click(within(main).getByRole('button', { name: /approve draft/i }))
+
+    expect(await within(main).findByText('This draft was already approved. Reference: req-approve-race')).toBeInTheDocument()
+    expect(within(main).queryByText('Outcome Studio draft approved into a governed asset version.')).not.toBeInTheDocument()
   })
 
   it('surfaces GRR provider-unavailable response generation failures without a success state', async () => {
@@ -1820,7 +2033,7 @@ describe('RuntimeWorkspace', () => {
     await user.click(within(history).getByRole('button', { name: /generate response/i }))
 
     expect(await within(main).findByText(
-      'Governed reasoning provider is not configured. Outcome Studio did not create a response or asset. Reference: grr-ref-001',
+      'Governed reasoning provider is not configured. Outcome Studio did not create a response or draft. Reference: grr-ref-001',
     )).toBeInTheDocument()
     expect(within(main).queryByText('Outcome Studio response generated.')).not.toBeInTheDocument()
     expect(refetchOutcomeStudioSession).not.toHaveBeenCalled()

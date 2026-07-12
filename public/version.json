@@ -1,9 +1,9 @@
 {
   "version": "0.0.0",
-  "buildNumber": "20260709.123919",
-  "commit": "c994083",
+  "buildNumber": "20260712.103008",
+  "commit": "898a86d",
   "branch": "main",
   "environment": "local",
-  "builtAt": "2026-07-09T12:39:19.450Z",
-  "fullVersion": "0.0.0+20260709.123919.c994083"
+  "builtAt": "2026-07-12T10:30:08.112Z",
+  "fullVersion": "0.0.0+20260712.103008.898a86d"
 }

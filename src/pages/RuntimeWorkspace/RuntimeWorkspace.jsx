@@ -46,6 +46,7 @@ import { useToaster } from '../../components/Toaster'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useApproveRuntimeOutcomeDraftMutation,
   useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
   useGetRuntimeEvidenceQuery,
@@ -709,7 +710,7 @@ const isGrrProviderUnavailableError = (error) =>
 
 const getOutcomeStudioResponseErrorMessage = (error) => {
   if (isGrrProviderUnavailableError(error)) {
-    return 'Governed reasoning provider is not configured. Outcome Studio did not create a response or asset.'
+    return 'Governed reasoning provider is not configured. Outcome Studio did not create a response or draft.'
   }
 
   return stripRequestReference(error?.message)
@@ -3722,6 +3723,12 @@ const getOutcomeStudioMessages = (session) =>
   (Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY)
     .filter((message) => String(message?.prompt ?? '').trim())
 
+const getOutcomeStudioDrafts = (session) =>
+  Array.isArray(session?.drafts) ? session.drafts : EMPTY_ARRAY
+
+const getOutcomeStudioDraftId = (draft = {}) =>
+  String(draft.draftId || draft.id || draft._id || '').trim()
+
 const refetchOutcomeStudioQueries = async (...refetchers) => {
   const pendingRefetches = refetchers
     .filter((refetcher) => typeof refetcher === 'function')
@@ -4315,9 +4322,11 @@ function OutcomeStudioSection({
   creatingSession = false,
   error = null,
   feedback = null,
+  approvingDraftId = '',
   exportingAssetKey = '',
   generatingResponse = false,
   loading = false,
+  onApproveDraft,
   onExportAsset,
   onGenerateResponse,
   onPublishAsset,
@@ -4386,6 +4395,7 @@ function OutcomeStudioSection({
     && !sessionError
     && sessionTruthCurrentness !== 'CURRENT'
   const sessionMessages = getOutcomeStudioMessages(sessionDetail)
+  const sessionDrafts = getOutcomeStudioDrafts(sessionDetail)
   const responseGenerationAvailable = safetyGates.responseGenerationAvailable === true
     || readiness.safetyGates?.responseGenerationAvailable === true
   const responseGenerationDisabledReason = getOutcomeStudioResponseGenerationDisabledReason({
@@ -4442,6 +4452,9 @@ function OutcomeStudioSection({
   const assetSummary = outcomeAssets.length > 0
     ? `${outcomeAssets.length} asset${outcomeAssets.length === 1 ? '' : 's'}`
     : 'No assets'
+  const draftSummary = sessionDrafts.length > 0
+    ? `${sessionDrafts.length} draft${sessionDrafts.length === 1 ? '' : 's'}`
+    : 'No drafts'
   const handleSubmitPrompt = async () => {
     const normalizedPrompt = String(promptDraft || '').trim()
     if (!canSubmitPrompt || !normalizedPrompt) return
@@ -4457,6 +4470,18 @@ function OutcomeStudioSection({
   const handleUpdateFromLatestTruth = async () => {
     if (!canUpdateTruth) return
     await onUpdateFromLatestTruth?.({ sessionId: activeSessionId })
+  }
+  const handleApproveDraft = async (draft) => {
+    const draftId = getOutcomeStudioDraftId(draft)
+    if (!draftId || !activeSessionId) return
+    const approved = await onApproveDraft?.({
+      draft,
+      draftId,
+      sessionId: activeSessionId,
+    })
+    if (approved) {
+      setActiveOutcomeStudioTab(3)
+    }
   }
   const readinessPanel = (
     <section
@@ -4843,6 +4868,101 @@ function OutcomeStudioSection({
           {!sessionLoading && !sessionError && sessionMessages.length === 0 ? (
             <p className="runtime-workspace__action-disabled-reason">No prompts have been submitted for this session.</p>
           ) : null}
+          {!sessionLoading && !sessionError ? (
+            <div
+              className="runtime-workspace__outcome-studio-drafts"
+              role="region"
+              aria-label="Outcome Studio working drafts"
+            >
+              <div className="runtime-workspace__output-lab-panel-heading">
+                <h4>Working Drafts</h4>
+                <Badge variant={sessionDrafts.length > 0 ? 'info' : 'neutral'} size="sm" pill outline>
+                  {draftSummary}
+                </Badge>
+              </div>
+              {sessionDrafts.length > 0 ? (
+                <ul
+                  className="runtime-workspace__plain-list runtime-workspace__outcome-studio-draft-list"
+                  aria-label="Outcome Studio conversation drafts"
+                >
+                  {sessionDrafts.map((draft, draftIndex) => {
+                    const draftId = getOutcomeStudioDraftId(draft)
+                    const draftStatus = normalizeRuntimeActionToken(draft.status || 'UNKNOWN')
+                    const currentIterationId = String(draft.currentIterationId || '').trim()
+                    const currentIterationNumber = Number(draft.currentIterationNumber || 0)
+                    const truthCurrentness = normalizeRuntimeActionToken(
+                      draft.truthSignature?.currentness || draft.truthSignature?.status || sessionTruthCurrentness,
+                    )
+                    const isActiveDraft = draftStatus === 'ACTIVE'
+                    const approvalBlockedByTruth = truthCurrentness !== 'CURRENT'
+                    const canApproveDraft = hasActiveSession
+                      && isActiveDraft
+                      && Boolean(draftId)
+                      && Boolean(currentIterationId)
+                      && !approvalBlockedByTruth
+                      && !approvingDraftId
+                    const approveReasonId = `runtime-outcome-studio-approve-reason-${draftIndex}`
+                    const approvingDraft = approvingDraftId === draftId
+                    const approveReason = !draftId
+                      ? 'Draft approval requires a persisted draft identifier.'
+                      : !currentIterationId
+                        ? 'Draft approval requires a current draft iteration.'
+                        : !isActiveDraft
+                          ? 'Only active working drafts can be approved.'
+                          : approvalBlockedByTruth
+                            ? 'Draft approval is blocked until the draft truth signature is current.'
+                            : approvingDraftId
+                              ? 'Wait for draft approval to finish.'
+                              : 'Approve this draft to create a governed asset version.'
+                    return (
+                      <li key={draftId || `${activeSessionId}-draft-${draftIndex}`}>
+                        <div>
+                          <strong>{draft.title || draft.outputTypeLabel || 'Outcome Draft'}</strong>
+                          <span>Draft {formatRuntimeIdentifier(draftId)}</span>
+                          <span>
+                            Current iteration {Number.isFinite(currentIterationNumber) && currentIterationNumber > 0 ? currentIterationNumber : '--'}
+                            {currentIterationId ? ` / ${formatRuntimeIdentifier(currentIterationId)}` : ''}
+                          </span>
+                          <span>
+                            Truth {formatRuntimeTokenLabel(truthCurrentness)}
+                            {' / '}
+                            Packs {draft.knowledgePackBinding?.activeCount ?? 0}/{draft.knowledgePackBinding?.requiredCount ?? requiredPacks.length}
+                          </span>
+                          <span id={approveReasonId}>{approveReason}</span>
+                          <div className="runtime-workspace__outcome-studio-draft-action-region">
+                            <ButtonGroup
+                              className="runtime-workspace__outcome-studio-draft-actions"
+                              aria-label={`Outcome Studio draft actions for ${draft.title || draft.outputTypeLabel || 'draft'}`}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                leftIcon={<MdCheckCircle aria-hidden="true" />}
+                                disabled={!canApproveDraft || approvingDraft}
+                                loading={approvingDraft}
+                                aria-describedby={!canApproveDraft ? approveReasonId : undefined}
+                                onClick={() => {
+                                  if (canApproveDraft) handleApproveDraft(draft)
+                                }}
+                              >
+                                {approvingDraft ? 'Approving' : 'Approve Draft'}
+                              </Button>
+                            </ButtonGroup>
+                          </div>
+                        </div>
+                        <Badge variant={getTokenStatusVariant(draftStatus)} size="sm" pill outline>
+                          {formatRuntimeTokenLabel(draftStatus)}
+                        </Badge>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <Status variant="neutral" size="sm" showIcon>No working drafts</Status>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <Textarea
@@ -4896,16 +5016,6 @@ function OutcomeStudioSection({
           </Button>
         )}
       </ButtonGroup>
-      {feedback?.message ? (
-        <Status
-          variant={feedback.variant === 'error' ? 'error' : 'success'}
-          size="sm"
-          showIcon
-          className="runtime-workspace__outcome-studio-feedback"
-        >
-          {feedback.message}
-        </Status>
-      ) : null}
       {sessionTruthNotCurrent ? (
         <p id={promptTruthReasonId} className="runtime-workspace__action-disabled-reason">
           {promptTruthDisabledReason}
@@ -5323,6 +5433,17 @@ function OutcomeStudioSection({
         {error ? (
           <Status variant="error" size="sm" showIcon>
             {stripRequestReference(error.message)}
+          </Status>
+        ) : null}
+
+        {feedback?.message ? (
+          <Status
+            variant={feedback.variant === 'error' ? 'error' : 'success'}
+            size="sm"
+            showIcon
+            className="runtime-workspace__outcome-studio-feedback"
+          >
+            {feedback.message}
           </Status>
         ) : null}
 
@@ -7264,6 +7385,9 @@ function RuntimeWorkspace() {
     { isLoading: isUpdatingOutcomeTruth },
   ] = useUpdateRuntimeOutcomeSessionFromLatestTruthMutation()
   const [
+    approveRuntimeOutcomeDraft,
+  ] = useApproveRuntimeOutcomeDraftMutation()
+  const [
     publishRuntimeOutcomeAsset,
   ] = usePublishRuntimeOutcomeAssetMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
@@ -7315,6 +7439,7 @@ function RuntimeWorkspace() {
   const [outcomeStudioFeedback, setOutcomeStudioFeedback] = useState(null)
   const [exportingOutputAssetKey, setExportingOutputAssetKey] = useState('')
   const [exportingOutcomeAssetKey, setExportingOutcomeAssetKey] = useState('')
+  const [approvingOutcomeDraftId, setApprovingOutcomeDraftId] = useState('')
   const [publishingOutcomeAssetKey, setPublishingOutcomeAssetKey] = useState('')
   const [selectedOutcomeAssetId, setSelectedOutcomeAssetId] = useState('')
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState(null)
@@ -8521,6 +8646,56 @@ function RuntimeWorkspace() {
     }
   }
 
+  const handleApproveOutcomeDraft = async ({
+    draftId = '',
+    sessionId = '',
+  } = {}) => {
+    const normalizedDraftId = String(draftId || '').trim()
+    const normalizedSessionId = String(sessionId || '').trim()
+    if (!runtimeInstanceId || !normalizedSessionId || !normalizedDraftId) {
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: 'Outcome Studio draft approval requires an active persisted draft.',
+      })
+      return false
+    }
+
+    setOutcomeStudioFeedback(null)
+    setApprovingOutcomeDraftId(normalizedDraftId)
+
+    try {
+      const approvalResponse = await approveRuntimeOutcomeDraft({
+        runtimeInstanceId,
+        sessionId: normalizedSessionId,
+        draftId: normalizedDraftId,
+        body: {},
+      }).unwrap()
+      const approval = getOutcomeStudioPayload(approvalResponse)
+      const approvedOutcomeAssetId = getOutcomeStudioAssetId(approval?.asset)
+      if (approvedOutcomeAssetId) {
+        setSelectedOutcomeAssetId(approvedOutcomeAssetId)
+      }
+      await refetchOutcomeStudioQueries(refetchOutcomeStudioSession, refetchOutcomeStudio)
+      setOutcomeStudioFeedback({
+        variant: 'success',
+        message: 'Outcome Studio draft approved into a governed asset version.',
+      })
+      return true
+    } catch (approvalError) {
+      const normalizedError = normalizeError(approvalError)
+      const requestReference = normalizedError.requestId
+        ? ` Reference: ${normalizedError.requestId}`
+        : ''
+      setOutcomeStudioFeedback({
+        variant: 'error',
+        message: `${stripRequestReference(normalizedError.message)}${requestReference}`,
+      })
+      return false
+    } finally {
+      setApprovingOutcomeDraftId('')
+    }
+  }
+
   const handlePublishOutcomeAsset = async ({ asset } = {}) => {
     const outcomeAssetId = getOutcomeStudioAssetId(asset)
     const currentVersionId = String(asset?.currentVersionId || '').trim()
@@ -9099,12 +9274,14 @@ function RuntimeWorkspace() {
               assetPreview={outcomeAssetPreview}
               assetPreviewError={outcomeAssetPreviewError}
               assetPreviewLoading={isFetchingOutcomeAssetPreview}
+              approvingDraftId={approvingOutcomeDraftId}
               creatingSession={isCreatingOutcomeSession}
               error={outcomeStudioError}
               exportingAssetKey={exportingOutcomeAssetKey}
               feedback={outcomeStudioFeedback}
               generatingResponse={isGeneratingOutcomeResponse}
               loading={isLoadingOutcomeStudio || isFetchingOutcomeStudio}
+              onApproveDraft={handleApproveOutcomeDraft}
               onExportAsset={handleExportOutcomeAsset}
               onGenerateResponse={handleGenerateOutcomeResponse}
               onPublishAsset={handlePublishOutcomeAsset}

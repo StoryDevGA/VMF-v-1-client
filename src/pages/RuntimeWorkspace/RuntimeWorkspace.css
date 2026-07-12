@@ -775,6 +775,7 @@
 .runtime-workspace__output-lab-actions,
 .runtime-workspace__output-lab-export-actions,
 .runtime-workspace__outcome-studio-asset-actions,
+.runtime-workspace__outcome-studio-draft-actions,
 .runtime-workspace__outcome-studio-export-actions,
 .runtime-workspace__outcome-studio-truth-actions {
   display: flex;
@@ -789,12 +790,15 @@
 
 .runtime-workspace__output-lab-export-actions,
 .runtime-workspace__outcome-studio-asset-actions,
+.runtime-workspace__outcome-studio-draft-actions,
 .runtime-workspace__outcome-studio-export-actions,
 .runtime-workspace__outcome-studio-truth-actions {
   justify-content: flex-start;
 }
 
-.runtime-workspace__output-lab-export-actions .btn {
+.runtime-workspace__output-lab-export-actions .btn,
+.runtime-workspace__outcome-studio-asset-actions .btn,
+.runtime-workspace__outcome-studio-draft-actions .btn {
   min-height: calc(var(--spacing-md) * 2);
   border: var(--border-width-thin) solid color-mix(in srgb, var(--color-card-border) 82%, transparent);
   padding: var(--spacing-3xs) var(--spacing-xs);
@@ -807,18 +811,26 @@
 }
 
 .runtime-workspace__output-lab-export-actions .btn:hover:not(:disabled),
-.runtime-workspace__output-lab-export-actions .btn:focus-visible:not(:disabled) {
+.runtime-workspace__output-lab-export-actions .btn:focus-visible:not(:disabled),
+.runtime-workspace__outcome-studio-asset-actions .btn:hover:not(:disabled),
+.runtime-workspace__outcome-studio-asset-actions .btn:focus-visible:not(:disabled),
+.runtime-workspace__outcome-studio-draft-actions .btn:hover:not(:disabled),
+.runtime-workspace__outcome-studio-draft-actions .btn:focus-visible:not(:disabled) {
   border: var(--border-width-thin) solid color-mix(in srgb, var(--color-action-primary) 42%, var(--color-card-border));
   background-color: color-mix(in srgb, var(--color-action-primary) 10%, transparent);
   color: var(--color-action-primary);
 }
 
-.runtime-workspace__output-lab-export-actions .btn:active:not(:disabled) {
+.runtime-workspace__output-lab-export-actions .btn:active:not(:disabled),
+.runtime-workspace__outcome-studio-asset-actions .btn:active:not(:disabled),
+.runtime-workspace__outcome-studio-draft-actions .btn:active:not(:disabled) {
   border-color: color-mix(in srgb, var(--color-action-primary) 58%, var(--color-card-border));
   background-color: color-mix(in srgb, var(--color-action-primary) 14%, transparent);
 }
 
-.runtime-workspace__output-lab-export-actions .btn:disabled {
+.runtime-workspace__output-lab-export-actions .btn:disabled,
+.runtime-workspace__outcome-studio-asset-actions .btn:disabled,
+.runtime-workspace__outcome-studio-draft-actions .btn:disabled {
   border-color: color-mix(in srgb, var(--color-card-border) 60%, transparent);
   background-color: transparent;
   color: var(--color-text-secondary);
@@ -827,7 +839,15 @@
 .runtime-workspace__output-lab-export-actions .btn__content,
 .runtime-workspace__output-lab-export-actions .btn__content--hidden,
 .runtime-workspace__output-lab-export-actions .btn__icon,
-.runtime-workspace__output-lab-export-actions .btn svg {
+.runtime-workspace__output-lab-export-actions .btn svg,
+.runtime-workspace__outcome-studio-asset-actions .btn__content,
+.runtime-workspace__outcome-studio-asset-actions .btn__content--hidden,
+.runtime-workspace__outcome-studio-asset-actions .btn__icon,
+.runtime-workspace__outcome-studio-asset-actions .btn svg,
+.runtime-workspace__outcome-studio-draft-actions .btn__content,
+.runtime-workspace__outcome-studio-draft-actions .btn__content--hidden,
+.runtime-workspace__outcome-studio-draft-actions .btn__icon,
+.runtime-workspace__outcome-studio-draft-actions .btn svg {
   color: inherit;
 }
 
@@ -900,6 +920,8 @@
 .runtime-workspace__outcome-studio-pack-list,
 .runtime-workspace__outcome-studio-asset-list,
 .runtime-workspace__outcome-studio-asset-preview,
+.runtime-workspace__outcome-studio-drafts,
+.runtime-workspace__outcome-studio-draft-list,
 .runtime-workspace__outcome-studio-version-detail,
 .runtime-workspace__outcome-studio-version-list,
 .runtime-workspace__outcome-studio-message-list,
@@ -914,6 +936,8 @@
 .runtime-workspace__outcome-studio-pack-list li,
 .runtime-workspace__outcome-studio-asset-list li,
 .runtime-workspace__outcome-studio-asset-preview,
+.runtime-workspace__outcome-studio-drafts,
+.runtime-workspace__outcome-studio-draft-list li,
 .runtime-workspace__outcome-studio-version-detail,
 .runtime-workspace__outcome-studio-version-list li,
 .runtime-workspace__outcome-studio-message-list li,
@@ -926,6 +950,7 @@
 
 .runtime-workspace__outcome-studio-pack-list li,
 .runtime-workspace__outcome-studio-asset-list li,
+.runtime-workspace__outcome-studio-draft-list li,
 .runtime-workspace__outcome-studio-version-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1000,6 +1025,7 @@
 }
 
 .runtime-workspace__outcome-studio-asset-action-region,
+.runtime-workspace__outcome-studio-draft-action-region,
 .runtime-workspace__outcome-studio-truth-action-region {
   display: grid;
   gap: var(--spacing-3xs);
@@ -1008,6 +1034,7 @@
 
 .runtime-workspace__outcome-studio-pack-list li > div,
 .runtime-workspace__outcome-studio-asset-list li > div,
+.runtime-workspace__outcome-studio-draft-list li > div,
 .runtime-workspace__outcome-studio-message-list li > div:not(.runtime-workspace__outcome-studio-message-actions) {
   display: grid;
   gap: var(--spacing-3xs);
@@ -1016,6 +1043,7 @@
 
 .runtime-workspace__outcome-studio-pack-list li:first-child,
 .runtime-workspace__outcome-studio-asset-list li:first-child,
+.runtime-workspace__outcome-studio-draft-list li:first-child,
 .runtime-workspace__outcome-studio-version-list li:first-child,
 .runtime-workspace__outcome-studio-message-list li:first-child {
   border-top: 0;
@@ -1025,6 +1053,8 @@
 .runtime-workspace__outcome-studio-pack-list strong,
 .runtime-workspace__outcome-studio-asset-list strong,
 .runtime-workspace__outcome-studio-asset-preview h4,
+.runtime-workspace__outcome-studio-drafts h4,
+.runtime-workspace__outcome-studio-draft-list strong,
 .runtime-workspace__outcome-studio-preview-sections strong,
 .runtime-workspace__outcome-studio-version-list strong,
 .runtime-workspace__outcome-studio-message-list strong,
@@ -1041,6 +1071,7 @@
 
 .runtime-workspace__outcome-studio-session h4,
 .runtime-workspace__outcome-studio-asset-preview h4,
+.runtime-workspace__outcome-studio-drafts h4,
 .runtime-workspace__outcome-studio-truth-signature h4,
 .runtime-workspace__outcome-studio-version-detail h4 {
   margin: 0;
@@ -1048,6 +1079,7 @@
 
 .runtime-workspace__outcome-studio-pack-list span,
 .runtime-workspace__outcome-studio-asset-list span,
+.runtime-workspace__outcome-studio-draft-list span,
 .runtime-workspace__outcome-studio-version-detail span,
 .runtime-workspace__outcome-studio-version-list span,
 .runtime-workspace__outcome-studio-message-list span,

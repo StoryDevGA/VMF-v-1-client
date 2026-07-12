@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAcceptRuntimeDiscoveryQuery,
   buildAcceptRuntimeSectionQuery,
+  buildApproveRuntimeOutcomeDraftQuery,
   buildClearRuntimeSectionEvidenceQuery,
   buildCreateRuntimeInstanceQuery,
   buildCreateRuntimeOutcomeSessionQuery,
@@ -48,6 +49,7 @@ import {
   DEFAULT_RUNTIME_INSTANCE_TYPE,
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
+  getApproveRuntimeOutcomeDraftInvalidationTags,
   getClearRuntimeSectionEvidenceInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getCreateRuntimeOutcomeSessionInvalidationTags,
@@ -75,6 +77,7 @@ import {
   runtimeInstanceListTag,
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
+  useApproveRuntimeOutcomeDraftMutation,
   useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeOutcomeSessionMutation,
@@ -145,6 +148,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeSessionAssets')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeAssetVersion')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('approveRuntimeOutcomeDraft')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('publishRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('exportRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('submitRuntimeOutcomeMessage')
@@ -194,6 +198,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeOutcomeAssetQuery).toBe('function')
     expect(typeof useLazyGetRuntimeOutcomeAssetQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeAssetVersionQuery).toBe('function')
+    expect(typeof useApproveRuntimeOutcomeDraftMutation).toBe('function')
     expect(typeof usePublishRuntimeOutcomeAssetMutation).toBe('function')
     expect(typeof useLazyExportRuntimeOutcomeAssetQuery).toBe('function')
     expect(typeof useSubmitRuntimeOutcomeMessageMutation).toBe('function')
@@ -242,6 +247,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeSessionAssets.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeAsset.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeAssetVersion.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.approveRuntimeOutcomeDraft.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.publishRuntimeOutcomeAsset.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.exportRuntimeOutcomeAsset.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.submitRuntimeOutcomeMessage.initiate).toBe('function')
@@ -360,6 +366,15 @@ describe('runtimeInstanceApi', () => {
       outcomeAssetId: 'outcome/asset-001',
       outcomeAssetVersionId: 'version/current-001',
     })).toBe('/runtime-instances/value%20narrative%2F001/outcome-studio/assets/outcome%2Fasset-001/versions/version%2Fcurrent-001')
+    expect(buildApproveRuntimeOutcomeDraftQuery({
+      runtimeInstanceId: 'value narrative/001',
+      sessionId: 'out/sess-001',
+      draftId: 'outcome/draft-001',
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/outcome-studio/sessions/out%2Fsess-001/drafts/outcome%2Fdraft-001/approve',
+      method: 'POST',
+      body: {},
+    })
     expect(buildPublishRuntimeOutcomeAssetQuery({
       runtimeInstanceId: 'value narrative/001',
       outcomeAssetId: 'outcome/asset-001',
@@ -723,6 +738,12 @@ describe('runtimeInstanceApi', () => {
       { type: 'RuntimeInstance', id: 'value-narrative-001' },
     ])
     expect(getUpdateRuntimeOutcomeSessionFromLatestTruthInvalidationTags({
+      data: { runtimeInstanceKey: 'value-narrative-001' },
+    }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
+      { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+    ])
+    expect(getApproveRuntimeOutcomeDraftInvalidationTags({
       data: { runtimeInstanceKey: 'value-narrative-001' },
     }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
       { type: 'RuntimeInstance', id: 'runtime-1' },
