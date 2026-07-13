@@ -403,6 +403,12 @@ function renderPage() {
   )
 }
 
+function getRowForText(text) {
+  const row = screen.getByText(text).closest('tr')
+  expect(row).not.toBeNull()
+  return row
+}
+
 describe('SuperAdminOutcomeKnowledgePacks page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -479,7 +485,8 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     expect(screen.getByRole('heading', { name: /knowledge packs/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /library/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: /runtime resolution/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByRole('tab', { name: /manifests/i })).not.toBeInTheDocument()
     expect(screen.getByText(/0 of 5 required packs active/i)).toBeInTheDocument()
     expect(screen.getByText(/authoring required/i)).toBeInTheDocument()
     expect(screen.queryByText(/starter import and upload are currently available only/i))
@@ -684,6 +691,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     const actions = screen.getByLabelText('Actions for et')
     expect(within(actions).getByRole('option', { name: 'Submit for Review' })).toBeInTheDocument()
+    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
     expect(within(actions).getByRole('option', { name: 'Activate blocked - review not approved' }))
       .toBeDisabled()
 
@@ -733,7 +741,131 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     await user.selectOptions(screen.getByLabelText('Actions for et'), 'activate')
 
+    expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /activate pack version/i })).toBeInTheDocument()
+  })
+
+  it('renders lifecycle and registry status as separate row facts', () => {
+    const buildPack = ({
+      packKey,
+      label,
+      status,
+      reviewStatus = 'DRAFT',
+    }) => ({
+      id: `kp-${packKey}`,
+      packId: `kp-${packKey}`,
+      packType: 'SYSTEM',
+      packKey,
+      label,
+      status,
+      reviewStatus,
+      latestVersionId: `kpv-${packKey}-1-0-0-global`,
+      latestSemanticVersion: '1.0.0',
+      sourceMetadata: {
+        importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+        sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+        sourceFilename: `${label}.md`,
+        contentPersisted: true,
+      },
+      authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+      updatedAt: '2026-07-08T09:00:00.000Z',
+    })
+
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          buildPack({
+            packKey: 'enterprise-technology',
+            label: 'Enterprise Technology',
+            status: 'VALIDATED',
+            reviewStatus: 'APPROVED',
+          }),
+          buildPack({
+            packKey: 'disabled-pack',
+            label: 'Disabled Pack',
+            status: 'DISABLED',
+            reviewStatus: 'APPROVED',
+          }),
+          buildPack({
+            packKey: 'failed-pack',
+            label: 'Failed Pack',
+            status: 'FAILED_VALIDATION',
+            reviewStatus: 'REJECTED',
+          }),
+          buildPack({
+            packKey: 'rolled-back-pack',
+            label: 'Rolled Back Pack',
+            status: 'ROLLED_BACK',
+            reviewStatus: 'APPROVED',
+          }),
+        ],
+      },
+    })
+
+    renderPage()
+
+    const approvedRow = getRowForText('Enterprise Technology')
+    expect(within(approvedRow).getByText('Approved')).toBeInTheDocument()
+    expect(within(approvedRow).getByText('Validated')).toBeInTheDocument()
+
+    const disabledRow = getRowForText('Disabled Pack')
+    const disabledStatuses = within(disabledRow).getAllByRole('status', {
+      name: /status: disabled/i,
+    })
+    expect(disabledStatuses).toHaveLength(2)
+    disabledStatuses.forEach((status) => {
+      expect(status).toHaveClass('status--neutral')
+    })
+
+    const failedRow = getRowForText('Failed Pack')
+    expect(within(failedRow).getAllByText('Failed validation')).toHaveLength(2)
+    expect(within(failedRow).queryByText('Rejected')).not.toBeInTheDocument()
+
+    const rolledBackRow = getRowForText('Rolled Back Pack')
+    expect(within(rolledBackRow).getAllByText('Rolled back')).toHaveLength(2)
+    expect(within(rolledBackRow).queryByText('Superseded')).not.toBeInTheDocument()
+  })
+
+  it('exposes approve and reject actions for packs that are in review', () => {
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            label: 'Enterprise Technology',
+            status: 'VALIDATED',
+            reviewStatus: 'READY_FOR_REVIEW',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceFilename: 'Enterprise Technology.md',
+              contentPersisted: true,
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+
+    const actions = screen.getByLabelText('Actions for et')
+    expect(screen.getAllByText('In Review').length).toBeGreaterThan(0)
+    expect(within(actions).getByRole('option', { name: 'Approve' })).toBeInTheDocument()
+    expect(within(actions).getByRole('option', { name: 'Reject' })).toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: 'Approve Review' })).not.toBeInTheDocument()
+    expect(within(actions).queryByRole('option', { name: 'Reject Review' })).not.toBeInTheDocument()
   })
 
   it('exposes lifecycle actions for active imported source-document packs', () => {
@@ -798,19 +930,35 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getByText(/blank-pack draft persistence/i)).toBeInTheDocument()
   })
 
-  it('renders manifest rows and previews dependency resolution without exposing pack content', async () => {
+  it('renders runtime resolution rows and previews dependency resolution without exposing pack content', async () => {
     const user = userEvent.setup()
+    manifestListQueryMock.mockReturnValue({
+      ...defaultManifestListResult,
+      data: {
+        ...defaultManifestListResult.data,
+        data: [
+          {
+            ...defaultManifestListResult.data.data[0],
+            id: 'kpm-acme-1-0-0-global',
+            manifestId: 'kpm-acme-1-0-0-global',
+            manifestKey: 'acme',
+            manifestName: 'Acme Manifest',
+          },
+        ],
+      },
+    })
     renderPage()
 
-    await user.click(screen.getByRole('tab', { name: /manifests/i }))
+    await user.click(screen.getByRole('tab', { name: /runtime resolution/i }))
 
-    expect(screen.getByRole('tab', { name: /manifests/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText('Outcome Studio Default Knowledge Manifest')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /select a manifest/i })).toBeInTheDocument()
-    expect(screen.getByText(/use preview on a manifest row to inspect dependency resolution/i)).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /runtime resolution/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('tab', { name: /manifests/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Acme Runtime Resolution')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /select runtime resolution/i })).toBeInTheDocument()
+    expect(screen.getByText(/use preview to inspect active pack resolution/i)).toBeInTheDocument()
 
     const manifestPreviewButton = screen.getByRole('button', {
-      name: /preview outcome studio default knowledge manifest/i,
+      name: /preview acme runtime resolution/i,
     })
     expect(manifestPreviewButton).toHaveAttribute('aria-expanded', 'false')
 
@@ -818,20 +966,20 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
 
     await waitFor(() => {
       expect(manifestPreviewQueryMock).toHaveBeenLastCalledWith(
-        { manifestId: 'kpm-outcome-studio-default-1-0-0-global' },
+        { manifestId: 'kpm-acme-1-0-0-global' },
         { skip: false },
       )
       expect(reasoningContextPreviewQueryMock).toHaveBeenLastCalledWith(
         {
-          manifestId: 'kpm-outcome-studio-default-1-0-0-global',
+          manifestId: 'kpm-acme-1-0-0-global',
           outputKey: '',
         },
         { skip: false },
       )
     })
-    expect(screen.getByLabelText(/manifest resolution preview/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/runtime resolution preview/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/reasoning context preview/i)).toBeInTheDocument()
-    expect(screen.getByText(/knowledge pack manifest resolved all required packs/i)).toBeInTheDocument()
+    expect(screen.getByText(/knowledge pack runtime resolution resolved all required packs/i)).toBeInTheDocument()
     expect(screen.getByText('Board Reporting Style')).toBeInTheDocument()
     expect(screen.getByText('Investment Committee Decision')).toBeInTheDocument()
     expect(screen.getByText(/PREVIEW_ONLY_NO_PROVIDER_EXECUTION/)).toBeInTheDocument()
@@ -839,14 +987,14 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getAllByText('validation').length).toBeGreaterThan(0)
 
     const hideManifestPreviewButton = screen.getByRole('button', {
-      name: /hide preview for outcome studio default knowledge manifest/i,
+      name: /hide preview for acme runtime resolution/i,
     })
     expect(hideManifestPreviewButton).toHaveAttribute('aria-expanded', 'true')
 
     await user.click(hideManifestPreviewButton)
 
-    expect(screen.queryByLabelText(/manifest resolution preview/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /select a manifest/i })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^runtime resolution preview$/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /select runtime resolution/i })).toBeInTheDocument()
   })
 
   it('creates a draft knowledge pack from source document metadata', async () => {

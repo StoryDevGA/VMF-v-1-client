@@ -34,6 +34,7 @@ import { getSuperAdminDashboardGroups } from '../../constants/superAdminNavigati
 import { useGetAuditStatsQuery } from '../../store/api/auditLogApi.js'
 import { useListCustomersQuery } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
+import { useListOutcomeKnowledgePacksQuery } from '../../store/api/outcomeKnowledgePacksApi.js'
 import { useListRolesQuery } from '../../store/api/roleApi.js'
 import {
   useListFrameworkPackagesQuery,
@@ -301,6 +302,7 @@ function SuperAdminDashboard() {
   const { data: workflowPolicyResponse } = useListWorkflowPoliciesQuery(DASHBOARD_COUNT_QUERY, DASHBOARD_COUNT_QUERY_OPTIONS)
   const { data: frameworkPackageResponse } = useListFrameworkPackagesQuery(DASHBOARD_COUNT_QUERY, DASHBOARD_COUNT_QUERY_OPTIONS)
   const { data: uiContractResponse } = useListUiContractsQuery(DASHBOARD_COUNT_QUERY, DASHBOARD_COUNT_QUERY_OPTIONS)
+  const { data: knowledgePackResponse } = useListOutcomeKnowledgePacksQuery(DASHBOARD_COUNT_QUERY, DASHBOARD_COUNT_QUERY_OPTIONS)
   const healthData = healthResponse?.data ?? healthResponse ?? {}
   const auditStats = auditStatsResponse?.data ?? auditStatsResponse ?? {}
   const counts = {
@@ -318,6 +320,7 @@ function SuperAdminDashboard() {
     workflowPolicies: getResponseTotal(workflowPolicyResponse),
     frameworkPackages: getResponseTotal(frameworkPackageResponse),
     uiContracts: getResponseTotal(uiContractResponse),
+    knowledgePacks: getResponseTotal(knowledgePackResponse),
   }
   const operationalSignals = [
     getHealthSignal({

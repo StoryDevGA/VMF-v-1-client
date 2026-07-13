@@ -19,6 +19,10 @@ vi.mock('../../store/api/licenseLevelApi.js', () => ({
   useListLicenseLevelsQuery: vi.fn(),
 }))
 
+vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
+  useListOutcomeKnowledgePacksQuery: vi.fn(),
+}))
+
 vi.mock('../../store/api/roleApi.js', () => ({
   useListRolesQuery: vi.fn(),
 }))
@@ -46,6 +50,7 @@ vi.mock('../../store/api/systemApi.js', () => ({
 import { useGetAuditStatsQuery } from '../../store/api/auditLogApi.js'
 import { useListCustomersQuery } from '../../store/api/customerApi.js'
 import { useListLicenseLevelsQuery } from '../../store/api/licenseLevelApi.js'
+import { useListOutcomeKnowledgePacksQuery } from '../../store/api/outcomeKnowledgePacksApi.js'
 import { useListRolesQuery } from '../../store/api/roleApi.js'
 import {
   useListFrameworkPackagesQuery,
@@ -114,6 +119,7 @@ beforeEach(() => {
   useListWorkflowPoliciesQuery.mockReturnValue({ data: listResponse(16) })
   useListFrameworkPackagesQuery.mockReturnValue({ data: listResponse(3) })
   useListUiContractsQuery.mockReturnValue({ data: listResponse(1) })
+  useListOutcomeKnowledgePacksQuery.mockReturnValue({ data: listResponse(42) })
 })
 
 describe('SuperAdminDashboard page', () => {
@@ -174,7 +180,7 @@ describe('SuperAdminDashboard page', () => {
       'href',
       '/super-admin/runtime-control/ui-contracts',
     )
-    expect(screen.getByRole('link', { name: /knowledge packs/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /knowledge packs.*42.*packs/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/knowledge-packs',
     )
@@ -226,7 +232,7 @@ describe('SuperAdminDashboard page', () => {
       'href',
       '/super-admin/runtime-control/ui-contracts',
     )
-    expect(within(runtimeControlSection).getByRole('link', { name: /knowledge packs/i })).toHaveAttribute(
+    expect(within(runtimeControlSection).getByRole('link', { name: /knowledge packs.*42.*packs/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/knowledge-packs',
     )

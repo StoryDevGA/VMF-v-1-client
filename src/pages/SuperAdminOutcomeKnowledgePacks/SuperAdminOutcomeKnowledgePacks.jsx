@@ -239,11 +239,22 @@ function normalizeDetailToken(value = '') {
   return String(value ?? '').trim().toUpperCase()
 }
 
-function formatVersionReviewState({ version = {}, pack = {}, activations = [] } = {}) {
-  const activeActivation = activations.some((activation) =>
+function hasActiveActivationForVersion({ version = {}, activations = [] } = {}) {
+  return activations.some((activation) =>
     normalizeDetailToken(activation.status) === 'ACTIVE'
     && formatDetailValue(activation.versionId, '') === formatDetailValue(version.versionId, ''),
   )
+}
+
+function getRawLifecycle(status) {
+  return {
+    label: formatKnowledgePackStatus(status),
+    variant: getKnowledgePackStatusVariant(status),
+  }
+}
+
+function formatVersionReviewState({ version = {}, pack = {}, activations = [] } = {}) {
+  const activeActivation = hasActiveActivationForVersion({ version, activations })
 
   if (
     activeActivation
@@ -254,6 +265,35 @@ function formatVersionReviewState({ version = {}, pack = {}, activations = [] } 
   }
 
   return formatDetailValue(version.reviewStatus)
+}
+
+function getKnowledgePackLifecycle(row = {}) {
+  const status = normalizeDetailToken(row.status)
+  const reviewStatus = normalizeDetailToken(row.reviewStatus || row.sourceMetadata?.reviewStatus)
+
+  if (status === 'ACTIVE') return getRawLifecycle(status)
+  if (status === 'DEPRECATED') return getRawLifecycle(status)
+  if (status === 'DISABLED') return getRawLifecycle(status)
+  if (status === 'ROLLED_BACK') return getRawLifecycle(status)
+  if (status === 'VALIDATING') return getRawLifecycle(status)
+  if (status === 'FAILED_VALIDATION') return getRawLifecycle(status)
+  if (status === 'MISSING') return getRawLifecycle(status)
+  if (reviewStatus === 'APPROVED') return { label: 'Approved', variant: 'info' }
+  if (reviewStatus === 'READY_FOR_REVIEW') return { label: 'In Review', variant: 'warning' }
+  if (reviewStatus === 'REJECTED') return { label: 'Rejected', variant: 'danger' }
+  if (status === 'VALIDATED') return getRawLifecycle(status)
+
+  return { label: 'Draft', variant: 'warning' }
+}
+
+function getVersionLifecycle({ version = {}, pack = {}, activations = [] } = {}) {
+  const activeActivation = hasActiveActivationForVersion({ version, activations })
+
+  return getKnowledgePackLifecycle({
+    ...pack,
+    status: activeActivation ? 'ACTIVE' : version.status,
+    reviewStatus: version.reviewStatus,
+  })
 }
 
 function getContentPreviewUnavailableReason({ version = {}, pack = {} } = {}) {
@@ -461,11 +501,11 @@ function KnowledgePackRowActionsMenu({
   }
 
   if (canApproveKnowledgePackReview(row)) {
-    options.push({ value: 'approve-review', label: 'Approve Review' })
+    options.push({ value: 'approve-review', label: 'Approve' })
   }
 
   if (canRejectKnowledgePackReview(row)) {
-    options.push({ value: 'reject-review', label: 'Reject Review' })
+    options.push({ value: 'reject-review', label: 'Reject' })
   }
 
   const activateDisabledReason = getActivateKnowledgePackDisabledReason(row)
@@ -561,11 +601,17 @@ function VersionSummary({
   const validationEntries = getSummaryEntries(version.validationSummary)
   const contentPreviewUnavailableReason = getContentPreviewUnavailableReason({ version, pack })
   const reviewState = formatVersionReviewState({ version, pack, activations })
+  const lifecycle = getVersionLifecycle({ version, pack, activations })
 
   return (
     <div className="super-admin-outcome-knowledge-packs__version-detail">
       <dl className="super-admin-outcome-knowledge-packs__detail-grid">
-        <DetailItem label="Status">
+        <DetailItem label="Lifecycle">
+          <Status size="sm" showIcon variant={lifecycle.variant}>
+            {lifecycle.label}
+          </Status>
+        </DetailItem>
+        <DetailItem label="Registry status">
           <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(version.status)}>
             {formatKnowledgePackStatus(version.status)}
           </Status>
@@ -1258,6 +1304,18 @@ function formatManifestStatus(value = '') {
   return formatKnowledgePackStatus(value)
 }
 
+function formatRuntimeResolutionName(manifest = {}) {
+  return String(manifest.manifestName || manifest.manifestKey || 'Outcome Studio Runtime Resolution')
+    .replace(/\bKnowledge Manifest\b/gi, 'Runtime Resolution')
+    .replace(/\bManifest\b/gi, 'Runtime Resolution')
+}
+
+function formatRuntimeResolutionSummary(value = '') {
+  return String(value || 'Preview returns runtime binding metadata only. Pack source content is not shown here.')
+    .replace(/\bKnowledge Pack manifest\b/gi, 'Knowledge Pack runtime resolution')
+    .replace(/\bmanifest\b/gi, 'runtime resolution')
+}
+
 function ManifestPackCount({ label, count }) {
   return (
     <span className="super-admin-outcome-knowledge-packs__manifest-count">
@@ -1319,7 +1377,7 @@ function KnowledgePackReasoningContextPreview({
         </ul>
       ) : (
         <p className="super-admin-outcome-knowledge-packs__table-note">
-          No optional context packs are selected for this manifest preview.
+          No optional context packs are selected for this runtime preview.
         </p>
       )}
       {safeguards.length > 0 ? (
@@ -1344,13 +1402,13 @@ function KnowledgePackManifestPreview({
     return (
       <section
         className="super-admin-outcome-knowledge-packs__manifest-preview super-admin-outcome-knowledge-packs__manifest-preview--empty"
-        aria-label="Manifest preview selection"
+        aria-label="Runtime resolution preview selection"
       >
         <div>
-          <p className="super-admin-outcome-knowledge-packs__empty-kicker">Manifest Preview</p>
-          <h3>Select a manifest</h3>
+          <p className="super-admin-outcome-knowledge-packs__empty-kicker">Runtime Resolution</p>
+          <h3>Select runtime resolution</h3>
           <p className="super-admin-outcome-knowledge-packs__empty-copy">
-            Use Preview on a manifest row to inspect dependency resolution.
+            Use Preview to inspect active pack resolution for Outcome Studio.
           </p>
         </div>
       </section>
@@ -1366,17 +1424,17 @@ function KnowledgePackManifestPreview({
   }
 
   if (isLoading) {
-    return <InlineLoadingState label="Loading manifest preview..." />
+    return <InlineLoadingState label="Loading runtime resolution preview..." />
   }
 
   const binding = preview?.binding ?? {}
   const resolution = binding.resolution ?? {}
 
   return (
-    <section className="super-admin-outcome-knowledge-packs__manifest-preview" aria-label="Manifest resolution preview">
+    <section className="super-admin-outcome-knowledge-packs__manifest-preview" aria-label="Runtime resolution preview">
       <div className="super-admin-outcome-knowledge-packs__panel-header">
         <div>
-          <h3>{manifest.manifestName || manifest.manifestKey}</h3>
+          <h3>{formatRuntimeResolutionName(manifest)}</h3>
           <p>{manifest.manifestKey} / v{manifest.semanticVersion}</p>
         </div>
         <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(binding.status || manifest.status)}>
@@ -1390,7 +1448,7 @@ function KnowledgePackManifestPreview({
         <ManifestPackCount label="dependencies" count={Number(resolution.dependencyCount ?? 0)} />
       </div>
       <p className="super-admin-outcome-knowledge-packs__table-note">
-        {binding.summary || 'Preview returns binding metadata only. Pack source content is not shown here.'}
+        {formatRuntimeResolutionSummary(binding.summary)}
       </p>
       <KnowledgePackReasoningContextPreview
         preview={reasoningPreview}
@@ -1947,12 +2005,26 @@ function SuperAdminOutcomeKnowledgePacks() {
       },
       {
         key: 'status',
+        label: 'Lifecycle',
+        mobileLabel: 'Lifecycle',
+        width: '150px',
+        render: (_value, row) => {
+          const lifecycle = getKnowledgePackLifecycle(row)
+          return (
+            <Status size="sm" showIcon variant={lifecycle.variant}>
+              {lifecycle.label}
+            </Status>
+          )
+        },
+      },
+      {
+        key: 'registryStatus',
         label: 'Registry Status',
         mobileLabel: 'Registry Status',
         width: '150px',
-        render: (value) => (
-          <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(value)}>
-            {formatKnowledgePackStatus(value)}
+        render: (_value, row) => (
+          <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(row.status)}>
+            {formatKnowledgePackStatus(row.status)}
           </Status>
         ),
       },
@@ -2028,12 +2100,12 @@ function SuperAdminOutcomeKnowledgePacks() {
     () => [
       {
         key: 'manifestName',
-        label: 'Manifest',
-        mobileLabel: 'Manifest',
+        label: 'Runtime Resolution',
+        mobileLabel: 'Runtime Resolution',
         render: (_value, row) => (
           <div className="super-admin-outcome-knowledge-packs__summary">
             <span className="super-admin-outcome-knowledge-packs__summary-name">
-              {row.manifestName || row.manifestKey}
+              {formatRuntimeResolutionName(row)}
             </span>
             <code className="super-admin-outcome-knowledge-packs__key">{row.manifestKey}</code>
           </div>
@@ -2059,8 +2131,8 @@ function SuperAdminOutcomeKnowledgePacks() {
       },
       {
         key: 'packSections',
-        label: 'Pack Sections',
-        mobileLabel: 'Pack Sections',
+        label: 'Resolved Packs',
+        mobileLabel: 'Resolved Packs',
         render: (_value, row) => (
           <div className="super-admin-outcome-knowledge-packs__manifest-counts">
             <ManifestPackCount label="required" count={row.mandatoryPacks?.length || 0} />
@@ -2089,7 +2161,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         width: '136px',
         render: (_value, row) => {
           const isPreviewOpen = selectedManifestId === row.manifestId
-          const manifestName = row.manifestName || row.manifestKey
+          const runtimeResolutionName = formatRuntimeResolutionName(row)
 
           return (
             <Button
@@ -2097,7 +2169,7 @@ function SuperAdminOutcomeKnowledgePacks() {
               variant={isPreviewOpen ? 'primary' : 'outline'}
               size="sm"
               aria-expanded={isPreviewOpen}
-              aria-label={`${isPreviewOpen ? 'Hide preview for' : 'Preview'} ${manifestName}`}
+              aria-label={`${isPreviewOpen ? 'Hide preview for' : 'Preview'} ${runtimeResolutionName}`}
               onClick={() => {
                 setSelectedManifestId((currentManifestId) => (
                   currentManifestId === row.manifestId ? '' : row.manifestId
@@ -2188,13 +2260,13 @@ function SuperAdminOutcomeKnowledgePacks() {
                 </Button>
                 <Button
                   type="button"
-                  variant={activeSurface === 'manifests' ? 'primary' : 'outline'}
+                  variant={activeSurface === 'resolution' ? 'primary' : 'outline'}
                   size="sm"
                   role="tab"
-                  aria-selected={activeSurface === 'manifests'}
-                  onClick={() => setActiveSurface('manifests')}
+                  aria-selected={activeSurface === 'resolution'}
+                  onClick={() => setActiveSurface('resolution')}
                 >
-                  Manifests
+                  Runtime Resolution
                 </Button>
               </div>
               <Button
@@ -2310,7 +2382,7 @@ function SuperAdminOutcomeKnowledgePacks() {
                 ) : null}
               </div>
             ) : (
-              <div className="super-admin-outcome-knowledge-packs__manifest-shell" role="tabpanel" aria-label="Knowledge Pack Manifests">
+              <div className="super-admin-outcome-knowledge-packs__manifest-shell" role="tabpanel" aria-label="Outcome Studio Runtime Resolution">
                 {manifestError ? (
                   <p className="super-admin-outcome-knowledge-packs__error" role="alert">
                     {manifestError.message}
@@ -2320,7 +2392,7 @@ function SuperAdminOutcomeKnowledgePacks() {
                 <div className="super-admin-outcome-knowledge-packs__manifest-grid">
                   <HorizontalScroll
                     className="super-admin-outcome-knowledge-packs__table-wrap"
-                    ariaLabel="Knowledge Pack manifest table"
+                    ariaLabel="Outcome Studio runtime resolution table"
                     gap="sm"
                   >
                     <Table
@@ -2330,8 +2402,8 @@ function SuperAdminOutcomeKnowledgePacks() {
                       loading={isManifestInitialLoading}
                       variant="striped"
                       hoverable
-                      emptyMessage="No manifests found."
-                      ariaLabel="Knowledge Pack manifests"
+                      emptyMessage="No runtime resolution data found."
+                      ariaLabel="Outcome Studio runtime resolution"
                     />
                   </HorizontalScroll>
 
@@ -2349,7 +2421,7 @@ function SuperAdminOutcomeKnowledgePacks() {
                 </div>
 
                 {manifestsQuery.isFetching && !isManifestInitialLoading ? (
-                  <InlineLoadingState label="Refreshing manifests..." />
+                  <InlineLoadingState label="Refreshing runtime resolution..." />
                 ) : null}
               </div>
             )}

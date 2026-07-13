@@ -17,6 +17,7 @@ const COUNT_INSIGHT_CONFIG = {
   'workflow-policies': { label: 'policies', countKey: 'workflowPolicies' },
   'framework-packages': { label: 'packages', countKey: 'frameworkPackages' },
   'ui-contracts': { label: 'contracts', countKey: 'uiContracts' },
+  'knowledge-packs': { label: 'packs', countKey: 'knowledgePacks' },
   'audit-logs': { label: 'logs', countKey: 'auditLogs' },
   'denied-access-logs': { label: 'denied', countKey: 'deniedAccessLogs' },
 }
