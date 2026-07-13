@@ -728,6 +728,18 @@
   min-width: 0;
 }
 
+.runtime-workspace__outcome-studio-feedback {
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+}
+
+.runtime-workspace__outcome-studio-feedback .status__text {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .runtime-workspace__section-panel--output-lab-readiness,
 .runtime-workspace__section-panel--output-lab-composition,
 .runtime-workspace__section-panel--output-lab-assets,

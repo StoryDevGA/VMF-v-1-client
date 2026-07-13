@@ -15,9 +15,6 @@ const {
   importSourceDocumentDraftMock,
   listQueryMock,
   loadContentPreviewMock,
-  manifestListQueryMock,
-  manifestPreviewQueryMock,
-  reasoningContextPreviewQueryMock,
   previewQueryMock,
   rollbackPackMock,
   updateReviewStatusMock,
@@ -33,9 +30,6 @@ const {
   importSourceDocumentDraftMock: vi.fn(),
   listQueryMock: vi.fn(),
   loadContentPreviewMock: vi.fn(),
-  manifestListQueryMock: vi.fn(),
-  manifestPreviewQueryMock: vi.fn(),
-  reasoningContextPreviewQueryMock: vi.fn(),
   previewQueryMock: vi.fn(),
   rollbackPackMock: vi.fn(),
   updateReviewStatusMock: vi.fn(),
@@ -148,105 +142,6 @@ const defaultPreviewResult = {
   error: null,
 }
 
-const defaultManifestListResult = {
-  data: {
-    data: [
-      {
-        id: 'kpm-outcome-studio-default-1-0-0-global',
-        manifestId: 'kpm-outcome-studio-default-1-0-0-global',
-        manifestKey: 'outcome-studio-default',
-        manifestName: 'Outcome Studio Default Knowledge Manifest',
-        semanticVersion: '1.0.0',
-        status: 'ACTIVE',
-        scopeType: 'GLOBAL',
-        scopeKey: 'GLOBAL',
-        mandatoryPacks: [
-          {
-            packType: 'OUTPUT_SCHEMA',
-            packKey: 'output-schemas-pack',
-            label: 'Output Schemas',
-          },
-        ],
-        optionalPacks: [],
-        validationPacks: [
-          {
-            packType: 'TRUTH_CERTIFICATION',
-            packKey: 'truth-certification-pack',
-            label: 'Truth Certification',
-          },
-        ],
-        blockedPacks: [],
-      },
-    ],
-    meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
-  },
-  isLoading: false,
-  isFetching: false,
-  error: null,
-}
-
-const defaultManifestPreviewResult = {
-  data: {
-    data: {
-      binding: {
-        status: 'PROJECTED',
-        summary: 'Knowledge Pack manifest resolved all required packs.',
-        resolution: {
-          activeCount: 2,
-          requiredCount: 1,
-          validationCount: 1,
-          dependencyCount: 1,
-        },
-      },
-    },
-  },
-  isLoading: false,
-  isFetching: false,
-  error: null,
-}
-
-const defaultReasoningContextPreviewResult = {
-  data: {
-    data: {
-      status: 'PROJECTED',
-      previewOnly: true,
-      contentVisible: false,
-      generatedOutput: false,
-      providerExecution: false,
-      context: {
-        resolution: {
-          basePackCount: 1,
-          selectedContextPackCount: 2,
-          validationPackCount: 1,
-          omittedOptionalPackCount: 0,
-        },
-        selectedContextPacks: [
-          {
-            purposeCategory: 'STYLE',
-            packType: 'STYLE',
-            packKey: 'board-reporting-style',
-            label: 'Board Reporting Style',
-          },
-          {
-            purposeCategory: 'DECISION',
-            packType: 'DECISION',
-            packKey: 'investment-committee-decision',
-            label: 'Investment Committee Decision',
-          },
-        ],
-      },
-      safeguards: [
-        'PREVIEW_ONLY_NO_PROVIDER_EXECUTION',
-        'NO_GENERATED_OUTPUT',
-        'NO_PACK_CONTENT_EXPOSED',
-      ],
-    },
-  },
-  isLoading: false,
-  isFetching: false,
-  error: null,
-}
-
 const defaultDetailResult = {
   data: {
     data: {
@@ -352,9 +247,6 @@ vi.mock('../../components/Toaster', () => ({
 vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
   useListOutcomeKnowledgePacksQuery: listQueryMock,
   usePreviewOutcomeKnowledgePackResolutionQuery: previewQueryMock,
-  useListOutcomeKnowledgePackManifestsQuery: manifestListQueryMock,
-  usePreviewOutcomeKnowledgePackManifestResolutionQuery: manifestPreviewQueryMock,
-  usePreviewOutcomeKnowledgePackReasoningContextQuery: reasoningContextPreviewQueryMock,
   useGetOutcomeKnowledgePackQuery: detailQueryMock,
   useGetOutcomeKnowledgePackVersionQuery: versionQueryMock,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery: () => [
@@ -414,9 +306,6 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     vi.clearAllMocks()
     listQueryMock.mockReturnValue(defaultListResult)
     previewQueryMock.mockReturnValue(defaultPreviewResult)
-    manifestListQueryMock.mockReturnValue(defaultManifestListResult)
-    manifestPreviewQueryMock.mockReturnValue(defaultManifestPreviewResult)
-    reasoningContextPreviewQueryMock.mockReturnValue(defaultReasoningContextPreviewResult)
     detailQueryMock.mockReturnValue(defaultDetailResult)
     versionQueryMock.mockReturnValue(defaultVersionResult)
     importSourceDocumentDraftMock.mockReturnValue({
@@ -484,8 +373,8 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /knowledge packs/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /library/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /runtime resolution/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByLabelText(/knowledge pack library/i)).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /runtime resolution/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /manifests/i })).not.toBeInTheDocument()
     expect(screen.getByText(/0 of 5 required packs active/i)).toBeInTheDocument()
     expect(screen.getByText(/authoring required/i)).toBeInTheDocument()
@@ -913,9 +802,12 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     const user = userEvent.setup()
     renderPage()
 
+    expect(screen.getByRole('region', { name: /knowledge pack library/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/^purpose$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^visibility$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^review$/i)).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /runtime resolution/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/outcome studio default runtime resolution/i)).not.toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText(/^purpose$/i), 'OUTPUT')
     await user.selectOptions(screen.getByLabelText(/^visibility$/i), 'PLATFORM')
@@ -928,73 +820,6 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByRole('heading', { name: /create blank pack/i })).toBeInTheDocument()
     expect(screen.getByText(/needs a draft persistence contract/i)).toBeInTheDocument()
     expect(screen.getByText(/blank-pack draft persistence/i)).toBeInTheDocument()
-  })
-
-  it('renders runtime resolution rows and previews dependency resolution without exposing pack content', async () => {
-    const user = userEvent.setup()
-    manifestListQueryMock.mockReturnValue({
-      ...defaultManifestListResult,
-      data: {
-        ...defaultManifestListResult.data,
-        data: [
-          {
-            ...defaultManifestListResult.data.data[0],
-            id: 'kpm-acme-1-0-0-global',
-            manifestId: 'kpm-acme-1-0-0-global',
-            manifestKey: 'acme',
-            manifestName: 'Acme Manifest',
-          },
-        ],
-      },
-    })
-    renderPage()
-
-    await user.click(screen.getByRole('tab', { name: /runtime resolution/i }))
-
-    expect(screen.getByRole('tab', { name: /runtime resolution/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.queryByRole('tab', { name: /manifests/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Acme Runtime Resolution')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /select runtime resolution/i })).toBeInTheDocument()
-    expect(screen.getByText(/use preview to inspect active pack resolution/i)).toBeInTheDocument()
-
-    const manifestPreviewButton = screen.getByRole('button', {
-      name: /preview acme runtime resolution/i,
-    })
-    expect(manifestPreviewButton).toHaveAttribute('aria-expanded', 'false')
-
-    await user.click(manifestPreviewButton)
-
-    await waitFor(() => {
-      expect(manifestPreviewQueryMock).toHaveBeenLastCalledWith(
-        { manifestId: 'kpm-acme-1-0-0-global' },
-        { skip: false },
-      )
-      expect(reasoningContextPreviewQueryMock).toHaveBeenLastCalledWith(
-        {
-          manifestId: 'kpm-acme-1-0-0-global',
-          outputKey: '',
-        },
-        { skip: false },
-      )
-    })
-    expect(screen.getByLabelText(/runtime resolution preview/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/reasoning context preview/i)).toBeInTheDocument()
-    expect(screen.getByText(/knowledge pack runtime resolution resolved all required packs/i)).toBeInTheDocument()
-    expect(screen.getByText('Board Reporting Style')).toBeInTheDocument()
-    expect(screen.getByText('Investment Committee Decision')).toBeInTheDocument()
-    expect(screen.getByText(/PREVIEW_ONLY_NO_PROVIDER_EXECUTION/)).toBeInTheDocument()
-    expect(screen.getByText('active')).toBeInTheDocument()
-    expect(screen.getAllByText('validation').length).toBeGreaterThan(0)
-
-    const hideManifestPreviewButton = screen.getByRole('button', {
-      name: /hide preview for acme runtime resolution/i,
-    })
-    expect(hideManifestPreviewButton).toHaveAttribute('aria-expanded', 'true')
-
-    await user.click(hideManifestPreviewButton)
-
-    expect(screen.queryByLabelText(/^runtime resolution preview$/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /select runtime resolution/i })).toBeInTheDocument()
   })
 
   it('creates a draft knowledge pack from source document metadata', async () => {

@@ -26,9 +26,6 @@ import {
   useGetOutcomeKnowledgePackVersionQuery,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
-  useListOutcomeKnowledgePackManifestsQuery,
-  usePreviewOutcomeKnowledgePackManifestResolutionQuery,
-  usePreviewOutcomeKnowledgePackReasoningContextQuery,
   useListOutcomeKnowledgePacksQuery,
   usePreviewOutcomeKnowledgePackResolutionQuery,
   useRollbackOutcomeKnowledgePackMutation,
@@ -1300,169 +1297,9 @@ function KnowledgePackBlankDraftDialog({ open, onClose }) {
   )
 }
 
-function formatManifestStatus(value = '') {
-  return formatKnowledgePackStatus(value)
-}
-
-function formatRuntimeResolutionName(manifest = {}) {
-  return String(manifest.manifestName || manifest.manifestKey || 'Outcome Studio Runtime Resolution')
-    .replace(/\bKnowledge Manifest\b/gi, 'Runtime Resolution')
-    .replace(/\bManifest\b/gi, 'Runtime Resolution')
-}
-
-function formatRuntimeResolutionSummary(value = '') {
-  return String(value || 'Preview returns runtime binding metadata only. Pack source content is not shown here.')
-    .replace(/\bKnowledge Pack manifest\b/gi, 'Knowledge Pack runtime resolution')
-    .replace(/\bmanifest\b/gi, 'runtime resolution')
-}
-
-function ManifestPackCount({ label, count }) {
-  return (
-    <span className="super-admin-outcome-knowledge-packs__manifest-count">
-      <strong>{count}</strong>
-      {label}
-    </span>
-  )
-}
-
-function KnowledgePackReasoningContextPreview({
-  preview,
-  error,
-  isLoading,
-}) {
-  if (isLoading) {
-    return <InlineLoadingState label="Loading reasoning context preview..." />
-  }
-
-  if (error) {
-    return (
-      <div className="super-admin-outcome-knowledge-packs__reasoning-preview-error" role="alert">
-        {error.message}
-      </div>
-    )
-  }
-
-  const context = preview?.context ?? {}
-  const resolution = context.resolution ?? {}
-  const selectedContextPacks = Array.isArray(context.selectedContextPacks)
-    ? context.selectedContextPacks
-    : []
-  const safeguards = Array.isArray(preview?.safeguards) ? preview.safeguards : []
-
-  return (
-    <section className="super-admin-outcome-knowledge-packs__reasoning-preview" aria-label="Reasoning context preview">
-      <div className="super-admin-outcome-knowledge-packs__reasoning-preview-header">
-        <div>
-          <h4>Reasoning Context Preview</h4>
-          <p>Metadata-only assembly. No provider execution or generated output.</p>
-        </div>
-        <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(preview?.status || 'PROJECTED')}>
-          {formatManifestStatus(preview?.status || 'PROJECTED')}
-        </Status>
-      </div>
-      <div className="super-admin-outcome-knowledge-packs__manifest-metrics">
-        <ManifestPackCount label="base" count={Number(resolution.basePackCount ?? 0)} />
-        <ManifestPackCount label="context" count={Number(resolution.selectedContextPackCount ?? 0)} />
-        <ManifestPackCount label="validation" count={Number(resolution.validationPackCount ?? 0)} />
-        <ManifestPackCount label="omitted" count={Number(resolution.omittedOptionalPackCount ?? 0)} />
-      </div>
-      {selectedContextPacks.length > 0 ? (
-        <ul className="super-admin-outcome-knowledge-packs__reasoning-pack-list">
-          {selectedContextPacks.slice(0, 6).map((pack) => (
-            <li key={`${pack.packType}:${pack.packKey}`}>
-              <strong>{pack.purposeCategory || pack.packType}</strong>
-              <span>{pack.label || pack.packKey}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="super-admin-outcome-knowledge-packs__table-note">
-          No optional context packs are selected for this runtime preview.
-        </p>
-      )}
-      {safeguards.length > 0 ? (
-        <p className="super-admin-outcome-knowledge-packs__table-note">
-          Safeguards: {safeguards.join(', ')}
-        </p>
-      ) : null}
-    </section>
-  )
-}
-
-function KnowledgePackManifestPreview({
-  manifest,
-  preview,
-  error,
-  isLoading,
-  reasoningPreview,
-  reasoningError,
-  isReasoningLoading,
-}) {
-  if (!manifest) {
-    return (
-      <section
-        className="super-admin-outcome-knowledge-packs__manifest-preview super-admin-outcome-knowledge-packs__manifest-preview--empty"
-        aria-label="Runtime resolution preview selection"
-      >
-        <div>
-          <p className="super-admin-outcome-knowledge-packs__empty-kicker">Runtime Resolution</p>
-          <h3>Select runtime resolution</h3>
-          <p className="super-admin-outcome-knowledge-packs__empty-copy">
-            Use Preview to inspect active pack resolution for Outcome Studio.
-          </p>
-        </div>
-      </section>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="super-admin-outcome-knowledge-packs__error-panel" role="alert">
-        {error.message}
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return <InlineLoadingState label="Loading runtime resolution preview..." />
-  }
-
-  const binding = preview?.binding ?? {}
-  const resolution = binding.resolution ?? {}
-
-  return (
-    <section className="super-admin-outcome-knowledge-packs__manifest-preview" aria-label="Runtime resolution preview">
-      <div className="super-admin-outcome-knowledge-packs__panel-header">
-        <div>
-          <h3>{formatRuntimeResolutionName(manifest)}</h3>
-          <p>{manifest.manifestKey} / v{manifest.semanticVersion}</p>
-        </div>
-        <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(binding.status || manifest.status)}>
-          {formatManifestStatus(binding.status || manifest.status)}
-        </Status>
-      </div>
-      <div className="super-admin-outcome-knowledge-packs__manifest-metrics">
-        <ManifestPackCount label="active" count={Number(resolution.activeCount ?? 0)} />
-        <ManifestPackCount label="required" count={Number(resolution.requiredCount ?? 0)} />
-        <ManifestPackCount label="validation" count={Number(resolution.validationCount ?? 0)} />
-        <ManifestPackCount label="dependencies" count={Number(resolution.dependencyCount ?? 0)} />
-      </div>
-      <p className="super-admin-outcome-knowledge-packs__table-note">
-        {formatRuntimeResolutionSummary(binding.summary)}
-      </p>
-      <KnowledgePackReasoningContextPreview
-        preview={reasoningPreview}
-        error={reasoningError}
-        isLoading={isReasoningLoading}
-      />
-    </section>
-  )
-}
-
 function SuperAdminOutcomeKnowledgePacks() {
   const navigate = useNavigate()
   const { addToast } = useToaster()
-  const [activeSurface, setActiveSurface] = useState('library')
   const [search, setSearch] = useState('')
   const [packType, setPackType] = useState('')
   const [status, setStatus] = useState('')
@@ -1470,7 +1307,6 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [visibility, setVisibility] = useState('')
   const [reviewStatus, setReviewStatus] = useState('')
   const [isBlankDraftOpen, setIsBlankDraftOpen] = useState(false)
-  const [selectedManifestId, setSelectedManifestId] = useState('')
   const [isSourceImportOpen, setIsSourceImportOpen] = useState(false)
   const [sourceImportForm, setSourceImportForm] = useState(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
   const [sourceImportError, setSourceImportError] = useState('')
@@ -1486,15 +1322,7 @@ function SuperAdminOutcomeKnowledgePacks() {
     page: 1,
     pageSize: OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
   })
-  const manifestsQuery = useListOutcomeKnowledgePackManifestsQuery({
-    page: 1,
-    pageSize: OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
-  })
   const previewQuery = usePreviewOutcomeKnowledgePackResolutionQuery({})
-  const manifestPreviewQuery = usePreviewOutcomeKnowledgePackManifestResolutionQuery(
-    { manifestId: selectedManifestId },
-    { skip: !selectedManifestId },
-  )
   const detailPackId = detailPack?.packId || ''
   const detailQuery = useGetOutcomeKnowledgePackQuery(
     { packId: detailPackId },
@@ -1529,17 +1357,6 @@ function SuperAdminOutcomeKnowledgePacks() {
       requiredPacks: currentPreviewData.requiredPacks ?? EMPTY_ROWS,
     })
   }, [listQuery.data, previewQuery.data])
-  const manifestRows = manifestsQuery.data?.data ?? EMPTY_ROWS
-  const selectedManifest = manifestRows.find((manifest) => manifest.manifestId === selectedManifestId)
-    || manifestRows.find((manifest) => manifest.manifestKey === selectedManifestId)
-    || null
-  const reasoningContextPreviewQuery = usePreviewOutcomeKnowledgePackReasoningContextQuery(
-    {
-      manifestId: selectedManifestId,
-      outputKey: selectedManifest?.outputKey || '',
-    },
-    { skip: !selectedManifestId },
-  )
   const filteredRows = useMemo(() => filterOutcomeKnowledgePackRows(rows, {
     search,
     packType,
@@ -1549,17 +1366,9 @@ function SuperAdminOutcomeKnowledgePacks() {
     reviewStatus,
   }), [packType, purposeCategory, reviewStatus, rows, search, status, visibility])
   const listError = listQuery.error ? normalizeError(listQuery.error) : null
-  const manifestError = manifestsQuery.error ? normalizeError(manifestsQuery.error) : null
   const previewError = previewQuery.error ? normalizeError(previewQuery.error) : null
-  const manifestPreviewError = manifestPreviewQuery.error
-    ? normalizeError(manifestPreviewQuery.error)
-    : null
-  const reasoningContextPreviewError = reasoningContextPreviewQuery.error
-    ? normalizeError(reasoningContextPreviewQuery.error)
-    : null
   const isInitialLoading =
     (listQuery.isLoading || previewQuery.isLoading) && rows.length === 0
-  const isManifestInitialLoading = manifestsQuery.isLoading && manifestRows.length === 0
   const isLifecycleMutating = isDeprecatingVersion || isDisablingVersion || isRollingBackPack
   const pendingLifecycleConfig = LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action] || null
   const pendingLifecycleDetail = pendingLifecycleAction
@@ -2096,95 +1905,6 @@ function SuperAdminOutcomeKnowledgePacks() {
     ],
   )
 
-  const manifestColumns = useMemo(
-    () => [
-      {
-        key: 'manifestName',
-        label: 'Runtime Resolution',
-        mobileLabel: 'Runtime Resolution',
-        render: (_value, row) => (
-          <div className="super-admin-outcome-knowledge-packs__summary">
-            <span className="super-admin-outcome-knowledge-packs__summary-name">
-              {formatRuntimeResolutionName(row)}
-            </span>
-            <code className="super-admin-outcome-knowledge-packs__key">{row.manifestKey}</code>
-          </div>
-        ),
-      },
-      {
-        key: 'semanticVersion',
-        label: 'Version',
-        mobileLabel: 'Version',
-        width: '112px',
-        render: (value) => <code className="super-admin-outcome-knowledge-packs__key">{value}</code>,
-      },
-      {
-        key: 'status',
-        label: 'Status',
-        mobileLabel: 'Status',
-        width: '132px',
-        render: (value) => (
-          <Status size="sm" showIcon variant={getKnowledgePackStatusVariant(value)}>
-            {formatManifestStatus(value)}
-          </Status>
-        ),
-      },
-      {
-        key: 'packSections',
-        label: 'Resolved Packs',
-        mobileLabel: 'Resolved Packs',
-        render: (_value, row) => (
-          <div className="super-admin-outcome-knowledge-packs__manifest-counts">
-            <ManifestPackCount label="required" count={row.mandatoryPacks?.length || 0} />
-            <ManifestPackCount label="optional" count={row.optionalPacks?.length || 0} />
-            <ManifestPackCount label="validation" count={row.validationPacks?.length || 0} />
-            <ManifestPackCount label="blocked" count={row.blockedPacks?.length || 0} />
-          </div>
-        ),
-      },
-      {
-        key: 'scopeKey',
-        label: 'Scope',
-        mobileLabel: 'Scope',
-        render: (value, row) => (
-          <div className="super-admin-outcome-knowledge-packs__summary">
-            <span>{row.scopeType || 'GLOBAL'}</span>
-            <code className="super-admin-outcome-knowledge-packs__key">{value || 'GLOBAL'}</code>
-          </div>
-        ),
-      },
-      {
-        key: 'actions',
-        label: 'Actions',
-        mobileLabel: 'Actions',
-        align: 'center',
-        width: '136px',
-        render: (_value, row) => {
-          const isPreviewOpen = selectedManifestId === row.manifestId
-          const runtimeResolutionName = formatRuntimeResolutionName(row)
-
-          return (
-            <Button
-              type="button"
-              variant={isPreviewOpen ? 'primary' : 'outline'}
-              size="sm"
-              aria-expanded={isPreviewOpen}
-              aria-label={`${isPreviewOpen ? 'Hide preview for' : 'Preview'} ${runtimeResolutionName}`}
-              onClick={() => {
-                setSelectedManifestId((currentManifestId) => (
-                  currentManifestId === row.manifestId ? '' : row.manifestId
-                ))
-              }}
-            >
-              {isPreviewOpen ? 'Hide' : 'Preview'}
-            </Button>
-          )
-        },
-      },
-    ],
-    [selectedManifestId],
-  )
-
   return (
     <section
       className="super-admin-outcome-knowledge-packs container"
@@ -2194,7 +1914,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         <div>
           <h1 className="super-admin-outcome-knowledge-packs__title">Knowledge Packs</h1>
           <p className="super-admin-outcome-knowledge-packs__subtitle">
-            Import, review, validate, and activate the Knowledge Packs used by Outcome Studio runtime resolution.
+            Import, review, validate, and activate the Knowledge Packs resolved by Outcome Studio at runtime.
           </p>
         </div>
         <Badge
@@ -2212,7 +1932,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         <Card.Body className="super-admin-outcome-knowledge-packs__summary-card-body">
           <div>
             <p className="super-admin-outcome-knowledge-packs__summary-label">
-              Runtime resolution
+              Runtime readiness
             </p>
             <h2 className="super-admin-outcome-knowledge-packs__summary-title">
               {activeCount} of {requiredCount} required packs active
@@ -2247,28 +1967,6 @@ function SuperAdminOutcomeKnowledgePacks() {
         <Card variant="elevated" className="super-admin-outcome-knowledge-packs__card">
           <Card.Body className="super-admin-outcome-knowledge-packs__card-body">
             <div className="super-admin-outcome-knowledge-packs__catalogue-actions">
-              <div className="super-admin-outcome-knowledge-packs__surface-tabs" role="tablist" aria-label="Knowledge library sections">
-                <Button
-                  type="button"
-                  variant={activeSurface === 'library' ? 'primary' : 'outline'}
-                  size="sm"
-                  role="tab"
-                  aria-selected={activeSurface === 'library'}
-                  onClick={() => setActiveSurface('library')}
-                >
-                  Library
-                </Button>
-                <Button
-                  type="button"
-                  variant={activeSurface === 'resolution' ? 'primary' : 'outline'}
-                  size="sm"
-                  role="tab"
-                  aria-selected={activeSurface === 'resolution'}
-                  onClick={() => setActiveSurface('resolution')}
-                >
-                  Runtime Resolution
-                </Button>
-              </div>
               <Button
                 type="button"
                 variant="primary"
@@ -2297,134 +1995,89 @@ function SuperAdminOutcomeKnowledgePacks() {
               </Button>
             </div>
 
-            {activeSurface === 'library' ? (
-              <div role="tabpanel" aria-label="Knowledge Pack Library">
-                <div className="super-admin-outcome-knowledge-packs__toolbar super-admin-outcome-knowledge-packs__toolbar--expanded">
-                  <Input
-                    id="outcome-knowledge-packs-search"
-                    label="Search"
-                    size="sm"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    fullWidth
-                  />
-                  <Select
-                    id="outcome-knowledge-packs-type"
-                    label="Pack Type"
-                    size="sm"
-                    value={packType}
-                    options={OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS}
-                    onChange={(event) => setPackType(event.target.value)}
-                  />
-                  <Select
-                    id="outcome-knowledge-packs-status"
-                    label="Status"
-                    size="sm"
-                    value={status}
-                    options={OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS}
-                    onChange={(event) => setStatus(event.target.value)}
-                  />
-                  <Select
-                    id="outcome-knowledge-packs-purpose"
-                    label="Purpose"
-                    size="sm"
-                    value={purposeCategory}
-                    options={KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS}
-                    onChange={(event) => setPurposeCategory(event.target.value)}
-                  />
-                  <Select
-                    id="outcome-knowledge-packs-visibility"
-                    label="Visibility"
-                    size="sm"
-                    value={visibility}
-                    options={KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS}
-                    onChange={(event) => setVisibility(event.target.value)}
-                  />
-                  <Select
-                    id="outcome-knowledge-packs-review"
-                    label="Review"
-                    size="sm"
-                    value={reviewStatus}
-                    options={KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS}
-                    onChange={(event) => setReviewStatus(event.target.value)}
-                  />
-                </div>
+            <div role="region" aria-label="Knowledge Pack Library">
+              <div className="super-admin-outcome-knowledge-packs__toolbar super-admin-outcome-knowledge-packs__toolbar--expanded">
+                <Input
+                  id="outcome-knowledge-packs-search"
+                  label="Search"
+                  size="sm"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  fullWidth
+                />
+                <Select
+                  id="outcome-knowledge-packs-type"
+                  label="Pack Type"
+                  size="sm"
+                  value={packType}
+                  options={OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS}
+                  onChange={(event) => setPackType(event.target.value)}
+                />
+                <Select
+                  id="outcome-knowledge-packs-status"
+                  label="Status"
+                  size="sm"
+                  value={status}
+                  options={OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS}
+                  onChange={(event) => setStatus(event.target.value)}
+                />
+                <Select
+                  id="outcome-knowledge-packs-purpose"
+                  label="Purpose"
+                  size="sm"
+                  value={purposeCategory}
+                  options={KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS}
+                  onChange={(event) => setPurposeCategory(event.target.value)}
+                />
+                <Select
+                  id="outcome-knowledge-packs-visibility"
+                  label="Visibility"
+                  size="sm"
+                  value={visibility}
+                  options={KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS}
+                  onChange={(event) => setVisibility(event.target.value)}
+                />
+                <Select
+                  id="outcome-knowledge-packs-review"
+                  label="Review"
+                  size="sm"
+                  value={reviewStatus}
+                  options={KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS}
+                  onChange={(event) => setReviewStatus(event.target.value)}
+                />
+              </div>
 
-                {listError || previewError ? (
-                  <p className="super-admin-outcome-knowledge-packs__error" role="alert">
-                    {(listError || previewError).message}
-                  </p>
-                ) : null}
-
-                <p className="super-admin-outcome-knowledge-packs__table-note">
-                  Use Import Source Document to create governed drafts and new versions. Runtime activation remains a separate audited action.
+              {listError || previewError ? (
+                <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+                  {(listError || previewError).message}
                 </p>
+              ) : null}
 
-                <HorizontalScroll
-                  className="super-admin-outcome-knowledge-packs__table-wrap"
-                  ariaLabel="Outcome Studio knowledge pack table"
-                  gap="sm"
-                >
-                  <Table
-                    className="super-admin-outcome-knowledge-packs__table"
-                    columns={columns}
-                    data={filteredRows}
-                    loading={isInitialLoading}
-                    variant="striped"
-                    hoverable
-                    emptyMessage="No knowledge packs found."
-                    ariaLabel="Outcome Studio knowledge packs"
-                  />
-                </HorizontalScroll>
+              <p className="super-admin-outcome-knowledge-packs__table-note">
+                Use Import Source Document to create governed drafts and new versions. Runtime activation remains a separate audited action.
+              </p>
 
-                {(listQuery.isFetching || previewQuery.isFetching) && !isInitialLoading ? (
-                  <InlineLoadingState label="Refreshing registry..." />
-                ) : null}
-              </div>
-            ) : (
-              <div className="super-admin-outcome-knowledge-packs__manifest-shell" role="tabpanel" aria-label="Outcome Studio Runtime Resolution">
-                {manifestError ? (
-                  <p className="super-admin-outcome-knowledge-packs__error" role="alert">
-                    {manifestError.message}
-                  </p>
-                ) : null}
+              <HorizontalScroll
+                className="super-admin-outcome-knowledge-packs__table-wrap"
+                ariaLabel="Outcome Studio knowledge pack table"
+                gap="sm"
+              >
+                <Table
+                  className="super-admin-outcome-knowledge-packs__table"
+                  columns={columns}
+                  data={filteredRows}
+                  loading={isInitialLoading}
+                  variant="striped"
+                  hoverable
+                  emptyMessage="No knowledge packs found."
+                  ariaLabel="Outcome Studio knowledge packs"
+                />
+              </HorizontalScroll>
 
-                <div className="super-admin-outcome-knowledge-packs__manifest-grid">
-                  <HorizontalScroll
-                    className="super-admin-outcome-knowledge-packs__table-wrap"
-                    ariaLabel="Outcome Studio runtime resolution table"
-                    gap="sm"
-                  >
-                    <Table
-                      className="super-admin-outcome-knowledge-packs__manifest-table"
-                      columns={manifestColumns}
-                      data={manifestRows}
-                      loading={isManifestInitialLoading}
-                      variant="striped"
-                      hoverable
-                      emptyMessage="No runtime resolution data found."
-                      ariaLabel="Outcome Studio runtime resolution"
-                    />
-                  </HorizontalScroll>
-
-                  <KnowledgePackManifestPreview
-                    manifest={selectedManifest}
-                    preview={manifestPreviewQuery.data?.data}
-                    error={manifestPreviewError}
-                    isLoading={manifestPreviewQuery.isLoading || manifestPreviewQuery.isFetching}
-                    reasoningPreview={reasoningContextPreviewQuery.data?.data}
-                    reasoningError={reasoningContextPreviewError}
-                    isReasoningLoading={
-                      reasoningContextPreviewQuery.isLoading || reasoningContextPreviewQuery.isFetching
-                    }
-                  />
-                </div>
-
-                {manifestsQuery.isFetching && !isManifestInitialLoading ? (
-                  <InlineLoadingState label="Refreshing runtime resolution..." />
-                ) : null}
-              </div>
-            )}
+              {(listQuery.isFetching || previewQuery.isFetching) && !isInitialLoading ? (
+                <InlineLoadingState label="Refreshing registry..." />
+              ) : null}
+            </div>
           </Card.Body>
         </Card>
       </Fieldset>
@@ -2520,7 +2173,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         open={Boolean(pendingDeletePack)}
         title="Delete knowledge pack?"
         message={`Delete ${pendingDeletePack?.label ?? 'this knowledge pack'}? This permanently removes the pack, its versions, and its activation records.`}
-        detail="Active, system, and manifest-bound packs are blocked by the governed registry."
+        detail="Active, system, and runtime-bound packs are blocked by the governed registry."
         eyebrow="Permanent delete"
         confirmLabel="Delete Pack"
         variant="danger"
