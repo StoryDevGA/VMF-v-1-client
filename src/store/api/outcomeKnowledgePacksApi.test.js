@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { configureStore } from '@reduxjs/toolkit'
+import { describe, expect, it, vi } from 'vitest'
+import { baseApi } from './baseApi.js'
 import {
   buildActivateOutcomeKnowledgePackVersionQuery,
   buildCloneOutcomeKnowledgePackManifestQuery,
@@ -12,6 +14,7 @@ import {
   buildOutcomeKnowledgePackManifestDetailQuery,
   buildOutcomeKnowledgePackManifestListQuery,
   buildOutcomeKnowledgePackDetailQuery,
+  buildOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   buildOutcomeKnowledgePackListQuery,
   buildOutcomeKnowledgePackVersionQuery,
   buildPreviewOutcomeKnowledgePackReasoningContextQuery,
@@ -32,6 +35,7 @@ import {
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackManifestQuery,
+  useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
@@ -50,6 +54,8 @@ import {
 describe('outcomeKnowledgePacksApi', () => {
   it('registers expected endpoint definitions', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('listOutcomeKnowledgePacks')
+    expect(outcomeKnowledgePacksApi.endpoints)
+      .toHaveProperty('getOutcomeKnowledgePackDuplicateDiagnostics')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('getOutcomeKnowledgePack')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('getOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('previewOutcomeKnowledgePackVersionContent')
@@ -74,8 +80,95 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('cloneOutcomeKnowledgePackManifest')
   })
 
+  it('refetches the library and duplicate diagnostics after a successful source import', async () => {
+    const requestCounts = { diagnostics: 0, library: 0, import: 0 }
+    const NativeRequest = globalThis.Request
+    class TestRequest {
+      constructor(input, init = {}) {
+        this.url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost').toString()
+        this.method = init.method || input?.method || 'GET'
+        this.headers = init.headers || input?.headers || new Headers()
+        this.body = init.body || input?.body || null
+        this.signal = init.signal || input?.signal
+      }
+
+      clone() {
+        return new TestRequest(this.url, this)
+      }
+    }
+    vi.stubGlobal('Request', TestRequest)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const request = input instanceof Request ? input : new Request(input)
+      const pathname = new URL(request.url).pathname
+      const jsonResponse = (body) => new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (pathname.endsWith('/duplicate-diagnostics')) {
+        requestCounts.diagnostics += 1
+        return jsonResponse({
+          data: {
+            status: 'CLEAR',
+            summary: { blockingGroups: 0, reviewRequiredGroups: 0, affectedPacks: 0 },
+            packDiagnostics: [],
+            groups: [],
+          },
+        })
+      }
+      if (pathname.endsWith('/source-document-import')) {
+        requestCounts.import += 1
+        return jsonResponse({ data: { pack: {}, version: {} } })
+      }
+
+      requestCounts.library += 1
+      return jsonResponse({ data: [], meta: { page: 1, pageSize: 20, total: 0 } })
+    })
+    const store = configureStore({
+      reducer: { [baseApi.reducerPath]: baseApi.reducer },
+      middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
+    })
+    const listSubscription = store.dispatch(
+      outcomeKnowledgePacksApi.endpoints.listOutcomeKnowledgePacks.initiate({
+        page: 1,
+        pageSize: 20,
+      }),
+    )
+    const diagnosticsSubscription = store.dispatch(
+      outcomeKnowledgePacksApi.endpoints.getOutcomeKnowledgePackDuplicateDiagnostics.initiate(),
+    )
+
+    try {
+      await Promise.all([listSubscription.unwrap(), diagnosticsSubscription.unwrap()])
+      expect(requestCounts).toEqual({ diagnostics: 1, library: 1, import: 0 })
+
+      await store.dispatch(
+        outcomeKnowledgePacksApi.endpoints.importOutcomeKnowledgePackSourceDocumentDraft.initiate({
+          packType: 'STYLE',
+          packKey: 'board-style',
+          label: 'Board Style',
+          semanticVersion: '1.0.0',
+          contentFormat: 'MARKDOWN',
+          sourceDocument: { filename: 'Board Style.md' },
+          extractedText: 'Board style source text.',
+          duplicateOverrideReason: 'Separate governed style for a distinct audience.',
+        }),
+      ).unwrap()
+
+      await vi.waitFor(() => {
+        expect(requestCounts).toEqual({ diagnostics: 2, library: 2, import: 1 })
+      })
+    } finally {
+      listSubscription.unsubscribe()
+      diagnosticsSubscription.unsubscribe()
+      fetchSpy.mockRestore()
+      vi.stubGlobal('Request', NativeRequest)
+    }
+  })
+
   it('exports query and mutation hooks', () => {
     expect(typeof useListOutcomeKnowledgePacksQuery).toBe('function')
+    expect(typeof useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery).toBe('function')
     expect(typeof useGetOutcomeKnowledgePackQuery).toBe('function')
     expect(typeof useGetOutcomeKnowledgePackVersionQuery).toBe('function')
     expect(typeof useLazyPreviewOutcomeKnowledgePackVersionContentQuery).toBe('function')
@@ -105,6 +198,7 @@ describe('outcomeKnowledgePacksApi', () => {
       pageSize: 50,
       q: 'truth',
       packType: 'TRUTH_CERTIFICATION',
+      knowledgeLayer: 'VALIDATION',
       status: 'ACTIVE',
       sortBy: 'updatedAt',
       sortOrder: 'desc',
@@ -115,6 +209,7 @@ describe('outcomeKnowledgePacksApi', () => {
         pageSize: 50,
         q: 'truth',
         packType: 'TRUTH_CERTIFICATION',
+        knowledgeLayer: 'VALIDATION',
         status: 'ACTIVE',
         sortBy: 'updatedAt',
         sortOrder: 'desc',
@@ -123,6 +218,10 @@ describe('outcomeKnowledgePacksApi', () => {
   })
 
   it('builds detail and version requests with encoded identifiers', () => {
+    expect(buildOutcomeKnowledgePackDuplicateDiagnosticsQuery()).toBe(
+      '/super-admin/outcome-studio/knowledge-packs/duplicate-diagnostics',
+    )
+
     expect(buildOutcomeKnowledgePackDetailQuery({
       packId: 'OUTPUT_SCHEMA:output-schemas-pack',
     })).toBe('/super-admin/outcome-studio/knowledge-packs/OUTPUT_SCHEMA%3Aoutput-schemas-pack')
@@ -167,9 +266,19 @@ describe('outcomeKnowledgePacksApi', () => {
       label: 'Execution Translation',
       description: 'Canonical ET source document.',
       purposeCategory: 'OUTPUT',
+      knowledgeLayer: 'FRAMEWORK',
+      capabilityKey: 'execution-translation',
+      workspaceCompatibility: ['outcome', 'advisor'],
+      dependencyReferences: [{
+        knowledgeLayer: 'output_schema',
+        requirement: 'required',
+        packType: 'output_schema',
+        packKey: 'board-summary',
+      }],
       semanticVersion: '2.8.0',
       sourceAuthority: 'StorylineOS',
       contentFormat: 'MARKDOWN',
+      duplicateOverrideReason: 'Reviewed the matching source and confirmed separate ownership.',
       sourceDocument: {
         filename: 'ET v2.8 Canonical Execution Translation System.md',
         contentType: 'text/markdown',
@@ -186,6 +295,15 @@ describe('outcomeKnowledgePacksApi', () => {
         label: 'Execution Translation',
         description: 'Canonical ET source document.',
         purposeCategory: 'OUTPUT',
+        knowledgeLayer: 'FRAMEWORK',
+        capabilityKey: 'execution-translation',
+        workspaceCompatibility: ['OUTCOME', 'ADVISOR'],
+        dependencyReferences: [{
+          knowledgeLayer: 'OUTPUT_SCHEMA',
+          requirement: 'REQUIRED',
+          packType: 'OUTPUT_SCHEMA',
+          packKey: 'board-summary',
+        }],
         semanticVersion: '2.8.0',
         schemaVersion: '1.0.0',
         sourceAuthority: 'StorylineOS',
@@ -193,6 +311,7 @@ describe('outcomeKnowledgePacksApi', () => {
         visibility: 'PLATFORM',
         contentFormat: 'MARKDOWN',
         extractedText: 'Extracted ET source text.',
+        duplicateOverrideReason: 'Reviewed the matching source and confirmed separate ownership.',
         sourceDocument: {
           filename: 'ET v2.8 Canonical Execution Translation System.md',
           contentType: 'text/markdown',

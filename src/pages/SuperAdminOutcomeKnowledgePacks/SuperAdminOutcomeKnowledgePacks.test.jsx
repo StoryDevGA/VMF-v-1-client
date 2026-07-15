@@ -12,6 +12,7 @@ const {
   deprecateVersionMock,
   detailQueryMock,
   disableVersionMock,
+  duplicateDiagnosticsQueryMock,
   importSourceDocumentDraftMock,
   listQueryMock,
   loadContentPreviewMock,
@@ -27,6 +28,7 @@ const {
   deprecateVersionMock: vi.fn(),
   detailQueryMock: vi.fn(),
   disableVersionMock: vi.fn(),
+  duplicateDiagnosticsQueryMock: vi.fn(),
   importSourceDocumentDraftMock: vi.fn(),
   listQueryMock: vi.fn(),
   loadContentPreviewMock: vi.fn(),
@@ -142,6 +144,55 @@ const defaultPreviewResult = {
   error: null,
 }
 
+const defaultDuplicateDiagnosticsResult = {
+  data: {
+    data: {
+      status: 'CLEAR',
+      generatedAt: '2026-07-14T12:00:00.000Z',
+      summary: {
+        totalGroups: 0,
+        blockingGroups: 0,
+        reviewRequiredGroups: 0,
+        affectedPacks: 0,
+      },
+      packDiagnostics: [],
+      groups: [],
+    },
+  },
+  isLoading: false,
+  isFetching: false,
+  error: null,
+}
+
+const duplicateReviewConflict = {
+  status: 409,
+  data: {
+    error: {
+      code: 'CONFLICT',
+      message: 'Review deterministic duplicate matches before importing.',
+      details: {
+        reason: 'PACK_DUPLICATE_REVIEW_REQUIRED',
+        allowedActions: ['VIEW_EXISTING', 'CANCEL', 'CONTINUE_WITH_REASON'],
+        candidates: [
+          {
+            classification: 'SOURCE_DUPLICATE',
+            packId: 'knowledge-pack-output-schemas-pack',
+            versionId: 'output-schemas-pack@1.0.0',
+            packType: 'OUTPUT_SCHEMA',
+            packKey: 'output-schemas-pack',
+            label: 'Output Schemas',
+            semanticVersion: '1.0.0',
+            scopeKey: 'GLOBAL',
+            status: 'DRAFT',
+            extractedText: 'raw source content must not render',
+            providerContext: 'private provider context must not render',
+          },
+        ],
+      },
+    },
+  },
+}
+
 const defaultDetailResult = {
   data: {
     data: {
@@ -246,6 +297,7 @@ vi.mock('../../components/Toaster', () => ({
 
 vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
   useListOutcomeKnowledgePacksQuery: listQueryMock,
+  useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery: duplicateDiagnosticsQueryMock,
   usePreviewOutcomeKnowledgePackResolutionQuery: previewQueryMock,
   useGetOutcomeKnowledgePackQuery: detailQueryMock,
   useGetOutcomeKnowledgePackVersionQuery: versionQueryMock,
@@ -296,15 +348,32 @@ function renderPage() {
 }
 
 function getRowForText(text) {
-  const row = screen.getByText(text).closest('tr')
+  const table = screen.getByRole('table', { name: /outcome studio knowledge packs/i })
+  const row = within(table).getByText(text).closest('tr')
   expect(row).not.toBeNull()
   return row
+}
+
+async function prepareTextSourceImport(user, {
+  packType = 'ET',
+  label = 'Execution Translation',
+  filename = 'ET v2.8 Canonical Execution Translation System.md',
+} = {}) {
+  await user.click(screen.getByRole('button', { name: /import source document/i }))
+  await user.selectOptions(await screen.findByLabelText(/draft pack type/i), packType)
+  await user.type(screen.getByLabelText(/^name \*$/i), label)
+  const sourceFile = new File(['Canonical source text.'], filename, { type: 'text/markdown' })
+  await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+  await waitFor(() => {
+    expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('Canonical source text.')
+  })
 }
 
 describe('SuperAdminOutcomeKnowledgePacks page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     listQueryMock.mockReturnValue(defaultListResult)
+    duplicateDiagnosticsQueryMock.mockReturnValue(defaultDuplicateDiagnosticsResult)
     previewQueryMock.mockReturnValue(defaultPreviewResult)
     detailQueryMock.mockReturnValue(defaultDetailResult)
     versionQueryMock.mockReturnValue(defaultVersionResult)
@@ -376,7 +445,8 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.getByLabelText(/knowledge pack library/i)).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /runtime resolution/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /manifests/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/0 of 5 required packs active/i)).toBeInTheDocument()
+    expect(screen.getByText(/mandatory runtime safeguards need attention/i)).toBeInTheDocument()
+    expect(screen.queryByText(/\d+ of \d+ required packs active/i)).not.toBeInTheDocument()
     expect(screen.getByText(/authoring required/i)).toBeInTheDocument()
     expect(screen.queryByText(/starter import and upload are currently available only/i))
       .not.toBeInTheDocument()
@@ -820,6 +890,263 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByRole('heading', { name: /create blank pack/i })).toBeInTheDocument()
     expect(screen.getByText(/needs a draft persistence contract/i)).toBeInTheDocument()
     expect(screen.getByText(/blank-pack draft persistence/i)).toBeInTheDocument()
+  })
+
+  it('renders duplicate diagnostics and filters the library by duplicate status', async () => {
+    const user = userEvent.setup()
+    duplicateDiagnosticsQueryMock.mockReturnValue({
+      ...defaultDuplicateDiagnosticsResult,
+      data: {
+        data: {
+          status: 'REVIEW_REQUIRED',
+          generatedAt: '2026-07-14T12:00:00.000Z',
+          summary: {
+            totalGroups: 1,
+            blockingGroups: 0,
+            reviewRequiredGroups: 1,
+            affectedPacks: 1,
+          },
+          packDiagnostics: [
+            {
+              packId: 'knowledge-pack-output-schemas-pack',
+              status: 'REVIEW_REQUIRED',
+              classifications: ['SOURCE_DUPLICATE'],
+              groupIds: ['kpd-source-duplicate-1'],
+            },
+          ],
+          groups: [],
+        },
+      },
+    })
+
+    renderPage()
+
+    const diagnostics = screen.getByRole('region', { name: /duplicate diagnostics/i })
+    expect(within(diagnostics).getByText('Review required')).toBeInTheDocument()
+    const reviewCount = within(diagnostics).getByText('Review groups').closest('div')
+    expect(within(reviewCount).getByText('1')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /duplicate status/i })).toBeInTheDocument()
+    const outputSchemasRow = getRowForText('Output Schemas')
+    expect(within(outputSchemasRow).getByText('Review required')).toBeInTheDocument()
+    expect(within(outputSchemasRow).getByText(': Source Duplicate')).toHaveClass('sr-only')
+
+    await user.selectOptions(screen.getByLabelText(/^duplicate status$/i), 'CLEAR')
+    expect(screen.getByText('No knowledge packs found.')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/^duplicate status$/i), 'REVIEW_REQUIRED')
+    expect(within(getRowForText('Output Schemas')).getByText('Review required')).toBeInTheDocument()
+  })
+
+  it('does not present packs as duplicate-clear when diagnostics fail', () => {
+    duplicateDiagnosticsQueryMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      error: {
+        status: 503,
+        data: { error: { code: 'SERVICE_UNAVAILABLE', message: 'Scan unavailable.' } },
+      },
+    })
+
+    renderPage()
+
+    const diagnostics = screen.getByRole('region', { name: /duplicate diagnostics/i })
+    expect(within(diagnostics).getByRole('alert')).toHaveTextContent(
+      'Diagnostics are unavailable. Scan unavailable.',
+    )
+    expect(within(getRowForText('Output Schemas')).getByText('Unavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^duplicate status$/i)).toBeDisabled()
+    expect(screen.queryByText('No knowledge packs found.')).not.toBeInTheDocument()
+  })
+
+  it('fails closed when duplicate diagnostics return an incomplete success payload', () => {
+    duplicateDiagnosticsQueryMock.mockReturnValue({
+      data: {
+        data: {
+          status: 'CLEAR',
+          summary: {
+            blockingGroups: 0,
+            reviewRequiredGroups: 0,
+            affectedPacks: 0,
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderPage()
+
+    const diagnostics = screen.getByRole('region', { name: /duplicate diagnostics/i })
+    expect(within(diagnostics).getByRole('alert')).toHaveTextContent(
+      'Diagnostics are unavailable. The diagnostics response was incomplete.',
+    )
+    expect(within(getRowForText('Output Schemas')).getByText('Unavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^duplicate status$/i)).toBeDisabled()
+  })
+
+  it('requires an operator reason and resubmits a review-required import with the override', async () => {
+    const user = userEvent.setup()
+    importSourceDocumentDraftMock.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue(duplicateReviewConflict),
+    })
+    renderPage()
+    await prepareTextSourceImport(user)
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    const reviewHeading = await screen.findByRole('heading', { name: /review possible duplicate/i })
+    const reviewDialog = reviewHeading.closest('dialog')
+    expect(reviewDialog).not.toBeNull()
+    expect(within(reviewDialog).getByText('Output Schemas')).toBeInTheDocument()
+    expect(within(reviewDialog).getByText('Source Duplicate')).toBeInTheDocument()
+    expect(within(reviewDialog).queryByText(/raw source content must not render/i))
+      .not.toBeInTheDocument()
+    expect(within(reviewDialog).queryByText(/private provider context must not render/i))
+      .not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+
+    await user.click(within(reviewDialog).getByRole('button', { name: /continue with reason/i }))
+    expect(within(reviewDialog).getByRole('alert')).toHaveTextContent('Enter at least 10 characters')
+    const invalidReasonField = within(reviewDialog).getByLabelText(/reason for separate asset/i)
+    expect(invalidReasonField).toHaveAttribute('aria-invalid', 'true')
+    expect(invalidReasonField.getAttribute('aria-describedby'))
+      .toContain('knowledge-pack-duplicate-override-reason-error')
+    expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(1)
+
+    const reason = 'Separate ownership and runtime scope were reviewed.'
+    const reasonField = within(reviewDialog).getByLabelText(/reason for separate asset/i)
+    expect(reasonField).toHaveAttribute('maxLength', '500')
+    await user.type(reasonField, reason)
+    await user.click(within(reviewDialog).getByRole('button', { name: /continue with reason/i }))
+
+    await waitFor(() => {
+      expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(2)
+    })
+    expect(importSourceDocumentDraftMock.mock.calls[1][0]).toEqual(expect.objectContaining({
+      packType: 'ET',
+      packKey: 'execution-translation',
+      duplicateOverrideReason: reason,
+    }))
+    expect(screen.queryByRole('heading', { name: /review possible duplicate/i }))
+      .not.toBeInTheDocument()
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Draft imported',
+      variant: 'success',
+    }))
+  })
+
+  it('cancels duplicate review without closing or clearing the import form', async () => {
+    const user = userEvent.setup()
+    importSourceDocumentDraftMock.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue(duplicateReviewConflict),
+    })
+    renderPage()
+    await prepareTextSourceImport(user)
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    const reviewDialog = (await screen.findByRole('heading', {
+      name: /review possible duplicate/i,
+    })).closest('dialog')
+    await user.click(within(reviewDialog).getByRole('button', { name: /^cancel$/i }))
+
+    expect(screen.queryByRole('heading', { name: /review possible duplicate/i }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /import source document/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+    expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the exact matched version and consolidates classifications for the same pack', async () => {
+    const user = userEvent.setup()
+    const candidateConflict = {
+      ...duplicateReviewConflict,
+      data: {
+        error: {
+          ...duplicateReviewConflict.data.error,
+          details: {
+            ...duplicateReviewConflict.data.error.details,
+            candidates: [
+              ...duplicateReviewConflict.data.error.details.candidates,
+              {
+                classification: 'NORMALIZED_NAME_MATCH',
+                packId: 'knowledge-pack-output-schemas-pack',
+                packType: 'OUTPUT_SCHEMA',
+                packKey: 'output-schemas-pack',
+                label: 'Output Schemas',
+                scopeKey: 'GLOBAL',
+                status: 'DRAFT',
+              },
+            ],
+          },
+        },
+      },
+    }
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: defaultListResult.data.data.map((pack) => ({
+          ...pack,
+          latestVersionId: 'output-schemas-pack@2.0.0',
+          latestSemanticVersion: '2.0.0',
+        })),
+      },
+    })
+    importSourceDocumentDraftMock.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue(candidateConflict),
+    })
+    renderPage()
+    await prepareTextSourceImport(user)
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    const reviewDialog = (await screen.findByRole('heading', {
+      name: /review possible duplicate/i,
+    })).closest('dialog')
+    expect(within(reviewDialog).getAllByRole('button', { name: /view existing/i })).toHaveLength(1)
+    expect(within(reviewDialog).getByText('Source Duplicate')).toBeInTheDocument()
+    expect(within(reviewDialog).getByText('Normalized Name Match')).toBeInTheDocument()
+    await user.click(within(reviewDialog).getByRole('button', { name: /view existing/i }))
+
+    expect(await screen.findByRole('heading', { name: /pack details/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+    expect(detailQueryMock).toHaveBeenCalledWith(
+      { packId: 'knowledge-pack-output-schemas-pack' },
+      { skip: false },
+    )
+    expect(versionQueryMock).toHaveBeenCalledWith(
+      {
+        packId: 'knowledge-pack-output-schemas-pack',
+        versionId: 'output-schemas-pack@1.0.0',
+      },
+      { skip: false },
+    )
+  })
+
+  it('keeps blocking duplicate conflicts outside the override workflow', async () => {
+    const user = userEvent.setup()
+    importSourceDocumentDraftMock.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'This pack version already exists.',
+            details: { reason: 'PACK_VERSION_ALREADY_EXISTS' },
+          },
+        },
+      }),
+    })
+    renderPage()
+    await prepareTextSourceImport(user)
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    expect(await screen.findByText('This pack version already exists.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /review possible duplicate/i }))
+      .not.toBeInTheDocument()
+    expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(1)
   })
 
   it('creates a draft knowledge pack from source document metadata', async () => {

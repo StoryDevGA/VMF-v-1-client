@@ -427,6 +427,35 @@ const TOKEN_STATUS_VARIANTS = Object.freeze({
 
 const normalizeRuntimeActionToken = (value) => String(value ?? '').trim().toUpperCase()
 
+const formatKnowledgeResolutionSummary = (binding = {}) => {
+  const status = normalizeRuntimeActionToken(binding?.resolution?.status || binding?.status)
+  const resolvedCount = binding?.resolution?.resolvedCount ?? binding?.resolvedCount
+  const resolvedSummary = typeof resolvedCount === 'number'
+    && Number.isSafeInteger(resolvedCount)
+    && resolvedCount > 0
+    ? ` / ${resolvedCount} pack${resolvedCount === 1 ? '' : 's'} resolved`
+    : ''
+
+  if (status === 'READY') return `Ready${resolvedSummary}`
+  if (status === 'READY_WITH_GAPS') return `Ready with optional gaps${resolvedSummary}`
+  if (status === 'AMBIGUOUS') return `Ambiguous request-specific resolution${resolvedSummary}`
+  if (status === 'PROJECTED') return 'Mandatory safeguards ready'
+  if (status === 'BOUND') return 'Mandatory safeguards bound'
+  if (status === 'BLOCKED') {
+    const requestSpecific = Boolean(
+      binding?.requestSpecific
+      || binding?.resolution?.requestedOutputTypeKey
+      || binding?.resolution?.requestedStyleKey
+      || binding?.resolution?.request?.requestedOutputTypeKey
+      || binding?.resolution?.request?.requestedStyleKey,
+    )
+    return requestSpecific
+      ? `Request-specific resolution blocked${resolvedSummary}`
+      : 'Mandatory safeguards blocked'
+  }
+  return 'Not resolved'
+}
+
 const SECTION_ACTION_KEYS = Object.freeze({
   GENERATE_SECTION: 'GENERATE_SECTION',
   REGENERATE_SECTION: 'REGENERATE_SECTION',
@@ -714,6 +743,17 @@ const getOutcomeStudioResponseErrorMessage = (error) => {
   }
 
   return stripRequestReference(error?.message)
+}
+
+const getRequestKnowledgeResolutionErrorSummary = (error) => {
+  const resolutionStatus = normalizeRuntimeActionToken(error?.details?.resolutionStatus)
+  if (!['AMBIGUOUS', 'BLOCKED'].includes(resolutionStatus)) return ''
+
+  return formatKnowledgeResolutionSummary({
+    status: resolutionStatus,
+    requestSpecific: true,
+    resolvedCount: error?.details?.resolvedCount,
+  })
 }
 
 const normalizeWarningSeverity = (value) => {
@@ -4440,9 +4480,7 @@ function OutcomeStudioSection({
   const readinessVariant = canStartSession
     ? getTokenStatusVariant(readiness.state || 'READY')
     : 'error'
-  const packSummary = requiredPacks.length > 0
-    ? `${packBinding.activePacks?.length || 0} active / ${requiredPacks.length} required`
-    : 'No packs'
+  const packSummary = formatKnowledgeResolutionSummary(packBinding)
   const packSourceSummary = sourceDocumentPacks.length > 0
     ? `${sourceDocumentPacks.length} source document${sourceDocumentPacks.length === 1 ? '' : 's'}`
     : 'No source documents'
@@ -4580,7 +4618,7 @@ function OutcomeStudioSection({
         </ul>
       ) : null}
       {requiredPacks.length > 0 ? (
-        <ul className="runtime-workspace__plain-list runtime-workspace__outcome-studio-pack-list" aria-label="Outcome Studio required knowledge packs">
+        <ul className="runtime-workspace__plain-list runtime-workspace__outcome-studio-pack-list" aria-label="Outcome Studio mandatory knowledge safeguards">
           {requiredPacks.map((pack) => (
             <li key={`${pack.packType}-${pack.packKey}`}>
               <div>
@@ -4783,10 +4821,10 @@ function OutcomeStudioSection({
               },
               {
                 id: 'session-pack-binding',
-                title: 'Knowledge Packs',
-                meta: `${sessionDetail?.knowledgePackBinding?.activeCount ?? activeSession?.knowledgePackBinding?.activeCount ?? 0} active / ${
-                  sessionDetail?.knowledgePackBinding?.requiredCount ?? activeSession?.knowledgePackBinding?.requiredCount ?? requiredPacks.length
-                } required`,
+                title: 'Knowledge Resolution',
+                meta: formatKnowledgeResolutionSummary(
+                  sessionDetail?.knowledgePackBinding || activeSession?.knowledgePackBinding,
+                ),
               },
             ]}
           />
@@ -4926,7 +4964,7 @@ function OutcomeStudioSection({
                           <span>
                             Truth {formatRuntimeTokenLabel(truthCurrentness)}
                             {' / '}
-                            Packs {draft.knowledgePackBinding?.activeCount ?? 0}/{draft.knowledgePackBinding?.requiredCount ?? requiredPacks.length}
+                            Knowledge {formatKnowledgeResolutionSummary(draft.knowledgePackBinding)}
                           </span>
                           <span id={approveReasonId}>{approveReason}</span>
                           <div className="runtime-workspace__outcome-studio-draft-action-region">
@@ -5085,7 +5123,7 @@ function OutcomeStudioSection({
                   <span>
                     Truth {formatRuntimeTokenLabel(truthCurrentness)}
                     {' / '}
-                    Packs {knowledgePackBinding.activeCount ?? 0}/{knowledgePackBinding.requiredCount ?? requiredPacks.length}
+                    Knowledge {formatKnowledgeResolutionSummary(knowledgePackBinding)}
                   </span>
                   {grrLineage.hasLineage ? (
                     <span>
@@ -8602,12 +8640,13 @@ function RuntimeWorkspace() {
       return true
     } catch (responseError) {
       const normalizedError = normalizeError(responseError)
+      const knowledgeResolutionSummary = getRequestKnowledgeResolutionErrorSummary(normalizedError)
       const requestReference = normalizedError.requestId
         ? ` Reference: ${normalizedError.requestId}`
         : ''
       setOutcomeStudioFeedback({
         variant: 'error',
-        message: `${getOutcomeStudioResponseErrorMessage(normalizedError)}${requestReference}`,
+        message: `${knowledgeResolutionSummary ? `Knowledge resolution: ${knowledgeResolutionSummary}. ` : ''}${getOutcomeStudioResponseErrorMessage(normalizedError)}${requestReference}`,
       })
       return false
     }

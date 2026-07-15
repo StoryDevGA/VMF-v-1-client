@@ -766,7 +766,11 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
   return render(runtimeWorkspaceTree(initialEntry))
 }
 
-function mockActiveOutcomeStudioSession({ drafts = [], truthCurrentness = 'CURRENT' } = {}) {
+function mockActiveOutcomeStudioSession({
+  drafts = [],
+  messages = [],
+  truthCurrentness = 'CURRENT',
+} = {}) {
   const activeSession = {
     sessionId: 'out_sess_active_fixture',
     status: 'ACTIVE',
@@ -823,7 +827,7 @@ function mockActiveOutcomeStudioSession({ drafts = [], truthCurrentness = 'CURRE
           status: 'PROJECTED',
           currentness: truthCurrentness,
         },
-        messages: [],
+        messages,
         drafts,
       },
     },
@@ -1537,7 +1541,9 @@ describe('RuntimeWorkspace', () => {
     expect(readinessRegion)
       .toHaveTextContent('Truth Certification must be active before Outcome Studio sessions can start.')
     expect(readinessRegion)
-      .toHaveTextContent('0 active / 5 required')
+      .toHaveTextContent('Mandatory safeguards blocked')
+    expect(readinessRegion)
+      .not.toHaveTextContent(/\d+ active \/ \d+ required/i)
     expect(readinessRegion)
       .toHaveTextContent('No source documents')
     expect(readinessRegion)
@@ -1738,8 +1744,13 @@ describe('RuntimeWorkspace', () => {
             currentness: 'CURRENT',
           },
           knowledgePackBinding: {
-            activeCount: 5,
-            requiredCount: 5,
+            status: 'READY',
+            resolvedCount: 7,
+            resolution: {
+              status: 'READY',
+              resolvedCount: 7,
+              requestedOutputTypeKey: 'executive_brief',
+            },
           },
           customerContent: {
             markdown: 'Raw draft content must not render.',
@@ -1779,7 +1790,8 @@ describe('RuntimeWorkspace', () => {
     await user.click(within(main).getByRole('tab', { name: /conversation/i }))
     const sessionRegion = within(main).getByRole('region', { name: /outcome studio active session/i })
     expect(sessionRegion).toHaveTextContent('Executive Brief')
-    expect(sessionRegion).toHaveTextContent('5 active / 5 required')
+    expect(sessionRegion).toHaveTextContent('Mandatory safeguards bound')
+    expect(sessionRegion).not.toHaveTextContent(/\d+ active \/ \d+ required/i)
     const history = within(sessionRegion).getByRole('list', { name: /outcome studio prompt history/i })
     expect(history).toHaveTextContent('Existing governed prompt.')
     expect(history).toHaveTextContent('Pending Response')
@@ -1787,6 +1799,7 @@ describe('RuntimeWorkspace', () => {
     const draftRegion = within(sessionRegion).getByRole('region', { name: /outcome studio working drafts/i })
     expect(draftRegion).toHaveTextContent('Executive Brief Draft')
     expect(draftRegion).toHaveTextContent('Current iteration 2')
+    expect(draftRegion).toHaveTextContent('Knowledge Ready / 7 packs resolved')
     expect(draftRegion).toHaveTextContent('Approve this draft to create a governed asset version.')
     expect(screen.queryByText('Raw draft content must not render.')).not.toBeInTheDocument()
     const generateResponseButton = within(history).getByRole('button', { name: /generate response/i })
@@ -2038,6 +2051,102 @@ describe('RuntimeWorkspace', () => {
     expect(within(main).queryByText('Outcome Studio response generated.')).not.toBeInTheDocument()
     expect(refetchOutcomeStudioSession).not.toHaveBeenCalled()
     expect(refetchOutcomeStudio).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      resolutionStatus: 'BLOCKED',
+      expectedSummary: 'Knowledge resolution: Request-specific resolution blocked.',
+      message: 'Outcome Studio could not resolve all required Knowledge Packs for this request.',
+      requestId: 'knowledge-blocked-ref',
+    },
+    {
+      resolutionStatus: 'AMBIGUOUS',
+      expectedSummary: 'Knowledge resolution: Ambiguous request-specific resolution.',
+      message: 'Outcome Studio found multiple equally eligible Knowledge Packs for this request.',
+      requestId: 'knowledge-ambiguous-ref',
+    },
+  ])('surfaces $resolutionStatus request-specific Knowledge resolution failures', async ({
+    expectedSummary,
+    message,
+    requestId,
+    resolutionStatus,
+  }) => {
+    const user = userEvent.setup()
+    mockActiveOutcomeStudioSession({
+      messages: [{
+        messageId: `out_msg_${resolutionStatus.toLowerCase()}_fixture`,
+        sessionId: 'out_sess_active_fixture',
+        role: 'USER',
+        status: 'SUBMITTED',
+        responseStatus: 'PENDING_RESPONSE',
+        prompt: 'Generate a governed response.',
+        submittedAt: '2026-06-15T08:24:00.000Z',
+      }],
+    })
+    unwrapGenerateRuntimeOutcomeResponse.mockRejectedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          code: 'CONFLICT',
+          message,
+          requestId,
+          details: {
+            resolutionStatus,
+            requestedOutputTypeKey: 'executive_brief',
+          },
+        },
+      },
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    const history = within(main).getByRole('list', { name: /outcome studio prompt history/i })
+    await user.click(within(history).getByRole('button', { name: /generate response/i }))
+
+    expect(await within(main).findByText(
+      `${expectedSummary} ${message} Reference: ${requestId}`,
+    )).toBeInTheDocument()
+    expect(within(main).queryByText('Outcome Studio response generated.')).not.toBeInTheDocument()
+    expect(refetchOutcomeStudioSession).not.toHaveBeenCalled()
+    expect(refetchOutcomeStudio).not.toHaveBeenCalled()
+  })
+
+  it('does not render an invalid request-specific Knowledge resolution count', async () => {
+    const user = userEvent.setup()
+    const invalidCounts = ['not-a-number', true, [7], 1.5]
+    mockActiveOutcomeStudioSession({
+      drafts: invalidCounts.map((resolvedCount, index) => ({
+        draftId: `outcome_draft_invalid_count_${index}_fixture`,
+        sessionId: 'out_sess_active_fixture',
+        status: 'ACTIVE',
+        title: `Executive Brief Draft ${index + 1}`,
+        currentIterationId: `outcome_draft_iteration_invalid_count_${index}_fixture`,
+        currentIterationNumber: 1,
+        truthSignature: { status: 'PROJECTED', currentness: 'CURRENT' },
+        knowledgePackBinding: {
+          status: 'READY',
+          resolvedCount,
+        },
+      })),
+    })
+
+    renderRuntimeWorkspace()
+
+    await user.click(screen.getByRole('button', { name: /outcome studio/i }))
+    const main = screen.getByRole('main', { name: /guided execution sections/i })
+    await user.click(within(main).getByRole('tab', { name: /conversation/i }))
+    const draftRegion = within(main).getByRole('region', { name: /outcome studio working drafts/i })
+
+    const draftRows = within(draftRegion).getAllByRole('listitem')
+    expect(draftRows).toHaveLength(invalidCounts.length)
+    draftRows.forEach((draftRow) => {
+      expect(draftRow).toHaveTextContent('Knowledge Ready')
+    })
+    expect(draftRegion).not.toHaveTextContent(/NaN|undefined|\d+(?:\.\d+)? packs? resolved/i)
   })
 
   it('blocks Outcome Studio prompt and response actions when active session truth is out of date', async () => {
@@ -2351,9 +2460,13 @@ describe('RuntimeWorkspace', () => {
         hiddenInternals: 'Raw outcome asset truth internals must not render.',
       },
       knowledgePackBinding: {
-        status: 'BOUND',
-        activeCount: 5,
-        requiredCount: 5,
+        status: 'READY_WITH_GAPS',
+        resolvedCount: 7,
+        resolution: {
+          status: 'READY_WITH_GAPS',
+          resolvedCount: 7,
+          requestedOutputTypeKey: 'board_narrative',
+        },
         activePacks: [
           {
             packKey: 'arl-core',
@@ -2409,7 +2522,8 @@ describe('RuntimeWorkspace', () => {
     expect(assetList).toHaveTextContent('Version 2')
     expect(assetList).toHaveTextContent('Parent outcome_asse..._fixture')
     expect(assetList).toHaveTextContent('Truth Current')
-    expect(assetList).toHaveTextContent('Packs 5/5')
+    expect(assetList).toHaveTextContent('Knowledge Ready with optional gaps / 7 packs resolved')
+    expect(assetList).not.toHaveTextContent(/Packs \d+\/\d+/i)
     expect(assetList).toHaveTextContent(/GRR grr_exec_run.*Artefact grr_art_run.*Provider Deterministic Test/)
     expect(assetList).toHaveTextContent('Runtime State Not Written / No Reviewed Grr Runtime Path V1 / Certified Truth No')
     expect(within(assetPanel).queryByRole('button', { name: /^markdown$/i })).not.toBeInTheDocument()

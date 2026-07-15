@@ -22,6 +22,7 @@ import {
   useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
+  useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
@@ -76,6 +77,21 @@ const EMPTY_ROWS = Object.freeze([])
 const SOURCE_IMPORT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 const SOURCE_IMPORT_VERSION_FORMAT_ERROR =
   'Use major.minor.patch format, for example 1.2.0.'
+const DUPLICATE_REVIEW_REQUIRED_REASON = 'PACK_DUPLICATE_REVIEW_REQUIRED'
+const DUPLICATE_OVERRIDE_REASON_MIN_LENGTH = 10
+const DUPLICATE_OVERRIDE_REASON_MAX_LENGTH = 500
+const DUPLICATE_STATUS_OPTIONS = Object.freeze([
+  Object.freeze({ value: '', label: 'All duplicate states' }),
+  Object.freeze({ value: 'CLEAR', label: 'Clear' }),
+  Object.freeze({ value: 'REVIEW_REQUIRED', label: 'Review required' }),
+  Object.freeze({ value: 'BLOCKED', label: 'Blocked' }),
+])
+const DUPLICATE_STATUS_CONFIG = Object.freeze({
+  CLEAR: Object.freeze({ label: 'Clear', variant: 'success' }),
+  REVIEW_REQUIRED: Object.freeze({ label: 'Review required', variant: 'warning' }),
+  BLOCKED: Object.freeze({ label: 'Blocked', variant: 'error' }),
+  UNKNOWN: Object.freeze({ label: 'Unavailable', variant: 'neutral' }),
+})
 const SOURCE_IMPORT_FIELD_ALIASES = Object.freeze({
   'sourceDocument.filename': 'filename',
   'sourceDocument.contentBase64': 'filename',
@@ -178,6 +194,143 @@ function canViewKnowledgePackDetail(row = {}) {
 function formatDetailValue(value, fallback = 'Not recorded') {
   const normalized = String(value ?? '').trim()
   return normalized || fallback
+}
+
+function getDuplicateStatusConfig(value) {
+  return DUPLICATE_STATUS_CONFIG[normalizeDetailToken(value)]
+    || DUPLICATE_STATUS_CONFIG.UNKNOWN
+}
+
+function formatDuplicateClassification(value) {
+  const normalized = normalizeDetailToken(value)
+  if (!normalized) return ''
+  return normalized
+    .toLowerCase()
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function isDuplicateReviewRequiredError(error = {}) {
+  return error.status === 409
+    && normalizeDetailToken(error.details?.reason) === DUPLICATE_REVIEW_REQUIRED_REASON
+}
+
+function getDuplicateReviewCandidates(details = {}) {
+  const entries = []
+
+  if (Array.isArray(details.warnings)) {
+    details.warnings.forEach((warning) => {
+      entries.push({
+        candidate: warning?.candidate,
+        classifications: [warning?.classification],
+      })
+    })
+  }
+
+  if (Array.isArray(details.candidates)) {
+    details.candidates.forEach((candidate) => {
+      entries.push({
+        candidate,
+        classifications: candidate?.classifications
+          || (candidate?.classification ? [candidate.classification] : details.classifications),
+      })
+    })
+  }
+
+  const candidatesByKey = new Map()
+  entries.forEach(({ candidate, classifications }) => {
+    if (!candidate || typeof candidate !== 'object') return
+
+    const safeCandidate = {
+      packId: formatDetailValue(candidate.packId || candidate.id, ''),
+      versionId: formatDetailValue(candidate.versionId, ''),
+      packType: normalizeDetailToken(candidate.packType),
+      packKey: formatDetailValue(candidate.packKey, '').toLowerCase(),
+      label: formatDetailValue(candidate.label, ''),
+      semanticVersion: formatDetailValue(candidate.semanticVersion, ''),
+      scopeKey: normalizeDetailToken(candidate.scopeKey),
+      status: normalizeDetailToken(candidate.status),
+      knowledgeLayer: normalizeDetailToken(candidate.knowledgeLayer),
+      capabilityKey: formatDetailValue(candidate.capabilityKey, '').toLowerCase(),
+    }
+    const key = safeCandidate.packId
+      || `${safeCandidate.packType}:${safeCandidate.packKey}`
+      || safeCandidate.versionId
+    if (!key || key === ':') return
+
+    const current = candidatesByKey.get(key) || {
+      ...safeCandidate,
+      classifications: [],
+      matchedVersions: [],
+    }
+    if (!current.versionId && safeCandidate.versionId) {
+      current.versionId = safeCandidate.versionId
+      current.semanticVersion = safeCandidate.semanticVersion
+      current.status = safeCandidate.status
+    }
+    if (safeCandidate.versionId) {
+      const matchedVersion = {
+        versionId: safeCandidate.versionId,
+        semanticVersion: safeCandidate.semanticVersion,
+        status: safeCandidate.status,
+      }
+      if (!current.matchedVersions.some((item) => item.versionId === matchedVersion.versionId)) {
+        current.matchedVersions.push(matchedVersion)
+      }
+    }
+    const nextClassifications = Array.isArray(classifications)
+      ? classifications
+      : [classifications]
+    current.classifications = [...new Set([
+      ...current.classifications,
+      ...nextClassifications.map(normalizeDetailToken).filter(Boolean),
+    ])]
+    candidatesByKey.set(key, current)
+  })
+
+  return [...candidatesByKey.values()]
+}
+
+const DUPLICATE_DIAGNOSTIC_STATUSES = new Set(['CLEAR', 'REVIEW_REQUIRED', 'BLOCKED'])
+
+function isDuplicateDiagnosticsPayload(value) {
+  if (!value || typeof value !== 'object') return false
+  if (!DUPLICATE_DIAGNOSTIC_STATUSES.has(normalizeDetailToken(value.status))) return false
+  if (!Array.isArray(value.packDiagnostics)) return false
+  if (!value.summary || typeof value.summary !== 'object') return false
+
+  return ['blockingGroups', 'reviewRequiredGroups', 'affectedPacks'].every((key) => {
+    const count = Number(value.summary[key])
+    return Number.isInteger(count) && count >= 0
+  })
+}
+
+function annotateRowsWithDuplicateDiagnostics(rows = [], diagnostics = null) {
+  if (!diagnostics) {
+    return rows.map((row) => ({
+      ...row,
+      duplicateStatus: 'UNKNOWN',
+      duplicateClassifications: [],
+    }))
+  }
+
+  const diagnosticsByPackId = new Map(
+    (diagnostics.packDiagnostics || [])
+      .map((item) => [formatDetailValue(item?.packId, ''), item])
+      .filter(([packId]) => packId),
+  )
+
+  return rows.map((row) => {
+    const item = diagnosticsByPackId.get(formatDetailValue(row.packId || row.id, ''))
+    return {
+      ...row,
+      duplicateStatus: normalizeDetailToken(item?.status) || 'CLEAR',
+      duplicateClassifications: Array.isArray(item?.classifications)
+        ? item.classifications.map(normalizeDetailToken).filter(Boolean)
+        : [],
+    }
+  })
 }
 
 function buildContentPreviewKey({ packId, versionId } = {}) {
@@ -1042,7 +1195,11 @@ function KnowledgePackSourceImportDialog({
 
   return (
     <Dialog open={open} onClose={onClose} size="xl">
-      <form onSubmit={onSubmit} noValidate>
+      <form
+        className="super-admin-outcome-knowledge-packs__dialog-form"
+        onSubmit={onSubmit}
+        noValidate
+      >
         <Dialog.Header>
           <h2>Import Source Document</h2>
           <p className="super-admin-outcome-knowledge-packs__dialog-copy">
@@ -1268,6 +1425,183 @@ function KnowledgePackSourceImportDialog({
   )
 }
 
+function DuplicateDiagnosticsSummary({ data, error, isLoading }) {
+  if (isLoading && !data) {
+    return (
+      <section
+        className="super-admin-outcome-knowledge-packs__duplicate-diagnostics"
+        aria-label="Duplicate diagnostics"
+      >
+        <InlineLoadingState label="Loading duplicate diagnostics..." />
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section
+        className="super-admin-outcome-knowledge-packs__duplicate-diagnostics"
+        aria-label="Duplicate diagnostics"
+      >
+        <div>
+          <p className="super-admin-outcome-knowledge-packs__diagnostics-label">
+            Duplicate diagnostics
+          </p>
+          <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+            Diagnostics are unavailable. {error.message}
+          </p>
+        </div>
+        <Status size="sm" variant="neutral">Unavailable</Status>
+      </section>
+    )
+  }
+
+  const status = getDuplicateStatusConfig(data?.status)
+  const summary = data?.summary || {}
+
+  return (
+    <section
+      className="super-admin-outcome-knowledge-packs__duplicate-diagnostics"
+      aria-label="Duplicate diagnostics"
+    >
+      <div>
+        <p className="super-admin-outcome-knowledge-packs__diagnostics-label">
+          Duplicate diagnostics
+        </p>
+        <Status size="sm" showIcon variant={status.variant}>{status.label}</Status>
+      </div>
+      <dl className="super-admin-outcome-knowledge-packs__diagnostics-counts">
+        <div>
+          <dt>Blocking groups</dt>
+          <dd>{Number(summary.blockingGroups ?? 0)}</dd>
+        </div>
+        <div>
+          <dt>Review groups</dt>
+          <dd>{Number(summary.reviewRequiredGroups ?? 0)}</dd>
+        </div>
+        <div>
+          <dt>Affected packs</dt>
+          <dd>{Number(summary.affectedPacks ?? 0)}</dd>
+        </div>
+      </dl>
+    </section>
+  )
+}
+
+function KnowledgePackDuplicateReviewDialog({
+  open,
+  review,
+  reason,
+  error,
+  isLoading,
+  onCancel,
+  onReasonChange,
+  onViewExisting,
+  onContinue,
+}) {
+  if (!open || !review) return null
+
+  const candidates = review.candidates || []
+  const allowedActions = new Set(
+    (review.allowedActions || []).map(normalizeDetailToken).filter(Boolean),
+  )
+  const canContinue = candidates.length > 0 && (
+    allowedActions.has('CONTINUE_WITH_REASON')
+    || allowedActions.has('CONTINUE_AS_SEPARATE_ASSET')
+  )
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onCancel}
+      size="lg"
+      closeOnBackdropClick={!isLoading}
+      closeOnEscape={!isLoading}
+      aria-labelledby="knowledge-pack-duplicate-review-title"
+    >
+      <Dialog.Header>
+        <h2 id="knowledge-pack-duplicate-review-title">Review Possible Duplicate</h2>
+        <p className="super-admin-outcome-knowledge-packs__dialog-copy">
+          Deterministic matches require review before this draft can be created as a separate asset.
+        </p>
+      </Dialog.Header>
+      <Dialog.Body className="super-admin-outcome-knowledge-packs__dialog-body">
+        {candidates.length > 0 ? (
+          <ul className="super-admin-outcome-knowledge-packs__duplicate-candidates">
+            {candidates.map((candidate) => (
+              <li key={candidate.packId || candidate.versionId || `${candidate.packType}:${candidate.packKey}`}>
+                <div className="super-admin-outcome-knowledge-packs__duplicate-candidate-summary">
+                  <strong>{candidate.label || candidate.packKey || 'Existing Knowledge Pack'}</strong>
+                  <code className="super-admin-outcome-knowledge-packs__key">
+                    {[candidate.packType, candidate.packKey].filter(Boolean).join(':')}
+                  </code>
+                  {candidate.matchedVersions.length > 1 ? (
+                    <span>
+                      Matched versions {candidate.matchedVersions
+                        .map((version) => version.semanticVersion || version.versionId)
+                        .join(', ')}
+                    </span>
+                  ) : candidate.semanticVersion ? <span>Version {candidate.semanticVersion}</span> : null}
+                  {candidate.scopeKey ? <span>Scope {candidate.scopeKey}</span> : null}
+                  <div className="super-admin-outcome-knowledge-packs__duplicate-classifications">
+                    {candidate.classifications.map((classification) => (
+                      <Badge key={classification} variant="warning" size="sm" pill outline>
+                        {formatDuplicateClassification(classification)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onViewExisting(candidate)}
+                  disabled={isLoading || !candidate.packId || !allowedActions.has('VIEW_EXISTING')}
+                >
+                  View Existing
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="super-admin-outcome-knowledge-packs__error" role="alert">
+            Candidate details are unavailable. Cancel and review duplicate diagnostics before retrying.
+          </p>
+        )}
+
+        <Textarea
+          id="knowledge-pack-duplicate-override-reason"
+          label="Reason for separate asset"
+          value={reason}
+          rows={4}
+          resize="vertical"
+          minLength={DUPLICATE_OVERRIDE_REASON_MIN_LENGTH}
+          maxLength={DUPLICATE_OVERRIDE_REASON_MAX_LENGTH}
+          onChange={(event) => onReasonChange(event.target.value)}
+          error={error}
+          helperText={`${reason.trim().length}/${DUPLICATE_OVERRIDE_REASON_MAX_LENGTH} characters. Explain why this should remain a separate Knowledge Pack.`}
+          required
+          fullWidth
+        />
+      </Dialog.Body>
+      <Dialog.Footer>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={onContinue}
+          loading={isLoading}
+          disabled={!canContinue}
+        >
+          Continue with Reason
+        </Button>
+      </Dialog.Footer>
+    </Dialog>
+  )
+}
+
 function KnowledgePackBlankDraftDialog({ open, onClose }) {
   return (
     <Dialog open={open} onClose={onClose} size="md">
@@ -1306,11 +1640,15 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [purposeCategory, setPurposeCategory] = useState('')
   const [visibility, setVisibility] = useState('')
   const [reviewStatus, setReviewStatus] = useState('')
+  const [duplicateStatus, setDuplicateStatus] = useState('')
   const [isBlankDraftOpen, setIsBlankDraftOpen] = useState(false)
   const [isSourceImportOpen, setIsSourceImportOpen] = useState(false)
   const [sourceImportForm, setSourceImportForm] = useState(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
   const [sourceImportError, setSourceImportError] = useState('')
   const [sourceImportFieldErrors, setSourceImportFieldErrors] = useState({})
+  const [duplicateReview, setDuplicateReview] = useState(null)
+  const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('')
+  const [duplicateOverrideError, setDuplicateOverrideError] = useState('')
   const [pendingActivation, setPendingActivation] = useState(null)
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null)
   const [pendingDeletePack, setPendingDeletePack] = useState(null)
@@ -1322,6 +1660,7 @@ function SuperAdminOutcomeKnowledgePacks() {
     page: 1,
     pageSize: OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
   })
+  const duplicateDiagnosticsQuery = useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery()
   const previewQuery = usePreviewOutcomeKnowledgePackResolutionQuery({})
   const detailPackId = detailPack?.packId || ''
   const detailQuery = useGetOutcomeKnowledgePackQuery(
@@ -1348,27 +1687,58 @@ function SuperAdminOutcomeKnowledgePacks() {
     useLazyPreviewOutcomeKnowledgePackVersionContentQuery()
 
   const previewData = previewQuery.data?.data ?? {}
+  const duplicateDiagnosticsPayload = duplicateDiagnosticsQuery.data?.data ?? null
+  const hasValidDuplicateDiagnostics = isDuplicateDiagnosticsPayload(duplicateDiagnosticsPayload)
+  const duplicateDiagnosticsData = duplicateDiagnosticsQuery.error || !hasValidDuplicateDiagnostics
+    ? null
+    : duplicateDiagnosticsPayload
   const resolution = previewData.resolution ?? {}
   const rows = useMemo(() => {
     const currentPreviewData = previewQuery.data?.data ?? {}
 
-    return buildOutcomeKnowledgePackRows({
+    const baseRows = buildOutcomeKnowledgePackRows({
       registryPacks: listQuery.data?.data ?? EMPTY_ROWS,
       requiredPacks: currentPreviewData.requiredPacks ?? EMPTY_ROWS,
     })
-  }, [listQuery.data, previewQuery.data])
-  const filteredRows = useMemo(() => filterOutcomeKnowledgePackRows(rows, {
-    search,
+
+    return annotateRowsWithDuplicateDiagnostics(baseRows, duplicateDiagnosticsData)
+  }, [duplicateDiagnosticsData, listQuery.data, previewQuery.data])
+  const filteredRows = useMemo(() => {
+    const baseFilteredRows = filterOutcomeKnowledgePackRows(rows, {
+      search,
+      packType,
+      status,
+      purposeCategory,
+      visibility,
+      reviewStatus,
+    })
+    const normalizedDuplicateStatus = normalizeDetailToken(duplicateStatus)
+    return normalizedDuplicateStatus && duplicateDiagnosticsData
+      ? baseFilteredRows.filter((row) => row.duplicateStatus === normalizedDuplicateStatus)
+      : baseFilteredRows
+  }, [
+    duplicateDiagnosticsData,
+    duplicateStatus,
     packType,
-    status,
     purposeCategory,
-    visibility,
     reviewStatus,
-  }), [packType, purposeCategory, reviewStatus, rows, search, status, visibility])
+    rows,
+    search,
+    status,
+    visibility,
+  ])
   const listError = listQuery.error ? normalizeError(listQuery.error) : null
+  const duplicateDiagnosticsError = duplicateDiagnosticsQuery.error
+    ? normalizeError(duplicateDiagnosticsQuery.error)
+    : !duplicateDiagnosticsQuery.isLoading
+      && !duplicateDiagnosticsQuery.isFetching
+      && !hasValidDuplicateDiagnostics
+      ? { message: 'The diagnostics response was incomplete.' }
+      : null
   const previewError = previewQuery.error ? normalizeError(previewQuery.error) : null
   const isInitialLoading =
-    (listQuery.isLoading || previewQuery.isLoading) && rows.length === 0
+    (listQuery.isLoading || previewQuery.isLoading || duplicateDiagnosticsQuery.isLoading)
+    && rows.length === 0
   const isLifecycleMutating = isDeprecatingVersion || isDisablingVersion || isRollingBackPack
   const pendingLifecycleConfig = LIFECYCLE_ACTION_CONFIG[pendingLifecycleAction?.action] || null
   const pendingLifecycleDetail = pendingLifecycleAction
@@ -1401,8 +1771,7 @@ function SuperAdminOutcomeKnowledgePacks() {
     ? contentPreviewState
     : EMPTY_CONTENT_PREVIEW_STATE
   const bindingStatus = previewData.status || 'BLOCKED'
-  const activeCount = Number(resolution.activeCount ?? 0)
-  const requiredCount = Number(resolution.requiredCount ?? rows.length)
+  const mandatorySafeguardsReady = bindingStatus === 'PROJECTED'
   const unboundRequiredPacks = resolution.unboundRequiredPacks ?? rows
     .filter((row) => row.runtimeBindable !== true)
     .map((row) => ({ label: row.label, packKey: row.packKey, status: row.status }))
@@ -1415,6 +1784,9 @@ function SuperAdminOutcomeKnowledgePacks() {
     setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
     setSourceImportError('')
     setSourceImportFieldErrors({})
+    setDuplicateReview(null)
+    setDuplicateOverrideReason('')
+    setDuplicateOverrideError('')
   }, [])
 
   const closeSourceImportDialog = useCallback(() => {
@@ -1423,6 +1795,16 @@ function SuperAdminOutcomeKnowledgePacks() {
     setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
     setSourceImportError('')
     setSourceImportFieldErrors({})
+    setDuplicateReview(null)
+    setDuplicateOverrideReason('')
+    setDuplicateOverrideError('')
+  }, [isImportingSourceDocumentDraft])
+
+  const closeDuplicateReview = useCallback(() => {
+    if (isImportingSourceDocumentDraft) return
+    setDuplicateReview(null)
+    setDuplicateOverrideReason('')
+    setDuplicateOverrideError('')
   }, [isImportingSourceDocumentDraft])
 
   const updateSourceImportForm = useCallback((field, value) => {
@@ -1469,6 +1851,30 @@ function SuperAdminOutcomeKnowledgePacks() {
     setContentPreviewState(EMPTY_CONTENT_PREVIEW_STATE)
   }, [])
 
+  const updateDuplicateOverrideReason = useCallback((value) => {
+    setDuplicateOverrideReason(value)
+    setDuplicateOverrideError('')
+  }, [])
+
+  const viewExistingDuplicateCandidate = useCallback((candidate) => {
+    const existingRow = rows.find((row) => (
+      formatDetailValue(row.packId, '') === candidate.packId
+      || (
+        normalizeDetailToken(row.packType) === candidate.packType
+        && formatDetailValue(row.packKey, '').toLowerCase() === candidate.packKey
+      )
+    ))
+    closeDuplicateReview()
+    openDetailDialog({
+      ...(existingRow || {
+        ...candidate,
+        id: candidate.packId,
+        isPersisted: true,
+      }),
+      latestVersionId: candidate.versionId || getVersionId(existingRow),
+    })
+  }, [closeDuplicateReview, openDetailDialog, rows])
+
   const closeDetailDialog = useCallback(() => {
     setDetailPack(null)
     setSelectedVersionId('')
@@ -1503,6 +1909,21 @@ function SuperAdminOutcomeKnowledgePacks() {
     if (isDeletingPack) return
     setPendingDeletePack(null)
   }, [isDeletingPack])
+
+  const completeSourceImport = useCallback((res, fallbackLabel) => {
+    addToast({
+      variant: 'success',
+      title: 'Draft imported',
+      description: `${res?.data?.pack?.label ?? fallbackLabel} is ready for review.`,
+    })
+    setIsSourceImportOpen(false)
+    setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
+    setSourceImportError('')
+    setSourceImportFieldErrors({})
+    setDuplicateReview(null)
+    setDuplicateOverrideReason('')
+    setDuplicateOverrideError('')
+  }, [addToast])
 
   const submitSourceImport = useCallback(async (event) => {
     event.preventDefault()
@@ -1557,49 +1978,103 @@ function SuperAdminOutcomeKnowledgePacks() {
       return
     }
 
-    try {
-      const res = await importSourceDocumentDraft({
-        packType: sourceImportForm.packType,
-        packKey: resolvedPackKey,
-        label: sourceImportForm.label,
-        description: sourceImportForm.description,
-        purposeCategory: sourceImportForm.purposeCategory,
-        semanticVersion,
-        schemaVersion,
-        sourceAuthority: sourceImportForm.sourceAuthority,
-        executionMode: sourceImportForm.executionMode,
-        visibility: sourceImportForm.visibility,
-        customerId: sourceImportForm.customerId,
-        tenantId: sourceImportForm.tenantId,
-        contentFormat: sourceImportForm.contentFormat,
-        sourceDocument: {
-          filename: sourceImportForm.filename,
-          contentType: sourceImportForm.contentType,
-          fileExtension: sourceImportForm.fileExtension,
-          sizeBytes: sourceImportForm.sizeBytes,
-          ...(isBinarySourceImport
-            ? { contentBase64: sourceImportForm.contentBase64 }
-            : {}),
-        },
-        extractedText: isBinarySourceImport ? undefined : sourceImportForm.extractedText,
-      }).unwrap()
+    const importPayload = {
+      packType: sourceImportForm.packType,
+      packKey: resolvedPackKey,
+      label: sourceImportForm.label,
+      description: sourceImportForm.description,
+      purposeCategory: sourceImportForm.purposeCategory,
+      semanticVersion,
+      schemaVersion,
+      sourceAuthority: sourceImportForm.sourceAuthority,
+      executionMode: sourceImportForm.executionMode,
+      visibility: sourceImportForm.visibility,
+      customerId: sourceImportForm.customerId,
+      tenantId: sourceImportForm.tenantId,
+      contentFormat: sourceImportForm.contentFormat,
+      sourceDocument: {
+        filename: sourceImportForm.filename,
+        contentType: sourceImportForm.contentType,
+        fileExtension: sourceImportForm.fileExtension,
+        sizeBytes: sourceImportForm.sizeBytes,
+        ...(isBinarySourceImport
+          ? { contentBase64: sourceImportForm.contentBase64 }
+          : {}),
+      },
+      extractedText: isBinarySourceImport ? undefined : sourceImportForm.extractedText,
+    }
 
-      addToast({
-        variant: 'success',
-        title: 'Draft imported',
-        description: `${res?.data?.pack?.label ?? sourceImportForm.label} is ready for review.`,
-      })
-      setIsSourceImportOpen(false)
-      setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
-      setSourceImportError('')
-      setSourceImportFieldErrors({})
+    try {
+      const res = await importSourceDocumentDraft(importPayload).unwrap()
+      completeSourceImport(res, sourceImportForm.label)
     } catch (err) {
       const appError = normalizeError(err)
+      if (isDuplicateReviewRequiredError(appError)) {
+        const details = appError.details || {}
+        const allowedActions = Array.isArray(details.allowedActions)
+          ? details.allowedActions
+          : Array.isArray(details.actions) ? details.actions : []
+        setDuplicateReview({
+          payload: importPayload,
+          candidates: getDuplicateReviewCandidates(details),
+          allowedActions,
+        })
+        setDuplicateOverrideReason('')
+        setDuplicateOverrideError('')
+        setSourceImportFieldErrors({})
+        setSourceImportError('')
+        return
+      }
+
       setSourceImportFieldErrors(collectSourceImportFieldErrors(appError.details))
       setSourceImportError(appError.message)
       addToast({ variant: 'error', title: 'Source import failed', description: appError.message })
     }
-  }, [addToast, importSourceDocumentDraft, isImportingSourceDocumentDraft, sourceImportForm])
+  }, [
+    addToast,
+    completeSourceImport,
+    importSourceDocumentDraft,
+    isImportingSourceDocumentDraft,
+    sourceImportForm,
+  ])
+
+  const continueSourceImportWithReason = useCallback(async () => {
+    if (!duplicateReview || isImportingSourceDocumentDraft) return
+
+    const reason = duplicateOverrideReason.trim()
+    if (reason.length < DUPLICATE_OVERRIDE_REASON_MIN_LENGTH) {
+      setDuplicateOverrideError(
+        `Enter at least ${DUPLICATE_OVERRIDE_REASON_MIN_LENGTH} characters before continuing.`,
+      )
+      return
+    }
+    if (reason.length > DUPLICATE_OVERRIDE_REASON_MAX_LENGTH) {
+      setDuplicateOverrideError(
+        `Reason must be ${DUPLICATE_OVERRIDE_REASON_MAX_LENGTH} characters or fewer.`,
+      )
+      return
+    }
+
+    setDuplicateOverrideError('')
+    try {
+      const res = await importSourceDocumentDraft({
+        ...duplicateReview.payload,
+        duplicateOverrideReason: reason,
+      }).unwrap()
+      completeSourceImport(res, duplicateReview.payload.label)
+    } catch (err) {
+      const appError = normalizeError(err)
+      setDuplicateOverrideError(appError.message)
+      addToast({ variant: 'error', title: 'Source import failed', description: appError.message })
+    }
+  }, [
+    addToast,
+    completeSourceImport,
+    duplicateOverrideReason,
+    duplicateReview,
+    importSourceDocumentDraft,
+    isImportingSourceDocumentDraft,
+  ])
 
   const handleValidateVersion = useCallback(async (row) => {
     const versionId = getVersionId(row)
@@ -1854,6 +2329,32 @@ function SuperAdminOutcomeKnowledgePacks() {
         ),
       },
       {
+        key: 'duplicateStatus',
+        label: 'Duplicate Status',
+        mobileLabel: 'Duplicate Status',
+        width: '176px',
+        render: (value, row) => {
+          const duplicateStatusConfig = getDuplicateStatusConfig(value)
+          const classificationSummary = row.duplicateClassifications
+            .map(formatDuplicateClassification)
+            .filter(Boolean)
+            .join(', ')
+          return (
+            <Status
+              size="sm"
+              showIcon
+              variant={duplicateStatusConfig.variant}
+              title={classificationSummary || undefined}
+            >
+              {duplicateStatusConfig.label}
+              {classificationSummary ? (
+                <span className="sr-only">: {classificationSummary}</span>
+              ) : null}
+            </Status>
+          )
+        },
+      },
+      {
         key: 'sourceFilename',
         label: 'Source',
         mobileLabel: 'Source',
@@ -1918,13 +2419,13 @@ function SuperAdminOutcomeKnowledgePacks() {
           </p>
         </div>
         <Badge
-          variant={bindingStatus === 'PROJECTED' ? 'success' : 'danger'}
+          variant={mandatorySafeguardsReady ? 'success' : 'danger'}
           size="sm"
           pill
           outline
           icon={<MdInventory2 aria-hidden="true" />}
         >
-          {bindingStatus}
+          {mandatorySafeguardsReady ? 'Safeguards ready' : 'Safeguards blocked'}
         </Badge>
       </header>
 
@@ -1935,27 +2436,29 @@ function SuperAdminOutcomeKnowledgePacks() {
               Runtime readiness
             </p>
             <h2 className="super-admin-outcome-knowledge-packs__summary-title">
-              {activeCount} of {requiredCount} required packs active
+              {mandatorySafeguardsReady
+                ? 'Mandatory runtime safeguards are ready'
+                : 'Mandatory runtime safeguards need attention'}
             </h2>
             <p className="super-admin-outcome-knowledge-packs__summary-copy">
               {previewData.summary
                 || 'Knowledge Pack Registry activation is required before Outcome Studio sessions can start.'}
             </p>
           </div>
-          <div className="super-admin-outcome-knowledge-packs__missing-list" aria-label="Unbound required packs">
+          <div className="super-admin-outcome-knowledge-packs__missing-list" aria-label="Unbound mandatory safeguards">
             {visibleUnboundRequiredPacks.length > 0 ? (
               visibleUnboundRequiredPacks.slice(0, 5).map((pack) => (
                 <Badge key={`${pack.packType}:${pack.packKey}`} variant="warning" size="sm" pill outline>
                   {pack.label ?? pack.packKey}
                 </Badge>
               ))
-            ) : bindingStatus !== 'PROJECTED' ? (
+            ) : !mandatorySafeguardsReady ? (
               <Badge variant="warning" size="sm" pill outline>
                 Authoring required
               </Badge>
             ) : (
               <Badge variant="success" size="sm" pill outline>
-                All packs active
+                Safeguards ready
               </Badge>
             )}
           </div>
@@ -2045,6 +2548,15 @@ function SuperAdminOutcomeKnowledgePacks() {
                   options={KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS}
                   onChange={(event) => setReviewStatus(event.target.value)}
                 />
+                <Select
+                  id="outcome-knowledge-packs-duplicate-status"
+                  label="Duplicate Status"
+                  size="sm"
+                  value={duplicateStatus}
+                  options={DUPLICATE_STATUS_OPTIONS}
+                  disabled={!duplicateDiagnosticsData}
+                  onChange={(event) => setDuplicateStatus(event.target.value)}
+                />
               </div>
 
               {listError || previewError ? (
@@ -2056,6 +2568,12 @@ function SuperAdminOutcomeKnowledgePacks() {
               <p className="super-admin-outcome-knowledge-packs__table-note">
                 Use Import Source Document to create governed drafts and new versions. Runtime activation remains a separate audited action.
               </p>
+
+              <DuplicateDiagnosticsSummary
+                data={duplicateDiagnosticsData}
+                error={duplicateDiagnosticsError}
+                isLoading={duplicateDiagnosticsQuery.isLoading}
+              />
 
               <HorizontalScroll
                 className="super-admin-outcome-knowledge-packs__table-wrap"
@@ -2074,7 +2592,11 @@ function SuperAdminOutcomeKnowledgePacks() {
                 />
               </HorizontalScroll>
 
-              {(listQuery.isFetching || previewQuery.isFetching) && !isInitialLoading ? (
+              {(
+                listQuery.isFetching
+                || previewQuery.isFetching
+                || duplicateDiagnosticsQuery.isFetching
+              ) && !isInitialLoading ? (
                 <InlineLoadingState label="Refreshing registry..." />
               ) : null}
             </div>
@@ -2098,6 +2620,18 @@ function SuperAdminOutcomeKnowledgePacks() {
         onFormChange={updateSourceImportForm}
         onFileMetadata={handleSourceImportFileMetadata}
         onFileReadError={handleSourceImportFileReadError}
+      />
+
+      <KnowledgePackDuplicateReviewDialog
+        open={Boolean(duplicateReview)}
+        review={duplicateReview}
+        reason={duplicateOverrideReason}
+        error={duplicateOverrideError}
+        isLoading={isImportingSourceDocumentDraft}
+        onCancel={closeDuplicateReview}
+        onReasonChange={updateDuplicateOverrideReason}
+        onViewExisting={viewExistingDuplicateCandidate}
+        onContinue={continueSourceImportWithReason}
       />
 
       <KnowledgePackDetailDialog

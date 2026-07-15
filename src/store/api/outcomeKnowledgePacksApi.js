@@ -27,6 +27,7 @@ export const buildOutcomeKnowledgePackListQuery = ({
   pageSize = 20,
   q = '',
   packType = '',
+  knowledgeLayer = '',
   packKey = '',
   status = '',
   sortBy = '',
@@ -39,6 +40,7 @@ export const buildOutcomeKnowledgePackListQuery = ({
 
   appendParam(params, 'q', q)
   appendParam(params, 'packType', packType)
+  appendParam(params, 'knowledgeLayer', knowledgeLayer)
   appendParam(params, 'packKey', packKey)
   appendParam(params, 'status', status)
   appendParam(params, 'sortBy', sortBy)
@@ -52,6 +54,9 @@ export const buildOutcomeKnowledgePackListQuery = ({
 
 export const buildOutcomeKnowledgePackDetailQuery = ({ packId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}`
+
+export const buildOutcomeKnowledgePackDuplicateDiagnosticsQuery = () =>
+  `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/duplicate-diagnostics`
 
 export const buildOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${encodePathSegment(versionId)}`
@@ -85,6 +90,10 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   label,
   description = '',
   purposeCategory = '',
+  knowledgeLayer = '',
+  capabilityKey = '',
+  workspaceCompatibility = [],
+  dependencyReferences = [],
   semanticVersion,
   schemaVersion = '1.0.0',
   sourceAuthority = '',
@@ -95,6 +104,7 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   contentFormat = '',
   sourceDocument = {},
   extractedText = '',
+  duplicateOverrideReason = '',
 } = {}) => {
   const body = {
     packType: normalizeToken(packType),
@@ -111,11 +121,28 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
 
   appendParam(body, 'description', description)
   appendParam(body, 'purposeCategory', purposeCategory)
+  appendParam(body, 'knowledgeLayer', knowledgeLayer)
+  appendParam(body, 'capabilityKey', capabilityKey)
+  if (Array.isArray(workspaceCompatibility) && workspaceCompatibility.length > 0) {
+    body.workspaceCompatibility = workspaceCompatibility.map(normalizeToken).filter(Boolean)
+  }
+  if (Array.isArray(dependencyReferences) && dependencyReferences.length > 0) {
+    body.dependencyReferences = dependencyReferences.map((reference) => ({
+      knowledgeLayer: normalizeToken(reference?.knowledgeLayer),
+      requirement: normalizeToken(reference?.requirement) || 'REQUIRED',
+      ...(normalizeToken(reference?.packType) ? { packType: normalizeToken(reference.packType) } : {}),
+      ...(normalizeText(reference?.packKey) ? { packKey: normalizeText(reference.packKey) } : {}),
+      ...(normalizeText(reference?.capabilityKey)
+        ? { capabilityKey: normalizeText(reference.capabilityKey) }
+        : {}),
+    }))
+  }
   appendParam(body, 'sourceAuthority', sourceAuthority)
   appendParam(body, 'customerId', customerId)
   appendParam(body, 'tenantId', tenantId)
   appendParam(body, 'contentFormat', contentFormat)
   appendParam(body, 'extractedText', extractedText)
+  appendParam(body, 'duplicateOverrideReason', duplicateOverrideReason)
   appendParam(body.sourceDocument, 'contentType', sourceDocument.contentType)
   appendParam(body.sourceDocument, 'fileExtension', sourceDocument.fileExtension)
   appendParam(body.sourceDocument, 'contentBase64', sourceDocument.contentBase64)
@@ -541,6 +568,11 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       providesTags: getListTags,
     }),
 
+    getOutcomeKnowledgePackDuplicateDiagnostics: build.query({
+      query: buildOutcomeKnowledgePackDuplicateDiagnosticsQuery,
+      providesTags: [outcomeKnowledgePackListTag],
+    }),
+
     getOutcomeKnowledgePack: build.query({
       query: buildOutcomeKnowledgePackDetailQuery,
       providesTags: getPackTags,
@@ -651,6 +683,7 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
 
 export const {
   useListOutcomeKnowledgePacksQuery,
+  useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
