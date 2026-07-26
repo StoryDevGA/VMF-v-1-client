@@ -106,6 +106,20 @@ export const getRuntimeWorkspaceRoute = (runtimeRecordOrId) => {
   return `/app/runtime/${encodeURIComponent(runtimeInstanceId)}`
 }
 
+export const getOutcomeStudioRoute = (runtimeRecordOrId) => {
+  const routeId = typeof runtimeRecordOrId === 'object'
+    ? getRuntimeInstanceRouteId(runtimeRecordOrId)
+    : String(runtimeRecordOrId ?? '').trim()
+
+  return routeId
+    ? `/app/runtime/${encodeURIComponent(routeId)}/outcome-studio`
+    : '/app/workspaces/vmf'
+}
+
+export const getOutcomeStudioReturnTarget = (runtimeInstanceId) => (
+  getRuntimeWorkspaceRoute(runtimeInstanceId)
+)
+
 export const getRuntimeLifecycleStatus = (runtimeRecord, fallback = 'DRAFT') => {
   const status = normalizeRuntimeToken(
     runtimeRecord?.runtimeStatus

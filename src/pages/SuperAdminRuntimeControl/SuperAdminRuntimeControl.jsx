@@ -11,6 +11,7 @@ import {
   MdLabel,
   MdPalette,
   MdSchema,
+  MdVerifiedUser,
   MdRule,
   MdSmartToy,
   MdTune,
@@ -84,6 +85,12 @@ const RUNTIME_CONTROL_MODULES = Object.freeze([
     description: 'Import, review, validate, and activate governed Knowledge Packs for Outcome Studio runtime bindings.',
     taskKey: 'OES-002A',
     Icon: MdSchema,
+  },
+  {
+    routeKey: 'outcomeStudioReadiness',
+    description: 'Record TEST-only Product, provider, and authority evidence while the server derives application readiness.',
+    taskKey: 'OES-004 R2 5A',
+    Icon: MdVerifiedUser,
   },
 ]).map((module) => ({
   ...module,

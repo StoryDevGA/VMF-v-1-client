@@ -5,6 +5,8 @@ import {
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
   getRuntimeInstanceRouteId,
+  getOutcomeStudioReturnTarget,
+  getOutcomeStudioRoute,
   getRuntimeLifecycleStatus,
   getRuntimeReadinessLabel,
   getRuntimeReadinessVariant,
@@ -43,6 +45,12 @@ describe('runtimeWorkspace utilities', () => {
       .toBe('/app/runtime/value%20narrative%2F001')
     expect(getRuntimeWorkspaceRoute({}))
       .toBe('/app/workspaces/vmf')
+    expect(getOutcomeStudioRoute('value narrative/001'))
+      .toBe('/app/runtime/value%20narrative%2F001/outcome-studio')
+    expect(getOutcomeStudioRoute({}))
+      .toBe('/app/workspaces/vmf')
+    expect(getOutcomeStudioReturnTarget('runtime-1'))
+      .toBe('/app/runtime/runtime-1')
   })
 
   it('maps runtime lifecycle and execution state variants separately', () => {

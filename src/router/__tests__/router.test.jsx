@@ -27,6 +27,10 @@ vi.mock('../../pages/SuperAdminRuntimeControl', () => ({
   default: () => <h1>Runtime Control Dashboard</h1>,
 }))
 
+vi.mock('../../pages/SuperAdminOutcomeStudioReadiness', () => ({
+  default: () => <h1>Application Readiness Administration</h1>,
+}))
+
 vi.mock('../../pages/SuperAdminFrameworkPackages', () => ({
   default: () => <h1>Framework Packages</h1>,
 }))
@@ -77,6 +81,10 @@ vi.mock('../../pages/MaintainVmfs', () => ({
 
 vi.mock('../../pages/RuntimeWorkspace', () => ({
   default: () => <h1>Runtime Workspace</h1>,
+}))
+
+vi.mock('../../pages/OutcomeStudioWorkspace', () => ({
+  default: () => <h1>Outcome Studio</h1>,
 }))
 
 vi.mock('../../pages/Dashboard', () => ({
@@ -278,6 +286,10 @@ describe('Router', () => {
       expect(runtimeRoute?.path).toBe('runtime/:runtimeInstanceId')
       expect(runtimeRoute?.element?.props?.requiredSelectedScopePermission).toBeUndefined()
       expect(runtimeRoute?.children).toBeUndefined()
+      const outcomeStudioRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'runtime/:runtimeInstanceId/outcome-studio',
+      )
+      expect(outcomeStudioRoute?.element?.props?.requiredSelectedScopePermission).toBeUndefined()
     })
 
     it('should render the runtime workspace route for authenticated customer users', async () => {
@@ -304,6 +316,28 @@ describe('Router', () => {
       expect(
         await screen.findByRole('heading', { name: /^runtime workspace$/i }, { timeout: 10000 }),
       ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render the standalone Outcome Studio route for authenticated customer users', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/app/runtime/value-narrative-001/outcome-studio'],
+      })
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'customer-user-1',
+            memberships: [{ customerId: 'cust-1', roles: ['USER'] }],
+            tenantMemberships: [],
+            vmfGrants: [],
+          },
+          status: 'authenticated',
+        },
+      })
+
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+
+      expect(await screen.findByRole('heading', { name: /^outcome studio$/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('main')).toHaveLength(1)
     }, ROUTE_TEST_TIMEOUT)
 
     it('should redirect the legacy manage-vmfs route to the VMF workspace route', () => {
@@ -470,6 +504,24 @@ describe('Router', () => {
           { timeout: 10000 },
         ),
       ).toBeInTheDocument()
+    }, ROUTE_TEST_TIMEOUT)
+
+    it('should render Outcome Studio Readiness for super admins', async () => {
+      const testRouter = createMemoryRouter(router.routes, {
+        initialEntries: ['/super-admin/runtime-control/outcome-studio-readiness'],
+      })
+      const store = createTestStore({
+        auth: {
+          user: {
+            id: 'sa-oes-readiness-1',
+            memberships: [{ customerId: null, roles: ['SUPER_ADMIN'] }],
+          },
+          status: 'authenticated',
+        },
+      })
+      renderWithProviders(<RouterProvider router={testRouter} />, { store })
+      expect(await screen.findByRole('heading', { name: 'Application Readiness Administration' })).toBeInTheDocument()
+      expect(screen.getAllByRole('main')).toHaveLength(1)
     }, ROUTE_TEST_TIMEOUT)
 
     it('should render the Framework Registry page at /super-admin/runtime-control/framework-registry for super admins', async () => {
@@ -851,6 +903,7 @@ describe('Router', () => {
         'runtime-control/ui-contracts/new',
         'runtime-control/ui-contracts/:uiContractId',
         'runtime-control/knowledge-packs',
+        'runtime-control/outcome-studio-readiness',
         'invitations',
         'license-levels',
         'roles',

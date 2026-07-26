@@ -165,6 +165,19 @@ export const buildApproveRuntimeOutcomeDraftQuery = ({
   body,
 })
 
+export const buildDiscardRuntimeOutcomeDraftQuery = ({
+  runtimeInstanceId,
+  sessionId,
+  draftId,
+  expectedUpdatedAt,
+}) => ({
+  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/discard`,
+  method: 'POST',
+  body: { expectedUpdatedAt },
+})
+
 export const buildPublishRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, body = {} }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
@@ -399,6 +412,7 @@ export const getSubmitRuntimeOutcomeMessageInvalidationTags = getRuntimeInstance
 export const getGenerateRuntimeOutcomeResponseInvalidationTags = getRuntimeInstanceDetailTags
 export const getUpdateRuntimeOutcomeSessionFromLatestTruthInvalidationTags = getRuntimeInstanceDetailTags
 export const getApproveRuntimeOutcomeDraftInvalidationTags = getRuntimeInstanceDetailTags
+export const getDiscardRuntimeOutcomeDraftInvalidationTags = getRuntimeInstanceDetailTags
 export const getPublishRuntimeOutcomeAssetInvalidationTags = getRuntimeInstanceDetailTags
 export const getCreateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getGenerateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
@@ -494,6 +508,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     approveRuntimeOutcomeDraft: build.mutation({
       query: buildApproveRuntimeOutcomeDraftQuery,
       invalidatesTags: getApproveRuntimeOutcomeDraftInvalidationTags,
+    }),
+
+    discardRuntimeOutcomeDraft: build.mutation({
+      query: buildDiscardRuntimeOutcomeDraftQuery,
+      invalidatesTags: getDiscardRuntimeOutcomeDraftInvalidationTags,
     }),
 
     publishRuntimeOutcomeAsset: build.mutation({
@@ -664,6 +683,7 @@ export const {
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useGetRuntimeOutcomeAssetVersionQuery,
   useApproveRuntimeOutcomeDraftMutation,
+  useDiscardRuntimeOutcomeDraftMutation,
   usePublishRuntimeOutcomeAssetMutation,
   useLazyExportRuntimeOutcomeAssetQuery,
   useCreateRuntimeOutcomeSessionMutation,

@@ -308,6 +308,7 @@ export const baseApi = createApi({
     'RuntimeInstance',
     'OutcomeKnowledgePack',
     'OutcomeKnowledgePackResolution',
+    'OutcomeStudioReadiness',
     'SkillRole',
     'SkillRoleDependencies',
     'ValidationRegistry',

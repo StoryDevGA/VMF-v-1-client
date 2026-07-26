@@ -1,9 +1,9 @@
 {
   "version": "0.0.0",
-  "buildNumber": "20260713.154935",
-  "commit": "eda1d32",
+  "buildNumber": "20260726.134026",
+  "commit": "e37c763",
   "branch": "main",
   "environment": "local",
-  "builtAt": "2026-07-13T15:49:35.956Z",
-  "fullVersion": "0.0.0+20260713.154935.eda1d32"
+  "builtAt": "2026-07-26T13:40:26.517Z",
+  "fullVersion": "0.0.0+20260726.134026.e37c763"
 }

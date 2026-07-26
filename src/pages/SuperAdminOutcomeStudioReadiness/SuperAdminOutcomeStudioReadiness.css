@@ -1,0 +1,295 @@
+.oes-readiness {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-xl);
+  padding-block: var(--spacing-xl);
+}
+
+.oes-readiness h1,
+.oes-readiness h2,
+.oes-readiness h3,
+.oes-readiness p,
+.oes-readiness dl,
+.oes-readiness dd {
+  margin-block: 0;
+}
+
+.oes-readiness__header,
+.oes-readiness__summary,
+.oes-readiness__section {
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  padding: var(--spacing-lg);
+}
+
+.oes-readiness__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-lg);
+}
+
+.oes-readiness__header > div,
+.oes-readiness__section,
+.oes-readiness__readiness-form,
+.oes-readiness__dialog-form,
+.oes-readiness__decision-fields {
+  display: grid;
+  gap: var(--spacing-lg);
+}
+
+.oes-readiness__eyebrow,
+.oes-readiness__gate-number {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.oes-readiness__summary {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.oes-readiness__summary > div:first-child {
+  margin-right: auto;
+}
+
+.oes-readiness__blockers,
+.oes-readiness__gate-strip {
+  flex-basis: 100%;
+  padding-top: var(--spacing-md);
+  border-top: var(--border-width-thin) solid var(--color-border);
+}
+
+.oes-readiness__blockers ul {
+  margin: var(--spacing-sm) 0 0;
+  padding-left: var(--spacing-lg);
+}
+
+.oes-readiness__blockers li {
+  overflow-wrap: anywhere;
+}
+
+.oes-readiness__gate-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.oes-readiness__gate-strip > div {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  padding: var(--spacing-sm);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
+}
+
+.oes-readiness__gate-strip span:first-child {
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-sm);
+}
+
+.oes-readiness__server-meta,
+.oes-readiness__helper,
+.oes-readiness__pagination-summary {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.oes-readiness__policy-notice,
+.oes-readiness__governance-note {
+  border-left: var(--border-width-thick) solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  padding: var(--spacing-md);
+}
+
+.oes-readiness__policy-notice {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.oes-readiness__section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.oes-readiness__section-heading > div {
+  display: grid;
+  gap: var(--spacing-xs);
+}
+
+.oes-readiness__form-grid,
+.oes-readiness__decision-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.oes-readiness__decision-fields > :last-child:nth-child(4),
+.oes-readiness__decision-fields > .oes-readiness__helper {
+  grid-column: 1 / -1;
+}
+
+.oes-readiness__fixed-policy {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.oes-readiness__fixed-policy > div {
+  min-width: 0;
+  padding: var(--spacing-sm);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
+}
+
+.oes-readiness__fixed-policy dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+}
+
+.oes-readiness__fixed-policy dd {
+  overflow-wrap: anywhere;
+}
+
+.oes-readiness__actions,
+.oes-readiness__dialog-actions,
+.oes-readiness__row-actions,
+.oes-readiness__pagination,
+.oes-readiness__pagination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.oes-readiness__actions,
+.oes-readiness__dialog-actions {
+  justify-content: flex-end;
+}
+
+.oes-readiness__row-actions {
+  justify-content: flex-start;
+}
+
+.oes-readiness__pagination {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.oes-readiness__pagination-info {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.oes-readiness__loading,
+.oes-readiness__inline-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  min-height: 160px;
+  color: var(--color-text-secondary);
+}
+
+.oes-readiness__inline-loading {
+  min-height: 80px;
+}
+
+.oes-readiness__history {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.oes-readiness__history article {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
+}
+
+.oes-readiness__empty {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
+}
+
+.oes-readiness__file-field {
+  display: grid;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.oes-readiness__file-field input {
+  min-height: 44px;
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+}
+
+.oes-readiness__field-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 1023px) {
+  .oes-readiness__gate-strip,
+  .oes-readiness__fixed-policy {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .oes-readiness__header {
+    flex-direction: column-reverse;
+  }
+
+  .oes-readiness__section-heading {
+    flex-direction: column;
+  }
+
+  .oes-readiness__section-heading > .btn,
+  .oes-readiness__dialog-actions > .btn {
+    width: 100%;
+  }
+
+  .oes-readiness__pagination {
+    align-items: stretch;
+  }
+
+  .oes-readiness__pagination-controls,
+  .oes-readiness__pagination-info {
+    width: 100%;
+  }
+
+  .oes-readiness__pagination-controls > .btn {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+  }
+
+  .oes-readiness__pagination-info {
+    text-align: center;
+  }
+
+  .oes-readiness__gate-strip,
+  .oes-readiness__fixed-policy,
+  .oes-readiness__form-grid,
+  .oes-readiness__decision-fields,
+  .oes-readiness__history article {
+    grid-template-columns: 1fr;
+  }
+}

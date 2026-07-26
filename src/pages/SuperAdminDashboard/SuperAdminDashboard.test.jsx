@@ -134,7 +134,7 @@ describe('SuperAdminDashboard page', () => {
     expect(screen.getByRole('heading', { name: /runtime control/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /runtime observability/i })).toBeInTheDocument()
     expect(screen.getAllByText('3 available')).toHaveLength(2)
-    expect(screen.getAllByText('12 available')).toHaveLength(1)
+    expect(screen.getAllByText('13 available')).toHaveLength(1)
     expect(within(getHeroMetric('API health')).getByText('Healthy')).toBeInTheDocument()
     expect(within(getHeroMetric('API uptime')).getByText('2h')).toBeInTheDocument()
     expect(within(getHeroMetric('Audit evidence')).getByText('550')).toBeInTheDocument()
@@ -183,6 +183,10 @@ describe('SuperAdminDashboard page', () => {
     expect(screen.getByRole('link', { name: /knowledge packs.*42.*packs/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/knowledge-packs',
+    )
+    expect(screen.getByRole('link', { name: /outcome studio readiness/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/outcome-studio-readiness',
     )
     expect(screen.getByRole('link', { name: /monitoring/i })).toHaveAttribute(
       'href',
@@ -235,6 +239,10 @@ describe('SuperAdminDashboard page', () => {
     expect(within(runtimeControlSection).getByRole('link', { name: /knowledge packs.*42.*packs/i })).toHaveAttribute(
       'href',
       '/super-admin/runtime-control/knowledge-packs',
+    )
+    expect(within(runtimeControlSection).getByRole('link', { name: /outcome studio readiness/i })).toHaveAttribute(
+      'href',
+      '/super-admin/runtime-control/outcome-studio-readiness',
     )
   })
 })

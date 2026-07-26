@@ -46,6 +46,9 @@ const SuperAdminUiContracts = lazy(
 const SuperAdminOutcomeKnowledgePacks = lazy(
   () => import('../pages/SuperAdminOutcomeKnowledgePacks'),
 )
+const SuperAdminOutcomeStudioReadiness = lazy(
+  () => import('../pages/SuperAdminOutcomeStudioReadiness'),
+)
 const SuperAdminUiContractEditor = lazy(
   () => import('../pages/SuperAdminUiContracts').then((module) => ({ default: module.SuperAdminUiContractEditor })),
 )
@@ -112,6 +115,9 @@ const MaintainVmfs = lazy(
 )
 const RuntimeWorkspace = lazy(
   () => import('../pages/RuntimeWorkspace'),
+)
+const OutcomeStudioWorkspace = lazy(
+  () => import('../pages/OutcomeStudioWorkspace'),
 )
 const TenantLinkedUsersWorkspace = lazy(
   () => import('../pages/MaintainTenants/TenantLinkedUsersWorkspace'),
@@ -200,6 +206,10 @@ export const router = createBrowserRouter([
               {
                 path: 'runtime/:runtimeInstanceId',
                 element: <RuntimeWorkspace />,
+              },
+              {
+                path: 'runtime/:runtimeInstanceId/outcome-studio',
+                element: <OutcomeStudioWorkspace />,
               },
               {
                 path: 'administration',
@@ -369,6 +379,10 @@ export const router = createBrowserRouter([
                 {
                   path: 'runtime-control/knowledge-packs',
                   element: <SuperAdminOutcomeKnowledgePacks />,
+                },
+                {
+                  path: 'runtime-control/outcome-studio-readiness',
+                  element: <SuperAdminOutcomeStudioReadiness />,
                 },
               ]
             : []),

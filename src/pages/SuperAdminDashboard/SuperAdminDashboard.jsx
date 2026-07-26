@@ -25,6 +25,7 @@ import {
   MdSmartToy,
   MdTune,
   MdWorkspacePremium,
+  MdVerifiedUser,
 } from 'react-icons/md'
 import { Badge } from '../../components/Badge'
 import { Card } from '../../components/Card'
@@ -85,6 +86,7 @@ const LINK_ICON_MAP = {
   'workflow-policies': MdPolicy,
   'framework-packages': MdInventory2,
   'ui-contracts': MdAssignmentTurnedIn,
+  'outcome-studio-readiness': MdVerifiedUser,
 }
 
 function getHealthSignal({ healthData, isFetching, error }) {

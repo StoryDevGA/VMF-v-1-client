@@ -40,7 +40,7 @@ const PHASE_1A_GROUP_ROUTE_KEYS = Object.freeze({
 })
 
 const PHASE_1B_GROUP_ROUTE_KEYS = Object.freeze({
-  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages', 'uiContracts', 'knowledgePacks']),
+  'runtime-control': Object.freeze(['frameworkRegistry', 'runtimePaths', 'skillRoles', 'skills', 'validationRegistry', 'agents', 'workflowPolicies', 'frameworkPackages', 'uiContracts', 'knowledgePacks', 'outcomeStudioReadiness']),
 })
 
 const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
@@ -54,6 +54,7 @@ const ENABLED_RUNTIME_CONTROL_MODULE_ROUTE_KEYS = Object.freeze([
   'frameworkPackages',
   'uiContracts',
   'knowledgePacks',
+  'outcomeStudioReadiness',
 ])
 
 const SUPER_ADMIN_DASHBOARD_GROUP_CATALOG = Object.freeze({
@@ -226,6 +227,16 @@ const SUPER_ADMIN_ROUTE_CATALOG = Object.freeze({
       canonical: 'Knowledge Packs',
       legacyNav: 'Knowledge Packs',
       phase1aNav: 'Knowledge Packs',
+    }),
+  }),
+  outcomeStudioReadiness: Object.freeze({
+    key: 'outcome-studio-readiness',
+    to: '/super-admin/runtime-control/outcome-studio-readiness',
+    availability: SUPER_ADMIN_ROUTE_PHASES.PHASE_1B,
+    labels: Object.freeze({
+      canonical: 'Outcome Studio Readiness',
+      legacyNav: 'Outcome Studio Readiness',
+      phase1aNav: 'Outcome Studio Readiness',
     }),
   }),
   agents: Object.freeze({
