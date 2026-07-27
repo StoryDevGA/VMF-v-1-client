@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdArrowBack,
@@ -31,6 +31,7 @@ import {
   useLazyExportRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
@@ -79,6 +80,13 @@ const buildDraftRows = (drafts, { sessionInformationCurrent }) => drafts.map((dr
       : !sessionInformationCurrent || informationCurrentness !== 'CURRENT'
         ? 'Approval is blocked until the draft uses current verified business information.'
         : ''
+  const previewDisabledReason = !draftId
+    ? 'Preview is unavailable until the draft has been persisted.'
+    : draft.approvalAvailable === false
+      ? 'Preview is unavailable until the draft passes content review.'
+      : !sessionInformationCurrent || informationCurrentness !== 'CURRENT'
+        ? 'Preview is blocked until the draft uses current verified business information.'
+        : ''
 
   return {
     approvalDisabledReason,
@@ -86,16 +94,27 @@ const buildDraftRows = (drafts, { sessionInformationCurrent }) => drafts.map((dr
     draftId,
     informationCurrentness,
     key: draftId || `unpersisted-draft-${index}`,
+    previewDisabledReason,
     readyToApprove: !approvalDisabledReason,
   }
 })
 
 const statusVariant = (value) => {
   const normalized = token(value)
-  if (['READY', 'CURRENT', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'PASSED', 'RESPONSE_READY'].includes(normalized)) return 'success'
+  if (['READY', 'CURRENT', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'PASSED', 'RESPONSE_READY', 'RESPONSE_GENERATED'].includes(normalized)) return 'success'
   if (['BLOCKED', 'FAILED', 'ERROR', 'STALE', 'OBSOLETE'].includes(normalized)) return 'error'
   if (['PENDING', 'PENDING_RESPONSE', 'DRAFT', 'READY_WITH_GAPS', 'OUT_OF_DATE'].includes(normalized)) return 'warning'
   return 'neutral'
+}
+
+const resolveDeliverableKey = ({ deliverableKey, requestedOutputTypeKey, deliverables }) => {
+  const availableKeys = new Set(deliverables.map((item) => item.key))
+  const candidates = [
+    String(deliverableKey || '').trim().toLowerCase(),
+    String(requestedOutputTypeKey || '').trim().toLowerCase(),
+    deliverables[0]?.key || '',
+  ]
+  return candidates.find((candidate) => availableKeys.has(candidate)) || ''
 }
 
 const renderSafeMarkdown = (markdown) => {
@@ -206,8 +225,14 @@ function OutcomeStudioWorkspace() {
   const [deliverableKey, setDeliverableKey] = useState('')
   const [pendingDiscard, setPendingDiscard] = useState(null)
   const [selectedAssetId, setSelectedAssetId] = useState('')
+  const [selectedDraftId, setSelectedDraftId] = useState('')
+  const [selectedDraftPreview, setSelectedDraftPreview] = useState(null)
+  const [draftPreviewError, setDraftPreviewError] = useState(null)
   const [busyKey, setBusyKey] = useState('')
   const [showAllRequests, setShowAllRequests] = useState(false)
+  const draftPreviewRequestRef = useRef(0)
+  const requestedDraftIterationRef = useRef('')
+  const currentSelectedDraftIterationRef = useRef('')
 
   const studioQuery = useGetRuntimeOutcomeStudioQuery({ runtimeInstanceId }, { skip: !runtimeInstanceId })
   const readinessQuery = useGetRuntimeOutcomeStudioReadinessQuery(
@@ -235,6 +260,7 @@ function OutcomeStudioWorkspace() {
   const [exportAsset] = useLazyExportRuntimeOutcomeAssetQuery()
   const [loadAsset, assetDetailState] = useLazyGetRuntimeOutcomeAssetQuery()
   const [loadPreview, assetPreviewState] = useLazyGetRuntimeOutcomeAssetPreviewQuery()
+  const [loadDraftPreview] = useLazyGetRuntimeOutcomeDraftPreviewQuery()
 
   const deliverables = useMemo(() => (
     (Array.isArray(studio?.deliverables?.available) ? studio.deliverables.available : EMPTY_ARRAY)
@@ -245,13 +271,17 @@ function OutcomeStudioWorkspace() {
       }))
       .filter((item) => item.key && item.label)
   ), [studio?.deliverables?.available])
-  const selectedDeliverableKey = deliverableKey
-    || String(session?.requestedOutputTypeKey || deliverables[0]?.key || '').trim().toLowerCase()
+  const selectedDeliverableKey = resolveDeliverableKey({
+    deliverableKey,
+    requestedOutputTypeKey: session?.requestedOutputTypeKey,
+    deliverables,
+  })
   const messages = Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY
   const requestMessages = messages.filter((message) => token(message?.role) !== 'ASSISTANT')
+  const newestFirstRequestMessages = [...requestMessages].reverse()
   const visibleMessages = showAllRequests
-    ? requestMessages
-    : requestMessages.slice(-REQUEST_HISTORY_PREVIEW_LIMIT)
+    ? newestFirstRequestMessages
+    : newestFirstRequestMessages.slice(0, REQUEST_HISTORY_PREVIEW_LIMIT)
   const drafts = (Array.isArray(session?.drafts) ? session.drafts : EMPTY_ARRAY)
     .filter((draft) => token(draft?.status) === 'ACTIVE')
   const assets = Array.isArray(session?.assets)
@@ -262,9 +292,18 @@ function OutcomeStudioWorkspace() {
   const selectedPreview = payload(assetPreviewState.data)
   const previewError = assetDetailState.error || assetPreviewState.error
   const previewLoading = assetDetailState.isFetching || assetPreviewState.isFetching
+  const draftPreviewSupportError = draftPreviewError
+    ? {
+        ...normalizeError(draftPreviewError),
+        message: 'This draft preview is temporarily unavailable. Refresh and try again.',
+      }
+    : null
   const information = studio?.information || studio?.truthBinding?.truthSignature || {}
   const isSessionInformationCurrent = !activeSessionId || isInformationCurrent(session)
   const draftRows = buildDraftRows(drafts, { sessionInformationCurrent: isSessionInformationCurrent })
+  const selectedDraftRow = draftRows.find((row) => row.draftId === selectedDraftId) || null
+  const selectedDraftIterationId = String(selectedDraftRow?.draft?.currentIterationId || '').trim()
+  currentSelectedDraftIterationRef.current = selectedDraftIterationId
   const readyDraftCount = draftRows.filter((row) => row.readyToApprove).length
   const unavailableDraftCount = draftRows.length - readyDraftCount
   const conversationEnabled = studio?.conversation?.enabled === true && isSessionInformationCurrent
@@ -282,8 +321,29 @@ function OutcomeStudioWorkspace() {
   const pageError = studioQuery.error || readinessQuery.error
 
   useEffect(() => {
+    draftPreviewRequestRef.current += 1
     setShowAllRequests(false)
+    setSelectedDraftId('')
+    setSelectedDraftPreview(null)
+    setDraftPreviewError(null)
+    requestedDraftIterationRef.current = ''
+    setBusyKey((current) => current.startsWith('preview:') ? '' : current)
   }, [activeSessionId])
+
+  useEffect(() => {
+    if (
+      !selectedDraftId
+      || !requestedDraftIterationRef.current
+      || requestedDraftIterationRef.current === selectedDraftIterationId
+    ) return
+
+    draftPreviewRequestRef.current += 1
+    requestedDraftIterationRef.current = ''
+    setSelectedDraftId('')
+    setSelectedDraftPreview(null)
+    setDraftPreviewError(null)
+    setBusyKey((current) => current.startsWith('preview:') ? '' : current)
+  }, [selectedDraftId, selectedDraftIterationId])
 
   const notify = (title, description, variant = 'success') => addToast({ title, description, variant })
   const failureMessage = (error) => {
@@ -296,9 +356,27 @@ function OutcomeStudioWorkspace() {
     return `This output preview is temporarily unavailable. Refresh and try again.${reference}`
   }
 
-  const afterMutation = async (message) => {
-    await refetchAll(sessionQuery.refetch, studioQuery.refetch, readinessQuery.refetch)
-    notify('Outcome Studio updated', message)
+  const refreshFailureMessage = (error) => {
+    const normalized = normalizeError(error)
+    const reference = normalized.requestId ? ` Reference: ${normalized.requestId}` : ''
+    return `The change was saved, but the latest Outcome Studio information could not be loaded. Refresh the page.${reference}`
+  }
+
+  const refreshAfterMutation = async (
+    message,
+    {
+      title = 'Outcome Studio updated',
+      refetchers = [sessionQuery.refetch, studioQuery.refetch, readinessQuery.refetch],
+    } = {},
+  ) => {
+    try {
+      await refetchAll(...refetchers)
+    } catch (error) {
+      notify('Outcome Studio refresh needed', refreshFailureMessage(error), 'warning')
+      return false
+    }
+    notify(title, message)
+    return true
   }
 
   const handleStartSession = async () => {
@@ -312,8 +390,9 @@ function OutcomeStudioWorkspace() {
         },
       }).unwrap()
       setPrompt('')
-      await refetchAll(studioQuery.refetch, readinessQuery.refetch)
-      notify('Outcome Studio updated', 'Outcome Studio session started.')
+      await refreshAfterMutation('Outcome Studio session started.', {
+        refetchers: [studioQuery.refetch, readinessQuery.refetch],
+      })
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
     }
@@ -328,7 +407,7 @@ function OutcomeStudioWorkspace() {
         body: { prompt: prompt.trim(), requestedOutputTypeKey: selectedDeliverableKey },
       }).unwrap()
       setPrompt('')
-      await afterMutation('Outcome Studio request submitted.')
+      await refreshAfterMutation('Outcome Studio request submitted.')
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
     }
@@ -340,7 +419,7 @@ function OutcomeStudioWorkspace() {
     setBusyKey(`generate:${messageId}`)
     try {
       await generateResponse({ runtimeInstanceId, sessionId: activeSessionId, messageId, body: {} }).unwrap()
-      await afterMutation('Outcome Studio draft generated.')
+      await refreshAfterMutation('Outcome Studio draft generated.')
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
     } finally {
@@ -352,7 +431,7 @@ function OutcomeStudioWorkspace() {
     if (!activeSessionId) return
     try {
       await updateTruth({ runtimeInstanceId, sessionId: activeSessionId, body: {} }).unwrap()
-      await afterMutation('Outcome Studio information updated.')
+      await refreshAfterMutation('Outcome Studio information updated.')
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
     }
@@ -365,7 +444,7 @@ function OutcomeStudioWorkspace() {
     setBusyKey(`approve:${draftId}`)
     try {
       await approveDraft({ runtimeInstanceId, sessionId: activeSessionId, draftId, body: {} }).unwrap()
-      await afterMutation('Working draft approved as a governed output.')
+      await refreshAfterMutation('Working draft approved as a governed output.')
       setActiveTab(2)
       return true
     } catch (error) {
@@ -386,9 +465,14 @@ function OutcomeStudioWorkspace() {
         draftId,
         expectedUpdatedAt: pendingDiscard.updatedAt,
       }).unwrap()
-      await refetchAll(sessionQuery.refetch, studioQuery.refetch)
       setPendingDiscard(null)
-      notify('Working draft discarded', 'The draft was retained in history and removed from active work.')
+      await refreshAfterMutation(
+        'The draft was retained in history and removed from active work.',
+        {
+          title: 'Working draft discarded',
+          refetchers: [sessionQuery.refetch, studioQuery.refetch],
+        },
+      )
     } catch (error) {
       notify('Draft discard failed', failureMessage(error), 'error')
     }
@@ -403,6 +487,38 @@ function OutcomeStudioWorkspace() {
     ])
   }
 
+  const handlePreviewDraft = async (draftRow) => {
+    const { draft, draftId, previewDisabledReason } = draftRow || {}
+    const draftIterationId = String(draft?.currentIterationId || '').trim()
+    if (!activeSessionId || !draftId || !draftIterationId || previewDisabledReason) return
+
+    const requestId = draftPreviewRequestRef.current + 1
+    draftPreviewRequestRef.current = requestId
+    requestedDraftIterationRef.current = draftIterationId
+    currentSelectedDraftIterationRef.current = draftIterationId
+    setSelectedDraftId(draftId)
+    setSelectedDraftPreview(null)
+    setDraftPreviewError(null)
+    setBusyKey(`preview:${draftId}`)
+    try {
+      const response = await loadDraftPreview({
+        runtimeInstanceId,
+        sessionId: activeSessionId,
+        draftId,
+      }).unwrap()
+      if (
+        draftPreviewRequestRef.current !== requestId
+        || currentSelectedDraftIterationRef.current !== draftIterationId
+      ) return
+      setSelectedDraftPreview(payload(response))
+    } catch (error) {
+      if (draftPreviewRequestRef.current !== requestId) return
+      setDraftPreviewError(error)
+    } finally {
+      if (draftPreviewRequestRef.current === requestId) setBusyKey('')
+    }
+  }
+
   const handlePublish = async (asset) => {
     const outcomeAssetId = assetIdOf(asset)
     if (
@@ -415,7 +531,7 @@ function OutcomeStudioWorkspace() {
     setBusyKey(`publish:${outcomeAssetId}`)
     try {
       await publishAsset({ runtimeInstanceId, outcomeAssetId, body: {} }).unwrap()
-      await afterMutation('Approved output published.')
+      await refreshAfterMutation('Approved output published.')
     } catch (error) {
       notify('Publish failed', failureMessage(error), 'error')
     } finally {
@@ -609,12 +725,14 @@ function OutcomeStudioWorkspace() {
               ) : sessionQuery.isLoading ? <Spinner size="sm" aria-label="Loading working drafts" /> : draftRows.length ? (
                 <ul className="outcome-studio-workspace__items" aria-label="Working drafts">
                   {draftRows.map((draftRow) => {
-                    const { approvalDisabledReason, draft, draftId, informationCurrentness, key, readyToApprove } = draftRow
+                    const { approvalDisabledReason, draft, draftId, informationCurrentness, key, previewDisabledReason, readyToApprove } = draftRow
                     const approvalReasonId = `outcome-draft-approval-reason-${key}`
-                    return <li key={key}><div><h3>{draft.title || draft.outputTypeLabel || 'Working draft'}</h3><p>Current iteration {draft.currentIterationNumber || 1} · Updated {formatDateTime(draft.updatedAt, 'Time unavailable')}</p><Status variant={readyToApprove ? 'success' : 'warning'} size="sm">{readyToApprove ? 'Ready to approve' : 'Approval unavailable'}</Status><Status variant={statusVariant(informationCurrentness)} size="sm">Information {formatRuntimeTokenLabel(informationCurrentness)}</Status>{approvalDisabledReason ? <p id={approvalReasonId}>{approvalDisabledReason}</p> : null}</div><ButtonGroup align="end"><Button variant="danger" size="sm" leftIcon={<MdDeleteOutline aria-hidden="true" />} disabled={!draftId || !draft.updatedAt || discardState.isLoading} onClick={() => setPendingDiscard(draft)}>Discard</Button><Button size="sm" leftIcon={<MdCheckCircle aria-hidden="true" />} loading={busyKey === `approve:${draftId}`} disabled={Boolean(approvalDisabledReason)} aria-describedby={approvalDisabledReason ? approvalReasonId : undefined} onClick={() => handleApprove(draftRow)}>Approve draft</Button></ButtonGroup></li>
+                    const previewReasonId = `outcome-draft-preview-reason-${key}`
+                    return <li key={key}><div><h3>{draft.title || draft.outputTypeLabel || 'Working draft'}</h3><p>Current iteration {draft.currentIterationNumber || 1} · Updated {formatDateTime(draft.updatedAt, 'Time unavailable')}</p><Status variant={readyToApprove ? 'success' : 'warning'} size="sm">{readyToApprove ? 'Ready to approve' : 'Approval unavailable'}</Status><Status variant={statusVariant(informationCurrentness)} size="sm">Information {formatRuntimeTokenLabel(informationCurrentness)}</Status>{previewDisabledReason ? <p id={previewReasonId}>{previewDisabledReason}</p> : null}{approvalDisabledReason && approvalDisabledReason !== previewDisabledReason ? <p id={approvalReasonId}>{approvalDisabledReason}</p> : null}</div><ButtonGroup align="end"><Button variant="danger" size="sm" leftIcon={<MdDeleteOutline aria-hidden="true" />} disabled={!draftId || !draft.updatedAt || discardState.isLoading} onClick={() => setPendingDiscard(draft)}>Discard</Button><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} loading={busyKey === `preview:${draftId}`} disabled={Boolean(previewDisabledReason)} aria-describedby={previewDisabledReason ? previewReasonId : undefined} onClick={() => handlePreviewDraft(draftRow)}>Preview</Button><Button size="sm" leftIcon={<MdCheckCircle aria-hidden="true" />} loading={busyKey === `approve:${draftId}`} disabled={Boolean(approvalDisabledReason)} aria-describedby={approvalDisabledReason ? (approvalDisabledReason === previewDisabledReason ? previewReasonId : approvalReasonId) : undefined} onClick={() => handleApprove(draftRow)}>Approve draft</Button></ButtonGroup></li>
                   })}
                 </ul>
               ) : <Status variant="neutral" size="sm">No working drafts</Status>}
+              {selectedDraftRow ? <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio working draft preview"><div className="outcome-studio-workspace__panel-heading"><div><h3>Working Draft Preview</h3><p>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'}</p></div>{busyKey === `preview:${selectedDraftId}` ? <Spinner size="sm" aria-label="Loading working draft preview" /> : <Status variant={draftPreviewError ? 'error' : selectedDraftPreview ? 'success' : 'neutral'} size="sm">{draftPreviewError ? 'Unavailable' : selectedDraftPreview ? 'Available' : 'Not loaded'}</Status>}</div>{draftPreviewSupportError ? <div className="outcome-studio-workspace__error"><Status variant="error" size="sm" showIcon>{draftPreviewSupportError.message}</Status><ErrorSupportPanel error={draftPreviewSupportError} context="outcome-studio-draft-preview" /></div> : String(selectedDraftPreview?.markdown || '').trim() ? <div className="outcome-studio-workspace__preview-body outcome-studio-workspace__preview-body--markdown">{renderSafeMarkdown(selectedDraftPreview.markdown)}</div> : selectedDraftPreview?.sections?.length ? <div className="outcome-studio-workspace__preview-body">{selectedDraftPreview.sections.map((section) => <section key={section.key || section.label}><h4>{section.label}</h4><p>{section.body}</p></section>)}</div> : null}</section> : null}
             </section>
           </TabView.Tab>
 

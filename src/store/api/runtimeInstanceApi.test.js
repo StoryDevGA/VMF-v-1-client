@@ -29,6 +29,7 @@ import {
   buildRuntimeOutcomeStudioReadinessQuery,
   buildRuntimeOutcomeAssetQuery,
   buildRuntimeOutcomeAssetVersionQuery,
+  buildRuntimeOutcomeDraftPreviewQuery,
   buildRuntimeOutcomeSessionAssetsQuery,
   buildRuntimeOutcomeSessionQuery,
   buildRuntimeRendererQuery,
@@ -64,6 +65,8 @@ import {
   getPublishRuntimeOutcomeAssetInvalidationTags,
   getPublishRuntimeOutputAssetInvalidationTags,
   getRuntimeInstanceDetailTags,
+  getRuntimeInstanceCacheIds,
+  getRuntimeInstanceId,
   getRuntimeInstanceListTags,
   getRuntimeRendererTags,
   getResetRuntimeDiscoveryInvalidationTags,
@@ -108,6 +111,7 @@ import {
   useGetRuntimeOutcomeSessionAssetsQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeDraftPreviewQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
   useLazyExportRuntimeOutcomeAssetQuery,
@@ -151,6 +155,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeSessionAssets')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeAssetVersion')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeDraftPreview')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('approveRuntimeOutcomeDraft')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('discardRuntimeOutcomeDraft')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('publishRuntimeOutcomeAsset')
@@ -201,6 +206,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeOutcomeSessionAssetsQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeAssetQuery).toBe('function')
     expect(typeof useLazyGetRuntimeOutcomeAssetQuery).toBe('function')
+    expect(typeof useLazyGetRuntimeOutcomeDraftPreviewQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeAssetVersionQuery).toBe('function')
     expect(typeof useApproveRuntimeOutcomeDraftMutation).toBe('function')
     expect(typeof useDiscardRuntimeOutcomeDraftMutation).toBe('function')
@@ -252,6 +258,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeSessionAssets.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeAsset.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeAssetVersion.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeDraftPreview.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.approveRuntimeOutcomeDraft.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.discardRuntimeOutcomeDraft.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.publishRuntimeOutcomeAsset.initiate).toBe('function')
@@ -290,6 +297,15 @@ describe('runtimeInstanceApi', () => {
       pageSize: 25,
     })).toBe(
       '/runtime-instances?customerId=cust-1&tenantId=tenant-1&runtimeType=VALUE_NARRATIVE&q=Northwind&status=ACTIVE&page=2&pageSize=25',
+    )
+  })
+
+  it('builds a sparse list query with stable default pagination', () => {
+    expect(buildRuntimeInstanceListQuery({
+      customerId: ' cust-1 ',
+      runtimeType: 'VALUE_NARRATIVE',
+    })).toBe(
+      '/runtime-instances?customerId=cust-1&runtimeType=VALUE_NARRATIVE&page=1&pageSize=20',
     )
   })
 
@@ -372,6 +388,11 @@ describe('runtimeInstanceApi', () => {
       outcomeAssetId: 'outcome/asset-001',
       outcomeAssetVersionId: 'version/current-001',
     })).toBe('/runtime-instances/value%20narrative%2F001/outcome-studio/assets/outcome%2Fasset-001/versions/version%2Fcurrent-001')
+    expect(buildRuntimeOutcomeDraftPreviewQuery({
+      runtimeInstanceId: 'value narrative/001',
+      sessionId: 'out/sess-001',
+      draftId: 'outcome/draft-001',
+    })).toBe('/runtime-instances/value%20narrative%2F001/outcome-studio/sessions/out%2Fsess-001/drafts/outcome%2Fdraft-001/preview')
     expect(buildApproveRuntimeOutcomeDraftQuery({
       runtimeInstanceId: 'value narrative/001',
       sessionId: 'out/sess-001',
@@ -977,6 +998,38 @@ describe('runtimeInstanceApi', () => {
       },
     }, null, { runtimeInstanceId: 'runtime-1' })).toEqual([
       { type: 'RuntimeInstance', id: 'runtime-1' },
+      { type: 'RuntimeInstance', id: 'value-narrative-001' },
+      runtimeInstanceListTag('VALUE_NARRATIVE'),
+    ])
+  })
+
+  it('resolves canonical runtime identity and de-duplicates cache aliases', () => {
+    expect(getRuntimeInstanceId({
+      id: 'runtime-1',
+      _id: 'runtime-legacy-1',
+      runtimeInstanceKey: 'value-narrative-001',
+    })).toBe('runtime-1')
+    expect(getRuntimeInstanceId({
+      _id: 'runtime-legacy-1',
+      runtimeInstanceKey: 'value-narrative-001',
+    })).toBe('runtime-legacy-1')
+    expect(getRuntimeInstanceId({
+      runtimeInstanceKey: 'value-narrative-001',
+    })).toBe('value-narrative-001')
+    expect(getRuntimeInstanceCacheIds({
+      id: 'value-narrative-001',
+      _id: ' value-narrative-001 ',
+      runtimeInstanceKey: 'value-narrative-001',
+    })).toEqual(['value-narrative-001'])
+  })
+
+  it('does not emit duplicate list tags when canonical and alias identities match', () => {
+    expect(getRuntimeInstanceListTags({
+      data: [{
+        id: 'value-narrative-001',
+        runtimeInstanceKey: 'value-narrative-001',
+      }],
+    }, null, { runtimeType: 'VALUE_NARRATIVE' })).toEqual([
       { type: 'RuntimeInstance', id: 'value-narrative-001' },
       runtimeInstanceListTag('VALUE_NARRATIVE'),
     ])

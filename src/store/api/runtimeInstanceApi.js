@@ -143,6 +143,11 @@ export const buildRuntimeOutcomeAssetPreviewQuery = ({ runtimeInstanceId, outcom
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
   }/preview`
 
+export const buildRuntimeOutcomeDraftPreviewQuery = ({ runtimeInstanceId, sessionId, draftId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+    encodeURIComponent(String(sessionId ?? '').trim())
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/preview`
+
 export const buildRuntimeOutcomeAssetVersionQuery = ({
   runtimeInstanceId,
   outcomeAssetId,
@@ -500,6 +505,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeInstanceDetailTags,
     }),
 
+    getRuntimeOutcomeDraftPreview: build.query({
+      query: buildRuntimeOutcomeDraftPreviewQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
     getRuntimeOutcomeAssetVersion: build.query({
       query: buildRuntimeOutcomeAssetVersionQuery,
       providesTags: getRuntimeInstanceDetailTags,
@@ -681,6 +691,7 @@ export const {
   useGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
+  useLazyGetRuntimeOutcomeDraftPreviewQuery,
   useGetRuntimeOutcomeAssetVersionQuery,
   useApproveRuntimeOutcomeDraftMutation,
   useDiscardRuntimeOutcomeDraftMutation,

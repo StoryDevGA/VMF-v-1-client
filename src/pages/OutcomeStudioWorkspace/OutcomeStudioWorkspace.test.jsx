@@ -15,6 +15,7 @@ import {
   useLazyExportRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
@@ -32,6 +33,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useLazyExportRuntimeOutcomeAssetQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetPreviewQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetQuery: vi.fn(),
+  useLazyGetRuntimeOutcomeDraftPreviewQuery: vi.fn(),
   usePublishRuntimeOutcomeAssetMutation: vi.fn(),
   useSubmitRuntimeOutcomeMessageMutation: vi.fn(),
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation: vi.fn(),
@@ -49,6 +51,7 @@ const publishAsset = vi.fn()
 const exportAsset = vi.fn()
 const loadAsset = vi.fn()
 const loadPreview = vi.fn()
+const loadDraftPreview = vi.fn()
 
 const resolvedMutation = (value = { data: {} }) => ({ unwrap: vi.fn().mockResolvedValue(value) })
 
@@ -164,6 +167,18 @@ describe('OutcomeStudioWorkspace', () => {
     exportAsset.mockReturnValue(resolvedMutation({ data: { filename: 'board-narrative.pdf', content: 'PDF' } }))
     loadAsset.mockResolvedValue({ data: { outcomeAssetId: 'asset-1', versions: [] } })
     loadPreview.mockResolvedValue({ data: { outcomeAssetId: 'asset-1' } })
+    loadDraftPreview.mockReturnValue(resolvedMutation({
+      data: {
+        draftId: 'draft-1',
+        draftIterationId: 'iteration-2',
+        iterationNumber: 2,
+        title: 'Board Narrative Draft',
+        previewAvailable: true,
+        contentFormat: 'MARKDOWN',
+        markdown: '# Board Narrative Draft\n\nCustomer-safe working content.',
+        sections: [],
+      },
+    }))
 
     useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: studio }, isLoading: false, error: null, refetch: refetchStudio })
     useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({ data: { data: studio.readiness }, isLoading: false, error: null, refetch: refetchReadiness })
@@ -178,6 +193,7 @@ describe('OutcomeStudioWorkspace', () => {
     useLazyExportRuntimeOutcomeAssetQuery.mockReturnValue([exportAsset, { isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([loadAsset, { data: { data: { outcomeAssetId: 'asset-1', versions: [] } }, isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([loadPreview, { data: { data: { outcomeAssetId: 'asset-1', previewAvailable: true, sections: [{ key: 'summary', label: 'Executive Summary', body: 'Customer-safe preview.' }] } }, isFetching: false, error: null }])
+    useLazyGetRuntimeOutcomeDraftPreviewQuery.mockReturnValue([loadDraftPreview, { isFetching: false, error: null }])
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn(() => 'blob:outcome-export'),
@@ -208,6 +224,224 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.getByRole('region', { name: /generated body preview/i })).toHaveTextContent('Customer-safe preview.')
   })
 
+  it('previews the current working draft before approval', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    const workingDrafts = screen.getByRole('region', { name: /outcome studio working drafts/i })
+    await user.click(within(workingDrafts).getByRole('button', { name: 'Preview' }))
+
+    expect(loadDraftPreview).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+      draftId: 'draft-1',
+    })
+    const preview = screen.getByRole('region', { name: /outcome studio working draft preview/i })
+    expect(preview).toHaveTextContent('Working Draft Preview')
+    expect(preview).toHaveTextContent('Customer-safe working content.')
+    expect(preview).not.toHaveTextContent('Hidden platform detail')
+  })
+
+  it('shows the shared spinner and suppresses stale content while a working draft preview loads', async () => {
+    let resolvePreview
+    loadDraftPreview.mockReturnValue({
+      unwrap: vi.fn(() => new Promise((resolve) => {
+        resolvePreview = resolve
+      })),
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+
+    expect(screen.getByLabelText('Loading working draft preview')).toBeInTheDocument()
+    expect(screen.queryByText('Customer-safe working content.')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolvePreview({
+        data: {
+          draftId: 'draft-1',
+          markdown: '# Loaded Draft\n\nFresh customer-safe content.',
+          previewAvailable: true,
+        },
+      })
+    })
+    expect(screen.getByText('Fresh customer-safe content.')).toBeInTheDocument()
+  })
+
+  it('clears an earlier working draft preview and shows a customer-safe error after failure', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    const previewButton = screen.getByRole('button', { name: 'Preview' })
+    await user.click(previewButton)
+    expect(screen.getByText('Customer-safe working content.')).toBeInTheDocument()
+
+    loadDraftPreview.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'CONFLICT',
+            message: 'Internal validation detail must not render.',
+            requestId: 'draft-preview-ref-1',
+          },
+        },
+      }),
+    })
+    await user.click(previewButton)
+
+    expect(screen.queryByText('Customer-safe working content.')).not.toBeInTheDocument()
+    const preview = screen.getByRole('region', { name: /outcome studio working draft preview/i })
+    expect(preview).toHaveTextContent('This draft preview is temporarily unavailable. Refresh and try again.')
+    expect(preview).toHaveTextContent('Request ID: draft-preview-ref-1')
+    expect(within(preview).getByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByText('Internal validation detail must not render.')).not.toBeInTheDocument()
+  })
+
+  it('keeps the newest working draft preview when concurrent requests finish out of order', async () => {
+    let resolveFirst
+    let resolveSecond
+    const sessionWithTwoDrafts = {
+      ...session,
+      drafts: [
+        session.drafts[0],
+        {
+          ...session.drafts[0],
+          draftId: 'draft-2',
+          title: 'Proposal Draft',
+          currentIterationId: 'iteration-proposal-1',
+          currentIterationNumber: 1,
+        },
+      ],
+    }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: { data: sessionWithTwoDrafts },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+    loadDraftPreview.mockImplementation(({ draftId }) => ({
+      unwrap: vi.fn(() => new Promise((resolve) => {
+        if (draftId === 'draft-1') resolveFirst = resolve
+        else resolveSecond = resolve
+      })),
+    }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    const firstDraft = screen.getByRole('heading', { name: 'Board Narrative Draft' }).closest('li')
+    const secondDraft = screen.getByRole('heading', { name: 'Proposal Draft' }).closest('li')
+    await user.click(within(firstDraft).getByRole('button', { name: 'Preview' }))
+    await user.click(within(secondDraft).getByRole('button', { name: 'Preview' }))
+
+    await act(async () => {
+      resolveSecond({
+        data: {
+          draftId: 'draft-2',
+          draftIterationId: 'iteration-proposal-1',
+          markdown: '# Proposal Draft\n\nNewest preview content.',
+          previewAvailable: true,
+        },
+      })
+    })
+    expect(screen.getByText('Newest preview content.')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFirst({
+        data: {
+          draftId: 'draft-1',
+          draftIterationId: 'iteration-2',
+          markdown: '# Board Narrative\n\nOlder preview content.',
+          previewAvailable: true,
+        },
+      })
+    })
+    expect(screen.getByText('Newest preview content.')).toBeInTheDocument()
+    expect(screen.queryByText('Older preview content.')).not.toBeInTheDocument()
+  })
+
+  it('clears a selected preview when the working draft advances to a new iteration', async () => {
+    const user = userEvent.setup()
+    const view = renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(screen.getByText('Customer-safe working content.')).toBeInTheDocument()
+
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...session,
+          drafts: [{
+            ...session.drafts[0],
+            currentIterationId: 'iteration-3',
+            currentIterationNumber: 3,
+          }],
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+    view.rerender(makePage())
+
+    expect(screen.queryByRole('region', { name: /outcome studio working draft preview/i }))
+      .not.toBeInTheDocument()
+    expect(screen.queryByText('Customer-safe working content.')).not.toBeInTheDocument()
+  })
+
+  it('discards an in-flight preview when the working draft advances to a new iteration', async () => {
+    let resolvePreview
+    loadDraftPreview.mockReturnValue({
+      unwrap: vi.fn(() => new Promise((resolve) => {
+        resolvePreview = resolve
+      })),
+    })
+    const user = userEvent.setup()
+    const view = renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(screen.getByLabelText('Loading working draft preview')).toBeInTheDocument()
+
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...session,
+          drafts: [{
+            ...session.drafts[0],
+            currentIterationId: 'iteration-3',
+            currentIterationNumber: 3,
+          }],
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+    view.rerender(makePage())
+
+    await act(async () => {
+      resolvePreview({
+        data: {
+          draftId: 'draft-1',
+          draftIterationId: 'iteration-2',
+          markdown: '# Board Narrative\n\nSuperseded preview content.',
+          previewAvailable: true,
+        },
+      })
+    })
+
+    expect(screen.queryByRole('region', { name: /outcome studio working draft preview/i }))
+      .not.toBeInTheDocument()
+    expect(screen.queryByText('Superseded preview content.')).not.toBeInTheDocument()
+  })
+
   it('shows recent requests first and expands the complete unmodified request history', async () => {
     const user = userEvent.setup()
     const messages = Array.from({ length: 6 }, (_, index) => makeMessage(index + 1))
@@ -223,19 +457,35 @@ describe('OutcomeStudioWorkspace', () => {
     const history = screen.getByRole('list', { name: 'Outcome Studio request history' })
     expect(within(history).queryByText('Request 1')).not.toBeInTheDocument()
     expect(within(history).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      expect.stringContaining('Request 2'),
-      expect.stringContaining('Request 3'),
-      expect.stringContaining('Request 4'),
-      expect.stringContaining('Request 5'),
       expect.stringContaining('Request 6'),
+      expect.stringContaining('Request 5'),
+      expect.stringContaining('Request 4'),
+      expect.stringContaining('Request 3'),
+      expect.stringContaining('Request 2'),
     ])
     const viewAll = screen.getByRole('button', { name: 'View all requests' })
     expect(viewAll).toHaveAttribute('aria-controls', 'outcome-studio-request-history')
     expect(viewAll).toHaveAttribute('aria-expanded', 'false')
-    expect(within(history).getAllByRole('button', { name: 'Generate draft' })).toHaveLength(5)
+    const generateButtons = within(history).getAllByRole('button', { name: 'Generate draft' })
+    expect(generateButtons).toHaveLength(5)
+    await user.click(generateButtons[0])
+    expect(generateResponse).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+      messageId: 'message-6',
+      body: {},
+    })
 
     await user.click(viewAll)
     expect(within(history).getByText('Request 1')).toBeInTheDocument()
+    expect(within(history).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Request 6'),
+      expect.stringContaining('Request 5'),
+      expect.stringContaining('Request 4'),
+      expect.stringContaining('Request 3'),
+      expect.stringContaining('Request 2'),
+      expect.stringContaining('Request 1'),
+    ])
     const showRecent = screen.getByRole('button', { name: 'Show recent requests' })
     expect(showRecent).toHaveAttribute('aria-expanded', 'true')
     await user.click(showRecent)
@@ -258,6 +508,13 @@ describe('OutcomeStudioWorkspace', () => {
       'id',
       'outcome-studio-request-history',
     )
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Request 5'),
+      expect.stringContaining('Request 4'),
+      expect.stringContaining('Request 3'),
+      expect.stringContaining('Request 2'),
+      expect.stringContaining('Request 1'),
+    ])
   })
 
   it('collapses an expanded request history when the active session changes', async () => {
@@ -647,9 +904,78 @@ describe('OutcomeStudioWorkspace', () => {
     renderPage()
 
     expect(screen.getByText('Draft created')).toBeInTheDocument()
+    expect(screen.getByText('Draft created').closest('.status')).toHaveClass('status--success')
     expect(screen.getByText('A draft was created from this request.')).toBeInTheDocument()
     expect(screen.queryByText('Customer-facing generated response.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate draft' })).not.toBeInTheDocument()
+  })
+
+  it('falls back to an available deliverable when persisted session metadata is stale', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...session,
+          requestedOutputTypeKey: 'retired-deliverable',
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+    renderPage()
+
+    expect(screen.getByRole('combobox', { name: 'Deliverable' })).toHaveValue('board-narrative')
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the available deliverable.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(submitMessage).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+      body: {
+        prompt: 'Refine the available deliverable.',
+        requestedOutputTypeKey: 'board-narrative',
+      },
+    })
+  })
+
+  it('warns that a submitted request was saved when only the refresh fails', async () => {
+    const user = userEvent.setup()
+    refetchSession.mockRejectedValueOnce(new Error('Internal refresh detail must not render.'))
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
+    expect(screen.getByText(
+      'The change was saved, but the latest Outcome Studio information could not be loaded. Refresh the page.',
+    )).toBeInTheDocument()
+    expect(screen.queryByText('Outcome Studio action failed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Internal refresh detail must not render.')).not.toBeInTheDocument()
+  })
+
+  it('keeps a rejected mutation on the standard action-failed path', async () => {
+    const user = userEvent.setup()
+    submitMessage.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            message: 'The request could not be submitted.',
+            requestId: 'outcome-submit-ref-1',
+          },
+        },
+      }),
+    })
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
+    expect(screen.getByText('The request could not be submitted. Reference: outcome-submit-ref-1')).toBeInTheDocument()
+    expect(screen.queryByText('Outcome Studio refresh needed')).not.toBeInTheDocument()
   })
 
   it('confirms retained discard, sends expectedUpdatedAt, and waits for refetch before success', async () => {
@@ -679,6 +1005,21 @@ describe('OutcomeStudioWorkspace', () => {
     })
     expect(await screen.findByText('The draft was retained in history and removed from active work.')).toBeInTheDocument()
     expect(refetchStudio).toHaveBeenCalled()
+  })
+
+  it('closes discard confirmation and warns that the discard was saved when refresh fails', async () => {
+    const user = userEvent.setup()
+    refetchSession.mockRejectedValueOnce(new Error('Internal discard refresh detail must not render.'))
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard draft' }))
+
+    expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Draft discard failed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Internal discard refresh detail must not render.')).not.toBeInTheDocument()
   })
 
   it('preserves conversation, approval, publish, and deterministic return flows', async () => {
@@ -803,6 +1144,31 @@ describe('OutcomeStudioWorkspace', () => {
     expect(refetchReadiness).toHaveBeenCalled()
     expect(refetchSession).not.toHaveBeenCalled()
     expect(await screen.findByText('Outcome Studio session started.')).toBeInTheDocument()
+  })
+
+  it('warns that a new session was saved when its refresh fails', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: { data: { ...studio, sessions: [] } },
+      isLoading: false,
+      error: null,
+      refetch: refetchStudio,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+    refetchStudio.mockRejectedValueOnce(new Error('Internal session refresh detail must not render.'))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Start session' }))
+
+    expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
+    expect(screen.queryByText('Outcome Studio action failed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Internal session refresh detail must not render.')).not.toBeInTheDocument()
+    expect(refetchSession).not.toHaveBeenCalled()
   })
 
   it.each([
