@@ -1158,10 +1158,13 @@ describe('RuntimeWorkspace', () => {
     expect(within(sectionObject).getByRole('region', { name: /generated content/i })).toHaveAttribute('tabindex', '0')
     expect(within(sectionObject).getByRole('region', { name: /generated content/i })).toHaveTextContent('Awaiting generation')
     selectRuntimeSectionTab('Truth')
-    expect(within(sectionObject).getByRole('region', { name: /accepted truth/i }).closest('.runtime-workspace__section-panels'))
+    const acceptedTruthRegion = within(sectionObject).getByRole('region', { name: /accepted truth/i })
+    expect(acceptedTruthRegion.closest('.runtime-workspace__section-panels'))
       .toHaveClass('runtime-workspace__section-panels--truth')
-    expect(within(sectionObject).getByRole('region', { name: /accepted truth/i })).toHaveAttribute('tabindex', '0')
-    expect(within(sectionObject).getByRole('region', { name: /accepted truth/i })).toHaveTextContent('No accepted governed truth')
+    expect(acceptedTruthRegion).toHaveAttribute('tabindex', '0')
+    expect(within(acceptedTruthRegion).getByText('No accepted governed truth has been projected for this section.', {
+      selector: 'p',
+    })).toHaveClass('runtime-workspace__accepted-truth-empty')
     selectRuntimeSectionTab('Governance')
     const governedIntelligence = screen.getByRole('region', { name: /governed intelligence/i })
     expect(within(governedIntelligence).getByText('Confidence').closest('.runtime-workspace__section-detail-row')).toBeInTheDocument()
@@ -5950,6 +5953,95 @@ describe('RuntimeWorkspace', () => {
     expect(acceptRuntimeSection).not.toHaveBeenCalled()
   })
 
+  it('formats accepted Truth into ordered headings, paragraphs, and compact semantic lists', async () => {
+    const user = userEvent.setup()
+    const longBoundary = 'UnbrokenBoundary'.repeat(12)
+    const acceptedTruth = [
+      'Known Stakeholder Groups',
+      '',
+      'The reviewed material identifies business topics that require named participants.',
+      '',
+      '- Participation question: identify who sponsors or decides.',
+      '',
+      '- Confirm the final decision maker and approval authority.',
+      '',
+      'Evidence boundary.',
+      '',
+      'Roles to confirm',
+      'This multiline block stays a paragraph because it is not a standalone heading.',
+      '',
+      longBoundary,
+    ].join('\n')
+
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sections: [
+            {
+              ...rendererPayload.sections[0],
+              accepted: {
+                content: acceptedTruth,
+                sourceGeneratedAt: '2026-05-19T08:01:00.000Z',
+                inputHash: 'hash-1',
+              },
+              state: {
+                status: 'ACCEPTED',
+                revisionCount: 0,
+              },
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /customer problem/i }))
+    selectRuntimeSectionTab('Truth')
+
+    const truthRegion = screen.getByRole('region', { name: /accepted truth/i })
+    const truthContent = within(truthRegion).getByRole('group', { name: /current accepted truth/i })
+    expect(within(truthContent).getByRole('heading', {
+      level: 5,
+      name: 'Known Stakeholder Groups',
+    })).toHaveClass('runtime-workspace__accepted-truth-heading')
+    expect(within(truthContent).queryByRole('heading', {
+      level: 5,
+      name: 'Evidence boundary.',
+    })).not.toBeInTheDocument()
+
+    const truthList = within(truthContent).getByRole('list')
+    expect(within(truthList).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(truthList).getByText('Participation question: identify who sponsors or decides.'))
+      .toBeInTheDocument()
+
+    const multilineParagraph = within(truthContent).getByText((_, element) => (
+      element?.tagName === 'P'
+      && element.textContent === 'Roles to confirm\nThis multiline block stays a paragraph because it is not a standalone heading.'
+    ))
+    expect(multilineParagraph).toHaveClass('runtime-workspace__accepted-truth-paragraph')
+    expect(within(truthContent).getByText(longBoundary, { selector: 'p' }))
+      .toHaveClass('runtime-workspace__accepted-truth-paragraph')
+
+    expect(
+      Array.from(truthContent.querySelectorAll('h5, p, li')).map((element) => element.textContent),
+    ).toEqual([
+      'Known Stakeholder Groups',
+      'The reviewed material identifies business topics that require named participants.',
+      'Participation question: identify who sponsors or decides.',
+      'Confirm the final decision maker and approval authority.',
+      'Evidence boundary.',
+      'Roles to confirm\nThis multiline block stays a paragraph because it is not a standalone heading.',
+      longBoundary,
+    ])
+    expect(truthRegion).not.toHaveTextContent('framework_state')
+    expect(truthRegion).not.toHaveTextContent('validation-completeness-check')
+  })
+
   it('keeps section acceptance disabled when current generated content is already accepted', async () => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
@@ -5987,9 +6079,16 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
     selectRuntimeSectionTab('Truth')
-    expect(screen.getByRole('region', { name: /accepted truth/i })).toHaveTextContent(
+    const truthRegion = screen.getByRole('region', { name: /accepted truth/i })
+    expect(truthRegion).toHaveTextContent(
       'Customer Problem: Proposal creation is slow.',
     )
+    const truthContent = within(truthRegion).getByRole('group', { name: /current accepted truth/i })
+    expect(within(truthContent).getByText('Customer Problem: Proposal creation is slow.', {
+      selector: 'p',
+    })).toHaveClass('runtime-workspace__accepted-truth-paragraph')
+    expect(within(truthContent).queryByRole('heading', { level: 5 })).not.toBeInTheDocument()
+    expect(within(truthContent).queryByRole('list')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /accept truth/i })).toBeDisabled()
   })
 

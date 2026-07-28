@@ -1598,6 +1598,130 @@ const buildCompareValueGroups = (value, fallbackTitle = 'Comparison Value') => {
     .filter((group) => group.rows.length > 0)
 }
 
+const buildAcceptedTruthSections = (value) => {
+  const text = String(value || '').replace(/\r\n?/g, '\n')
+  const sourceBlocks = text
+    .split(/\n[ \t]*\n+/)
+    .filter((block) => block.trim())
+
+  if (sourceBlocks.length === 0) return EMPTY_ARRAY
+
+  const sections = []
+  let activeSection = null
+
+  const ensureSection = () => {
+    if (!activeSection) {
+      activeSection = {
+        id: `accepted-truth-section-${sections.length}`,
+        heading: '',
+        blocks: [],
+      }
+      sections.push(activeSection)
+    }
+
+    return activeSection
+  }
+
+  sourceBlocks.forEach((sourceBlock) => {
+    const inspectionBlock = sourceBlock.trim()
+    const sourceLines = sourceBlock.split('\n')
+    const isBulletBlock = sourceLines.length > 0
+      && sourceLines.every((line) => line.startsWith('- '))
+    const isLikelyHeading = sourceBlocks.length > 1
+      && sourceLines.length === 1
+      && inspectionBlock.length <= 80
+      && !inspectionBlock.startsWith('- ')
+      && !/[.!?]$/.test(inspectionBlock)
+
+    if (isLikelyHeading) {
+      activeSection = {
+        id: `accepted-truth-section-${sections.length}`,
+        heading: sourceBlock,
+        blocks: [],
+      }
+      sections.push(activeSection)
+      return
+    }
+
+    const section = ensureSection()
+
+    if (isBulletBlock) {
+      const items = sourceLines.map((line) => line.slice(2))
+      const previousBlock = section.blocks[section.blocks.length - 1]
+
+      if (previousBlock?.type === 'list') {
+        previousBlock.items.push(...items)
+        return
+      }
+
+      section.blocks.push({
+        type: 'list',
+        items,
+      })
+      return
+    }
+
+    section.blocks.push({
+      type: 'paragraph',
+      text: sourceBlock,
+    })
+  })
+
+  return sections
+}
+
+function AcceptedTruthContent({
+  value = '',
+  emptyMessage = 'No accepted governed truth has been projected for this section.',
+}) {
+  const sections = buildAcceptedTruthSections(value)
+
+  if (sections.length === 0) {
+    return (
+      <p className="runtime-workspace__accepted-truth-empty">
+        {emptyMessage}
+      </p>
+    )
+  }
+
+  return (
+    <div
+      className="runtime-workspace__accepted-truth-content"
+      role="group"
+      aria-label="Current accepted truth"
+    >
+      {sections.map((section) => (
+        <div className="runtime-workspace__accepted-truth-section" key={section.id}>
+          {section.heading ? (
+            <h5 className="runtime-workspace__accepted-truth-heading">
+              {section.heading}
+            </h5>
+          ) : null}
+          {section.blocks.map((block, blockIndex) => (
+            block.type === 'list' ? (
+              <ul
+                className="runtime-workspace__accepted-truth-list"
+                key={`${section.id}-list-${blockIndex}`}
+              >
+                {block.items.map((item, itemIndex) => (
+                  <li key={`${section.id}-item-${blockIndex}-${itemIndex}`}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p
+                className="runtime-workspace__accepted-truth-paragraph"
+                key={`${section.id}-paragraph-${blockIndex}`}
+              >
+                {block.text}
+              </p>
+            )
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SourceRegistryGroupList({ groups = EMPTY_ARRAY }) {
   if (!Array.isArray(groups) || groups.length === 0) return null
 
@@ -1719,9 +1843,10 @@ function SectionDetailGroupList({
       {groups.map((group) => {
         const GroupIcon = group.icon || MdInfoOutline
         const rows = Array.isArray(group.rows) ? group.rows : EMPTY_ARRAY
+        const content = group.content || null
         const badgeLabel = String(group.badgeLabel || '').trim()
 
-        if (rows.length === 0) return null
+        if (rows.length === 0 && !content) return null
 
         return (
           <div
@@ -1750,7 +1875,12 @@ function SectionDetailGroupList({
                 </Badge>
               ) : null}
             </div>
-            <SectionDetailRows rows={rows} className="runtime-workspace__section-detail-rows--grouped" />
+            {content || (
+              <SectionDetailRows
+                rows={rows}
+                className="runtime-workspace__section-detail-rows--grouped"
+              />
+            )}
           </div>
         )
       })}
@@ -2324,13 +2454,6 @@ function RuntimeSection({
       badgeVariant: getTokenStatusVariant(compareState),
     },
   ]
-  const acceptedTruthRows = [
-    {
-      id: 'accepted-truth',
-      title: acceptedContent ? 'Current accepted truth' : 'Accepted truth not projected',
-      meta: acceptedContent || 'No accepted governed truth has been projected for this section.',
-    },
-  ]
   const compareRows = [
     {
       id: 'generated-section',
@@ -2420,7 +2543,7 @@ function RuntimeSection({
       iconVariant: 'truth',
       badgeLabel: formatRuntimeTokenLabel(section?.state?.status || (acceptedContent ? 'ACCEPTED' : 'DRAFT')),
       badgeVariant: getTokenStatusVariant(section?.state?.status || (acceptedContent ? 'ACCEPTED' : 'DRAFT')),
-      rows: acceptedTruthRows,
+      content: <AcceptedTruthContent value={acceptedContent} />,
     },
   ]
 
