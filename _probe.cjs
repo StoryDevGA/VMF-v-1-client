@@ -1,17 +1,16 @@
-import { baseApi } from './baseApi.js'
+
 
 const OUTCOME_KNOWLEDGE_PACKS_BASE_PATH = '/super-admin/outcome-studio/knowledge-packs'
 
-export const outcomeKnowledgePackListTag = { type: 'OutcomeKnowledgePack', id: 'LIST' }
-export const outcomeKnowledgePackResolutionTag = {
+const outcomeKnowledgePackListTag = { type: 'OutcomeKnowledgePack', id: 'LIST' }
+const outcomeKnowledgePackResolutionTag = {
   type: 'OutcomeKnowledgePackResolution',
   id: 'CURRENT',
 }
-export const outcomeKnowledgePackManifestListTag = {
+const outcomeKnowledgePackManifestListTag = {
   type: 'OutcomeKnowledgePackManifest',
   id: 'LIST',
 }
-export const OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION = 'SS002_RELATIONSHIP_V1'
 
 const normalizeText = (value) => String(value ?? '').trim()
 const normalizeToken = (value) => normalizeText(value).toUpperCase()
@@ -23,46 +22,7 @@ const appendParam = (params, key, value) => {
 
 const encodePathSegment = (value) => encodeURIComponent(normalizeText(value))
 
-const buildVersionConstraint = (value = {}) => {
-  const constraint = {}
-  appendParam(constraint, 'exactVersion', value?.exactVersion)
-  appendParam(constraint, 'minimumVersionInclusive', value?.minimumVersionInclusive)
-  appendParam(constraint, 'maximumVersionExclusive', value?.maximumVersionExclusive)
-  return Object.keys(constraint).length > 0 ? constraint : null
-}
-
-const buildDependencyReference = (reference, index) => {
-  const relationshipType = normalizeToken(reference?.relationshipType)
-  const requiredAt = normalizeToken(reference?.requiredAt)
-  const cardinality = normalizeToken(reference?.cardinality)
-  if (!relationshipType || !requiredAt || !cardinality) {
-    throw new TypeError(`dependencyReferences[${index}] requires relationshipType, requiredAt and cardinality.`)
-  }
-  const versionConstraint = buildVersionConstraint(reference?.versionConstraint)
-  return {
-    relationshipType,
-    ...(normalizeToken(reference?.targetPackType)
-      ? { targetPackType: normalizeToken(reference.targetPackType) }
-      : {}),
-    ...(normalizeText(reference?.targetPackKey)
-      ? { targetPackKey: normalizeText(reference.targetPackKey) }
-      : {}),
-    ...(normalizeText(reference?.targetCapabilityKey)
-      ? { targetCapabilityKey: normalizeText(reference.targetCapabilityKey) }
-      : {}),
-    ...(normalizeToken(reference?.targetKnowledgeAssetId)
-      ? { targetKnowledgeAssetId: normalizeToken(reference.targetKnowledgeAssetId) }
-      : {}),
-    ...(normalizeToken(reference?.targetKnowledgeLayer)
-      ? { targetKnowledgeLayer: normalizeToken(reference.targetKnowledgeLayer) }
-      : {}),
-    requiredAt,
-    cardinality,
-    ...(versionConstraint ? { versionConstraint } : {}),
-  }
-}
-
-export const buildOutcomeKnowledgePackListQuery = ({
+const buildOutcomeKnowledgePackListQuery = ({
   page = 1,
   pageSize = 20,
   q = '',
@@ -92,21 +52,21 @@ export const buildOutcomeKnowledgePackListQuery = ({
   }
 }
 
-export const buildOutcomeKnowledgePackDetailQuery = ({ packId }) =>
+const buildOutcomeKnowledgePackDetailQuery = ({ packId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}`
 
-export const buildOutcomeKnowledgePackDuplicateDiagnosticsQuery = () =>
+const buildOutcomeKnowledgePackDuplicateDiagnosticsQuery = () =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/duplicate-diagnostics`
 
-export const buildOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) =>
+const buildOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${encodePathSegment(versionId)}`
 
-export const buildPreviewOutcomeKnowledgePackVersionContentQuery = ({ packId, versionId }) =>
+const buildPreviewOutcomeKnowledgePackVersionContentQuery = ({ packId, versionId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
     encodePathSegment(versionId)
   }/content-preview`
 
-export const buildCreateOutcomeKnowledgePackVersionQuery = ({
+const buildCreateOutcomeKnowledgePackVersionQuery = ({
   packId,
   semanticVersion,
   schemaVersion = '1.0.0',
@@ -124,7 +84,7 @@ export const buildCreateOutcomeKnowledgePackVersionQuery = ({
   },
 })
 
-export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
+const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   packType,
   packKey,
   label,
@@ -135,7 +95,7 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   knowledgeAssetId = '',
   workspaceCompatibility = [],
   dependencyReferences = [],
-  relationshipContractVersion = OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
+  relationshipContractVersion = 'SS002_RELATIONSHIP_V1',
   semanticVersion,
   schemaVersion = '1.0.0',
   sourceAuthority = '',
@@ -170,12 +130,50 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
     body.workspaceCompatibility = workspaceCompatibility.map(normalizeToken).filter(Boolean)
   }
   if (Array.isArray(dependencyReferences) && dependencyReferences.length > 0) {
-    body.dependencyReferences = dependencyReferences.map(buildDependencyReference)
-    const normalizedContractVersion = normalizeToken(relationshipContractVersion)
-    if (!normalizedContractVersion) {
-      throw new TypeError('relationshipContractVersion is required when dependencyReferences are supplied.')
-    }
-    body.relationshipContractVersion = normalizedContractVersion
+    body.dependencyReferences = dependencyReferences.map((reference) => ({
+      relationshipType: normalizeToken(reference?.relationshipType),
+      ...(normalizeToken(reference?.targetPackType)
+        ? { targetPackType: normalizeToken(reference.targetPackType) }
+        : {}),
+      ...(normalizeText(reference?.targetPackKey)
+        ? { targetPackKey: normalizeText(reference.targetPackKey) }
+        : {}),
+      ...(normalizeText(reference?.targetCapabilityKey)
+        ? { targetCapabilityKey: normalizeText(reference.targetCapabilityKey) }
+        : {}),
+      ...(normalizeToken(reference?.targetKnowledgeAssetId)
+        ? { targetKnowledgeAssetId: normalizeToken(reference.targetKnowledgeAssetId) }
+        : {}),
+      ...(normalizeToken(reference?.targetKnowledgeLayer)
+        ? { targetKnowledgeLayer: normalizeToken(reference.targetKnowledgeLayer) }
+        : {}),
+      requiredAt: normalizeToken(reference?.requiredAt),
+      cardinality: normalizeToken(reference?.cardinality),
+      ...(reference?.versionConstraint
+        ? {
+          versionConstraint: {
+            ...(normalizeText(reference.versionConstraint.exactVersion)
+              ? { exactVersion: normalizeText(reference.versionConstraint.exactVersion) }
+              : {}),
+            ...(normalizeText(reference.versionConstraint.minimumVersionInclusive)
+              ? {
+                minimumVersionInclusive: normalizeText(
+                  reference.versionConstraint.minimumVersionInclusive,
+                ),
+              }
+              : {}),
+            ...(normalizeText(reference.versionConstraint.maximumVersionExclusive)
+              ? {
+                maximumVersionExclusive: normalizeText(
+                  reference.versionConstraint.maximumVersionExclusive,
+                ),
+              }
+              : {}),
+          },
+        }
+        : {}),
+    }))
+    body.relationshipContractVersion = normalizeToken(relationshipContractVersion)
   }
   appendParam(body, 'sourceAuthority', sourceAuthority)
   appendParam(body, 'customerId', customerId)
@@ -197,12 +195,12 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   }
 }
 
-export const buildDeleteOutcomeKnowledgePackQuery = ({ packId }) => ({
+const buildDeleteOutcomeKnowledgePackQuery = ({ packId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}`,
   method: 'DELETE',
 })
 
-export const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
+const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
     encodePathSegment(versionId)
   }/validate`,
@@ -210,7 +208,7 @@ export const buildValidateOutcomeKnowledgePackVersionQuery = ({ packId, versionI
   body: {},
 })
 
-export const buildUpdateOutcomeKnowledgePackReviewQuery = ({
+const buildUpdateOutcomeKnowledgePackReviewQuery = ({
   packId,
   versionId,
   reviewStatus,
@@ -224,7 +222,7 @@ export const buildUpdateOutcomeKnowledgePackReviewQuery = ({
   },
 })
 
-export const buildActivateOutcomeKnowledgePackVersionQuery = ({
+const buildActivateOutcomeKnowledgePackVersionQuery = ({
   packId,
   versionId,
   scopeType = 'GLOBAL',
@@ -253,7 +251,7 @@ export const buildActivateOutcomeKnowledgePackVersionQuery = ({
   }
 }
 
-export const buildDeprecateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
+const buildDeprecateOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
     encodePathSegment(versionId)
   }/deprecate`,
@@ -261,7 +259,7 @@ export const buildDeprecateOutcomeKnowledgePackVersionQuery = ({ packId, version
   body: {},
 })
 
-export const buildDisableOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
+const buildDisableOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/versions/${
     encodePathSegment(versionId)
   }/disable`,
@@ -269,7 +267,7 @@ export const buildDisableOutcomeKnowledgePackVersionQuery = ({ packId, versionId
   body: {},
 })
 
-export const buildRollbackOutcomeKnowledgePackQuery = ({
+const buildRollbackOutcomeKnowledgePackQuery = ({
   packId,
   versionId,
   rollbackReason = '',
@@ -299,7 +297,7 @@ export const buildRollbackOutcomeKnowledgePackQuery = ({
   }
 }
 
-export const buildPreviewOutcomeKnowledgePackResolutionQuery = ({
+const buildPreviewOutcomeKnowledgePackResolutionQuery = ({
   frameworkKey = '',
   runtimeType = '',
   packageKey = '',
@@ -320,7 +318,7 @@ export const buildPreviewOutcomeKnowledgePackResolutionQuery = ({
   }
 }
 
-export const buildOutcomeKnowledgePackManifestListQuery = ({
+const buildOutcomeKnowledgePackManifestListQuery = ({
   page = 1,
   pageSize = 100,
   q = '',
@@ -353,10 +351,10 @@ export const buildOutcomeKnowledgePackManifestListQuery = ({
   }
 }
 
-export const buildOutcomeKnowledgePackManifestDetailQuery = ({ manifestId }) =>
+const buildOutcomeKnowledgePackManifestDetailQuery = ({ manifestId }) =>
   `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests/${encodePathSegment(manifestId)}`
 
-export const buildPreviewOutcomeKnowledgePackManifestResolutionQuery = ({
+const buildPreviewOutcomeKnowledgePackManifestResolutionQuery = ({
   manifestId,
   frameworkKey = '',
   runtimeType = '',
@@ -380,7 +378,7 @@ export const buildPreviewOutcomeKnowledgePackManifestResolutionQuery = ({
   }
 }
 
-export const buildPreviewOutcomeKnowledgePackReasoningContextQuery = ({
+const buildPreviewOutcomeKnowledgePackReasoningContextQuery = ({
   manifestId,
   outputKey = '',
   contextCategories = [],
@@ -415,7 +413,7 @@ export const buildPreviewOutcomeKnowledgePackReasoningContextQuery = ({
   }
 }
 
-export const buildCompareOutcomeKnowledgePackManifestsQuery = ({
+const buildCompareOutcomeKnowledgePackManifestsQuery = ({
   manifestId,
   targetManifestId,
 } = {}) =>
@@ -506,13 +504,13 @@ const normalizeManifestBody = (
   return normalized
 }
 
-export const buildCreateOutcomeKnowledgePackManifestQuery = (body = {}) => ({
+const buildCreateOutcomeKnowledgePackManifestQuery = (body = {}) => ({
   url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/manifests`,
   method: 'POST',
   body: normalizeManifestBody(body),
 })
 
-export const buildUpdateOutcomeKnowledgePackManifestQuery = ({
+const buildUpdateOutcomeKnowledgePackManifestQuery = ({
   manifestId,
   ...body
 } = {}) => ({
@@ -521,7 +519,7 @@ export const buildUpdateOutcomeKnowledgePackManifestQuery = ({
   body: normalizeManifestBody(body, { includeIdentity: false, partial: true }),
 })
 
-export const buildCloneOutcomeKnowledgePackManifestQuery = ({
+const buildCloneOutcomeKnowledgePackManifestQuery = ({
   manifestId,
   ...body
 } = {}) => ({
@@ -597,153 +595,9 @@ const getMutationInvalidationTags = (_result, _error, { packId }) => [
 
 const getSourceDocumentImportInvalidationTags = (_result, _error, { packKey }) => [
   outcomeKnowledgePackListTag,
-  outcomeKnowledgePackManifestListTag,
   outcomeKnowledgePackResolutionTag,
   { type: 'OutcomeKnowledgePack', id: normalizeText(packKey) },
 ]
 
-export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
-  endpoints: (build) => ({
-    listOutcomeKnowledgePacks: build.query({
-      query: buildOutcomeKnowledgePackListQuery,
-      providesTags: getListTags,
-    }),
 
-    getOutcomeKnowledgePackDuplicateDiagnostics: build.query({
-      query: buildOutcomeKnowledgePackDuplicateDiagnosticsQuery,
-      providesTags: [outcomeKnowledgePackListTag],
-    }),
-
-    getOutcomeKnowledgePack: build.query({
-      query: buildOutcomeKnowledgePackDetailQuery,
-      providesTags: getPackTags,
-    }),
-
-    getOutcomeKnowledgePackVersion: build.query({
-      query: buildOutcomeKnowledgePackVersionQuery,
-      providesTags: getPackTags,
-    }),
-
-    previewOutcomeKnowledgePackVersionContent: build.query({
-      query: buildPreviewOutcomeKnowledgePackVersionContentQuery,
-      providesTags: getPackTags,
-    }),
-
-    createOutcomeKnowledgePackVersion: build.mutation({
-      query: buildCreateOutcomeKnowledgePackVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    importOutcomeKnowledgePackSourceDocumentDraft: build.mutation({
-      query: buildImportOutcomeKnowledgePackSourceDocumentDraftQuery,
-      invalidatesTags: getSourceDocumentImportInvalidationTags,
-    }),
-
-    deleteOutcomeKnowledgePack: build.mutation({
-      query: buildDeleteOutcomeKnowledgePackQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    validateOutcomeKnowledgePackVersion: build.mutation({
-      query: buildValidateOutcomeKnowledgePackVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    updateOutcomeKnowledgePackReview: build.mutation({
-      query: buildUpdateOutcomeKnowledgePackReviewQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    activateOutcomeKnowledgePackVersion: build.mutation({
-      query: buildActivateOutcomeKnowledgePackVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    deprecateOutcomeKnowledgePackVersion: build.mutation({
-      query: buildDeprecateOutcomeKnowledgePackVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    disableOutcomeKnowledgePackVersion: build.mutation({
-      query: buildDisableOutcomeKnowledgePackVersionQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    rollbackOutcomeKnowledgePack: build.mutation({
-      query: buildRollbackOutcomeKnowledgePackQuery,
-      invalidatesTags: getMutationInvalidationTags,
-    }),
-
-    previewOutcomeKnowledgePackResolution: build.query({
-      query: buildPreviewOutcomeKnowledgePackResolutionQuery,
-      providesTags: [outcomeKnowledgePackResolutionTag],
-    }),
-
-    listOutcomeKnowledgePackManifests: build.query({
-      query: buildOutcomeKnowledgePackManifestListQuery,
-      providesTags: getManifestListTags,
-    }),
-
-    getOutcomeKnowledgePackManifest: build.query({
-      query: buildOutcomeKnowledgePackManifestDetailQuery,
-      providesTags: getManifestTags,
-    }),
-
-    previewOutcomeKnowledgePackManifestResolution: build.query({
-      query: buildPreviewOutcomeKnowledgePackManifestResolutionQuery,
-      providesTags: getManifestTags,
-    }),
-
-    previewOutcomeKnowledgePackReasoningContext: build.query({
-      query: buildPreviewOutcomeKnowledgePackReasoningContextQuery,
-      providesTags: getManifestTags,
-    }),
-
-    compareOutcomeKnowledgePackManifests: build.query({
-      query: buildCompareOutcomeKnowledgePackManifestsQuery,
-      providesTags: getManifestTags,
-    }),
-
-    createOutcomeKnowledgePackManifest: build.mutation({
-      query: buildCreateOutcomeKnowledgePackManifestQuery,
-      invalidatesTags: getManifestMutationTags,
-    }),
-
-    updateOutcomeKnowledgePackManifest: build.mutation({
-      query: buildUpdateOutcomeKnowledgePackManifestQuery,
-      invalidatesTags: getManifestMutationTags,
-    }),
-
-    cloneOutcomeKnowledgePackManifest: build.mutation({
-      query: buildCloneOutcomeKnowledgePackManifestQuery,
-      invalidatesTags: getManifestMutationTags,
-    }),
-  }),
-  overrideExisting: false,
-})
-
-export const {
-  useListOutcomeKnowledgePacksQuery,
-  useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
-  useGetOutcomeKnowledgePackQuery,
-  useGetOutcomeKnowledgePackVersionQuery,
-  useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
-  useCreateOutcomeKnowledgePackVersionMutation,
-  useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
-  useDeleteOutcomeKnowledgePackMutation,
-  useDeprecateOutcomeKnowledgePackVersionMutation,
-  useDisableOutcomeKnowledgePackVersionMutation,
-  useValidateOutcomeKnowledgePackVersionMutation,
-  useUpdateOutcomeKnowledgePackReviewMutation,
-  useActivateOutcomeKnowledgePackVersionMutation,
-  useRollbackOutcomeKnowledgePackMutation,
-  usePreviewOutcomeKnowledgePackResolutionQuery,
-  useListOutcomeKnowledgePackManifestsQuery,
-  useGetOutcomeKnowledgePackManifestQuery,
-  usePreviewOutcomeKnowledgePackManifestResolutionQuery,
-  usePreviewOutcomeKnowledgePackReasoningContextQuery,
-  useCompareOutcomeKnowledgePackManifestsQuery,
-  useCreateOutcomeKnowledgePackManifestMutation,
-  useUpdateOutcomeKnowledgePackManifestMutation,
-  useCloneOutcomeKnowledgePackManifestMutation,
-} = outcomeKnowledgePacksApi
+module.exports={buildImportOutcomeKnowledgePackSourceDocumentDraftQuery};

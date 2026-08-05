@@ -25,6 +25,7 @@ import {
   buildUpdateOutcomeKnowledgePackManifestQuery,
   buildUpdateOutcomeKnowledgePackReviewQuery,
   buildValidateOutcomeKnowledgePackVersionQuery,
+  OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
   outcomeKnowledgePacksApi,
   useActivateOutcomeKnowledgePackVersionMutation,
   useCloneOutcomeKnowledgePackManifestMutation,
@@ -80,8 +81,8 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('cloneOutcomeKnowledgePackManifest')
   })
 
-  it('refetches the library and duplicate diagnostics after a successful source import', async () => {
-    const requestCounts = { diagnostics: 0, library: 0, import: 0 }
+  it('refetches the library, manifests and duplicate diagnostics after a successful source import', async () => {
+    const requestCounts = { diagnostics: 0, library: 0, manifests: 0, import: 0 }
     const NativeRequest = globalThis.Request
     class TestRequest {
       constructor(input, init = {}) {
@@ -120,6 +121,10 @@ describe('outcomeKnowledgePacksApi', () => {
         requestCounts.import += 1
         return jsonResponse({ data: { pack: {}, version: {} } })
       }
+      if (pathname.endsWith('/manifests')) {
+        requestCounts.manifests += 1
+        return jsonResponse({ data: [], meta: { page: 1, pageSize: 20, total: 0 } })
+      }
 
       requestCounts.library += 1
       return jsonResponse({ data: [], meta: { page: 1, pageSize: 20, total: 0 } })
@@ -137,10 +142,20 @@ describe('outcomeKnowledgePacksApi', () => {
     const diagnosticsSubscription = store.dispatch(
       outcomeKnowledgePacksApi.endpoints.getOutcomeKnowledgePackDuplicateDiagnostics.initiate(),
     )
+    const manifestSubscription = store.dispatch(
+      outcomeKnowledgePacksApi.endpoints.listOutcomeKnowledgePackManifests.initiate({
+        page: 1,
+        pageSize: 20,
+      }),
+    )
 
     try {
-      await Promise.all([listSubscription.unwrap(), diagnosticsSubscription.unwrap()])
-      expect(requestCounts).toEqual({ diagnostics: 1, library: 1, import: 0 })
+      await Promise.all([
+        listSubscription.unwrap(),
+        diagnosticsSubscription.unwrap(),
+        manifestSubscription.unwrap(),
+      ])
+      expect(requestCounts).toEqual({ diagnostics: 1, library: 1, manifests: 1, import: 0 })
 
       await store.dispatch(
         outcomeKnowledgePacksApi.endpoints.importOutcomeKnowledgePackSourceDocumentDraft.initiate({
@@ -156,11 +171,12 @@ describe('outcomeKnowledgePacksApi', () => {
       ).unwrap()
 
       await vi.waitFor(() => {
-        expect(requestCounts).toEqual({ diagnostics: 2, library: 2, import: 1 })
+        expect(requestCounts).toEqual({ diagnostics: 2, library: 2, manifests: 2, import: 1 })
       })
     } finally {
       listSubscription.unsubscribe()
       diagnosticsSubscription.unsubscribe()
+      manifestSubscription.unsubscribe()
       fetchSpy.mockRestore()
       vi.stubGlobal('Request', NativeRequest)
     }
@@ -268,12 +284,15 @@ describe('outcomeKnowledgePacksApi', () => {
       purposeCategory: 'OUTPUT',
       knowledgeLayer: 'FRAMEWORK',
       capabilityKey: 'execution-translation',
+      knowledgeAssetId: 'et-001',
       workspaceCompatibility: ['outcome', 'advisor'],
       dependencyReferences: [{
-        knowledgeLayer: 'output_schema',
-        requirement: 'required',
-        packType: 'output_schema',
-        packKey: 'board-summary',
+        relationshipType: 'required_at_runtime',
+        targetKnowledgeLayer: 'output_schema',
+        targetPackType: 'output_schema',
+        targetPackKey: 'board-summary',
+        requiredAt: 'runtime',
+        cardinality: 'one',
       }],
       semanticVersion: '2.8.0',
       sourceAuthority: 'StorylineOS',
@@ -297,13 +316,17 @@ describe('outcomeKnowledgePacksApi', () => {
         purposeCategory: 'OUTPUT',
         knowledgeLayer: 'FRAMEWORK',
         capabilityKey: 'execution-translation',
+        knowledgeAssetId: 'ET-001',
         workspaceCompatibility: ['OUTCOME', 'ADVISOR'],
         dependencyReferences: [{
-          knowledgeLayer: 'OUTPUT_SCHEMA',
-          requirement: 'REQUIRED',
-          packType: 'OUTPUT_SCHEMA',
-          packKey: 'board-summary',
+          relationshipType: 'REQUIRED_AT_RUNTIME',
+          targetKnowledgeLayer: 'OUTPUT_SCHEMA',
+          targetPackType: 'OUTPUT_SCHEMA',
+          targetPackKey: 'board-summary',
+          requiredAt: 'RUNTIME',
+          cardinality: 'ONE',
         }],
+        relationshipContractVersion: 'SS002_RELATIONSHIP_V1',
         semanticVersion: '2.8.0',
         schemaVersion: '1.0.0',
         sourceAuthority: 'StorylineOS',
@@ -396,6 +419,58 @@ describe('outcomeKnowledgePacksApi', () => {
         runtimeType: 'VALUE_NARRATIVE',
       },
     })
+  })
+
+  it('omits an empty version constraint instead of sending an invalid object', () => {
+    const request = buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+      packType: 'STYLE',
+      packKey: 'board-style',
+      label: 'Board Style',
+      semanticVersion: '1.0.0',
+      dependencyReferences: [{
+        relationshipType: 'required_at_runtime',
+        targetKnowledgeLayer: 'style',
+        requiredAt: 'runtime',
+        cardinality: 'one',
+        versionConstraint: {},
+      }],
+      sourceDocument: { filename: 'Board Style.md' },
+    })
+
+    expect(request.body.dependencyReferences[0]).not.toHaveProperty('versionConstraint')
+    expect(request.body.relationshipContractVersion)
+      .toBe(OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION)
+  })
+
+  it.each([
+    ['relationshipType', { requiredAt: 'runtime', cardinality: 'one' }],
+    ['requiredAt', { relationshipType: 'required_at_runtime', cardinality: 'one' }],
+    ['cardinality', { relationshipType: 'required_at_runtime', requiredAt: 'runtime' }],
+  ])('rejects an incomplete relationship missing %s before the network boundary', (_field, reference) => {
+    expect(() => buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+      packType: 'STYLE',
+      packKey: 'board-style',
+      label: 'Board Style',
+      semanticVersion: '1.0.0',
+      dependencyReferences: [reference],
+      sourceDocument: { filename: 'Board Style.md' },
+    })).toThrow(TypeError)
+  })
+
+  it('rejects an empty relationship contract version when relationships are supplied', () => {
+    expect(() => buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+      packType: 'STYLE',
+      packKey: 'board-style',
+      label: 'Board Style',
+      semanticVersion: '1.0.0',
+      relationshipContractVersion: '',
+      dependencyReferences: [{
+        relationshipType: 'required_at_runtime',
+        requiredAt: 'runtime',
+        cardinality: 'one',
+      }],
+      sourceDocument: { filename: 'Board Style.md' },
+    })).toThrow(TypeError)
   })
 
   it('builds lifecycle mutation requests', () => {

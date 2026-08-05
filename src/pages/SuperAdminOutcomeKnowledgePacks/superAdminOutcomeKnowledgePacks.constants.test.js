@@ -14,6 +14,9 @@ import {
   OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPES,
 } from './superAdminOutcomeKnowledgePacks.constants.js'
+import {
+  OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
+} from '../../store/api/outcomeKnowledgePacksApi.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const workspaceRoot = path.resolve(path.dirname(currentFilePath), '../../../..')
@@ -44,6 +47,7 @@ function loadBackendKnowledgePackConstants() {
       executionModes: runtime.KNOWLEDGE_PACK_EXECUTION_MODES,
       purposeCategories: runtime.KNOWLEDGE_PACK_PURPOSE_CATEGORIES,
       reviewStatuses: runtime.KNOWLEDGE_PACK_REVIEW_STATUSES,
+      relationshipContractVersion: runtime.KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
       visibilityScopes: runtime.KNOWLEDGE_PACK_VISIBILITY_SCOPES,
     }));
   `
@@ -86,6 +90,8 @@ describe('superAdminOutcomeKnowledgePacks constants', () => {
     expect(sortValues(optionValues(KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS))).toEqual(
       sortValues(Object.values(backend.reviewStatuses)),
     )
+    expect(OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION)
+      .toBe(backend.relationshipContractVersion)
   })
 
   it('keeps the visible status filter intentionally scoped to searchable registry states', () => {
