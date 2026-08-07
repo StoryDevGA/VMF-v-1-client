@@ -21,10 +21,19 @@ export function Accordion({
   rounded = true,
   allowMultiple = false,
   defaultOpenItems = [],
+  openItems: controlledOpenItems,
+  onOpenItemsChange,
   className = '',
   ...props
 }) {
-  const [openItems, setOpenItems] = useState(defaultOpenItems)
+  const [uncontrolledOpenItems, setUncontrolledOpenItems] = useState(defaultOpenItems)
+  const openItems = Array.isArray(controlledOpenItems) ? controlledOpenItems : uncontrolledOpenItems
+
+  const setOpenItems = (nextValue) => {
+    const nextOpenItems = typeof nextValue === 'function' ? nextValue(openItems) : nextValue
+    if (!Array.isArray(controlledOpenItems)) setUncontrolledOpenItems(nextOpenItems)
+    onOpenItemsChange?.(nextOpenItems)
+  }
 
   const toggleItem = (itemId) => {
     if (allowMultiple) {

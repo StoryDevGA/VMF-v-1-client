@@ -8,11 +8,13 @@ import {
   KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS,
   KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS,
   KNOWLEDGE_PACK_VISIBILITY_OPTIONS,
+  OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_STATUSES,
   OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPES,
+  formatKnowledgePackType,
 } from './superAdminOutcomeKnowledgePacks.constants.js'
 import {
   OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
@@ -35,6 +37,95 @@ const optionValues = (options = []) =>
     .filter(Boolean)
 
 const sortValues = (values = []) => [...values].sort((left, right) => left.localeCompare(right))
+
+const SS003_CANONICAL_PACK_TYPES = Object.freeze([
+  'ARL',
+  'RL',
+  'ET',
+  'ET_RUNTIME',
+  'ERR',
+  'RGS',
+  'OBSERVATION_REGISTER',
+  'CCD',
+  'CCR',
+  'DIAGNOSTIC_EXTENSION',
+  'VALIDATION_EVIDENCE',
+  'CONTRADICTION_REGISTER',
+  'CDRM',
+  'CDRT',
+  'FRAMEWORK_METADATA',
+  'FRAMEWORK_PACK',
+  'SYSTEM_REFERENCE',
+  'OUTPUT_SCHEMA',
+  'TRUTH_CERTIFICATION',
+  'OUTPUT_TYPE_DEFINITION',
+  'STYLE',
+  'AUDIENCE',
+  'INDUSTRY',
+  'LANGUAGE',
+  'BRAND',
+  'COMPLIANCE',
+  'DECISION',
+  'ADVISOR',
+  'DOMAIN',
+  'SYSTEM',
+  'CHANNEL',
+  'COMMUNICATION_PATTERN',
+  'VISUAL_SYSTEM',
+  'TRANSFORMATION',
+  'TEMPLATE',
+  'CATALOGUE',
+  'CAPABILITY',
+  'PROCESS',
+  'ASSESSMENT_MODEL',
+  'SCORING_MODEL',
+  'QUESTION_LIBRARY',
+  'FINDING_LIBRARY',
+  'RECOMMENDATION_LIBRARY',
+  'RISK_LIBRARY',
+  'METRIC_LIBRARY',
+  'TERMINOLOGY',
+  'REFERENCE_DATA',
+  'RULE_SET',
+  'POLICY_DEFINITION',
+  'GOVERNANCE_STANDARD',
+  'QUALITY_STANDARD',
+  'OUTPUT_TEMPLATE',
+  'OUTPUT_PATTERN',
+])
+
+const SS003_LEGACY_PACK_TYPE_ALIASES = Object.freeze([
+  ['ET_RT', 'ET Runtime (legacy)'],
+  ['OR', 'Observation Register (legacy)'],
+  ['DX', 'Diagnostic Extension (legacy)'],
+  ['VE', 'Validation Evidence (legacy)'],
+  ['CR', 'Contradiction Register (legacy)'],
+])
+
+const SS003_PURPOSE_CATEGORIES = Object.freeze([
+  'SYSTEM',
+  'GOVERNANCE',
+  'OUTPUT',
+  'FRAMEWORK',
+  'DOMAIN',
+  'VALIDATION',
+  'STYLE',
+  'AUDIENCE',
+  'INDUSTRY',
+  'LANGUAGE',
+  'BRAND',
+  'COMPLIANCE',
+  'DECISION',
+  'ADVISOR',
+  'CHANNEL',
+  'COMMUNICATIONS',
+  'VISUAL',
+  'TRANSFORMATION',
+  'CAPABILITY',
+  'PROCESS',
+  'ASSESSMENT',
+  'REFERENCE',
+])
 
 function loadBackendKnowledgePackConstants() {
   const script = `
@@ -92,6 +183,28 @@ describe('superAdminOutcomeKnowledgePacks constants', () => {
     )
     expect(OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION)
       .toBe(backend.relationshipContractVersion)
+  })
+
+  it('exposes the SS-003 canonical catalogues while preserving legacy alias labels', () => {
+    expect(optionValues(OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS))
+      .toEqual(expect.arrayContaining(SS003_CANONICAL_PACK_TYPES))
+    expect(optionValues(KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS))
+      .toEqual(expect.arrayContaining(SS003_PURPOSE_CATEGORIES))
+
+    SS003_LEGACY_PACK_TYPE_ALIASES.forEach(([value, label]) => {
+      expect(optionValues(OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS)).toContain(value)
+      expect(formatKnowledgePackType(value)).toBe(label)
+    })
+  })
+
+  it('excludes legacy pack aliases from source-document authoring options', () => {
+    expect(optionValues(OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS))
+      .toEqual(expect.arrayContaining(SS003_CANONICAL_PACK_TYPES))
+
+    SS003_LEGACY_PACK_TYPE_ALIASES.forEach(([value]) => {
+      expect(optionValues(OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS)).toContain(value)
+      expect(optionValues(OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS)).not.toContain(value)
+    })
   })
 
   it('keeps the visible status filter intentionally scoped to searchable registry states', () => {

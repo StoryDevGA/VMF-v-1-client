@@ -380,6 +380,43 @@ describe('outcomeKnowledgePacksApi', () => {
       },
     })
 
+    expect(buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+      packType: 'visual_system',
+      packKey: 'vmf-visual-system',
+      label: 'VMF Visual System',
+      purposeCategory: 'VISUAL',
+      knowledgeAssetId: 'VS-001',
+      semanticVersion: '1.0.0',
+      contentFormat: 'MARKDOWN',
+      sourceDocument: {
+        filename: 'VMF Visual System.md',
+        contentType: 'text/markdown',
+        fileExtension: 'md',
+      },
+      extractedText: 'Canonical visual system instructions.',
+    })).toEqual({
+      url: '/super-admin/outcome-studio/knowledge-packs/source-document-import',
+      method: 'POST',
+      body: {
+        packType: 'VISUAL_SYSTEM',
+        packKey: 'vmf-visual-system',
+        label: 'VMF Visual System',
+        purposeCategory: 'VISUAL',
+        knowledgeAssetId: 'VS-001',
+        semanticVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+        executionMode: 'PROVIDER_CONTEXT',
+        visibility: 'PLATFORM',
+        contentFormat: 'MARKDOWN',
+        extractedText: 'Canonical visual system instructions.',
+        sourceDocument: {
+          filename: 'VMF Visual System.md',
+          contentType: 'text/markdown',
+          fileExtension: 'md',
+        },
+      },
+    })
+
     expect(buildValidateOutcomeKnowledgePackVersionQuery({
       packId: 'truth-certification-pack',
       versionId: 'truth-certification-pack@1.0.1',
