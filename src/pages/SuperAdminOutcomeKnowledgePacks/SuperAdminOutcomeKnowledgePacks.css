@@ -219,6 +219,12 @@
   overflow-wrap: anywhere;
 }
 
+.super-admin-outcome-knowledge-packs__badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+}
+
 .super-admin-outcome-knowledge-packs__row-actions {
   min-width: 128px;
 }
@@ -338,6 +344,29 @@
 .super-admin-outcome-knowledge-packs__file-field input {
   width: 100%;
   color: var(--color-text-secondary);
+}
+
+.super-admin-outcome-knowledge-packs__checkbox-group {
+  display: grid;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.super-admin-outcome-knowledge-packs__checkbox-group legend {
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.super-admin-outcome-knowledge-packs__checkbox-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-2xs) var(--spacing-xs);
 }
 
 .super-admin-outcome-knowledge-packs__field-error {
@@ -618,6 +647,7 @@
   .super-admin-outcome-knowledge-packs__form-grid,
   .super-admin-outcome-knowledge-packs__form-grid--compact,
   .super-admin-outcome-knowledge-packs__derived-source,
+  .super-admin-outcome-knowledge-packs__checkbox-list,
   .super-admin-outcome-knowledge-packs__detail-grid,
   .super-admin-outcome-knowledge-packs__detail-layout,
   .super-admin-outcome-knowledge-packs__duplicate-diagnostics {

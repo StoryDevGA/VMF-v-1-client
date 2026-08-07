@@ -1,4 +1,6 @@
 export const OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE = 100
+export const SOURCE_DOCUMENT_MAX_BYTES = 10_000_000
+export const SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN_SOURCE = '[A-Z0-9]+(?:-[A-Z0-9]+)+'
 
 export const OUTCOME_KNOWLEDGE_PACK_TYPES = Object.freeze({
   ARL: 'ARL',
@@ -253,6 +255,40 @@ export const KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS = Object.freeze([
   Object.freeze({ value: 'SYSTEM_ONLY', label: 'System Only' }),
 ])
 
+export const KNOWLEDGE_PACK_LAYER_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'FOUNDATION', label: 'Foundation' }),
+  Object.freeze({ value: 'DOMAIN', label: 'Domain' }),
+  Object.freeze({ value: 'SOLUTION', label: 'Solution' }),
+  Object.freeze({ value: 'ORGANISATION', label: 'Organisation' }),
+  Object.freeze({ value: 'RUNTIME', label: 'Runtime' }),
+  Object.freeze({ value: 'SYSTEM', label: 'System' }),
+  Object.freeze({ value: 'REASONING', label: 'Reasoning' }),
+  Object.freeze({ value: 'FRAMEWORK', label: 'Framework' }),
+  Object.freeze({ value: 'AUDIENCE', label: 'Audience' }),
+  Object.freeze({ value: 'INDUSTRY', label: 'Industry' }),
+  Object.freeze({ value: 'OUTPUT_TYPE', label: 'Output Type' }),
+  Object.freeze({ value: 'OUTPUT_SCHEMA', label: 'Output Schema' }),
+  Object.freeze({ value: 'COMMUNICATION_PATTERN', label: 'Communication Pattern' }),
+  Object.freeze({ value: 'STYLE', label: 'Style' }),
+  Object.freeze({ value: 'CHANNEL', label: 'Channel' }),
+  Object.freeze({ value: 'BRAND', label: 'Brand' }),
+  Object.freeze({ value: 'LANGUAGE', label: 'Language' }),
+  Object.freeze({ value: 'VISUAL_SYSTEM', label: 'Visual System' }),
+  Object.freeze({ value: 'VALIDATION', label: 'Validation' }),
+])
+
+export const KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS = Object.freeze([
+  Object.freeze({ value: '', label: 'All layers' }),
+  ...KNOWLEDGE_PACK_LAYER_OPTIONS,
+])
+
+export const KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'OUTCOME', label: 'Outcome' }),
+  Object.freeze({ value: 'DISCOVERY', label: 'Discovery' }),
+  Object.freeze({ value: 'ADVISOR', label: 'Advisor' }),
+  Object.freeze({ value: 'FRAMEWORK', label: 'Framework' }),
+])
+
 export const KNOWLEDGE_PACK_VISIBILITY_OPTIONS = Object.freeze([
   Object.freeze({ value: 'PLATFORM', label: 'Platform' }),
   Object.freeze({ value: 'CUSTOMER', label: 'Customer' }),
@@ -281,6 +317,9 @@ export const EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM = Object.freeze({
   packType: OUTCOME_KNOWLEDGE_PACK_TYPES.SYSTEM,
   packKey: '',
   knowledgeAssetId: '',
+  knowledgeLayer: 'SYSTEM',
+  capabilityKey: '',
+  workspaceCompatibility: Object.freeze(['OUTCOME']),
   label: '',
   description: '',
   purposeCategory: 'SYSTEM',
@@ -548,6 +587,12 @@ const buildPersistedPackRow = (record, requiredPack) => {
     packKey: normalizeLower(record?.packKey || requiredPack?.packKey),
     label: normalizeText(record?.label || requiredPack?.label),
     description: normalizeText(record?.description),
+    knowledgeAssetId: normalizeToken(record?.knowledgeAssetId || requiredPack?.knowledgeAssetId),
+    knowledgeLayer: normalizeToken(record?.knowledgeLayer || requiredPack?.knowledgeLayer),
+    capabilityKey: normalizeLower(record?.capabilityKey || requiredPack?.capabilityKey),
+    workspaceCompatibility: Array.isArray(record?.workspaceCompatibility)
+      ? record.workspaceCompatibility.map(normalizeToken).filter(Boolean)
+      : [],
     status,
     runtimeBindable,
     runtimeStatus: runtimeBindable ? OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE : status,
@@ -622,6 +667,7 @@ export function filterOutcomeKnowledgePackRows(rows = [], {
   search = '',
   packType = '',
   status = '',
+  knowledgeLayer = '',
   purposeCategory = '',
   visibility = '',
   reviewStatus = '',
@@ -629,6 +675,7 @@ export function filterOutcomeKnowledgePackRows(rows = [], {
   const query = normalizeLower(search)
   const normalizedPackType = normalizeToken(packType)
   const normalizedStatus = normalizeToken(status)
+  const normalizedKnowledgeLayer = normalizeToken(knowledgeLayer)
   const normalizedPurposeCategory = normalizeToken(purposeCategory)
   const normalizedVisibility = normalizeToken(visibility)
   const normalizedReviewStatus = normalizeToken(reviewStatus)
@@ -636,6 +683,7 @@ export function filterOutcomeKnowledgePackRows(rows = [], {
   return rows.filter((row) => {
     if (normalizedPackType && row.packType !== normalizedPackType) return false
     if (normalizedStatus && row.status !== normalizedStatus) return false
+    if (normalizedKnowledgeLayer && row.knowledgeLayer !== normalizedKnowledgeLayer) return false
     if (normalizedPurposeCategory && row.purposeCategory !== normalizedPurposeCategory) return false
     if (normalizedVisibility && row.visibility !== normalizedVisibility) return false
     if (normalizedReviewStatus && row.reviewStatus !== normalizedReviewStatus) return false
@@ -645,7 +693,10 @@ export function filterOutcomeKnowledgePackRows(rows = [], {
       row.label,
       row.packKey,
       row.packType,
+      row.knowledgeAssetId,
       row.purposeCategory,
+      row.knowledgeLayer,
+      row.capabilityKey,
       row.visibility,
       row.reviewStatus,
       row.description,

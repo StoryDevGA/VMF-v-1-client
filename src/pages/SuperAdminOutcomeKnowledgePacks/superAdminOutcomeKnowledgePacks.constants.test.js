@@ -5,15 +5,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS,
+  KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS,
+  KNOWLEDGE_PACK_LAYER_OPTIONS,
   KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS,
   KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS,
   KNOWLEDGE_PACK_VISIBILITY_OPTIONS,
+  KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_STATUSES,
   OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPES,
+  SOURCE_DOCUMENT_MAX_BYTES,
+  SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN_SOURCE,
   formatKnowledgePackType,
 } from './superAdminOutcomeKnowledgePacks.constants.js'
 import {
@@ -29,6 +34,14 @@ const outcomeKnowledgePacksConstantsPath = path.join(
 const knowledgeRuntimeConstantsPath = path.join(
   workspaceRoot,
   'VMF-v-1-api/src/constants/knowledgeRuntime.js',
+)
+const workspaceGovernanceConstantsPath = path.join(
+  workspaceRoot,
+  'VMF-v-1-api/src/constants/workspaceGovernance.js',
+)
+const sourceDocumentExtractionServicePath = path.join(
+  workspaceRoot,
+  'VMF-v-1-api/src/services/knowledgePackSourceDocumentExtractionService.js',
 )
 
 const optionValues = (options = []) =>
@@ -131,15 +144,21 @@ function loadBackendKnowledgePackConstants() {
   const script = `
     const outcome = await import(${JSON.stringify(pathToFileURL(outcomeKnowledgePacksConstantsPath).href)});
     const runtime = await import(${JSON.stringify(pathToFileURL(knowledgeRuntimeConstantsPath).href)});
+    const workspaceGovernance = await import(${JSON.stringify(pathToFileURL(workspaceGovernanceConstantsPath).href)});
+    const sourceDocuments = await import(${JSON.stringify(pathToFileURL(sourceDocumentExtractionServicePath).href)});
     process.stdout.write(JSON.stringify({
+      assetIdPatternSource: runtime.KNOWLEDGE_ASSET_ID_PATTERN_SOURCE,
       contentFormats: outcome.OUTCOME_KNOWLEDGE_PACK_CONTENT_FORMATS,
       statuses: outcome.OUTCOME_KNOWLEDGE_PACK_STATUSES,
       types: outcome.OUTCOME_KNOWLEDGE_PACK_TYPES,
       executionModes: runtime.KNOWLEDGE_PACK_EXECUTION_MODES,
+      knowledgeLayers: runtime.KNOWLEDGE_PACK_LAYERS,
       purposeCategories: runtime.KNOWLEDGE_PACK_PURPOSE_CATEGORIES,
       reviewStatuses: runtime.KNOWLEDGE_PACK_REVIEW_STATUSES,
       relationshipContractVersion: runtime.KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
+      sourceDocumentMaxBytes: sourceDocuments.SOURCE_DOCUMENT_IMPORT_LIMITS.maxSourceDocumentBytes,
       visibilityScopes: runtime.KNOWLEDGE_PACK_VISIBILITY_SCOPES,
+      workspaceTypes: workspaceGovernance.WORKSPACE_TYPES,
     }));
   `
 
@@ -175,6 +194,15 @@ describe('superAdminOutcomeKnowledgePacks constants', () => {
     expect(sortValues(optionValues(KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS))).toEqual(
       sortValues(Object.values(backend.executionModes)),
     )
+    expect(sortValues(optionValues(KNOWLEDGE_PACK_LAYER_OPTIONS))).toEqual(
+      sortValues(Object.values(backend.knowledgeLayers)),
+    )
+    expect(sortValues(optionValues(KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS))).toEqual(
+      sortValues(Object.values(backend.knowledgeLayers)),
+    )
+    expect(sortValues(optionValues(KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS))).toEqual(
+      sortValues(Object.values(backend.workspaceTypes)),
+    )
     expect(sortValues(optionValues(KNOWLEDGE_PACK_VISIBILITY_OPTIONS))).toEqual(
       sortValues(Object.values(backend.visibilityScopes)),
     )
@@ -183,6 +211,8 @@ describe('superAdminOutcomeKnowledgePacks constants', () => {
     )
     expect(OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION)
       .toBe(backend.relationshipContractVersion)
+    expect(SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN_SOURCE).toBe(backend.assetIdPatternSource)
+    expect(SOURCE_DOCUMENT_MAX_BYTES).toBe(backend.sourceDocumentMaxBytes)
   })
 
   it('exposes the SS-003 canonical catalogues while preserving legacy alias labels', () => {

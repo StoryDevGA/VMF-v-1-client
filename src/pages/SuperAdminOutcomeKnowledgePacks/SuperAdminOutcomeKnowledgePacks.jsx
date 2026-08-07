@@ -16,6 +16,7 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import { Textarea } from '../../components/Textarea'
+import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import {
   useActivateOutcomeKnowledgePackVersionMutation,
@@ -37,16 +38,21 @@ import { normalizeError } from '../../utils/errors.js'
 import {
   EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM,
   KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS,
+  KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS,
+  KNOWLEDGE_PACK_LAYER_OPTIONS,
   KNOWLEDGE_PACK_PURPOSE_FILTER_OPTIONS,
   KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS,
   KNOWLEDGE_PACK_REVIEW_STATUS_OPTIONS,
   KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS,
   KNOWLEDGE_PACK_VISIBILITY_OPTIONS,
+  KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_PAGE_SIZE,
   OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS,
   OUTCOME_KNOWLEDGE_PACK_TYPE_OPTIONS,
+  SOURCE_DOCUMENT_MAX_BYTES,
+  SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN_SOURCE,
   buildOutcomeKnowledgePackRows,
   canApproveKnowledgePackReview,
   canActivateKnowledgePack,
@@ -78,9 +84,13 @@ const EMPTY_ROWS = Object.freeze([])
 const SOURCE_IMPORT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 const SOURCE_IMPORT_VERSION_FORMAT_ERROR =
   'Use major.minor.patch format, for example 1.2.0.'
-const SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)+$/
+const SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN = new RegExp(`^${SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN_SOURCE}$`)
 const SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_ERROR =
   'Enter the governed Knowledge Asset ID, for example OT-001.'
+const SOURCE_IMPORT_UNSUPPORTED_FORMAT_ERROR =
+  'Select a supported source document format: MD, Markdown, YAML, JSON, DOCX, or PDF.'
+const SOURCE_IMPORT_SIZE_LIMIT_ERROR =
+  `SOURCE_DOCUMENT_SIZE_LIMIT_EXCEEDED: Source document must be ${SOURCE_DOCUMENT_MAX_BYTES} bytes or fewer.`
 const DUPLICATE_REVIEW_REQUIRED_REASON = 'PACK_DUPLICATE_REVIEW_REQUIRED'
 const DUPLICATE_OVERRIDE_REASON_MIN_LENGTH = 10
 const DUPLICATE_OVERRIDE_REASON_MAX_LENGTH = 500
@@ -107,6 +117,9 @@ const SOURCE_IMPORT_FIELD_KEYS = new Set([
   'packType',
   'packKey',
   'knowledgeAssetId',
+  'knowledgeLayer',
+  'capabilityKey',
+  'workspaceCompatibility',
   'label',
   'description',
   'purposeCategory',
@@ -472,11 +485,12 @@ function getFilenameExtension(filename = '') {
 
 function inferSourceFormatFromFilename(filename = '') {
   const extension = getFilenameExtension(filename)
+  if (extension === 'md' || extension === 'markdown') return 'MARKDOWN'
   if (extension === 'docx') return 'DOCX'
   if (extension === 'pdf') return 'PDF'
   if (extension === 'yaml' || extension === 'yml') return 'YAML'
   if (extension === 'json') return 'JSON'
-  return 'MARKDOWN'
+  return ''
 }
 
 function shouldReadSourceText(filename = '') {
@@ -546,6 +560,13 @@ function buildDraftPackKey(value = '') {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function normalizeCapabilityKeyDraft(value = '') {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
 }
 
 function getSummaryEntries(summary = {}) {
@@ -726,6 +747,40 @@ function DetailItem({ label, children }) {
   )
 }
 
+function GovernanceLayerValue({ value }) {
+  const normalized = normalizeDetailToken(value)
+  if (!normalized) {
+    return <span className="super-admin-outcome-knowledge-packs__muted">Not recorded</span>
+  }
+  return (
+    <Badge variant="info" size="sm" pill outline>
+      {formatKnowledgePackStatus(normalized)}
+    </Badge>
+  )
+}
+
+const getWorkspaceCompatibilityLabel = (value) =>
+  KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS
+    .find((option) => option.value === value)?.label || formatKnowledgePackStatus(value)
+
+function WorkspaceCompatibilityValue({ values = [] }) {
+  const normalizedValues = Array.isArray(values)
+    ? values.map(normalizeDetailToken).filter(Boolean)
+    : []
+  if (normalizedValues.length === 0) {
+    return <span className="super-admin-outcome-knowledge-packs__muted">Not recorded</span>
+  }
+  return (
+    <span className="super-admin-outcome-knowledge-packs__badge-list">
+      {normalizedValues.map((value) => (
+        <Badge key={value} variant="neutral" size="sm" pill outline>
+          {getWorkspaceCompatibilityLabel(value)}
+        </Badge>
+      ))}
+    </span>
+  )
+}
+
 function VersionSummary({
   version,
   pack,
@@ -784,6 +839,17 @@ function VersionSummary({
           <code className="super-admin-outcome-knowledge-packs__key">
             {formatDetailValue(version.scopeKey)}
           </code>
+        </DetailItem>
+        <DetailItem label="Knowledge Layer">
+          <GovernanceLayerValue value={version.knowledgeLayer} />
+        </DetailItem>
+        <DetailItem label="Capability Key">
+          <code className="super-admin-outcome-knowledge-packs__key">
+            {formatDetailValue(version.capabilityKey)}
+          </code>
+        </DetailItem>
+        <DetailItem label="Workspace Compatibility">
+          <WorkspaceCompatibilityValue values={version.workspaceCompatibility} />
         </DetailItem>
         <DetailItem label="Source">
           {version.sourceFilename ? (
@@ -1001,6 +1067,17 @@ function KnowledgePackDetailDialog({
                   {formatDetailValue(detailPack.knowledgeAssetId)}
                 </code>
               </DetailItem>
+              <DetailItem label="Knowledge Layer">
+                <GovernanceLayerValue value={detailPack.knowledgeLayer} />
+              </DetailItem>
+              <DetailItem label="Capability Key">
+                <code className="super-admin-outcome-knowledge-packs__key">
+                  {formatDetailValue(detailPack.capabilityKey)}
+                </code>
+              </DetailItem>
+              <DetailItem label="Workspace Compatibility">
+                <WorkspaceCompatibilityValue values={detailPack.workspaceCompatibility} />
+              </DetailItem>
               <DetailItem label="Latest version">
                 <code className="super-admin-outcome-knowledge-packs__key">
                   {formatDetailValue(detailPack.latestVersionId)}
@@ -1189,7 +1266,19 @@ function KnowledgePackSourceImportDialog({
     if (hasAdvancedFieldErrors) setAdvancedOpenItems(['source-import-advanced'])
   }
 
+  const toggleWorkspaceCompatibility = (workspaceType, checked) => {
+    const currentValues = Array.isArray(form.workspaceCompatibility)
+      ? form.workspaceCompatibility
+      : []
+    const nextValues = checked
+      ? [...new Set([...currentValues, workspaceType])]
+      : currentValues.filter((value) => value !== workspaceType)
+    onFormChange('workspaceCompatibility', nextValues)
+  }
+
   if (!open) return null
+  const workspaceCompatibilityErrorId =
+    'knowledge-pack-source-import-workspace-compatibility-error'
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -1197,6 +1286,18 @@ function KnowledgePackSourceImportDialog({
 
     const filename = file.name
     const contentFormat = inferSourceFormatFromFilename(filename)
+    if (!contentFormat) {
+      event.target.value = ''
+      onFileReadError?.(new Error(SOURCE_IMPORT_UNSUPPORTED_FORMAT_ERROR))
+      return
+    }
+    if (Number(file.size ?? 0) > SOURCE_DOCUMENT_MAX_BYTES) {
+      event.target.value = ''
+      const err = new Error(SOURCE_IMPORT_SIZE_LIMIT_ERROR)
+      err.code = 'SOURCE_DOCUMENT_SIZE_LIMIT_EXCEEDED'
+      onFileReadError?.(err)
+      return
+    }
     const nextMetadata = {
       filename,
       contentType: file.type || '',
@@ -1289,6 +1390,68 @@ function KnowledgePackSourceImportDialog({
                 required
                 fullWidth
               />
+              <Select
+                id="knowledge-pack-source-import-knowledge-layer"
+                label="Knowledge Layer"
+                size="sm"
+                value={form.knowledgeLayer}
+                options={KNOWLEDGE_PACK_LAYER_OPTIONS}
+                onChange={(event) => onFormChange('knowledgeLayer', event.target.value)}
+                error={fieldErrors.knowledgeLayer}
+                required
+              />
+              <Input
+                id="knowledge-pack-source-import-capability-key"
+                label="Capability Key"
+                size="sm"
+                value={form.capabilityKey}
+                onChange={(event) => onFormChange(
+                  'capabilityKey',
+                  normalizeCapabilityKeyDraft(event.target.value),
+                )}
+                error={fieldErrors.capabilityKey}
+                helperText="Stable lower-case capability key retained across versions."
+                required
+                fullWidth
+              />
+              <fieldset
+                className="super-admin-outcome-knowledge-packs__checkbox-group"
+                aria-invalid={fieldErrors.workspaceCompatibility ? 'true' : undefined}
+                aria-describedby={fieldErrors.workspaceCompatibility
+                  ? workspaceCompatibilityErrorId
+                  : undefined}
+              >
+                <legend>Workspace Compatibility</legend>
+                <div className="super-admin-outcome-knowledge-packs__checkbox-list">
+                  {KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS.map((option) => (
+                    <Tickbox
+                      key={option.value}
+                      id={`knowledge-pack-source-import-workspace-${option.value.toLowerCase()}`}
+                      label={option.label}
+                      size="sm"
+                      checked={Array.isArray(form.workspaceCompatibility)
+                        && form.workspaceCompatibility.includes(option.value)}
+                      aria-invalid={fieldErrors.workspaceCompatibility ? 'true' : undefined}
+                      aria-describedby={fieldErrors.workspaceCompatibility
+                        ? workspaceCompatibilityErrorId
+                        : undefined}
+                      onChange={(event) => toggleWorkspaceCompatibility(
+                        option.value,
+                        event.target.checked,
+                      )}
+                    />
+                  ))}
+                </div>
+                {fieldErrors.workspaceCompatibility ? (
+                  <p
+                    id={workspaceCompatibilityErrorId}
+                    className="super-admin-outcome-knowledge-packs__field-error"
+                    role="alert"
+                  >
+                    {fieldErrors.workspaceCompatibility}
+                  </p>
+                ) : null}
+              </fieldset>
             </div>
             <Textarea
               id="knowledge-pack-source-import-description"
@@ -1703,6 +1866,7 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [search, setSearch] = useState('')
   const [packType, setPackType] = useState('')
   const [status, setStatus] = useState('')
+  const [knowledgeLayer, setKnowledgeLayer] = useState('')
   const [purposeCategory, setPurposeCategory] = useState('')
   const [visibility, setVisibility] = useState('')
   const [reviewStatus, setReviewStatus] = useState('')
@@ -1774,6 +1938,7 @@ function SuperAdminOutcomeKnowledgePacks() {
       search,
       packType,
       status,
+      knowledgeLayer,
       purposeCategory,
       visibility,
       reviewStatus,
@@ -1785,6 +1950,7 @@ function SuperAdminOutcomeKnowledgePacks() {
   }, [
     duplicateDiagnosticsData,
     duplicateStatus,
+    knowledgeLayer,
     packType,
     purposeCategory,
     reviewStatus,
@@ -1999,6 +2165,11 @@ function SuperAdminOutcomeKnowledgePacks() {
     const resolvedPackKey = sourceImportForm.packKey.trim()
       || buildDraftPackKey(sourceImportForm.label)
     const knowledgeAssetId = sourceImportForm.knowledgeAssetId.trim().toUpperCase()
+    const knowledgeLayer = sourceImportForm.knowledgeLayer.trim().toUpperCase()
+    const capabilityKey = buildDraftPackKey(sourceImportForm.capabilityKey)
+    const workspaceCompatibility = Array.isArray(sourceImportForm.workspaceCompatibility)
+      ? sourceImportForm.workspaceCompatibility.map((value) => value.trim().toUpperCase()).filter(Boolean)
+      : []
     const semanticVersion = sourceImportForm.semanticVersion.trim()
     const schemaVersion = sourceImportForm.schemaVersion.trim()
 
@@ -2016,6 +2187,15 @@ function SuperAdminOutcomeKnowledgePacks() {
         'Knowledge Asset ID is missing. Word and PDF documents cannot provide YAML front matter, so enter the governed ID in the import form, for example OT-001.'
     } else if (!SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_PATTERN.test(knowledgeAssetId)) {
       fieldErrors.knowledgeAssetId = SOURCE_IMPORT_KNOWLEDGE_ASSET_ID_ERROR
+    }
+    if (!knowledgeLayer) {
+      fieldErrors.knowledgeLayer = 'Knowledge Layer is required.'
+    }
+    if (!capabilityKey) {
+      fieldErrors.capabilityKey = 'Capability Key is required.'
+    }
+    if (workspaceCompatibility.length === 0) {
+      fieldErrors.workspaceCompatibility = 'Select at least one compatible workspace.'
     }
     if (!semanticVersion) {
       fieldErrors.semanticVersion = 'Semantic version is required.'
@@ -2055,6 +2235,9 @@ function SuperAdminOutcomeKnowledgePacks() {
       packType: sourceImportForm.packType,
       packKey: resolvedPackKey,
       knowledgeAssetId,
+      knowledgeLayer,
+      capabilityKey,
+      workspaceCompatibility,
       label: sourceImportForm.label,
       description: sourceImportForm.description,
       purposeCategory: sourceImportForm.purposeCategory,
@@ -2597,6 +2780,14 @@ function SuperAdminOutcomeKnowledgePacks() {
                   value={status}
                   options={OUTCOME_KNOWLEDGE_PACK_STATUS_OPTIONS}
                   onChange={(event) => setStatus(event.target.value)}
+                />
+                <Select
+                  id="outcome-knowledge-packs-knowledge-layer"
+                  label="Knowledge Layer"
+                  size="sm"
+                  value={knowledgeLayer}
+                  options={KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS}
+                  onChange={(event) => setKnowledgeLayer(event.target.value)}
                 />
                 <Select
                   id="outcome-knowledge-packs-purpose"

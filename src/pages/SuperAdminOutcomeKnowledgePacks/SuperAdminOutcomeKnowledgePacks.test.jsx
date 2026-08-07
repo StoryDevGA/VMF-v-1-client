@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SuperAdminOutcomeKnowledgePacks from './SuperAdminOutcomeKnowledgePacks.jsx'
@@ -91,6 +91,9 @@ const defaultListResult = {
         packType: 'OUTPUT_SCHEMA',
         packKey: 'output-schemas-pack',
         knowledgeAssetId: 'OSC-001',
+        knowledgeLayer: 'OUTPUT_SCHEMA',
+        capabilityKey: 'output-schemas',
+        workspaceCompatibility: ['OUTCOME', 'ADVISOR'],
         label: 'Output Schemas',
         description: 'Output schema knowledge pack for Outcome Studio.',
         status: 'DRAFT',
@@ -204,6 +207,9 @@ const defaultDetailResult = {
           packId: 'knowledge-pack-output-schemas-pack',
           packType: 'OUTPUT_SCHEMA',
           packKey: 'output-schemas-pack',
+          knowledgeLayer: 'OUTPUT_SCHEMA',
+          capabilityKey: 'output-schemas',
+          workspaceCompatibility: ['OUTCOME', 'ADVISOR'],
           semanticVersion: '1.0.0',
           schemaVersion: '1.0.0',
           status: 'VALIDATED',
@@ -359,12 +365,14 @@ async function prepareTextSourceImport(user, {
   packType = 'ET',
   label = 'Execution Translation',
   knowledgeAssetId = 'ET-001',
+  capabilityKey = 'execution-translation',
   filename = 'ET v2.8 Canonical Execution Translation System.md',
 } = {}) {
   await user.click(screen.getByRole('button', { name: /import source document/i }))
   await user.selectOptions(await screen.findByLabelText(/draft pack type/i), packType)
   await user.type(screen.getByLabelText(/^name \*$/i), label)
   await user.type(screen.getByLabelText(/knowledge asset id/i), knowledgeAssetId)
+  await user.type(screen.getByLabelText(/capability key/i), capabilityKey)
   const sourceFile = new File(['Canonical source text.'], filename, { type: 'text/markdown' })
   await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
   await waitFor(() => {
@@ -510,6 +518,51 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .toBeDisabled()
     expect(within(actions).queryByRole('option', { name: 'Activate Version' }))
       .not.toBeInTheDocument()
+  })
+
+  it('filters catalogue rows by Knowledge Layer', async () => {
+    const user = userEvent.setup()
+    listQueryMock.mockReturnValue({
+      ...defaultListResult,
+      data: {
+        ...defaultListResult.data,
+        data: [
+          ...defaultListResult.data.data,
+          {
+            id: 'kp-system-et',
+            packId: 'kp-system-et',
+            packType: 'SYSTEM',
+            packKey: 'et',
+            knowledgeAssetId: 'SYS-001',
+            knowledgeLayer: 'SYSTEM',
+            capabilityKey: 'enterprise-technology',
+            workspaceCompatibility: ['OUTCOME'],
+            label: 'Enterprise Technology',
+            description: 'Enterprise Technology methodology.',
+            status: 'DRAFT',
+            latestVersionId: 'kpv-system-et-5-0-0-global',
+            latestSemanticVersion: '5.0.0',
+            sourceMetadata: {
+              importMode: 'SOURCE_DOCUMENT_IMPORT_DRAFT',
+              sourceStatus: 'SOURCE_DOCUMENT_PRESENT',
+              sourceDocument: { filename: 'Enterprise Technology.md' },
+            },
+            authoringMode: 'IMPORT_SOURCE_DOCUMENT',
+            updatedAt: '2026-07-08T09:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderPage()
+    const table = screen.getByRole('table', { name: /outcome studio knowledge packs/i })
+    expect(within(table).getByText('Output Schemas')).toBeInTheDocument()
+    expect(within(table).getByText('Enterprise Technology')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/knowledge layer/i), 'SYSTEM')
+
+    expect(within(table).queryByText('Output Schemas')).not.toBeInTheDocument()
+    expect(within(table).getByText('Enterprise Technology')).toBeInTheDocument()
   })
 
   it('allows imported draft packs to be hard-deleted from the row actions after confirmation', async () => {
@@ -1173,6 +1226,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.selectOptions(screen.getByLabelText(/draft pack type/i), 'ET')
     await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
     await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'execution-translation')
     await user.selectOptions(screen.getByLabelText(/purpose category/i), 'OUTPUT')
     const sourceFile = new File(
       ['Canonical execution translation source text.'],
@@ -1197,6 +1251,9 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
         packType: 'ET',
         packKey: 'execution-translation',
         knowledgeAssetId: 'ET-001',
+        knowledgeLayer: 'SYSTEM',
+        capabilityKey: 'execution-translation',
+        workspaceCompatibility: ['OUTCOME'],
         label: 'Execution Translation',
         description: '',
         purposeCategory: 'OUTPUT',
@@ -1235,6 +1292,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'SYSTEM')
     await user.type(screen.getByLabelText(/^name \*$/i), 'Enterprise Technology')
     await user.type(screen.getByLabelText(/knowledge asset id/i), 'sys-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'enterprise-technology')
     await user.selectOptions(screen.getByLabelText(/purpose category/i), 'FRAMEWORK')
     const sourceFile = new File(
       ['%PDF-1.4 Enterprise Technology framework assessment governance'],
@@ -1257,6 +1315,9 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
         packType: 'SYSTEM',
         packKey: 'enterprise-technology',
         knowledgeAssetId: 'SYS-001',
+        knowledgeLayer: 'SYSTEM',
+        capabilityKey: 'enterprise-technology',
+        workspaceCompatibility: ['OUTCOME'],
         label: 'Enterprise Technology',
         description: '',
         purposeCategory: 'FRAMEWORK',
@@ -1284,6 +1345,45 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(activateVersionMock).not.toHaveBeenCalled()
   })
 
+  it('blocks oversize source documents before reading file content', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    const sourceFile = new File(
+      ['%PDF-1.4 Enterprise Technology framework assessment governance'],
+      'Enterprise Technology Framework v5.pdf',
+      { type: 'application/pdf' },
+    )
+    Object.defineProperty(sourceFile, 'size', { value: 10_000_001 })
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+
+    expect(await screen.findByText(/SOURCE_DOCUMENT_SIZE_LIMIT_EXCEEDED/i)).toBeInTheDocument()
+    const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
+    expect(within(derivedMetadata).getByText('Select a source document')).toBeInTheDocument()
+    expect(within(derivedMetadata).queryByText('Enterprise Technology Framework v5.pdf')).not.toBeInTheDocument()
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsupported source document extensions instead of treating them as Markdown', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    const sourceFile = new File(['not really an image'], 'bad-import.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText(/source document file/i), {
+      target: { files: [sourceFile] },
+    })
+
+    expect(await screen.findByText(/supported source document format/i)).toBeInTheDocument()
+    const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
+    expect(within(derivedMetadata).getByText('Select a source document')).toBeInTheDocument()
+    expect(within(derivedMetadata).queryByText('bad-import.png')).not.toBeInTheDocument()
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
+  })
+
   it('blocks source document import when Knowledge Asset ID is missing', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -1304,6 +1404,66 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
 
+  it('normalizes capability key and workspace compatibility before source import', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ET')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
+    await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'Execution Translation !!')
+    await user.click(screen.getByLabelText(/^outcome$/i))
+    await user.click(screen.getByLabelText(/^advisor$/i))
+    await user.click(screen.getByLabelText(/^discovery$/i))
+    const sourceFile = new File(
+      ['Canonical execution translation source text.'],
+      'ET v2.8 Canonical Execution Translation System.md',
+      { type: 'text/markdown' },
+    )
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    await waitFor(() => {
+      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith(expect.objectContaining({
+        capabilityKey: 'execution-translation',
+        workspaceCompatibility: ['ADVISOR', 'DISCOVERY'],
+      }))
+    })
+  })
+
+  it('associates empty workspace compatibility validation with the checkbox group', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /import source document/i }))
+
+    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ET')
+    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
+    await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'execution-translation')
+    await user.click(screen.getByLabelText(/^outcome$/i))
+    const sourceFile = new File(
+      ['Canonical execution translation source text.'],
+      'ET v2.8 Canonical Execution Translation System.md',
+      { type: 'text/markdown' },
+    )
+    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
+
+    await user.click(screen.getByRole('button', { name: /create draft/i }))
+
+    const error = await screen.findByText('Select at least one compatible workspace.')
+    expect(error).toHaveAttribute('id', 'knowledge-pack-source-import-workspace-compatibility-error')
+    expect(screen.getByLabelText(/^outcome$/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/^outcome$/i)).toHaveAttribute(
+      'aria-describedby',
+      'knowledge-pack-source-import-workspace-compatibility-error',
+    )
+    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
+  })
+
   it('blocks source document import when version metadata is not major.minor.patch', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -1313,6 +1473,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
     await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
     await user.type(screen.getByLabelText(/knowledge asset id/i), 'arl-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'adaptive-reasoning-layer')
     const sourceFile = new File(
       ['Adaptive reasoning source text.'],
       'ARL v1.2 Candidate.md',
@@ -1361,6 +1522,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
     await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
     await user.type(screen.getByLabelText(/knowledge asset id/i), 'arl-001')
+    await user.type(screen.getByLabelText(/capability key/i), 'adaptive-reasoning-layer')
     const sourceFile = new File(
       ['Adaptive reasoning source text.'],
       'ARL v1.2 Candidate.md',
@@ -1439,6 +1601,10 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(await screen.findByRole('heading', { name: /pack details/i })).toBeInTheDocument()
     expect(screen.getAllByText('output-schemas-pack@1.0.0').length).toBeGreaterThan(0)
     expect(screen.getByText('OSC-001')).toBeInTheDocument()
+    expect(screen.getAllByText('Output Schema').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('output-schemas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Outcome').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Advisor').length).toBeGreaterThan(0)
     expect(screen.getAllByText('sha256:output-schema-content').length).toBeGreaterThan(0)
     expect(screen.getAllByText('DRAFT').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /activation history/i })).toBeInTheDocument()
