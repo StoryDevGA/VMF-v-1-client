@@ -15,8 +15,10 @@ import {
   useLazyExportRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeDraftCompareQuery,
   useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
+  useReviseRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
 } from '../../store/api/runtimeInstanceApi.js'
@@ -33,8 +35,10 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useLazyExportRuntimeOutcomeAssetQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetPreviewQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetQuery: vi.fn(),
+  useLazyGetRuntimeOutcomeDraftCompareQuery: vi.fn(),
   useLazyGetRuntimeOutcomeDraftPreviewQuery: vi.fn(),
   usePublishRuntimeOutcomeAssetMutation: vi.fn(),
+  useReviseRuntimeOutcomeAssetMutation: vi.fn(),
   useSubmitRuntimeOutcomeMessageMutation: vi.fn(),
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation: vi.fn(),
 }))
@@ -48,9 +52,11 @@ const approveDraft = vi.fn()
 const submitMessage = vi.fn()
 const generateResponse = vi.fn()
 const publishAsset = vi.fn()
+const reviseAsset = vi.fn()
 const exportAsset = vi.fn()
 const loadAsset = vi.fn()
 const loadPreview = vi.fn()
+const loadDraftCompare = vi.fn()
 const loadDraftPreview = vi.fn()
 
 const resolvedMutation = (value = { data: {} }) => ({ unwrap: vi.fn().mockResolvedValue(value) })
@@ -71,6 +77,33 @@ const studio = {
   safetyGates: {
     status: 'READY',
     responseGenerationAvailable: true,
+  },
+  governanceEvidence: {
+    notice: 'Knowledge Pack evidence is server-resolved and stage-specific usage is recorded only when persisted.',
+    stages: ['CLARIFICATION', 'GUARDRAILS', 'VALIDATION', 'OUTCOME_READINESS'].map((key) => ({
+      key,
+      evidenceLabel: 'Recorded on this governed session',
+      knowledgePacks: [{
+        packKey: 'truth-pack',
+        label: 'Verified truth pack',
+        semanticVersion: '1.2.0',
+        roles: ['Required business guidance'],
+        assignmentStatus: 'STAGE_ASSIGNED',
+        evidenceLabel: 'Resolved for this stage',
+        executionStatus: 'PASSED',
+        executionChecks: [{ key: 'PROVIDER_COMPLETED', status: 'PASSED', message: 'Provider completed.' }],
+        projectedEntryCount: 1,
+        suppliedEntryCount: 1,
+        suppliedCategories: ['BUSINESS_GUIDANCE'],
+      }],
+      inputs: [{
+        key: `${key.toLowerCase()}-input`,
+        label: 'Runtime context',
+        status: 'RECORDED',
+        value: 'VALUE_NARRATIVE · VMF · vmf-standard-2-3-1',
+      }],
+      checks: [],
+    })),
   },
   deliverables: {
     available: [{
@@ -121,6 +154,18 @@ const session = {
     currentIterationId: 'iteration-2',
     updatedAt: '2026-07-17T10:00:00.000Z',
     informationStatus: { status: 'CURRENT', currentness: 'CURRENT' },
+    contentReview: { status: 'PASS', result: 'ALLOW' },
+    approvalReadiness: {
+      contractVersion: 'outcome-studio.execution-approval-readiness.v2',
+      status: 'PASSED',
+      approvalAvailable: true,
+      blockerReason: '',
+      message: 'All required execution evidence passed for this exact draft version.',
+      expectedPackCount: 1,
+      passedPackCount: 1,
+      requiredRuntimeCheckCount: 4,
+      passedRuntimeCheckCount: 4,
+    },
     approvalAvailable: true,
   }],
 }
@@ -164,6 +209,7 @@ describe('OutcomeStudioWorkspace', () => {
     submitMessage.mockReturnValue(resolvedMutation())
     generateResponse.mockReturnValue(resolvedMutation())
     publishAsset.mockReturnValue(resolvedMutation())
+    reviseAsset.mockReturnValue(resolvedMutation({ data: { draft: { ...session.drafts[0], draftId: 'draft-revised' } } }))
     exportAsset.mockReturnValue(resolvedMutation({ data: { filename: 'board-narrative.pdf', content: 'PDF' } }))
     loadAsset.mockResolvedValue({ data: { outcomeAssetId: 'asset-1', versions: [] } })
     loadPreview.mockResolvedValue({ data: { outcomeAssetId: 'asset-1' } })
@@ -179,6 +225,28 @@ describe('OutcomeStudioWorkspace', () => {
         sections: [],
       },
     }))
+    loadDraftCompare.mockReturnValue(resolvedMutation({
+      data: {
+        draftId: 'draft-1',
+        compareAvailable: true,
+        from: {
+          draftIterationId: 'iteration-1',
+          iterationNumber: 1,
+          title: 'Board Narrative Draft',
+          contentFormat: 'MARKDOWN',
+          markdown: '# Board Narrative Draft\n\nPrevious customer-safe content.',
+          sections: [],
+        },
+        to: {
+          draftIterationId: 'iteration-2',
+          iterationNumber: 2,
+          title: 'Board Narrative Draft',
+          contentFormat: 'MARKDOWN',
+          markdown: '# Board Narrative Draft\n\nCurrent customer-safe content.',
+          sections: [],
+        },
+      },
+    }))
 
     useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: studio }, isLoading: false, error: null, refetch: refetchStudio })
     useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({ data: { data: studio.readiness }, isLoading: false, error: null, refetch: refetchReadiness })
@@ -190,9 +258,11 @@ describe('OutcomeStudioWorkspace', () => {
     useApproveRuntimeOutcomeDraftMutation.mockReturnValue([approveDraft, { isLoading: false }])
     useDiscardRuntimeOutcomeDraftMutation.mockReturnValue([discardDraft, { isLoading: false }])
     usePublishRuntimeOutcomeAssetMutation.mockReturnValue([publishAsset, { isLoading: false }])
+    useReviseRuntimeOutcomeAssetMutation.mockReturnValue([reviseAsset, { isLoading: false }])
     useLazyExportRuntimeOutcomeAssetQuery.mockReturnValue([exportAsset, { isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([loadAsset, { data: { data: { outcomeAssetId: 'asset-1', versions: [] } }, isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([loadPreview, { data: { data: { outcomeAssetId: 'asset-1', previewAvailable: true, sections: [{ key: 'summary', label: 'Executive Summary', body: 'Customer-safe preview.' }] } }, isFetching: false, error: null }])
+    useLazyGetRuntimeOutcomeDraftCompareQuery.mockReturnValue([loadDraftCompare, { isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeDraftPreviewQuery.mockReturnValue([loadDraftPreview, { isFetching: false, error: null }])
     vi.stubGlobal('URL', {
       ...URL,
@@ -224,6 +294,411 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.getByRole('region', { name: /generated body preview/i })).toHaveTextContent('Customer-safe preview.')
   })
 
+  it('shows approved asset linkage and execution evidence in the separate Governance view', async () => {
+    const user = userEvent.setup()
+    const governanceEvidence = {
+      record: {
+        type: 'ASSET_VERSION',
+        id: 'version-1',
+        iterationId: 'iteration-2',
+        versionNumber: 1,
+      },
+      runtimeContext: {
+        runtimeInstanceKey: 'value-narrative-001',
+        runtimeType: 'VALUE_NARRATIVE',
+        frameworkKey: 'VMF',
+        packageKey: 'vmf-standard',
+        packageVersion: '2.3.1',
+      },
+      sourceOutput: {
+        outputAssetId: 'source-asset-1',
+        outputTypeKey: 'FRAMEWORK_DIAGRAM',
+        outputTypeLabel: 'Framework Diagram',
+        status: 'BOUND',
+      },
+      truthBinding: {
+        truthSignatureId: 'truth-1',
+        status: 'CERTIFIED',
+        currentness: 'CURRENT',
+        boundAt: '2026-08-11T12:00:00.000Z',
+      },
+      knowledgeResolution: {
+        status: 'READY',
+        manifestKey: 'outcome-studio',
+        manifestVersion: '1.0.0',
+        policyVersion: 'KP-004',
+        activeCount: 2,
+      },
+      governedReasoning: {
+        executionId: 'grr_exec_1',
+        runtimeArtifactId: 'artifact-1',
+        providerMode: 'LIVE_TEST',
+        runtimeStateWriteStatus: 'WRITTEN',
+        runtimeArtifactIsCertifiedTruth: true,
+      },
+      stages: [{
+        key: 'OUTCOME_READINESS',
+        knowledgePacks: [{
+          packKey: 'rendering-layer',
+          label: 'Rendering Layer',
+          semanticVersion: '1.0.0',
+          executionStatus: 'PASSED',
+          executionChecks: [{ key: 'PROVIDER_COMPLETED', status: 'PASSED' }],
+        }],
+      }],
+    }
+    useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([
+      loadAsset,
+      {
+        data: {
+          data: {
+            outcomeAssetId: 'asset-1',
+            currentVersionId: 'version-1',
+            currentVersionNumber: 1,
+            governanceEvidence,
+            versions: [{
+              outcomeAssetVersionId: 'version-1',
+              versionNumber: 1,
+              governanceEvidence,
+              contentReview: { result: 'ALLOW', checkedAt: '2026-08-11T12:01:00.000Z' },
+            }],
+          },
+        },
+        isFetching: false,
+        error: null,
+      },
+    ])
+
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Governance' }))
+
+    const preview = screen.getByRole('region', { name: /generated body preview/i })
+    expect(within(preview).getByText('Asset identity').nextElementSibling).toHaveTextContent('asset-1')
+    expect(within(preview).getByText('Approved version').nextElementSibling).toHaveTextContent('version-1')
+    expect(preview).toHaveTextContent('Framework Diagram')
+    expect(preview).toHaveTextContent('Current')
+    expect(preview).toHaveTextContent('Certified')
+    expect(preview).toHaveTextContent('grr_exec_1')
+    expect(preview).toHaveTextContent('Rendering Layer')
+    expect(preview).toHaveTextContent('Passed')
+    expect(preview).not.toHaveTextContent('Raw customer payload')
+    expect(preview).not.toHaveTextContent('Hidden platform detail')
+  })
+
+  it('shows Not recorded when approved asset linkage evidence is unavailable', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Governance' }))
+
+    const preview = screen.getByRole('region', { name: /generated body preview/i })
+    expect(within(preview).getAllByText('Not recorded').length).toBeGreaterThan(0)
+    expect(preview).toHaveTextContent('Knowledge Pack execution is not recorded for this asset version.')
+    expect(preview).not.toHaveTextContent('Raw customer payload')
+    expect(preview).not.toHaveTextContent('Hidden platform detail')
+  })
+
+  it('shows the governed stage path and surfaces the first blocked stage', () => {
+    const blockedReadiness = {
+      ...studio.readiness,
+      state: 'BLOCKED',
+      canReason: false,
+      summary: 'Outcome Studio readiness is blocked.',
+      blockers: [{ code: 'KNOWLEDGE_PACK_BINDING_MISSING', message: 'Knowledge Pack binding is required.' }],
+      safetyGates: {
+        gates: [{
+          code: 'KNOWLEDGE_PACKS_BOUND',
+          label: 'Knowledge Pack Binding',
+          status: 'BLOCKED',
+          message: 'Knowledge Pack binding is required.',
+          blockerReason: 'Activate the required Knowledge Packs.',
+        }],
+        responseGenerationAvailable: false,
+      },
+    }
+    const blockedStudio = {
+      ...studio,
+      readiness: blockedReadiness,
+      safetyGates: { ...studio.safetyGates, responseGenerationAvailable: false },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: blockedStudio }, isLoading: false, error: null, refetch: refetchStudio })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({ data: { data: blockedReadiness }, isLoading: false, error: null, refetch: refetchReadiness })
+
+    renderPage()
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    expect(tracker).toHaveTextContent('Clarification')
+    expect(tracker).toHaveTextContent('Guardrails')
+    expect(tracker).toHaveTextContent('Validation')
+    expect(tracker).toHaveTextContent('Outcome readiness')
+    expect(within(tracker).getAllByRole('status', { name: 'Status: Blocked' })).toHaveLength(2)
+    expect(tracker).toHaveTextContent('Knowledge Pack binding is required.')
+    expect(tracker).toHaveTextContent('Activate the required Knowledge Packs.')
+  })
+
+  it('opens each stage evidence summary in its own standard dialog', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    const stageLabels = ['Clarification', 'Guardrails', 'Validation', 'Outcome readiness']
+    expect(within(tracker).getAllByRole('button', { name: /evidence details/i })).toHaveLength(4)
+
+    for (const stageLabel of stageLabels) {
+      await user.click(within(tracker).getByRole('button', { name: `${stageLabel} evidence details` }))
+      const dialog = screen.getByRole('dialog', { name: `${stageLabel} evidence` })
+      expect(within(dialog).getByRole('img', { name: `${stageLabel}: ${['Clarification', 'Guardrails'].includes(stageLabel) ? 'passed' : 'not passed'}` })).toBeInTheDocument()
+      expect(within(dialog).getByText('Verified truth pack')).toBeInTheDocument()
+      expect(within(dialog).getByText('truth-pack · v1.2.0')).toBeInTheDocument()
+      expect(within(dialog).getByText('VALUE_NARRATIVE · VMF · vmf-standard-2-3-1')).toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+      expect(screen.queryByRole('dialog', { name: `${stageLabel} evidence` })).not.toBeInTheDocument()
+    }
+
+    expect(within(tracker).getByText(/stage-specific usage is recorded only when persisted/i)).toBeInTheDocument()
+  })
+
+  it('uses the current active draft evidence before a draft is selected', async () => {
+    const user = userEvent.setup()
+    const draftEvidence = {
+      ...studio.governanceEvidence,
+      stages: [{
+        key: 'GUARDRAILS',
+        evidenceLabel: 'Recorded on this draft version',
+        knowledgePacks: [{
+          packKey: 'draft-receipt-pack',
+          label: 'Draft receipt pack',
+          semanticVersion: '2.0.0',
+          roles: ['Required business guidance'],
+          assignmentStatus: 'STAGE_ASSIGNED',
+          evidenceLabel: 'Recorded on this draft version',
+          executionStatus: 'PASSED',
+          executionChecks: [{ key: 'PROVIDER_COMPLETED', status: 'PASSED', message: 'Draft receipt recorded.' }],
+        }],
+        inputs: [],
+        checks: [],
+      }],
+    }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...session,
+          drafts: [{ ...session.drafts[0], governanceEvidence: draftEvidence }],
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+
+    renderPage()
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    await user.click(within(tracker).getByRole('button', { name: 'Guardrails evidence details' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Guardrails evidence' })
+    expect(within(dialog).getByText('Draft receipt pack')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Verified truth pack')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('img', { name: 'Draft receipt pack: execution passed' })).toBeInTheDocument()
+  })
+
+  it('marks only passed stages with a tick', () => {
+    renderPage()
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    expect(within(tracker).getByRole('img', { name: 'Clarification: passed' })).toBeInTheDocument()
+    expect(within(tracker).getByRole('img', { name: 'Guardrails: passed' })).toBeInTheDocument()
+    expect(within(tracker).getByRole('img', { name: 'Validation: not passed' })).toBeInTheDocument()
+    expect(within(tracker).getByRole('img', { name: 'Outcome readiness: not passed' })).toBeInTheDocument()
+    expect(tracker).toHaveTextContent('2/4 stages passed')
+    expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('Tick = all required checks passed for this exact draft version')
+    expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('Cross = not passed')
+  })
+
+  it('blocks every parent stage and approval when exact-version execution evidence is not ready', async () => {
+    const user = userEvent.setup()
+    const blockedMessage = 'Approval is blocked until all required execution evidence passes for this exact draft version.'
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: {
+        data: {
+          ...session,
+          drafts: [{
+            ...session.drafts[0],
+            approvalAvailable: false,
+            approvalReadiness: {
+              ...session.drafts[0].approvalReadiness,
+              status: 'BLOCKED',
+              approvalAvailable: false,
+              blockerReason: 'EXECUTION_EVIDENCE_NOT_RECORDED',
+              message: blockedMessage,
+              passedPackCount: 0,
+              passedRuntimeCheckCount: 0,
+            },
+          }],
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
+
+    renderPage()
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    expect(within(tracker).getAllByRole('status', { name: 'Status: Blocked' })).toHaveLength(4)
+    expect(within(tracker).getAllByText(blockedMessage)).toHaveLength(4)
+    expect(within(tracker).getByText('0/4 stages passed')).toBeInTheDocument()
+    for (const label of ['Clarification', 'Guardrails', 'Validation', 'Outcome readiness']) {
+      expect(within(tracker).getByRole('img', { name: `${label}: not passed` })).toBeInTheDocument()
+    }
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve draft' })).toHaveAccessibleDescription(blockedMessage)
+  })
+
+  it('shows truthful per-pack and runtime execution checks for debugging', async () => {
+    const user = userEvent.setup()
+    const executionPack = {
+      ...studio.governanceEvidence.stages[2].knowledgePacks[0],
+      executionStatus: 'PASSED',
+      projectedEntryCount: 4,
+      safeCandidateEntryCount: 5,
+      suppliedEntryCount: 3,
+      suppliedCategories: ['outputSchema', 'validationCriteria'],
+      sharedContribution: true,
+      projectionDisposition: 'PROJECTED',
+      admissionDisposition: 'ADMITTED',
+      executionChecks: [
+        { key: 'RESOLUTION_VERIFIED', status: 'PASSED', evidenceKind: 'PACK_EXECUTION', message: 'Selected version hash verified.' },
+        { key: 'VERSION_CONTENT_LOADED', status: 'PASSED', evidenceKind: 'PACK_EXECUTION', message: 'Exact version loaded.' },
+        { key: 'SAFE_GUIDANCE_PROJECTED', status: 'PASSED', evidenceKind: 'PACK_EXECUTION', message: 'Four safe entries projected.' },
+        { key: 'PROVIDER_CONTEXT_SUPPLIED', status: 'PASSED', message: 'Three entries supplied.' },
+        { key: 'PROVIDER_COMPLETED', status: 'PASSED', message: 'Provider completed.' },
+      ],
+    }
+    const bindingOnlyPack = {
+      packKey: 'binding-only-pack',
+      label: 'Binding-only pack',
+      semanticVersion: '1.0.0',
+      roles: ['Validation guidance'],
+      assignmentStatus: 'STAGE_ASSIGNED',
+      evidenceLabel: 'Binding recorded',
+      executionStatus: 'PASSED',
+      executionChecks: [],
+    }
+    const frameworkPack = {
+      packKey: 'truth-certification-framework',
+      label: 'Truth Certification Framework',
+      semanticVersion: '1.0.0',
+      roles: ['Post-generation validation'],
+      assignmentStatus: 'STAGE_ASSIGNED',
+      evidenceLabel: 'Framework execution failed',
+      executionStatus: 'FAILED',
+      executionChecks: [
+        { key: 'DEPENDENCY_RECEIPT_SET_BOUND', status: 'FAILED', evidenceKind: 'PACK_RECEIPT', message: 'Sibling receipt set incomplete.' },
+        { key: 'TRUTH_PRESERVATION_CONTROL', status: 'FAILED', evidenceKind: 'FRAMEWORK_CONTROL', message: 'Exact truth receipt missing.' },
+        { key: 'LINEAGE_PRESERVATION_CONTROL', status: 'PASSED', evidenceKind: 'FRAMEWORK_CONTROL', message: 'Generation-time lineage retained.' },
+      ],
+    }
+    const validationStage = {
+      ...studio.governanceEvidence.stages[2],
+      knowledgePacks: [executionPack, bindingOnlyPack, frameworkPack],
+      inputs: [
+        ...studio.governanceEvidence.stages[2].inputs,
+        { key: 'missing-input', label: 'Content validation', status: 'NOT_RECORDED', value: 'No receipt' },
+      ],
+      checks: [{
+        key: 'PROVIDER_RESPONSE_SCHEMA',
+        status: 'PASSED',
+        message: 'Strict provider response schema parsed successfully.',
+        providerKey: 'openai',
+        model: 'gpt-test',
+        configurationVersion: 'OUTCOME_STUDIO_OPENAI_RESPONSES_V1',
+        schemaName: 'governed_deliverable_v1',
+        schemaVersion: '1',
+        strict: true,
+        requestId: 'req-safe',
+        responseId: 'resp-safe',
+        latencyMs: 42,
+      }],
+    }
+    const evidenceStudio = {
+      ...studio,
+      governanceEvidence: {
+        ...studio.governanceEvidence,
+        stages: studio.governanceEvidence.stages.map((stage, index) => index === 2 ? validationStage : stage),
+      },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: evidenceStudio }, isLoading: false, error: null, refetch: refetchStudio })
+
+    renderPage()
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    const validationCard = within(tracker).getByText('Validation').closest('li')
+    await user.click(within(validationCard).getByRole('button', { name: 'Validation evidence details' }))
+
+    const validationDialog = screen.getByRole('dialog', { name: 'Validation evidence' })
+
+    expect(within(validationDialog).getByRole('img', { name: 'Verified truth pack: execution passed' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Binding-only pack: execution not recorded' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Truth Certification Framework: execution not passed' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Truth Preservation Control: Failed' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Provider Context Supplied: passed' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Provider Response Schema: passed' })).toBeInTheDocument()
+    expect(within(validationDialog).getByRole('img', { name: 'Content validation: Not Recorded' })).toBeInTheDocument()
+    expect(validationDialog).toHaveTextContent('3 supplied / 4 projected')
+    expect(validationDialog).toHaveTextContent('5 safe candidates · Projected · Admitted')
+    expect(validationDialog).toHaveTextContent('shared/deduplicated contribution')
+    expect(validationDialog).toHaveTextContent('Schema governed_deliverable_v1 v1')
+    expect(validationDialog).toHaveTextContent('Request req-safe')
+    expect(validationDialog).toHaveTextContent('42 ms')
+    expect(validationDialog).toHaveTextContent('Evidence type: Pack execution')
+    expect(validationDialog).toHaveTextContent('Evidence type: Pack receipt')
+    expect(validationDialog).toHaveTextContent('Evidence type: Framework control')
+    expect(validationDialog).toHaveTextContent('Evidence type: Evidence type not recorded')
+  })
+
+  it('marks the current draft preview as passed and binds the revision composer to the same draft', async () => {
+    const user = userEvent.setup()
+    const readyGates = [
+      'SOURCE_OUTPUT_BOUND',
+      'TRUTH_SIGNATURE_BOUND',
+      'KNOWLEDGE_PACKS_BOUND',
+      'PROMPT_PERSISTENCE_READY',
+      'RESPONSE_GENERATION_ENGINE',
+    ].map((code) => ({ code, status: 'PASSED', message: 'Passed.' }))
+    const readyReadiness = {
+      ...studio.readiness,
+      safetyGates: { gates: readyGates, responseGenerationAvailable: true },
+    }
+    const readyStudio = {
+      ...studio,
+      readiness: readyReadiness,
+      safetyGates: { ...studio.safetyGates, responseGenerationAvailable: true, gates: readyGates },
+    }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: readyStudio }, isLoading: false, error: null, refetch: refetchStudio })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({ data: { data: readyReadiness }, isLoading: false, error: null, refetch: refetchReadiness })
+
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    expect(tracker).toHaveTextContent('Working Draft v2 is open in the in-context Preview surface.')
+    expect(within(tracker).getAllByText('Passed').length).toBeGreaterThanOrEqual(2)
+
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
+    expect(screen.getByText(/Board Narrative Draft · v2/)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /composer bound to current draft/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit revision' })).toBeInTheDocument()
+  })
+
   it('previews the current working draft before approval', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -241,6 +716,41 @@ describe('OutcomeStudioWorkspace', () => {
     expect(preview).toHaveTextContent('Working Draft Preview')
     expect(preview).toHaveTextContent('Customer-safe working content.')
     expect(preview).not.toHaveTextContent('Hidden platform detail')
+  })
+
+  it('compares the verified previous and current draft versions in context', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(loadDraftCompare).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+      draftId: 'draft-1',
+    })
+
+    const compareTab = screen.getByRole('tab', { name: 'Compare' })
+    expect(compareTab).toBeEnabled()
+    await user.click(compareTab)
+    const compareView = within(screen.getByRole('region', { name: /outcome studio working draft preview/i })).getByRole('tabpanel')
+    expect(compareView).toHaveTextContent('Previous customer-safe content.')
+    expect(compareView).toHaveTextContent('Current customer-safe content.')
+  })
+
+  it('keeps Compare unavailable when the server cannot verify a previous draft version', async () => {
+    loadDraftCompare.mockReturnValueOnce({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: { error: { code: 'CONFLICT', state: { compareAvailable: false } } },
+      }),
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(screen.getByRole('tab', { name: 'Compare' })).toBeDisabled()
   })
 
   it('shows the shared spinner and suppresses stale content while a working draft preview loads', async () => {
@@ -508,7 +1018,7 @@ describe('OutcomeStudioWorkspace', () => {
       'id',
       'outcome-studio-request-history',
     )
-    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    expect(within(screen.getByRole('list', { name: 'Outcome Studio request history' })).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('Request 5'),
       expect.stringContaining('Request 4'),
       expect.stringContaining('Request 3'),
@@ -978,6 +1488,56 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByText('Outcome Studio refresh needed')).not.toBeInTheDocument()
   })
 
+  it('shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
+    const user = userEvent.setup()
+    submitMessage.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            message: 'Please review the information provided and try again.',
+            requestId: 'provider-context-ref-1',
+            diagnostic: {
+              failureStage: 'GUIDANCE',
+              diagnosticCode: 'REQUIRED_GUIDANCE_UNAVAILABLE',
+            },
+          },
+        },
+      }),
+    })
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Create the brief.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
+    expect(screen.getByText(
+      'Please review the information provided and try again. Diagnostic: guidance preparation; required guidance was not available. Reference: provider-context-ref-1',
+    )).toBeInTheDocument()
+
+    submitMessage.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 422,
+        data: {
+          error: {
+            message: 'Please review the information provided and try again.',
+            requestId: 'provider-context-ref-2',
+            diagnostic: {
+              failureStage: 'INTERNAL_STAGE',
+              diagnosticCode: 'RAW_INTERNAL_REASON',
+            },
+          },
+        },
+      }),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    expect(await screen.findByText(
+      'Please review the information provided and try again. Reference: provider-context-ref-2',
+    )).toBeInTheDocument()
+    expect(screen.queryByText(/RAW_INTERNAL_REASON|INTERNAL_STAGE/)).not.toBeInTheDocument()
+  })
+
   it('confirms retained discard, sends expectedUpdatedAt, and waits for refetch before success', async () => {
     const user = userEvent.setup()
     let resolveSessionRefetch
@@ -1039,6 +1599,14 @@ describe('OutcomeStudioWorkspace', () => {
     expect(approveDraft).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', sessionId: 'session-1', draftId: 'draft-1', body: {} })
 
     const outputs = screen.getByRole('region', { name: /approved outputs/i })
+    await user.click(within(outputs).getByRole('button', { name: 'Revise as working draft' }))
+    expect(reviseAsset).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+      outcomeAssetId: 'asset-1',
+      body: {},
+    })
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
     await user.click(within(outputs).getByRole('button', { name: 'Publish' }))
     expect(publishAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', outcomeAssetId: 'asset-1', body: {} })
 
@@ -1250,6 +1818,37 @@ describe('OutcomeStudioWorkspace', () => {
     expect(lists[1]).toHaveTextContent('Second decision')
     expect(preview).toHaveTextContent('<script>unsafe()</script>')
     expect(container.querySelector('script')).not.toBeInTheDocument()
+  })
+
+  it('renders inline emphasis without exposing raw Markdown markers', async () => {
+    const user = userEvent.setup()
+    useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([
+      loadPreview,
+      {
+        data: {
+          data: {
+            outcomeAssetId: 'asset-1',
+            previewAvailable: true,
+            markdown: '# Executive Summary\n\n**Verified fact:** The buyer loses *two working days* per month.\n\n- __Decision required__',
+            sections: [],
+          },
+        },
+        isFetching: false,
+        error: null,
+      },
+    ])
+    renderPage()
+
+    await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+
+    const preview = screen.getByRole('region', { name: /generated body preview/i })
+    expect(within(preview).getByText('Verified fact:')).toBeInTheDocument()
+    expect(within(preview).getByText('two working days')).toBeInTheDocument()
+    expect(within(preview).getByText('Decision required')).toBeInTheDocument()
+    expect(preview).not.toHaveTextContent('**Verified fact:**')
+    expect(preview).not.toHaveTextContent('*two working days*')
+    expect(preview).not.toHaveTextContent('__Decision required__')
   })
 
   it('prefers safe Markdown over a redundant structured section body', async () => {

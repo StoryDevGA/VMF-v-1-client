@@ -337,6 +337,7 @@ export const normalizeError = (error) => {
       nested.retryAfterSeconds ?? data.retryAfterSeconds ?? data.retryAfter ?? 0,
     ) || undefined
     const details = nested.details ?? data.details ?? undefined
+    const diagnostic = nested.diagnostic ?? data.diagnostic ?? undefined
 
     let message =
       nested.message ?? data.message ?? getErrorMessage(code) ?? ERROR_MESSAGES.SERVER_ERROR
@@ -356,6 +357,7 @@ export const normalizeError = (error) => {
       status,
       requestId,
       retryAfterSeconds,
+      ...(diagnostic ? { diagnostic } : {}),
       details,
     }
   }

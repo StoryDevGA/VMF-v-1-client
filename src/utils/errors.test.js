@@ -124,6 +124,27 @@ describe('errors', () => {
       })
     })
 
+    it('preserves the bounded Outcome Studio diagnostic envelope for the UI mapper', () => {
+      const result = normalizeError({
+        status: 422,
+        data: {
+          error: {
+            code: 'INVALID_REQUEST',
+            message: 'Please review the information provided and try again.',
+            diagnostic: {
+              failureStage: 'GUIDANCE',
+              diagnosticCode: 'REQUIRED_GUIDANCE_UNAVAILABLE',
+            },
+          },
+        },
+      })
+
+      expect(result.diagnostic).toEqual({
+        failureStage: 'GUIDANCE',
+        diagnosticCode: 'REQUIRED_GUIDANCE_UNAVAILABLE',
+      })
+    })
+
     it('should normalize an RTK Query error without data', () => {
       const rtkError = { status: 500 }
       const result = normalizeError(rtkError)

@@ -439,6 +439,13 @@ const LOCKED_RUNTIME_INSPECTION_REASON =
   'Locked runtimes are read-only. Create a revision before changing discovery or section truth.'
 
 const DISCOVERY_NAV_KEY = 'discovery'
+/**
+ * Internal compatibility boundary only. Output Lab is deliberately absent
+ * from standard customer navigation and is not an Outcome Studio dependency.
+ * Keep this surface for internal diagnostics/tests until its compatibility
+ * contract is explicitly retired; do not restore it as a customer authoring
+ * alternative or use its assets to satisfy Outcome Studio gates.
+ */
 const OUTPUT_LAB_NAV_KEY = 'output_lab'
 const OUTCOME_STUDIO_NAV_KEY = 'outcome_studio'
 const OUTPUT_LAB_LABEL = 'Output Lab'
@@ -3587,10 +3594,8 @@ function RuntimeSectionNavigation({
   lockedInspection = false,
   onSelectDiscovery,
   onSelectOutcomeStudio,
-  onSelectOutputLab,
   onSelectSection,
   outcomeStudioState = 'Not Ready',
-  outputLabState = 'Not Ready',
   sections = EMPTY_ARRAY,
 }) {
   const navItems = sections.map((section, index) => {
@@ -3645,21 +3650,6 @@ function RuntimeSectionNavigation({
             </button>
           </li>
           {navItems.map(renderNavigationItem)}
-          <li>
-            <button
-              type="button"
-              className={[
-                'runtime-workspace__section-nav-button',
-                activeKey === OUTPUT_LAB_NAV_KEY && 'runtime-workspace__section-nav-button--active',
-              ].filter(Boolean).join(' ')}
-              aria-current={activeKey === OUTPUT_LAB_NAV_KEY ? 'step' : undefined}
-              onClick={onSelectOutputLab}
-            >
-              <span><MdArticle aria-hidden="true" /></span>
-              <strong title={OUTPUT_LAB_LABEL}>{OUTPUT_LAB_LABEL}</strong>
-              <small>{outputLabState}</small>
-            </button>
-          </li>
           <li>
             <button
               type="button"
@@ -6064,6 +6054,9 @@ function RuntimeWorkspace() {
     { runtimeInstanceId },
     { skip: !runtimeInstanceId },
   )
+  // Output Lab data remains available to the internal compatibility surface.
+  // Outcome Studio uses its own /outcome-studio API chain and must not depend
+  // on this query, its assets, or its readiness result.
   const {
     data: outputLabResponse,
     isLoading: isLoadingOutputLab,
@@ -6329,10 +6322,6 @@ function RuntimeWorkspace() {
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
   const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
-  const outputLabState = getOutputLabReadinessLabel(outputLab, {
-    loading: isLoadingOutputLab || isFetchingOutputLab,
-    error: outputLabError,
-  })
   const outcomeStudioState = getOutcomeStudioReadinessLabel({
     readiness: outcomeStudioReadiness,
   }, {
@@ -7557,6 +7546,8 @@ function RuntimeWorkspace() {
         </aside>
 
         <main className="runtime-workspace__main" aria-label="Guided execution sections">
+          {/* Output Lab branch is retained only for explicit internal compatibility state;
+              standard customer navigation cannot select it. */}
           {activeWorkspaceKey === DISCOVERY_NAV_KEY ? (
             <DiscoverySection
               key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
@@ -7657,10 +7648,8 @@ function RuntimeWorkspace() {
                 lockedInspection={isRuntimeLockedForInspection}
                 onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
                 onSelectOutcomeStudio={handleOpenOutcomeStudio}
-                onSelectOutputLab={() => setActiveWorkspaceKey(OUTPUT_LAB_NAV_KEY)}
                 onSelectSection={handleSelectSection}
                 outcomeStudioState={outcomeStudioState}
-                outputLabState={outputLabState}
                 sections={sections}
               />
             </Card.Body>

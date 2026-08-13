@@ -3,6 +3,7 @@ import {
   buildAcceptRuntimeDiscoveryQuery,
   buildAcceptRuntimeSectionQuery,
   buildApproveRuntimeOutcomeDraftQuery,
+  buildReviseRuntimeOutcomeAssetQuery,
   buildClearRuntimeSectionEvidenceQuery,
   buildCreateRuntimeInstanceQuery,
   buildCreateRuntimeOutcomeSessionQuery,
@@ -52,6 +53,7 @@ import {
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
   getApproveRuntimeOutcomeDraftInvalidationTags,
+  getReviseRuntimeOutcomeAssetInvalidationTags,
   getClearRuntimeSectionEvidenceInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getCreateRuntimeOutcomeSessionInvalidationTags,
@@ -83,6 +85,7 @@ import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useApproveRuntimeOutcomeDraftMutation,
+  useReviseRuntimeOutcomeAssetMutation,
   useClearRuntimeSectionEvidenceMutation,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeOutcomeSessionMutation,
@@ -157,6 +160,7 @@ describe('runtimeInstanceApi', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeAssetVersion')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeOutcomeDraftPreview')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('approveRuntimeOutcomeDraft')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('reviseRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('discardRuntimeOutcomeDraft')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('publishRuntimeOutcomeAsset')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('exportRuntimeOutcomeAsset')
@@ -209,6 +213,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useLazyGetRuntimeOutcomeDraftPreviewQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeAssetVersionQuery).toBe('function')
     expect(typeof useApproveRuntimeOutcomeDraftMutation).toBe('function')
+    expect(typeof useReviseRuntimeOutcomeAssetMutation).toBe('function')
     expect(typeof useDiscardRuntimeOutcomeDraftMutation).toBe('function')
     expect(typeof usePublishRuntimeOutcomeAssetMutation).toBe('function')
     expect(typeof useLazyExportRuntimeOutcomeAssetQuery).toBe('function')
@@ -399,6 +404,15 @@ describe('runtimeInstanceApi', () => {
       draftId: 'outcome/draft-001',
     })).toEqual({
       url: '/runtime-instances/value%20narrative%2F001/outcome-studio/sessions/out%2Fsess-001/drafts/outcome%2Fdraft-001/approve',
+      method: 'POST',
+      body: {},
+    })
+    expect(buildReviseRuntimeOutcomeAssetQuery({
+      runtimeInstanceId: 'value narrative/001',
+      sessionId: 'out/sess-001',
+      outcomeAssetId: 'outcome/asset-001',
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/outcome-studio/sessions/out%2Fsess-001/assets/outcome%2Fasset-001/revise',
       method: 'POST',
       body: {},
     })

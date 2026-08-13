@@ -790,6 +790,13 @@ function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001
   return render(runtimeWorkspaceTree(initialEntry))
 }
 
+function renderInternalOutputLabWorkspace() {
+  return renderRuntimeWorkspace({
+    pathname: '/app/runtime/value-narrative-001',
+    state: { runtimeWorkspace: { activeWorkspaceKey: 'output_lab' } },
+  })
+}
+
 
 function selectIntelligenceHubTab(name) {
   const discoverySection = screen.getByRole('main', { name: /guided execution sections/i })
@@ -1437,7 +1444,7 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderInternalOutputLabWorkspace()
 
     expect(screen.getByRole('button', { name: /create revision/i })).toBeDisabled()
     expect(screen.getByText('Lock snapshot and replay anchor proof are required before creating a revision.')).toBeInTheDocument()
@@ -1445,13 +1452,12 @@ describe('RuntimeWorkspace', () => {
 
   it('renders Output Lab as blocked when locked canonical output eligibility is missing', async () => {
     const user = userEvent.setup()
-    renderRuntimeWorkspace()
+    renderInternalOutputLabWorkspace()
 
     expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )
-    await user.click(screen.getByRole('button', { name: /output lab/i }))
 
     const main = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(main).getByRole('heading', { name: /^output lab$/i })).toBeInTheDocument()
@@ -1476,6 +1482,13 @@ describe('RuntimeWorkspace', () => {
     expect(screen.getByText('discovery')).toBeInTheDocument()
   })
 
+  it('does not expose Output Lab as a customer workspace authoring route', () => {
+    renderRuntimeWorkspace()
+
+    expect(screen.queryByRole('button', { name: /output lab/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /outcome studio/i })).toBeInTheDocument()
+  })
+
   it('preserves the governed source section when launching standalone Outcome Studio', async () => {
     const user = userEvent.setup()
     renderRuntimeWorkspace()
@@ -1491,9 +1504,8 @@ describe('RuntimeWorkspace', () => {
 
   it('renders Truth Quality in Output Lab without exposing raw evidence or graph payloads', async () => {
     const user = userEvent.setup()
-    renderRuntimeWorkspace()
+    renderInternalOutputLabWorkspace()
 
-    await user.click(screen.getByRole('button', { name: /output lab/i }))
     const main = screen.getByRole('main', { name: /guided execution sections/i })
     await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
 
@@ -1532,8 +1544,7 @@ describe('RuntimeWorkspace', () => {
         error: null,
       })
 
-      renderRuntimeWorkspace()
-      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      renderInternalOutputLabWorkspace()
       const main = screen.getByRole('main', { name: /guided execution sections/i })
       await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
 
@@ -1556,8 +1567,7 @@ describe('RuntimeWorkspace', () => {
       error: null,
     })
 
-    renderRuntimeWorkspace()
-    await user.click(screen.getByRole('button', { name: /output lab/i }))
+    renderInternalOutputLabWorkspace()
     const main = screen.getByRole('main', { name: /guided execution sections/i })
 
     await user.click(within(main).getByRole('tab', { name: /truth quality/i }))
@@ -1592,8 +1602,7 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchOutputLab,
     })
 
-    renderRuntimeWorkspace()
-    await user.click(screen.getByRole('button', { name: /output lab/i }))
+    renderInternalOutputLabWorkspace()
 
     const main = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(main).getByRole('tablist', { name: /output lab sections/i })).toBeInTheDocument()
@@ -1642,8 +1651,7 @@ describe('RuntimeWorkspace', () => {
         refetch: refetchOutputLab,
       })
 
-      renderRuntimeWorkspace()
-      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      renderInternalOutputLabWorkspace()
       const main = screen.getByRole('main', { name: /guided execution sections/i })
       await user.click(within(main).getByRole('tab', { name: /composition/i }))
       await user.click(within(main).getByRole('button', { name: /^generate$/i }))
@@ -1696,8 +1704,7 @@ describe('RuntimeWorkspace', () => {
         refetch: refetchOutputLab,
       })
 
-      renderRuntimeWorkspace()
-      await user.click(screen.getByRole('button', { name: /output lab/i }))
+      renderInternalOutputLabWorkspace()
       const main = screen.getByRole('main', { name: /guided execution sections/i })
       await user.click(within(main).getByRole('tab', { name: /outputs/i }))
 
