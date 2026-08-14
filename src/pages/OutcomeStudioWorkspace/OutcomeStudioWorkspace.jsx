@@ -124,6 +124,11 @@ const statusVariant = (value) => {
 const isStagePassed = (status) => token(status) === 'PASSED'
 const isExecutionPassed = (status) => token(status) === 'PASSED'
 const isEvidenceInputPassed = (status) => statusVariant(status) === 'success'
+const sourceContextLabelOf = (sourceOutput) => token(sourceOutput?.sourceType) === 'FRAMEWORK_HANDOFF'
+  ? 'Locked Framework Runtime handoff'
+  : sourceOutput?.outputAssetId
+    ? 'Output Lab asset'
+    : 'Not recorded'
 const compareBlockerOf = (error) => (
   normalizeError(error)?.details?.blockerReason
   || (error?.data?.error?.state?.compareAvailable === false ? 'OUTCOME_DRAFT_PREVIOUS_ITERATION_MISSING' : '')
@@ -1100,8 +1105,11 @@ function OutcomeStudioWorkspace() {
     )
   }
 
-  const renderSummary = () => (
-    <section className="outcome-studio-workspace__summary" aria-label="Outcome Studio readiness and information">
+  const renderSummary = () => {
+    const frameworkHandoff = readiness.frameworkHandoff || {}
+    const sourceOutput = information.sourceOutput || null
+    return (
+      <section className="outcome-studio-workspace__summary" aria-label="Outcome Studio readiness and information">
       <div className="outcome-studio-workspace__summary-copy">
         <span>Readiness</span>
         <strong>{readiness.summary || 'Outcome Studio readiness is being evaluated.'}</strong>
@@ -1119,14 +1127,28 @@ function OutcomeStudioWorkspace() {
           <dt>Deliverables</dt>
           <dd>{deliverables.length} available</dd>
         </div>
-      </dl>
-      {readiness.blockers?.length ? (
-        <ul className="outcome-studio-workspace__messages" aria-label="Outcome Studio blockers">
-          {readiness.blockers.map((blocker) => <li key={blocker.code || blocker.message}>{blocker.message}</li>)}
-        </ul>
-      ) : null}
-    </section>
-  )
+        <div>
+          <dt>Framework handoff</dt>
+          <dd>
+            <Status variant={statusVariant(frameworkHandoff.status)} size="sm" showIcon>
+              {formatRuntimeTokenLabel(frameworkHandoff.status || 'UNKNOWN')}
+            </Status>
+            <small>{formatRuntimeTokenLabel(frameworkHandoff.currentness || 'UNKNOWN')} · {frameworkHandoff.contractVersion || 'Contract not recorded'}</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Source context</dt>
+          <dd>{sourceContextLabelOf(sourceOutput)}</dd>
+        </div>
+        </dl>
+        {readiness.blockers?.length ? (
+          <ul className="outcome-studio-workspace__messages" aria-label="Outcome Studio blockers">
+            {readiness.blockers.map((blocker) => <li key={blocker.code || blocker.message}>{blocker.message}</li>)}
+          </ul>
+        ) : null}
+      </section>
+    )
+  }
 
   const renderStageTracker = () => (
     <section className="outcome-studio-workspace__stage-tracker" aria-label="Outcome Studio stage progress">

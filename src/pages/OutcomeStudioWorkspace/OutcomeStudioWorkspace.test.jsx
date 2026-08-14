@@ -68,11 +68,23 @@ const studio = {
     canReason: true,
     summary: 'Outcome Studio can start governed sessions.',
     blockers: [],
+    frameworkHandoff: {
+      status: 'READY',
+      contractVersion: 'ss-011.framework-to-outcome-studio.evidence-to-knowledge.v1',
+      currentness: 'CURRENT',
+    },
     safetyGates: {
       responseGenerationAvailable: true,
     },
   },
-  information: { status: 'PROJECTED', currentness: 'CURRENT' },
+  information: {
+    status: 'PROJECTED',
+    currentness: 'CURRENT',
+    sourceOutput: {
+      outputAssetId: 'framework_handoff_fixture',
+      sourceType: 'FRAMEWORK_HANDOFF',
+    },
+  },
   conversation: { enabled: true, requestMaxLength: 2000 },
   safetyGates: {
     status: 'READY',
@@ -279,6 +291,9 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'Outcome Studio' })).toBeInTheDocument()
     expect(container.querySelector('main')).toBeNull()
     expect(screen.getByRole('region', { name: /readiness and information/i })).toHaveTextContent('Outcome Studio can start governed sessions.')
+    expect(screen.getByRole('region', { name: /readiness and information/i })).toHaveTextContent('Framework handoff')
+    expect(screen.getByRole('region', { name: /readiness and information/i })).toHaveTextContent('Locked Framework Runtime handoff')
+    expect(screen.getByRole('region', { name: /readiness and information/i })).toHaveTextContent('ss-011.framework-to-outcome-studio.evidence-to-knowledge.v1')
     expect(screen.getByRole('tab', { name: 'Conversation' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Working Drafts' })).toBeInTheDocument()
     expect(screen.getByText('Prepare the board narrative.')).toBeInTheDocument()
