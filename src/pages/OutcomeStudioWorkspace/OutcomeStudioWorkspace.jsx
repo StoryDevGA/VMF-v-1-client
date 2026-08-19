@@ -16,7 +16,6 @@ import {
 import { Button, ButtonGroup } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorSupportPanel } from '../../components/ErrorSupportPanel'
-import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
@@ -31,6 +30,7 @@ import {
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyExportRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useLazyGetRuntimeOutcomeDraftCompareQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
@@ -51,6 +51,7 @@ import './OutcomeStudioWorkspace.css'
 const EMPTY_ARRAY = Object.freeze([])
 const DOWNLOAD_CLEANUP_DELAY_MS = 1000
 const REQUEST_HISTORY_PREVIEW_LIMIT = 5
+const OUTPUT_CONTRACT_CLARIFICATION_CODE = 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATION_REQUIRED'
 
 const payload = (response) => response?.data ?? response ?? null
 const token = (value) => String(value || '').trim().toUpperCase()
@@ -58,6 +59,8 @@ const idOf = (record, keys) => String(keys.map((key) => record?.[key]).find(Bool
 const sessionIdOf = (session) => idOf(session, ['sessionId', 'id', '_id'])
 const draftIdOf = (draft) => idOf(draft, ['draftId', 'id', '_id'])
 const assetIdOf = (asset) => idOf(asset, ['outcomeAssetId', 'assetId', 'id', '_id'])
+const normalizeRequestText = (value) => String(value || '').trim().replace(/\s+/g, ' ')
+const isUserRequestMessage = (message) => token(message?.role) !== 'ASSISTANT'
 
 const informationCurrentnessOf = (record) => token(
   record?.informationStatus?.currentness
@@ -316,16 +319,6 @@ const getOutcomeStudioStages = ({
   }))
 }
 
-const resolveDeliverableKey = ({ deliverableKey, requestedOutputTypeKey, deliverables }) => {
-  const availableKeys = new Set(deliverables.map((item) => item.key))
-  const candidates = [
-    String(deliverableKey || '').trim().toLowerCase(),
-    String(requestedOutputTypeKey || '').trim().toLowerCase(),
-    deliverables[0]?.key || '',
-  ]
-  return candidates.find((candidate) => availableKeys.has(candidate)) || ''
-}
-
 const renderSafeInlineMarkdown = (text) => {
   const tokens = String(text || '').split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g)
   return tokens.map((token, index) => {
@@ -582,7 +575,9 @@ function OutcomeStudioWorkspace() {
   const { addToast } = useToaster()
   const [activeTab, setActiveTab] = useState(0)
   const [prompt, setPrompt] = useState('')
-  const [deliverableKey, setDeliverableKey] = useState('')
+  const [composerError, setComposerError] = useState('')
+  const [uncertainPrompt, setUncertainPrompt] = useState('')
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [pendingDiscard, setPendingDiscard] = useState(null)
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [selectedDraftId, setSelectedDraftId] = useState('')
@@ -628,6 +623,7 @@ function OutcomeStudioWorkspace() {
   const [loadPreview, assetPreviewState] = useLazyGetRuntimeOutcomeAssetPreviewQuery()
   const [loadDraftCompare] = useLazyGetRuntimeOutcomeDraftCompareQuery()
   const [loadDraftPreview] = useLazyGetRuntimeOutcomeDraftPreviewQuery()
+  const [loadSessionForReconciliation] = useLazyGetRuntimeOutcomeSessionQuery()
 
   const deliverables = useMemo(() => (
     (Array.isArray(studio?.deliverables?.available) ? studio.deliverables.available : EMPTY_ARRAY)
@@ -638,13 +634,8 @@ function OutcomeStudioWorkspace() {
       }))
       .filter((item) => item.key && item.label)
   ), [studio?.deliverables?.available])
-  const selectedDeliverableKey = resolveDeliverableKey({
-    deliverableKey,
-    requestedOutputTypeKey: session?.requestedOutputTypeKey,
-    deliverables,
-  })
   const messages = Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY
-  const requestMessages = messages.filter((message) => token(message?.role) !== 'ASSISTANT')
+  const requestMessages = messages.filter(isUserRequestMessage)
   const newestFirstRequestMessages = [...requestMessages].reverse()
   const visibleMessages = showAllRequests
     ? newestFirstRequestMessages
@@ -761,37 +752,181 @@ function OutcomeStudioWorkspace() {
     return true
   }
 
-  const handleStartSession = async () => {
-    if (!selectedDeliverableKey) return
+  const setClarificationFromError = (error) => {
+    const normalized = normalizeError(error)
+    if (token(normalized.code) !== OUTPUT_CONTRACT_CLARIFICATION_CODE) return false
+    setComposerError(stripRequestReference(normalized.message))
+    return true
+  }
+
+  const reconcileMessageSubmission = async ({
+    beforeMessages = [],
+    boundOutputTypeKey = '',
+    promptText,
+    targetSessionId,
+  }) => {
+    const beforeIds = new Set(beforeMessages.map((message) => idOf(message, ['messageId', 'id', '_id'])).filter(Boolean))
     try {
-      await createSession({
+      const response = await loadSessionForReconciliation({
         runtimeInstanceId,
-        body: {
-          requestedOutputTypeKey: selectedDeliverableKey,
-          ...(prompt.trim() ? { prompt: prompt.trim() } : {}),
-        },
+        sessionId: targetSessionId,
+      }).unwrap()
+      const refreshedSession = payload(response)
+      const refreshedMessages = (Array.isArray(refreshedSession?.messages) ? refreshedSession.messages : EMPTY_ARRAY)
+        .filter(isUserRequestMessage)
+      if (refreshedMessages.some((message) => !idOf(message, ['messageId', 'id', '_id']))) {
+        throw new Error('Outcome Studio returned an unidentifiable request during reconciliation.')
+      }
+      const newMessages = refreshedMessages.filter((message) => (
+        !beforeIds.has(idOf(message, ['messageId', 'id', '_id']))
+      ))
+      const normalizedPrompt = normalizeRequestText(promptText)
+      const normalizedBoundKey = String(boundOutputTypeKey || refreshedSession?.requestedOutputTypeKey || '')
+        .trim()
+        .toLowerCase()
+      const matchingMessages = newMessages.filter((message) => {
+        const messageKey = String(message?.requestedOutputTypeKey || '').trim().toLowerCase()
+        return normalizeRequestText(message?.content || message?.prompt) === normalizedPrompt
+          && (!normalizedBoundKey || !messageKey || messageKey === normalizedBoundKey)
+      })
+
+      if (newMessages.length === 1 && matchingMessages.length === 1) {
+        setPrompt('')
+        setComposerError('')
+        setUncertainPrompt('')
+        await refetchAll(studioQuery.refetch, readinessQuery.refetch)
+        notify(
+          'Outcome Studio request recovered',
+          'The request was saved even though its first response was interrupted.',
+          'warning',
+        )
+        return 'COMMITTED'
+      }
+      if (newMessages.length === 0) return 'NOT_COMMITTED'
+    } catch {
+      // The fail-closed branch below intentionally covers query and identity uncertainty.
+    }
+
+    setUncertainPrompt(promptText)
+    setComposerError('Outcome Studio could not confirm whether this request was saved. Refresh before trying again.')
+    return 'UNCERTAIN'
+  }
+
+  const submitPromptToSession = async ({
+    beforeMessages = [],
+    boundOutputTypeKey = '',
+    isNewSession = false,
+    promptText,
+    targetSessionId,
+  }) => {
+    try {
+      await submitMessage({
+        runtimeInstanceId,
+        sessionId: targetSessionId,
+        body: { prompt: promptText },
       }).unwrap()
       setPrompt('')
-      await refreshAfterMutation('Outcome Studio session started.', {
-        refetchers: [studioQuery.refetch, readinessQuery.refetch],
+      setComposerError('')
+      setUncertainPrompt('')
+      await refreshAfterMutation(
+        isNewSession
+          ? 'Outcome Studio session started and request submitted.'
+          : 'Outcome Studio request submitted.',
+        isNewSession
+          ? { refetchers: [studioQuery.refetch, readinessQuery.refetch] }
+          : {},
+      )
+      return true
+    } catch (error) {
+      const reconciliation = await reconcileMessageSubmission({
+        beforeMessages,
+        boundOutputTypeKey,
+        promptText,
+        targetSessionId,
+      })
+      if (reconciliation === 'COMMITTED' || reconciliation === 'UNCERTAIN') return reconciliation === 'COMMITTED'
+      if (setClarificationFromError(error)) {
+        notify('Outcome Studio needs clarification', failureMessage(error), 'warning')
+      } else if (isNewSession) {
+        notify(
+          'Outcome Studio session saved',
+          'The session was started, but the request was not saved. Submit the retained request again.',
+          'warning',
+        )
+      } else {
+        notify('Outcome Studio action failed', failureMessage(error), 'error')
+      }
+      return false
+    }
+  }
+
+  const handleStartSession = async () => {
+    const promptText = normalizeRequestText(prompt)
+    if (!promptText || requestSubmitting) return
+    setRequestSubmitting(true)
+    setComposerError('')
+    try {
+      const response = await createSession({
+        runtimeInstanceId,
+        body: { prompt: promptText },
+      }).unwrap()
+      const createdSession = payload(response)
+      const createdSessionId = sessionIdOf(createdSession)
+      if (!createdSessionId) throw new Error('Outcome Studio did not return the new session.')
+      await submitPromptToSession({
+        beforeMessages: [],
+        boundOutputTypeKey: createdSession?.requestedOutputTypeKey,
+        isNewSession: true,
+        promptText,
+        targetSessionId: createdSessionId,
       })
     } catch (error) {
-      notify('Outcome Studio action failed', failureMessage(error), 'error')
+      if (setClarificationFromError(error)) {
+        notify('Outcome Studio needs clarification', failureMessage(error), 'warning')
+      } else {
+        try {
+          const refreshed = await studioQuery.refetch()
+          await readinessQuery.refetch()
+          const refreshedStudio = payload(refreshed?.data)
+          const recoveredSession = activeSessionFrom(refreshedStudio)
+          const recoveredSessionId = sessionIdOf(recoveredSession)
+          if (
+            recoveredSessionId
+            && normalizeRequestText(recoveredSession?.requestText) === promptText
+          ) {
+            await submitPromptToSession({
+              beforeMessages: [],
+              boundOutputTypeKey: recoveredSession?.requestedOutputTypeKey,
+              isNewSession: true,
+              promptText,
+              targetSessionId: recoveredSessionId,
+            })
+          } else {
+            notify('Outcome Studio action failed', failureMessage(error), 'error')
+          }
+        } catch {
+          notify('Outcome Studio action failed', failureMessage(error), 'error')
+        }
+      }
+    } finally {
+      setRequestSubmitting(false)
     }
   }
 
   const handleSubmit = async () => {
-    if (!activeSessionId || !prompt.trim() || !selectedDeliverableKey) return
+    const promptText = normalizeRequestText(prompt)
+    if (!activeSessionId || !promptText || requestSubmitting) return
+    setRequestSubmitting(true)
+    setComposerError('')
     try {
-      await submitMessage({
-        runtimeInstanceId,
-        sessionId: activeSessionId,
-        body: { prompt: prompt.trim(), requestedOutputTypeKey: selectedDeliverableKey },
-      }).unwrap()
-      setPrompt('')
-      await refreshAfterMutation('Outcome Studio request submitted.')
-    } catch (error) {
-      notify('Outcome Studio action failed', failureMessage(error), 'error')
+      await submitPromptToSession({
+        beforeMessages: requestMessages,
+        boundOutputTypeKey: session?.requestedOutputTypeKey,
+        promptText,
+        targetSessionId: activeSessionId,
+      })
+    } finally {
+      setRequestSubmitting(false)
     }
   }
 
@@ -800,7 +935,12 @@ function OutcomeStudioWorkspace() {
     if (!activeSessionId || !messageId || generationBlockedReason) return
     setBusyKey(`generate:${messageId}`)
     try {
-      await generateResponse({ runtimeInstanceId, sessionId: activeSessionId, messageId, body: {} }).unwrap()
+      await generateResponse({
+        runtimeInstanceId,
+        sessionId: activeSessionId,
+        messageId,
+        body: { allowReadyWithGaps: true },
+      }).unwrap()
       await refreshAfterMutation('Outcome Studio draft generated.')
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
@@ -1284,11 +1424,35 @@ function OutcomeStudioWorkspace() {
                 </div>
               ) : null}
               <div className="outcome-studio-workspace__composer">
-                <Select id="outcome-studio-deliverable" label="Deliverable" value={selectedDeliverableKey} options={deliverables.map((item) => ({ value: item.key, label: item.label }))} disabled={!deliverables.length} onChange={(event) => setDeliverableKey(event.target.value)} />
-                <Textarea id="outcome-studio-request" label="Your request" value={prompt} rows={5} maxLength={studio?.conversation?.requestMaxLength || 2000} disabled={Boolean(activeSessionId) && !conversationEnabled} onChange={(event) => setPrompt(event.target.value)} />
+                <Textarea
+                  id="outcome-studio-request"
+                  label="Your request"
+                  value={prompt}
+                  rows={5}
+                  maxLength={studio?.conversation?.requestMaxLength || 2000}
+                  disabled={Boolean(activeSessionId) && !conversationEnabled}
+                  error={composerError}
+                  helperText="Outcome Studio will infer the deliverable, audience, structure, style, and applicable guidance from your request."
+                  onChange={(event) => {
+                    setPrompt(event.target.value)
+                    setComposerError('')
+                    setUncertainPrompt('')
+                  }}
+                />
                 {selectedDraftRow ? <div className="outcome-studio-workspace__asset-binding" role="status"><Status variant="info" size="sm" showIcon>Composer bound to current draft</Status><span>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'} · v{selectedDraftRow.draft.currentIterationNumber || 1}</span><small>Submitting a revision keeps the same governed asset identity and creates the next draft version.</small></div> : null}
                 <ButtonGroup align="end" stackOnMobile fullWidthOnMobile>
-                  <Button loading={activeSessionId ? submitState.isLoading : createState.isLoading} disabled={!selectedDeliverableKey || (activeSessionId ? !conversationEnabled || !prompt.trim() : readiness.canStartSession !== true)} leftIcon={<MdPlayArrow aria-hidden="true" />} onClick={activeSessionId ? handleSubmit : handleStartSession}>{activeSessionId ? (selectedDraftRow ? 'Submit revision' : 'Submit request') : 'Start session'}</Button>
+                  <Button
+                    loading={requestSubmitting || submitState.isLoading || createState.isLoading}
+                    disabled={
+                      !prompt.trim()
+                      || normalizeRequestText(uncertainPrompt) === normalizeRequestText(prompt)
+                      || (activeSessionId ? !conversationEnabled : readiness.canStartSession !== true)
+                    }
+                    leftIcon={<MdPlayArrow aria-hidden="true" />}
+                    onClick={activeSessionId ? handleSubmit : handleStartSession}
+                  >
+                    {selectedDraftRow ? 'Submit revision' : 'Submit request'}
+                  </Button>
                 </ButtonGroup>
               </div>
               <div className="outcome-studio-workspace__history">

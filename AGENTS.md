@@ -22,6 +22,12 @@
 - Audit/registry/filter constants must align with the API and seed guard. Do not add client-only audit actions, resource types, event keys, categories, severities, or lifecycle statuses.
 - Final client handoff must state the focused Vitest/build commands, `git diff --check`, browser/manual QA status when relevant, and which quality-gate surfaces were checked.
 
+## Current governed cross-layer intake — 2026-08-14
+
+- SS-012's pure backend `composition-lineage-and-fixture-hardening` slice is now verified in exactly two API files: focused composition tests 12/12, adjacent API regression 248/248, syntax/diff checks, and independent evaluator PASS at `0.99`. The later live-bridge identity/governance slice passed at `0.97`, and the Markdown duplicate-content slice passed at `0.96` with bridge `37/37` and focused nine-suite regression `328/328`. No client slice is authorized by those backend results; structured YAML/JSON alias strictness and real persistence remain separate backend gates.
+- Do not add readiness copy, response-shape, RTK Query, mock/live parity, or customer UI for SS-012 until a separate provider/GRR/API contract authorizes it and the backend persistence gate is verified.
+- No client-only projection may substitute for server-owned fact admission, attribution, claim-permission, provider safety, or manifest enforcement. If SS-012 later changes the API shape, map constants, endpoint shape, mock/live parity, cache/refetch behavior, direct-route guards, error states, accessibility, and authenticated manual route after the backend contract is accepted.
+
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 

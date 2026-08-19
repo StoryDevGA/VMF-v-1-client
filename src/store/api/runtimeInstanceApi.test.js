@@ -53,7 +53,6 @@ import {
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
   getApproveRuntimeOutcomeDraftInvalidationTags,
-  getReviseRuntimeOutcomeAssetInvalidationTags,
   getClearRuntimeSectionEvidenceInvalidationTags,
   getCreateRuntimeInstanceInvalidationTags,
   getCreateRuntimeOutcomeSessionInvalidationTags,
@@ -113,6 +112,7 @@ import {
   useGetRuntimeOutcomeAssetVersionQuery,
   useGetRuntimeOutcomeSessionAssetsQuery,
   useGetRuntimeOutcomeSessionQuery,
+  useLazyGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeDraftPreviewQuery,
   useGetRuntimeRendererQuery,
@@ -207,6 +207,7 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useGetRuntimeOutcomeStudioReadinessQuery).toBe('function')
     expect(typeof useCreateRuntimeOutcomeSessionMutation).toBe('function')
     expect(typeof useGetRuntimeOutcomeSessionQuery).toBe('function')
+    expect(typeof useLazyGetRuntimeOutcomeSessionQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeSessionAssetsQuery).toBe('function')
     expect(typeof useGetRuntimeOutcomeAssetQuery).toBe('function')
     expect(typeof useLazyGetRuntimeOutcomeAssetQuery).toBe('function')

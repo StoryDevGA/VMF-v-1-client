@@ -716,6 +716,7 @@ export const {
   useGetRuntimeOutcomeStudioQuery,
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
+  useLazyGetRuntimeOutcomeSessionQuery,
   useGetRuntimeOutcomeSessionAssetsQuery,
   useGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetQuery,

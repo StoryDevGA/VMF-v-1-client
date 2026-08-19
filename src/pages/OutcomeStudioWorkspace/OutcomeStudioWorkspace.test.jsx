@@ -13,6 +13,7 @@ import {
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyExportRuntimeOutcomeAssetQuery,
+  useLazyGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeDraftCompareQuery,
@@ -33,6 +34,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useGetRuntimeOutcomeStudioReadinessQuery: vi.fn(),
   useGetRuntimeOutcomeSessionQuery: vi.fn(),
   useLazyExportRuntimeOutcomeAssetQuery: vi.fn(),
+  useLazyGetRuntimeOutcomeSessionQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetPreviewQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetQuery: vi.fn(),
   useLazyGetRuntimeOutcomeDraftCompareQuery: vi.fn(),
@@ -58,6 +60,7 @@ const loadAsset = vi.fn()
 const loadPreview = vi.fn()
 const loadDraftCompare = vi.fn()
 const loadDraftPreview = vi.fn()
+const loadSessionForReconciliation = vi.fn()
 
 const resolvedMutation = (value = { data: {} }) => ({ unwrap: vi.fn().mockResolvedValue(value) })
 
@@ -225,6 +228,7 @@ describe('OutcomeStudioWorkspace', () => {
     exportAsset.mockReturnValue(resolvedMutation({ data: { filename: 'board-narrative.pdf', content: 'PDF' } }))
     loadAsset.mockResolvedValue({ data: { outcomeAssetId: 'asset-1', versions: [] } })
     loadPreview.mockResolvedValue({ data: { outcomeAssetId: 'asset-1' } })
+    loadSessionForReconciliation.mockReturnValue(resolvedMutation({ data: session }))
     loadDraftPreview.mockReturnValue(resolvedMutation({
       data: {
         draftId: 'draft-1',
@@ -276,6 +280,7 @@ describe('OutcomeStudioWorkspace', () => {
     useLazyGetRuntimeOutcomeAssetPreviewQuery.mockReturnValue([loadPreview, { data: { data: { outcomeAssetId: 'asset-1', previewAvailable: true, sections: [{ key: 'summary', label: 'Executive Summary', body: 'Customer-safe preview.' }] } }, isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeDraftCompareQuery.mockReturnValue([loadDraftCompare, { isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeDraftPreviewQuery.mockReturnValue([loadDraftPreview, { isFetching: false, error: null }])
+    useLazyGetRuntimeOutcomeSessionQuery.mockReturnValue([loadSessionForReconciliation, { isFetching: false, error: null }])
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn(() => 'blob:outcome-export'),
@@ -998,7 +1003,7 @@ describe('OutcomeStudioWorkspace', () => {
       runtimeInstanceId: 'value-narrative-001',
       sessionId: 'session-1',
       messageId: 'message-6',
-      body: {},
+      body: { allowReadyWithGaps: true },
     })
 
     await user.click(viewAll)
@@ -1112,7 +1117,7 @@ describe('OutcomeStudioWorkspace', () => {
       { skip: true },
     )
     expect(screen.getByText('No active session')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start session' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled()
     expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
   })
 
@@ -1363,7 +1368,7 @@ describe('OutcomeStudioWorkspace', () => {
       runtimeInstanceId: 'value-narrative-001',
       sessionId: 'session-1',
       messageId: 'message-1',
-      body: {},
+      body: { allowReadyWithGaps: true },
     })
   })
 
@@ -1435,7 +1440,7 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Generate draft' })).not.toBeInTheDocument()
   })
 
-  it('falls back to an available deliverable when persisted session metadata is stale', async () => {
+  it('does not send stale or customer-selected deliverable metadata', async () => {
     const user = userEvent.setup()
     useGetRuntimeOutcomeSessionQuery.mockReturnValue({
       data: {
@@ -1450,17 +1455,14 @@ describe('OutcomeStudioWorkspace', () => {
     })
     renderPage()
 
-    expect(screen.getByRole('combobox', { name: 'Deliverable' })).toHaveValue('board-narrative')
+    expect(screen.queryByRole('combobox', { name: 'Deliverable' })).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the available deliverable.')
     await user.click(screen.getByRole('button', { name: 'Submit request' }))
 
     expect(submitMessage).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       sessionId: 'session-1',
-      body: {
-        prompt: 'Refine the available deliverable.',
-        requestedOutputTypeKey: 'board-narrative',
-      },
+      body: { prompt: 'Refine the available deliverable.' },
     })
   })
 
@@ -1501,6 +1503,112 @@ describe('OutcomeStudioWorkspace', () => {
     expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
     expect(screen.getByText('The request could not be submitted. Reference: outcome-submit-ref-1')).toBeInTheDocument()
     expect(screen.queryByText('Outcome Studio refresh needed')).not.toBeInTheDocument()
+  })
+
+  it('shows only the stable output-contract clarification as an inline composer error', async () => {
+    const user = userEvent.setup()
+    submitMessage.mockReturnValue({
+      unwrap: vi.fn().mockRejectedValue({
+        status: 409,
+        data: {
+          error: {
+            code: 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATION_REQUIRED',
+            message: 'Which outcome should I prepare: Board Narrative?',
+            requestId: 'clarification-1',
+          },
+        },
+      }),
+    })
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare something for leadership.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Which outcome should I prepare: Board Narrative?')
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Prepare something for leadership.')
+    expect(submitMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles a committed message after response loss without submitting it twice', async () => {
+    const user = userEvent.setup()
+    submitMessage.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
+    loadSessionForReconciliation.mockReturnValue(resolvedMutation({
+      data: {
+        ...session,
+        messages: [
+          ...session.messages,
+          {
+            messageId: 'message-recovered',
+            role: 'USER',
+            content: 'Refine the recommendation.',
+            requestedOutputTypeKey: 'board-narrative',
+          },
+        ],
+      },
+    }))
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Outcome Studio request recovered')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('')
+    expect(submitMessage).toHaveBeenCalledTimes(1)
+    expect(loadSessionForReconciliation).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-1',
+    })
+  })
+
+  it('retains the prompt and permits a manual retry when reconciliation proves no write', async () => {
+    const user = userEvent.setup()
+    submitMessage
+      .mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
+      .mockReturnValueOnce(resolvedMutation())
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    expect(submitMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    {
+      name: 'ambiguous refreshed history',
+      reconcileResult: resolvedMutation({
+        data: {
+          ...session,
+          messages: [
+            ...session.messages,
+            { messageId: 'message-new-1', role: 'USER', content: 'Refine the recommendation.' },
+            { messageId: 'message-new-2', role: 'USER', content: 'Another request.' },
+          ],
+        },
+      }),
+    },
+    {
+      name: 'reconciliation query failure',
+      reconcileResult: { unwrap: vi.fn().mockRejectedValue(new Error('query failed')) },
+    },
+  ])('fails closed after $name', async ({ reconcileResult }) => {
+    const user = userEvent.setup()
+    submitMessage.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
+    loadSessionForReconciliation.mockReturnValue(reconcileResult)
+    renderPage()
+
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Outcome Studio could not confirm whether this request was saved. Refresh before trying again.',
+    )
+    expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Refine the recommendation.')
+    expect(submitMessage).toHaveBeenCalledTimes(1)
   })
 
   it('shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
@@ -1606,7 +1714,7 @@ describe('OutcomeStudioWorkspace', () => {
     expect(submitMessage).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       sessionId: 'session-1',
-      body: { prompt: 'Refine the recommendation.', requestedOutputTypeKey: 'board-narrative' },
+      body: { prompt: 'Refine the recommendation.' },
     })
 
     await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
@@ -1700,7 +1808,7 @@ describe('OutcomeStudioWorkspace', () => {
     expect(approveDraft).not.toHaveBeenCalled()
   })
 
-  it('starts a session without refetching the skipped session query', async () => {
+  it('starts a session conversationally and submits the first request without refetching the skipped session query', async () => {
     const user = userEvent.setup()
     useGetRuntimeOutcomeStudioQuery.mockReturnValue({
       data: { data: { ...studio, sessions: [] } },
@@ -1717,16 +1825,22 @@ describe('OutcomeStudioWorkspace', () => {
     refetchSession.mockRejectedValue(new Error('Skipped query must not refetch.'))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'Start session' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
 
     expect(createSession).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
-      body: { requestedOutputTypeKey: 'board-narrative' },
+      body: { prompt: 'Prepare a board narrative.' },
+    })
+    expect(submitMessage).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001',
+      sessionId: 'session-new',
+      body: { prompt: 'Prepare a board narrative.' },
     })
     expect(refetchStudio).toHaveBeenCalled()
     expect(refetchReadiness).toHaveBeenCalled()
     expect(refetchSession).not.toHaveBeenCalled()
-    expect(await screen.findByText('Outcome Studio session started.')).toBeInTheDocument()
+    expect(await screen.findByText('Outcome Studio session started and request submitted.')).toBeInTheDocument()
   })
 
   it('warns that a new session was saved when its refresh fails', async () => {
@@ -1746,7 +1860,8 @@ describe('OutcomeStudioWorkspace', () => {
     refetchStudio.mockRejectedValueOnce(new Error('Internal session refresh detail must not render.'))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'Start session' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Submit request' }))
 
     expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
     expect(screen.queryByText('Outcome Studio action failed')).not.toBeInTheDocument()
