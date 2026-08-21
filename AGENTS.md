@@ -28,6 +28,17 @@
 - Do not add readiness copy, response-shape, RTK Query, mock/live parity, or customer UI for SS-012 until a separate provider/GRR/API contract authorizes it and the backend persistence gate is verified.
 - No client-only projection may substitute for server-owned fact admission, attribution, claim-permission, provider safety, or manifest enforcement. If SS-012 later changes the API shape, map constants, endpoint shape, mock/live parity, cache/refetch behavior, direct-route guards, error states, accessibility, and authenticated manual route after the backend contract is accepted.
 
+## SS-013 seed-import closeout — 2026-08-20
+
+- The client-side Audit Logs parity update for VMF v3.1.2 is included in the completed SS-013 change set. The focused client parity test passed, and the owner has confirmed the committed application builds.
+- Canonical evidence is `../docs/generated/harness-runs/ss-013/2026-08-20-vmf-v3-1-2-import/`; this sprint did not claim browser rendering, deployment, production, Help, or customer-visible behavior.
+- Do not add client-only audit actions or reinterpret the persisted seed result; the API-owned audit registry remains authoritative.
+
+## SS-013 amended section-generation seed compatibility — 2026-08-21
+
+- No client code or client seed constants were changed. The API importer guard confirmed the amended workflow execution contexts and UI action records are already represented by the existing client Framework Package editor contract.
+- The amended-pack evidence and the remaining no-browser/no-deployment boundary are recorded in `../docs/generated/harness-runs/ss-013/2026-08-21-section-generation-seed-amendment/`.
+
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 
