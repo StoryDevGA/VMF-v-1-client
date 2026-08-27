@@ -7,6 +7,7 @@
 import { baseApi } from './baseApi.js'
 
 export const DEFAULT_RUNTIME_INSTANCE_TYPE = 'VALUE_NARRATIVE'
+export const RUNTIME_HEAVY_READ_OPTIONS = Object.freeze({ maxRetries: 0 })
 
 export const runtimeInstanceListTag = (runtimeType = 'ALL') => ({
   type: 'RuntimeInstance',
@@ -467,16 +468,19 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeRenderer: build.query({
       query: buildRuntimeRendererQuery,
       providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeTruthQuality: build.query({
       query: buildRuntimeTruthQualityQuery,
       providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeOutputLab: build.query({
       query: buildRuntimeOutputLabQuery,
       providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeOutputLabReadiness: build.query({
@@ -497,6 +501,7 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeOutcomeStudioReadiness: build.query({
       query: buildRuntimeOutcomeStudioReadinessQuery,
       providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     createRuntimeOutcomeSession: build.mutation({

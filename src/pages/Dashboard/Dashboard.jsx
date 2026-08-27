@@ -376,6 +376,7 @@ const getRuntimeReviewBadge = (runtimeRecord) => {
 
   if (
     readiness?.submittedForReview === true
+    || runtimeRecord?.submittedForReview === true
     || readinessState === 'IN_REVIEW'
     || lifecycleStage === 'IN_REVIEW'
     || executionState === 'WAITING_APPROVAL'

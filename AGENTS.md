@@ -37,7 +37,8 @@
 ## SS-013 amended section-generation seed compatibility — 2026-08-21
 
 - No client code or client seed constants were changed. The API importer guard confirmed the amended workflow execution contexts and UI action records are already represented by the existing client Framework Package editor contract.
-- The amended-pack evidence and the remaining no-browser/no-deployment boundary are recorded in `../docs/generated/harness-runs/ss-013/2026-08-21-section-generation-seed-amendment/`.
+- The authorized API-side in-place replacement is now complete; the amended package has 28 workflow bindings and the canonical UI Contract has 10 actions, including `GENERATE_SECTION` and `REGENERATE_SECTION`. The amended-pack evidence and the remaining no-browser/no-deployment boundary are recorded in `../docs/generated/harness-runs/ss-013/2026-08-21-section-generation-seed-amendment/`.
+- No client behavior claim is made beyond the existing contract surface; browser rendering, deployment, production, Help, and Product acceptance remain separate evidence classes.
 
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.

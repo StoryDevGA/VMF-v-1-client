@@ -3918,6 +3918,7 @@ const getOutcomeStudioReadinessLabel = (outcomeStudio, { loading = false, error 
   if (loading) return 'Loading'
   if (error) return 'Unavailable'
   const readiness = outcomeStudio?.readiness || {}
+  if (!outcomeStudio?.readiness) return 'Open to check'
   if (readiness.canStartSession === true) {
     return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
   }
@@ -6065,7 +6066,7 @@ function RuntimeWorkspace() {
     refetch: refetchOutputLab,
   } = useGetRuntimeOutputLabQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId },
+    { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTPUT_LAB_NAV_KEY },
   )
   const {
     data: outcomeStudioReadinessResponse,
@@ -6074,7 +6075,7 @@ function RuntimeWorkspace() {
     error: outcomeStudioReadinessQueryError,
   } = useGetRuntimeOutcomeStudioReadinessQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId },
+    { skip: true },
   )
   const {
     data: truthQualityResponse,
@@ -6083,7 +6084,7 @@ function RuntimeWorkspace() {
     error: truthQualityQueryError,
   } = useGetRuntimeTruthQualityQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId },
+    { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTPUT_LAB_NAV_KEY },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()

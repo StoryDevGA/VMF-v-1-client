@@ -50,6 +50,7 @@ import {
   buildUpdateRuntimeDiscoveryInputsQuery,
   buildUpdateRuntimeSectionEvidenceQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
+  RUNTIME_HEAVY_READ_OPTIONS,
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
   getApproveRuntimeOutcomeDraftInvalidationTags,
@@ -135,6 +136,10 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('marks heavyweight runtime reads as explicit, no-auto-retry surfaces', () => {
+    expect(RUNTIME_HEAVY_READ_OPTIONS).toEqual({ maxRetries: 0 })
+  })
+
   it('registers expected endpoint definitions', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('listRuntimeInstances')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')

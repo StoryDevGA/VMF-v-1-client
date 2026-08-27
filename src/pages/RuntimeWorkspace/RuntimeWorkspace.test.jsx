@@ -1098,7 +1098,15 @@ describe('RuntimeWorkspace', () => {
     )
     expect(useGetRuntimeTruthQualityQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
-      { skip: false },
+      { skip: true },
+    )
+    expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: true },
+    )
+    expect(useGetRuntimeOutcomeStudioReadinessQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: true },
     )
     const actionBar = screen.getByRole('group', { name: /execution workspace actions/i })
     const backButton = within(actionBar).getByRole('button', { name: /^back$/i })
@@ -1455,6 +1463,10 @@ describe('RuntimeWorkspace', () => {
     renderInternalOutputLabWorkspace()
 
     expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    expect(useGetRuntimeTruthQualityQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )

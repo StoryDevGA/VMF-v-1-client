@@ -145,6 +145,13 @@ const executeWithBackoffRetry = async ({ args, api, extraOptions, maxRetries }) 
   return enrichErrorWithMeta(result)
 }
 
+export const getConfiguredMaxRetries = (extraOptions = {}) => {
+  const configured = extraOptions?.maxRetries
+  return Number.isInteger(configured) && configured >= 0
+    ? configured
+    : DEFAULT_MAX_RETRIES
+}
+
 /* ------------------------------------------------------------------ */
 /*  Wrapper: auto-refresh on 401                                      */
 /* ------------------------------------------------------------------ */
@@ -178,7 +185,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     args,
     api,
     extraOptions,
-    maxRetries: DEFAULT_MAX_RETRIES,
+    maxRetries: getConfiguredMaxRetries(extraOptions),
   })
 
   if (result.error && result.error.status === 401) {
