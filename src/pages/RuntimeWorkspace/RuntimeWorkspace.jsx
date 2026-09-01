@@ -442,6 +442,7 @@ const LOCKED_RUNTIME_INSPECTION_REASON =
   'Locked runtimes are read-only. Create a revision before changing discovery or section truth.'
 
 const DISCOVERY_NAV_KEY = 'discovery'
+const HIDDEN_RUNTIME_STATE_SECTION_KEYS = new Set(['output-requirements'])
 /**
  * Internal compatibility boundary only. Output Lab is deliberately absent
  * from standard customer navigation and is not an Outcome Studio dependency.
@@ -3734,8 +3735,13 @@ const getRuntimeStateBootstrapPayload = (response) => {
 const normalizeRuntimeStateIdentity = (value) => String(value ?? '').trim().toLowerCase()
 
 const normalizeRuntimeStateSectionKey = (value) => normalizeRuntimeStateIdentity(value)
-  .replace(/[^a-z0-9]+/g, '_')
-  .replace(/^_+|_+$/g, '')
+  .replace(/_/g, '-')
+  .replace(/[^a-z0-9-]+/g, '-')
+  .replace(/-+/g, '-')
+  .replace(/^-+|-+$/g, '')
+
+const isRuntimeWorkspaceKey = (value, expectedKey) =>
+  normalizeRuntimeStateSectionKey(value) === normalizeRuntimeStateSectionKey(expectedKey)
 
 const getRuntimeStateSummary = (summary) => summary ?? {}
 
@@ -3779,11 +3785,12 @@ const composeRuntimeSections = ({ renderer, bootstrap }) => {
   const summaryKeys = summaries.map((section) => normalizeRuntimeStateSectionKey(section?.sectionKey))
   const rendererKeySet = new Set(rendererKeys)
   const summaryKeySet = new Set(summaryKeys)
+  const unexpectedSummaryKeys = summaryKeys.filter((key) => !rendererKeySet.has(key))
   const catalogueMismatch = rendererKeys.some((key) => !key)
     || summaryKeys.some((key) => !key)
     || rendererKeySet.size !== rendererKeys.length
     || summaryKeySet.size !== summaryKeys.length
-    || rendererKeySet.size !== summaryKeySet.size
+    || unexpectedSummaryKeys.some((key) => !HIDDEN_RUNTIME_STATE_SECTION_KEYS.has(key))
     || rendererKeys.some((key) => !summaryKeySet.has(key))
   if (catalogueMismatch) {
     return {
@@ -6306,17 +6313,20 @@ function RuntimeWorkspace() {
       && !runtimeStateBootstrapReady
       ? { message: 'Runtime State V2 bootstrap response is invalid.' }
       : null
-  const normalizedActiveWorkspaceKey = String(activeWorkspaceKey ?? '').trim().toLowerCase()
-  const runtimeStateCatalogueSectionKeys = new Set(
+  const normalizedActiveWorkspaceKey = normalizeRuntimeStateSectionKey(activeWorkspaceKey)
+  const runtimeStateSectionKeyByNormalizedKey = new Map(
     (runtimeStateBootstrap?.sections ?? [])
-      .map((section) => normalizeRuntimeStateSectionKey(section?.sectionKey))
-      .filter(Boolean),
+      .map((section) => [
+        normalizeRuntimeStateSectionKey(section?.sectionKey),
+        String(section?.sectionKey ?? '').trim(),
+      ])
+      .filter(([normalizedKey, sectionKey]) => normalizedKey && sectionKey),
   )
-  const selectedRuntimeStateSectionKey = normalizedActiveWorkspaceKey === DISCOVERY_NAV_KEY
-    || normalizedActiveWorkspaceKey === OUTPUT_LAB_NAV_KEY
-    || !runtimeStateCatalogueSectionKeys.has(normalizedActiveWorkspaceKey)
+  const selectedRuntimeStateSectionKey = isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, DISCOVERY_NAV_KEY)
+    || isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, OUTPUT_LAB_NAV_KEY)
+    || !runtimeStateSectionKeyByNormalizedKey.has(normalizedActiveWorkspaceKey)
     ? ''
-    : normalizedActiveWorkspaceKey
+    : runtimeStateSectionKeyByNormalizedKey.get(normalizedActiveWorkspaceKey)
   const {
     data: runtimeStateSectionResponse,
     isLoading: isLoadingRuntimeStateSection,
@@ -6372,7 +6382,7 @@ function RuntimeWorkspace() {
     refetch: refetchOutputLab,
   } = useGetRuntimeOutputLabQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTPUT_LAB_NAV_KEY },
+    { skip: !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
   )
   const {
     data: truthQualityResponse,
@@ -6381,7 +6391,7 @@ function RuntimeWorkspace() {
     error: truthQualityQueryError,
   } = useGetRuntimeTruthQualityQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTPUT_LAB_NAV_KEY },
+    { skip: !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
@@ -6441,8 +6451,9 @@ function RuntimeWorkspace() {
   const rendererSections = runtimeStateComposition.sections
   const composedSections = runtimeStateSection
     ? rendererSections.map((section) => {
-        const sectionKey = String(section?.sectionKey || section?.key || '').trim().toLowerCase()
-        if (sectionKey !== runtimeStateSection.sectionKey) return section
+        const sectionKey = normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key)
+        const runtimeStateSectionKey = normalizeRuntimeStateSectionKey(runtimeStateSection.sectionKey)
+        if (sectionKey !== runtimeStateSectionKey) return section
         return {
           ...section,
           ...runtimeStateSection.sectionDetail,
@@ -6683,11 +6694,12 @@ function RuntimeWorkspace() {
     packageVersion ? `Package ${packageVersion}` : packageName || packageKey,
   ].filter(Boolean)
   const matchedActiveSectionIndex = sections.findIndex((section) =>
-    (section?.sectionKey || section?.key) === activeWorkspaceKey,
+    normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key)
+      === normalizedActiveWorkspaceKey,
   )
   const activeSectionIndex = matchedActiveSectionIndex >= 0 ? matchedActiveSectionIndex : 0
-  const activeSection = activeWorkspaceKey === DISCOVERY_NAV_KEY
-    || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
+  const activeSection = isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, DISCOVERY_NAV_KEY)
+    || isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, OUTPUT_LAB_NAV_KEY)
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
   const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
@@ -6695,20 +6707,21 @@ function RuntimeWorkspace() {
   useEffect(() => {
     if (workspaceLoading || runtimeStateRefreshInFlight) return
     if (
-      activeWorkspaceKey === DISCOVERY_NAV_KEY
-      || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
+      isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, DISCOVERY_NAV_KEY)
+      || isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, OUTPUT_LAB_NAV_KEY)
     ) return
     const hasActiveSection = sections.some((section) =>
-      (section?.sectionKey || section?.key) === activeWorkspaceKey,
+      normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key)
+        === normalizedActiveWorkspaceKey,
     )
     if (!hasActiveSection) {
       setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
     }
-  }, [activeWorkspaceKey, runtimeStateRefreshInFlight, sections, workspaceLoading])
+  }, [normalizedActiveWorkspaceKey, runtimeStateRefreshInFlight, sections, workspaceLoading])
 
   useEffect(() => {
     if (hasAutoSelectedInitialSection.current) return
-    if (activeWorkspaceKey === OUTPUT_LAB_NAV_KEY) return
+    if (isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY)) return
     if (activeWorkspaceKey !== DISCOVERY_NAV_KEY) {
       hasAutoSelectedInitialSection.current = true
       return
@@ -7956,7 +7969,7 @@ function RuntimeWorkspace() {
               showSources={showEvidenceSources}
               tenantId={tenantId}
             />
-          ) : activeWorkspaceKey === OUTPUT_LAB_NAV_KEY ? (
+          ) : isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) ? (
             <OutputLabSection
               error={outputLabError}
               exportingAssetKey={exportingOutputAssetKey}

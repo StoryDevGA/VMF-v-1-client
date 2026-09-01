@@ -1253,11 +1253,18 @@ describe('RuntimeWorkspace', () => {
       data: {
         data: {
           ...runtimeStateBootstrapPayload,
-          sections: [{
-            ...runtimeStateBootstrapPayload.sections[0],
-            stateStatus: 'ACCEPTED',
-            truthHash: `sha256:${'a'.repeat(64)}`,
-          }],
+          sections: [
+            {
+              ...runtimeStateBootstrapPayload.sections[0],
+              stateStatus: 'ACCEPTED',
+              truthHash: `sha256:${'a'.repeat(64)}`,
+            },
+            {
+              sectionKey: 'output-requirements',
+              stateVersion: 'runtime-revision:1',
+              stateStatus: 'CURRENT',
+            },
+          ],
         },
       },
       isLoading: false,
@@ -1290,6 +1297,43 @@ describe('RuntimeWorkspace', () => {
     expect(screen.queryByText(
       'Runtime State V2 selected-section response is invalid.',
     )).not.toBeInTheDocument()
+  })
+
+  it('fails closed when the V2 bootstrap contains an uncontracted extra section', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: {
+        data: {
+          ...runtimeStateBootstrapPayload,
+          sections: [
+            ...runtimeStateBootstrapPayload.sections,
+            {
+              sectionKey: 'uncontracted-section',
+              stateVersion: 'runtime-revision:1',
+              stateStatus: 'CURRENT',
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Runtime State V2 section catalogue does not match the renderer package.',
+    )
   })
 
   it('fails closed when the renderer package section is absent from the V2 catalogue', () => {
