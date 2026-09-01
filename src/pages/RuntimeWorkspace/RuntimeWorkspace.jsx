@@ -43,18 +43,21 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
   useClearRuntimeSectionEvidenceMutation,
   useExecuteRuntimeActionMutation,
-  useGetRuntimeEvidenceQuery,
   useCreateRuntimeOutputRequestMutation,
   useCreateRuntimeRevisionMutation,
   useGenerateRuntimeOutputRequestMutation,
-  useGetRuntimeIntelligenceGraphQuery,
+  useGetRuntimeStateBootstrapQuery,
+  useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateGraphManifestQuery,
+  useGetRuntimeStateGraphProjectionQuery,
+  useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeOutputLabQuery,
-  useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeRendererQuery,
   useGetRuntimeTruthQualityQuery,
   useLazyExportRuntimeOutputAssetQuery,
@@ -877,6 +880,13 @@ const hasRequiredSectionProgress = (section) =>
     && String(section?.state?.status || '').trim().toUpperCase() === 'ACCEPTED'
   )
 
+const hasRuntimeStateSummaryAcceptedTruth = (section) => {
+  const summary = section?.runtimeStateSummary
+  return summary
+    && String(summary.stateStatus || summary.truthStatus || '').trim().toUpperCase() === 'ACCEPTED'
+    && Boolean(String(summary.truthHash || '').trim())
+}
+
 const toProgressCount = (value) => {
   const count = Number(value)
   if (!Number.isFinite(count) || count < 0) return null
@@ -990,9 +1000,6 @@ const hasDiscoveryHealthSummary = (summary) =>
       || (Array.isArray(summary.contradictionCandidates) && summary.contradictionCandidates.length > 0)
     ),
   )
-
-const hasIntelligenceGraphSummary = (summary) =>
-  Boolean(summary && typeof summary === 'object' && !Array.isArray(summary))
 
 const formatDiscoveryEvidenceObjectSummary = (summary = {}) => {
   const evidenceObjectCount = getSummaryCount(summary, 'evidenceObjectCount')
@@ -1163,6 +1170,17 @@ const getEvidenceObjectActionLabel = (evidenceObject = {}) => {
     || 'evidence object'
   return String(candidate || '').trim() || 'evidence object'
 }
+
+const getEvidenceObjectDisplayTitle = (evidenceObject = {}) =>
+  normalizeIntelligenceHubDisplayText(
+    evidenceObject.category
+      || evidenceObject.title
+      || evidenceObject.evidenceObjectId
+      || 'Evidence object',
+  )
+
+const getEvidenceObjectDisplayText = (evidenceObject = {}) =>
+  normalizeIntelligenceHubDisplayText(evidenceObject.extractedFact || evidenceObject.summary)
 
 const getDiscoverySourceRegistry = ({ discovery, evidenceDetail }) => {
   if (Array.isArray(evidenceDetail?.sourceRegistry)) return evidenceDetail.sourceRegistry
@@ -3530,14 +3548,23 @@ function RuntimeProgressSummary({
   const sectionTruth = readiness?.sectionTruth || {}
   const serverReadyCount = toProgressCount(sectionTruth.readySectionCount)
   const serverRequiredCount = toProgressCount(sectionTruth.requiredSectionCount)
+  const hasSectionTruthCounts = requiredSections.length > 0
+    && requiredSections.every((section) => section?.runtimeStateSummary)
   const hasServerSectionTruthCounts = serverReadyCount !== null && serverRequiredCount !== null
-  const requiredCompleteCount = hasServerSectionTruthCounts
+  const requiredCompleteCount = hasSectionTruthCounts
+    ? requiredSections.filter(hasRuntimeStateSummaryAcceptedTruth).length
+    : hasServerSectionTruthCounts
     ? Math.min(serverReadyCount, serverRequiredCount)
     : requiredSections.filter(hasRequiredSectionProgress).length
-  const requiredTotal = hasServerSectionTruthCounts
+  const requiredTotal = hasSectionTruthCounts
+    ? requiredSections.length
+    : hasServerSectionTruthCounts
     ? serverRequiredCount
     : requiredSections.length
-  const generatedCount = sections.filter((section) => hasRuntimeValue(section?.generated?.content ?? section?.generated)).length
+  const generatedCount = sections.filter((section) =>
+    hasRuntimeValue(section?.generated?.content ?? section?.generated)
+    || hasRuntimeStateSummaryAcceptedTruth(section),
+  ).length
   const warningCounts = configWarnings.reduce((acc, warning) => {
     const severity = normalizeWarningSeverity(warning?.severity)
     acc[severity] = (acc[severity] || 0) + 1
@@ -3673,12 +3700,173 @@ function RuntimeSectionNavigation({
 
 const getOutputLabPayload = (response) => response?.data ?? response ?? null
 
-const getOutcomeStudioPayload = (response) => response?.data ?? response ?? null
-
 
 const getTruthQualityPayload = (response) => response?.data ?? response ?? null
 
-const getRuntimeIntelligenceGraphPayload = (response) => response?.data ?? response ?? null
+const getRuntimeStateGraphProjectionPayload = (response) => response?.data?.graph ?? response?.graph ?? null
+
+const getRuntimeStateGraphManifestPayload = (response) => response?.data?.manifest ?? response?.manifest ?? null
+
+const getRuntimeStateEvidencePagePayload = (response) => {
+  const payload = response?.data?.data ?? response?.data ?? response ?? null
+  return Array.isArray(payload?.evidenceObjects) ? payload : null
+}
+
+const getRuntimeStateBootstrapPayload = (response) => {
+  const payload = response?.data?.data ?? response?.data ?? response ?? null
+  const control = payload?.control
+  const stateVersion = String(control?.stateVersion ?? payload?.stateVersion ?? '').trim()
+  if (
+    !payload
+    || !control
+    || typeof control !== 'object'
+    || Array.isArray(control)
+    || !String(control.id ?? '').trim()
+    || !String(control.runtimeInstanceKey ?? '').trim()
+    || !stateVersion
+    || !Array.isArray(payload.sections)
+  ) {
+    return null
+  }
+  return payload
+}
+
+const normalizeRuntimeStateIdentity = (value) => String(value ?? '').trim().toLowerCase()
+
+const normalizeRuntimeStateSectionKey = (value) => normalizeRuntimeStateIdentity(value)
+  .replace(/[^a-z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '')
+
+const getRuntimeStateSummary = (summary) => summary ?? {}
+
+const composeRuntimeSections = ({ renderer, bootstrap }) => {
+  if (!renderer || !bootstrap) return { sections: EMPTY_ARRAY, error: null }
+
+  const rendererSections = Array.isArray(renderer.sections) ? renderer.sections : EMPTY_ARRAY
+  if (renderer.sectionStateSource !== 'runtime_state_v2') {
+    return { sections: rendererSections, error: null }
+  }
+
+  const runtimeInstance = renderer.runtimeInstance
+  const control = bootstrap.control
+  const rendererPackage = renderer.package ?? {}
+  const identityPairs = [
+    ['runtime id', runtimeInstance?.id, control?.id],
+    ['runtime key', runtimeInstance?.runtimeInstanceKey, control?.runtimeInstanceKey],
+    ['customer', runtimeInstance?.customerId, control?.customerId],
+    ['tenant', runtimeInstance?.tenantId, control?.tenantId],
+    ['package id', runtimeInstance?.packageId, control?.packageId],
+    ['package key', rendererPackage.packageKey ?? runtimeInstance?.packageKey, control?.packageKey],
+    ['package version', rendererPackage.frameworkVersion ?? runtimeInstance?.packageVersion, control?.packageVersion],
+    ['state version', runtimeInstance?.stateVersion, control?.stateVersion ?? bootstrap.stateVersion],
+  ]
+  const mismatchedIdentity = identityPairs.find(([, rendererValue, bootstrapValue]) => {
+    const left = normalizeRuntimeStateIdentity(rendererValue)
+    const right = normalizeRuntimeStateIdentity(bootstrapValue)
+    return !left || !right || left !== right
+  })
+  if (mismatchedIdentity) {
+    return {
+      sections: EMPTY_ARRAY,
+      error: { message: `Runtime State V2 ${mismatchedIdentity[0]} does not match the renderer shell.` },
+    }
+  }
+
+  const summaries = Array.isArray(bootstrap.sections) ? bootstrap.sections : EMPTY_ARRAY
+  const rendererKeys = rendererSections.map((section) =>
+    normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key),
+  )
+  const summaryKeys = summaries.map((section) => normalizeRuntimeStateSectionKey(section?.sectionKey))
+  const rendererKeySet = new Set(rendererKeys)
+  const summaryKeySet = new Set(summaryKeys)
+  const catalogueMismatch = rendererKeys.some((key) => !key)
+    || summaryKeys.some((key) => !key)
+    || rendererKeySet.size !== rendererKeys.length
+    || summaryKeySet.size !== summaryKeys.length
+    || rendererKeySet.size !== summaryKeySet.size
+    || rendererKeys.some((key) => !summaryKeySet.has(key))
+  if (catalogueMismatch) {
+    return {
+      sections: EMPTY_ARRAY,
+      error: { message: 'Runtime State V2 section catalogue does not match the renderer package.' },
+    }
+  }
+
+  const summaryByKey = new Map(summaries.map((summary) => [
+    normalizeRuntimeStateSectionKey(summary.sectionKey),
+    summary,
+  ]))
+  return {
+    error: null,
+    sections: rendererSections.map((section) => {
+      const sectionKey = normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key)
+      const summary = getRuntimeStateSummary(summaryByKey.get(sectionKey))
+      return {
+        key: section.key || sectionKey,
+        sectionKey,
+        runtimePath: section.runtimePath,
+        label: section.label,
+        shortLabel: section.shortLabel,
+        control: section.control,
+        dataType: section.dataType,
+        allowedValues: section.allowedValues,
+        allowedValueLabels: section.allowedValueLabels,
+        required: section.required,
+        helpText: section.helpText,
+        placeholder: section.placeholder,
+        editable: section.editable,
+        visible: section.visible,
+        readonlyReason: section.readonlyReason,
+        allowedOperations: section.allowedOperations,
+        requiredPermissions: section.requiredPermissions,
+        source: section.source,
+        displayOrder: section.displayOrder,
+        sectionGroup: section.sectionGroup,
+        presentationKey: section.presentationKey,
+        collapsedByDefault: section.collapsedByDefault,
+        validationKeys: section.validationKeys,
+        value: '',
+        generated: null,
+        accepted: null,
+        review: {},
+        revisions: [],
+        acceptedRevisions: [],
+        dependencies: {},
+        validationMessages: [],
+        state: {
+          status: summary.truthStatus || summary.stateStatus || 'DRAFT',
+          revisionCount: 0,
+          stateVersion: summary.stateVersion,
+          sourceStateVersion: summary.sourceStateVersion,
+          truthHash: summary.truthHash,
+          contentHash: summary.contentHash,
+          updatedAt: summary.updatedAt,
+        },
+        runtimeStateSummary: summary,
+      }
+    }),
+  }
+}
+
+const getRuntimeStateSectionDetailPayload = (response, { sectionKey, stateVersion } = {}) => {
+  const payload = response?.data?.data ?? response?.data ?? response ?? null
+  const section = payload?.section
+  const expectedSectionKey = String(sectionKey ?? '').trim().toLowerCase()
+  const expectedStateVersion = String(stateVersion ?? '').trim()
+  if (
+    !section
+    || typeof section !== 'object'
+    || Array.isArray(section)
+    || String(section.sectionKey ?? '').trim().toLowerCase() !== expectedSectionKey
+    || String(section.stateVersion ?? '').trim() !== expectedStateVersion
+    || !section.sectionDetail
+    || typeof section.sectionDetail !== 'object'
+    || Array.isArray(section.sectionDetail)
+  ) {
+    return null
+  }
+  return section
+}
 
 const TRUTH_CERTIFICATION_VARIANTS = Object.freeze({
   STRATEGIC_TRUTH: 'success',
@@ -3909,17 +4097,6 @@ const getOutputLabReadinessLabel = (outputLab, { loading = false, error = null }
   if (error) return 'Unavailable'
   const readiness = outputLab?.readiness || {}
   if (readiness.canGenerate === true) {
-    return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
-  }
-  return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Not Ready'
-}
-
-const getOutcomeStudioReadinessLabel = (outcomeStudio, { loading = false, error = null } = {}) => {
-  if (loading) return 'Loading'
-  if (error) return 'Unavailable'
-  const readiness = outcomeStudio?.readiness || {}
-  if (!outcomeStudio?.readiness) return 'Open to check'
-  if (readiness.canStartSession === true) {
     return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Ready'
   }
   return readiness.state ? formatRuntimeTokenLabel(readiness.state) : 'Not Ready'
@@ -4218,6 +4395,7 @@ function OutputLabSection({
 
 function DiscoverySection({
   activity = EMPTY_ARRAY,
+  customerId = '',
   discovery = null,
   discoveryState = 'Evidence Not Ready',
   disabled = false,
@@ -4230,6 +4408,7 @@ function DiscoverySection({
   mutationDisabledReason = '',
   executingActionKey = '',
   onAcceptDiscovery,
+  onEvidencePageChange,
   onResetDiscovery,
   onReviewEvidenceObject,
   onRefreshEvidence,
@@ -4238,6 +4417,7 @@ function DiscoverySection({
   runtimeInstanceId = '',
   saving = false,
   showSources = false,
+  tenantId = '',
 }) {
   const scopedViews = getDiscoveryScopedViews(discovery)
   const scopedViewKeys = Object.keys(scopedViews)
@@ -4260,21 +4440,48 @@ function DiscoverySection({
   const [acquisitionProfile, setAcquisitionProfile] = useState(persistedAcquisitionProfile)
   const [showResetWarning, setShowResetWarning] = useState(false)
   const [activeIntelligenceHubTab, setActiveIntelligenceHubTab] = useState(INTELLIGENCE_HUB_TAB_INDEXES.OVERVIEW)
-  const graphProjectionEnabled = Boolean(runtimeInstanceId)
+  const graphProjectionEnabled = Boolean(runtimeInstanceId && customerId && tenantId)
     && activeIntelligenceHubTab === INTELLIGENCE_HUB_TAB_INDEXES.COVERAGE
+  const {
+    data: runtimeGraphManifestResponse,
+    isLoading: isLoadingRuntimeGraphManifest,
+    isFetching: isFetchingRuntimeGraphManifest,
+    error: runtimeGraphManifestQueryError,
+  } = useGetRuntimeStateGraphManifestQuery(
+    { runtimeInstanceId, customerId, tenantId },
+    { skip: !graphProjectionEnabled },
+  )
+  const runtimeGraphManifest = getRuntimeStateGraphManifestPayload(runtimeGraphManifestResponse)
+  const runtimeGraphManifestCurrent = runtimeGraphManifest?.status === 'CURRENT'
+  const runtimeGraphManifestLoading = graphProjectionEnabled
+    && (isLoadingRuntimeGraphManifest || isFetchingRuntimeGraphManifest)
+  const runtimeGraphManifestError = runtimeGraphManifestQueryError
+    ? normalizeError(runtimeGraphManifestQueryError)
+    : null
+  const runtimeGraphManifestReady = runtimeGraphManifestCurrent
+    && !runtimeGraphManifestLoading
+    && !runtimeGraphManifestError
   const {
     data: runtimeGraphResponse,
     isLoading: isLoadingRuntimeGraph,
     isFetching: isFetchingRuntimeGraph,
     error: runtimeGraphQueryError,
-  } = useGetRuntimeIntelligenceGraphQuery(
-    { runtimeInstanceId },
-    { skip: !graphProjectionEnabled },
+  } = useGetRuntimeStateGraphProjectionQuery(
+    { runtimeInstanceId, customerId, tenantId },
+    { skip: !graphProjectionEnabled || !runtimeGraphManifestReady },
   )
-  const runtimeGraph = getRuntimeIntelligenceGraphPayload(runtimeGraphResponse)
-  const runtimeGraphError = runtimeGraphQueryError ? normalizeError(runtimeGraphQueryError) : null
-  const runtimeGraphLoading = graphProjectionEnabled && (isLoadingRuntimeGraph || isFetchingRuntimeGraph)
-  const showRuntimeGraphPanel = graphProjectionEnabled && Boolean(runtimeGraph || runtimeGraphError || runtimeGraphLoading)
+  const runtimeGraph = getRuntimeStateGraphProjectionPayload(runtimeGraphResponse)
+  const runtimeGraphError = runtimeGraphManifestError || (runtimeGraphQueryError ? normalizeError(runtimeGraphQueryError) : null)
+  const runtimeGraphLoading = graphProjectionEnabled && (
+    runtimeGraphManifestLoading
+    || (runtimeGraphManifestReady && (isLoadingRuntimeGraph || isFetchingRuntimeGraph))
+  )
+  const runtimeGraphUnavailable = graphProjectionEnabled
+    && !runtimeGraphManifestLoading
+    && !runtimeGraphManifestReady
+    && !runtimeGraphManifestError
+  const showRuntimeGraphPanel = graphProjectionEnabled
+    && Boolean(runtimeGraph || runtimeGraphError || runtimeGraphLoading || runtimeGraphUnavailable)
   const documentUploadPreparingRef = useRef(false)
   const discoveryDocumentInputRef = useRef(null)
   const inputSummaryKeys = Array.isArray(discovery?.inputSummary?.keys) ? discovery.inputSummary.keys : []
@@ -4393,8 +4600,8 @@ function DiscoverySection({
   const acquisitionEffectivenessProfileLabel = acquisitionEffectiveness.label || getDiscoveryAcquisitionLabel(
     acquisitionEffectiveness.profile || persistedAcquisitionProfile,
   )
-  const intelligenceGraph = hasIntelligenceGraphSummary(discovery?.intelligenceGraph)
-    ? discovery.intelligenceGraph
+  const intelligenceGraph = runtimeGraph && typeof runtimeGraph === 'object' && !Array.isArray(runtimeGraph)
+    ? runtimeGraph
     : {}
   const graphAvailable = intelligenceGraph.available === true
   const graphBuild = intelligenceGraph.build && typeof intelligenceGraph.build === 'object'
@@ -4411,7 +4618,11 @@ function DiscoverySection({
     : {}
   const graphQuality = intelligenceGraph.quality && typeof intelligenceGraph.quality === 'object'
     ? intelligenceGraph.quality
-    : {}
+    : {
+        orphanEvidenceCount: Number(graphHealth.orphanEvidenceCount || 0),
+        lowQualityEvidenceCount: Number(graphHealth.lowQualityEvidenceCount || 0),
+        unclassifiedEvidenceCount: Number(graphHealth.unclassifiedEvidenceCount || 0),
+      }
   const graphMissingAreas = Array.isArray(intelligenceGraph.missingAreas)
     ? intelligenceGraph.missingAreas.map(formatRuntimeTokenLabel).filter(Boolean)
     : Array.isArray(graphCoverage.missingDomains)
@@ -5582,7 +5793,10 @@ function DiscoverySection({
                       <Status variant="info" size="sm" showIcon>Loading sources</Status>
                     ) : evidenceDetailError ? (
                       <Status variant="error" size="sm" showIcon>{evidenceDetailError.message}</Status>
-                    ) : sourceRegistry.length > 0 || evidenceObjects.length > 0 || lineageSources.length > 0 ? (
+                    ) : sourceRegistry.length > 0
+                      || evidenceObjects.length > 0
+                      || lineageSources.length > 0
+                      || evidenceDetail?.source === 'runtime_state_v2.evidence_page' ? (
                       <div className="runtime-workspace__evidence-detail-grid">
                         <div>
                           <h4>Source Registry</h4>
@@ -5631,13 +5845,13 @@ function DiscoverySection({
                                           className="runtime-workspace__evidence-object"
                                         >
                                           <div className="runtime-workspace__evidence-object-heading">
-                                            <strong>{evidenceObject.category || evidenceObject.evidenceObjectId || 'Evidence object'}</strong>
+                                            <strong>{getEvidenceObjectDisplayTitle(evidenceObject)}</strong>
                                             <Badge variant={getReviewStatusVariant(reviewStatus)} size="sm" pill outline>
                                               {formatRuntimeTokenLabel(reviewStatus)}
                                             </Badge>
                                           </div>
                                           <span>
-                                            {normalizeIntelligenceHubDisplayText(evidenceObject.extractedFact)
+                                            {getEvidenceObjectDisplayText(evidenceObject)
                                               || 'No extracted fact text is available.'}
                                           </span>
                                           <span className="runtime-workspace__section-note">
@@ -5681,6 +5895,32 @@ function DiscoverySection({
                           ) : (
                             <p>No reviewable evidence objects are available for this evidence pack.</p>
                           )}
+                          {evidenceDetail?.source === 'runtime_state_v2.evidence_page'
+                            && Number(evidenceDetail.totalPages) > 1 ? (
+                            <div className="runtime-workspace__evidence-pagination" aria-label="Evidence pages">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={evidenceDetailLoading || Number(evidenceDetail.page) <= 1}
+                                onClick={() => onEvidencePageChange?.(Number(evidenceDetail.page) - 1)}
+                              >
+                                Previous page
+                              </Button>
+                              <span>
+                                {`Page ${Number(evidenceDetail.page) || 1} of ${Number(evidenceDetail.totalPages) || 1}`}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={evidenceDetailLoading || Number(evidenceDetail.page) >= Number(evidenceDetail.totalPages)}
+                                onClick={() => onEvidencePageChange?.(Number(evidenceDetail.page) + 1)}
+                              >
+                                Next page
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                         {lineageSources.length > 0 ? (
                           <div>
@@ -6042,9 +6282,75 @@ function RuntimeWorkspace() {
   const location = useLocation()
   const { runtimeInstanceId = '' } = useParams()
   const { addToast } = useToaster()
+  const { customerId, tenantId } = useTenantContext()
+  const runtimeStateScopeReady = Boolean(customerId && tenantId)
   const [activeWorkspaceKey, setActiveWorkspaceKey] = useState(
     () => String(location.state?.runtimeWorkspace?.activeWorkspaceKey || DISCOVERY_NAV_KEY),
   )
+  const {
+    data: runtimeStateBootstrapResponse,
+    isLoading: isLoadingRuntimeStateBootstrap,
+    isFetching: isFetchingRuntimeStateBootstrap,
+    error: runtimeStateBootstrapQueryError,
+  } = useGetRuntimeStateBootstrapQuery(
+    { runtimeInstanceId, customerId, tenantId },
+    { skip: !runtimeInstanceId || !runtimeStateScopeReady },
+  )
+  const runtimeStateBootstrap = getRuntimeStateBootstrapPayload(runtimeStateBootstrapResponse)
+  const runtimeStateBootstrapReady = Boolean(runtimeStateBootstrap)
+  const runtimeStateBootstrapError = runtimeStateBootstrapQueryError
+    ? normalizeError(runtimeStateBootstrapQueryError)
+    : runtimeStateBootstrapResponse
+      && !isLoadingRuntimeStateBootstrap
+      && !isFetchingRuntimeStateBootstrap
+      && !runtimeStateBootstrapReady
+      ? { message: 'Runtime State V2 bootstrap response is invalid.' }
+      : null
+  const normalizedActiveWorkspaceKey = String(activeWorkspaceKey ?? '').trim().toLowerCase()
+  const runtimeStateCatalogueSectionKeys = new Set(
+    (runtimeStateBootstrap?.sections ?? [])
+      .map((section) => normalizeRuntimeStateSectionKey(section?.sectionKey))
+      .filter(Boolean),
+  )
+  const selectedRuntimeStateSectionKey = normalizedActiveWorkspaceKey === DISCOVERY_NAV_KEY
+    || normalizedActiveWorkspaceKey === OUTPUT_LAB_NAV_KEY
+    || !runtimeStateCatalogueSectionKeys.has(normalizedActiveWorkspaceKey)
+    ? ''
+    : normalizedActiveWorkspaceKey
+  const {
+    data: runtimeStateSectionResponse,
+    isLoading: isLoadingRuntimeStateSection,
+    isFetching: isFetchingRuntimeStateSection,
+    error: runtimeStateSectionQueryError,
+  } = useGetRuntimeStateSectionSummaryQuery(
+    {
+      runtimeInstanceId,
+      sectionKey: selectedRuntimeStateSectionKey,
+      customerId,
+      tenantId,
+    },
+    {
+      skip: !runtimeInstanceId
+        || !runtimeStateScopeReady
+        || !runtimeStateBootstrapReady
+        || !selectedRuntimeStateSectionKey,
+    },
+  )
+  const runtimeStateSection = selectedRuntimeStateSectionKey
+    ? getRuntimeStateSectionDetailPayload(runtimeStateSectionResponse, {
+        sectionKey: selectedRuntimeStateSectionKey,
+        stateVersion: runtimeStateBootstrap?.stateVersion,
+      })
+    : null
+  const runtimeStateSectionError = runtimeStateSectionQueryError
+    ? normalizeError(runtimeStateSectionQueryError)
+    : selectedRuntimeStateSectionKey
+      && runtimeStateSectionResponse
+      && !isLoadingRuntimeStateSection
+      && !isFetchingRuntimeStateSection
+      && !runtimeStateSection
+      ? { message: 'Runtime State V2 selected-section response is invalid.' }
+      : null
   const {
     data: rendererResponse,
     isLoading,
@@ -6052,8 +6358,8 @@ function RuntimeWorkspace() {
     error,
     refetch,
   } = useGetRuntimeRendererQuery(
-    { runtimeInstanceId },
-    { skip: !runtimeInstanceId },
+    { runtimeInstanceId, customerId, tenantId },
+    { skip: !runtimeInstanceId || !runtimeStateScopeReady || !runtimeStateBootstrapReady },
   )
   // Output Lab data remains available to the internal compatibility surface.
   // Outcome Studio uses its own /outcome-studio API chain and must not depend
@@ -6067,15 +6373,6 @@ function RuntimeWorkspace() {
   } = useGetRuntimeOutputLabQuery(
     { runtimeInstanceId },
     { skip: !runtimeInstanceId || activeWorkspaceKey !== OUTPUT_LAB_NAV_KEY },
-  )
-  const {
-    data: outcomeStudioReadinessResponse,
-    isLoading: isLoadingOutcomeStudioReadiness,
-    isFetching: isFetchingOutcomeStudioReadiness,
-    error: outcomeStudioReadinessQueryError,
-  } = useGetRuntimeOutcomeStudioReadinessQuery(
-    { runtimeInstanceId },
-    { skip: true },
   )
   const {
     data: truthQualityResponse,
@@ -6104,6 +6401,7 @@ function RuntimeWorkspace() {
   const [savingRuntimePath, setSavingRuntimePath] = useState('')
   const [acceptingRuntimePath, setAcceptingRuntimePath] = useState('')
   const [savingDiscovery, setSavingDiscovery] = useState(false)
+  const [runtimeStateEvidencePage, setRuntimeStateEvidencePage] = useState(1)
   const [reviewingEvidenceObjectId, setReviewingEvidenceObjectId] = useState('')
   const [reviewingSectionEvidenceObjectId, setReviewingSectionEvidenceObjectId] = useState('')
   const [clearingSectionEvidencePath, setClearingSectionEvidencePath] = useState('')
@@ -6123,20 +6421,53 @@ function RuntimeWorkspace() {
   const hasAutoSelectedInitialSection = useRef(false)
   const reviewingEvidenceObjectIdRef = useRef('')
   const reviewingSectionEvidenceObjectIdRef = useRef('')
+  const coherentSectionsRef = useRef({ runtimeInstanceId: '', sections: EMPTY_ARRAY })
 
   const renderer = getRendererPayload(rendererResponse)
   const outputLab = getOutputLabPayload(outputLabResponse)
   const outputLabError = outputLabQueryError ? normalizeError(outputLabQueryError) : null
-  const outcomeStudioReadiness = getOutcomeStudioPayload(outcomeStudioReadinessResponse)
-  const outcomeStudioReadinessError = outcomeStudioReadinessQueryError
-    ? normalizeError(outcomeStudioReadinessQueryError)
-    : null
   const truthQuality = getTruthQualityPayload(truthQualityResponse)
   const truthQualityError = truthQualityQueryError ? normalizeError(truthQualityQueryError) : null
   const truthQualityLoading = isLoadingTruthQuality || isFetchingTruthQuality
   const outputLabDefinitions = Array.isArray(outputLab?.definitions) ? outputLab.definitions : EMPTY_ARRAY
   const runtimeInstance = renderer?.runtimeInstance ?? {}
-  const sections = Array.isArray(renderer?.sections) ? renderer.sections : EMPTY_ARRAY
+  const runtimeStateRefreshInFlight = isFetchingRuntimeStateBootstrap
+    || isFetching
+    || isFetchingRuntimeStateSection
+  const runtimeStateComposition = composeRuntimeSections({
+    renderer,
+    bootstrap: runtimeStateBootstrap,
+  })
+  const rendererSections = runtimeStateComposition.sections
+  const composedSections = runtimeStateSection
+    ? rendererSections.map((section) => {
+        const sectionKey = String(section?.sectionKey || section?.key || '').trim().toLowerCase()
+        if (sectionKey !== runtimeStateSection.sectionKey) return section
+        return {
+          ...section,
+          ...runtimeStateSection.sectionDetail,
+          value: runtimeStateSection.sectionDetail.input,
+          key: section.key,
+          sectionKey: section.sectionKey || section.key,
+          runtimePath: section.runtimePath,
+        }
+      })
+    : rendererSections
+  if (coherentSectionsRef.current.runtimeInstanceId !== runtimeInstanceId) {
+    coherentSectionsRef.current = { runtimeInstanceId, sections: EMPTY_ARRAY }
+  }
+  const sectionProjectionCoherent = !selectedRuntimeStateSectionKey || Boolean(runtimeStateSection)
+  const currentProjectionCoherent = !runtimeStateComposition.error
+    && sectionProjectionCoherent
+    && composedSections.length > 0
+  if (currentProjectionCoherent) {
+    coherentSectionsRef.current = { runtimeInstanceId, sections: composedSections }
+  }
+  const sections = runtimeStateRefreshInFlight
+    && !currentProjectionCoherent
+    && coherentSectionsRef.current.sections.length > 0
+    ? coherentSectionsRef.current.sections
+    : composedSections
   const actions = Array.isArray(renderer?.actions) ? renderer.actions : EMPTY_ARRAY
   const sectionActionByKey = actions.reduce((acc, action) => {
     const actionKey = getRuntimeActionKey(action)
@@ -6184,15 +6515,38 @@ function RuntimeWorkspace() {
       ? IMMUTABLE_RUNTIME_DISCOVERY_REASON
       : ''
   const {
-    data: evidenceResponse,
-    isFetching: isFetchingEvidence,
-    error: evidenceError,
-  } = useGetRuntimeEvidenceQuery(
-    { runtimeInstanceId },
-    { skip: !runtimeInstanceId || !showEvidenceSources },
+    data: runtimeStateEvidenceResponse,
+    isLoading: isLoadingRuntimeStateEvidence,
+    isFetching: isFetchingRuntimeStateEvidence,
+    error: runtimeStateEvidenceQueryError,
+  } = useGetRuntimeStateEvidenceQuery(
+    {
+      runtimeInstanceId,
+      page: runtimeStateEvidencePage,
+      pageSize: 50,
+      customerId,
+      tenantId,
+    },
+    {
+      skip: !runtimeInstanceId
+        || !runtimeStateScopeReady
+        || activeWorkspaceKey !== DISCOVERY_NAV_KEY,
+    },
   )
-  const evidenceDetail = evidenceResponse?.data?.discovery ?? evidenceResponse?.discovery ?? null
-  const evidenceDetailError = evidenceError ? normalizeError(evidenceError) : null
+  const runtimeStateEvidencePagePayload = getRuntimeStateEvidencePagePayload(runtimeStateEvidenceResponse)
+  const runtimeStateEvidenceEnabled = activeWorkspaceKey === DISCOVERY_NAV_KEY
+  const runtimeStateEvidenceLoading = runtimeStateEvidenceEnabled
+    && (isLoadingRuntimeStateEvidence || isFetchingRuntimeStateEvidence)
+  const evidenceDetail = runtimeStateEvidencePagePayload
+  const evidenceDetailLoading = runtimeStateEvidenceLoading
+  const evidenceDetailError = runtimeStateEvidenceQueryError
+    ? normalizeError(runtimeStateEvidenceQueryError)
+    : runtimeStateEvidenceEnabled
+      && runtimeStateEvidenceResponse
+      && !runtimeStateEvidenceLoading
+      && !runtimeStateEvidencePagePayload
+      ? { message: 'Runtime State V2 evidence response is invalid.' }
+      : null
   const configWarnings = Array.isArray(renderer?.diagnostics?.configWarnings)
     ? renderer.diagnostics.configWarnings
     : EMPTY_ARRAY
@@ -6204,7 +6558,21 @@ function RuntimeWorkspace() {
     ? configWarningGroups
     : configWarningGroups.slice(0, WARNING_PREVIEW_LIMIT)
   const showRuntimePaths = String(renderer?.diagnostics?.runtimePathVisibility ?? '').trim().toUpperCase() === 'VISIBLE'
-  const appError = error ? normalizeError(error) : null
+  const appError = runtimeStateBootstrapError
+    || (!runtimeStateRefreshInFlight ? runtimeStateSectionError : null)
+    || (!runtimeStateRefreshInFlight ? runtimeStateComposition.error : null)
+    || (error ? normalizeError(error) : null)
+  const appErrorContext = runtimeStateBootstrapError
+    ? 'runtime-workspace-bootstrap'
+    : runtimeStateSectionError
+      ? 'runtime-workspace-section-detail'
+      : runtimeStateComposition.error
+        ? 'runtime-workspace-state-composition'
+        : 'runtime-workspace-renderer'
+  const workspaceLoading = !runtimeStateScopeReady
+    || isLoadingRuntimeStateBootstrap
+    || (runtimeStateBootstrapReady && isLoading)
+    || isLoadingRuntimeStateSection
   const pendingRuntimeActionConfig = pendingRuntimeAction?.actionKey
     ? findRuntimeActionByKey(actions, pendingRuntimeAction.actionKey)
     : null
@@ -6323,14 +6691,9 @@ function RuntimeWorkspace() {
     ? null
     : matchedActiveSectionIndex >= 0 ? sections[matchedActiveSectionIndex] : null
   const activeSectionIntelligence = activeSection ? getSectionIntelligence(activeSection) : null
-  const outcomeStudioState = getOutcomeStudioReadinessLabel({
-    readiness: outcomeStudioReadiness,
-  }, {
-    loading: isLoadingOutcomeStudioReadiness || isFetchingOutcomeStudioReadiness,
-    error: outcomeStudioReadinessError,
-  })
 
   useEffect(() => {
+    if (workspaceLoading || runtimeStateRefreshInFlight) return
     if (
       activeWorkspaceKey === DISCOVERY_NAV_KEY
       || activeWorkspaceKey === OUTPUT_LAB_NAV_KEY
@@ -6341,7 +6704,7 @@ function RuntimeWorkspace() {
     if (!hasActiveSection) {
       setActiveWorkspaceKey(DISCOVERY_NAV_KEY)
     }
-  }, [activeWorkspaceKey, sections])
+  }, [activeWorkspaceKey, runtimeStateRefreshInFlight, sections, workspaceLoading])
 
   useEffect(() => {
     if (hasAutoSelectedInitialSection.current) return
@@ -6365,6 +6728,11 @@ function RuntimeWorkspace() {
       setSelectedOutputTypeKey(firstOutputTypeKey)
     }
   }, [outputLabDefinitions, selectedOutputTypeKey])
+
+  const handleToggleEvidenceSources = () => {
+    if (!showEvidenceSources) setRuntimeStateEvidencePage(1)
+    setShowEvidenceSources((current) => !current)
+  }
 
   const handleBack = () => {
     navigate(getRuntimeWorkspaceBackTarget(location.state))
@@ -6421,6 +6789,8 @@ function RuntimeWorkspace() {
         setExecutingActionKey(resolvedActionKey)
         await executeRuntimeAction({
           runtimeInstanceId,
+          customerId,
+          tenantId,
           actionKey: resolvedActionKey,
           body: {
             acquisitionProfile,
@@ -6481,6 +6851,8 @@ function RuntimeWorkspace() {
         setExecutingActionKey(resolvedActionKey)
         await executeRuntimeAction({
           runtimeInstanceId,
+          customerId,
+          tenantId,
           actionKey: resolvedActionKey,
           body: {
             expectedUpdatedAt,
@@ -6526,6 +6898,7 @@ function RuntimeWorkspace() {
     setSavingDiscovery(true)
     setDiscoveryFeedback(null)
     setShowEvidenceSources(false)
+    setRuntimeStateEvidencePage(1)
 
     try {
       await resetRuntimeDiscovery({
@@ -6984,6 +7357,8 @@ function RuntimeWorkspace() {
     try {
       await executeRuntimeAction({
         runtimeInstanceId,
+        customerId,
+        tenantId,
         actionKey,
         body: { expectedUpdatedAt, ...actionBody },
       }).unwrap()
@@ -7234,7 +7609,7 @@ function RuntimeWorkspace() {
     pendingRuntimeActionKey && executingActionKey === pendingRuntimeActionKey,
   )
 
-  if (isLoading) {
+  if (workspaceLoading) {
     return (
       <section className="runtime-workspace container" aria-label="Execution workspace">
         <Card variant="default" className="runtime-workspace__state-card">
@@ -7258,7 +7633,7 @@ function RuntimeWorkspace() {
             Back
           </Button>
         </div>
-        <ErrorSupportPanel error={appError} context="runtime-workspace-renderer" />
+        <ErrorSupportPanel error={appError} context={appErrorContext} />
       </section>
     )
   }
@@ -7553,6 +7928,7 @@ function RuntimeWorkspace() {
             <DiscoverySection
               key={`discovery-${getDiscoveryAcquisitionProfile(discovery)}-${JSON.stringify(discovery?.inputValues || {})}`}
               activity={activity}
+              customerId={customerId}
               discovery={discovery}
               discoveryState={discoveryState}
               disabled={savingDiscovery
@@ -7563,20 +7939,22 @@ function RuntimeWorkspace() {
               discoveryActions={discoveryActionByKey}
               evidenceDetail={evidenceDetail}
               evidenceDetailError={evidenceDetailError}
-              evidenceDetailLoading={isFetchingEvidence}
+              evidenceDetailLoading={evidenceDetailLoading}
               executingActionKey={executingActionKey}
               feedback={discoveryFeedback}
               inspectionMode={isRuntimeLockedForInspection}
               mutationDisabledReason={discoveryMutationDisabledReason}
               onAcceptDiscovery={handleAcceptDiscovery}
+              onEvidencePageChange={(page) => setRuntimeStateEvidencePage(Math.max(1, Number(page) || 1))}
               onResetDiscovery={handleResetDiscovery}
               onReviewEvidenceObject={handleReviewEvidenceObject}
               onRefreshEvidence={handleRefreshDiscoveryEvidence}
-              onToggleSources={() => setShowEvidenceSources((current) => !current)}
+              onToggleSources={handleToggleEvidenceSources}
               reviewingEvidenceObjectId={reviewingEvidenceObjectId}
               runtimeInstanceId={runtimeInstanceId}
               saving={savingDiscovery}
               showSources={showEvidenceSources}
+              tenantId={tenantId}
             />
           ) : activeWorkspaceKey === OUTPUT_LAB_NAV_KEY ? (
             <OutputLabSection
@@ -7650,7 +8028,7 @@ function RuntimeWorkspace() {
                 onSelectDiscovery={() => setActiveWorkspaceKey(DISCOVERY_NAV_KEY)}
                 onSelectOutcomeStudio={handleOpenOutcomeStudio}
                 onSelectSection={handleSelectSection}
-                outcomeStudioState={outcomeStudioState}
+                outcomeStudioState="Open to check"
                 sections={sections}
               />
             </Card.Body>
@@ -7860,5 +8238,7 @@ function RuntimeWorkspace() {
     </section>
   )
 }
+
+RuntimeWorkspace.getRuntimeStateSummary = getRuntimeStateSummary
 
 export default RuntimeWorkspace
