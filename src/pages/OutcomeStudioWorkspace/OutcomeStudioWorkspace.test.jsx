@@ -25,6 +25,10 @@ import {
 } from '../../store/api/runtimeInstanceApi.js'
 import OutcomeStudioWorkspace from './OutcomeStudioWorkspace.jsx'
 
+vi.mock('../../hooks/useTenantContext.js', () => ({
+  useTenantContext: () => ({ customerId: 'customer-001', tenantId: 'tenant-001' }),
+}))
+
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useApproveRuntimeOutcomeDraftMutation: vi.fn(),
   useCreateRuntimeOutcomeSessionMutation: vi.fn(),
@@ -213,6 +217,12 @@ const makeMessage = (number) => ({
 })
 
 describe('OutcomeStudioWorkspace', () => {
+  it('preserves present falsy identifiers while skipping only nullish fields', () => {
+    expect(OutcomeStudioWorkspace.idOf({ messageId: 0, id: 'message-1' }, ['messageId', 'id'])).toBe('0')
+    expect(OutcomeStudioWorkspace.idOf({ messageId: '', id: 'message-1' }, ['messageId', 'id'])).toBe('')
+    expect(OutcomeStudioWorkspace.idOf({ messageId: null, id: 'message-1' }, ['messageId', 'id'])).toBe('message-1')
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     refetchStudio.mockResolvedValue({ data: studio })
@@ -309,8 +319,8 @@ describe('OutcomeStudioWorkspace', () => {
     expect(outputs).not.toHaveTextContent('Hidden platform detail')
 
     await user.click(within(outputs).getByRole('button', { name: 'Preview' }))
-    expect(loadAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', outcomeAssetId: 'asset-1' })
-    expect(loadPreview).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', outcomeAssetId: 'asset-1' })
+    expect(loadAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1' })
+    expect(loadPreview).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1' })
     expect(screen.getByRole('region', { name: /generated body preview/i })).toHaveTextContent('Customer-safe preview.')
   })
 
@@ -729,6 +739,8 @@ describe('OutcomeStudioWorkspace', () => {
 
     expect(loadDraftPreview).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       draftId: 'draft-1',
     })
@@ -746,6 +758,8 @@ describe('OutcomeStudioWorkspace', () => {
     await user.click(screen.getByRole('button', { name: 'Preview' }))
     expect(loadDraftCompare).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       draftId: 'draft-1',
     })
@@ -1001,6 +1015,8 @@ describe('OutcomeStudioWorkspace', () => {
     await user.click(generateButtons[0])
     expect(generateResponse).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       messageId: 'message-6',
       body: { allowReadyWithGaps: true },
@@ -1113,7 +1129,7 @@ describe('OutcomeStudioWorkspace', () => {
     renderPage()
 
     expect(useGetRuntimeOutcomeSessionQuery).toHaveBeenCalledWith(
-      { runtimeInstanceId: 'value-narrative-001', sessionId: '' },
+      { runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', sessionId: '' },
       { skip: true },
     )
     expect(screen.getByText('No active session')).toBeInTheDocument()
@@ -1366,6 +1382,8 @@ describe('OutcomeStudioWorkspace', () => {
 
     expect(generateResponse).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       messageId: 'message-1',
       body: { allowReadyWithGaps: true },
@@ -1461,6 +1479,8 @@ describe('OutcomeStudioWorkspace', () => {
 
     expect(submitMessage).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       body: { prompt: 'Refine the available deliverable.' },
     })
@@ -1556,6 +1576,8 @@ describe('OutcomeStudioWorkspace', () => {
     expect(submitMessage).toHaveBeenCalledTimes(1)
     expect(loadSessionForReconciliation).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
     })
   })
@@ -1677,6 +1699,8 @@ describe('OutcomeStudioWorkspace', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard draft' }))
     expect(discardDraft).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       draftId: 'draft-1',
       expectedUpdatedAt: '2026-07-17T10:00:00.000Z',
@@ -1713,25 +1737,29 @@ describe('OutcomeStudioWorkspace', () => {
     await user.click(screen.getByRole('button', { name: 'Submit request' }))
     expect(submitMessage).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       body: { prompt: 'Refine the recommendation.' },
     })
 
     await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
     await user.click(screen.getByRole('button', { name: 'Approve draft' }))
-    expect(approveDraft).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', sessionId: 'session-1', draftId: 'draft-1', body: {} })
+    expect(approveDraft).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', sessionId: 'session-1', draftId: 'draft-1', body: {} })
 
     const outputs = screen.getByRole('region', { name: /approved outputs/i })
     await user.click(within(outputs).getByRole('button', { name: 'Revise as working draft' }))
     expect(reviseAsset).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-1',
       outcomeAssetId: 'asset-1',
       body: {},
     })
     await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
     await user.click(within(outputs).getByRole('button', { name: 'Publish' }))
-    expect(publishAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', outcomeAssetId: 'asset-1', body: {} })
+    expect(publishAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1', body: {} })
 
     fireEvent.click(screen.getByRole('button', { name: 'Execution Workspace' }))
     expect(screen.getByText('Execution Workspace Return')).toBeInTheDocument()
@@ -1830,10 +1858,14 @@ describe('OutcomeStudioWorkspace', () => {
 
     expect(createSession).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       body: { prompt: 'Prepare a board narrative.' },
     })
     expect(submitMessage).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001',
+      tenantId: 'tenant-001',
       sessionId: 'session-new',
       body: { prompt: 'Prepare a board narrative.' },
     })

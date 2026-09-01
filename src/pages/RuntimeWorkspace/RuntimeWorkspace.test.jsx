@@ -6,6 +6,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useAcceptRuntimeSectionMutation,
@@ -16,11 +17,13 @@ import {
   useCreateRuntimeRevisionMutation,
   useExecuteRuntimeActionMutation,
   useGenerateRuntimeOutputRequestMutation,
-  useGetRuntimeEvidenceQuery,
-  useGetRuntimeIntelligenceGraphQuery,
+  useGetRuntimeStateGraphProjectionQuery,
+  useGetRuntimeStateBootstrapQuery,
+  useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateGraphManifestQuery,
+  useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeOutputLabQuery,
   useGetRuntimeOutcomeStudioQuery,
-  useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
   useLazyGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeAssetPreviewQuery,
@@ -42,6 +45,10 @@ import {
 } from '../../store/api/runtimeInstanceApi.js'
 import RuntimeWorkspace from './RuntimeWorkspace'
 
+vi.mock('../../hooks/useTenantContext.js', () => ({
+  useTenantContext: vi.fn(),
+}))
+
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
@@ -52,11 +59,13 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useCreateRuntimeRevisionMutation: vi.fn(),
   useExecuteRuntimeActionMutation: vi.fn(),
   useGenerateRuntimeOutputRequestMutation: vi.fn(),
-  useGetRuntimeEvidenceQuery: vi.fn(),
-  useGetRuntimeIntelligenceGraphQuery: vi.fn(),
+  useGetRuntimeStateGraphProjectionQuery: vi.fn(),
+  useGetRuntimeStateBootstrapQuery: vi.fn(),
+  useGetRuntimeStateEvidenceQuery: vi.fn(),
+  useGetRuntimeStateGraphManifestQuery: vi.fn(),
+  useGetRuntimeStateSectionSummaryQuery: vi.fn(),
   useGetRuntimeOutputLabQuery: vi.fn(),
   useGetRuntimeOutcomeStudioQuery: vi.fn(),
-  useGetRuntimeOutcomeStudioReadinessQuery: vi.fn(),
   useGetRuntimeOutcomeSessionQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetQuery: vi.fn(),
   useLazyGetRuntimeOutcomeAssetPreviewQuery: vi.fn(),
@@ -216,12 +225,16 @@ const rendererPayload = {
   runtimeInstance: {
     id: 'runtime-1',
     runtimeInstanceKey: 'value-narrative-001',
+    customerId: '507f1f77bcf86cd799439012',
+    tenantId: '507f1f77bcf86cd799439013',
     runtimeType: 'VALUE_NARRATIVE',
     status: 'ACTIVE',
     executionStatus: 'IDLE',
     name: 'Acme Value Narrative',
     packageKey: 'vmf-standard-2-3-1',
     packageVersion: '2.3.1',
+    packageId: 'package-1',
+    stateVersion: 'runtime-revision:1',
     updatedAt: '2026-05-19T08:00:00.000Z',
   },
   package: {
@@ -338,6 +351,28 @@ const rendererPayload = {
       },
     ],
   },
+}
+
+const runtimeStateBootstrapPayload = {
+  control: {
+    id: 'runtime-1',
+    runtimeInstanceKey: 'value-narrative-001',
+    customerId: '507f1f77bcf86cd799439012',
+    tenantId: '507f1f77bcf86cd799439013',
+    packageId: 'package-1',
+    packageKey: 'vmf-standard-2-3-1',
+    packageVersion: '2.3.1',
+    stateVersion: 'runtime-revision:1',
+  },
+  sections: [
+    {
+      sectionKey: 'customer_problem',
+      stateVersion: 'runtime-revision:1',
+      stateStatus: 'CURRENT',
+    },
+  ],
+  sectionCount: 1,
+  stateVersion: 'runtime-revision:1',
 }
 
 const outputLabPayload = {
@@ -833,6 +868,14 @@ function buildRuntimeSection(index, label) {
 
 describe('RuntimeWorkspace', () => {
   beforeEach(() => {
+    useTenantContext.mockReturnValue({
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
+    })
+    useGetRuntimeStateGraphProjectionQuery.mockClear()
+    useGetRuntimeStateGraphManifestQuery.mockClear()
+    useGetRuntimeStateBootstrapQuery.mockClear()
+    useGetRuntimeStateSectionSummaryQuery.mockClear()
     refetchRenderer.mockReset()
     refetchOutputLab.mockReset()
     refetchOutcomeStudio.mockReset()
@@ -1009,13 +1052,32 @@ describe('RuntimeWorkspace', () => {
     useReviewAllRuntimeSectionEvidenceMutation.mockReturnValue([reviewAllRuntimeSectionEvidence, { isLoading: false }])
     useReviewRuntimeSectionEvidenceMutation.mockReturnValue([reviewRuntimeSectionEvidence, { isLoading: false }])
     useUpdateRuntimeSectionEvidenceMutation.mockReturnValue([updateRuntimeSectionEvidence, { isLoading: false }])
-    useGetRuntimeEvidenceQuery.mockReturnValue({
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
       data: null,
+      isLoading: false,
       isFetching: false,
       error: null,
     })
-    useGetRuntimeIntelligenceGraphQuery.mockReturnValue({
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: { data: runtimeStateBootstrapPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeStateSectionSummaryQuery.mockReturnValue({
       data: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeStateGraphProjectionQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: { manifest: { status: 'CURRENT' } },
       isLoading: false,
       isFetching: false,
       error: null,
@@ -1033,12 +1095,6 @@ describe('RuntimeWorkspace', () => {
       isFetching: false,
       error: null,
       refetch: refetchOutcomeStudio,
-    })
-    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
-      data: { data: outcomeStudioPayload.readiness },
-      isLoading: false,
-      isFetching: false,
-      error: null,
     })
     useGetRuntimeOutcomeSessionQuery.mockReturnValue({
       data: null,
@@ -1089,16 +1145,530 @@ describe('RuntimeWorkspace', () => {
     )
   })
 
+  it('defaults a missing runtime state summary to an empty object', () => {
+    expect(RuntimeWorkspace.getRuntimeStateSummary(undefined)).toEqual({})
+    expect(RuntimeWorkspace.getRuntimeStateSummary(null)).toEqual({})
+  })
+
+  it('opens the renderer only after the V2 bootstrap has established the runtime state version', () => {
+    renderRuntimeWorkspace()
+
+    expect(useGetRuntimeStateBootstrapQuery).toHaveBeenCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+    expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+  })
+
+  it('renders the active section from the exact current V2 section detail', async () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateSectionSummaryQuery.mockReturnValue({
+      data: {
+        data: {
+          section: {
+            sectionKey: 'customer_problem',
+            stateVersion: 'runtime-revision:1',
+            sectionDetail: {
+              input: 'V2 migrated customer problem input',
+              generated: null,
+              accepted: null,
+              review: {},
+              state: { status: 'DRAFT' },
+              lineage: {
+                sectionKey: 'customer_problem',
+                runtimePath: 'framework_state.sections.customer_problem',
+              },
+              revisions: [],
+              dependencies: {},
+              validation: {},
+              confidence: {},
+              intelligence: {},
+              metrics: {},
+              additionalEvidence: {},
+              evidenceObjects: [],
+              gsilContext: {},
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    })
+
+    expect(useGetRuntimeStateSectionSummaryQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        sectionKey: 'customer_problem',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+    expect(screen.getByLabelText('Customer Problem', { exact: true }))
+      .toHaveValue('V2 migrated customer problem input')
+  })
+
+  it('matches renderer kebab-case section keys to canonical V2 section keys', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          sectionStateSource: 'runtime_state_v2',
+          sections: [{
+            ...rendererPayload.sections[0],
+            key: 'customer-problem',
+            sectionKey: 'customer-problem',
+          }],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: {
+        data: {
+          ...runtimeStateBootstrapPayload,
+          sections: [{
+            ...runtimeStateBootstrapPayload.sections[0],
+            stateStatus: 'ACCEPTED',
+            truthHash: `sha256:${'a'.repeat(64)}`,
+          }],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    })
+
+    expect(screen.queryByText(
+      'Runtime State V2 section catalogue does not match the renderer package.',
+    )).not.toBeInTheDocument()
+    expect(useGetRuntimeStateSectionSummaryQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        sectionKey: 'customer_problem',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+    expect(screen.getByLabelText('Execution progress summary')).toHaveTextContent('1/1')
+    expect(screen.getByLabelText('Execution progress summary')).toHaveTextContent('Generated1/1')
+
+    fireEvent.click(screen.getByRole('button', { name: /intelligence hub/i }))
+
+    expect(screen.queryByText(
+      'Runtime State V2 selected-section response is invalid.',
+    )).not.toBeInTheDocument()
+  })
+
+  it('fails closed when the renderer package section is absent from the V2 catalogue', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: {
+        data: {
+          ...runtimeStateBootstrapPayload,
+          sections: [{
+            sectionKey: 'current_state_assessment',
+            stateVersion: 'runtime-revision:1',
+            stateStatus: 'ACCEPTED',
+          }],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    })
+
+    expect(useGetRuntimeStateSectionSummaryQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        sectionKey: '',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: true },
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Runtime State V2 section catalogue does not match the renderer package.',
+    )
+  })
+
+  it('fails closed when the V2 bootstrap identity does not match the renderer shell', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: {
+        data: {
+          ...runtimeStateBootstrapPayload,
+          control: {
+            ...runtimeStateBootstrapPayload.control,
+            stateVersion: 'runtime-revision:2',
+          },
+          stateVersion: 'runtime-revision:2',
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Runtime State V2 state version does not match the renderer shell.',
+    )
+  })
+
+  it('keeps the renderer skipped while the V2 bootstrap is loading', () => {
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: null,
+      isLoading: true,
+      isFetching: true,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByLabelText('Loading execution workspace')).toBeInTheDocument()
+    expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: true },
+    )
+  })
+
+  it('keeps the section mounted while bootstrap and section versions converge', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: { data: runtimeStateBootstrapPayload },
+      isLoading: false,
+      isFetching: true,
+      error: null,
+    })
+    useGetRuntimeStateSectionSummaryQuery.mockReturnValue({
+      data: {
+        data: {
+          section: {
+            sectionKey: 'customer_problem',
+            stateVersion: 'runtime-revision:2',
+            sectionDetail: { input: 'Newly generated section context' },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    })
+
+    expect(screen.queryByLabelText('Loading execution workspace')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Customer Problem' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not surface a renderer identity mismatch while its refresh is in flight', () => {
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: {
+        data: {
+          ...runtimeStateBootstrapPayload,
+          control: {
+            ...runtimeStateBootstrapPayload.control,
+            stateVersion: 'runtime-revision:2',
+          },
+          stateVersion: 'runtime-revision:2',
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: true,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.queryByLabelText('Loading execution workspace')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('preserves the selected section and tab while currentness responses refresh', () => {
+    const initialEntry = {
+      pathname: '/app/runtime/value-narrative-001',
+      state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
+    }
+    let bootstrapQuery = {
+      data: { data: runtimeStateBootstrapPayload },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    let rendererQuery = {
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    }
+    let sectionQuery = {
+      data: {
+        data: {
+          section: {
+            sectionKey: 'customer_problem',
+            stateVersion: 'runtime-revision:1',
+            sectionDetail: {
+              input: 'Original section context',
+              generated: null,
+              accepted: null,
+              review: {},
+              state: { status: 'DRAFT' },
+              lineage: {},
+              revisions: [],
+              dependencies: {},
+              validation: {},
+              confidence: {},
+              intelligence: {},
+              metrics: {},
+              additionalEvidence: {},
+              evidenceObjects: [],
+              gsilContext: {},
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    useGetRuntimeStateBootstrapQuery.mockImplementation(() => bootstrapQuery)
+    useGetRuntimeRendererQuery.mockImplementation(() => rendererQuery)
+    useGetRuntimeStateSectionSummaryQuery.mockImplementation(() => sectionQuery)
+
+    const { rerender } = renderRuntimeWorkspace(initialEntry)
+    selectRuntimeSectionTab('Context')
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+
+    const nextBootstrap = {
+      ...runtimeStateBootstrapPayload,
+      control: {
+        ...runtimeStateBootstrapPayload.control,
+        stateVersion: 'runtime-revision:2',
+      },
+      stateVersion: 'runtime-revision:2',
+      sections: runtimeStateBootstrapPayload.sections.map((section) => ({
+        ...section,
+        stateVersion: 'runtime-revision:2',
+      })),
+    }
+    bootstrapQuery = {
+      data: { data: nextBootstrap },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    rendererQuery = {
+      data: { data: { ...rendererPayload, sectionStateSource: 'runtime_state_v2' } },
+      isLoading: false,
+      isFetching: true,
+      error: null,
+      refetch: refetchRenderer,
+    }
+    sectionQuery = {
+      ...sectionQuery,
+      data: {
+        data: {
+          section: {
+            ...sectionQuery.data.data.section,
+            stateVersion: 'runtime-revision:2',
+          },
+        },
+      },
+    }
+    rerender(runtimeWorkspaceTree(initialEntry))
+
+    expect(screen.queryByLabelText('Loading execution workspace')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+
+    rendererQuery = {
+      data: {
+        data: {
+          ...rendererPayload,
+          sectionStateSource: 'runtime_state_v2',
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            stateVersion: 'runtime-revision:2',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    }
+    sectionQuery = {
+      data: {
+        data: {
+          section: {
+            sectionKey: 'customer_problem',
+            stateVersion: 'runtime-revision:2',
+            sectionDetail: {
+              input: 'Original section context',
+              generated: {
+                content: 'New generated truth remains in the current tab.',
+                generatedAt: '2026-08-29T19:00:00.000Z',
+              },
+              accepted: null,
+              review: {},
+              state: { status: 'DRAFT' },
+              lineage: {},
+              revisions: [],
+              dependencies: {},
+              validation: {},
+              confidence: {},
+              intelligence: {},
+              metrics: {},
+              additionalEvidence: {},
+              evidenceObjects: [],
+              gsilContext: {},
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }
+    rerender(runtimeWorkspaceTree(initialEntry))
+
+    expect(screen.getByLabelText('Customer Problem', { exact: true }))
+      .toHaveValue('Original section context')
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('fails closed when the V2 bootstrap errors or returns an invalid payload', () => {
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: { status: 503, data: { error: { message: 'Bootstrap unavailable' } } },
+    })
+
+    const { unmount } = renderRuntimeWorkspace()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Bootstrap unavailable')
+    expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: true },
+    )
+
+    unmount()
+    useGetRuntimeStateBootstrapQuery.mockReturnValue({
+      data: { data: { control: {}, sections: [] } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Runtime State V2 bootstrap response is invalid.')
+    expect(useGetRuntimeRendererQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: true },
+    )
+  })
+
   it('renders server-projected runtime sections, actions, signals, activity, and diagnostics', async () => {
     renderRuntimeWorkspace()
 
     expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
-      { runtimeInstanceId: 'value-narrative-001' },
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
       { skip: false },
     )
     expect(useGetRuntimeTruthQualityQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
-      { skip: false },
+      { skip: true },
+    )
+    expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: true },
     )
     const actionBar = screen.getByRole('group', { name: /execution workspace actions/i })
     const backButton = within(actionBar).getByRole('button', { name: /^back$/i })
@@ -1297,7 +1867,11 @@ describe('RuntimeWorkspace', () => {
     })
     await waitFor(() => {
       expect(useGetRuntimeRendererQuery).toHaveBeenCalledWith(
-        { runtimeInstanceId: 'value-narrative-001-rev-2' },
+        {
+          runtimeInstanceId: 'value-narrative-001-rev-2',
+          customerId: '507f1f77bcf86cd799439012',
+          tenantId: '507f1f77bcf86cd799439013',
+        },
         { skip: false },
       )
     })
@@ -1455,6 +2029,10 @@ describe('RuntimeWorkspace', () => {
     renderInternalOutputLabWorkspace()
 
     expect(useGetRuntimeOutputLabQuery).toHaveBeenCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' },
+      { skip: false },
+    )
+    expect(useGetRuntimeTruthQualityQuery).toHaveBeenCalledWith(
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: false },
     )
@@ -2410,24 +2988,41 @@ describe('RuntimeWorkspace', () => {
 
   it('loads evidence source lineage on demand without rendering fake source data', async () => {
     const user = userEvent.setup()
-    useGetRuntimeEvidenceQuery.mockReturnValue({
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
       data: {
         data: {
-          discovery: {
-            lineage: {
-              sources: [
-                {
-                  sourceId: 'input_companyWebsite',
-                  type: 'USER_PROVIDED_WEBSITE',
-                  fieldKey: 'companyWebsite',
-                  url: 'https://acme.example',
-                  status: 'USER_PROVIDED',
-                },
-              ],
-            },
+          source: 'runtime_state_v2.evidence_page',
+          page: 1,
+          pageSize: 50,
+          total: 1,
+          totalPages: 1,
+          evidenceObjects: [{
+            evidenceObjectId: 'evidence-company-website',
+            sourceId: 'input_companyWebsite',
+            extractedFact: 'Company website: https://acme.example',
+            reviewStatus: 'PENDING',
+          }],
+          sourceRegistry: [{
+            sourceId: 'input_companyWebsite',
+            sourceType: 'WEBSITE',
+            label: 'companyWebsite',
+            url: 'https://acme.example',
+            acquisitionStatus: 'USER_PROVIDED',
+          }],
+          lineage: {
+            sources: [{
+              sourceId: 'input_companyWebsite',
+              sourceType: 'WEBSITE',
+              type: 'WEBSITE',
+              label: 'companyWebsite',
+              url: 'https://acme.example',
+              acquisitionStatus: 'USER_PROVIDED',
+              status: 'USER_PROVIDED',
+            }],
           },
         },
       },
+      isLoading: false,
       isFetching: false,
       error: null,
     })
@@ -2465,14 +3060,10 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace()
-    expect(useGetRuntimeEvidenceQuery).toHaveBeenLastCalledWith(
-      { runtimeInstanceId: 'value-narrative-001' },
-      { skip: true },
-    )
     await user.click(screen.getByRole('button', { name: /view sources/i }))
 
-    expect(useGetRuntimeEvidenceQuery).toHaveBeenLastCalledWith(
-      { runtimeInstanceId: 'value-narrative-001' },
+    expect(useGetRuntimeStateEvidenceQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001', page: 1, pageSize: 50 }),
       { skip: false },
     )
     const sourceRegistry = screen.getByRole('region', { name: /source registry/i })
@@ -2483,8 +3074,212 @@ describe('RuntimeWorkspace', () => {
     expect(sourceRegion).toHaveClass('runtime-workspace__section-panel--evidence-sources')
     expect(sourceRegion).toHaveAttribute('tabindex', '0')
     expect(within(sourceRegion).getByText('companyWebsite')).toBeInTheDocument()
-    expect(within(sourceRegion).getByText(/USER_PROVIDED_WEBSITE \/ USER_PROVIDED \/ https:\/\/acme\.example/)).toBeInTheDocument()
+    expect(within(sourceRegion).getByText(/WEBSITE \/ USER_PROVIDED \/ https:\/\/acme\.example/)).toBeInTheDocument()
     expect(within(sourceRegion).queryByText(/competitor/i)).not.toBeInTheDocument()
+  })
+
+  it('uses the bounded V2 evidence page as the authoritative evidence source', async () => {
+    const user = userEvent.setup()
+    const discovery = {
+      state: { status: 'EVIDENCE_READY' },
+      inputComplete: true,
+      evidenceReady: true,
+      accepted: false,
+      needsRefresh: false,
+      inputValues: {},
+      evidenceSummary: { keys: ['source'], count: 1 },
+      sourceRegistry: [{ sourceId: 'source-1', sourceType: 'WEBSITE', url: 'https://acme.example' }],
+      scopedViews: {},
+    }
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: { data: { ...rendererPayload, discovery } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateEvidenceQuery.mockImplementation(({ page }) => ({
+      data: {
+        data: {
+          source: 'runtime_state_v2.evidence_page',
+          page,
+          pageSize: 50,
+          total: 51,
+          totalPages: 2,
+          evidenceObjects: [{
+            evidenceObjectId: `v2-evidence-${page}`,
+            sourceId: 'source-1',
+            sourceType: 'WEBSITE',
+            title: `V2 evidence page ${page}`,
+            extractedFact: `V2 extracted fact ${page}`,
+            reviewStatus: 'PENDING',
+          }],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderRuntimeWorkspace()
+
+    expect(useGetRuntimeStateEvidenceQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001', page: 1, pageSize: 50 }),
+      { skip: false },
+    )
+    expect(screen.getByRole('region', { name: /evidence objects/i }))
+      .toHaveTextContent('1 total extracted')
+
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    expect(useGetRuntimeStateEvidenceQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        page: 1,
+        pageSize: 50,
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+    const sourceRegion = screen.getByRole('region', { name: /evidence sources/i })
+    expect(within(sourceRegion).getByText('V2 evidence page 1')).toBeInTheDocument()
+    expect(within(sourceRegion).getByText('V2 extracted fact 1')).toBeInTheDocument()
+    expect(within(sourceRegion).getByText('Page 1 of 2')).toBeInTheDocument()
+
+    await user.click(within(sourceRegion).getByRole('button', { name: /next page/i }))
+
+    expect(useGetRuntimeStateEvidenceQuery).toHaveBeenLastCalledWith(
+      {
+        runtimeInstanceId: 'value-narrative-001',
+        page: 2,
+        pageSize: 50,
+        customerId: '507f1f77bcf86cd799439012',
+        tenantId: '507f1f77bcf86cd799439013',
+      },
+      { skip: false },
+    )
+    expect(within(sourceRegion).getByText('V2 evidence page 2')).toBeInTheDocument()
+    expect(within(sourceRegion).getByText('Page 2 of 2')).toBeInTheDocument()
+  })
+
+  it('shows the bounded V2 loading state without requesting legacy evidence', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: { status: 'EVIDENCE_READY' },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            evidenceSummary: { keys: ['source'], count: 1 },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
+      data: null,
+      isLoading: true,
+      isFetching: true,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    expect(screen.getByText('Loading sources')).toBeInTheDocument()
+  })
+
+  it('shows the bounded V2 empty state without requesting legacy evidence', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: { status: 'EVIDENCE_READY' },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            evidenceSummary: { keys: ['source'], count: 1 },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          source: 'runtime_state_v2.evidence_page',
+          page: 1,
+          pageSize: 50,
+          total: 0,
+          totalPages: 1,
+          evidenceObjects: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    expect(screen.getByText('No reviewable evidence objects are available for this evidence pack.'))
+      .toBeInTheDocument()
+  })
+
+  it('shows the V2 evidence error without requesting a legacy fallback', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          discovery: {
+            state: { status: 'EVIDENCE_READY' },
+            inputComplete: true,
+            evidenceReady: true,
+            accepted: false,
+            needsRefresh: false,
+            inputValues: {},
+            evidenceSummary: { keys: ['source'], count: 1 },
+            scopedViews: {},
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: { status: 503, data: { message: 'V2 evidence is unavailable.' } },
+    })
+    renderRuntimeWorkspace()
+    await user.click(screen.getByRole('button', { name: /view sources/i }))
+
+    const sourceRegion = screen.getByRole('region', { name: /evidence sources/i })
+    expect(within(sourceRegion).getByText('V2 evidence is unavailable.')).toBeInTheDocument()
+    expect(within(sourceRegion).queryByText(/legacy/i)).not.toBeInTheDocument()
   })
 
   it('explains why evidence sources are disabled before an evidence pack exists', () => {
@@ -2912,6 +3707,8 @@ describe('RuntimeWorkspace', () => {
 
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'BUILD_EVIDENCE_PACK',
       body: {
         acquisitionProfile: 'STANDARD',
@@ -2977,6 +3774,8 @@ describe('RuntimeWorkspace', () => {
 
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'BUILD_EVIDENCE_PACK',
       body: {
         acquisitionProfile: 'ENHANCED',
@@ -3666,12 +4465,67 @@ describe('RuntimeWorkspace', () => {
   })
 
   it('renders Intelligence Graph summaries without exposing raw graph internals', async () => {
-    useGetRuntimeIntelligenceGraphQuery.mockReturnValue({
+    useGetRuntimeStateGraphProjectionQuery.mockReturnValue({
       data: {
         data: {
-          available: true,
-          graphVersion: '2.2',
-          nodes: [
+          graph: {
+            available: true,
+            graphVersion: '2.2',
+            build: {
+              status: 'VALID',
+              trigger: 'EXPLICIT_REBUILD',
+              builtAt: '2026-06-05T10:00:00.000Z',
+              nodeCount: 12,
+              edgeCount: 14,
+              sourceHash: 'sha256:source-hash',
+            },
+            health: {
+              state: 'WARNING',
+              acceptedEvidenceCount: 3,
+              orphanEvidenceCount: 1,
+              lowQualityEvidenceCount: 0,
+              unclassifiedEvidenceCount: 1,
+              missingDomainCount: 8,
+              dependencyCount: 1,
+              contradictionCount: 0,
+            },
+            coverage: {
+              coverageModel: 'EVIDENCE_DOMAIN_COVERAGE',
+              coveragePercent: 20,
+              coveredDomainCount: 2,
+              totalDomainCount: 10,
+              missingDomains: ['Proof', 'Economics'],
+              domains: [
+                {
+                  domain: 'Company',
+                  state: 'ADEQUATE',
+                  acceptedEvidenceCount: 1,
+                  connectedEvidenceCount: 1,
+                  pendingEvidenceCount: 0,
+                  rejectedEvidenceCount: 0,
+                  lowQualityEvidenceCount: 0,
+                },
+                {
+                  domain: 'Economics',
+                  state: 'MISSING',
+                  acceptedEvidenceCount: 0,
+                  connectedEvidenceCount: 0,
+                  pendingEvidenceCount: 0,
+                  rejectedEvidenceCount: 0,
+                  lowQualityEvidenceCount: 0,
+                },
+              ],
+            },
+            dependencies: {
+              sectionDependencyCount: 1,
+              missingDependencyTruthCount: 0,
+              sections: [{
+                sectionKey: 'value_drivers',
+                dependencySectionKeys: ['customer_problem'],
+                missingDependencyTruthKeys: [],
+              }],
+            },
+            nodes: [
             {
               nodeId: 'source-node-id-should-not-render',
               nodeType: 'SOURCE',
@@ -3694,7 +4548,7 @@ describe('RuntimeWorkspace', () => {
               sectionKey: 'customer_problem',
             },
           ],
-          edges: [
+            edges: [
             {
               edgeId: 'edge-1',
               edgeType: 'SOURCE_PRODUCES_EVIDENCE',
@@ -3711,7 +4565,8 @@ describe('RuntimeWorkspace', () => {
               toNodeId: 'section-truth-node-id-should-not-render',
               customerVisible: true,
             },
-          ],
+            ],
+          },
         },
       },
       isLoading: false,
@@ -3722,82 +4577,6 @@ describe('RuntimeWorkspace', () => {
       data: {
         data: {
           ...rendererPayload,
-          discovery: {
-            ...rendererPayload.discovery,
-            intelligenceGraph: {
-              available: true,
-              graphVersion: '2.1',
-              graphHash: 'sha256:graph-hash',
-              build: {
-                status: 'VALID',
-                trigger: 'EXPLICIT_REBUILD',
-                builtAt: '2026-06-05T10:00:00.000Z',
-                nodeCount: 12,
-                edgeCount: 14,
-                sourceHash: 'sha256:source-hash',
-              },
-              health: {
-                state: 'WARNING',
-                acceptedEvidenceCount: 3,
-                orphanEvidenceCount: 1,
-                lowQualityEvidenceCount: 0,
-                unclassifiedEvidenceCount: 1,
-                missingDomainCount: 8,
-                dependencyCount: 1,
-                contradictionCount: 0,
-              },
-              coverage: {
-                coverageModel: 'EVIDENCE_DOMAIN_COVERAGE',
-                coveragePercent: 20,
-                coveredDomainCount: 2,
-                totalDomainCount: 10,
-                missingDomains: ['Proof', 'Economics'],
-                domains: [
-                  {
-                    domain: 'Company',
-                    state: 'ADEQUATE',
-                    acceptedEvidenceCount: 1,
-                    connectedEvidenceCount: 1,
-                    pendingEvidenceCount: 0,
-                    rejectedEvidenceCount: 0,
-                    lowQualityEvidenceCount: 0,
-                  },
-                  {
-                    domain: 'Economics',
-                    state: 'MISSING',
-                    acceptedEvidenceCount: 0,
-                    connectedEvidenceCount: 0,
-                    pendingEvidenceCount: 0,
-                    rejectedEvidenceCount: 0,
-                    lowQualityEvidenceCount: 0,
-                  },
-                ],
-              },
-              dependencies: {
-                sectionDependencyCount: 1,
-                missingDependencyTruthCount: 0,
-                sections: [
-                  {
-                    sectionKey: 'value_drivers',
-                    dependencySectionKeys: ['customer_problem'],
-                    missingDependencyTruthKeys: [],
-                  },
-                ],
-              },
-              missingAreas: ['Proof', 'Economics'],
-              quality: {
-                orphanEvidenceCount: 1,
-                lowQualityEvidenceCount: 0,
-                unclassifiedEvidenceCount: 1,
-              },
-              nodes: [
-                {
-                  nodeId: 'raw-node-id-should-not-render',
-                  textContent: 'raw graph text should not render',
-                },
-              ],
-            },
-          },
         },
       },
       isLoading: false,
@@ -3810,8 +4589,20 @@ describe('RuntimeWorkspace', () => {
 
     selectIntelligenceHubTab('Coverage')
     await waitFor(() => {
-      expect(useGetRuntimeIntelligenceGraphQuery).toHaveBeenLastCalledWith(
-        { runtimeInstanceId: 'value-narrative-001' },
+      expect(useGetRuntimeStateGraphManifestQuery).toHaveBeenLastCalledWith(
+        {
+          runtimeInstanceId: 'value-narrative-001',
+          customerId: '507f1f77bcf86cd799439012',
+          tenantId: '507f1f77bcf86cd799439013',
+        },
+        { skip: false },
+      )
+      expect(useGetRuntimeStateGraphProjectionQuery).toHaveBeenLastCalledWith(
+        {
+          runtimeInstanceId: 'value-narrative-001',
+          customerId: '507f1f77bcf86cd799439012',
+          tenantId: '507f1f77bcf86cd799439013',
+        },
         { skip: false },
       )
     })
@@ -3854,6 +4645,114 @@ describe('RuntimeWorkspace', () => {
     expect(screen.queryByText(/Raw source label should not render/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Raw evidence label should not render/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/raw source graph text should not render/i)).not.toBeInTheDocument()
+  })
+
+  it('blocks the V2 graph projection while the manifest is loading', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: null,
+      isLoading: true,
+      isFetching: true,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Loading graph projection...')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
+  })
+
+  it('blocks the V2 graph projection while a cached current manifest is refetching', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: { manifest: { status: 'CURRENT' } },
+      isLoading: false,
+      isFetching: true,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Loading graph projection...')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
+  })
+
+  it('blocks the V2 graph projection when the manifest is stale', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: { manifest: { status: 'STALE' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Rebuild the Intelligence Graph to project runtime nodes and relationships.')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
+  })
+
+  it('blocks the V2 graph projection when the manifest fails', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: { status: 409, data: { message: 'Graph manifest is not current.' } },
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Graph projection is unavailable right now.')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
+  })
+
+  it('blocks the V2 graph projection when a cached current manifest fails to refresh', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: { manifest: { status: 'CURRENT' } },
+      isLoading: false,
+      isFetching: false,
+      error: { status: 503, data: { message: 'Graph manifest refresh failed.' } },
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Graph projection is unavailable right now.')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
+  })
+
+  it('blocks the V2 graph projection when the manifest is missing', async () => {
+    useGetRuntimeStateGraphManifestQuery.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+
+    expect(await screen.findByText('Rebuild the Intelligence Graph to project runtime nodes and relationships.')).toBeInTheDocument()
+    expect(useGetRuntimeStateGraphProjectionQuery).not.toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeInstanceId: 'value-narrative-001' }),
+      { skip: false },
+    )
   })
 
   it('keeps accepted evidence summary separate from accepted section truth copy', () => {
@@ -3965,11 +4864,15 @@ describe('RuntimeWorkspace', () => {
       error: null,
       refetch: refetchRenderer,
     })
-    useGetRuntimeEvidenceQuery.mockReturnValue({
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
       data: {
         data: {
-          discovery: {
-            sourceRegistry: [
+          source: 'runtime_state_v2.evidence_page',
+          page: 1,
+          pageSize: 50,
+          total: 4,
+          totalPages: 1,
+          sourceRegistry: [
               {
                 sourceId: 'input_companyWebsite',
                 sourceType: 'WEBSITE',
@@ -3993,8 +4896,8 @@ describe('RuntimeWorkspace', () => {
                 documentStatus: 'EXTRACTED',
                 evidenceProduced: 1,
               },
-            ],
-            evidenceObjects: [
+          ],
+          evidenceObjects: [
               {
                 evidenceObjectId: 'evidence_companyWebsite_fixture',
                 sourceId: 'input_companyWebsite',
@@ -4027,10 +4930,10 @@ describe('RuntimeWorkspace', () => {
                 extractedFact: 'Discovery note: governed narrative generation is required.',
                 reviewStatus: 'PENDING',
               },
-            ],
-          },
+          ],
         },
       },
+      isLoading: false,
       isFetching: false,
       error: null,
     })
@@ -4105,11 +5008,16 @@ describe('RuntimeWorkspace', () => {
       error: null,
       refetch: refetchRenderer,
     })
-    useGetRuntimeEvidenceQuery.mockReturnValue({
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
       data: {
         data: {
-          discovery: {
-            evidenceObjects: [
+          source: 'runtime_state_v2.evidence_page',
+          page: 1,
+          pageSize: 50,
+          total: 2,
+          totalPages: 1,
+          sourceRegistry: [],
+          evidenceObjects: [
               {
                 evidenceObjectId: 'evidence_companyWebsite_fixture',
                 sourceId: 'input_companyWebsite',
@@ -4126,10 +5034,10 @@ describe('RuntimeWorkspace', () => {
                 extractedFact: 'Target offer: Managed proposal platform',
                 reviewStatus: 'PENDING',
               },
-            ],
-          },
+          ],
         },
       },
+      isLoading: false,
       isFetching: false,
       error: null,
     })
@@ -4198,40 +5106,6 @@ describe('RuntimeWorkspace', () => {
               sourceCount: 1,
               builderMode: 'DETERMINISTIC',
             },
-            scopedViews: {},
-            acceptedAt: '2026-05-24T09:00:00.000Z',
-          },
-        },
-      },
-      isLoading: false,
-      isFetching: false,
-      error: null,
-      refetch: refetchRenderer,
-    })
-    useGetRuntimeEvidenceQuery.mockReturnValue({
-      data: {
-        data: {
-          discovery: {
-            sourceRegistry: [
-              {
-                sourceId: 'input_companyWebsite',
-                sourceType: 'WEBSITE',
-                label: 'Company Website',
-                acquisitionStatus: 'CAPTURED',
-                evidenceProduced: 1,
-                url: 'https://acme.example',
-              },
-            ],
-            evidenceObjects: [
-              {
-                evidenceObjectId: 'evidence_companyWebsite_fixture',
-                sourceId: 'input_companyWebsite',
-                category: 'Company',
-                coverageArea: 'Company',
-                extractedFact: 'Company website: https://acme.example',
-                reviewStatus: 'PENDING',
-              },
-            ],
             discoveryHealth: {
               coveragePercent: 10,
               confidence: 'USER_PROVIDED',
@@ -4242,9 +5116,47 @@ describe('RuntimeWorkspace', () => {
               sourceCount: 1,
               missingAreas: ['Products', 'Proof'],
             },
+            scopedViews: {},
+            acceptedAt: '2026-05-24T09:00:00.000Z',
           },
         },
       },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+    useGetRuntimeStateEvidenceQuery.mockReturnValue({
+      data: {
+        data: {
+          source: 'runtime_state_v2.evidence_page',
+          page: 1,
+          pageSize: 50,
+          total: 1,
+          totalPages: 1,
+          sourceRegistry: [
+              {
+                sourceId: 'input_companyWebsite',
+                sourceType: 'WEBSITE',
+                label: 'Company Website',
+                acquisitionStatus: 'CAPTURED',
+                evidenceProduced: 1,
+                url: 'https://acme.example',
+              },
+          ],
+          evidenceObjects: [
+              {
+                evidenceObjectId: 'evidence_companyWebsite_fixture',
+                sourceId: 'input_companyWebsite',
+                category: 'Company',
+                coverageArea: 'Company',
+                extractedFact: 'Company website: https://acme.example',
+                reviewStatus: 'PENDING',
+              },
+          ],
+        },
+      },
+      isLoading: false,
       isFetching: false,
       error: null,
     })
@@ -4383,6 +5295,8 @@ describe('RuntimeWorkspace', () => {
 
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'ACCEPT_EVIDENCE',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
@@ -7003,6 +7917,8 @@ describe('RuntimeWorkspace', () => {
 
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'SUBMIT_FOR_REVIEW',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
@@ -7589,6 +8505,8 @@ describe('RuntimeWorkspace', () => {
 
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'GENERATE_SECTION',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
@@ -7929,6 +8847,8 @@ describe('RuntimeWorkspace', () => {
     await user.click(regenerateButton)
     expect(executeRuntimeAction).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
+      customerId: '507f1f77bcf86cd799439012',
+      tenantId: '507f1f77bcf86cd799439013',
       actionKey: 'REGENERATE_SECTION',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',

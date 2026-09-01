@@ -199,8 +199,12 @@ const buildGraphProjection = (graph = {}) => {
     networkLinks,
     networkNodes,
     nodeGroups: buildNodeGroups(Array.from(representedNodeById.values())),
-    projectedEdgeCount: projectedEdges.length,
-    projectedNodeCount: projectedNodes.length,
+    projectedEdgeCount: Number.isFinite(Number(graph.totalEdgeCount))
+      ? Number(graph.totalEdgeCount)
+      : projectedEdges.length,
+    projectedNodeCount: Number.isFinite(Number(graph.totalNodeCount))
+      ? Number(graph.totalNodeCount)
+      : projectedNodes.length,
     relationshipCount: validEdges.length,
     relationships,
   }

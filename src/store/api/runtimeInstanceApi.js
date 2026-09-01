@@ -7,6 +7,7 @@
 import { baseApi } from './baseApi.js'
 
 export const DEFAULT_RUNTIME_INSTANCE_TYPE = 'VALUE_NARRATIVE'
+export const RUNTIME_HEAVY_READ_OPTIONS = Object.freeze({ maxRetries: 0 })
 
 export const runtimeInstanceListTag = (runtimeType = 'ALL') => ({
   type: 'RuntimeInstance',
@@ -84,8 +85,76 @@ export const getCreateRuntimeInstanceInvalidationTags = (_result, _error, { body
 export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}`
 
-export const buildRuntimeRendererQuery = ({ runtimeInstanceId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`
+const buildRuntimeStateScopeParams = ({ customerId, tenantId } = {}) => {
+  const params = new URLSearchParams()
+  appendParam(params, 'customerId', customerId)
+  appendParam(params, 'tenantId', tenantId)
+  return params
+}
+
+const appendRuntimeStateScope = (url, scope) => {
+  const query = buildRuntimeStateScopeParams(scope).toString()
+  return `${url}${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateBootstrapQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  const query = params.toString()
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/bootstrap${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateSectionSummaryQuery = ({
+  runtimeInstanceId,
+  sectionKey,
+  customerId,
+  tenantId,
+}) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  const query = params.toString()
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/sections/${encodeURIComponent(String(sectionKey ?? '').trim())}${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateEvidenceQuery = ({
+  runtimeInstanceId,
+  page = 1,
+  pageSize = 25,
+  reviewStatus = '',
+  acceptanceState = '',
+  customerId,
+  tenantId,
+}) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
+  appendParam(params, 'reviewStatus', reviewStatus)
+  appendParam(params, 'acceptanceState', acceptanceState)
+
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/evidence?${params.toString()}`
+}
+
+export const buildRuntimeStateGraphManifestQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  const query = params.toString()
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/graph-manifest${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateGraphProjectionQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  const query = params.toString()
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/graph-projection${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeStateOutcomeHandoffReadinessQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  const query = params.toString()
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/state/outcome-handoff/readiness${query ? `?${query}` : ''}`
+}
+
+export const buildRuntimeRendererQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(
+    `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/renderer`,
+    { customerId, tenantId },
+  )
 
 export const buildRuntimeTruthQualityQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/truth-quality`
@@ -99,78 +168,93 @@ export const buildRuntimeOutputLabReadinessQuery = ({ runtimeInstanceId }) =>
 export const buildRuntimeOutputLabDefinitionsQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/output-lab/definitions`
 
-export const buildRuntimeOutcomeStudioQuery = ({ runtimeInstanceId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio`
+export const buildRuntimeOutcomeStudioQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(
+    `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio`,
+    { customerId, tenantId },
+  )
 
-export const buildRuntimeOutcomeStudioReadinessQuery = ({ runtimeInstanceId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/readiness`
+export const buildRuntimeOutcomeStudioReadinessQuery = ({ runtimeInstanceId, customerId, tenantId }) =>
+  appendRuntimeStateScope(
+    `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/readiness`,
+    { customerId, tenantId },
+  )
 
-export const buildCreateRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, body = {} }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions`,
+export const buildCreateRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, customerId, tenantId, body = {} }) => ({
+  url: appendRuntimeStateScope(
+    `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions`,
+    { customerId, tenantId },
+  ),
   method: 'POST',
   body,
 })
 
-export const buildRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, sessionId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+export const buildRuntimeOutcomeSessionQuery = ({ runtimeInstanceId, sessionId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }`
+  }`, { customerId, tenantId })
 
 export const buildUpdateRuntimeOutcomeSessionFromLatestTruthQuery = ({
   runtimeInstanceId,
   sessionId,
+  customerId,
+  tenantId,
   body = {},
 }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/update-from-latest-truth`,
+  }/update-from-latest-truth`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
 
-export const buildRuntimeOutcomeSessionAssetsQuery = ({ runtimeInstanceId, sessionId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+export const buildRuntimeOutcomeSessionAssetsQuery = ({ runtimeInstanceId, sessionId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/assets`
+  }/assets`, { customerId, tenantId })
 
-export const buildRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+export const buildRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
-  }`
+  }`, { customerId, tenantId })
 
-export const buildRuntimeOutcomeAssetPreviewQuery = ({ runtimeInstanceId, outcomeAssetId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+export const buildRuntimeOutcomeAssetPreviewQuery = ({ runtimeInstanceId, outcomeAssetId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
-  }/preview`
+  }/preview`, { customerId, tenantId })
 
-export const buildRuntimeOutcomeDraftPreviewQuery = ({ runtimeInstanceId, sessionId, draftId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+export const buildRuntimeOutcomeDraftPreviewQuery = ({ runtimeInstanceId, sessionId, draftId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/preview`
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/preview`, { customerId, tenantId })
 
-export const buildRuntimeOutcomeDraftCompareQuery = ({ runtimeInstanceId, sessionId, draftId }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+export const buildRuntimeOutcomeDraftCompareQuery = ({ runtimeInstanceId, sessionId, draftId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/compare`
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/compare`, { customerId, tenantId })
 
 export const buildRuntimeOutcomeAssetVersionQuery = ({
   runtimeInstanceId,
   outcomeAssetId,
   outcomeAssetVersionId,
+  customerId,
+  tenantId,
 }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
-  }/versions/${encodeURIComponent(String(outcomeAssetVersionId ?? '').trim())}`
+  }/versions/${encodeURIComponent(String(outcomeAssetVersionId ?? '').trim())}`, { customerId, tenantId })
 
 export const buildApproveRuntimeOutcomeDraftQuery = ({
   runtimeInstanceId,
   sessionId,
   draftId,
+  customerId,
+  tenantId,
   body = {},
 }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/approve`,
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/approve`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
@@ -179,11 +263,13 @@ export const buildReviseRuntimeOutcomeAssetQuery = ({
   runtimeInstanceId,
   sessionId,
   outcomeAssetId,
+  customerId,
+  tenantId,
   body = {},
 }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/assets/${encodeURIComponent(String(outcomeAssetId ?? '').trim())}/revise`,
+  }/assets/${encodeURIComponent(String(outcomeAssetId ?? '').trim())}/revise`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
@@ -192,32 +278,34 @@ export const buildDiscardRuntimeOutcomeDraftQuery = ({
   runtimeInstanceId,
   sessionId,
   draftId,
+  customerId,
+  tenantId,
   expectedUpdatedAt,
 }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/discard`,
+  }/drafts/${encodeURIComponent(String(draftId ?? '').trim())}/discard`, { customerId, tenantId }),
   method: 'POST',
   body: { expectedUpdatedAt },
 })
 
-export const buildPublishRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, body = {} }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+export const buildPublishRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, customerId, tenantId, body = {} }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
-  }/publish`,
+  }/publish`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
 
-export const buildExportRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, format }) =>
-  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+export const buildExportRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, format, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
-  }/export/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`
+  }/export/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`, { customerId, tenantId })
 
-export const buildSubmitRuntimeOutcomeMessageQuery = ({ runtimeInstanceId, sessionId, body = {} }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+export const buildSubmitRuntimeOutcomeMessageQuery = ({ runtimeInstanceId, sessionId, customerId, tenantId, body = {} }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/messages`,
+  }/messages`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
@@ -226,11 +314,13 @@ export const buildGenerateRuntimeOutcomeResponseQuery = ({
   runtimeInstanceId,
   sessionId,
   messageId,
+  customerId,
+  tenantId,
   body = {},
 }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
-  }/messages/${encodeURIComponent(String(messageId ?? '').trim())}/generate-response`,
+  }/messages/${encodeURIComponent(String(messageId ?? '').trim())}/generate-response`, { customerId, tenantId }),
   method: 'POST',
   body,
 })
@@ -362,10 +452,13 @@ export const buildAcceptRuntimeSectionQuery = ({ runtimeInstanceId, body }) => (
   body,
 })
 
-export const buildExecuteRuntimeActionQuery = ({ runtimeInstanceId, actionKey, body }) => ({
-  url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/actions/${
-    encodeURIComponent(String(actionKey ?? '').trim())
-  }`,
+export const buildExecuteRuntimeActionQuery = ({ runtimeInstanceId, actionKey, customerId, tenantId, body }) => ({
+  url: appendRuntimeStateScope(
+    `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/actions/${
+      encodeURIComponent(String(actionKey ?? '').trim())
+    }`,
+    { customerId, tenantId },
+  ),
   method: 'POST',
   body,
 })
@@ -464,19 +557,58 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeInstanceDetailTags,
     }),
 
+    getRuntimeStateBootstrap: build.query({
+      query: buildRuntimeStateBootstrapQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateSectionSummary: build.query({
+      query: buildRuntimeStateSectionSummaryQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateEvidence: build.query({
+      query: buildRuntimeStateEvidenceQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateGraphManifest: build.query({
+      query: buildRuntimeStateGraphManifestQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateGraphProjection: build.query({
+      query: buildRuntimeStateGraphProjectionQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
+    getRuntimeStateOutcomeHandoffReadiness: build.query({
+      query: buildRuntimeStateOutcomeHandoffReadinessQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+    }),
+
     getRuntimeRenderer: build.query({
       query: buildRuntimeRendererQuery,
       providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeTruthQuality: build.query({
       query: buildRuntimeTruthQualityQuery,
       providesTags: getRuntimeRendererTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeOutputLab: build.query({
       query: buildRuntimeOutputLabQuery,
       providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     getRuntimeOutputLabReadiness: build.query({
@@ -497,6 +629,7 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
     getRuntimeOutcomeStudioReadiness: build.query({
       query: buildRuntimeOutcomeStudioReadinessQuery,
       providesTags: getRuntimeInstanceDetailTags,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
     }),
 
     createRuntimeOutcomeSession: build.mutation({
@@ -707,6 +840,12 @@ export const {
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeRevisionMutation,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeStateBootstrapQuery,
+  useGetRuntimeStateSectionSummaryQuery,
+  useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateGraphManifestQuery,
+  useGetRuntimeStateGraphProjectionQuery,
+  useGetRuntimeStateOutcomeHandoffReadinessQuery,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeOutputAssetQuery,
   useGetRuntimeOutputAssetsQuery,

@@ -774,6 +774,38 @@ describe('Dashboard page', () => {
     expect(screen.getAllByText('0 available').length).toBeGreaterThanOrEqual(1)
   })
 
+  it('uses the bounded runtime list review flag for the Continue Work badge', () => {
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'runtime-review-summary',
+            runtimeInstanceKey: 'value-narrative-review-summary',
+            runtimeType: 'VALUE_NARRATIVE',
+            name: 'Review Summary Runtime',
+            status: 'ACTIVE',
+            executionStatus: 'IDLE',
+            submittedForReview: true,
+            updatedAt: '2026-05-18T11:13:00.000Z',
+          },
+        ],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const actionPanel = screen.getByRole('navigation', { name: /runtime action queue panel/i })
+    const primaryActionCard = within(actionPanel)
+      .getByText('Review Summary Runtime')
+      .closest('.dashboard__launch-item')
+
+    expect(within(primaryActionCard).getByText('Needs Review')).toBeInTheDocument()
+  })
+
   it('renders an honest empty work-in-progress table until runtime instances are API-backed', async () => {
     const user = userEvent.setup()
     renderDashboard()

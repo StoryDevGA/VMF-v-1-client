@@ -20,6 +20,12 @@ import {
   buildPublishRuntimeOutputAssetQuery,
   buildRuntimeInstanceDetailQuery,
   buildRuntimeInstanceListQuery,
+  buildRuntimeStateBootstrapQuery,
+  buildRuntimeStateSectionSummaryQuery,
+  buildRuntimeStateEvidenceQuery,
+  buildRuntimeStateGraphManifestQuery,
+  buildRuntimeStateGraphProjectionQuery,
+  buildRuntimeStateOutcomeHandoffReadinessQuery,
   buildRuntimeEvidenceQuery,
   buildRuntimeOutputAssetQuery,
   buildRuntimeOutputAssetsQuery,
@@ -50,6 +56,7 @@ import {
   buildUpdateRuntimeDiscoveryInputsQuery,
   buildUpdateRuntimeSectionEvidenceQuery,
   DEFAULT_RUNTIME_INSTANCE_TYPE,
+  RUNTIME_HEAVY_READ_OPTIONS,
   getAcceptRuntimeDiscoveryInvalidationTags,
   getAcceptRuntimeSectionInvalidationTags,
   getApproveRuntimeOutcomeDraftInvalidationTags,
@@ -96,6 +103,12 @@ import {
   useGenerateRuntimeOutcomeResponseMutation,
   useGetRuntimeEvidenceQuery,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeStateBootstrapQuery,
+  useGetRuntimeStateSectionSummaryQuery,
+  useGetRuntimeStateEvidenceQuery,
+  useGetRuntimeStateGraphManifestQuery,
+  useGetRuntimeStateGraphProjectionQuery,
+  useGetRuntimeStateOutcomeHandoffReadinessQuery,
   useGetRuntimeIntelligenceGraphCoverageQuery,
   useGetRuntimeIntelligenceGraphHealthQuery,
   useGetRuntimeIntelligenceGraphNodeLineageQuery,
@@ -135,11 +148,21 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('marks heavyweight runtime reads as explicit, no-auto-retry surfaces', () => {
+    expect(RUNTIME_HEAVY_READ_OPTIONS).toEqual({ maxRetries: 0 })
+  })
+
   it('registers expected endpoint definitions', () => {
     expect(runtimeInstanceApi.endpoints).toHaveProperty('listRuntimeInstances')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeRevision')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeInstance')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateBootstrap')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateSectionSummary')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateEvidence')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateGraphManifest')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateGraphProjection')
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeStateOutcomeHandoffReadiness')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeEvidence')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraph')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('getRuntimeIntelligenceGraphHealth')
@@ -192,6 +215,12 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
     expect(typeof useCreateRuntimeRevisionMutation).toBe('function')
     expect(typeof useGetRuntimeInstanceQuery).toBe('function')
+    expect(typeof useGetRuntimeStateBootstrapQuery).toBe('function')
+    expect(typeof useGetRuntimeStateSectionSummaryQuery).toBe('function')
+    expect(typeof useGetRuntimeStateEvidenceQuery).toBe('function')
+    expect(typeof useGetRuntimeStateGraphManifestQuery).toBe('function')
+    expect(typeof useGetRuntimeStateGraphProjectionQuery).toBe('function')
+    expect(typeof useGetRuntimeStateOutcomeHandoffReadinessQuery).toBe('function')
     expect(typeof useGetRuntimeEvidenceQuery).toBe('function')
     expect(typeof useGetRuntimeIntelligenceGraphQuery).toBe('function')
     expect(typeof useGetRuntimeIntelligenceGraphHealthQuery).toBe('function')
@@ -246,6 +275,12 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeInstance.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.createRuntimeRevision.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeInstance.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateBootstrap.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateSectionSummary.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateEvidence.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateGraphManifest.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateGraphProjection.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeStateOutcomeHandoffReadiness.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeEvidence.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraph.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.getRuntimeIntelligenceGraphHealth.initiate).toBe('function')
@@ -347,10 +382,52 @@ describe('runtimeInstanceApi', () => {
       .toBe('/runtime-instances/value-narrative-001')
     expect(buildRuntimeInstanceDetailQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001')
+    expect(buildRuntimeStateBootstrapQuery({
+      runtimeInstanceId: 'value narrative/001',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/bootstrap?customerId=customer+1&tenantId=tenant%2F1')
+    expect(buildRuntimeStateSectionSummaryQuery({
+      runtimeInstanceId: 'value narrative/001',
+      sectionKey: 'section/one',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/sections/section%2Fone?customerId=customer+1&tenantId=tenant%2F1')
+    expect(buildRuntimeStateEvidenceQuery({
+      runtimeInstanceId: 'value narrative/001',
+      page: 2,
+      pageSize: 50,
+      reviewStatus: 'accepted review',
+      acceptanceState: 'eligible/state',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/evidence?customerId=customer+1&tenantId=tenant%2F1&page=2&pageSize=50&reviewStatus=accepted+review&acceptanceState=eligible%2Fstate')
+    expect(buildRuntimeStateEvidenceQuery({ runtimeInstanceId: 'value narrative/001' }))
+      .toBe('/runtime-instances/value%20narrative%2F001/state/evidence?page=1&pageSize=25')
+    expect(buildRuntimeStateGraphManifestQuery({
+      runtimeInstanceId: 'value narrative/001',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/graph-manifest?customerId=customer+1&tenantId=tenant%2F1')
+    expect(buildRuntimeStateGraphProjectionQuery({
+      runtimeInstanceId: 'value narrative/001',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/graph-projection?customerId=customer+1&tenantId=tenant%2F1')
+    expect(buildRuntimeStateOutcomeHandoffReadinessQuery({
+      runtimeInstanceId: 'value narrative/001',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/state/outcome-handoff/readiness?customerId=customer+1&tenantId=tenant%2F1')
     expect(buildRuntimeRendererQuery({ runtimeInstanceId: 'value-narrative-001' }))
       .toBe('/runtime-instances/value-narrative-001/renderer')
     expect(buildRuntimeRendererQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/renderer')
+    expect(buildRuntimeRendererQuery({
+      runtimeInstanceId: 'value narrative/001',
+      customerId: 'customer 1',
+      tenantId: 'tenant/1',
+    })).toBe('/runtime-instances/value%20narrative%2F001/renderer?customerId=customer+1&tenantId=tenant%2F1')
     expect(buildRuntimeTruthQualityQuery({ runtimeInstanceId: 'value narrative/001' }))
       .toBe('/runtime-instances/value%20narrative%2F001/truth-quality')
     expect(buildRuntimeOutputLabQuery({ runtimeInstanceId: 'value narrative/001' }))
@@ -560,11 +637,13 @@ describe('runtimeInstanceApi', () => {
     expect(buildExecuteRuntimeActionQuery({
       runtimeInstanceId: 'value narrative/001',
       actionKey: 'SUBMIT_FOR_REVIEW',
+      customerId: 'customer/001',
+      tenantId: 'tenant/001',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',
       },
     })).toEqual({
-      url: '/runtime-instances/value%20narrative%2F001/actions/SUBMIT_FOR_REVIEW',
+      url: '/runtime-instances/value%20narrative%2F001/actions/SUBMIT_FOR_REVIEW?customerId=customer%2F001&tenantId=tenant%2F001',
       method: 'POST',
       body: {
         expectedUpdatedAt: '2026-05-19T08:00:00.000Z',

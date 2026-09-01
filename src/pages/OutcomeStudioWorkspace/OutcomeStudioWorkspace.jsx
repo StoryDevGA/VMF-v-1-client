@@ -21,6 +21,7 @@ import { Status } from '../../components/Status'
 import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
+import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useApproveRuntimeOutcomeDraftMutation,
   useCreateRuntimeOutcomeSessionMutation,
@@ -55,7 +56,12 @@ const OUTPUT_CONTRACT_CLARIFICATION_CODE = 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATIO
 
 const payload = (response) => response?.data ?? response ?? null
 const token = (value) => String(value || '').trim().toUpperCase()
-const idOf = (record, keys) => String(keys.map((key) => record?.[key]).find(Boolean) || '').trim()
+const idOf = (record, keys) => {
+  const value = keys
+    .map((key) => record?.[key])
+    .find((candidate) => candidate !== null && candidate !== undefined)
+  return String(value ?? '').trim()
+}
 const sessionIdOf = (session) => idOf(session, ['sessionId', 'id', '_id'])
 const draftIdOf = (draft) => idOf(draft, ['draftId', 'id', '_id'])
 const assetIdOf = (asset) => idOf(asset, ['outcomeAssetId', 'assetId', 'id', '_id'])
@@ -573,6 +579,12 @@ function OutcomeStudioWorkspace() {
   const location = useLocation()
   const navigate = useNavigate()
   const { addToast } = useToaster()
+  const { customerId, tenantId } = useTenantContext()
+  const runtimeScope = useMemo(
+    () => ({ runtimeInstanceId, customerId, tenantId }),
+    [runtimeInstanceId, customerId, tenantId],
+  )
+  const runtimeScopeReady = Boolean(runtimeInstanceId && customerId && tenantId)
   const [activeTab, setActiveTab] = useState(0)
   const [prompt, setPrompt] = useState('')
   const [composerError, setComposerError] = useState('')
@@ -594,10 +606,10 @@ function OutcomeStudioWorkspace() {
   const requestedDraftIterationRef = useRef('')
   const currentSelectedDraftIterationRef = useRef('')
 
-  const studioQuery = useGetRuntimeOutcomeStudioQuery({ runtimeInstanceId }, { skip: !runtimeInstanceId })
+  const studioQuery = useGetRuntimeOutcomeStudioQuery(runtimeScope, { skip: !runtimeScopeReady })
   const readinessQuery = useGetRuntimeOutcomeStudioReadinessQuery(
-    { runtimeInstanceId },
-    { skip: !runtimeInstanceId },
+    runtimeScope,
+    { skip: !runtimeScopeReady },
   )
   const studio = payload(studioQuery.data)
   const dedicatedReadiness = payload(readinessQuery.data)
@@ -605,8 +617,8 @@ function OutcomeStudioWorkspace() {
   const activeSession = activeSessionFrom(studio)
   const activeSessionId = sessionIdOf(activeSession)
   const sessionQuery = useGetRuntimeOutcomeSessionQuery(
-    { runtimeInstanceId, sessionId: activeSessionId },
-    { skip: !runtimeInstanceId || !activeSessionId },
+    { ...runtimeScope, sessionId: activeSessionId },
+    { skip: !runtimeScopeReady || !activeSessionId },
   )
   const session = payload(sessionQuery.data) || activeSession
 
@@ -768,7 +780,7 @@ function OutcomeStudioWorkspace() {
     const beforeIds = new Set(beforeMessages.map((message) => idOf(message, ['messageId', 'id', '_id'])).filter(Boolean))
     try {
       const response = await loadSessionForReconciliation({
-        runtimeInstanceId,
+        ...runtimeScope,
         sessionId: targetSessionId,
       }).unwrap()
       const refreshedSession = payload(response)
@@ -821,7 +833,7 @@ function OutcomeStudioWorkspace() {
   }) => {
     try {
       await submitMessage({
-        runtimeInstanceId,
+        ...runtimeScope,
         sessionId: targetSessionId,
         body: { prompt: promptText },
       }).unwrap()
@@ -867,7 +879,7 @@ function OutcomeStudioWorkspace() {
     setComposerError('')
     try {
       const response = await createSession({
-        runtimeInstanceId,
+        ...runtimeScope,
         body: { prompt: promptText },
       }).unwrap()
       const createdSession = payload(response)
@@ -936,7 +948,7 @@ function OutcomeStudioWorkspace() {
     setBusyKey(`generate:${messageId}`)
     try {
       await generateResponse({
-        runtimeInstanceId,
+        ...runtimeScope,
         sessionId: activeSessionId,
         messageId,
         body: { allowReadyWithGaps: true },
@@ -952,7 +964,7 @@ function OutcomeStudioWorkspace() {
   const handleUpdateTruth = async () => {
     if (!activeSessionId) return
     try {
-      await updateTruth({ runtimeInstanceId, sessionId: activeSessionId, body: {} }).unwrap()
+      await updateTruth({ ...runtimeScope, sessionId: activeSessionId, body: {} }).unwrap()
       await refreshAfterMutation('Outcome Studio information updated.')
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
@@ -965,7 +977,7 @@ function OutcomeStudioWorkspace() {
 
     setBusyKey(`approve:${draftId}`)
     try {
-      await approveDraft({ runtimeInstanceId, sessionId: activeSessionId, draftId, body: {} }).unwrap()
+      await approveDraft({ ...runtimeScope, sessionId: activeSessionId, draftId, body: {} }).unwrap()
       await refreshAfterMutation('Working draft approved as a governed output.')
       setActiveTab(2)
       return true
@@ -982,7 +994,7 @@ function OutcomeStudioWorkspace() {
     if (!draftId || !pendingDiscard?.updatedAt) return
     try {
       await discardDraft({
-        runtimeInstanceId,
+        ...runtimeScope,
         sessionId: activeSessionId,
         draftId,
         expectedUpdatedAt: pendingDiscard.updatedAt,
@@ -1005,8 +1017,8 @@ function OutcomeStudioWorkspace() {
     setSelectedAssetId(outcomeAssetId)
     setAssetPreviewView('CONTENT')
     await Promise.allSettled([
-      loadAsset({ runtimeInstanceId, outcomeAssetId }),
-      loadPreview({ runtimeInstanceId, outcomeAssetId }),
+      loadAsset({ ...runtimeScope, outcomeAssetId }),
+      loadPreview({ ...runtimeScope, outcomeAssetId }),
     ])
   }
 
@@ -1021,7 +1033,7 @@ function OutcomeStudioWorkspace() {
     setBusyKey(`revise:${outcomeAssetId}`)
     try {
       const response = await reviseAsset({
-        runtimeInstanceId,
+        ...runtimeScope,
         sessionId: activeSessionId,
         outcomeAssetId,
         body: {},
@@ -1064,12 +1076,12 @@ function OutcomeStudioWorkspace() {
     try {
       const [previewResult, compareResult] = await Promise.allSettled([
         loadDraftPreview({
-          runtimeInstanceId,
+          ...runtimeScope,
           sessionId: activeSessionId,
           draftId,
         }).unwrap(),
         loadDraftCompare({
-          runtimeInstanceId,
+          ...runtimeScope,
           sessionId: activeSessionId,
           draftId,
         }).unwrap(),
@@ -1104,7 +1116,7 @@ function OutcomeStudioWorkspace() {
     ) return
     setBusyKey(`publish:${outcomeAssetId}`)
     try {
-      await publishAsset({ runtimeInstanceId, outcomeAssetId, body: {} }).unwrap()
+      await publishAsset({ ...runtimeScope, outcomeAssetId, body: {} }).unwrap()
       await refreshAfterMutation('Approved output published.')
     } catch (error) {
       notify('Publish failed', failureMessage(error), 'error')
@@ -1124,7 +1136,7 @@ function OutcomeStudioWorkspace() {
     const format = token(formatDescriptor?.format)
     setBusyKey(`export:${outcomeAssetId}:${format}`)
     try {
-      const response = await exportAsset({ runtimeInstanceId, outcomeAssetId, format }).unwrap()
+      const response = await exportAsset({ ...runtimeScope, outcomeAssetId, format }).unwrap()
       const exported = payload(response)
       const extension = String(formatDescriptor?.extension || format).toLowerCase()
       const filename = downloadExport(
@@ -1621,5 +1633,7 @@ function OutcomeStudioWorkspace() {
     </section>
   )
 }
+
+OutcomeStudioWorkspace.idOf = idOf
 
 export default OutcomeStudioWorkspace
