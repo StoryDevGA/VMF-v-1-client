@@ -420,6 +420,15 @@ export const buildReviewRuntimeDiscoveryEvidenceQuery = ({ runtimeInstanceId, ev
   body,
 })
 
+export const buildRuntimeDiscoveryContradictionsQuery = ({ runtimeInstanceId }) =>
+  `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/discovery-contradictions`
+
+export const buildReviewRuntimeDiscoveryContradictionQuery = ({ runtimeInstanceId, contradictionId, body }) => ({
+  url: `${buildRuntimeDiscoveryContradictionsQuery({ runtimeInstanceId })}/${encodeURIComponent(String(contradictionId ?? '').trim())}/review`,
+  method: 'PATCH',
+  body,
+})
+
 export const buildUpdateRuntimeSectionEvidenceQuery = ({ runtimeInstanceId, body }) => ({
   url: `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/section-evidence`,
   method: 'PATCH',
@@ -802,6 +811,18 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       invalidatesTags: getReviewRuntimeDiscoveryEvidenceInvalidationTags,
     }),
 
+    getRuntimeDiscoveryContradictions: build.query({
+      query: buildRuntimeDiscoveryContradictionsQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+      providesTags: getRuntimeRendererTags,
+    }),
+
+    reviewRuntimeDiscoveryContradiction: build.mutation({
+      query: buildReviewRuntimeDiscoveryContradictionQuery,
+      extraOptions: RUNTIME_HEAVY_READ_OPTIONS,
+      invalidatesTags: getMutateRuntimeStateInvalidationTags,
+    }),
+
     updateRuntimeSectionEvidence: build.mutation({
       query: buildUpdateRuntimeSectionEvidenceQuery,
       invalidatesTags: getUpdateRuntimeSectionEvidenceInvalidationTags,
@@ -890,6 +911,8 @@ export const {
   useClearRuntimeSectionEvidenceMutation,
   useResetRuntimeDiscoveryMutation,
   useReviewRuntimeDiscoveryEvidenceMutation,
+  useGetRuntimeDiscoveryContradictionsQuery,
+  useReviewRuntimeDiscoveryContradictionMutation,
   useReviewRuntimeSectionEvidenceMutation,
   useReviewAllRuntimeSectionEvidenceMutation,
   useUpdateRuntimeSectionEvidenceMutation,

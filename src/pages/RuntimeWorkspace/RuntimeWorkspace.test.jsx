@@ -9,6 +9,7 @@ import { ToasterProvider } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
+  useGetRuntimeDiscoveryContradictionsQuery,
   useAcceptRuntimeSectionMutation,
   useApproveRuntimeOutcomeDraftMutation,
   useClearRuntimeSectionEvidenceMutation,
@@ -50,6 +51,8 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
 }))
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useGetRuntimeDiscoveryContradictionsQuery: vi.fn(),
+  useReviewRuntimeDiscoveryContradictionMutation: vi.fn(() => [vi.fn(), { isLoading: false }]),
   useAcceptRuntimeDiscoveryMutation: vi.fn(),
   useAcceptRuntimeSectionMutation: vi.fn(),
   useApproveRuntimeOutcomeDraftMutation: vi.fn(),
@@ -867,7 +870,21 @@ function buildRuntimeSection(index, label) {
 }
 
 describe('RuntimeWorkspace', () => {
+  it('loads human review inside Discovery Readiness using the active runtime identity', () => {
+    renderRuntimeWorkspace()
+    selectIntelligenceHubTab('Coverage')
+    const readiness = screen.getByRole('region', { name: /^Discovery readiness$/i })
+    expect(within(readiness).getByRole('region', { name: /human contradiction review/i })).toBeInTheDocument()
+    expect(useGetRuntimeDiscoveryContradictionsQuery).toHaveBeenLastCalledWith(
+      { runtimeInstanceId: 'value-narrative-001' }, { skip: false },
+    )
+  })
+
   beforeEach(() => {
+    useGetRuntimeDiscoveryContradictionsQuery.mockReturnValue({
+      currentData: { data: { canReview: false, candidates: [] } },
+      isLoading: false, isFetching: false, refetch: vi.fn(),
+    })
     useTenantContext.mockReturnValue({
       customerId: '507f1f77bcf86cd799439012',
       tenantId: '507f1f77bcf86cd799439013',

@@ -87,6 +87,7 @@ import {
   getRuntimeStatusVariant,
 } from '../../utils/runtimeWorkspace.js'
 import './RuntimeWorkspace.css'
+import DiscoveryContradictionReview from './DiscoveryContradictionReview'
 
 const EMPTY_ARRAY = Object.freeze([])
 const RuntimeGraphPanel = lazy(() => import('../../components/RuntimeGraphPanel'))
@@ -6049,6 +6050,7 @@ function DiscoverySection({
                             : `${discoveryReadinessContradictionCount} contradiction candidate${discoveryReadinessContradictionCount === 1 ? '' : 's'} projected`}
                         </li>
                       </ul>
+                      <DiscoveryContradictionReview key={runtimeInstanceId} runtimeInstanceId={runtimeInstanceId} />
                     </section>
                     <section
                       className="runtime-workspace__coverage-diagnostic runtime-workspace__coverage-diagnostic--signals"

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { configureStore } from '@reduxjs/toolkit'
 import {
+  buildRuntimeDiscoveryContradictionsQuery,
+  buildReviewRuntimeDiscoveryContradictionQuery,
+  useGetRuntimeDiscoveryContradictionsQuery,
+  useReviewRuntimeDiscoveryContradictionMutation,
   buildAcceptRuntimeDiscoveryQuery,
   buildAcceptRuntimeSectionQuery,
   buildApproveRuntimeOutcomeDraftQuery,
@@ -148,6 +153,43 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('shares runtime invalidation with contradiction reads and readiness consumers', async () => {
+    const store = configureStore({
+      reducer: { [runtimeInstanceApi.reducerPath]: runtimeInstanceApi.reducer },
+      middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(runtimeInstanceApi.middleware),
+    })
+    try {
+      for (const endpoint of ['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer']) {
+        await store.dispatch(runtimeInstanceApi.util.upsertQueryData(endpoint,
+          { runtimeInstanceId: 'runtime-1' }, { data: { candidates: [], runtimeInstance: { id: 'runtime-1' } } }))
+      }
+      await store.dispatch(runtimeInstanceApi.util.upsertQueryData('getRuntimeDiscoveryContradictions',
+        { runtimeInstanceId: 'unrelated-runtime' }, { data: { candidates: [] } }))
+      const tags = getMutateRuntimeStateInvalidationTags({ data: {} }, null, { runtimeInstanceId: 'runtime-1' })
+      const invalidated = runtimeInstanceApi.util.selectInvalidatedBy(store.getState(), tags)
+      expect(invalidated.map((entry) => entry.endpointName).sort())
+        .toEqual(['getRuntimeDiscoveryContradictions', 'getRuntimeRenderer'])
+      expect(invalidated.every((entry) => entry.originalArgs.runtimeInstanceId === 'runtime-1')).toBe(true)
+    } finally {
+      store.dispatch(runtimeInstanceApi.util.resetApiState())
+    }
+  })
+
+  it('exports contradiction review query and mutation hooks and initiators', () => {
+    expect(typeof useGetRuntimeDiscoveryContradictionsQuery).toBe('function')
+    expect(typeof useReviewRuntimeDiscoveryContradictionMutation).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeDiscoveryContradictions.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.reviewRuntimeDiscoveryContradiction.initiate).toBe('function')
+  })
+
+  it('encodes contradiction identifiers and preserves the explicit review body', () => {
+    const body = { expectedUpdatedAt: '2026-09-03T00:00:00.000Z', expectedEvidencePairHash: 'sha256:pair',
+      disposition: 'NOT_CONTRADICTORY', rationale: 'Different reporting periods.', confirm: true }
+    expect(buildRuntimeDiscoveryContradictionsQuery({ runtimeInstanceId: ' runtime/1 ' }))
+      .toBe('/runtime-instances/runtime%2F1/discovery-contradictions')
+    expect(buildReviewRuntimeDiscoveryContradictionQuery({ runtimeInstanceId: 'runtime/1', contradictionId: 'pair/2', body }))
+      .toEqual({ url: '/runtime-instances/runtime%2F1/discovery-contradictions/pair%2F2/review', method: 'PATCH', body })
+  })
   it('marks heavyweight runtime reads as explicit, no-auto-retry surfaces', () => {
     expect(RUNTIME_HEAVY_READ_OPTIONS).toEqual({ maxRetries: 0 })
   })
