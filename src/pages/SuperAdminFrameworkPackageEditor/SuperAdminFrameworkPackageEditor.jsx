@@ -1921,11 +1921,13 @@ function SuperAdminFrameworkPackageEditor() {
     : isCloneMode
       ? 'Clone surface for a governed draft package.'
       : 'Editor surface for a new framework package.'
-  // Only drafts enter validation; validated/active/deprecated packages must use their governed paths.
+  // Only drafts enter validation; validated and active non-default packages use governed activation.
   const canValidatePackage = isEditMode && form.status === FRAMEWORK_PACKAGE_STATUSES.DRAFT
+  const activationStatusEligible = form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+    || (form.status === FRAMEWORK_PACKAGE_STATUSES.ACTIVE && loadedPackage?.isDefault === false)
   const canActivatePackage = Boolean(
     isEditMode
-    && form.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
+    && activationStatusEligible
     && normalizeSectionKey(form.packageKey)
     && (!Array.isArray(form.sections) || form.sections.length === 0 || Boolean(String(form.uiContractKey ?? '').trim()))
     && latestCheckpointAllowsActivation
@@ -2718,6 +2720,18 @@ function SuperAdminFrameworkPackageEditor() {
                         >
                           Checkpoint History
                         </Button>
+                        {loadedPackage?.isDefault === false ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            onClick={() => setActivationDialogOpen(true)}
+                            loading={isActivatingPackage}
+                            disabled={!canActivatePackage || isSaving || isValidatingPackage}
+                          >
+                            Activate Package
+                          </Button>
+                        ) : null}
                       </>
                     ) : isEditMode && validatedStructureLocked ? (
                       <>
@@ -3064,7 +3078,9 @@ function SuperAdminFrameworkPackageEditor() {
                       </Status>
                       <p className="super-admin-framework-packages__table-note">
                         {activePackageLocked
-                          ? 'Runtime structure is locked. Access controls and display metadata may still be updated with audit evidence.'
+                          ? loadedPackage?.isDefault === false
+                            ? 'Runtime structure is locked. This certified active release can be reactivated as the default when readiness remains satisfied.'
+                            : 'Runtime structure is locked. Access controls and display metadata may still be updated with audit evidence.'
                           : deprecatedPackageLocked
                             ? 'Deprecated framework packages are retained for audit and cannot be edited or cloned unless a revival workflow is explicitly introduced.'
                             : 'Validated packages are locked for direct edits. Clone the package to create the next draft, or activate it when checkpoint evidence is ready.'}

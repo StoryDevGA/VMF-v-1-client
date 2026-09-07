@@ -1894,13 +1894,177 @@ const getLatestRuntimeValidationVerdictForPackage = (packageId) => {
   return findFrameworkPackageById(packageId)?.runtimeVerdict || null
 }
 
-const getActiveMockRuntimeDeployment = (frameworkKey) =>
+const getActiveMockRuntimeDeployment = (frameworkKey, packageId = null) =>
   (runtimeControlState.runtimeDeployments ?? [])
     .find((deployment) =>
       deployment.frameworkKey === frameworkKey
+      && (!packageId || deployment.packageId === packageId)
       && deployment.status === RUNTIME_DEPLOYMENT_STATUSES.ACTIVE
       && deployment.tenantScope === 'GLOBAL'
       && deployment.deploymentMode === 'PRODUCTION')
+
+const buildMockFrameworkPackageActivationStatusRequirement = (pkg) => {
+  const packageStatus = String(pkg?.status ?? '').trim().toUpperCase()
+  if (packageStatus === FRAMEWORK_PACKAGE_STATUSES.VALIDATED) {
+    return {
+      key: 'packageStatus', status: 'PASS', reason: 'FRAMEWORK_PACKAGE_VALIDATED',
+      message: 'Package is validated.',
+    }
+  }
+  if (packageStatus === FRAMEWORK_PACKAGE_STATUSES.ACTIVE && pkg?.isDefault === false) {
+    return {
+      key: 'packageStatus', status: 'PASS', reason: 'FRAMEWORK_PACKAGE_REACTIVATION_ELIGIBLE',
+      message: 'Active non-default package is eligible for governed reactivation.',
+    }
+  }
+  if (packageStatus === FRAMEWORK_PACKAGE_STATUSES.ACTIVE && pkg?.isDefault === true) {
+    return {
+      key: 'packageStatus', status: 'FAIL', reason: 'FRAMEWORK_PACKAGE_ACTIVE_DEFAULT_CONFLICT',
+      message: 'Package is already the active default.',
+    }
+  }
+  return {
+    key: 'packageStatus', status: 'FAIL', reason: 'FRAMEWORK_PACKAGE_ACTIVATION_REQUIRES_VALIDATED',
+    message: 'Only validated or active non-default framework packages can be activated.',
+  }
+}
+
+const MOCK_RUNTIME_RELEASE_CERTIFICATION_VERSION = 'runtime-release-certification.v1'
+const MOCK_CERTIFICATION_RECORD_METADATA = new Set([
+  '__v', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lockedAt', 'lockedBy',
+  'lockedReason', 'lockedByPackageKeys',
+])
+const MOCK_CERTIFICATION_PACKAGE_METADATA = new Set([
+  ...MOCK_CERTIFICATION_RECORD_METADATA, 'runtimeVerdict', 'status', 'versionStatus', 'isLocked',
+  'isDefault', 'activatedAt', 'activatedBy', 'lastCheckpointStatus', 'lastCheckpointAt',
+  'lastCheckpointResult', 'dependencyLock',
+])
+const MOCK_CERTIFICATION_DEPENDENCY_STORES = Object.freeze({
+  RuntimePathRegistry: 'runtimePaths',
+  ValidationRegistry: 'validationRegistry',
+  WorkflowPolicy: 'workflowPolicies',
+  RuntimeAgent: 'agents',
+  RuntimeSkill: 'skills',
+  SkillRoleRegistry: 'skillRoles',
+  UIContract: 'uiContracts',
+})
+const MOCK_CERTIFICATION_DEPENDENCY_KEYS = Object.freeze({
+  RuntimePathRegistry: 'pathKey',
+  ValidationRegistry: 'key',
+  WorkflowPolicy: 'key',
+  RuntimeAgent: 'key',
+  RuntimeSkill: 'key',
+  SkillRoleRegistry: 'roleKey',
+  UIContract: 'uiContractKey',
+})
+
+const canonicalizeMockCertificationValue = (value, excluded = new Set()) => {
+  if (Array.isArray(value)) return value.map((entry) => canonicalizeMockCertificationValue(entry))
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.keys(value).sort()
+    .filter((key) => !excluded.has(key) && value[key] !== undefined)
+    .map((key) => [key, canonicalizeMockCertificationValue(
+      key === 'uiContractBinding' && value[key]
+        ? Object.fromEntries(Object.entries(value[key]).filter(([field]) => field !== 'resolvedAt'))
+        : value[key],
+    )]))
+}
+
+// Mock-mode drift sentinel only. This is deliberately not cryptographic and is
+// never represented as SHA-256 or accepted from a caller.
+const buildMockCertificationSentinelDigest = (value) => {
+  const source = JSON.stringify(value)
+  return Array.from({ length: 8 }, (_, index) => {
+    let hash = (2166136261 ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0
+    for (let offset = 0; offset < source.length; offset += 1) {
+      hash ^= source.charCodeAt(offset)
+      hash = Math.imul(hash, 16777619) >>> 0
+    }
+    return hash.toString(16).padStart(8, '0')
+  }).join('')
+}
+
+const resolveMockCertificationDependencies = (pkg) => {
+  const references = Array.isArray(pkg?.dependencyLock?.references) ? pkg.dependencyLock.references : []
+  const records = []
+  const seen = new Set()
+  for (const reference of references) {
+    const storeKey = MOCK_CERTIFICATION_DEPENDENCY_STORES[reference?.collectionKey]
+    const identityKey = MOCK_CERTIFICATION_DEPENDENCY_KEYS[reference?.collectionKey]
+    const referenceIdentity = `${reference?.collectionKey}:${reference?.id}`
+    if (!storeKey || !identityKey || seen.has(referenceIdentity)) return null
+    seen.add(referenceIdentity)
+    const row = (runtimeControlState[storeKey] || []).find((candidate) =>
+      [candidate?.stableId, candidate?.id].map(String).includes(String(reference.id)))
+    if (!row
+      || row.status !== 'ACTIVE'
+      || row.versionStatus !== 'ACTIVE'
+      || row.isLocked !== true
+      || reference.status !== row.status
+      || reference.versionStatus !== row.versionStatus
+      || !Number.isInteger(reference.componentVersion)
+      || reference.componentVersion !== row.componentVersion
+      || String(reference.key) !== String(row[identityKey])) return null
+    records.push({
+      collectionKey: reference.collectionKey,
+      record: canonicalizeMockCertificationValue(row, MOCK_CERTIFICATION_RECORD_METADATA),
+    })
+  }
+  return records
+}
+
+const buildMockRuntimeReleaseCertificationBinding = (pkg) => {
+  if (!pkg?.dependencyLock?.snapshotId || !pkg?.dependencyLock?.snapshotHash) return null
+  const dependencies = resolveMockCertificationDependencies(pkg)
+  if (!dependencies) return null
+  return {
+    version: MOCK_RUNTIME_RELEASE_CERTIFICATION_VERSION,
+    digest: buildMockCertificationSentinelDigest({
+      frameworkPackage: canonicalizeMockCertificationValue(pkg, MOCK_CERTIFICATION_PACKAGE_METADATA),
+      dependencySnapshot: canonicalizeMockCertificationValue(pkg.dependencyLock),
+      dependencies,
+    }),
+  }
+}
+
+const verifyMockRuntimeReleaseCertification = (pkg, runtimeVerdict) => {
+  const fail = (reason) => ({ valid: false, reason })
+  const eligible = runtimeVerdict?.result === 'ALLOW'
+    && ['PASS', 'WARN'].includes(runtimeVerdict?.status)
+    && ['STRICT', 'WARN_ONLY'].includes(runtimeVerdict?.mode)
+    && runtimeVerdict?.dependencyLockState === 'LOCKED'
+    && runtimeVerdict?.auditPersisted === true
+    && ['PASS', 'PASS_WITH_WARNINGS'].includes(pkg?.dependencyLock?.status)
+  if (!eligible) return fail('RUNTIME_RELEASE_CERTIFICATION_NOT_ELIGIBLE')
+  if (!runtimeVerdict.auditId || runtimeVerdict.auditId !== runtimeVerdict.validationId) {
+    return fail('RUNTIME_RELEASE_CERTIFICATION_AUDIT_ID_MISMATCH')
+  }
+  const audit = (runtimeControlState.runtimeValidationAudits || [])
+    .find((row) => String(row.id) === String(runtimeVerdict.auditId))
+  const auditMatches = audit
+    && audit.isPackageLevelValidation === true
+    && audit.packageResolved === true
+    && [String(pkg.id), String(pkg.packageKey)].includes(String(audit.packageId))
+    && audit.frameworkKey === pkg.frameworkKey
+    && audit.result === runtimeVerdict.result
+    && audit.status === runtimeVerdict.status
+    && audit.mode === runtimeVerdict.mode
+    && audit.dependencyLockState === 'LOCKED'
+    && audit.createdAt === runtimeVerdict.lastValidatedAt
+    && JSON.stringify(audit.certificationBinding) === JSON.stringify(runtimeVerdict.certificationBinding)
+  if (!auditMatches) return fail('RUNTIME_RELEASE_CERTIFICATION_AUDIT_MISMATCH')
+  const binding = runtimeVerdict.certificationBinding
+  if (binding?.version !== MOCK_RUNTIME_RELEASE_CERTIFICATION_VERSION
+    || !/^[a-f0-9]{64}$/.test(binding?.digest || '')) {
+    return fail('RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH')
+  }
+  const currentBinding = buildMockRuntimeReleaseCertificationBinding(pkg)
+  if (!currentBinding) return fail('RUNTIME_RELEASE_CERTIFICATION_INPUT_INVALID')
+  if (currentBinding.version !== binding.version || currentBinding.digest !== binding.digest) {
+    return fail('RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH')
+  }
+  return { valid: true, reason: 'RUNTIME_RELEASE_CERTIFICATION_VERIFIED', binding }
+}
 
 const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
   const checkpointStatus = String(checkpoint?.status || pkg?.lastCheckpointStatus || '').trim().toUpperCase()
@@ -1909,28 +2073,18 @@ const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
   const runtimeVerdictDependencyLockState = String(runtimeVerdict?.dependencyLockState ?? '').trim().toUpperCase()
   const runtimeVerdictAuditPersisted = runtimeVerdict?.auditPersisted === true
   const runtimeVerdictLastValidatedAt = runtimeVerdict?.lastValidatedAt ? new Date(runtimeVerdict.lastValidatedAt) : null
-  const packageUpdatedAt = pkg?.updatedAt ? new Date(pkg.updatedAt) : null
   const dependencyLockStatus = String(pkg?.dependencyLock?.status ?? '').trim().toUpperCase()
-  const dependencyLockResolvedAt = pkg?.dependencyLock?.resolvedAt || pkg?.dependencyLock?.lockedAt
-    ? new Date(pkg.dependencyLock.resolvedAt || pkg.dependencyLock.lockedAt)
-    : null
   const dependencyReferences = Array.isArray(pkg?.dependencyLock?.references) ? pkg.dependencyLock.references : []
-  const activeDeployment = getActiveMockRuntimeDeployment(pkg?.frameworkKey)
-  const runtimeVerdictStale =
-    runtimeVerdictResult === 'ALLOW'
-    && runtimeVerdictLastValidatedAt instanceof Date
-    && !Number.isNaN(runtimeVerdictLastValidatedAt.getTime())
-    && (
-      (packageUpdatedAt instanceof Date && !Number.isNaN(packageUpdatedAt.getTime()) && packageUpdatedAt > runtimeVerdictLastValidatedAt)
-      || (dependencyLockResolvedAt instanceof Date && !Number.isNaN(dependencyLockResolvedAt.getTime()) && dependencyLockResolvedAt > runtimeVerdictLastValidatedAt)
-    )
+  const activeDeployment = getActiveMockRuntimeDeployment(pkg?.frameworkKey, pkg?.id)
+  // Exact mock certification input equality is the currentness contract.
+  const runtimeVerdictStale = false
   const runtimeVerdictCertified =
     runtimeVerdictResult === 'ALLOW'
     && runtimeVerdictAuditPersisted
     && runtimeVerdictDependencyLockState === 'LOCKED'
     && runtimeVerdictLastValidatedAt instanceof Date
     && !Number.isNaN(runtimeVerdictLastValidatedAt.getTime())
-    && !runtimeVerdictStale
+  const certification = verifyMockRuntimeReleaseCertification(pkg, runtimeVerdict)
   let runtimeVerdictReason = 'RUNTIME_VERDICT_MISSING'
   if (runtimeVerdictCertified) {
     runtimeVerdictReason = 'RUNTIME_VERDICT_ALLOW'
@@ -1943,20 +2097,9 @@ const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
     runtimeVerdictReason = 'RUNTIME_VERDICT_NOT_CERTIFIED'
   } else if (runtimeVerdictResult === 'ALLOW' && runtimeVerdictDependencyLockState !== 'LOCKED') {
     runtimeVerdictReason = 'RUNTIME_VERDICT_DEPENDENCY_LOCK_NOT_CERTIFIED'
-  } else if (runtimeVerdictStale) {
-    runtimeVerdictReason = 'RUNTIME_VERDICT_STALE'
   }
   const requirements = [
-    {
-      key: 'packageStatus',
-      status: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED ? 'PASS' : 'FAIL',
-      reason: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
-        ? 'FRAMEWORK_PACKAGE_VALIDATED'
-        : 'FRAMEWORK_PACKAGE_ACTIVATION_REQUIRES_VALIDATED',
-      message: pkg?.status === FRAMEWORK_PACKAGE_STATUSES.VALIDATED
-        ? 'Package is validated.'
-        : 'Only validated framework packages can be activated.',
-    },
+    buildMockFrameworkPackageActivationStatusRequirement(pkg),
     {
       key: 'checkpoint',
       status: checkpointStatus === 'PASS' || checkpointStatus === 'PASS_WITH_WARNINGS' ? 'PASS' : 'FAIL',
@@ -1986,6 +2129,14 @@ const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
         : 'A locked dependency snapshot is required before activation.',
     },
     {
+      key: 'certificationBinding',
+      status: certification.valid ? 'PASS' : 'FAIL',
+      reason: certification.reason,
+      message: certification.valid
+        ? 'Runtime release certification binding is verified.'
+        : 'Runtime release certification is not valid.',
+    },
+    {
       key: 'activeDeployment',
       status: activeDeployment ? 'WARN' : 'PASS',
       reason: activeDeployment ? 'RUNTIME_DEPLOYMENT_WILL_SUPERSEDE' : 'RUNTIME_DEPLOYMENT_NO_CONFLICT',
@@ -2011,6 +2162,7 @@ const buildMockRuntimeActivationReadiness = (pkg, checkpoint = null) => {
     dependencySnapshotId: pkg?.dependencyLock?.snapshotId || '',
     dependencyReferenceCount: dependencyReferences.length,
     supersedesDeploymentId: activeDeployment?.deploymentId || null,
+    certificationBinding: certification.valid ? certification.binding : null,
     requirements,
     blockingReasons: blockingRequirements.map((item) => item.reason),
   }
@@ -4534,10 +4686,11 @@ export const runtimeControlApi = baseApi.injectEndpoints({
           return buildNotFoundError('Framework package was not found.')
         }
 
-        if (existingPackage.status !== FRAMEWORK_PACKAGE_STATUSES.VALIDATED) {
-          return buildConflictError('Only validated framework packages can be activated.', {
+        const packageStatusRequirement = buildMockFrameworkPackageActivationStatusRequirement(existingPackage)
+        if (packageStatusRequirement.status !== 'PASS') {
+          return buildConflictError(packageStatusRequirement.message, {
             field: 'status',
-            reason: 'FRAMEWORK_PACKAGE_ACTIVATION_REQUIRES_VALIDATED',
+            reason: packageStatusRequirement.reason,
           })
         }
 
@@ -4554,18 +4707,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
         }
 
         const activationTime = new Date().toISOString()
+        const packageStatusAtActivation = String(existingPackage.status ?? '').trim().toUpperCase()
         const activationId = generateRuntimeId('activation', `${existingPackage.frameworkKey}-${existingPackage.version}`)
         const deploymentId = `deployment-${String(existingPackage.frameworkKey ?? '').toLowerCase()}-global-production-${String(activationId).slice(-24)}`
-        const previousDeployment = getActiveMockRuntimeDeployment(existingPackage.frameworkKey)
+        const previousDeployment = getActiveMockRuntimeDeployment(existingPackage.frameworkKey, packageId)
         const activationSnapshot = {
           id: generateMockObjectId(activationId),
+          certificationBinding: readiness.certificationBinding,
           activationId,
           deploymentId,
           packageId,
           packageKey: existingPackage.packageKey || '',
           frameworkKey: existingPackage.frameworkKey,
           frameworkVersion: existingPackage.version,
-          packageStatusAtActivation: FRAMEWORK_PACKAGE_STATUSES.VALIDATED,
+          packageStatusAtActivation,
           activationStatus: RUNTIME_ACTIVATION_STATUSES.ACTIVE,
           dependencySnapshotId: existingPackage.dependencyLock?.snapshotId || '',
           dependencySnapshotHash: existingPackage.dependencyLock?.snapshotHash || existingPackage.dependencyLock?.hash || '',
@@ -4782,6 +4937,20 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 
         const validation = validateMockRuntimeOperation(payload)
         const shouldUpdatePackageRuntimeVerdict = payload.isPackageLevelValidation === true && validation.packageResolved !== false
+        const verdictPackage = shouldUpdatePackageRuntimeVerdict
+          ? runtimeControlState.frameworkPackages.find((pkg) =>
+              String(pkg.id ?? '').trim() === String(validation.packageId ?? '').trim()
+              || String(pkg.packageKey ?? '').trim() === String(validation.packageId ?? '').trim())
+          : null
+        const shouldCertifyPackage = Boolean(verdictPackage)
+          && validation.result === 'ALLOW'
+          && ['PASS', 'WARN'].includes(validation.status)
+          && ['STRICT', 'WARN_ONLY'].includes(validation.mode)
+          && validation.dependencyLockState !== 'NOT_LOCKED'
+          && ['PASS', 'PASS_WITH_WARNINGS'].includes(verdictPackage.dependencyLock?.status)
+        const certificationBinding = shouldCertifyPackage
+          ? buildMockRuntimeReleaseCertificationBinding(verdictPackage)
+          : null
         const runtimeVerdict = shouldUpdatePackageRuntimeVerdict
           ? {
               validationId: validation.validationId,
@@ -4794,6 +4963,7 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               dependencyLockState: validation.result === 'ALLOW' ? 'LOCKED' : 'NOT_LOCKED',
               blockingIssues: Number(validation.summary?.failed) || 0,
               warnings: Number(validation.summary?.warnings) || 0,
+              certificationBinding,
             }
           : null
         runtimeControlState = {
@@ -4825,6 +4995,10 @@ export const runtimeControlApi = baseApi.injectEndpoints({
               status: validation.status,
               result: validation.result,
               mode: validation.mode,
+              packageResolved: validation.packageResolved !== false,
+              isPackageLevelValidation: payload.isPackageLevelValidation === true,
+              dependencyLockState: runtimeVerdict?.dependencyLockState || null,
+              certificationBinding: runtimeVerdict?.certificationBinding || null,
               message: validation.message,
               issues: validation.issues,
               summary: validation.summary,

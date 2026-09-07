@@ -192,7 +192,7 @@ export const FRAMEWORK_PACKAGE_FORM_STATUS_OPTIONS = Object.freeze([
 export const FRAMEWORK_PACKAGE_PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE
 
 export const FRAMEWORK_PACKAGES_HELP_TEXT =
-  'Validated packages can be activated. The active default package for a framework becomes the authoritative binding for future framework-aware products.'
+  'Validated and active non-default packages can be activated when runtime readiness is satisfied. The active default package for a framework becomes the authoritative binding for future framework-aware products.'
 
 export const DEPRECATED_FRAMEWORK_PACKAGE_FIELD_MESSAGES = Object.freeze({
   compatibleWorkflowKeys: 'compatibleWorkflowKeys is deprecated. Use workflowBindings instead.',

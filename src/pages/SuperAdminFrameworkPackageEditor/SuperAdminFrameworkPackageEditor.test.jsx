@@ -719,6 +719,7 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     paramsMock = { packageId: 'pkg-live-2' }
     frameworkPackageQueryMock = buildLoadedPackage()
     frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isDefault = true
 
     render(<SuperAdminFrameworkPackageEditor />)
 
@@ -728,10 +729,34 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     expect(screen.getByRole('button', { name: /dependency snapshot/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /checkpoint history/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /validate package/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /activate package/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /clone package/i }))
 
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages/new?cloneFrom=pkg-live-2')
+  })
+
+  it('confirms governed reactivation for an active non-default package', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isDefault = false
+    activateFrameworkPackageMock.mockReturnValue({
+      unwrap: () => Promise.resolve({ data: { id: 'pkg-live-2', status: 'ACTIVE', isDefault: true } }),
+    })
+
+    render(<SuperAdminFrameworkPackageEditor />)
+
+    const activateButton = await screen.findByRole('button', { name: /activate package/i })
+    expect(activateButton).toBeEnabled()
+    expect(screen.getByText(/certified active release can be reactivated/i)).toBeInTheDocument()
+    await user.click(activateButton)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^activate package$/i }))
+
+    await waitFor(() => {
+      expect(activateFrameworkPackageMock).toHaveBeenCalledWith({ packageId: 'pkg-live-2' })
+    })
   })
 
   it('updates safe display metadata for active packages without calling the runtime update endpoint', async () => {

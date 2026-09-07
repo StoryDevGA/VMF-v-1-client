@@ -1,9 +1,9 @@
 {
   "version": "0.0.0",
-  "buildNumber": "20260901.133024",
-  "commit": "5b17bb5",
-  "branch": "codex/ss-014-hold",
+  "buildNumber": "20260904.200132",
+  "commit": "48f25c0",
+  "branch": "main",
   "environment": "local",
-  "builtAt": "2026-09-01T13:30:24.794Z",
-  "fullVersion": "0.0.0+20260901.133024.5b17bb5"
+  "builtAt": "2026-09-04T20:01:32.534Z",
+  "fullVersion": "0.0.0+20260904.200132.48f25c0"
 }

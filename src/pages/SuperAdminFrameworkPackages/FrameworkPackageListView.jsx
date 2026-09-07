@@ -25,6 +25,7 @@ function FrameworkPackageRowActionsMenu({ row, onAction }) {
       ? [
           { value: 'View', label: 'View' },
           { value: 'Clone', label: 'Clone' },
+          ...(row.isDefault === false ? [{ value: 'Activate', label: 'Activate' }] : []),
           { value: 'Dependency Snapshot', label: 'Dependency Snapshot' },
           { value: 'Checkpoint History', label: 'Checkpoint History' },
         ]

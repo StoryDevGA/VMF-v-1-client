@@ -100,6 +100,66 @@ const expectFrameworkPackageCloneReleaseFieldsCleared = (frameworkPackage) => {
   }
 }
 
+const certifyMockFrameworkPackage = async (store, packageId) => {
+  const result = await store.dispatch(runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+    operationType: 'OUTPUT_VALIDATION',
+    mode: 'STRICT',
+    packageId,
+    frameworkKey: 'VMF',
+    outputContract: { type: 'object' },
+    payload: {},
+    isPackageLevelValidation: true,
+  }))
+  expect(result.error).toBeUndefined()
+  const packageResult = await store.dispatch(
+    runtimeControlApi.endpoints.getFrameworkPackage.initiate(packageId, { forceRefetch: true }),
+  )
+  expect(packageResult.data?.data?.runtimeVerdict?.certificationBinding).toEqual({
+    version: 'runtime-release-certification.v1',
+    digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+  })
+}
+
+const configureMockCertificationPackage = (packageId = 'pkg-vmf-230') => {
+  __mutateRuntimeControlApiStateForTests((state) => ({
+    ...state,
+    runtimePaths: state.runtimePaths.map((row) => row.pathKey === 'framework_state.sections.customer_problem'
+      ? { ...row, status: 'ACTIVE', versionStatus: 'ACTIVE', isLocked: true, componentVersion: 1 }
+      : row),
+    frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === packageId
+      ? {
+          ...pkg,
+          status: 'VALIDATED',
+          versionStatus: 'VALIDATED',
+          isDefault: false,
+          dependencyLock: {
+            status: 'PASS',
+            snapshotId: `dep-lock-${packageId}`,
+            snapshotHash: `mock-lock-${packageId}`,
+            references: [{
+              collectionKey: 'RuntimePathRegistry',
+              id: state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.stableId
+                || state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.id,
+              key: 'framework_state.sections.customer_problem',
+              status: 'ACTIVE',
+              versionStatus: 'ACTIVE',
+              componentVersion: 1,
+              itemKey: 'framework_state.sections.customer_problem',
+            }],
+          },
+          lastCheckpointStatus: 'PASS',
+          lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
+          runtimeVerdict: null,
+        }
+      : pkg),
+  }))
+}
+
+const prepareMockCertifiedFrameworkPackage = async (store, packageId = 'pkg-vmf-230') => {
+  configureMockCertificationPackage(packageId)
+  await certifyMockFrameworkPackage(store, packageId)
+}
+
 describe('runtimeControlApi', () => {
   beforeEach(() => {
     globalThis.__RUNTIME_CONTROL_API_MOCK__ = true
@@ -1385,6 +1445,9 @@ describe('runtimeControlApi', () => {
 
     __mutateRuntimeControlApiStateForTests((state) => ({
       ...state,
+      runtimePaths: state.runtimePaths.map((row) => row.pathKey === 'framework_state.sections.customer_problem'
+        ? { ...row, status: 'ACTIVE', versionStatus: 'ACTIVE', isLocked: true, componentVersion: 1 }
+        : row),
       runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
       frameworkPackages: state.frameworkPackages.map((pkg) =>
         pkg.id === 'pkg-vmf-230'
@@ -1397,24 +1460,21 @@ describe('runtimeControlApi', () => {
                 status: 'PASS',
                 snapshotId: 'dep-lock-vmf-230',
                 snapshotHash: 'sha256-dep-lock-vmf-230',
-                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+                references: [{ collectionKey: 'RuntimePathRegistry',
+                  id: state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.stableId
+                    || state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.id,
+                  key: 'framework_state.sections.customer_problem', status: 'ACTIVE', versionStatus: 'ACTIVE', componentVersion: 1,
+                  itemKey: 'framework_state.sections.customer_problem' }],
               },
               lastCheckpointStatus: 'PASS_WITH_WARNINGS',
               lastCheckpointResult: { status: 'PASS_WITH_WARNINGS', summary: { totalChecks: 1, passed: 1, warnings: 1, failed: 0 } },
-              runtimeVerdict: {
-                validationId: 'rvl-vmf-230',
-                auditId: 'rvl-vmf-230',
-                status: 'PASS',
-                result: runtimeActivationParity.readinessReady.runtimeVerdictResult,
-                mode: 'STRICT',
-                lastValidatedAt: '2026-05-08T12:00:00.000Z',
-                auditPersisted: true,
-                dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
-              },
+              runtimeVerdict: null,
             }
           : pkg,
       ),
     }))
+
+    await certifyMockFrameworkPackage(store, 'pkg-vmf-230')
 
     const readinessResult = await store.dispatch(
       runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230'),
@@ -1456,6 +1516,7 @@ describe('runtimeControlApi', () => {
     expect(activationSnapshot?.deploymentId).toBe(deployment?.deploymentId)
     expect(activationSnapshot?.dependencySnapshotId).toBe('dep-lock-vmf-230')
     expect(activationSnapshot?.dependencySnapshotHash).toBe('sha256-dep-lock-vmf-230')
+    expect(activationSnapshot?.certificationBinding).toEqual(readinessResult.data?.data?.certificationBinding)
 
     const deploymentsResult = await store.dispatch(runtimeControlApi.endpoints.listRuntimeDeployments.initiate())
     expect(deploymentsResult.error).toBeUndefined()
@@ -1478,6 +1539,190 @@ describe('runtimeControlApi', () => {
         activationStatus: runtimeActivationParity.activationResult.activationStatus,
       }),
     ]))
+  })
+
+  it('reactivates an exactly active non-default package with truthful snapshot provenance', async () => {
+    const store = createTestStore()
+    await prepareMockCertifiedFrameworkPackage(store)
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+        ? { ...pkg, status: 'ACTIVE', versionStatus: 'ACTIVE', isDefault: false }
+        : pkg),
+    }))
+
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(readinessResult.data?.data).toEqual(expect.objectContaining({ ready: true }))
+    expect(readinessResult.data?.data?.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'packageStatus', status: 'PASS',
+        reason: runtimeActivationParity.packageStatusEligibility.activeNonDefault.reason,
+      }),
+    ]))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+    expect(activateResult.error).toBeUndefined()
+    expect(activateResult.data?.meta?.runtimeActivation?.activationSnapshot).toEqual(expect.objectContaining({
+      packageStatusAtActivation: 'ACTIVE',
+      packageId: 'pkg-vmf-230',
+      activationStatus: 'ACTIVE',
+    }))
+  })
+
+  it.each([
+    [true, runtimeActivationParity.packageStatusEligibility.activeDefault.reason],
+    [null, runtimeActivationParity.packageStatusEligibility.ineligible.reason],
+    [undefined, runtimeActivationParity.packageStatusEligibility.ineligible.reason],
+    ['false', runtimeActivationParity.packageStatusEligibility.ineligible.reason],
+    [0, runtimeActivationParity.packageStatusEligibility.ineligible.reason],
+  ])('blocks mock reactivation when active default state is %s', async (isDefault, reason) => {
+    const store = createTestStore()
+    await prepareMockCertifiedFrameworkPackage(store)
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+        ? { ...pkg, status: 'ACTIVE', versionStatus: 'ACTIVE', isDefault }
+        : pkg),
+    }))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+    expect(activateResult.error?.status).toBe(409)
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(
+      reason,
+    )
+  })
+
+  it.each([
+    ['missing binding', 'RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH', (state) => {
+      const verdict = state.frameworkPackages.find((pkg) => pkg.id === 'pkg-vmf-230').runtimeVerdict
+      return {
+        ...state,
+        frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+          ? { ...pkg, runtimeVerdict: { ...verdict, certificationBinding: null } } : pkg),
+        runtimeValidationAudits: state.runtimeValidationAudits.map((row) => row.id === verdict.auditId
+          ? { ...row, certificationBinding: null } : row),
+      }
+    }],
+    ['malformed binding', 'RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH', (state) => {
+      const verdict = state.frameworkPackages.find((pkg) => pkg.id === 'pkg-vmf-230').runtimeVerdict
+      const malformed = { version: 'runtime-release-certification.v1', digest: 'short' }
+      return {
+        ...state,
+        frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+          ? { ...pkg, runtimeVerdict: { ...verdict, certificationBinding: malformed } } : pkg),
+        runtimeValidationAudits: state.runtimeValidationAudits.map((row) => row.id === verdict.auditId
+          ? { ...row, certificationBinding: malformed } : row),
+      }
+    }],
+    ['audit mismatch', 'RUNTIME_RELEASE_CERTIFICATION_AUDIT_MISMATCH', (state) => {
+      const verdict = state.frameworkPackages.find((pkg) => pkg.id === 'pkg-vmf-230').runtimeVerdict
+      return { ...state, runtimeValidationAudits: state.runtimeValidationAudits.map((row) => row.id === verdict.auditId
+        ? { ...row, certificationBinding: { ...row.certificationBinding, digest: 'b'.repeat(64) } } : row) }
+    }],
+    ['package input drift', 'RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH', (state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+        ? { ...pkg, frameworkName: `${pkg.frameworkName} changed` } : pkg),
+    })],
+    ['dependency input drift', 'RUNTIME_RELEASE_CERTIFICATION_BINDING_MISMATCH', (state) => {
+      const referenceId = state.frameworkPackages.find((pkg) => pkg.id === 'pkg-vmf-230').dependencyLock.references[0].id
+      return { ...state, runtimePaths: state.runtimePaths.map((row) => [row.stableId, row.id].map(String).includes(String(referenceId))
+        ? { ...row, label: `${row.label} changed` } : row) }
+    }],
+  ])('fails mock readiness and activation closed for %s', async (_case, reason, mutate) => {
+    const store = createTestStore()
+    await prepareMockCertifiedFrameworkPackage(store)
+    __mutateRuntimeControlApiStateForTests(mutate)
+
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data?.ready).toBe(false)
+    expect(readinessResult.data?.data?.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'certificationBinding', status: 'FAIL', reason }),
+    ]))
+
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+    expect(activateResult.error?.status).toBe(409)
+    expect(activateResult.error?.data?.error?.details?.reason).toBe(reason)
+  })
+
+  it.each(['AUDIT_ONLY', 'DISABLED'])('does not certify package-level %s validation', async (mode) => {
+    const store = createTestStore()
+    await prepareMockCertifiedFrameworkPackage(store)
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'OUTPUT_VALIDATION',
+        mode,
+        packageId: 'pkg-vmf-230',
+        frameworkKey: 'VMF',
+        outputContract: { type: 'object' },
+        payload: {},
+        isPackageLevelValidation: true,
+        certificationBinding: { version: 'runtime-release-certification.v1', digest: 'b'.repeat(64) },
+      }),
+    )
+    expect(validationResult.error).toBeUndefined()
+    const packageResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(packageResult.data?.data?.runtimeVerdict?.certificationBinding).toBeNull()
+    expect(packageResult.data?.data?.runtimeVerdict?.certificationBinding?.digest).not.toBe('b'.repeat(64))
+  })
+
+  it.each([
+    ['duplicate reference', (state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) =>
+      pkg.id === 'pkg-vmf-230' ? { ...pkg, dependencyLock: { ...pkg.dependencyLock,
+        references: [...pkg.dependencyLock.references, { ...pkg.dependencyLock.references[0] }] } } : pkg) })],
+    ['missing dependency', (state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) =>
+      pkg.id === 'pkg-vmf-230' ? { ...pkg, dependencyLock: { ...pkg.dependencyLock,
+        references: pkg.dependencyLock.references.map((reference) => ({ ...reference, id: 'missing-dependency' })) } } : pkg) })],
+    ['inactive dependency', (state) => ({ ...state, runtimePaths: state.runtimePaths.map((row) =>
+      row.pathKey === 'framework_state.sections.customer_problem' ? { ...row, status: 'DISABLED' } : row) })],
+    ['unlocked dependency', (state) => ({ ...state, runtimePaths: state.runtimePaths.map((row) =>
+      row.pathKey === 'framework_state.sections.customer_problem' ? { ...row, isLocked: false } : row) })],
+    ['wrong dependency key', (state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) =>
+      pkg.id === 'pkg-vmf-230' ? { ...pkg, dependencyLock: { ...pkg.dependencyLock,
+        references: pkg.dependencyLock.references.map((reference) => ({ ...reference, key: 'wrong-key' })) } } : pkg) })],
+    ['wrong dependency component version', (state) => ({ ...state, frameworkPackages: state.frameworkPackages.map((pkg) =>
+      pkg.id === 'pkg-vmf-230' ? { ...pkg, dependencyLock: { ...pkg.dependencyLock,
+        references: pkg.dependencyLock.references.map((reference) => ({ ...reference, componentVersion: 2 })) } } : pkg) })],
+  ])('does not mint usable mock certification for %s', async (_case, mutate) => {
+    const store = createTestStore()
+    configureMockCertificationPackage()
+    __mutateRuntimeControlApiStateForTests(mutate)
+    const validationResult = await store.dispatch(
+      runtimeControlApi.endpoints.validateRuntimeOperation.initiate({
+        operationType: 'OUTPUT_VALIDATION', mode: 'STRICT', packageId: 'pkg-vmf-230', frameworkKey: 'VMF',
+        outputContract: { type: 'object' }, payload: {}, isPackageLevelValidation: true,
+      }),
+    )
+    expect(validationResult.error).toBeUndefined()
+    const packageResult = await store.dispatch(
+      runtimeControlApi.endpoints.getFrameworkPackage.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(packageResult.data?.data?.runtimeVerdict?.certificationBinding).toBeNull()
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data?.ready).toBe(false)
+    expect(readinessResult.data?.data?.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'certificationBinding', status: 'FAIL' }),
+    ]))
+    const activateResult = await store.dispatch(
+      runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
+    )
+    expect(activateResult.error?.status).toBe(409)
   })
 
   it('blocks mock runtime activation when the Runtime Validation verdict is missing', async () => {
@@ -1617,48 +1862,40 @@ describe('runtimeControlApi', () => {
     )
   })
 
-  it('blocks mock runtime activation when the Runtime Validation verdict is stale', async () => {
+  it('allows mock activation after later operational timestamps when certified inputs are unchanged', async () => {
     const store = createTestStore()
-
+    await prepareMockCertifiedFrameworkPackage(store)
     __mutateRuntimeControlApiStateForTests((state) => ({
       ...state,
       frameworkPackages: state.frameworkPackages.map((pkg) =>
         pkg.id === 'pkg-vmf-230'
           ? {
               ...pkg,
-              status: 'VALIDATED',
-              versionStatus: 'VALIDATED',
-              updatedAt: '2026-05-08T13:00:00.000Z',
-              dependencyLock: {
-                status: 'PASS',
-                snapshotId: 'dep-lock-vmf-230',
-                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
-              },
+              updatedAt: '2099-05-08T13:00:00.000Z',
+              lastCheckpointAt: '2099-05-08T13:00:00.000Z',
               lastCheckpointStatus: 'PASS',
-              lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
-              runtimeVerdict: {
-                validationId: 'rvl-vmf-230',
-                auditId: 'rvl-vmf-230',
-                status: 'PASS',
-                result: 'ALLOW',
-                mode: 'STRICT',
-                lastValidatedAt: '2026-05-08T12:00:00.000Z',
-                auditPersisted: true,
-                dependencyLockState: 'LOCKED',
-              },
+              lastCheckpointResult: { ...pkg.lastCheckpointResult, status: 'PASS', timestamp: '2099-05-08T13:00:00.000Z' },
             }
           : pkg,
       ),
     }))
 
+    const readinessResult = await store.dispatch(
+      runtimeControlApi.endpoints.getRuntimeActivationReadiness.initiate('pkg-vmf-230', { forceRefetch: true }),
+    )
+    expect(readinessResult.error).toBeUndefined()
+    expect(readinessResult.data?.data).toEqual(expect.objectContaining({ ready: true, status: 'READY' }))
+    expect(readinessResult.data?.data?.runtimeVerdict?.stale).toBe(false)
+    expect(readinessResult.data?.data?.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'runtimeVerdict', status: 'PASS' }),
+      expect.objectContaining({ key: 'certificationBinding', status: 'PASS' }),
+    ]))
+
     const activateResult = await store.dispatch(
       runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
     )
-
-    expect(activateResult.error?.status).toBe(runtimeActivationParity.readinessBlockedRuntimeVerdictStale.httpStatus)
-    expect(activateResult.error?.data?.error?.details?.reason).toBe(
-      runtimeActivationParity.readinessBlockedRuntimeVerdictStale.reason,
-    )
+    expect(activateResult.error).toBeUndefined()
+    expect(activateResult.data?.data?.status).toBe('ACTIVE')
   })
 
   it('blocks mock runtime activation when dependency lock evidence is missing', async () => {
@@ -1715,18 +1952,21 @@ describe('runtimeControlApi', () => {
     )
   })
 
-  it('supersedes the previous mock runtime deployment when activation registers a new deployment', async () => {
+  it('supersedes only the same package mock runtime deployment when activation registers a new deployment', async () => {
     const store = createTestStore()
 
     __mutateRuntimeControlApiStateForTests((state) => ({
       ...state,
+      runtimePaths: state.runtimePaths.map((row) => row.pathKey === 'framework_state.sections.customer_problem'
+        ? { ...row, status: 'ACTIVE', versionStatus: 'ACTIVE', isLocked: true, componentVersion: 1 }
+        : row),
       runtimeValidationAudits: (state.runtimeValidationAudits ?? []).filter((row) => row.packageId !== 'pkg-vmf-230'),
       runtimeDeployments: [
         {
           id: 'deployment-previous-id',
           deploymentId: 'deployment-vmf-global-production-previous',
           activationId: 'activation-vmf-2-3-0-previous',
-          packageId: 'pkg-vmf-231',
+          packageId: 'pkg-vmf-230',
           frameworkKey: 'VMF',
           frameworkVersion: '2.3.0',
           status: 'ACTIVE',
@@ -1740,7 +1980,7 @@ describe('runtimeControlApi', () => {
         {
           id: 'activation-previous-id',
           activationId: 'activation-vmf-2-3-0-previous',
-          packageId: 'pkg-vmf-231',
+          packageId: 'pkg-vmf-230',
           packageKey: 'vmf-2-3-0',
           frameworkKey: 'VMF',
           frameworkVersion: '2.3.0',
@@ -1758,24 +1998,22 @@ describe('runtimeControlApi', () => {
               dependencyLock: {
                 status: 'PASS',
                 snapshotId: 'dep-lock-vmf-230',
-                references: [{ collectionKey: 'RuntimePathRegistry', itemKey: 'framework_state.sections.customer_problem' }],
+                snapshotHash: 'sha256-dep-lock-vmf-230',
+                references: [{ collectionKey: 'RuntimePathRegistry',
+                  id: state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.stableId
+                    || state.runtimePaths.find((row) => row.pathKey === 'framework_state.sections.customer_problem')?.id,
+                  key: 'framework_state.sections.customer_problem', status: 'ACTIVE', versionStatus: 'ACTIVE', componentVersion: 1,
+                  itemKey: 'framework_state.sections.customer_problem' }],
               },
               lastCheckpointStatus: 'PASS',
               lastCheckpointResult: { status: 'PASS', summary: { totalChecks: 1, passed: 1, warnings: 0, failed: 0 } },
-              runtimeVerdict: {
-                validationId: 'rvl-vmf-230',
-                auditId: 'rvl-vmf-230',
-                status: 'PASS',
-                result: runtimeActivationParity.readinessReady.runtimeVerdictResult,
-                mode: 'STRICT',
-                lastValidatedAt: '2026-05-08T12:00:00.000Z',
-                auditPersisted: true,
-                dependencyLockState: runtimeActivationParity.readinessReady.dependencyLockState,
-              },
+              runtimeVerdict: null,
             }
           : pkg,
       ),
     }))
+
+    await certifyMockFrameworkPackage(store, 'pkg-vmf-230')
 
     const activateResult = await store.dispatch(
       runtimeControlApi.endpoints.activateFrameworkPackage.initiate({ packageId: 'pkg-vmf-230' }),
@@ -1818,7 +2056,7 @@ describe('runtimeControlApi', () => {
     }))
 
     const previousHistoryResult = await store.dispatch(
-      runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate('pkg-vmf-231'),
+      runtimeControlApi.endpoints.getRuntimeActivationHistory.initiate('pkg-vmf-230'),
     )
     expect(previousHistoryResult.data?.data).toEqual(expect.arrayContaining([
       expect.objectContaining({

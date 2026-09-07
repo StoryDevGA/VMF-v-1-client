@@ -60,7 +60,7 @@ describe('SuperAdminFrameworkPackages page', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: /framework packages/i })).toBeInTheDocument()
-    expect(screen.getByText(/validated packages can be activated/i)).toBeInTheDocument()
+    expect(screen.getByText(/validated and active non-default packages can be activated/i)).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /framework packages/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
 
@@ -264,9 +264,24 @@ describe('SuperAdminFrameworkPackages page', () => {
     expect(within(validatedActions).getByRole('option', { name: 'View' })).toBeInTheDocument()
     expect(within(validatedActions).getByRole('option', { name: 'Clone' })).toBeInTheDocument()
     expect(within(validatedActions).getByRole('option', { name: 'Activate' })).toBeInTheDocument()
+    const activeDefaultActions = await screen.findByLabelText(/actions for vmf 2.3.1/i)
+    expect(within(activeDefaultActions).queryByRole('option', { name: 'Activate' })).not.toBeInTheDocument()
   })
 
-  it('activates a validated package and updates the default status in the catalogue', async () => {
+  it('offers governed activation for an active non-default package', async () => {
+    __mutateRuntimeControlApiStateForTests((state) => ({
+      ...state,
+      frameworkPackages: state.frameworkPackages.map((pkg) => pkg.id === 'pkg-vmf-230'
+        ? { ...pkg, status: 'ACTIVE', isDefault: false }
+        : pkg),
+    }))
+    renderPage()
+
+    const actions = await screen.findByLabelText(/actions for vmf 2.3.0/i)
+    expect(within(actions).getByRole('option', { name: 'Activate' })).toBeInTheDocument()
+  })
+
+  it('keeps an uncertified validated catalogue fixture unchanged when activation fails closed', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -276,13 +291,13 @@ describe('SuperAdminFrameworkPackages page', () => {
     )
 
     await waitFor(() => {
-      const activatedRow = screen.getByText('2.3.0').closest('tr')
-      const previousDefaultRow = screen.getByText('2.3.1').closest('tr')
-      expect(activatedRow).not.toBeNull()
-      expect(previousDefaultRow).not.toBeNull()
-      expect(within(activatedRow).getByText(/active/i)).toBeInTheDocument()
-      expect(within(activatedRow).getByText(/default/i)).toBeInTheDocument()
-      expect(within(previousDefaultRow).getByText(/validated/i)).toBeInTheDocument()
+      expect(screen.getByText(/failed to activate framework package/i)).toBeInTheDocument()
     })
+    const targetRow = screen.getByText('2.3.0').closest('tr')
+    const defaultRow = screen.getByText('2.3.1').closest('tr')
+    expect(within(targetRow).getByText(/validated/i)).toBeInTheDocument()
+    expect(within(targetRow).getByText(/not default/i)).toBeInTheDocument()
+    expect(within(defaultRow).getByText(/active/i)).toBeInTheDocument()
+    expect(within(defaultRow).getByText(/^default$/i)).toBeInTheDocument()
   })
 })
