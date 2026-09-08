@@ -31,7 +31,6 @@ import {
 import {
   hasPlatformRole,
   hasCustomerRole,
-  hasAnyCustomerRole,
   hasTenantRole,
   hasPlatformPermission,
   hasCustomerPermission,
@@ -109,12 +108,15 @@ export function ProtectedRoute({
     return <Navigate to={unauthorizedRedirect} replace />
   }
 
-  // Selected customer role gate. If customer context is not initialized
-  // yet, fall back to any matching customer role.
+  // Selected-scope routes must wait for their actual customer context.
   if (requiredSelectedCustomerRole) {
-    const hasRequiredSelectedCustomerRole = selectedCustomerId
-      ? hasCustomerRole(user, selectedCustomerId, requiredSelectedCustomerRole)
-      : hasAnyCustomerRole(user, requiredSelectedCustomerRole)
+    if (!selectedCustomerId) return (
+      <div className="protected-route__loading" role="status">
+        <Spinner size="lg" />
+        <p className="protected-route__loading-text">Resolving customer context…</p>
+      </div>
+    )
+    const hasRequiredSelectedCustomerRole = hasCustomerRole(user, selectedCustomerId, requiredSelectedCustomerRole)
 
     if (!hasRequiredSelectedCustomerRole) {
       return <Navigate to={unauthorizedRedirect} replace />

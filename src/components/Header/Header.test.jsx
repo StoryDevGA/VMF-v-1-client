@@ -17,6 +17,10 @@ import { useListTenantsQuery } from '../../store/api/tenantApi.js'
 
 vi.mock('../../store/api/tenantApi.js', () => ({
   useListTenantsQuery: vi.fn(),
+  useTenantContextCatalogueQuery: ({ customerId }, options) => {
+    const result = useListTenantsQuery({ customerId, page: 1, pageSize: 100 }, options)
+    return { ...result, currentData: result.data }
+  },
 }))
 
 // Create a minimal store for Header + Navigation Redux needs

@@ -17,14 +17,57 @@
  */
 
 import { baseApi } from './baseApi.js'
+import { getSessionRevision } from '../../utils/tokenStorage.js'
 
 const getScopedTenantMutationUrl = (customerId, tenantId, suffix = '') =>
   customerId
     ? `/customers/${customerId}/tenants/${tenantId}${suffix}`
     : `/tenants/${tenantId}${suffix}`
 
+// The context switcher needs a complete catalogue; ordinary list views stay paginated.
+export const fetchTenantContextCatalogue = async ({ customerId }, api, _extraOptions, baseQuery) => {
+  const session = getSessionRevision()
+  const incomplete = () => ({ error: { status: 'CUSTOM_ERROR', error: 'Incomplete tenant catalogue', data: {
+    code: 'TENANT_CONTEXT_INCOMPLETE', message: 'The tenant list could not be loaded completely. Try again.',
+  } } })
+  const tenants = []
+  const ids = new Set()
+  let firstMeta
+  for (let page = 1; page <= 100; page += 1) {
+    if (api.signal?.aborted) return { error: { status: 'FETCH_ERROR', error: 'AbortError' } }
+    if (session !== getSessionRevision()) return incomplete()
+    const result = await baseQuery(`/customers/${customerId}/tenants?page=${page}&pageSize=100`)
+    if (session !== getSessionRevision()) return incomplete()
+    if (api.signal?.aborted) return { error: { status: 'FETCH_ERROR', error: 'AbortError' } }
+    if (result.error) return result
+    const { data, meta } = result.data || {}
+    if (!Array.isArray(data) || !Number.isInteger(meta?.total) || meta.total < 0
+      || meta.page !== page || meta.pageSize !== 100 || meta.totalPages !== Math.ceil(meta.total / 100)
+      || meta.totalPages > 100 || (firstMeta && (meta.total !== firstMeta.total || meta.totalPages !== firstMeta.totalPages))) return incomplete()
+    firstMeta ||= meta
+    for (const tenant of data) {
+      const id = tenant?.id ?? tenant?._id
+      if (!id || ids.has(String(id))) return incomplete()
+      ids.add(String(id))
+      tenants.push(tenant)
+    }
+    if (page >= meta.totalPages) return tenants.length === meta.total
+      ? { data: { data: tenants, meta: { ...firstMeta, customerId, complete: true } } }
+      : incomplete()
+    if (data.length !== 100) return incomplete()
+  }
+  return incomplete()
+}
+
 export const tenantApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    tenantContextCatalogue: build.query({
+      queryFn: fetchTenantContextCatalogue,
+      providesTags: (result) => [
+        ...(result?.data || []).map((tenant) => ({ type: 'Tenant', id: tenant.id ?? tenant._id })),
+        { type: 'Tenant', id: 'LIST' },
+      ],
+    }),
     /**
      * GET /customers/:customerId/tenants
      * Paginated tenant list with optional search and status filter.
@@ -133,6 +176,7 @@ export const tenantApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useTenantContextCatalogueQuery,
   useListTenantsQuery,
   useLazyListTenantsQuery,
   useCreateTenantMutation,

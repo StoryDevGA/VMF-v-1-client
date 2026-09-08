@@ -16,6 +16,11 @@ const REFRESH_TOKEN_KEY = 'vmf_refresh_token'
 
 /** In-memory access token — never written to storage */
 let accessToken = null
+let sessionRevision = 0
+let tokenRevision = 0
+
+export const getSessionRevision = () => sessionRevision
+export const getTokenRevision = () => tokenRevision
 
 /* ------------------------------------------------------------------ */
 /*  Access Token (in-memory)                                          */
@@ -32,6 +37,8 @@ export const getAccessToken = () => accessToken
  * @param {string} token
  */
 export const setAccessToken = (token) => {
+  sessionRevision += 1
+  tokenRevision += 1
   accessToken = token
 }
 
@@ -56,6 +63,8 @@ export const getRefreshToken = () => {
  * @param {string} token
  */
 export const setRefreshToken = (token) => {
+  sessionRevision += 1
+  tokenRevision += 1
   try {
     sessionStorage.setItem(REFRESH_TOKEN_KEY, token)
   } catch {
@@ -71,15 +80,23 @@ export const setRefreshToken = (token) => {
  * Store both tokens at once (convenience for login / refresh responses)
  * @param {{ accessToken: string, refreshToken: string }} tokens
  */
-export const setTokens = ({ accessToken: at, refreshToken: rt }) => {
-  setAccessToken(at)
-  setRefreshToken(rt)
+export const setTokens = ({ accessToken: at, refreshToken: rt }, { preserveSession = false } = {}) => {
+  if (!preserveSession) sessionRevision += 1
+  tokenRevision += 1
+  accessToken = at
+  try {
+    sessionStorage.setItem(REFRESH_TOKEN_KEY, rt)
+  } catch {
+    // Storage may be unavailable in private browsing.
+  }
 }
 
 /**
  * Clear all stored tokens (logout)
  */
 export const clearTokens = () => {
+  sessionRevision += 1
+  tokenRevision += 1
   accessToken = null
   try {
     sessionStorage.removeItem(REFRESH_TOKEN_KEY)

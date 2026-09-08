@@ -9,7 +9,7 @@
  */
 
 import { baseApi } from './baseApi.js'
-import { setTokens, clearTokens } from '../../utils/tokenStorage.js'
+import { setTokens, clearTokens, getSessionRevision } from '../../utils/tokenStorage.js'
 
 export const authApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -98,8 +98,10 @@ export const authApi = baseApi.injectEndpoints({
       query: () => '/auth/me',
       providesTags: ['User'],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        const session = getSessionRevision()
         try {
           const { data } = await queryFulfilled
+          if (session !== getSessionRevision()) return
           dispatch({
             type: 'auth/setCredentials',
             payload: {
@@ -108,8 +110,10 @@ export const authApi = baseApi.injectEndpoints({
               resolvedPermissions: data.data.resolvedPermissions ?? null,
             },
           })
-        } catch {
-          dispatch({ type: 'auth/clearCredentials' })
+        } catch (failure) {
+          const error = failure?.error ?? failure
+          const aborted = error?.name === 'AbortError' || error?.error === 'AbortError'
+          if (!aborted && session === getSessionRevision()) dispatch({ type: 'auth/clearCredentials' })
         }
       },
     }),

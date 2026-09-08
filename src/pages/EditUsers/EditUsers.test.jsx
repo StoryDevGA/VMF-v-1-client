@@ -36,6 +36,10 @@ vi.mock('../../hooks/useUsers.js', () => ({
 
 vi.mock('../../store/api/tenantApi.js', () => ({
   useListTenantsQuery: (...args) => mockUseListTenantsQuery(...args),
+  useTenantContextCatalogueQuery: ({ customerId }, options) => {
+    const result = mockUseListTenantsQuery({ customerId, page: 1, pageSize: 100 }, options)
+    return { ...result, currentData: result.data }
+  },
 }))
 
 vi.mock('../../store/api/customerApi.js', () => ({

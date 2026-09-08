@@ -264,12 +264,13 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 
-  it('falls back to any customer-admin membership when customer context is not initialized', () => {
+  it('waits for selected customer context instead of admitting an unrelated customer-admin membership', () => {
     renderProtected({
       authState: { user: customerAdminUser, status: 'authenticated' },
       requiredSelectedCustomerRole: 'CUSTOMER_ADMIN',
     })
-    expect(screen.getByText('Protected Content')).toBeInTheDocument()
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
+    expect(screen.getByText('Resolving customer context…')).toBeInTheDocument()
   })
 
   // --- requiredTenantRole ---

@@ -26,7 +26,8 @@ import {
   reconcileUserContext,
   clearTenantContext,
 } from '../store/slices/tenantContextSlice.js'
-import { useListTenantsQuery } from '../store/api/tenantApi.js'
+import { useTenantContextCatalogueQuery } from '../store/api/tenantApi.js'
+import { getSessionRevision } from '../utils/tokenStorage.js'
 import {
   isSuperAdmin as checkIsSuperAdmin,
   getAccessibleCustomerIds,
@@ -169,13 +170,15 @@ export function useTenantContext() {
 
   /* ---- Fetch tenant list for the active customer ---- */
   const {
-    data: tenantsData,
-    isLoading: isLoadingTenants,
+    currentData: tenantsData,
+    isFetching: isFetchingTenants,
+    isLoading: isInitiallyLoadingTenants,
     error: tenantsError,
-  } = useListTenantsQuery(
-    { customerId, page: 1, pageSize: 100 },
+  } = useTenantContextCatalogueQuery(
+    { customerId, sessionRevision: getSessionRevision() },
     { skip: !customerId || !canViewTenants },
   )
+  const isLoadingTenants = Boolean(isInitiallyLoadingTenants || isFetchingTenants)
 
   const tenants = useMemo(() => tenantsData?.data ?? [], [tenantsData])
   const tenantVisibilityMeta = useMemo(
@@ -239,38 +242,23 @@ export function useTenantContext() {
       && tenantId
       && !isLoadingTenants
       && !tenantsError
+      && tenantsData
+      && canViewTenants
       && !selectedTenant,
   )
 
   useEffect(() => {
-    if (!customerId || !defaultTenantContext?.tenantId) return
-    if (tenantId === defaultTenantContext.tenantId && !hasInvalidTenantContext) return
-
-    dispatch(setTenant({
-      tenantId: defaultTenantContext.tenantId,
-      tenantName: defaultTenantContext.tenantName,
-    }))
-  }, [
-    customerId,
-    defaultTenantContext,
-    dispatch,
-    hasInvalidTenantContext,
-    tenantId,
-  ])
-
-  useEffect(() => {
-    if (!customerId || isLoadingTenants || tenantsError) return
-    if (!Array.isArray(selectableTenants) || selectableTenants.length !== 1) return
+    if (!customerId) return
+    if (!canViewTenants) {
+      if (!tenantId && defaultTenantContext?.tenantId) dispatch(setTenant(defaultTenantContext))
+      return
+    }
+    if (isLoadingTenants || tenantsError || !tenantsData) return
     if (tenantId && !hasInvalidTenantContext) return
-
-    const onlyTenant = selectableTenants[0]
-    const onlyTenantId = getTenantRowId(onlyTenant)
-    if (!onlyTenantId) return
-
-    dispatch(setTenant({
-      tenantId: onlyTenantId,
-      tenantName: onlyTenant?.name ?? null,
-    }))
+    const declaredDefault = selectableTenants.find((tenant) => getTenantRowId(tenant) === defaultTenantContext?.tenantId)
+    const nextTenant = declaredDefault || (selectableTenants.length === 1 ? selectableTenants[0] : null)
+    if (!nextTenant) return
+    dispatch(setTenant({ tenantId: getTenantRowId(nextTenant), tenantName: nextTenant.name ?? null }))
   }, [
     customerId,
     dispatch,
@@ -279,6 +267,9 @@ export function useTenantContext() {
     selectableTenants,
     tenantId,
     tenantsError,
+    tenantsData,
+    canViewTenants,
+    defaultTenantContext,
   ])
 
   /* ---- Actions ---- */

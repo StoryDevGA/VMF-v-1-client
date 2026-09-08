@@ -636,6 +636,10 @@ function normalizeSectionRows(sections) {
         sectionKey,
         runtimePath,
         required: section.required !== false,
+        ...(section.sectionMode !== undefined ? { sectionMode: section.sectionMode } : {}),
+        ...(section.runtimeRole !== undefined ? { runtimeRole: section.runtimeRole } : {}),
+        ...(section.dependsOnSectionKeys !== undefined ? { dependsOnSectionKeys: section.dependsOnSectionKeys } : {}),
+        ...(section.runtimeManagedCompletion !== undefined ? { runtimeManagedCompletion: section.runtimeManagedCompletion } : {}),
         validationKeys: Array.isArray(section.validationKeys)
           ? [...new Set(section.validationKeys.map(normalizeKeyToken).filter(Boolean))]
           : parseKeyList(section.validationKeys),

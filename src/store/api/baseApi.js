@@ -19,6 +19,8 @@ import {
   setTokens,
   clearTokens,
   isTokenExpired,
+  getSessionRevision,
+  getTokenRevision,
 } from '../../utils/tokenStorage.js'
 
 /* ------------------------------------------------------------------ */
@@ -32,9 +34,10 @@ import {
 const generateRequestId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+const RETRYABLE_STATUSES = new Set([500, 502, 503, 504])
 const DEFAULT_MAX_RETRIES = 2
 const BASE_RETRY_DELAY_MS = 400
+const MAX_RETRY_DELAY_MS = 30_000
 
 /* ------------------------------------------------------------------ */
 /*  Base query with JWT + request-id headers                          */
@@ -59,7 +62,21 @@ const rawBaseQuery = fetchBaseQuery({
   },
 })
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const abortedResult = () => ({ error: { status: 'FETCH_ERROR', error: 'AbortError' } })
+const sessionChangedResult = () => ({ error: { status: 'CUSTOM_ERROR', error: 'Session changed', data: { code: 'SESSION_CHANGED', message: 'The session changed. Reload this view.' } } })
+const waitForCaller = (promise, signal) => new Promise((resolve) => {
+  if (signal?.aborted) return resolve(false)
+  const abort = () => { signal?.removeEventListener('abort', abort); resolve(false) }
+  signal?.addEventListener('abort', abort, { once: true })
+  promise.then((value) => { signal?.removeEventListener('abort', abort); resolve(value) }, abort)
+})
+const sleep = (ms, signal) => new Promise((resolve) => {
+  if (signal?.aborted) return resolve(false)
+  const finish = (completed) => { clearTimeout(timer); signal?.removeEventListener('abort', abort); resolve(completed) }
+  const abort = () => finish(false)
+  const timer = setTimeout(() => finish(true), ms)
+  signal?.addEventListener('abort', abort, { once: true })
+})
 
 const getRequestMethod = (args) => {
   if (typeof args === 'string') return 'GET'
@@ -92,7 +109,7 @@ const isRetriableError = (error) => {
 
 const calculateRetryDelayMs = ({ attempt, retryAfterSeconds }) => {
   if (retryAfterSeconds > 0) {
-    return retryAfterSeconds * 1000
+    return Math.min(retryAfterSeconds * 1000, MAX_RETRY_DELAY_MS)
   }
   const jitter = Math.floor(Math.random() * 120)
   return BASE_RETRY_DELAY_MS * 2 ** attempt + jitter
@@ -134,11 +151,14 @@ const enrichErrorWithMeta = (result) => {
 }
 
 const executeWithBackoffRetry = async ({ args, api, extraOptions, maxRetries }) => {
+  const session = getSessionRevision()
+  if (api.signal?.aborted) return abortedResult()
   let result = await rawBaseQuery(args, api, extraOptions)
 
   for (let attempt = 0; shouldRetryRequest({ args, result, attempt, maxRetries }); attempt += 1) {
     const retryAfterSeconds = parseRetryAfterHeader(result.meta?.response?.headers)
-    await sleep(calculateRetryDelayMs({ attempt, retryAfterSeconds }))
+    if (!await sleep(calculateRetryDelayMs({ attempt, retryAfterSeconds }), api.signal)) return abortedResult()
+    if (session !== getSessionRevision()) return sessionChangedResult()
     result = await rawBaseQuery(args, api, extraOptions)
   }
 
@@ -148,7 +168,7 @@ const executeWithBackoffRetry = async ({ args, api, extraOptions, maxRetries }) 
 export const getConfiguredMaxRetries = (extraOptions = {}) => {
   const configured = extraOptions?.maxRetries
   return Number.isInteger(configured) && configured >= 0
-    ? configured
+    ? Math.min(configured, DEFAULT_MAX_RETRIES)
     : DEFAULT_MAX_RETRIES
 }
 
@@ -160,7 +180,9 @@ export const getConfiguredMaxRetries = (extraOptions = {}) => {
  * Enhanced base query that intercepts 401 responses and attempts a
  * silent token refresh before retrying the original request once.
  */
-const baseQueryWithReauth = async (args, api, extraOptions) => {
+export const baseQueryWithReauth = async (args, api, extraOptions) => {
+  if (api.signal?.aborted) return abortedResult()
+  const session = getSessionRevision()
   // Offline guard: fail fast with a normalized shape.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return {
@@ -178,9 +200,13 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   // If the access token is about to expire, try refreshing proactively
   const currentToken = getAccessToken()
   if (currentToken && isTokenExpired(currentToken)) {
-    await attemptRefresh(api)
+    const refreshed = await attemptRefresh(api)
+    if (api.signal?.aborted) return abortedResult()
+    if (session !== getSessionRevision()) return sessionChangedResult()
+    if (!refreshed) return { error: { status: 401, data: { code: 'SESSION_EXPIRED' } } }
   }
 
+  const requestTokenRevision = getTokenRevision()
   let result = await executeWithBackoffRetry({
     args,
     api,
@@ -189,7 +215,12 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   })
 
   if (result.error && result.error.status === 401) {
-    const refreshed = await attemptRefresh(api)
+    if (api.signal?.aborted) return abortedResult()
+    if (session !== getSessionRevision()) return sessionChangedResult()
+    // A delayed 401 may belong to the token another request already rotated.
+    const refreshed = requestTokenRevision !== getTokenRevision() || await attemptRefresh(api)
+    if (api.signal?.aborted) return abortedResult()
+    if (session !== getSessionRevision()) return sessionChangedResult()
     if (refreshed) {
       // Retry the original request with the new token
       result = await executeWithBackoffRetry({
@@ -201,7 +232,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     }
   }
 
-  return result
+  return session === getSessionRevision() ? result : sessionChangedResult()
 }
 
 /**
@@ -209,9 +240,27 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
  * On failure, clear credentials and force logout.
  * @returns {boolean} true if refresh succeeded
  */
+let refreshFlight = null
+
 async function attemptRefresh(api) {
+  const session = getSessionRevision()
+  if (!refreshFlight || refreshFlight.session !== session) {
+    const flight = { session }
+    // One caller unmounting must not cancel token rotation for other callers.
+    const sharedApi = { ...api, signal: new AbortController().signal }
+    flight.promise = performRefresh(sharedApi, session).finally(() => {
+      if (refreshFlight === flight) refreshFlight = null
+    })
+    refreshFlight = flight
+  }
+  return waitForCaller(refreshFlight.promise, api.signal)
+}
+
+async function performRefresh(api, session) {
+  const revision = getTokenRevision()
   const refreshToken = getRefreshToken()
   if (!refreshToken) {
+    clearTokens()
     api.dispatch({ type: 'auth/clearCredentials' })
     return false
   }
@@ -231,7 +280,10 @@ async function attemptRefresh(api) {
       // Backend wraps response as { data: { accessToken, refreshToken }, meta }
       const tokens = refreshResult.data.data ?? refreshResult.data
       const { accessToken, refreshToken: newRefresh } = tokens
-      setTokens({ accessToken, refreshToken: newRefresh })
+      if (session !== getSessionRevision() || revision !== getTokenRevision()) return false
+      if (typeof accessToken !== 'string' || !accessToken || typeof newRefresh !== 'string' || !newRefresh) throw new Error('Invalid refresh response')
+      setTokens({ accessToken, refreshToken: newRefresh }, { preserveSession: true })
+      const refreshedRevision = getTokenRevision()
       api.dispatch({
         type: 'auth/tokenRefreshed',
         payload: { accessToken },
@@ -242,7 +294,7 @@ async function attemptRefresh(api) {
       // Failure is non-blocking — the new access token is still valid.
       try {
         const meResult = await rawBaseQuery({ url: '/auth/me', method: 'GET' }, api, {})
-        if (meResult.data) {
+        if (meResult.data && session === getSessionRevision() && refreshedRevision === getTokenRevision()) {
           const meData = meResult.data.data ?? meResult.data
           api.dispatch({
             type: 'auth/setCredentials',
@@ -257,15 +309,17 @@ async function attemptRefresh(api) {
         // /auth/me failure is non-blocking — the refreshed token is still usable
       }
 
-      return true
+      return session === getSessionRevision()
     }
   } catch {
     // refresh failed
   }
 
   // Refresh failed — clear everything
-  clearTokens()
-  api.dispatch({ type: 'auth/clearCredentials' })
+  if (session === getSessionRevision() && revision === getTokenRevision()) {
+    clearTokens()
+    api.dispatch({ type: 'auth/clearCredentials' })
+  }
   return false
 }
 

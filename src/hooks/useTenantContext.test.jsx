@@ -12,13 +12,17 @@ const { mockUseListTenantsQuery } = vi.hoisted(() => ({
 }))
 
 vi.mock('../store/api/tenantApi.js', () => ({
-  useListTenantsQuery: (...args) => mockUseListTenantsQuery(...args),
+  useTenantContextCatalogueQuery: (...args) => {
+    const result = mockUseListTenantsQuery(...args)
+    return { currentData: result.data, ...result }
+  },
 }))
 
 import useTenantContext from './useTenantContext.js'
 import authReducer from '../store/slices/authSlice.js'
 import tenantContextReducer from '../store/slices/tenantContextSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
+import { getSessionRevision, setTokens } from '../utils/tokenStorage.js'
 
 const defaultResolvedPermissions = {
   platform: { roleKeys: [], permissions: [] },
@@ -520,8 +524,67 @@ describe('useTenantContext', () => {
     expect(result.current.canViewTenants).toBe(false)
     expect(result.current.selectableTenants).toEqual([])
     expect(mockUseListTenantsQuery).toHaveBeenLastCalledWith(
-      { customerId: 'cust-1', page: 1, pageSize: 100 },
+      { customerId: 'cust-1', sessionRevision: getSessionRevision() },
       { skip: true },
     )
+  })
+
+  it('settles on the permitted sole tenant when the declared default is not visible', async () => {
+    mockUseListTenantsQuery.mockReturnValue({ data: { data: [{ id: 'ten-visible', name: 'Visible', isSelectable: true }] }, isLoading: false })
+    const wrapper = createWrapper({
+      auth: { user: customerAdminUser, status: 'authenticated', customerScopes: [{ customerId: 'cust-1', topology: 'SINGLE_TENANT', defaultTenantId: 'ten-inaccessible' }] },
+      tenantContext: { customerId: 'cust-1', tenantId: 'ten-inaccessible', tenantName: null, ownerUserId: 'user-1' },
+    })
+    let renderCount = 0
+    const { result, rerender } = renderHook(() => { renderCount += 1; return useTenantContext() }, { wrapper })
+    await waitFor(() => expect(result.current.tenantId).toBe('ten-visible'))
+    rerender()
+    rerender()
+    expect(result.current.tenantId).toBe('ten-visible')
+    expect(renderCount).toBeLessThan(10)
+  })
+
+  it('does not auto-select from an incomplete or failed catalogue', () => {
+    mockUseListTenantsQuery.mockReturnValue({ data: undefined, isLoading: false, error: { data: { code: 'TENANT_CONTEXT_INCOMPLETE' } } })
+    const wrapper = createWrapper({ auth: { user: customerAdminUser, status: 'authenticated' }, tenantContext: { customerId: 'cust-1', tenantId: null, ownerUserId: 'user-1' } })
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+    expect(result.current.tenantId).toBeNull()
+    expect(result.current.selectableTenants).toEqual([])
+    expect(result.current.tenantsError.data.code).toBe('TENANT_CONTEXT_INCOMPLETE')
+  })
+
+  it('does not expose the previous customer catalogue while the next customer loads', () => {
+    const previous = { data: [{ id: 'old-tenant', isSelectable: true }] }
+    mockUseListTenantsQuery.mockImplementation(({ customerId }) => customerId === 'cust-1'
+      ? { data: previous, currentData: previous, isFetching: false }
+      : { data: previous, currentData: undefined, isFetching: true })
+    const wrapper = createWrapper({ auth: { user: superAdminUser, status: 'authenticated' }, tenantContext: { customerId: 'cust-1', tenantId: 'old-tenant', ownerUserId: 'user-2' } })
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+    act(() => result.current.setCustomerId('cust-2'))
+    expect(result.current.customerId).toBe('cust-2')
+    expect(result.current.tenants).toEqual([])
+    expect(result.current.selectableTenants).toEqual([])
+    expect(result.current.isLoadingTenants).toBe(true)
+    expect(result.current.hasInvalidTenantContext).toBe(false)
+  })
+
+  it('keeps a valid selected tenant beyond the first page', () => {
+    const data = Array.from({ length: 101 }, (_, index) => ({ id: `ten-${index}`, isSelectable: true }))
+    mockUseListTenantsQuery.mockReturnValue({ data: { data }, isLoading: false })
+    const wrapper = createWrapper({ auth: { user: customerAdminUser, status: 'authenticated' }, tenantContext: { customerId: 'cust-1', tenantId: 'ten-100', ownerUserId: 'user-1' } })
+    const { result } = renderHook(() => useTenantContext(), { wrapper })
+    expect(result.current.selectedTenant.id).toBe('ten-100')
+    expect(result.current.hasInvalidTenantContext).toBe(false)
+    expect(result.current.selectableTenants).toHaveLength(101)
+  })
+
+  it('uses a new catalogue cache key after a new session in the same customer', () => {
+    const wrapper = createWrapper({ auth: { user: customerAdminUser, status: 'authenticated' }, tenantContext: { customerId: 'cust-1', tenantId: null, ownerUserId: 'user-1' } })
+    const { rerender } = renderHook(() => useTenantContext(), { wrapper })
+    const originalArgs = mockUseListTenantsQuery.mock.lastCall[0]
+    setTokens({ accessToken: 'new-session', refreshToken: 'new-session-refresh' })
+    rerender()
+    expect(mockUseListTenantsQuery.mock.lastCall[0]).toMatchObject({ customerId: originalArgs.customerId })
+    expect(mockUseListTenantsQuery.mock.lastCall[0].sessionRevision).toBeGreaterThan(originalArgs.sessionRevision)
   })
 })

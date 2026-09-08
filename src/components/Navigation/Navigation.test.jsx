@@ -22,6 +22,10 @@ vi.mock('../../hooks/useAuth.js', () => ({
 
 vi.mock('../../store/api/tenantApi.js', () => ({
   useListTenantsQuery: vi.fn(),
+  useTenantContextCatalogueQuery: ({ customerId }, options) => {
+    const result = useListTenantsQuery({ customerId, page: 1, pageSize: 100 }, options)
+    return { ...result, currentData: result.data }
+  },
 }))
 
 beforeEach(() => {
