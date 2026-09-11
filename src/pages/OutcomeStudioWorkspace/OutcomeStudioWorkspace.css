@@ -516,6 +516,13 @@
   overflow-wrap: anywhere;
 }
 
+.outcome-studio-workspace__summary-detail {
+  display: block;
+  margin-top: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
 .outcome-studio-workspace__messages {
   grid-column: 1 / -1;
   margin: 0;

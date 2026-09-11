@@ -1260,6 +1260,9 @@ function OutcomeStudioWorkspace() {
   const renderSummary = () => {
     const frameworkHandoff = readiness.frameworkHandoff || {}
     const sourceOutput = information.sourceOutput || null
+    const frameworkHandoffStatus = formatRuntimeTokenLabel(frameworkHandoff.status || 'UNKNOWN')
+    const frameworkHandoffCurrentness = formatRuntimeTokenLabel(frameworkHandoff.currentness || 'UNKNOWN')
+    const frameworkHandoffContractVersion = frameworkHandoff.contractVersion || 'Contract not recorded'
     return (
       <section className="outcome-studio-workspace__summary" aria-label="Outcome Studio readiness and information">
       <div className="outcome-studio-workspace__summary-copy">
@@ -1283,9 +1286,12 @@ function OutcomeStudioWorkspace() {
           <dt>Framework handoff</dt>
           <dd>
             <Status variant={statusVariant(frameworkHandoff.status)} size="sm" showIcon>
-              {formatRuntimeTokenLabel(frameworkHandoff.status || 'UNKNOWN')}
+              {frameworkHandoffStatus}
             </Status>
-            <small>{formatRuntimeTokenLabel(frameworkHandoff.currentness || 'UNKNOWN')} · {frameworkHandoff.contractVersion || 'Contract not recorded'}</small>
+            <small className="outcome-studio-workspace__summary-detail">
+              {frameworkHandoffCurrentness !== frameworkHandoffStatus ? `${frameworkHandoffCurrentness} · ` : ''}
+              {frameworkHandoffContractVersion}
+            </small>
           </dd>
         </div>
         <div>

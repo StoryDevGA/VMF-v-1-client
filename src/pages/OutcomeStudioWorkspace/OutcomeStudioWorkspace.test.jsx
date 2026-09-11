@@ -470,6 +470,29 @@ describe('OutcomeStudioWorkspace', () => {
     expect(tracker).toHaveTextContent('Activate the required Knowledge Packs.')
   })
 
+  it('does not repeat the framework handoff status when currentness matches it', () => {
+    const blockedReadiness = {
+      ...studio.readiness,
+      state: 'BLOCKED',
+      summary: 'Outcome Studio readiness is blocked.',
+      frameworkHandoff: {
+        ...studio.readiness.frameworkHandoff,
+        status: 'BLOCKED',
+        currentness: 'BLOCKED',
+      },
+    }
+    const blockedStudio = { ...studio, readiness: blockedReadiness }
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: blockedStudio }, isLoading: false, error: null, refetch: refetchStudio })
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({ data: { data: blockedReadiness }, isLoading: false, error: null, refetch: refetchReadiness })
+
+    renderPage()
+
+    const frameworkHandoff = screen.getByText('Framework handoff').parentElement
+    expect(frameworkHandoff).toHaveTextContent('Blocked')
+    expect(frameworkHandoff).toHaveTextContent('ss-011.framework-to-outcome-studio.evidence-to-knowledge.v1')
+    expect(frameworkHandoff.textContent).not.toContain('BlockedBlocked')
+  })
+
   it('opens each stage evidence summary in its own standard dialog', async () => {
     const user = userEvent.setup()
     renderPage()
