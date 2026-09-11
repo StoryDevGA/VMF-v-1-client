@@ -25,6 +25,8 @@ import {
   buildPublishRuntimeOutputAssetQuery,
   buildRuntimeInstanceDetailQuery,
   buildRuntimeInstanceListQuery,
+  buildAvailableFrameworkPackagesQuery,
+  AVAILABLE_FRAMEWORK_PACKAGE_LIST_TAGS,
   buildRuntimeStateBootstrapQuery,
   buildRuntimeStateSectionSummaryQuery,
   buildRuntimeStateEvidenceQuery,
@@ -138,6 +140,7 @@ import {
   useLazyExportRuntimeOutcomeAssetQuery,
   useLazyExportRuntimeOutputAssetQuery,
   useListRuntimeInstancesQuery,
+  useListAvailableFrameworkPackagesQuery,
   useMutateRuntimeStateMutation,
   usePublishRuntimeOutcomeAssetMutation,
   usePublishRuntimeOutputAssetMutation,
@@ -195,6 +198,7 @@ describe('runtimeInstanceApi', () => {
   })
 
   it('registers expected endpoint definitions', () => {
+    expect(runtimeInstanceApi.endpoints).toHaveProperty('listAvailableFrameworkPackages')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('listRuntimeInstances')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeInstance')
     expect(runtimeInstanceApi.endpoints).toHaveProperty('createRuntimeRevision')
@@ -253,6 +257,7 @@ describe('runtimeInstanceApi', () => {
   })
 
   it('exports runtime instance hooks', () => {
+    expect(typeof useListAvailableFrameworkPackagesQuery).toBe('function')
     expect(typeof useListRuntimeInstancesQuery).toBe('function')
     expect(typeof useCreateRuntimeInstanceMutation).toBe('function')
     expect(typeof useCreateRuntimeRevisionMutation).toBe('function')
@@ -381,6 +386,24 @@ describe('runtimeInstanceApi', () => {
     })).toBe(
       '/runtime-instances?customerId=cust-1&tenantId=tenant-1&runtimeType=VALUE_NARRATIVE&q=Northwind&status=ACTIVE&page=2&pageSize=25',
     )
+  })
+
+  it('builds the generic customer Framework Package catalogue query', () => {
+    expect(buildAvailableFrameworkPackagesQuery({
+      customerId: 'customer-1',
+      tenantId: 'tenant-1',
+      frameworkKey: 'WEBSITE_ANALYSIS',
+      runtimeType: 'VALUE_NARRATIVE',
+    })).toBe(
+      '/runtime-instances/framework-packages?customerId=customer-1&tenantId=tenant-1&frameworkKey=WEBSITE_ANALYSIS&runtimeType=VALUE_NARRATIVE&page=1&pageSize=100',
+    )
+  })
+
+  it('shares available package cache tags with framework package mutations', () => {
+    expect(AVAILABLE_FRAMEWORK_PACKAGE_LIST_TAGS).toEqual([
+      { type: 'RuntimeFrameworkPackage', id: 'AVAILABLE_LIST' },
+      { type: 'RuntimeFrameworkPackage', id: 'LIST' },
+    ])
   })
 
   it('builds a sparse list query with stable default pagination', () => {

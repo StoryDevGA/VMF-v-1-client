@@ -68,13 +68,13 @@ vi.mock('../../store/api/customerApi.js', () => ({
 
 vi.mock('../../store/api/vmfApi.js', () => ({
   useListVmfsQuery: vi.fn(),
-  useListVmfFrameworkPackagesQuery: vi.fn(),
   useUpdateVmfMutation: vi.fn(),
   useDeleteVmfMutation: vi.fn(),
 }))
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useCreateRuntimeInstanceMutation: vi.fn(),
+  useListAvailableFrameworkPackagesQuery: vi.fn(),
   useListRuntimeInstancesQuery: vi.fn(),
 }))
 
@@ -83,12 +83,12 @@ import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
   useDeleteVmfMutation,
-  useListVmfFrameworkPackagesQuery,
   useListVmfsQuery,
   useUpdateVmfMutation,
 } from '../../store/api/vmfApi.js'
 import {
   useCreateRuntimeInstanceMutation,
+  useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
 } from '../../store/api/runtimeInstanceApi.js'
 
@@ -215,7 +215,7 @@ describe('MaintainVmfs', () => {
       isFetching: false,
       error: null,
     }
-    useListVmfFrameworkPackagesQuery.mockImplementation(() => frameworkPackageQueryResponse)
+    useListAvailableFrameworkPackagesQuery.mockImplementation(() => frameworkPackageQueryResponse)
 
     createRuntimeInstanceMock.mockReset()
     createRuntimeInstanceMock.mockReturnValue({
@@ -832,6 +832,61 @@ describe('MaintainVmfs', () => {
     })
   })
 
+  it('loads runtime-ready packages through the generic customer catalogue route', () => {
+    renderPage()
+
+    expect(useListAvailableFrameworkPackagesQuery).toHaveBeenCalledWith(
+      {
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+        frameworkKey: 'VMF',
+        runtimeType: 'VALUE_NARRATIVE',
+        page: 1,
+        pageSize: 100,
+      },
+      { skip: false },
+    )
+  })
+
+  it('paginates the generic VMF package catalogue in the create dialog', async () => {
+    const user = userEvent.setup()
+    useListAvailableFrameworkPackagesQuery.mockImplementation(({ page } = {}) => ({
+      data: {
+        data: [{
+          id: `pkg-${page}`,
+          packageName: `VMF page ${page}`,
+          packageKey: `vmf-page-${page}`,
+          version: `3.1.${page}`,
+          status: 'ACTIVE',
+        }],
+        meta: { page, totalPages: 2, total: 101 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    }))
+
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    const pagination = within(dialog).getByRole('navigation', { name: /vmf version pagination/i })
+    expect(within(pagination).getByText('VMF versions page 1 of 2')).toBeInTheDocument()
+    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+      .toHaveDisplayValue('VMF page 1 / v3.1.1')
+
+    await user.click(within(pagination).getByRole('button', { name: /next versions/i }))
+
+    await waitFor(() => {
+      expect(useListAvailableFrameworkPackagesQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, pageSize: 100 }),
+        { skip: false },
+      )
+    })
+    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+      .toHaveDisplayValue('VMF page 2 / v3.1.2')
+  })
+
   it('allows the user to override the default VMF version selection', async () => {
     const user = userEvent.setup()
 
@@ -1364,6 +1419,10 @@ describe('MaintainVmfs', () => {
       screen.getByLabelText(/lifecycle/i, { selector: 'select#vmf-lifecycle-filter' }),
     ).toBeDisabled()
     expect(useGetCustomerQuery).toHaveBeenLastCalledWith('cust-1', { skip: true })
+    expect(useListAvailableFrameworkPackagesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ customerId: 'cust-1', tenantId: 'tenant-1' }),
+      { skip: true },
+    )
 
     await user.selectOptions(actions, 'View details')
 
@@ -1381,6 +1440,25 @@ describe('MaintainVmfs', () => {
     expect(within(dialog).getByText('Readiness pending')).toBeInTheDocument()
     expect(within(dialog).getByText('Not Started')).toBeInTheDocument()
     expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
+  })
+
+  it('does not query available packages when VMF entitlement is missing', () => {
+    useAuthorization.mockReturnValue({
+      hasFeatureEntitlement: () => false,
+      hasCustomerPermission: () => false,
+      hasTenantPermission: (_customerId, _tenantId, permission) =>
+        permission === 'VMF_VIEW' || permission === 'VMF_CREATE',
+      hasVmfPermission: () => false,
+      hasVmfWorkspaceManagementAccess: () => true,
+    })
+
+    renderPage()
+
+    expect(screen.getByText(/customer licence does not include vmf/i)).toBeInTheDocument()
+    expect(useListAvailableFrameworkPackagesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ customerId: 'cust-1', tenantId: 'tenant-1' }),
+      { skip: true },
+    )
   })
 
   it('applies the read-only published lifecycle filter to runtime instance rows', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -128,6 +128,7 @@ function renderItemCount(value, noun) {
 
 function SuperAdminUiContracts() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [frameworkKey, setFrameworkKey] = useState('')
@@ -151,6 +152,11 @@ function SuperAdminUiContracts() {
     'uiContractSaved',
   ])
   const showInitialSkeleton = isLoading && !showPostSaveRefresh
+  const returnTarget = typeof location.state?.returnTo === 'string'
+    && location.state.returnTo.startsWith('/super-admin/')
+    && location.state.returnTo !== location.pathname
+    ? location.state.returnTo
+    : '/super-admin/runtime-control'
 
   const frameworkOptions = useMemo(() => {
     const frameworkKeys = [...new Set(rows.flatMap((row) => row.frameworkKeys ?? []))]
@@ -272,7 +278,7 @@ function SuperAdminUiContracts() {
         <Card variant="elevated" className="super-admin-ui-contracts__card">
           <Card.Body className="super-admin-ui-contracts__card-body super-admin-ui-contracts__card-body--compact">
             <div className="super-admin-ui-contracts__catalogue-actions">
-              <Button type="button" variant="outline" size="sm" onClick={() => navigate('/super-admin/runtime-control')}>
+              <Button type="button" variant="outline" size="sm" onClick={() => navigate(returnTarget)}>
                 Back
               </Button>
               <Button type="button" variant="primary" size="sm" onClick={() => navigate('/super-admin/runtime-control/ui-contracts/new')}>

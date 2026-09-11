@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Button, ButtonGroup } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
@@ -13,6 +13,7 @@ import {
 import { normalizeError } from '../../utils/errors.js'
 
 export default function DisplayRevisionPanel({ packageId, contracts = [] }) {
+  const location = useLocation()
   const bindingQuery = useGetFrameworkPackageDisplayBindingQuery(packageId)
   const [check, { isLoading: checking }] = useCheckFrameworkPackageDisplayRevisionMutation()
   const [apply, { isLoading: applying }] = useApplyFrameworkPackageDisplayRevisionMutation()
@@ -70,7 +71,10 @@ export default function DisplayRevisionPanel({ packageId, contracts = [] }) {
       <Fieldset.Legend>Display revision for new runtimes</Fieldset.Legend>
       <Fieldset.Content>
         <p className="super-admin-framework-package-editor__helper">
-          Clone and edit a contract in the <Link to="/super-admin/runtime-control/ui-contracts">UI Contract Registry</Link>,
+          Clone and edit a contract in the <Link
+            to="/super-admin/runtime-control/ui-contracts"
+            state={{ returnTo: `${location.pathname}${location.search}${location.hash}` }}
+          >UI Contract Registry</Link>,
           then select the active revision here. Runtime structure changes require a package revision/import.
         </p>
         {bindingQuery.isLoading ? <p role="status">Loading display binding…</p> : null}

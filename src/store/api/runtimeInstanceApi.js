@@ -8,6 +8,10 @@ import { baseApi } from './baseApi.js'
 
 export const DEFAULT_RUNTIME_INSTANCE_TYPE = 'VALUE_NARRATIVE'
 export const RUNTIME_HEAVY_READ_OPTIONS = Object.freeze({ maxRetries: 0 })
+export const AVAILABLE_FRAMEWORK_PACKAGE_LIST_TAGS = Object.freeze([
+  { type: 'RuntimeFrameworkPackage', id: 'AVAILABLE_LIST' },
+  { type: 'RuntimeFrameworkPackage', id: 'LIST' },
+])
 
 export const runtimeInstanceListTag = (runtimeType = 'ALL') => ({
   type: 'RuntimeInstance',
@@ -53,6 +57,24 @@ export const buildRuntimeInstanceListQuery = ({
   params.set('pageSize', String(pageSize))
 
   return `/runtime-instances?${params.toString()}`
+}
+
+export const buildAvailableFrameworkPackagesQuery = ({
+  customerId,
+  tenantId,
+  frameworkKey = 'VMF',
+  runtimeType = DEFAULT_RUNTIME_INSTANCE_TYPE,
+  page = 1,
+  pageSize = 100,
+}) => {
+  const params = new URLSearchParams()
+  appendParam(params, 'customerId', customerId)
+  appendParam(params, 'tenantId', tenantId)
+  appendParam(params, 'frameworkKey', frameworkKey)
+  appendParam(params, 'runtimeType', runtimeType)
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
+  return `/runtime-instances/framework-packages?${params.toString()}`
 }
 
 export const getRuntimeInstanceListTags = (result, _error, { runtimeType }) =>
@@ -546,6 +568,11 @@ export const getPublishRuntimeOutputAssetInvalidationTags = getMutateRuntimeStat
 
 export const runtimeInstanceApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    listAvailableFrameworkPackages: build.query({
+      query: buildAvailableFrameworkPackagesQuery,
+      providesTags: AVAILABLE_FRAMEWORK_PACKAGE_LIST_TAGS,
+    }),
+
     listRuntimeInstances: build.query({
       query: buildRuntimeInstanceListQuery,
       providesTags: getRuntimeInstanceListTags,
@@ -857,6 +884,7 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeRevisionMutation,

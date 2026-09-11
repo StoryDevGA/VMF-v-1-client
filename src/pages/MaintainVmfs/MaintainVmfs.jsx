@@ -38,12 +38,12 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import {
   useDeleteVmfMutation,
-  useListVmfFrameworkPackagesQuery,
   useListVmfsQuery,
   useUpdateVmfMutation,
 } from '../../store/api/vmfApi.js'
 import {
   useCreateRuntimeInstanceMutation,
+  useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
 } from '../../store/api/runtimeInstanceApi.js'
 import {
@@ -953,6 +953,7 @@ function MaintainVmfs() {
   const [lifecycleFilter, setLifecycleFilter] = useState('')
   const [page, setPage] = useState(1)
   const [runtimePage, setRuntimePage] = useState(1)
+  const [frameworkPackagePage, setFrameworkPackagePage] = useState(1)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', description: '', frameworkPackageId: '' })
@@ -1071,11 +1072,13 @@ function MaintainVmfs() {
     isLoading: isLoadingFrameworkPackages,
     isFetching: isFetchingFrameworkPackages,
     error: frameworkPackageError,
-  } = useListVmfFrameworkPackagesQuery(
+  } = useListAvailableFrameworkPackagesQuery(
     {
       customerId,
       tenantId,
-      page: 1,
+      frameworkKey: 'VMF',
+      runtimeType: 'VALUE_NARRATIVE',
+      page: frameworkPackagePage,
       pageSize: 100,
     },
     { skip: !customerId || !tenantId || !canCreateVmfs || !hasVmfEntitlement },
@@ -1101,6 +1104,9 @@ function MaintainVmfs() {
   const runtimeCurrentPage = Number(runtimeInstanceMeta.page) || runtimePage
   const runtimeTotalPages = Number(runtimeInstanceMeta.totalPages) || 1
   const runtimeTotalCount = Number(runtimeInstanceMeta.total) || runtimeInstanceRows.length
+  const frameworkPackageMeta = frameworkPackageResponse?.meta ?? {}
+  const frameworkPackageCurrentPage = Number(frameworkPackageMeta.page) || frameworkPackagePage
+  const frameworkPackageTotalPages = Math.max(1, Number(frameworkPackageMeta.totalPages) || 1)
 
   const listAppError = listError ? normalizeError(listError) : null
   const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
@@ -1313,6 +1319,7 @@ function MaintainVmfs() {
     setLifecycleFilter('')
     setPage(1)
     setRuntimePage(1)
+    setFrameworkPackagePage(1)
     closeCreateDialog()
     closeEditDialog()
     closeDetailsDialog()
@@ -2312,6 +2319,42 @@ function MaintainVmfs() {
               }
               required
             />
+            {frameworkPackageTotalPages > 1 ? (
+              <div className="maintain-vmfs__pagination" role="navigation" aria-label="VMF version pagination">
+                <p className="maintain-vmfs__pagination-info">
+                  VMF versions page {frameworkPackageCurrentPage} of {frameworkPackageTotalPages}
+                </p>
+                <div className="maintain-vmfs__pagination-controls">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isFrameworkPackageSelectionLoading || frameworkPackageCurrentPage <= 1}
+                    onClick={() => {
+                      setCreateForm((current) => ({ ...current, frameworkPackageId: '' }))
+                      setFrameworkPackagePage((current) => Math.max(1, current - 1))
+                    }}
+                  >
+                    Previous versions
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      isFrameworkPackageSelectionLoading
+                      || frameworkPackageCurrentPage >= frameworkPackageTotalPages
+                    }
+                    onClick={() => {
+                      setCreateForm((current) => ({ ...current, frameworkPackageId: '' }))
+                      setFrameworkPackagePage((current) => Math.min(frameworkPackageTotalPages, current + 1))
+                    }}
+                  >
+                    Next versions
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             {frameworkPackageAppError ? (
               <p className="maintain-vmfs__error" role="alert">
                 {frameworkPackageAppError.message}

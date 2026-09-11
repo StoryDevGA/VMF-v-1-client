@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   vmfApi,
   useListVmfsQuery,
-  useListVmfFrameworkPackagesQuery,
   useCreateVmfMutation,
   useGetVmfQuery,
   useUpdateVmfMutation,
@@ -12,7 +11,6 @@ import {
 describe('vmfApi', () => {
   it('registers expected endpoint definitions', () => {
     expect(vmfApi.endpoints).toHaveProperty('listVmfs')
-    expect(vmfApi.endpoints).toHaveProperty('listVmfFrameworkPackages')
     expect(vmfApi.endpoints).toHaveProperty('createVmf')
     expect(vmfApi.endpoints).toHaveProperty('getVmf')
     expect(vmfApi.endpoints).toHaveProperty('updateVmf')
@@ -21,10 +19,6 @@ describe('vmfApi', () => {
 
   it('exports list query hook', () => {
     expect(typeof useListVmfsQuery).toBe('function')
-  })
-
-  it('exports available framework package list query hook', () => {
-    expect(typeof useListVmfFrameworkPackagesQuery).toBe('function')
   })
 
   it('exports create mutation hook', () => {

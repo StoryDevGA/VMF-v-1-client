@@ -101,6 +101,37 @@ describe('SuperAdminUiContracts page', () => {
     expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/ui-contracts/new?cloneFrom=ui-contract-vmf-ui-contract-v1')
   })
 
+  it('returns to the originating page when the registry receives a return target', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter
+        initialEntries={[{
+          pathname: '/super-admin/runtime-control/ui-contracts',
+          state: { returnTo: '/super-admin/runtime-control/framework-packages/gus-test/edit' },
+        }]}
+      >
+        <SuperAdminUiContracts />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control/framework-packages/gus-test/edit')
+  })
+
+  it('falls back to the Runtime Control dashboard without a valid return target', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SuperAdminUiContracts />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/super-admin/runtime-control')
+  })
+
   it('renders version, version status, and lock state in the Version column', () => {
     listUiContractsQueryMock.mockReturnValue({
       ...defaultListResult,
