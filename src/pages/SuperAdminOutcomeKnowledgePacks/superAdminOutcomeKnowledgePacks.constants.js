@@ -314,6 +314,10 @@ export const KNOWLEDGE_PACK_VISIBILITY_FILTER_OPTIONS = Object.freeze([
 ])
 
 export const EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM = Object.freeze({
+  runtimeConsumers: Object.freeze([]),
+  metadataOverrides: Object.freeze([]),
+  sourceValues: Object.freeze({}),
+  sourceReady: false,
   packType: OUTCOME_KNOWLEDGE_PACK_TYPES.SYSTEM,
   packKey: '',
   knowledgeAssetId: '',
@@ -338,6 +342,10 @@ export const EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM = Object.freeze({
   contentBase64: '',
   sizeBytes: '',
 })
+
+export const IMPORT_FIELDS = Object.freeze(['label', 'knowledgeAssetId', 'capabilityKey', 'packType',
+  'purposeCategory', 'knowledgeLayer', 'executionMode', 'visibility',
+  'workspaceCompatibility', 'runtimeConsumers', 'description'])
 
 const normalizeText = (value) => String(value ?? '').trim()
 const normalizeToken = (value) => normalizeText(value).toUpperCase()

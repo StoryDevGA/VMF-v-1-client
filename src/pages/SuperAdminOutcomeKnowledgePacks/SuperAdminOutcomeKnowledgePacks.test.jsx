@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import SuperAdminOutcomeKnowledgePacks from './SuperAdminOutcomeKnowledgePacks.jsx'
@@ -14,6 +14,7 @@ const {
   disableVersionMock,
   duplicateDiagnosticsQueryMock,
   importSourceDocumentDraftMock,
+  importMetadataPreviewMock,
   listQueryMock,
   loadContentPreviewMock,
   previewQueryMock,
@@ -30,6 +31,7 @@ const {
   disableVersionMock: vi.fn(),
   duplicateDiagnosticsQueryMock: vi.fn(),
   importSourceDocumentDraftMock: vi.fn(),
+  importMetadataPreviewMock: vi.fn(),
   listQueryMock: vi.fn(),
   loadContentPreviewMock: vi.fn(),
   previewQueryMock: vi.fn(),
@@ -303,6 +305,7 @@ vi.mock('../../components/Toaster', () => ({
 }))
 
 vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
+  usePreviewKnowledgePackImportMetadataMutation: () => [importMetadataPreviewMock, {}],
   useListOutcomeKnowledgePacksQuery: listQueryMock,
   useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery: duplicateDiagnosticsQueryMock,
   usePreviewOutcomeKnowledgePackResolutionQuery: previewQueryMock,
@@ -369,20 +372,33 @@ async function prepareTextSourceImport(user, {
   filename = 'ET v2.8 Canonical Execution Translation System.md',
 } = {}) {
   await user.click(screen.getByRole('button', { name: /import source document/i }))
-  await user.selectOptions(await screen.findByLabelText(/draft pack type/i), packType)
-  await user.type(screen.getByLabelText(/^name \*$/i), label)
-  await user.type(screen.getByLabelText(/knowledge asset id/i), knowledgeAssetId)
-  await user.type(screen.getByLabelText(/capability key/i), capabilityKey)
   const sourceFile = new File(['Canonical source text.'], filename, { type: 'text/markdown' })
   await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
   await waitFor(() => {
     expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('Canonical source text.')
   })
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.clear(screen.getByLabelText(/^name \*$/i))
+  await user.type(screen.getByLabelText(/^name \*$/i), label)
+  await user.clear(screen.getByLabelText(/knowledge asset id/i))
+  await user.type(screen.getByLabelText(/knowledge asset id/i), knowledgeAssetId)
+  await user.clear(screen.getByLabelText(/capability key/i))
+  await user.type(screen.getByLabelText(/capability key/i), capabilityKey)
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.selectOptions(screen.getByLabelText(/draft pack type/i), packType)
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await user.click(screen.getByRole('button', { name: 'Next' }))
 }
 
 describe('SuperAdminOutcomeKnowledgePacks page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    importMetadataPreviewMock.mockImplementation(() => ({ unwrap: vi.fn().mockResolvedValue({ data: {
+      metadata: { label: 'Execution Translation', knowledgeAssetId: 'ET-001', capabilityKey: 'execution-translation',
+        packType: 'ET', purposeCategory: 'OUTPUT', knowledgeLayer: 'SYSTEM', executionMode: 'PROVIDER_CONTEXT',
+        visibility: 'PLATFORM', workspaceCompatibility: ['OUTCOME'], runtimeConsumers: ['Outcome Studio'], description: '' },
+      sourceMetadata: { label: 'Execution Translation' }, fieldErrors: {},
+    } }) }))
     listQueryMock.mockReturnValue(defaultListResult)
     duplicateDiagnosticsQueryMock.mockReturnValue(defaultDuplicateDiagnosticsResult)
     previewQueryMock.mockReturnValue(defaultPreviewResult)
@@ -1062,7 +1078,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
       .not.toBeInTheDocument()
     expect(within(reviewDialog).queryByText(/private provider context must not render/i))
       .not.toBeInTheDocument()
-    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+    expect(screen.getByText('Execution Translation')).toBeInTheDocument()
 
     await user.click(within(reviewDialog).getByRole('button', { name: /continue with reason/i }))
     expect(within(reviewDialog).getByRole('alert')).toHaveTextContent('Enter at least 10 characters')
@@ -1111,7 +1127,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(screen.queryByRole('heading', { name: /review possible duplicate/i }))
       .not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /import source document/i })).toBeInTheDocument()
-    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+    expect(screen.getByText('Execution Translation')).toBeInTheDocument()
     expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(1)
   })
 
@@ -1167,7 +1183,7 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     await user.click(within(reviewDialog).getByRole('button', { name: /view existing/i }))
 
     expect(await screen.findByRole('heading', { name: /pack details/i })).toBeInTheDocument()
-    expect(screen.getByLabelText(/^name \*$/i)).toHaveValue('Execution Translation')
+    expect(screen.getByText('Execution Translation')).toBeInTheDocument()
     expect(detailQueryMock).toHaveBeenCalledWith(
       { packId: 'knowledge-pack-output-schemas-pack' },
       { skip: false },
@@ -1206,389 +1222,79 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     expect(importSourceDocumentDraftMock).toHaveBeenCalledTimes(1)
   })
 
-  it('creates a draft knowledge pack from source document metadata', async () => {
+  it('hydrates metadata before creating a draft and retains overrides in the payload', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    expect(await screen.findByRole('heading', { name: /import source document/i }))
-      .toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /authoring details/i }))
-      .toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /runtime settings/i }))
-      .toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^source document$/i }))
-      .toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /advanced\/system metadata/i }))
-      .toBeInTheDocument()
-
-    await user.selectOptions(screen.getByLabelText(/draft pack type/i), 'ET')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'execution-translation')
-    await user.selectOptions(screen.getByLabelText(/purpose category/i), 'OUTPUT')
-    const sourceFile = new File(
-      ['Canonical execution translation source text.'],
-      'ET v2.8 Canonical Execution Translation System.md',
-      { type: 'text/markdown' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue(
-        'Canonical execution translation source text.',
-      )
-    })
-    expect(screen.getByRole('button', { name: /advanced\/system metadata/i }))
-      .toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByLabelText(/source hash/i)).not.toBeInTheDocument()
-
+    await prepareTextSourceImport(user)
     await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    await waitFor(() => {
-      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith({
-        packType: 'ET',
-        packKey: 'execution-translation',
-        knowledgeAssetId: 'ET-001',
-        knowledgeLayer: 'SYSTEM',
-        capabilityKey: 'execution-translation',
-        workspaceCompatibility: ['OUTCOME'],
-        label: 'Execution Translation',
-        description: '',
-        purposeCategory: 'OUTPUT',
-        semanticVersion: '1.0.0',
-        schemaVersion: '1.0.0',
-        sourceAuthority: '',
-        executionMode: 'PROVIDER_CONTEXT',
-        visibility: 'PLATFORM',
-        customerId: '',
-        tenantId: '',
-        contentFormat: 'MARKDOWN',
-        sourceDocument: {
-          filename: 'ET v2.8 Canonical Execution Translation System.md',
-          contentType: 'text/markdown',
-          fileExtension: 'md',
-          sizeBytes: sourceFile.size,
-        },
-        extractedText: 'Canonical execution translation source text.',
-      })
-    })
-
-    expect(validateVersionMock).not.toHaveBeenCalled()
-    expect(activateVersionMock).not.toHaveBeenCalled()
-    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Draft imported',
-      variant: 'success',
-    }))
+    await waitFor(() => expect(importSourceDocumentDraftMock).toHaveBeenCalledWith(expect.objectContaining({
+      packType: 'ET', knowledgeAssetId: 'ET-001', label: 'Execution Translation',
+      runtimeConsumers: ['Outcome Studio'], workspaceCompatibility: ['OUTCOME'],
+      metadataOverrides: expect.arrayContaining(['label', 'packType']),
+      extractedText: 'Canonical source text.',
+    })))
   })
 
-  it('creates a draft knowledge pack from a binary source document for server extraction', async () => {
+  it('keeps file selection first and blocks progress without a source', async () => {
     const user = userEvent.setup()
     renderPage()
-
     await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'SYSTEM')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Enterprise Technology')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'sys-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'enterprise-technology')
-    await user.selectOptions(screen.getByLabelText(/purpose category/i), 'FRAMEWORK')
-    const sourceFile = new File(
-      ['%PDF-1.4 Enterprise Technology framework assessment governance'],
-      'Enterprise Technology Framework v5.pdf',
-      { type: 'application/pdf' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    await waitFor(() => {
-      const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
-      expect(within(derivedMetadata).getByText('Enterprise Technology Framework v5.pdf')).toBeInTheDocument()
-      expect(within(derivedMetadata).getByText('PDF')).toBeInTheDocument()
-    })
-    expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('')
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    await waitFor(() => {
-      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith({
-        packType: 'SYSTEM',
-        packKey: 'enterprise-technology',
-        knowledgeAssetId: 'SYS-001',
-        knowledgeLayer: 'SYSTEM',
-        capabilityKey: 'enterprise-technology',
-        workspaceCompatibility: ['OUTCOME'],
-        label: 'Enterprise Technology',
-        description: '',
-        purposeCategory: 'FRAMEWORK',
-        semanticVersion: '1.0.0',
-        schemaVersion: '1.0.0',
-        sourceAuthority: '',
-        executionMode: 'PROVIDER_CONTEXT',
-        visibility: 'PLATFORM',
-        customerId: '',
-        tenantId: '',
-        contentFormat: 'PDF',
-        sourceDocument: {
-          filename: 'Enterprise Technology Framework v5.pdf',
-          contentType: 'application/pdf',
-          fileExtension: 'pdf',
-          sizeBytes: sourceFile.size,
-          contentBase64: expect.any(String),
-        },
-        extractedText: undefined,
-      })
-    })
-    expect(importSourceDocumentDraftMock.mock.calls[0][0].sourceDocument.contentBase64)
-      .toMatch(/JVBERi0xLjQgRW50ZXJwcmlzZSBUZWNobm9sb2d5/)
-    expect(validateVersionMock).not.toHaveBeenCalled()
-    expect(activateVersionMock).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText(/^name/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Create Draft' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: /import source document/i })).toHaveFocus()
   })
 
-  it('blocks oversize source documents before reading file content', async () => {
+  it('blocks invalid version metadata and directs the user to the visible error', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    const sourceFile = new File(
-      ['%PDF-1.4 Enterprise Technology framework assessment governance'],
-      'Enterprise Technology Framework v5.pdf',
-      { type: 'application/pdf' },
-    )
-    Object.defineProperty(sourceFile, 'size', { value: 10_000_001 })
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    expect(await screen.findByText(/SOURCE_DOCUMENT_SIZE_LIMIT_EXCEEDED/i)).toBeInTheDocument()
-    const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
-    expect(within(derivedMetadata).getByText('Select a source document')).toBeInTheDocument()
-    expect(within(derivedMetadata).queryByText('Enterprise Technology Framework v5.pdf')).not.toBeInTheDocument()
+    await prepareTextSourceImport(user)
+    await user.clear(screen.getByLabelText(/^semantic version/i))
+    await user.type(screen.getByLabelText(/^semantic version/i), 'invalid')
+    await user.click(screen.getByRole('button', { name: 'Create Draft' }))
+    expect(await screen.findByText(/Use major.minor.patch/)).toBeInTheDocument()
     expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
 
-  it('rejects unsupported source document extensions instead of treating them as Markdown', async () => {
+  it('keeps server metadata conflicts blocking and opens the affected step', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    const sourceFile = new File(['not really an image'], 'bad-import.png', { type: 'image/png' })
-    fireEvent.change(screen.getByLabelText(/source document file/i), {
-      target: { files: [sourceFile] },
-    })
-
-    expect(await screen.findByText(/supported source document format/i)).toBeInTheDocument()
-    const derivedMetadata = screen.getByLabelText(/derived source metadata/i)
-    expect(within(derivedMetadata).getByText('Select a source document')).toBeInTheDocument()
-    expect(within(derivedMetadata).queryByText('bad-import.png')).not.toBeInTheDocument()
+    await prepareTextSourceImport(user)
+    importMetadataPreviewMock.mockReturnValueOnce({ unwrap: vi.fn().mockResolvedValue({ data: {
+      fieldErrors: { knowledgeAssetId: 'Knowledge Asset ID must match the selected source.' },
+    } }) })
+    await user.click(screen.getByRole('button', { name: 'Create Draft' }))
+    expect(await screen.findByText('Knowledge Asset ID must match the selected source.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/knowledge asset id/i)).toHaveAttribute('aria-invalid', 'true')
     expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
 
-  it('blocks source document import when Knowledge Asset ID is missing', async () => {
+  it('maps API errors to their step and retains source import failure reporting', async () => {
     const user = userEvent.setup()
     renderPage()
+    await prepareTextSourceImport(user)
+    importSourceDocumentDraftMock.mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 422,
+      data: { error: { code: 'VALIDATION_FAILED', message: 'Please check the form for errors.',
+        details: { semanticVersion: 'Invalid source version.' } } },
+    }) })
+    await user.click(screen.getByRole('button', { name: 'Create Draft' }))
+    expect(await screen.findByText('Invalid source version.')).toBeInTheDocument()
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Source import failed' }))
+  })
 
+  it.each(['disk', 'size', 'extension'])('invalidates failed %s file selections before draft import', async (failure) => {
+    const user = userEvent.setup({ applyAccept: false })
+    renderPage()
     await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.type(await screen.findByLabelText(/^name \*$/i), 'Enterprise Technology')
-    const sourceFile = new File(
-      ['%PDF-1.4 Enterprise Technology framework assessment governance'],
-      'Enterprise Technology Framework v5.pdf',
-      { type: 'application/pdf' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    expect(await screen.findByText(/Knowledge Asset ID is missing/i)).toBeInTheDocument()
+    const file = new File(['source'], failure === 'extension' ? 'bad.exe' : 'pack.md')
+    if (failure === 'disk') Object.defineProperty(file, 'text', { value: vi.fn().mockRejectedValue(new Error('Disk read failed')) })
+    if (failure === 'size') Object.defineProperty(file, 'size', { value: 10000001 })
+    await user.upload(screen.getByLabelText(/source document file/i), file)
+    expect(await screen.findByText('Unable to read selected source document.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
     expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
   })
-
-  it('normalizes capability key and workspace compatibility before source import', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ET')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'Execution Translation !!')
-    await user.click(screen.getByLabelText(/^outcome$/i))
-    await user.click(screen.getByLabelText(/^advisor$/i))
-    await user.click(screen.getByLabelText(/^discovery$/i))
-    const sourceFile = new File(
-      ['Canonical execution translation source text.'],
-      'ET v2.8 Canonical Execution Translation System.md',
-      { type: 'text/markdown' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    await waitFor(() => {
-      expect(importSourceDocumentDraftMock).toHaveBeenCalledWith(expect.objectContaining({
-        capabilityKey: 'execution-translation',
-        workspaceCompatibility: ['ADVISOR', 'DISCOVERY'],
-      }))
-    })
-  })
-
-  it('associates empty workspace compatibility validation with the checkbox group', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ET')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Execution Translation')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'et-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'execution-translation')
-    await user.click(screen.getByLabelText(/^outcome$/i))
-    const sourceFile = new File(
-      ['Canonical execution translation source text.'],
-      'ET v2.8 Canonical Execution Translation System.md',
-      { type: 'text/markdown' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    const error = await screen.findByText('Select at least one compatible workspace.')
-    expect(error).toHaveAttribute('id', 'knowledge-pack-source-import-workspace-compatibility-error')
-    expect(screen.getByLabelText(/^outcome$/i)).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByLabelText(/^outcome$/i)).toHaveAttribute(
-      'aria-describedby',
-      'knowledge-pack-source-import-workspace-compatibility-error',
-    )
-    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
-  })
-
-  it('blocks source document import when version metadata is not major.minor.patch', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'arl-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'adaptive-reasoning-layer')
-    const sourceFile = new File(
-      ['Adaptive reasoning source text.'],
-      'ARL v1.2 Candidate.md',
-      { type: 'text/markdown' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-    await user.click(screen.getByRole('button', { name: /advanced\/system metadata/i }))
-
-    await user.clear(screen.getByLabelText(/semantic version/i))
-    await user.type(screen.getByLabelText(/semantic version/i), '1.2')
-    await user.clear(screen.getByLabelText(/schema version/i))
-    await user.type(screen.getByLabelText(/schema version/i), '1.2')
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    expect(screen.getAllByText('Use major.minor.patch format, for example 1.2.0.'))
-      .toHaveLength(2)
-    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
-    expect(addToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Source import failed',
-    }))
-  })
-
-  it('maps source document import API field details back into the form', async () => {
-    const user = userEvent.setup()
-    importSourceDocumentDraftMock.mockReturnValueOnce({
-      unwrap: vi.fn().mockRejectedValue({
-        status: 422,
-        data: {
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'Please check the form for errors.',
-            requestId: 'req-source-import',
-            details: {
-              semanticVersion: 'semanticVersion must use major.minor.patch format',
-              'sourceDocument.filename': 'Source filename has already been used.',
-            },
-          },
-        },
-      }),
-    })
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    await user.selectOptions(await screen.findByLabelText(/draft pack type/i), 'ARL')
-    await user.type(screen.getByLabelText(/^name \*$/i), 'Adaptive Reasoning Layer')
-    await user.type(screen.getByLabelText(/knowledge asset id/i), 'arl-001')
-    await user.type(screen.getByLabelText(/capability key/i), 'adaptive-reasoning-layer')
-    const sourceFile = new File(
-      ['Adaptive reasoning source text.'],
-      'ARL v1.2 Candidate.md',
-      { type: 'text/markdown' },
-    )
-    await user.upload(screen.getByLabelText(/source document file/i), sourceFile)
-    await waitFor(() => {
-      expect(screen.getByLabelText(/extracted text preview/i))
-        .toHaveValue('Adaptive reasoning source text.')
-    })
-    await user.click(screen.getByRole('button', { name: /advanced\/system metadata/i }))
-
-    await user.click(screen.getByRole('button', { name: /create draft/i }))
-
-    expect(await screen.findByText('semanticVersion must use major.minor.patch format'))
-      .toBeInTheDocument()
-    expect(screen.getByText('Source filename has already been used.')).toBeInTheDocument()
-    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Source import failed',
-      description: 'Please check the form for errors. (Ref: req-source-import)',
-    }))
-  })
-
-  it('surfaces source-document file read failures before draft import', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-
-    const sourceFile = new File(
-      ['Canonical execution translation source text.'],
-      'ET v2.8 Canonical Execution Translation System.md',
-      { type: 'text/markdown' },
-    )
-    Object.defineProperty(sourceFile, 'text', {
-      value: vi.fn().mockRejectedValue(new Error('Disk read failed')),
-    })
-
-    await user.upload(await screen.findByLabelText(/source document file/i), sourceFile)
-
-    await waitFor(() => {
-      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
-        variant: 'error',
-        title: 'Source file read failed',
-        description: 'Disk read failed',
-      }))
-    })
-    expect(screen.getByText('Unable to read selected source document.')).toBeInTheDocument()
-    expect(screen.getByText('Disk read failed')).toBeInTheDocument()
-    expect(screen.getByLabelText(/extracted text preview/i)).toHaveValue('')
-    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
-  })
-
-  it('blocks source document import when required draft fields are missing', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(screen.getByRole('button', { name: /import source document/i }))
-    await user.click(await screen.findByRole('button', { name: /create draft/i }))
-
-    expect(await screen.findByText('Label is required.')).toBeInTheDocument()
-    expect(screen.getAllByText('Source filename is required.')).toHaveLength(1)
-    expect(screen.getByText('Extracted text is required for text source imports.')).toBeInTheDocument()
-    expect(importSourceDocumentDraftMock).not.toHaveBeenCalled()
-  })
-
   it('opens persisted pack details with version and activation history without loading source content', async () => {
     const user = userEvent.setup()
     renderPage()

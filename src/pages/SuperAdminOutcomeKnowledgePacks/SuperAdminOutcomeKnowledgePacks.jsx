@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MdInventory2 } from 'react-icons/md'
-import { Accordion } from '../../components/Accordion'
+import { KnowledgePackSourceImportDialog } from './KnowledgePackSourceImportDialog.jsx'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -37,6 +37,7 @@ import {
 import { normalizeError } from '../../utils/errors.js'
 import {
   EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM,
+  IMPORT_FIELDS,
   KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS,
   KNOWLEDGE_PACK_LAYER_FILTER_OPTIONS,
   KNOWLEDGE_PACK_LAYER_OPTIONS,
@@ -512,6 +513,19 @@ function bytesToBase64(bytes) {
   return globalThis.btoa(binary)
 }
 
+async function readSourceImportFile(file) {
+  const filename = file.name
+  const contentFormat = inferSourceFormatFromFilename(filename)
+  if (!contentFormat) throw new Error(SOURCE_IMPORT_UNSUPPORTED_FORMAT_ERROR)
+  if (Number(file.size ?? 0) > SOURCE_DOCUMENT_MAX_BYTES) throw new Error(SOURCE_IMPORT_SIZE_LIMIT_ERROR)
+  return {
+    filename, contentFormat, contentType: file.type || '', fileExtension: getFilenameExtension(filename),
+    sizeBytes: file.size ?? '',
+    extractedText: shouldReadSourceText(filename) ? await readFileText(file) : '',
+    contentBase64: shouldReadSourceBinary(filename) ? await readFileBase64(file) : '',
+  }
+}
+
 function readFileText(file) {
   if (!file) return Promise.resolve('')
   if (typeof file.text === 'function') return file.text()
@@ -560,13 +574,6 @@ function buildDraftPackKey(value = '') {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-}
-
-function normalizeCapabilityKeyDraft(value = '') {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-{2,}/g, '-')
 }
 
 function getSummaryEntries(summary = {}) {
@@ -1234,426 +1241,6 @@ function renderVersion(_value, row) {
   )
 }
 
-function KnowledgePackSourceImportDialog({
-  open,
-  form,
-  error,
-  fieldErrors = {},
-  isLoading,
-  onClose,
-  onSubmit,
-  onFormChange,
-  onFileMetadata,
-  onFileReadError,
-}) {
-  const [advancedOpenItems, setAdvancedOpenItems] = useState([])
-  const [prevHasAdvancedFieldErrors, setPrevHasAdvancedFieldErrors] = useState(false)
-
-  const advancedFieldKeys = [
-    'packKey',
-    'semanticVersion',
-    'schemaVersion',
-    'contentFormat',
-    'sourceAuthority',
-    'customerId',
-    'tenantId',
-  ]
-  const hasAdvancedFieldErrors = Boolean(
-    advancedFieldKeys.some((fieldKey) => fieldErrors[fieldKey]),
-  )
-  if (hasAdvancedFieldErrors !== prevHasAdvancedFieldErrors) {
-    setPrevHasAdvancedFieldErrors(hasAdvancedFieldErrors)
-    if (hasAdvancedFieldErrors) setAdvancedOpenItems(['source-import-advanced'])
-  }
-
-  const toggleWorkspaceCompatibility = (workspaceType, checked) => {
-    const currentValues = Array.isArray(form.workspaceCompatibility)
-      ? form.workspaceCompatibility
-      : []
-    const nextValues = checked
-      ? [...new Set([...currentValues, workspaceType])]
-      : currentValues.filter((value) => value !== workspaceType)
-    onFormChange('workspaceCompatibility', nextValues)
-  }
-
-  if (!open) return null
-  const workspaceCompatibilityErrorId =
-    'knowledge-pack-source-import-workspace-compatibility-error'
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const filename = file.name
-    const contentFormat = inferSourceFormatFromFilename(filename)
-    if (!contentFormat) {
-      event.target.value = ''
-      onFileReadError?.(new Error(SOURCE_IMPORT_UNSUPPORTED_FORMAT_ERROR))
-      return
-    }
-    if (Number(file.size ?? 0) > SOURCE_DOCUMENT_MAX_BYTES) {
-      event.target.value = ''
-      const err = new Error(SOURCE_IMPORT_SIZE_LIMIT_ERROR)
-      err.code = 'SOURCE_DOCUMENT_SIZE_LIMIT_EXCEEDED'
-      onFileReadError?.(err)
-      return
-    }
-    const nextMetadata = {
-      filename,
-      contentType: file.type || '',
-      fileExtension: getFilenameExtension(filename),
-      contentFormat,
-      extractedText: '',
-      contentBase64: '',
-      sizeBytes: file.size ?? '',
-    }
-
-    try {
-      if (shouldReadSourceText(filename)) {
-        nextMetadata.extractedText = await readFileText(file)
-      }
-      if (shouldReadSourceBinary(filename)) {
-        nextMetadata.contentBase64 = await readFileBase64(file)
-      }
-    } catch (err) {
-      event.target.value = ''
-      onFileReadError?.(err)
-      return
-    }
-
-    onFileMetadata(nextMetadata)
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} size="xl">
-      <form
-        className="super-admin-outcome-knowledge-packs__dialog-form"
-        onSubmit={onSubmit}
-        noValidate
-      >
-        <Dialog.Header>
-          <h2>Import Source Document</h2>
-          <p className="super-admin-outcome-knowledge-packs__dialog-copy">
-            Create a draft Knowledge Pack from a governed source document reference.
-          </p>
-        </Dialog.Header>
-        <Dialog.Body className="super-admin-outcome-knowledge-packs__dialog-body">
-          {error ? (
-            <p className="super-admin-outcome-knowledge-packs__error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <section
-            className="super-admin-outcome-knowledge-packs__form-section"
-            aria-labelledby="knowledge-pack-source-import-authoring-heading"
-          >
-            <h3 id="knowledge-pack-source-import-authoring-heading">Authoring details</h3>
-            <div className="super-admin-outcome-knowledge-packs__form-grid">
-              <Input
-                id="knowledge-pack-source-import-label"
-                label="Name"
-                size="sm"
-                value={form.label}
-                onChange={(event) => onFormChange('label', event.target.value)}
-                error={fieldErrors.label}
-                required
-                fullWidth
-              />
-              <Select
-                id="knowledge-pack-source-import-pack-type"
-                label="Draft Pack Type"
-                size="sm"
-                value={form.packType}
-                options={OUTCOME_KNOWLEDGE_PACK_AUTHORING_TYPE_OPTIONS}
-                onChange={(event) => onFormChange('packType', event.target.value)}
-                error={fieldErrors.packType}
-                required
-              />
-              <Select
-                id="knowledge-pack-source-import-purpose-category"
-                label="Purpose Category"
-                size="sm"
-                value={form.purposeCategory}
-                options={KNOWLEDGE_PACK_PURPOSE_CATEGORY_OPTIONS}
-                onChange={(event) => onFormChange('purposeCategory', event.target.value)}
-                error={fieldErrors.purposeCategory}
-              />
-              <Input
-                id="knowledge-pack-source-import-knowledge-asset-id"
-                label="Knowledge Asset ID"
-                size="sm"
-                value={form.knowledgeAssetId}
-                onChange={(event) => onFormChange('knowledgeAssetId', event.target.value.toUpperCase())}
-                error={fieldErrors.knowledgeAssetId}
-                helperText="Permanent governed identity retained across versions. Use the canonical ID, not a filename or database ID."
-                required
-                fullWidth
-              />
-              <Select
-                id="knowledge-pack-source-import-knowledge-layer"
-                label="Knowledge Layer"
-                size="sm"
-                value={form.knowledgeLayer}
-                options={KNOWLEDGE_PACK_LAYER_OPTIONS}
-                onChange={(event) => onFormChange('knowledgeLayer', event.target.value)}
-                error={fieldErrors.knowledgeLayer}
-                required
-              />
-              <Input
-                id="knowledge-pack-source-import-capability-key"
-                label="Capability Key"
-                size="sm"
-                value={form.capabilityKey}
-                onChange={(event) => onFormChange(
-                  'capabilityKey',
-                  normalizeCapabilityKeyDraft(event.target.value),
-                )}
-                error={fieldErrors.capabilityKey}
-                helperText="Stable lower-case capability key retained across versions."
-                required
-                fullWidth
-              />
-              <fieldset
-                className="super-admin-outcome-knowledge-packs__checkbox-group"
-                aria-invalid={fieldErrors.workspaceCompatibility ? 'true' : undefined}
-                aria-describedby={fieldErrors.workspaceCompatibility
-                  ? workspaceCompatibilityErrorId
-                  : undefined}
-              >
-                <legend>Workspace Compatibility</legend>
-                <div className="super-admin-outcome-knowledge-packs__checkbox-list">
-                  {KNOWLEDGE_PACK_WORKSPACE_COMPATIBILITY_OPTIONS.map((option) => (
-                    <Tickbox
-                      key={option.value}
-                      id={`knowledge-pack-source-import-workspace-${option.value.toLowerCase()}`}
-                      label={option.label}
-                      size="sm"
-                      checked={Array.isArray(form.workspaceCompatibility)
-                        && form.workspaceCompatibility.includes(option.value)}
-                      aria-invalid={fieldErrors.workspaceCompatibility ? 'true' : undefined}
-                      aria-describedby={fieldErrors.workspaceCompatibility
-                        ? workspaceCompatibilityErrorId
-                        : undefined}
-                      onChange={(event) => toggleWorkspaceCompatibility(
-                        option.value,
-                        event.target.checked,
-                      )}
-                    />
-                  ))}
-                </div>
-                {fieldErrors.workspaceCompatibility ? (
-                  <p
-                    id={workspaceCompatibilityErrorId}
-                    className="super-admin-outcome-knowledge-packs__field-error"
-                    role="alert"
-                  >
-                    {fieldErrors.workspaceCompatibility}
-                  </p>
-                ) : null}
-              </fieldset>
-            </div>
-            <Textarea
-              id="knowledge-pack-source-import-description"
-              label="Description"
-              value={form.description}
-              rows={3}
-              resize="vertical"
-              onChange={(event) => onFormChange('description', event.target.value)}
-              error={fieldErrors.description}
-              fullWidth
-            />
-          </section>
-
-          <section
-            className="super-admin-outcome-knowledge-packs__form-section"
-            aria-labelledby="knowledge-pack-source-import-runtime-heading"
-          >
-            <h3 id="knowledge-pack-source-import-runtime-heading">Runtime settings</h3>
-            <div className="super-admin-outcome-knowledge-packs__form-grid super-admin-outcome-knowledge-packs__form-grid--compact">
-              <Select
-                id="knowledge-pack-source-import-execution-mode"
-                label="Execution Mode"
-                size="sm"
-                value={form.executionMode}
-                options={KNOWLEDGE_PACK_EXECUTION_MODE_OPTIONS}
-                onChange={(event) => onFormChange('executionMode', event.target.value)}
-                error={fieldErrors.executionMode}
-              />
-              <Select
-                id="knowledge-pack-source-import-visibility"
-                label="Visibility"
-                size="sm"
-                value={form.visibility}
-                options={KNOWLEDGE_PACK_VISIBILITY_OPTIONS}
-                onChange={(event) => onFormChange('visibility', event.target.value)}
-                error={fieldErrors.visibility}
-              />
-            </div>
-          </section>
-
-          <section
-            className="super-admin-outcome-knowledge-packs__form-section"
-            aria-labelledby="knowledge-pack-source-import-source-heading"
-          >
-            <h3 id="knowledge-pack-source-import-source-heading">Source document</h3>
-            <label className="super-admin-outcome-knowledge-packs__file-field">
-              <span>Source document file</span>
-              <input
-                type="file"
-                accept=".md,.markdown,.txt,.yaml,.yml,.json,.docx,.pdf,text/plain,text/markdown,application/json,application/yaml,text/yaml,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
-                onChange={handleFileChange}
-                disabled={isLoading}
-              />
-            </label>
-            {fieldErrors.filename ? (
-              <p className="super-admin-outcome-knowledge-packs__field-error" role="alert">
-                {fieldErrors.filename}
-              </p>
-            ) : null}
-
-            <dl
-              className="super-admin-outcome-knowledge-packs__derived-source"
-              aria-label="Derived source metadata"
-            >
-              <DetailItem label="Filename">
-                {formatDetailValue(form.filename, 'Select a source document')}
-              </DetailItem>
-              <DetailItem label="Format">
-                {formatDetailValue(form.contentFormat, 'Derived from file')}
-              </DetailItem>
-              <DetailItem label="Document ID">
-                Server generated
-              </DetailItem>
-              <DetailItem label="Source hash">
-                Server generated
-              </DetailItem>
-            </dl>
-
-            <Textarea
-              id="knowledge-pack-source-import-extracted-text"
-              label="Extracted text preview"
-              value={form.extractedText}
-              rows={8}
-              resize="vertical"
-              onChange={(event) => onFormChange('extractedText', event.target.value)}
-              error={fieldErrors.extractedText}
-              helperText="Auto-filled for Markdown, YAML, JSON, and text source documents. DOCX and PDF extraction runs on the server when the draft is created."
-              readOnly
-              fullWidth
-            />
-          </section>
-
-          <Accordion
-            variant="outlined"
-            className="super-admin-outcome-knowledge-packs__advanced"
-            openItems={advancedOpenItems}
-            onOpenItemsChange={setAdvancedOpenItems}
-          >
-            <Accordion.Item id="source-import-advanced">
-              <Accordion.Header itemId="source-import-advanced">
-                Advanced/system metadata
-              </Accordion.Header>
-              <Accordion.Content itemId="source-import-advanced">
-                <div className="super-admin-outcome-knowledge-packs__form-grid">
-                  <Input
-                    id="knowledge-pack-source-import-pack-key"
-                    label="Pack Key"
-                    size="sm"
-                    value={form.packKey}
-                    onChange={(event) => onFormChange('packKey', event.target.value)}
-                    error={fieldErrors.packKey}
-                    required
-                    fullWidth
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-semantic-version"
-                    label="Semantic Version"
-                    size="sm"
-                    value={form.semanticVersion}
-                    onChange={(event) => onFormChange('semanticVersion', event.target.value)}
-                    error={fieldErrors.semanticVersion}
-                    required
-                    fullWidth
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-schema-version"
-                    label="Schema Version"
-                    size="sm"
-                    value={form.schemaVersion}
-                    onChange={(event) => onFormChange('schemaVersion', event.target.value)}
-                    error={fieldErrors.schemaVersion}
-                    required
-                    fullWidth
-                  />
-                  <Select
-                    id="knowledge-pack-source-import-content-format"
-                    label="Source Format"
-                    size="sm"
-                    value={form.contentFormat}
-                    options={OUTCOME_KNOWLEDGE_PACK_SOURCE_FORMAT_OPTIONS}
-                    onChange={(event) => onFormChange('contentFormat', event.target.value)}
-                    error={fieldErrors.contentFormat}
-                    required
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-filename"
-                    label="Source Filename"
-                    size="sm"
-                    value={form.filename}
-                    onChange={(event) => onFormChange('filename', event.target.value)}
-                    required
-                    fullWidth
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-authority"
-                    label="Source Authority"
-                    size="sm"
-                    value={form.sourceAuthority}
-                    onChange={(event) => onFormChange('sourceAuthority', event.target.value)}
-                    error={fieldErrors.sourceAuthority}
-                    fullWidth
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-customer-id"
-                    label="Customer Id"
-                    size="sm"
-                    value={form.customerId}
-                    onChange={(event) => onFormChange('customerId', event.target.value)}
-                    error={fieldErrors.customerId}
-                    fullWidth
-                  />
-                  <Input
-                    id="knowledge-pack-source-import-tenant-id"
-                    label="Tenant Id"
-                    size="sm"
-                    value={form.tenantId}
-                    onChange={(event) => onFormChange('tenantId', event.target.value)}
-                    error={fieldErrors.tenantId}
-                    fullWidth
-                  />
-                </div>
-              </Accordion.Content>
-            </Accordion.Item>
-          </Accordion>
-
-          <p className="super-admin-outcome-knowledge-packs__dialog-helper">
-            Imported source documents are saved as draft packs. Validation and activation stay separate.
-          </p>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={isLoading}>
-            Create Draft
-          </Button>
-        </Dialog.Footer>
-      </form>
-    </Dialog>
-  )
-}
-
 function DuplicateDiagnosticsSummary({ data, error, isLoading }) {
   if (isLoading && !data) {
     return (
@@ -1873,6 +1460,13 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [duplicateStatus, setDuplicateStatus] = useState('')
   const [isBlankDraftOpen, setIsBlankDraftOpen] = useState(false)
   const [isSourceImportOpen, setIsSourceImportOpen] = useState(false)
+  const sourceImportTrigger = useRef(null)
+  useEffect(() => {
+    if (!isSourceImportOpen && sourceImportTrigger.current) {
+      sourceImportTrigger.current.focus()
+      sourceImportTrigger.current = null
+    }
+  }, [isSourceImportOpen])
   const [sourceImportForm, setSourceImportForm] = useState(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
   const [sourceImportError, setSourceImportError] = useState('')
   const [sourceImportFieldErrors, setSourceImportFieldErrors] = useState({})
@@ -2011,7 +1605,8 @@ function SuperAdminOutcomeKnowledgePacks() {
   const visibleUnboundRequiredPacks = unboundRequiredPacks
     .filter((pack) => visiblePackKeys.has(buildRuntimePackKey(pack)))
 
-  const openSourceImportDialog = useCallback(() => {
+  const openSourceImportDialog = useCallback((event) => {
+    sourceImportTrigger.current = event?.currentTarget || null
     setIsSourceImportOpen(true)
     setSourceImportForm(EMPTY_KNOWLEDGE_PACK_SOURCE_IMPORT_FORM)
     setSourceImportError('')
@@ -2040,7 +1635,11 @@ function SuperAdminOutcomeKnowledgePacks() {
   }, [isImportingSourceDocumentDraft])
 
   const updateSourceImportForm = useCallback((field, value) => {
-    setSourceImportForm((current) => ({ ...current, [field]: value }))
+    setSourceImportForm((current) => ({ ...current, [field]: value,
+      metadataOverrides: IMPORT_FIELDS.includes(field)
+        ? [...new Set([...(current.metadataOverrides || []), field])]
+        : current.metadataOverrides,
+    }))
     setSourceImportFieldErrors((current) => {
       if (!current[field]) return current
       const next = { ...current }
@@ -2050,17 +1649,13 @@ function SuperAdminOutcomeKnowledgePacks() {
   }, [])
 
   const handleSourceImportFileMetadata = useCallback((metadata = {}) => {
+    const { _fieldErrors = {}, ...values } = metadata
     setSourceImportForm((current) => ({
       ...current,
-      ...metadata,
+      ...values,
     }))
-    setSourceImportFieldErrors((current) => {
-      const next = { ...current }
-      delete next.filename
-      delete next.contentFormat
-      delete next.extractedText
-      return next
-    })
+    setSourceImportFieldErrors(_fieldErrors)
+    setSourceImportError('')
   }, [])
 
   const handleSourceImportFileReadError = useCallback((err) => {
@@ -2166,7 +1761,7 @@ function SuperAdminOutcomeKnowledgePacks() {
       || buildDraftPackKey(sourceImportForm.label)
     const knowledgeAssetId = sourceImportForm.knowledgeAssetId.trim().toUpperCase()
     const knowledgeLayer = sourceImportForm.knowledgeLayer.trim().toUpperCase()
-    const capabilityKey = buildDraftPackKey(sourceImportForm.capabilityKey)
+    const capabilityKey = sourceImportForm.capabilityKey.trim()
     const workspaceCompatibility = Array.isArray(sourceImportForm.workspaceCompatibility)
       ? sourceImportForm.workspaceCompatibility.map((value) => value.trim().toUpperCase()).filter(Boolean)
       : []
@@ -2232,6 +1827,8 @@ function SuperAdminOutcomeKnowledgePacks() {
     }
 
     const importPayload = {
+      runtimeConsumers: sourceImportForm.runtimeConsumers,
+      metadataOverrides: sourceImportForm.metadataOverrides,
       packType: sourceImportForm.packType,
       packKey: resolvedPackKey,
       knowledgeAssetId,
@@ -2885,6 +2482,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         onFormChange={updateSourceImportForm}
         onFileMetadata={handleSourceImportFileMetadata}
         onFileReadError={handleSourceImportFileReadError}
+        readSourceFile={readSourceImportFile}
       />
 
       <KnowledgePackDuplicateReviewDialog

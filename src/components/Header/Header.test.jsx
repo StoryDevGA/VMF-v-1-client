@@ -490,7 +490,7 @@ describe('Header Component', () => {
 
       // Click a navigation link
       await user.click(screen.getByRole('button', { name: /runtime control/i }))
-      await user.click(screen.getByRole('link', { name: /system versioning/i }))
+      await user.click(screen.getByRole('link', { name: /framework registry/i }))
 
       // Menu should close
       expect(screen.getByLabelText('Open menu')).toBeInTheDocument()

@@ -52,6 +52,13 @@ import {
   useValidateOutcomeKnowledgePackVersionMutation,
 } from './outcomeKnowledgePacksApi.js'
 
+it('retains an explicit empty Description override and inert Runtime Consumers', () => {
+  const { body } = buildImportOutcomeKnowledgePackSourceDocumentDraftQuery({
+    description: '', metadataOverrides: ['description'], runtimeConsumers: ['Outcome Studio'],
+  })
+  expect(body).toMatchObject({ description: '', metadataOverrides: ['description'], runtimeConsumers: ['Outcome Studio'] })
+})
+
 describe('outcomeKnowledgePacksApi', () => {
   it('registers expected endpoint definitions', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('listOutcomeKnowledgePacks')

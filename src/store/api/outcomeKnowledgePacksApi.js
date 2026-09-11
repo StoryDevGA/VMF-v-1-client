@@ -134,6 +134,8 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   capabilityKey = '',
   knowledgeAssetId = '',
   workspaceCompatibility = [],
+  runtimeConsumers,
+  metadataOverrides,
   dependencyReferences = [],
   relationshipContractVersion = OUTCOME_KNOWLEDGE_PACK_RELATIONSHIP_CONTRACT_VERSION,
   semanticVersion,
@@ -162,6 +164,9 @@ export const buildImportOutcomeKnowledgePackSourceDocumentDraftQuery = ({
   }
 
   appendParam(body, 'description', description)
+  if (metadataOverrides?.includes('description')) body.description = normalizeText(description)
+  if (runtimeConsumers !== undefined) body.runtimeConsumers = runtimeConsumers
+  if (metadataOverrides !== undefined) body.metadataOverrides = metadataOverrides
   appendParam(body, 'purposeCategory', purposeCategory)
   appendParam(body, 'knowledgeLayer', knowledgeLayer)
   appendParam(body, 'capabilityKey', capabilityKey)
@@ -639,6 +644,14 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
       invalidatesTags: getSourceDocumentImportInvalidationTags,
     }),
 
+    previewKnowledgePackImportMetadata: build.mutation({
+      query: (body) => ({
+        url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/source-document-import/metadata`,
+        method: 'POST',
+        body,
+      }),
+    }),
+
     deleteOutcomeKnowledgePack: build.mutation({
       query: buildDeleteOutcomeKnowledgePackQuery,
       invalidatesTags: getMutationInvalidationTags,
@@ -730,6 +743,7 @@ export const {
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useCreateOutcomeKnowledgePackVersionMutation,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
+  usePreviewKnowledgePackImportMetadataMutation,
   useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,

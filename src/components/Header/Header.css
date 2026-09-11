@@ -236,8 +236,19 @@
 /* Tablet and desktop */
 @media (min-width: 768px) {
   .header__container {
+    flex-wrap: wrap;
     padding-top: var(--spacing-md);
     padding-bottom: var(--spacing-md);
+  }
+
+  .header__nav {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .header__nav .nav__links {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 
