@@ -1486,6 +1486,31 @@ describe('OutcomeStudioWorkspace', () => {
     })
   })
 
+  it('does not present the retained legacy source as an Output Lab journey step', () => {
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
+      data: {
+        data: {
+          ...studio,
+          information: {
+            ...studio.information,
+            sourceOutput: {
+              outputAssetId: 'legacy-source-1',
+              sourceType: 'OUTPUT_LAB',
+            },
+          },
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchStudio,
+    })
+
+    renderPage()
+
+    expect(screen.getByText('Governed source asset')).toBeInTheDocument()
+    expect(screen.queryByText('Output Lab asset')).not.toBeInTheDocument()
+  })
+
   it('warns that a submitted request was saved when only the refresh fails', async () => {
     const user = userEvent.setup()
     refetchSession.mockRejectedValueOnce(new Error('Internal refresh detail must not render.'))

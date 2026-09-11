@@ -136,7 +136,7 @@ const isEvidenceInputPassed = (status) => statusVariant(status) === 'success'
 const sourceContextLabelOf = (sourceOutput) => token(sourceOutput?.sourceType) === 'FRAMEWORK_HANDOFF'
   ? 'Locked Framework Runtime handoff'
   : sourceOutput?.outputAssetId
-    ? 'Output Lab asset'
+    ? 'Governed source asset'
     : 'Not recorded'
 const compareBlockerOf = (error) => (
   normalizeError(error)?.details?.blockerReason
