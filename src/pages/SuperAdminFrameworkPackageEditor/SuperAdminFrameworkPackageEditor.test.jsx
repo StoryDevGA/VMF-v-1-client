@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { DEFAULT_TABLE_PAGE_SIZE } from '../../components/Table'
 import SuperAdminFrameworkPackageEditor from './SuperAdminFrameworkPackageEditor.jsx'
+import { MemoryRouter } from 'react-router-dom'
 import {
   FRAMEWORK_PACKAGE_OUTPUT_KEY_OPTIONS,
   FRAMEWORK_PACKAGE_OUTPUT_STYLE_OPTIONS,
@@ -20,6 +21,8 @@ const runFrameworkPackageCheckpointMock = vi.fn()
 const validateFrameworkPackageMock = vi.fn()
 const activateFrameworkPackageMock = vi.fn()
 const validateRuntimeOperationMock = vi.fn()
+const checkFrameworkPackageDisplayRevisionMock = vi.fn()
+const applyFrameworkPackageDisplayRevisionMock = vi.fn()
 const packageIntegrityRefetchMock = vi.fn()
 const packageRefetchMock = vi.fn()
 const packageDependenciesRefetchMock = vi.fn()
@@ -221,6 +224,14 @@ let uiContractRowsMock = [cloneTestRow(activeUiContractRow)]
 let listUiContractsQueryArgs = []
 
 vi.mock('../../store/api/runtimeControlApi.js', () => ({
+  useGetFrameworkPackageDisplayBindingQuery: () => ({
+    data: { data: { uiContractKey: 'base-contract', updatedAt: '2026-05-01T12:00:00.000Z' } },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+  }),
+  useCheckFrameworkPackageDisplayRevisionMutation: () => [checkFrameworkPackageDisplayRevisionMock, { isLoading: false }],
+  useApplyFrameworkPackageDisplayRevisionMutation: () => [applyFrameworkPackageDisplayRevisionMock, { isLoading: false }],
   useCreateFrameworkPackageMutation: () => [createFrameworkPackageMock, { isLoading: false }],
   useCloneFrameworkPackageMutation: () => [cloneFrameworkPackageMock, { isLoading: false }],
   useActivateFrameworkPackageMutation: () => [activateFrameworkPackageMock, { isLoading: false }],
@@ -409,6 +420,16 @@ describe('SuperAdminFrameworkPackageEditor', () => {
     validateFrameworkPackageMock.mockReset()
     activateFrameworkPackageMock.mockReset()
     validateRuntimeOperationMock.mockReset()
+    checkFrameworkPackageDisplayRevisionMock.mockReset()
+    applyFrameworkPackageDisplayRevisionMock.mockReset()
+    checkFrameworkPackageDisplayRevisionMock.mockReturnValue({ unwrap: () => Promise.resolve({
+      status: 'PASS',
+      compatible: true,
+      uiContractKey: 'vmf-ui-contract-v1',
+      checkpointHash: 'test-checkpoint-hash',
+      issues: [],
+    }) })
+    applyFrameworkPackageDisplayRevisionMock.mockReturnValue({ unwrap: () => Promise.resolve({}) })
     packageIntegrityRefetchMock.mockReset()
     packageRefetchMock.mockReset()
     packageDependenciesRefetchMock.mockReset()
@@ -608,6 +629,22 @@ describe('SuperAdminFrameworkPackageEditor', () => {
       '/super-admin/runtime-control/framework-packages',
       { state: { runtimeControlSaved: true } },
     )
+  })
+
+  it('renders display revision controls for an active locked package', async () => {
+    const user = userEvent.setup()
+    paramsMock = { packageId: 'pkg-live-2' }
+    frameworkPackageQueryMock = buildLoadedPackage()
+    frameworkPackageQueryMock.data.data.status = 'ACTIVE'
+    frameworkPackageQueryMock.data.data.isLocked = true
+
+    render(<MemoryRouter><SuperAdminFrameworkPackageEditor /></MemoryRouter>)
+
+    await user.click(screen.getByRole('tab', { name: /^ui contract$/i }))
+
+    expect(screen.getByText(/display revision for new runtimes/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /check display compatibility/i })).toBeInTheDocument()
+    expect(screen.getByText(/existing drafts keep their current display/i)).toBeInTheDocument()
   })
 
   it('clones a loaded package through the clone endpoint allowlist', async () => {

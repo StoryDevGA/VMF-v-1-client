@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import DisplayRevisionPanel from './DisplayRevisionPanel.jsx'
 import { MdContentCopy, MdExpandMore, MdInfoOutline } from 'react-icons/md'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
@@ -3733,6 +3734,9 @@ function SuperAdminFrameworkPackageEditor() {
 
                   <TabView.Tab label={renderTabLabel('UI Contract', tabErrorCounts.uiContract)}>
                     <div className="super-admin-framework-package-editor__tab-panel">
+                      {isEditMode && loadedPackage?.status === 'ACTIVE' && loadedPackage?.isLocked === true ? (
+                        <DisplayRevisionPanel key={packageId} packageId={packageId} contracts={uiContractRows} />
+                      ) : null}
                       <SectionHeader
                         title="UI Contract"
                         copy="Select and inspect the presentation contract that maps package sections to renderer controls."

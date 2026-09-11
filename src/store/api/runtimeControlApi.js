@@ -133,6 +133,13 @@ const isRuntimeControlMockMode = () => {
   return mockModeAllowed && globalThis.__RUNTIME_CONTROL_API_MOCK__ === true
 }
 
+// Display rebinding requires persisted compatibility evidence; mock mode cannot certify it.
+const displayRevisionMockError = () => ({ error: { status: 409, data: { error: {
+  code: 'CONFLICT',
+  message: 'Display revisions require a live API connection.',
+  details: { reason: 'DISPLAY_REVISION_REQUIRES_LIVE_API' },
+} } } })
+
 const buildListParams = ({
   page,
   pageSize,
@@ -4281,6 +4288,31 @@ export const runtimeControlApi = baseApi.injectEndpoints({
       ],
     }),
 
+    getFrameworkPackageDisplayBinding: build.query({
+      queryFn: (packageId, api, extraOptions, baseQuery) => isRuntimeControlMockMode()
+        ? displayRevisionMockError()
+        : baseQuery({ url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/ui-contract-display-binding` }, api, extraOptions),
+      providesTags: (_result, _error, packageId) => [{ type: 'RuntimeFrameworkPackage', id: packageId }],
+    }),
+    checkFrameworkPackageDisplayRevision: build.mutation({
+      queryFn: ({ packageId, uiContractKey }, api, extraOptions, baseQuery) => isRuntimeControlMockMode()
+        ? displayRevisionMockError()
+        : baseQuery({
+          url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/ui-contract-display-checkpoint`,
+          method: 'POST', body: { uiContractKey },
+        }, api, extraOptions),
+    }),
+    applyFrameworkPackageDisplayRevision: build.mutation({
+      queryFn: ({ packageId, uiContractKey, expectedUiContractKey, checkpointHash }, api, extraOptions, baseQuery) => isRuntimeControlMockMode()
+        ? displayRevisionMockError()
+        : baseQuery({
+          url: `${RUNTIME_CONTROL_BASE_PATH}/framework-packages/${packageId}/ui-contract-display-binding`,
+          method: 'POST', body: { uiContractKey, expectedUiContractKey, checkpointHash },
+        }, api, extraOptions),
+      invalidatesTags: (_result, _error, { packageId }) => [
+        { type: 'RuntimeFrameworkPackage', id: packageId }, 'RuntimeUIContract', 'AuditLog',
+      ],
+    }),
     runFrameworkPackageCheckpoint: build.mutation({
       queryFn: async ({ packageId, mode = 'FULL', persist = false } = {}, api, extraOptions, baseQuery) => {
         if (!isRuntimeControlMockMode()) {
@@ -8023,6 +8055,9 @@ export const runtimeControlApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useGetFrameworkPackageDisplayBindingQuery,
+  useCheckFrameworkPackageDisplayRevisionMutation,
+  useApplyFrameworkPackageDisplayRevisionMutation,
   useListFrameworkRegistriesQuery,
   useCreateFrameworkRegistryMutation,
   useGetFrameworkRegistryQuery,
