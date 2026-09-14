@@ -9,6 +9,7 @@ import {
   useCreateRuntimeOutcomeSessionMutation,
   useDiscardRuntimeOutcomeDraftMutation,
   useGenerateRuntimeOutcomeResponseMutation,
+  useGetRuntimeOutcomeAssetRenderOutputsQuery,
   useGetRuntimeOutcomeStudioQuery,
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
@@ -19,6 +20,7 @@ import {
   useLazyGetRuntimeOutcomeDraftCompareQuery,
   useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
+  useRenderRuntimeOutcomeAssetMutation,
   useReviseRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
@@ -34,6 +36,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useCreateRuntimeOutcomeSessionMutation: vi.fn(),
   useDiscardRuntimeOutcomeDraftMutation: vi.fn(),
   useGenerateRuntimeOutcomeResponseMutation: vi.fn(),
+  useGetRuntimeOutcomeAssetRenderOutputsQuery: vi.fn(),
   useGetRuntimeOutcomeStudioQuery: vi.fn(),
   useGetRuntimeOutcomeStudioReadinessQuery: vi.fn(),
   useGetRuntimeOutcomeSessionQuery: vi.fn(),
@@ -44,6 +47,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useLazyGetRuntimeOutcomeDraftCompareQuery: vi.fn(),
   useLazyGetRuntimeOutcomeDraftPreviewQuery: vi.fn(),
   usePublishRuntimeOutcomeAssetMutation: vi.fn(),
+  useRenderRuntimeOutcomeAssetMutation: vi.fn(),
   useReviseRuntimeOutcomeAssetMutation: vi.fn(),
   useSubmitRuntimeOutcomeMessageMutation: vi.fn(),
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation: vi.fn(),
@@ -58,6 +62,7 @@ const approveDraft = vi.fn()
 const submitMessage = vi.fn()
 const generateResponse = vi.fn()
 const publishAsset = vi.fn()
+const renderAsset = vi.fn()
 const reviseAsset = vi.fn()
 const exportAsset = vi.fn()
 const loadAsset = vi.fn()
@@ -234,6 +239,7 @@ describe('OutcomeStudioWorkspace', () => {
     submitMessage.mockReturnValue(resolvedMutation())
     generateResponse.mockReturnValue(resolvedMutation())
     publishAsset.mockReturnValue(resolvedMutation())
+    renderAsset.mockReturnValue(resolvedMutation({ data: { filename: 'board-narrative.pdf', content: 'PDF' } }))
     reviseAsset.mockReturnValue(resolvedMutation({ data: { draft: { ...session.drafts[0], draftId: 'draft-revised' } } }))
     exportAsset.mockReturnValue(resolvedMutation({ data: { filename: 'board-narrative.pdf', content: 'PDF' } }))
     loadAsset.mockResolvedValue({ data: { outcomeAssetId: 'asset-1', versions: [] } })
@@ -280,10 +286,12 @@ describe('OutcomeStudioWorkspace', () => {
     useCreateRuntimeOutcomeSessionMutation.mockReturnValue([createSession, { isLoading: false }])
     useSubmitRuntimeOutcomeMessageMutation.mockReturnValue([submitMessage, { isLoading: false }])
     useGenerateRuntimeOutcomeResponseMutation.mockReturnValue([generateResponse, { isLoading: false }])
+    useGetRuntimeOutcomeAssetRenderOutputsQuery.mockReturnValue({ data: { data: { outputs: [] } }, isFetching: false, error: null })
     useUpdateRuntimeOutcomeSessionFromLatestTruthMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useApproveRuntimeOutcomeDraftMutation.mockReturnValue([approveDraft, { isLoading: false }])
     useDiscardRuntimeOutcomeDraftMutation.mockReturnValue([discardDraft, { isLoading: false }])
     usePublishRuntimeOutcomeAssetMutation.mockReturnValue([publishAsset, { isLoading: false }])
+    useRenderRuntimeOutcomeAssetMutation.mockReturnValue([renderAsset, { isLoading: false }])
     useReviseRuntimeOutcomeAssetMutation.mockReturnValue([reviseAsset, { isLoading: false }])
     useLazyExportRuntimeOutcomeAssetQuery.mockReturnValue([exportAsset, { isFetching: false, error: null }])
     useLazyGetRuntimeOutcomeAssetQuery.mockReturnValue([loadAsset, { data: { data: { outcomeAssetId: 'asset-1', versions: [] } }, isFetching: false, error: null }])
@@ -322,6 +330,37 @@ describe('OutcomeStudioWorkspace', () => {
     expect(loadAsset).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1' })
     expect(loadPreview).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001', outcomeAssetId: 'asset-1' })
     expect(screen.getByRole('region', { name: /generated body preview/i })).toHaveTextContent('Customer-safe preview.')
+  })
+
+  it('keeps render-output list keys unique when backend identifiers are absent', async () => {
+    const user = userEvent.setup()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const createdAt = '2026-09-14T10:30:45.000Z'
+    useGetRuntimeOutcomeAssetRenderOutputsQuery.mockReturnValue({
+      data: {
+        data: {
+          outputs: [
+            { renderOutputId: '', format: 'PDF', status: 'READY', createdAt, artifact: { filename: 'first.pdf' } },
+            { renderOutputId: '', format: 'PDF', status: 'READY', createdAt, artifact: { filename: 'second.pdf' } },
+          ],
+        },
+      },
+      isFetching: false,
+      error: null,
+    })
+
+    try {
+      renderPage()
+      await user.click(screen.getByRole('tab', { name: 'Approved Outputs' }))
+      const outputs = screen.getByRole('region', { name: /approved outputs/i })
+      await user.click(within(outputs).getByRole('button', { name: 'Preview' }))
+
+      const renderOutputs = await screen.findByRole('region', { name: /render outputs/i })
+      expect(within(renderOutputs).getAllByRole('listitem')).toHaveLength(2)
+      expect(consoleError.mock.calls.some(([message]) => String(message).includes('same key'))).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('shows approved asset linkage and execution evidence in the separate Governance view', async () => {
@@ -1995,6 +2034,7 @@ describe('OutcomeStudioWorkspace', () => {
     expect(exportButton).toHaveProperty('disabled', exportDisabled)
     if (exportDisabled) expect(exportButton).toHaveAccessibleDescription(reason)
     expect(publishAsset).not.toHaveBeenCalled()
+    expect(renderAsset).not.toHaveBeenCalled()
     expect(exportAsset).not.toHaveBeenCalled()
   })
 
@@ -2184,7 +2224,7 @@ describe('OutcomeStudioWorkspace', () => {
 
   it('reports malformed base64 exports without creating a download', async () => {
     const user = userEvent.setup()
-    exportAsset.mockReturnValue(resolvedMutation({
+    renderAsset.mockReturnValue(resolvedMutation({
       data: {
         filename: 'board-narrative.pdf',
         mimeType: 'application/pdf',
@@ -2201,6 +2241,8 @@ describe('OutcomeStudioWorkspace', () => {
     await user.click(screen.getByRole('button', { name: 'PDF' }))
 
     expect(await screen.findByText('Export content could not be decoded.')).toBeInTheDocument()
+    expect(renderAsset).toHaveBeenCalledWith(expect.objectContaining({ outcomeAssetId: 'asset-1', format: 'PDF' }))
+    expect(exportAsset).not.toHaveBeenCalled()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 })

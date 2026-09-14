@@ -324,6 +324,19 @@ export const buildExportRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcome
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
   }/export/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`, { customerId, tenantId })
 
+export const buildRenderRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcomeAssetId, format, customerId, tenantId }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/render/${encodeURIComponent(String(format ?? '').trim().toUpperCase())}`, { customerId, tenantId }),
+  method: 'POST',
+  body: {},
+})
+
+export const buildRuntimeOutcomeAssetRenderOutputsQuery = ({ runtimeInstanceId, outcomeAssetId, customerId, tenantId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
+    encodeURIComponent(String(outcomeAssetId ?? '').trim())
+  }/render-outputs`, { customerId, tenantId })
+
 export const buildSubmitRuntimeOutcomeMessageQuery = ({ runtimeInstanceId, sessionId, customerId, tenantId, body = {} }) => ({
   url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/sessions/${
     encodeURIComponent(String(sessionId ?? '').trim())
@@ -562,6 +575,7 @@ export const getApproveRuntimeOutcomeDraftInvalidationTags = getRuntimeInstanceD
 export const getReviseRuntimeOutcomeAssetInvalidationTags = getRuntimeInstanceDetailTags
 export const getDiscardRuntimeOutcomeDraftInvalidationTags = getRuntimeInstanceDetailTags
 export const getPublishRuntimeOutcomeAssetInvalidationTags = getRuntimeInstanceDetailTags
+export const getRenderRuntimeOutcomeAssetInvalidationTags = getRuntimeInstanceDetailTags
 export const getCreateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getGenerateRuntimeOutputRequestInvalidationTags = getMutateRuntimeStateInvalidationTags
 export const getPublishRuntimeOutputAssetInvalidationTags = getMutateRuntimeStateInvalidationTags
@@ -730,6 +744,16 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 
     exportRuntimeOutcomeAsset: build.query({
       query: buildExportRuntimeOutcomeAssetQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    renderRuntimeOutcomeAsset: build.mutation({
+      query: buildRenderRuntimeOutcomeAssetQuery,
+      invalidatesTags: getRenderRuntimeOutcomeAssetInvalidationTags,
+    }),
+
+    getRuntimeOutcomeAssetRenderOutputs: build.query({
+      query: buildRuntimeOutcomeAssetRenderOutputsQuery,
       providesTags: getRuntimeInstanceDetailTags,
     }),
 
@@ -917,6 +941,8 @@ export const {
   useDiscardRuntimeOutcomeDraftMutation,
   usePublishRuntimeOutcomeAssetMutation,
   useLazyExportRuntimeOutcomeAssetQuery,
+  useRenderRuntimeOutcomeAssetMutation,
+  useGetRuntimeOutcomeAssetRenderOutputsQuery,
   useCreateRuntimeOutcomeSessionMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useGenerateRuntimeOutcomeResponseMutation,

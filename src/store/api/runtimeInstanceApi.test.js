@@ -17,6 +17,8 @@ import {
   buildDiscardRuntimeOutcomeDraftQuery,
   buildExecuteRuntimeActionQuery,
   buildExportRuntimeOutcomeAssetQuery,
+  buildRenderRuntimeOutcomeAssetQuery,
+  buildRuntimeOutcomeAssetRenderOutputsQuery,
   buildExportRuntimeOutputAssetQuery,
   buildGenerateRuntimeOutputRequestQuery,
   buildGenerateRuntimeOutcomeResponseQuery,
@@ -143,6 +145,8 @@ import {
   useListAvailableFrameworkPackagesQuery,
   useMutateRuntimeStateMutation,
   usePublishRuntimeOutcomeAssetMutation,
+  useRenderRuntimeOutcomeAssetMutation,
+  useGetRuntimeOutcomeAssetRenderOutputsQuery,
   usePublishRuntimeOutputAssetMutation,
   useResetRuntimeDiscoveryMutation,
   useRebuildRuntimeIntelligenceGraphMutation,
@@ -294,6 +298,8 @@ describe('runtimeInstanceApi', () => {
     expect(typeof useDiscardRuntimeOutcomeDraftMutation).toBe('function')
     expect(typeof usePublishRuntimeOutcomeAssetMutation).toBe('function')
     expect(typeof useLazyExportRuntimeOutcomeAssetQuery).toBe('function')
+    expect(typeof useRenderRuntimeOutcomeAssetMutation).toBe('function')
+    expect(typeof useGetRuntimeOutcomeAssetRenderOutputsQuery).toBe('function')
     expect(typeof useSubmitRuntimeOutcomeMessageMutation).toBe('function')
     expect(typeof useGenerateRuntimeOutcomeResponseMutation).toBe('function')
     expect(typeof useUpdateRuntimeOutcomeSessionFromLatestTruthMutation).toBe('function')
@@ -351,6 +357,8 @@ describe('runtimeInstanceApi', () => {
     expect(typeof runtimeInstanceApi.endpoints.discardRuntimeOutcomeDraft.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.publishRuntimeOutcomeAsset.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.exportRuntimeOutcomeAsset.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.renderRuntimeOutcomeAsset.initiate).toBe('function')
+    expect(typeof runtimeInstanceApi.endpoints.getRuntimeOutcomeAssetRenderOutputs.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.submitRuntimeOutcomeMessage.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.generateRuntimeOutcomeResponse.initiate).toBe('function')
     expect(typeof runtimeInstanceApi.endpoints.updateRuntimeOutcomeSessionFromLatestTruth.initiate).toBe('function')
@@ -582,6 +590,19 @@ describe('runtimeInstanceApi', () => {
       outcomeAssetId: 'outcome/asset-001',
       format: 'markdown',
     })).toBe('/runtime-instances/value%20narrative%2F001/outcome-studio/assets/outcome%2Fasset-001/export/MARKDOWN')
+    expect(buildRenderRuntimeOutcomeAssetQuery({
+      runtimeInstanceId: 'value narrative/001',
+      outcomeAssetId: 'outcome/asset-001',
+      format: 'html',
+    })).toEqual({
+      url: '/runtime-instances/value%20narrative%2F001/outcome-studio/assets/outcome%2Fasset-001/render/HTML',
+      method: 'POST',
+      body: {},
+    })
+    expect(buildRuntimeOutcomeAssetRenderOutputsQuery({
+      runtimeInstanceId: 'value narrative/001',
+      outcomeAssetId: 'outcome/asset-001',
+    })).toBe('/runtime-instances/value%20narrative%2F001/outcome-studio/assets/outcome%2Fasset-001/render-outputs')
     expect(buildSubmitRuntimeOutcomeMessageQuery({
       runtimeInstanceId: 'value narrative/001',
       sessionId: 'out/sess-001',

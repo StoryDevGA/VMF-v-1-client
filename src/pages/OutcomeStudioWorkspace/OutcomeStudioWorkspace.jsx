@@ -27,6 +27,7 @@ import {
   useCreateRuntimeOutcomeSessionMutation,
   useDiscardRuntimeOutcomeDraftMutation,
   useGenerateRuntimeOutcomeResponseMutation,
+  useGetRuntimeOutcomeAssetRenderOutputsQuery,
   useGetRuntimeOutcomeStudioQuery,
   useGetRuntimeOutcomeStudioReadinessQuery,
   useGetRuntimeOutcomeSessionQuery,
@@ -37,6 +38,7 @@ import {
   useLazyGetRuntimeOutcomeAssetQuery,
   useLazyGetRuntimeOutcomeDraftPreviewQuery,
   usePublishRuntimeOutcomeAssetMutation,
+  useRenderRuntimeOutcomeAssetMutation,
   useReviseRuntimeOutcomeAssetMutation,
   useSubmitRuntimeOutcomeMessageMutation,
   useUpdateRuntimeOutcomeSessionFromLatestTruthMutation,
@@ -53,6 +55,7 @@ const EMPTY_ARRAY = Object.freeze([])
 const DOWNLOAD_CLEANUP_DELAY_MS = 1000
 const REQUEST_HISTORY_PREVIEW_LIMIT = 5
 const OUTPUT_CONTRACT_CLARIFICATION_CODE = 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATION_REQUIRED'
+const GOVERNED_RENDER_FORMATS = new Set(['MARKDOWN', 'HTML', 'DOCX', 'PDF', 'PPTX'])
 
 const payload = (response) => response?.data ?? response ?? null
 const token = (value) => String(value || '').trim().toUpperCase()
@@ -630,6 +633,7 @@ function OutcomeStudioWorkspace() {
   const [reviseAsset] = useReviseRuntimeOutcomeAssetMutation()
   const [discardDraft, discardState] = useDiscardRuntimeOutcomeDraftMutation()
   const [publishAsset] = usePublishRuntimeOutcomeAssetMutation()
+  const [renderAsset] = useRenderRuntimeOutcomeAssetMutation()
   const [exportAsset] = useLazyExportRuntimeOutcomeAssetQuery()
   const [loadAsset, assetDetailState] = useLazyGetRuntimeOutcomeAssetQuery()
   const [loadPreview, assetPreviewState] = useLazyGetRuntimeOutcomeAssetPreviewQuery()
@@ -660,6 +664,11 @@ function OutcomeStudioWorkspace() {
   const selectedAsset = assets.find((asset) => assetIdOf(asset) === selectedAssetId) || null
   const selectedAssetDetail = payload(assetDetailState.data)
   const selectedPreview = payload(assetPreviewState.data)
+  const renderOutputsQuery = useGetRuntimeOutcomeAssetRenderOutputsQuery(
+    { ...runtimeScope, outcomeAssetId: selectedAssetId },
+    { skip: !runtimeScopeReady || !selectedAssetId },
+  )
+  const renderOutputs = payload(renderOutputsQuery.data)?.outputs || EMPTY_ARRAY
   const previewError = assetDetailState.error || assetPreviewState.error
   const previewLoading = assetDetailState.isFetching || assetPreviewState.isFetching
   const draftPreviewSupportError = draftPreviewError
@@ -1136,7 +1145,9 @@ function OutcomeStudioWorkspace() {
     const format = token(formatDescriptor?.format)
     setBusyKey(`export:${outcomeAssetId}:${format}`)
     try {
-      const response = await exportAsset({ ...runtimeScope, outcomeAssetId, format }).unwrap()
+      const response = await (GOVERNED_RENDER_FORMATS.has(format)
+        ? renderAsset({ ...runtimeScope, outcomeAssetId, format }).unwrap()
+        : exportAsset({ ...runtimeScope, outcomeAssetId, format }).unwrap())
       const exported = payload(response)
       const extension = String(formatDescriptor?.extension || format).toLowerCase()
       const filename = downloadExport(
@@ -1626,6 +1637,7 @@ function OutcomeStudioWorkspace() {
                 return <li key={assetId}><div><h3>{asset.title || asset.outputTypeLabel || 'Approved output'}</h3><p>Version {asset.currentVersionNumber || 1} | Generated {formatDateTime(asset.generatedAt || asset.createdAt, 'Time unavailable')}</p><Status variant={statusVariant(asset.status)} size="sm">{formatRuntimeTokenLabel(asset.status || 'APPROVED')}</Status>{previewReason ? <p id={previewReasonId}>{previewReason}</p> : null}{publishReason && publishReason !== previewReason ? <p id={reasonId}>{publishReason}</p> : null}</div><ButtonGroup align="end"><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} disabled={Boolean(previewReason)} aria-describedby={previewReason ? previewReasonId : undefined} onClick={() => handleViewAsset(asset)}>Preview</Button>{token(asset.status) !== 'PUBLISHED' ? <Button variant="outline" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} loading={busyKey === `revise:${assetId}`} disabled={!activeSessionId} onClick={() => handleReviseAsset(asset)}>Revise as working draft</Button> : null}<Button variant="outline" size="sm" leftIcon={<MdPublish aria-hidden="true" />} loading={busyKey === `publish:${assetId}`} disabled={Boolean(publishReason)} aria-describedby={publishReason ? (publishReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handlePublish(asset)}>Publish</Button>{formats.map((descriptor) => { const format = typeof descriptor === 'string' ? descriptor : descriptor.format; const formatDescriptor = typeof descriptor === 'string' ? { format: descriptor } : descriptor; return <Button key={format} variant="outline" size="sm" leftIcon={<MdDownload aria-hidden="true" />} loading={busyKey === `export:${assetId}:${token(format)}`} disabled={Boolean(distributionReason)} aria-describedby={distributionReason ? (distributionReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handleExport(asset, formatDescriptor)}>{formatDescriptor.label || formatRuntimeTokenLabel(format)}</Button> })}</ButtonGroup></li>
               })}</ul> : <Status variant="neutral" size="sm">No approved outputs</Status>}
               {selectedAsset ? <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio generated body preview"><div className="outcome-studio-workspace__panel-heading"><div><h3>Generated Body Preview</h3><p>{selectedAsset.title || selectedAsset.outputTypeLabel}</p></div>{previewLoading ? <Spinner size="sm" aria-label="Loading output preview" /> : <Status variant={previewError ? 'error' : selectedPreview?.previewAvailable === false ? 'warning' : selectedPreview ? 'success' : 'neutral'} size="sm">{previewError || selectedPreview?.previewAvailable === false ? 'Unavailable' : selectedPreview ? 'Available' : 'Not loaded'}</Status>}</div><div className="outcome-studio-workspace__draft-view-tabs" role="tablist" aria-label="Approved output views"><button type="button" role="tab" aria-selected={assetPreviewView === 'CONTENT'} aria-controls="outcome-studio-approved-output-content" onClick={() => setAssetPreviewView('CONTENT')}>Content</button><button type="button" role="tab" aria-selected={assetPreviewView === 'GOVERNANCE'} aria-controls="outcome-studio-approved-output-governance" onClick={() => setAssetPreviewView('GOVERNANCE')}>Governance</button></div><div id={`outcome-studio-approved-output-${assetPreviewView.toLowerCase()}`} role="tabpanel" tabIndex="0">{assetPreviewView === 'GOVERNANCE' ? renderApprovedAssetGovernanceView() : previewError ? <Status variant="error" size="sm" showIcon>{previewFailureMessage(previewError)}</Status> : String(selectedPreview?.markdown || '').trim() ? <div className="outcome-studio-workspace__preview-body outcome-studio-workspace__preview-body--markdown">{renderSafeMarkdown(selectedPreview.markdown)}</div> : selectedPreview?.sections?.length ? <div className="outcome-studio-workspace__preview-body">{selectedPreview.sections.map((section) => <section key={section.key || section.label}><h4>{section.label}</h4><p>{section.body}</p></section>)}</div> : selectedAssetDetail ? <Status variant="neutral" size="sm">Preview content is not available for this version.</Status> : null}</div></section> : null}
+              {selectedAsset ? <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio render outputs"><div className="outcome-studio-workspace__panel-heading"><div><h3>Render outputs</h3><p>Presentations of the active asset version; governed content remains shared.</p></div>{renderOutputsQuery.isFetching ? <Spinner size="sm" aria-label="Loading render outputs" /> : <Status variant={renderOutputs.length ? 'success' : 'neutral'} size="sm">{renderOutputs.length} recorded</Status>}</div>{renderOutputs.length ? <ul className="outcome-studio-workspace__items" aria-label="Render outputs">{renderOutputs.map((output, index) => <li key={output.renderOutputId || `render-output-${index}`}><div><h4>{formatRuntimeTokenLabel(output.format)}</h4><p>{output.artifact?.filename || 'Artifact recorded'} · Version {output.versionNumber || renderOutputsQuery.data?.data?.versionNumber || selectedAsset.currentVersionNumber || 1}</p></div><Status variant={token(output.status) === 'READY' ? 'success' : token(output.status) === 'SUPERSEDED' ? 'neutral' : 'warning'} size="sm">{formatRuntimeTokenLabel(output.status || 'UNKNOWN')}</Status></li>)}</ul> : <Status variant="neutral" size="sm">No governed render outputs have been recorded for this version.</Status>}</section> : null}
             </section>
           </TabView.Tab>
         </TabView>
