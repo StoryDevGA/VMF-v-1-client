@@ -13,6 +13,14 @@
 - Use `src/pages/SuperAdminCustomers/` as the reference implementation for layout, interaction, component decomposition, modal workflows, table behavior, responsive behavior, and regression scope unless a documented exception is explicitly approved.
 - Prefer adapting that standard over creating a new page-specific pattern.
 
+## New Sprint Thread Preflight (Mandatory)
+
+- Every new frontend sprint thread starts with the root [Sprint Engineering Preflight Standard](../docs/references/sprint-engineering-preflight-standard.md), not with code edits.
+- Complete the preflight template under `../docs/generated/harness-runs/<workstream>/<date>-<slug>/` before implementation. A prior thread, prior summary, or passing build does not replace this step.
+- The frontend preflight must audit route peers, shared components, design tokens, state/query patterns, accessibility primitives, responsive behavior, tests, direct-route guards, and the authenticated browser surface.
+- Do not add new UI structure, CSS scales, terminology, navigation, or abstractions until the audit records the existing anchor and the pre-edit evaluator returns `PASS`.
+- Use the closeout template to separate local tests, lint/build, browser, deployment, production, and Product acceptance evidence.
+
 ## Runtime Control Contract Quality Gate
 
 - For Runtime Control governance, audit, lifecycle, activation, validation, dependency-lock, seed, or mock/API work, apply `../docs/references/runtime-control/runtime-control-contract-quality-gate.md` before coding and again before handoff.
