@@ -180,6 +180,46 @@ describe('Navigation', () => {
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
   })
 
+  it('shows Signal navigation without Core-only links for Signal customers', async () => {
+    const user = userEvent.setup()
+    const store = createTestStore({
+      ...basicUser,
+      customerScopes: [{ customerId: 'cust-1', featureEntitlements: ['DEALS', 'VIEWS'] }],
+    }, 'authenticated', { customerId: 'cust-1' })
+    renderNavigation(store)
+
+    expect(screen.getByRole('link', { name: 'Signal Home' })).toHaveAttribute('href', '/app/dashboard')
+    expect(screen.getByRole('link', { name: 'Website Analysis' })).toHaveAttribute('href', '/app/website-analysis')
+    expect(screen.getByRole('link', { name: 'Document Improvement' })).toHaveAttribute('href', '/app/document-improvement')
+    expect(screen.getByRole('link', { name: 'Credits' })).toHaveAttribute('href', '/app/credits')
+    expect(screen.queryByRole('link', { name: 'Project Workspaces' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Intelligence Hub' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /basic account menu/i }))
+    expect(screen.getByRole('link', { name: 'Account' })).toHaveAttribute('href', '/app/account')
+    expect(screen.getByRole('link', { name: 'Help' })).toHaveAttribute('href', '/help')
+  })
+
+  it('shows Core navigation only for VMF-entitled customers', () => {
+    const store = createTestStore({
+      ...basicUser,
+      customerScopes: [{ customerId: 'cust-1', featureEntitlements: ['VMF'] }],
+    }, 'authenticated', {
+      customerId: 'cust-1',
+      tenantId: 'tenant-1',
+    })
+    renderNavigation(store)
+
+    expect(screen.getByRole('link', { name: 'Customer Home' })).toHaveAttribute('href', '/app/dashboard')
+    expect(screen.getByRole('link', { name: 'Intelligence Hub' })).toHaveAttribute('href', '/app/intelligence')
+    expect(screen.getByRole('link', { name: 'Intelligence Quality' })).toHaveAttribute('href', '/app/intelligence/quality')
+    expect(screen.getByRole('link', { name: 'Workspace Structure' })).toHaveAttribute('href', '/app/workspace-structure')
+    expect(screen.getByRole('link', { name: 'Outcome Studio' })).toHaveAttribute('href', '/app/outcome-studio')
+    expect(screen.getByRole('link', { name: 'Assets' })).toHaveAttribute('href', '/app/assets')
+    expect(screen.getByRole('link', { name: 'Review & evidence' })).toHaveAttribute('href', '/app/review-evidence')
+    expect(screen.queryByRole('link', { name: 'Signal Home' })).not.toBeInTheDocument()
+  })
+
   it('shows Admin and System Health menus for CUSTOMER_ADMIN', async () => {
     const user = userEvent.setup()
     const store = createTestStore(multiTenantCustomerAdminUser, 'authenticated', {

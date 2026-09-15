@@ -11,7 +11,7 @@
 
 .header {
   /* Background and borders */
-  background-color: transparent;
+  background-color: color-mix(in srgb, var(--color-background) 96%, var(--color-action-primary));
   border-bottom: var(--border-width-thin) solid color-mix(in srgb, var(--color-border) 30%, transparent);
 
   /* Sticky positioning */
@@ -77,13 +77,19 @@
 .header__logo-custom {
   display: flex;
   align-items: center;
-  max-height: 180px; /* Adjusted actual image */
+  max-height: 22px;
 }
 
 .header__logo-custom img {
   display: block;
-  max-height: 180px; /* Adjusted actual image */
+  height: 22px;
+  max-height: 22px;
   width: auto;
+}
+
+.header__logo-custom .logo__image {
+  height: 22px;
+  max-height: 22px;
 }
 
 /* ===========================
@@ -191,11 +197,11 @@
   }
 
   .header__logo-custom {
-   max-height: 180px; /* Adjusted actual image */
+    max-height: 40px;
   }
 
   .header__logo-custom img {
-    max-height: 180px; /* Adjusted actual image */
+    max-height: 40px;
   }
 
   /* Show hamburger on mobile */
@@ -213,10 +219,15 @@
     bottom: 0;
     background-color: var(--color-surface);
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     visibility: hidden;
     clip-path: circle(0% at 0% 0%);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: calc(var(--spacing-md) * 4);
+    padding-bottom: var(--spacing-xl);
+    box-sizing: border-box;
     transition:
       clip-path 0.6s cubic-bezier(0.4, 0, 0.2, 1),
       visibility 0s 0.6s;
@@ -231,24 +242,108 @@
       clip-path 0.6s cubic-bezier(0.4, 0, 0.2, 1),
       visibility 0s 0s;
   }
+
+  .header__nav .nav {
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: 100%;
+    height: auto;
+  }
 }
 
 /* Tablet and desktop */
 @media (min-width: 768px) {
   .header__container {
-    flex-wrap: wrap;
-    padding-top: var(--spacing-md);
-    padding-bottom: var(--spacing-md);
+    flex-wrap: nowrap;
+    min-height: var(--spacing-3xl);
+    height: var(--spacing-3xl);
+    padding-right: var(--spacing-lg);
+    padding-left: var(--spacing-lg);
+    padding-top: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
   }
 
   .header__nav {
     min-width: 0;
     max-width: 100%;
+    /* Keep absolutely positioned navigation panels visible. An overflow
+       scroll container clips the Admin, System Health, and account menus. */
+    overflow: visible;
+  }
+
+  .header__nav .nav {
+    /* Header is already sticky; a nested sticky nav can escape the flex item
+       and paint over the brand once overflow clipping is removed. */
+    position: relative;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .header__nav .nav__container {
+    width: 100%;
   }
 
   .header__nav .nav__links {
-    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    height: calc(var(--spacing-xl) + var(--spacing-lg));
+    flex-wrap: nowrap;
     justify-content: flex-end;
+    gap: var(--spacing-sm);
+    align-items: center;
+  }
+
+  /* The approved Home prototype uses a utility header. The full customer
+     route set remains available in the mobile navigation and bounded page
+     actions, while desktop keeps the compact utility treatment. */
+  .header__nav .nav__item--link {
+    display: none;
+  }
+
+  /* Signal's approved utility header has no customer-route links in the
+     desktop shell; those routes remain available in the mobile menu and
+     from the bounded Signal Home actions. */
+  .header__nav .nav--signal .nav__item--link {
+    display: none;
+  }
+
+  .header__nav .nav__link,
+  .header__nav .nav__group-toggle,
+  .header__nav .nav__user-toggle,
+  .header__nav .nav__action {
+    min-height: calc(var(--spacing-md) * 2.75);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+
+  .header__nav .nav__item--context {
+    min-width: calc(var(--spacing-xl) * 6);
+    min-height: calc(var(--spacing-md) * 2.75);
+    margin-right: var(--spacing-2xs);
+    padding: var(--spacing-xs) var(--spacing-md);
+  }
+
+  .header__nav .nav__context-value,
+  .header__nav .nav__group-summary strong {
+    font-size: var(--font-size-xs);
+  }
+
+  .header__nav .nav__group-summary {
+    gap: var(--spacing-xs);
+  }
+
+  .header__nav .nav__item--user .nav__user-toggle {
+    min-height: calc(var(--spacing-md) * 2.75);
+  }
+}
+
+@media (max-width: 767px) {
+  .header__nav .nav__item--link {
+    display: list-item;
+  }
+
+  .header__nav .nav--signal .nav__item--link {
+    display: list-item;
   }
 }
 

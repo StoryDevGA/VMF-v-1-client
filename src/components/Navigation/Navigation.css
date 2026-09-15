@@ -32,6 +32,80 @@
   position: relative;
 }
 
+.nav__item--context {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 120px;
+  padding: 0 var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  line-height: var(--line-height-tight);
+}
+
+.nav__context-label,
+.nav__group-summary .nav__text {
+  color: var(--color-text-tertiary);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav__context-value,
+.nav__group-summary strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav__group-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.nav__item--credit-summary {
+  display: flex;
+  align-items: stretch;
+}
+
+.nav__credit-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  min-width: 104px;
+  padding: 0.25rem;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.nav__credit-summary span {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.1rem 0.25rem;
+}
+
+.nav__credit-summary span + span {
+  border-left: var(--border-width-thin) solid var(--color-border);
+}
+
+.nav__credit-summary strong {
+  color: var(--color-primary-300);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.nav__credit-summary small {
+  font-size: 0.55rem;
+  line-height: 1;
+}
+
 .nav__link,
 .nav__group-toggle,
 .nav__user-toggle,
@@ -89,6 +163,10 @@
   min-width: 0;
   padding-right: var(--spacing-sm);
   text-transform: none;
+}
+
+.nav__group-toggle:has(.nav__group-summary) {
+  align-items: center;
 }
 
 .nav__user-avatar,
@@ -299,6 +377,23 @@
     text-transform: none;
   }
 
+  .nav__item--context {
+    align-items: flex-start;
+    min-width: 0;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: 0;
+  }
+
+  .nav__credit-summary {
+    width: 100%;
+    min-width: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .nav__group-summary {
+    gap: var(--spacing-2xs);
+  }
+
   .nav__user-toggle {
     justify-content: flex-start;
     width: 100%;
@@ -365,7 +460,7 @@
   }
 
   .nav__links {
-    gap: var(--spacing-lg);
+    gap: var(--spacing-xs);
   }
 }
 

@@ -11,6 +11,7 @@ import { useSelector } from 'react-redux'
 import { MdExpandMore } from 'react-icons/md'
 import { Avatar } from '../Avatar'
 import { useAuth } from '../../hooks/useAuth.js'
+import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectCurrentUser, selectIsAuthenticated, selectResolvedPermissions } from '../../store/slices/authSlice.js'
 import {
@@ -24,6 +25,7 @@ import {
   hasCustomerPermission,
 } from '../../utils/authorization.js'
 import { getPhase1aSuperAdminNavigationEntries } from '../../constants/superAdminNavigation.js'
+import { CUSTOMER_EXPERIENCE, resolveCustomerExperience } from '../../utils/customerExperience.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
@@ -32,8 +34,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, logoutResult } = useAuth()
+  const { getCustomerScope } = useAuthorization()
   const {
     customerId: selectedCustomerId,
+    customerName,
+    resolvedTenantName,
     selectedCustomerTopology,
     supportsTenantManagement: selectedCustomerSupportsTenantManagement,
   } = useTenantContext()
@@ -102,6 +107,9 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     selectedCustomerTopology,
   ])
   const canViewSystemHealth = hasPlatformPermission(resolvedPermissions, 'SYSTEM_HEALTH_VIEW') || hasCustomerAdminAccess
+  const customerExperience = resolveCustomerExperience(
+    selectedCustomerId ? getCustomerScope(selectedCustomerId) : null,
+  )
   const userDisplayName = useMemo(() => {
     const preferredName = typeof user?.name === 'string' ? user.name.trim() : ''
     if (preferredName) return preferredName
@@ -121,6 +129,43 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     if (!isAuthenticated) return []
 
     const entries = []
+
+    if (!isSuperAdmin && customerExperience === CUSTOMER_EXPERIENCE.SIGNAL) {
+      entries.push(
+        { type: 'link', key: 'signal-home', label: 'Signal Home', to: '/app/dashboard' },
+        { type: 'link', key: 'website-analysis', label: 'Website Analysis', to: '/app/website-analysis' },
+        { type: 'link', key: 'document-improvement', label: 'Document Improvement', to: '/app/document-improvement' },
+        { type: 'link', key: 'credits', label: 'Credits', to: '/app/credits' },
+        { type: 'credit-summary', key: 'signal-credit-summary', to: '/app/credits' },
+      )
+    }
+
+    if (!isSuperAdmin && customerExperience === CUSTOMER_EXPERIENCE.CORE) {
+      entries.push(
+        {
+          type: 'context',
+          key: 'customer-context',
+          label: 'Customer',
+          secondaryLabel: customerName || 'Customer workspace',
+        },
+        { type: 'link', key: 'customer-home', label: 'Customer Home', to: '/app/dashboard' },
+        { type: 'link', key: 'project-workspaces', label: 'Project Workspaces', to: '/app/workspaces/vmf' },
+        { type: 'link', key: 'intelligence-hub', label: 'Intelligence Hub', to: '/app/intelligence' },
+        { type: 'link', key: 'intelligence-quality', label: 'Intelligence Quality', to: '/app/intelligence/quality' },
+        { type: 'link', key: 'workspace-structure', label: 'Workspace Structure', to: '/app/workspace-structure' },
+        { type: 'link', key: 'outcome-studio', label: 'Outcome Studio', to: '/app/outcome-studio' },
+        { type: 'link', key: 'assets', label: 'Assets', to: '/app/assets' },
+        { type: 'link', key: 'review-evidence', label: 'Review & evidence', to: '/app/review-evidence' },
+        { type: 'link', key: 'credits', label: 'Credits', to: '/app/credits' },
+        {
+          type: 'group',
+          key: 'tenant',
+          label: 'Tenant',
+          secondaryLabel: resolvedTenantName || 'Select tenant',
+          links: [{ key: 'project-workspaces', label: 'Project Workspaces', to: '/app/workspaces/vmf' }],
+        },
+      )
+    }
 
     if (isSuperAdmin) {
       entries.push(...getPhase1aSuperAdminNavigationEntries())
@@ -185,12 +230,26 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       })
     }
 
+    if (!isSuperAdmin) {
+      entries.push({
+        type: 'group',
+        key: 'help',
+        label: 'Help',
+        links: [{ key: 'help', label: 'Help centre', to: '/help' }],
+      })
+    }
+
     entries.push({
       type: 'user-menu',
       key: 'account',
       label: userDisplayName,
       secondaryLabel: userEmail,
       links: [
+        {
+          key: 'account',
+          label: 'Account',
+          to: '/app/account',
+        },
         {
           key: 'help',
           label: 'Help',
@@ -210,8 +269,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     canManageTenants,
     canManageUsers,
     canViewSystemHealth,
+    customerExperience,
+    customerName,
     isAuthenticated,
     isSuperAdmin,
+    resolvedTenantName,
     userDisplayName,
     userEmail,
   ])
@@ -247,7 +309,12 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
   if (menuEntries.length === 0) return null
 
-  const navClasses = ['nav', isOpen && 'nav--open'].filter(Boolean).join(' ')
+  const navClasses = [
+    'nav',
+    customerExperience === CUSTOMER_EXPERIENCE.SIGNAL && 'nav--signal',
+    customerExperience === CUSTOMER_EXPERIENCE.CORE && 'nav--core',
+    isOpen && 'nav--open',
+  ].filter(Boolean).join(' ')
 
   const toggleMenuGroup = (groupKey) => {
     setOpenMenuKey((previous) => (previous === groupKey ? null : groupKey))
@@ -311,6 +378,31 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   >
                     <span className="nav__text">{entry.label}</span>
                   </button>
+                </li>
+              )
+            }
+
+            if (entry.type === 'context') {
+              return (
+                <li key={entry.key} className="nav__item nav__item--context">
+                  <span className="nav__context-label">{entry.label}</span>
+                  <strong className="nav__context-value">{entry.secondaryLabel}</strong>
+                </li>
+              )
+            }
+
+            if (entry.type === 'credit-summary') {
+              return (
+                <li key={entry.key} className="nav__item nav__item--credit-summary">
+                  <NavLink
+                    to={entry.to}
+                    className="nav__credit-summary"
+                    aria-label="View Signal credit balances"
+                    onClick={handleSubmenuLinkClick}
+                  >
+                    <span><strong>—</strong><small>Document</small></span>
+                    <span><strong>—</strong><small>Website</small></span>
+                  </NavLink>
                 </li>
               )
             }
@@ -430,8 +522,15 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   onClick={() => toggleMenuGroup(entry.key)}
                   aria-expanded={isOpenGroup}
                   aria-controls={submenuId}
-                >
-                  <span className="nav__text">{entry.label}</span>
+                  >
+                  {entry.secondaryLabel ? (
+                    <span className="nav__group-summary">
+                      <span className="nav__text">{entry.label}</span>
+                      <strong>{entry.secondaryLabel}</strong>
+                    </span>
+                  ) : (
+                    <span className="nav__text">{entry.label}</span>
+                  )}
                   <MdExpandMore
                     className={`nav__group-icon ${isOpenGroup ? 'nav__group-icon--open' : ''}`}
                     aria-hidden="true"

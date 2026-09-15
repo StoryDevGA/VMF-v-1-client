@@ -102,39 +102,39 @@ const VMF_LIFECYCLE_TRANSITIONS = {
 }
 
 const VMF_UNAUTHORIZED_MESSAGE =
-  'You do not have permission to manage VMFs for this tenant.'
+  'You do not have permission to manage workspaces for this tenant.'
 
 const VMF_INACTIVE_CUSTOMER_MESSAGE =
-  'This customer is inactive. VMF management is unavailable until the customer is reactivated.'
+  'This customer is inactive. Workspace management is unavailable until the customer is reactivated.'
 
 const VMF_LICENCE_MESSAGE =
-  'This customer licence does not include VMF. Contact your Super Admin to update entitlements.'
+  'This customer licence does not include Core workspaces. Contact your platform administrator to update entitlements.'
 
 const VMF_LIFECYCLE_NOTE =
-  'Runtime objects are shown alongside transitional VMF bridge records. Open row details for runtime state and package lineage fields; use Actions for bridge-record details, edits, or soft-delete where permitted. Active VMFs must be disabled before deletion.'
+  'Workspaces are shown with their current status and framework package provenance. Open row details for review status and source basis; use Actions for permitted workspace changes. Active workspaces must be disabled before deletion.'
 
 const VMF_READ_ONLY_NOTE =
-  "This workspace is read-only for your current access level. Open row details for package lineage and use Actions to view details; standard users and linked tenant members can review published VMF bridge records and published runtime lifecycle rows only, while customer administrators and the selected tenant's assigned tenant admin can create, edit, or delete VMFs."
+  "This workspace is read-only for your current access level. Open row details for package provenance and use Actions to view details; your account can review published workspaces only, while authorised customer administrators can make permitted workspace changes."
 
 const VMF_REGISTER_GUIDE_ITEMS = [
-  ['Scope', 'Runtime objects + bridge records'],
-  ['Details', 'State + package lineage'],
-  ['Actions', 'Lifecycle-gated bridge edits'],
+  ['Scope', 'Workspaces + package provenance'],
+  ['Details', 'Workspace status + package provenance'],
+  ['Actions', 'Lifecycle-gated workspace edits'],
 ]
 
 const VMF_READ_ONLY_REGISTER_GUIDE_ITEMS = [
-  ['Scope', 'Published VMF bridge records'],
-  ['Details', 'Package lineage + runtime state'],
+  ['Scope', 'Published workspaces'],
+  ['Details', 'Package provenance + review status'],
   ['Access', 'Review only'],
 ]
 
 const READ_ONLY_VMF_LIFECYCLE = 'PUBLISHED'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER =
-  'No eligible VMF version is assigned or published for this customer.'
+  'No eligible framework package is assigned or published for this customer.'
 
 const VMF_RUNTIME_PACKAGE_UNAVAILABLE_MESSAGE =
-  'The capacity badge shows tenant Value Narrative runtime slots. Creation also requires a VMF version that is both available to this customer and runtime-ready. Ask a Super Admin to assign or publish a version with active deployment evidence, or complete the version evidence chain: certified dependency lock, active activation, active deployment, and matching snapshot/hash evidence.'
+  'No eligible framework package is available for this tenant. Creation requires a package assigned to this customer and ready for use. Contact your platform administrator if the required package is unavailable.'
 
 const getLifecycleVariant = (value) => {
   if (value === 'PUBLISHED') return 'success'
@@ -237,9 +237,9 @@ const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? '').trim()
 
 const getRuntimeCapacityCountLabel = (countMode) => {
   const normalizedCountMode = String(countMode ?? '').trim().toUpperCase()
-  if (normalizedCountMode === 'ACTIVE_RUNTIME_INSTANCES') return 'active Value Narrative'
-  if (normalizedCountMode === 'NON_ARCHIVED') return 'non-archived'
-  return 'active'
+  if (normalizedCountMode === 'ACTIVE_RUNTIME_INSTANCES') return 'active Value Narrative workspace'
+  if (normalizedCountMode === 'NON_ARCHIVED') return 'non-archived workspace'
+  return 'active workspace'
 }
 
 const parsePositiveInteger = (value) => {
@@ -307,7 +307,7 @@ const getRuntimeCapacityGuidance = (
   const maxRuntimeInstances = runtimeCapacity?.maxRuntimeInstances
   const countLabel = getRuntimeCapacityCountLabel(runtimeCapacity?.countMode)
   const displayCount = Number.isFinite(remainingCount) ? Math.max(remainingCount, 0) : null
-  const capacityNoun = `${countLabel} runtime slot${maxRuntimeInstances === 1 ? '' : 's'}`
+  const capacityNoun = countLabel
   const visibleValue = displayCount !== null && maxRuntimeInstances !== null
     ? `${displayCount} of ${maxRuntimeInstances} left`
     : null
@@ -340,18 +340,40 @@ const getRuntimeCapacityBlockMessage = ({
   isUnavailable = false,
 } = {}) => {
   if (isReached) {
-    return 'No Value Narrative runtime slots are available for this tenant.'
+    return 'No Value Narrative workspaces are available for this tenant.'
   }
 
   if (isUnavailable) {
-    return 'Value Narrative capacity is unavailable. Creation is blocked until runtime capacity can be loaded.'
+    return 'Value Narrative workspace capacity is unavailable. Creation is blocked until capacity can be loaded.'
   }
 
   if (isLoading || isRefreshing) {
-    return 'Value Narrative capacity is still being checked. Creation is blocked until capacity is confirmed.'
+    return 'Value Narrative workspace capacity is still being checked. Creation is blocked until capacity is confirmed.'
   }
 
   return ''
+}
+
+const formatCustomerWorkspaceSignal = (value) => {
+  const normalized = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '_')
+  const customerLabels = {
+    EXECUTION_BLOCKED: 'Items needing attention',
+    PENDING_RUNTIME_ENGINE: 'Things to verify',
+    READINESS_PENDING: 'Review items',
+    FAILED: 'Items needing attention',
+    ERROR: 'Items needing attention',
+    BLOCKED: 'Items needing attention',
+    PENDING: 'Review items',
+    VALIDATION_PASSED: 'Evidence checked',
+    NOT_RUN: 'Not yet recorded',
+    NOT_TRACKED: 'Not yet recorded',
+    UNBOUND: 'Not yet recorded',
+    IN_PROGRESS: 'In progress',
+    PROCESSING: 'In progress',
+    IDLE: 'Ready for next action',
+  }
+
+  return customerLabels[normalized] || formatRuntimeTokenLabel(value)
 }
 
 const getLifecycleOptionsForCurrentState = (value) => {
@@ -372,37 +394,37 @@ const getRuntimeEvidenceItems = (row) => {
 
   return [
     {
-      label: 'Readiness',
-      value: readiness,
+      label: 'Understanding',
+      value: formatCustomerWorkspaceSignal(readiness),
       variant: getRuntimeReadinessVariant(readiness),
     },
     {
-      label: 'Execution',
-      value: formatRuntimeTokenLabel(executionState),
+      label: 'Current stage',
+      value: formatCustomerWorkspaceSignal(executionState),
       variant: getExecutionStateVariant(executionState),
     },
     {
-      label: 'Completion',
-      value: completion,
+      label: 'Outcome status',
+      value: formatCustomerWorkspaceSignal(completion),
       variant: getRuntimeStateVariant(completion),
     },
     {
-      label: 'Validation',
-      value: validation,
+      label: 'Evidence status',
+      value: formatCustomerWorkspaceSignal(validation),
       variant: getRuntimeStateVariant(validation),
     },
     {
-      label: 'Lock',
-      value: lockStatus,
+      label: 'Workspace status',
+      value: formatCustomerWorkspaceSignal(lockStatus),
       variant: lockStatus === 'LOCKED' ? 'warning' : getRuntimeStateVariant(lockStatus),
     },
     {
-      label: 'Snapshot',
-      value: snapshotStatus,
+      label: 'Source basis',
+      value: formatCustomerWorkspaceSignal(snapshotStatus),
       variant: getRuntimeStateVariant(snapshotStatus),
     },
     {
-      label: 'Migration',
+      label: 'Things to verify',
       value: migration,
       variant: row?.migrationAvailable === true ? 'success' : row?.migrationAvailable === false ? 'neutral' : 'info',
     },
@@ -503,7 +525,7 @@ const buildRuntimeInstanceRegisterRow = (row) => {
   return {
     key,
     source: 'runtime',
-    sourceLabel: 'Runtime object',
+    sourceLabel: 'Workspace',
     original: row,
     name,
     description,
@@ -520,10 +542,10 @@ const buildRuntimeInstanceRegisterRow = (row) => {
     executionState,
     executionLabel: formatRuntimeTokenLabel(executionState),
     executionVariant: getExecutionStateVariant(executionState),
-    stageLabel: formatRuntimeTokenLabel(executionState),
-    stageHelper: 'Execution state',
+    stageLabel: formatCustomerWorkspaceSignal(executionState),
+    stageHelper: 'Current stage',
     stageVariant: getExecutionStateVariant(executionState),
-    healthLabel: readiness,
+    healthLabel: formatCustomerWorkspaceSignal(readiness),
     healthVariant: getRuntimeReadinessVariant(readiness),
     updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
     updatedTime: getUpdatedTimestamp(row),
@@ -531,11 +553,11 @@ const buildRuntimeInstanceRegisterRow = (row) => {
     evidenceItems: getRuntimeEvidenceItems(row),
     lineageItems: [
       ['Framework', getFrameworkLabel(row)],
-      ['Package', packageLabel],
+      ['Framework package', packageLabel],
       ['Version', packageVersion],
       ['Framework Lifecycle', frameworkLifecycle],
-      ['Work Type', formatRuntimeTokenLabel(runtimeType)],
-      ['Runtime ID', displayId],
+      ['Workspace type', formatRuntimeTokenLabel(runtimeType)],
+      ['Workspace ID', displayId],
     ],
     searchText: buildSearchText([
       name,
@@ -566,7 +588,7 @@ const buildVmfRegisterRow = (row) => {
   return {
     key,
     source: 'vmf',
-    sourceLabel: 'VMF bridge',
+    sourceLabel: 'Framework package',
     original: row,
     name,
     description,
@@ -583,21 +605,21 @@ const buildVmfRegisterRow = (row) => {
     executionState,
     executionLabel: formatRuntimeTokenLabel(executionState),
     executionVariant: getExecutionStateVariant(executionState),
-    stageLabel: readiness,
-    stageHelper: `Validation ${String(row?.validationStatus ?? 'NOT_RUN').trim().toUpperCase() || 'NOT_RUN'}`,
+    stageLabel: formatCustomerWorkspaceSignal(readiness),
+    stageHelper: 'Evidence status',
     stageVariant: getRuntimeReadinessVariant(readiness),
-    healthLabel: readiness,
+    healthLabel: formatCustomerWorkspaceSignal(readiness),
     healthVariant: getRuntimeReadinessVariant(readiness),
     updatedAt: row?.updatedAt ?? row?.updated_at ?? row?.modifiedAt ?? row?.createdAt,
     updatedTime: getUpdatedTimestamp(row),
     evidenceItems: getRuntimeEvidenceItems(row),
     lineageItems: [
       ['Framework', getFrameworkLabel(row)],
-      ['Package', packageLabel],
+      ['Framework package', packageLabel],
       ['Version', packageVersion],
       ['Lifecycle', lifecycle],
       ['Package Status', getFrameworkPackageDetail(row, 'status') || '--'],
-      ['VMF ID', vmfId || '--'],
+      ['Workspace ID', vmfId || '--'],
     ],
     searchText: buildSearchText([
       name,
@@ -629,7 +651,7 @@ const formatSoftDeleteMessage = (payload) => {
     return `Soft-delete scheduled. Purge in ${retentionDays} day(s).`
   }
 
-  return String(payload?.message ?? 'VMF soft-delete was scheduled.')
+  return String(payload?.message ?? 'Workspace soft-delete was scheduled.')
 }
 
 function VmfRowActionsMenu({ row, actions, onAction }) {
@@ -712,7 +734,7 @@ function ContinueWorkCard({
         <div className="maintain-vmfs__continue-heading">
           <h3 className="maintain-vmfs__continue-title">{primaryTitle}</h3>
           {primary && row ? (
-            <div className="maintain-vmfs__continue-status" aria-label="Runtime state">
+            <div className="maintain-vmfs__continue-status" aria-label="Workspace status">
               <Status
                 size="sm"
                 variant={row.statusVariant === 'danger' ? 'error' : row.statusVariant}
@@ -808,10 +830,10 @@ function RegisterExpansionPanel({ row, onOpen, runtimeWorkspaceBackState }) {
   const runtimeRoute = String(row?.route ?? '').trim()
 
   return (
-    <div className="maintain-vmfs__expansion" aria-label={`${row.name} expanded runtime details`}>
+    <div className="maintain-vmfs__expansion" aria-label={`${row.name} expanded workspace details`}>
       <div className="maintain-vmfs__expansion-header">
         <div className="maintain-vmfs__section-pills" aria-label={`${row.name} detail sections available in this panel`}>
-          {['Overview', 'Runtime', 'Framework', 'Lineage', 'Dependencies', 'Notes', 'Change Log'].map((tab) => (
+          {['Overview', 'Workspace status', 'Framework package', 'Source basis', 'Dependencies', 'Notes', 'Change Log'].map((tab) => (
             <span
               key={tab}
               className="maintain-vmfs__section-pill"
@@ -835,16 +857,16 @@ function RegisterExpansionPanel({ row, onOpen, runtimeWorkspaceBackState }) {
         <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} overview`}>
           <h3>Overview</h3>
           <dl>
-            <DetailPair label="Instance ID">{row.displayId}</DetailPair>
-            <DetailPair label="Work Type">{row.frameworkLabel}</DetailPair>
-            <DetailPair label="Source">{row.sourceLabel}</DetailPair>
+            <DetailPair label="Workspace ID">{row.displayId}</DetailPair>
+            <DetailPair label="Workspace type">{row.frameworkLabel}</DetailPair>
+            <DetailPair label="Source basis">{row.sourceLabel}</DetailPair>
             <DetailPair label="Description">
               {row.description || 'No description recorded'}
             </DetailPair>
           </dl>
         </section>
-        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} runtime health`}>
-          <h3>Runtime Health</h3>
+        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} workspace status`}>
+          <h3>Workspace status</h3>
           <dl>
             {row.evidenceItems.map((item) => (
               <DetailPair key={item.label} label={item.label}>
@@ -855,11 +877,11 @@ function RegisterExpansionPanel({ row, onOpen, runtimeWorkspaceBackState }) {
             ))}
           </dl>
         </section>
-        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} framework link`}>
-          <h3>Framework Link</h3>
+        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} framework package`}>
+          <h3>Framework package</h3>
           <dl>
             <DetailPair label="Framework">{row.frameworkLabel}</DetailPair>
-            <DetailPair label="Package">{row.packageLabel}</DetailPair>
+            <DetailPair label="Framework package">{row.packageLabel}</DetailPair>
             <DetailPair label="Version">{row.packageVersion}</DetailPair>
             <DetailPair label="Lifecycle">{row.lifecycleLabel}</DetailPair>
           </dl>
@@ -870,12 +892,12 @@ function RegisterExpansionPanel({ row, onOpen, runtimeWorkspaceBackState }) {
               variant="primary"
               underline="hover"
             >
-              Open runtime workspace
+              Open workspace
             </Link>
           ) : null}
         </section>
-        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} source lineage`}>
-          <h3>Source Lineage</h3>
+        <section className="maintain-vmfs__detail-panel" aria-label={`${row.name} source basis`}>
+          <h3>Source basis</h3>
           <dl>
             {row.lineageItems.map(([label, value]) => (
               <DetailPair key={`${row.key}-${label}`} label={label}>{value}</DetailPair>
@@ -898,18 +920,18 @@ function VmfDetailField({ label, children }) {
 
 function MaintainVmfsBoundaryState({ message, onBack }) {
   return (
-    <section className="maintain-vmfs container" aria-label="VMF workspace">
+    <section className="maintain-vmfs container" aria-label="Workspace">
       <header className="maintain-vmfs__header">
-        <h1 className="maintain-vmfs__title">VMF Workspace</h1>
+        <h1 className="maintain-vmfs__title">Workspace</h1>
       </header>
       <Fieldset className="maintain-vmfs__fieldset">
-        <Fieldset.Legend className="sr-only">VMF workspace state</Fieldset.Legend>
+        <Fieldset.Legend className="sr-only">Workspace status</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--state">
             <div
               className="maintain-vmfs__catalogue-actions"
               role="group"
-              aria-label="VMF workspace actions"
+              aria-label="Workspace actions"
             >
               <Button
                 type="button"
@@ -1421,8 +1443,8 @@ function MaintainVmfs() {
   const registerShownCount = registerRows.length
   const registerCountLabel = `${registerShownCount} shown`
   const registerSourceCountLabel = `${runtimeTotalCount} ${
-    runtimeTotalCount === 1 ? 'runtime object' : 'runtime objects'
-  } | ${totalCount} ${totalCount === 1 ? 'VMF bridge record' : 'VMF bridge records'}`
+    runtimeTotalCount === 1 ? 'workspace' : 'workspaces'
+  } | ${totalCount} ${totalCount === 1 ? 'package provenance entry' : 'package provenance entries'}`
   const isRegisterLoading = isLoading || isLoadingRuntimeInstances
   const isRegisterRefreshing = Boolean(
     (isFetching && !isLoading) || (isFetchingRuntimeInstances && !isLoadingRuntimeInstances),
@@ -1442,11 +1464,20 @@ function MaintainVmfs() {
 
   const featuredRegisterRow = registerRows[0] ?? null
   const lockedInstanceRows = registerRows.filter(
-    (row) => String(getEvidenceItemValue(row, 'Lock')).trim().toUpperCase() === 'LOCKED',
+    (row) => String(getEvidenceItemValue(row, 'Workspace status')).trim().toUpperCase() === 'LOCKED',
   )
   const pendingValidationRows = registerRows.filter((row) => {
-    const validation = String(getEvidenceItemValue(row, 'Validation')).trim().toUpperCase()
-    return ['FAILED', 'ERROR', 'BLOCKED', 'NOT_RUN', 'PENDING'].includes(validation)
+    const validation = String(getEvidenceItemValue(row, 'Evidence status')).trim().toUpperCase()
+    return [
+      'FAILED',
+      'ERROR',
+      'BLOCKED',
+      'NOT_RUN',
+      'PENDING',
+      'ITEMS NEEDING ATTENTION',
+      'REVIEW ITEMS',
+      'THINGS TO VERIFY',
+    ].includes(validation)
   })
   const atRiskInstanceRows = registerRows.filter((row) =>
     ['warning', 'error', 'danger'].includes(row.stageVariant)
@@ -1458,17 +1489,17 @@ function MaintainVmfs() {
   const lockedInstanceFocus = lockedInstanceRows[0] ?? null
   const pendingValidationFocus = pendingValidationRows[0] ?? null
   const atRiskInstanceFocus = atRiskInstanceRows[0] ?? null
-  const lockedInstanceEvidence = getEvidenceItem(lockedInstanceFocus, 'Lock')
-  const pendingValidationEvidence = getEvidenceItem(pendingValidationFocus, 'Validation')
+  const lockedInstanceEvidence = getEvidenceItem(lockedInstanceFocus, 'Workspace status')
+  const pendingValidationEvidence = getEvidenceItem(pendingValidationFocus, 'Evidence status')
   const lockedInstanceInsight = lockedInstanceFocus
     ? `Latest: ${lockedInstanceFocus.name}`
-    : 'No locked instances'
+    : 'No locked workspaces'
   const pendingValidationInsight = pendingValidationFocus
     ? `Latest: ${pendingValidationFocus.name}`
-    : 'No pending validation'
+    : 'No review items'
   const atRiskInstanceInsight = atRiskInstanceFocus
     ? `Latest: ${atRiskInstanceFocus.name}`
-    : 'No at-risk instances'
+    : 'No items to verify'
   const lockedInstanceBadge = lockedInstanceFocus
     ? {
         label: formatRuntimeTokenLabel(lockedInstanceEvidence?.value ?? 'LOCKED'),
@@ -1504,9 +1535,9 @@ function MaintainVmfs() {
         nextErrors.form = runtimeCapacityBlockMessage
       }
       if (!frameworkPackageId) {
-        nextErrors.frameworkPackageId = 'VMF version is required.'
+        nextErrors.frameworkPackageId = 'Framework package is required.'
       } else if (!frameworkPackageOptions.some((option) => option.value === frameworkPackageId)) {
-        nextErrors.frameworkPackageId = 'Select an available VMF version.'
+        nextErrors.frameworkPackageId = 'Select an available framework package.'
       }
 
       if (Object.keys(nextErrors).length > 0) {
@@ -1534,8 +1565,8 @@ function MaintainVmfs() {
         addToast({
           title: 'Value Narrative created',
           description: packageVersion
-            ? `${createdName} started as runtime work on package ${packageVersion}.`
-            : `${createdName} started as runtime work.`,
+            ? `${createdName} was created on framework package ${packageVersion}.`
+            : `${createdName} was created as a workspace.`,
           variant: 'success',
         })
 
@@ -1646,8 +1677,8 @@ function MaintainVmfs() {
       }).unwrap()
 
       addToast({
-        title: 'VMF updated',
-        description: 'VMF changes were saved successfully.',
+        title: 'Workspace updated',
+        description: 'Workspace changes were saved successfully.',
         variant: 'success',
       })
       closeEditDialog()
@@ -1695,14 +1726,14 @@ function MaintainVmfs() {
     try {
       const response = await deleteVmf({ vmfId }).unwrap()
       addToast({
-        title: 'VMF soft-deleted',
+        title: 'Workspace soft-deleted',
         description: formatSoftDeleteMessage(response?.data),
         variant: 'success',
       })
     } catch (error) {
       const appError = normalizeError(error)
       addToast({
-        title: 'Failed to delete VMF',
+        title: 'Failed to delete workspace',
         description: appError.message,
         variant: appError.status === 422 ? 'warning' : 'error',
       })
@@ -1721,7 +1752,7 @@ function MaintainVmfs() {
   if (!customerId) {
     return (
       <MaintainVmfsBoundaryState
-        message="No customer context available. Select a customer to manage VMFs."
+        message="No customer context available. Select a customer to manage workspaces."
         onBack={handleBackToHome}
       />
     )
@@ -1732,10 +1763,10 @@ function MaintainVmfs() {
       <MaintainVmfsBoundaryState
         message={
           supportsTenantManagement
-            ? 'Select a tenant from the tenant switcher before opening the VMF workspace.'
+            ? 'Select a tenant from the tenant switcher before opening the workspace.'
             : isLoadingTenants
               ? 'Loading tenant context for this workspace.'
-              : 'VMF access is available, but the workspace could not resolve its tenant context. Refresh or re-open this page.'
+              : 'Workspace access is available, but the workspace could not resolve its tenant context. Refresh or re-open this page.'
         }
         onBack={handleBackToHome}
       />
@@ -1785,7 +1816,7 @@ function MaintainVmfs() {
                 || isCreateRuntimeCapacityBlocked
               }
             >
-              Create New Instance
+              Create New Workspace
             </Button>
           ) : null}
         </div>
@@ -1800,27 +1831,27 @@ function MaintainVmfs() {
             <ContinueWorkCard
               row={featuredRegisterRow}
               primary
-              title="Continue latest instance"
+              title="Continue latest workspace"
               icon={MdOutlineDescription}
               onOpen={handleRuntimeRowOpen}
             />
             <ContinueWorkCard
-              title="Review Locked Instances"
-              description={`${lockedInstanceCount} ${lockedInstanceCount === 1 ? 'instance' : 'instances'} locked`}
+              title="Review locked workspaces"
+              description={`${lockedInstanceCount} ${lockedInstanceCount === 1 ? 'workspace' : 'workspaces'} locked`}
               insight={lockedInstanceInsight}
               summaryBadge={lockedInstanceBadge}
               icon={MdLockOutline}
             />
             <ContinueWorkCard
-              title="Resolve Pending Validation"
-              description={`${pendingValidationCount} ${pendingValidationCount === 1 ? 'instance needs' : 'instances need'} attention`}
+              title="Review items needing attention"
+              description={`${pendingValidationCount} ${pendingValidationCount === 1 ? 'workspace needs' : 'workspaces need'} attention`}
               insight={pendingValidationInsight}
               summaryBadge={pendingValidationBadge}
               icon={MdShield}
             />
             <ContinueWorkCard
-              title="Review At-Risk Instances"
-              description={`${atRiskInstanceCount} ${atRiskInstanceCount === 1 ? 'instance needs' : 'instances need'} attention`}
+              title="Things to verify"
+              description={`${atRiskInstanceCount} ${atRiskInstanceCount === 1 ? 'workspace needs' : 'workspaces need'} attention`}
               insight={atRiskInstanceInsight}
               summaryBadge={atRiskInstanceBadge}
               icon={MdOutlineWarningAmber}
@@ -1829,23 +1860,23 @@ function MaintainVmfs() {
           </ul>
         ) : (
           <div className="maintain-vmfs__empty-panel">
-            <p>No Value Narrative runtime work is available for this tenant yet.</p>
+            <p>No Value Narrative workspace is available for this tenant yet.</p>
           </div>
         )}
       </section>
 
       <Fieldset className="maintain-vmfs__fieldset maintain-vmfs__register-section">
-        <Fieldset.Legend className="sr-only">Value Narrative work register</Fieldset.Legend>
+        <Fieldset.Legend className="sr-only">Value Narrative workspace register</Fieldset.Legend>
         <Card variant="elevated" className="maintain-vmfs__card maintain-vmfs__register-card">
           <Card.Body className="maintain-vmfs__card-body maintain-vmfs__card-body--compact">
             <div className="maintain-vmfs__register-header">
               <div className="maintain-vmfs__register-copy-wrapper">
                 <div className="maintain-vmfs__section-copy">
                   <h2 className="maintain-vmfs__section-title">
-                    Instances <span className="sr-only">Value Narratives</span>
+                    Workspaces <span className="sr-only">Value Narratives</span>
                   </h2>
                   <p className="maintain-vmfs__section-description">
-                    Runtime objects are shown with transitional VMF bridge records for this tenant.
+                    Workspaces are shown with their current status and framework package provenance for this tenant.
                   </p>
                 </div>
               </div>
@@ -1862,9 +1893,9 @@ function MaintainVmfs() {
                       size="sm"
                       showIcon
                       className="maintain-vmfs__package-status"
-                      aria-label="Eligible VMF version required"
+                      aria-label="Eligible framework package required"
                     >
-                      No eligible version
+                      No eligible package
                     </Status>
                   ) : null}
                   <div className="maintain-vmfs__catalogue-buttons">
@@ -1890,7 +1921,7 @@ function MaintainVmfs() {
                   ) : null}
                 </div>
 
-                <div className="maintain-vmfs__toolbar" role="group" aria-label="Instance filters">
+                <div className="maintain-vmfs__toolbar" role="group" aria-label="Workspace filters">
                   <Input
                     id="vmf-search"
                     aria-label="Search"
@@ -1907,7 +1938,7 @@ function MaintainVmfs() {
                   />
                   <Select
                     id="vmf-status-filter"
-                    label="State"
+                    label="Workspace status"
                     className="maintain-vmfs__filter-control"
                     size="sm"
                     value={statusFilter}
@@ -1971,23 +2002,23 @@ function MaintainVmfs() {
 
             <HorizontalScroll
               className="maintain-vmfs__table-wrap"
-              ariaLabel="Value Narrative work register table"
+              ariaLabel="Value Narrative workspace register table"
               gap="sm"
             >
               <Table
                 className="maintain-vmfs__table maintain-vmfs__register-table"
                 hoverable
                 variant="striped"
-                ariaLabel="Value Narrative work register"
+                ariaLabel="Value Narrative workspace register"
               >
                 <Table.Head>
                     <Table.Row>
-                    <Table.Header width="300px">Instance</Table.Header>
-                    <Table.Header width="220px">Package</Table.Header>
+                    <Table.Header width="300px">Workspace</Table.Header>
+                    <Table.Header width="220px">Framework package</Table.Header>
                     <Table.Header width="130px">Version</Table.Header>
-                    <Table.Header width="140px">State</Table.Header>
+                    <Table.Header width="140px">Workspace status</Table.Header>
                     <Table.Header width="130px">Lifecycle</Table.Header>
-                    <Table.Header width="150px">Health</Table.Header>
+                    <Table.Header width="150px">Review status</Table.Header>
                     <Table.Header width="140px">Updated</Table.Header>
                     <Table.Header width="170px" align="center">Action</Table.Header>
                   </Table.Row>
@@ -1996,13 +2027,13 @@ function MaintainVmfs() {
                   {isRegisterLoading ? (
                     <Table.Row className="table__row--loading">
                       <Table.Cell colSpan={8} className="table__cell--empty">
-                        <p className="table__empty-message">Loading Value Narrative work...</p>
+                        <p className="table__empty-message">Loading Value Narrative workspaces...</p>
                       </Table.Cell>
                     </Table.Row>
                   ) : registerRows.length === 0 ? (
                     <Table.Row className="table__row--empty">
                       <Table.Cell colSpan={8} className="table__cell--empty">
-                        <p className="table__empty-message">No Value Narratives found.</p>
+                        <p className="table__empty-message">No Value Narrative workspaces found.</p>
                       </Table.Cell>
                     </Table.Row>
                   ) : (
@@ -2018,7 +2049,7 @@ function MaintainVmfs() {
                             ].filter(Boolean).join(' ')}
                           >
                             <Table.Cell
-                              dataLabel="Instance"
+                              dataLabel="Workspace"
                               className="maintain-vmfs__register-identity-cell"
                             >
                               <div className="maintain-vmfs__instance-summary">
@@ -2050,7 +2081,7 @@ function MaintainVmfs() {
                                 </div>
                               </div>
                             </Table.Cell>
-                            <Table.Cell dataLabel="Package">
+                            <Table.Cell dataLabel="Framework package">
                               <span className="maintain-vmfs__summary-value">
                                 {registerRow.packageLabel}
                               </span>
@@ -2060,7 +2091,7 @@ function MaintainVmfs() {
                                 {registerRow.packageVersion}
                               </span>
                             </Table.Cell>
-                            <Table.Cell dataLabel="State">
+                            <Table.Cell dataLabel="Workspace status">
                               <Status
                                 size="sm"
                                 showIcon
@@ -2078,7 +2109,7 @@ function MaintainVmfs() {
                                 {registerRow.lifecycleLabel}
                               </Badge>
                             </Table.Cell>
-                            <Table.Cell dataLabel="Health">
+                            <Table.Cell dataLabel="Review status">
                               <Badge
                                 size="sm"
                                 variant={registerRow.healthVariant}
@@ -2159,7 +2190,7 @@ function MaintainVmfs() {
             </HorizontalScroll>
 
             {isRegisterRefreshing ? (
-              <p className="maintain-vmfs__muted">Refreshing Value Narrative work...</p>
+              <p className="maintain-vmfs__muted">Refreshing Value Narrative workspaces...</p>
             ) : null}
 
             {runtimeTotalPages > 1 || totalPages > 1 ? (
@@ -2168,7 +2199,7 @@ function MaintainVmfs() {
                   <div
                     className="maintain-vmfs__pagination"
                     role="navigation"
-                    aria-label="Value Narrative runtime pagination"
+                    aria-label="Value Narrative workspace pagination"
                   >
                     <div className="maintain-vmfs__pagination-controls">
                       <Button
@@ -2189,8 +2220,8 @@ function MaintainVmfs() {
                       </Button>
                     </div>
                     <p className="maintain-vmfs__pagination-info">
-                      Runtime objects page {runtimeCurrentPage} of {runtimeTotalPages}
-                      {runtimeTotalCount > 0 ? ` (${runtimeTotalCount} runtime objects)` : ''}
+                      Workspaces page {runtimeCurrentPage} of {runtimeTotalPages}
+                      {runtimeTotalCount > 0 ? ` (${runtimeTotalCount} workspaces)` : ''}
                     </p>
                     <div className="maintain-vmfs__pagination-controls">
                       <Button
@@ -2214,7 +2245,7 @@ function MaintainVmfs() {
                 ) : null}
 
                 {totalPages > 1 ? (
-                  <div className="maintain-vmfs__pagination" role="navigation" aria-label="VMF bridge record pagination">
+                  <div className="maintain-vmfs__pagination" role="navigation" aria-label="Package provenance pagination">
                     <div className="maintain-vmfs__pagination-controls">
                       <Button
                         variant="outline"
@@ -2234,8 +2265,8 @@ function MaintainVmfs() {
                       </Button>
                     </div>
                     <p className="maintain-vmfs__pagination-info">
-                      VMF bridge records page {currentPage} of {totalPages}
-                      {totalCount > 0 ? ` (${totalCount} VMF bridge records)` : ''}
+                      Package provenance page {currentPage} of {totalPages}
+                      {totalCount > 0 ? ` (${totalCount} package provenance entries)` : ''}
                     </p>
                     <div className="maintain-vmfs__pagination-controls">
                       <Button
@@ -2265,7 +2296,7 @@ function MaintainVmfs() {
 
       <Dialog open={createOpen} onClose={closeCreateDialog} size="md">
         <Dialog.Header>
-          <h2 className="maintain-vmfs__dialog-title">Create Value Narrative</h2>
+          <h2 className="maintain-vmfs__dialog-title">Create Value Narrative workspace</h2>
         </Dialog.Header>
         <Dialog.Body className="maintain-vmfs__dialog-body">
           <form className="maintain-vmfs__form" onSubmit={handleCreateSubmit} noValidate>
@@ -2292,12 +2323,12 @@ function MaintainVmfs() {
             />
             <Select
               id="vmf-create-framework-package"
-              label="VMF Version"
+              label="Framework package"
               value={createForm.frameworkPackageId}
               placeholder={
                 isFrameworkPackageSelectionLoading
-                  ? 'Loading VMF versions...'
-                  : 'Select a VMF version'
+                  ? 'Loading framework packages...'
+                  : 'Select a framework package'
               }
               options={frameworkPackageOptions}
               onChange={(event) =>
@@ -2309,7 +2340,7 @@ function MaintainVmfs() {
               error={createErrors.frameworkPackageId}
               helperText={
                 frameworkPackageOptions.length > 0
-                  ? 'Select the active runtime-ready VMF version this instance will snapshot at creation.'
+                  ? 'Select the active framework package to use when creating this workspace.'
                   : VMF_RUNTIME_PACKAGE_UNAVAILABLE_HELPER
               }
               disabled={
@@ -2320,9 +2351,9 @@ function MaintainVmfs() {
               required
             />
             {frameworkPackageTotalPages > 1 ? (
-              <div className="maintain-vmfs__pagination" role="navigation" aria-label="VMF version pagination">
+              <div className="maintain-vmfs__pagination" role="navigation" aria-label="Framework package pagination">
                 <p className="maintain-vmfs__pagination-info">
-                  VMF versions page {frameworkPackageCurrentPage} of {frameworkPackageTotalPages}
+                  Framework packages page {frameworkPackageCurrentPage} of {frameworkPackageTotalPages}
                 </p>
                 <div className="maintain-vmfs__pagination-controls">
                   <Button
@@ -2380,8 +2411,8 @@ function MaintainVmfs() {
               fullWidth
             />
             <p className="maintain-vmfs__muted">
-              New Value Narratives start as <strong>ACTIVE</strong> runtime work with a
-              <strong> DRAFT</strong> framework state. Package evidence is snapshotted from
+              New Value Narratives start as <strong>ACTIVE</strong> workspaces with a
+              <strong> DRAFT</strong> current stage. Package evidence is recorded from
               the selected active package at creation.
             </p>
             <div className="maintain-vmfs__form-actions">
@@ -2413,7 +2444,7 @@ function MaintainVmfs() {
 
       <Dialog open={editOpen} onClose={closeEditDialog} size="md">
         <Dialog.Header>
-          <h2 className="maintain-vmfs__dialog-title">Edit VMF</h2>
+          <h2 className="maintain-vmfs__dialog-title">Edit workspace</h2>
         </Dialog.Header>
         <Dialog.Body className="maintain-vmfs__dialog-body">
           <div className="maintain-vmfs__form">
@@ -2493,17 +2524,17 @@ function MaintainVmfs() {
         open={detailsOpen}
         onClose={closeDetailsDialog}
         size="lg"
-        aria-label={detailsTarget?.name ? `${detailsTarget.name} details` : 'VMF details'}
+        aria-label={detailsTarget?.name ? `${detailsTarget.name} details` : 'Workspace details'}
       >
         <Dialog.Header>
           <h2 className="maintain-vmfs__dialog-title">
-            {detailsTarget?.name ? `${detailsTarget.name} Details` : 'VMF Details'}
+            {detailsTarget?.name ? `${detailsTarget.name} Details` : 'Workspace details'}
           </h2>
         </Dialog.Header>
         <Dialog.Body className="maintain-vmfs__dialog-body">
           <p className="maintain-vmfs__dialog-text">
-            Read-only VMF metadata returned by the backend. Runtime-control fields are displayed
-            here but are not sent back on normal edits.
+            Read-only workspace metadata returned by the service. Package and assurance fields are
+            displayed here but are not sent back on normal edits.
           </p>
           <dl className="maintain-vmfs__details-grid">
             <VmfDetailField label="Name">
@@ -2512,7 +2543,7 @@ function MaintainVmfs() {
             <VmfDetailField label="Description">
               {String(detailsTarget?.description ?? '--')}
             </VmfDetailField>
-            <VmfDetailField label="Operational Status">
+            <VmfDetailField label="Workspace status">
               <Status
                 size="sm"
                 showIcon
@@ -2521,7 +2552,7 @@ function MaintainVmfs() {
                 {String(detailsTarget?.status ?? 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN'}
               </Status>
             </VmfDetailField>
-            <VmfDetailField label="Lifecycle Status">
+            <VmfDetailField label="Lifecycle">
               <Badge
                 size="sm"
                 variant={getLifecycleVariant(String(detailsTarget?.lifecycleStatus ?? '').trim().toUpperCase() || 'DRAFT')}
@@ -2530,16 +2561,16 @@ function MaintainVmfs() {
                 {String(detailsTarget?.lifecycleStatus ?? 'DRAFT').trim().toUpperCase() || 'DRAFT'}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Framework Version">
+            <VmfDetailField label="Framework package version">
               {String(detailsTarget?.frameworkVersion ?? '--').trim() || '--'}
             </VmfDetailField>
-            <VmfDetailField label="VMF Version">
+            <VmfDetailField label="Framework package">
               {getFrameworkPackageLabel(detailsTarget)}
             </VmfDetailField>
-            <VmfDetailField label="VMF Version Id">
+            <VmfDetailField label="Framework package ID">
               {String(detailsTarget?.frameworkPackageId ?? '--').trim() || '--'}
             </VmfDetailField>
-            <VmfDetailField label="VMF Version Status">
+            <VmfDetailField label="Framework package status">
               <Badge
                 size="sm"
                 variant={getRuntimeStateVariant(getFrameworkPackageDetail(detailsTarget, 'status') || '')}
@@ -2548,63 +2579,63 @@ function MaintainVmfs() {
                 {getFrameworkPackageDetail(detailsTarget, 'status') || '--'}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="VMF Version Number">
+            <VmfDetailField label="Framework package version">
               {getFrameworkPackageDetail(detailsTarget, 'version')
                 || getFrameworkPackageDetail(detailsTarget, 'frameworkVersion')
                 || '--'}
             </VmfDetailField>
-            <VmfDetailField label="Runtime Readiness">
+            <VmfDetailField label="Understanding">
               <Badge
                 size="sm"
                 variant={getRuntimeReadinessVariant(detailsRuntimeReadiness)}
                 pill
               >
-                {detailsRuntimeReadiness}
+                {formatCustomerWorkspaceSignal(detailsRuntimeReadiness)}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Execution State">
+            <VmfDetailField label="Current stage">
               <Badge
                 size="sm"
                 variant={getExecutionStateVariant(detailsExecutionState)}
                 pill
               >
-                {formatRuntimeTokenLabel(detailsExecutionState)}
+                {formatCustomerWorkspaceSignal(detailsExecutionState)}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Completion State">
+            <VmfDetailField label="Outcome status">
               <Badge
                 size="sm"
                 variant={getRuntimeStateVariant(detailsTarget?.completionState ?? 'NOT_TRACKED')}
                 pill
               >
-                {String(detailsTarget?.completionState ?? 'NOT_TRACKED').trim().toUpperCase() || 'NOT_TRACKED'}
+                {formatCustomerWorkspaceSignal(detailsTarget?.completionState ?? 'NOT_TRACKED')}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Validation Status">
+            <VmfDetailField label="Evidence status">
               <Badge
                 size="sm"
                 variant={getRuntimeStateVariant(detailsTarget?.validationStatus ?? 'NOT_RUN')}
                 pill
               >
-                {String(detailsTarget?.validationStatus ?? 'NOT_RUN').trim().toUpperCase() || 'NOT_RUN'}
+                {formatCustomerWorkspaceSignal(detailsTarget?.validationStatus ?? 'NOT_RUN')}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Lock Status">
+            <VmfDetailField label="Review state">
               <Badge
                 size="sm"
                 variant={String(detailsTarget?.lockStatus ?? '').trim().toUpperCase() === 'LOCKED' ? 'warning' : getRuntimeStateVariant(detailsTarget?.lockStatus ?? 'UNLOCKED')}
                 pill
               >
-                {String(detailsTarget?.lockStatus ?? 'UNLOCKED').trim().toUpperCase() || 'UNLOCKED'}
+                {formatCustomerWorkspaceSignal(detailsTarget?.lockStatus ?? 'UNLOCKED')}
               </Badge>
             </VmfDetailField>
-            <VmfDetailField label="Snapshot Status">
+            <VmfDetailField label="Source basis">
               <Badge
                 size="sm"
                 variant={getRuntimeStateVariant(detailsTarget?.snapshotStatus ?? 'UNBOUND')}
                 pill
               >
-                {String(detailsTarget?.snapshotStatus ?? 'UNBOUND').trim().toUpperCase() || 'UNBOUND'}
+                {formatCustomerWorkspaceSignal(detailsTarget?.snapshotStatus ?? 'UNBOUND')}
               </Badge>
             </VmfDetailField>
             <VmfDetailField label="Migration Available">
@@ -2622,11 +2653,11 @@ function MaintainVmfs() {
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} size="sm">
         <Dialog.Header>
-          <h2 className="maintain-vmfs__dialog-title">Delete VMF</h2>
+          <h2 className="maintain-vmfs__dialog-title">Delete workspace</h2>
         </Dialog.Header>
         <Dialog.Body className="maintain-vmfs__dialog-body">
           <p className="maintain-vmfs__dialog-text">
-            Delete {deleteTarget?.name ?? 'this VMF'}? This action is a soft-delete and the row
+            Delete {deleteTarget?.name ?? 'this workspace'}? This action is a soft-delete and the row
             will be hidden until retention purge runs.
           </p>
         </Dialog.Body>
@@ -2643,7 +2674,7 @@ function MaintainVmfs() {
             onClick={handleConfirmDelete}
             loading={deleteResult.isLoading}
           >
-            Delete VMF
+            Delete workspace
           </Button>
         </Dialog.Footer>
       </Dialog>

@@ -1,1688 +1,466 @@
-/**
- * Dashboard Page
- *
- * Customer runtime operating surface with tenant, role, and work context.
- */
-
-import { useEffect, useMemo, useState } from 'react'
-import {
-  MdAddCircleOutline,
-  MdLockOutline,
-  MdBusiness,
-  MdChevronRight,
-  MdFilterList,
-  MdOutlineEventNote,
-  MdOutlineDashboardCustomize,
-  MdOutlineDescription,
-  MdOutlineDomain,
-  MdOutlineInventory2,
-  MdOutlineInsights,
-  MdOutlinePeopleAlt,
-  MdOutlinePlayCircle,
-  MdOutlineTrendingUp,
-  MdOutlineWarningAmber,
-  MdShield,
-} from 'react-icons/md'
-import { Badge } from '../../components/Badge'
+import { useMemo, useState } from 'react'
 import { Card } from '../../components/Card'
-import { CustomerSelector } from '../../components/CustomerSelector'
-import { CustomSelect } from '../../components/CustomSelect'
-import { HorizontalScroll } from '../../components/HorizontalScroll'
-import { Input } from '../../components/Input'
 import { Link } from '../../components/Link'
-import { Select } from '../../components/Select'
+import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
-import { TableDateTime } from '../../components/TableDateTime'
-import { TenantSwitcher } from '../../components/TenantSwitcher'
 import { useAuthorization } from '../../hooks/useAuthorization.js'
-import { useDebounce } from '../../hooks/useDebounce.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
-import { useGetCustomerQuery } from '../../store/api/customerApi.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
-import { normalizeError } from '../../utils/errors.js'
 import {
-  formatRuntimeTokenLabel,
-  getRuntimeExecutionState,
-  getRuntimeInstanceDisplayId,
-  getRuntimeInstanceRouteId,
-  getRuntimeLifecycleStatus,
-  getRuntimeReadinessLabel,
-  getRuntimeReadinessVariant,
-  getRuntimeStatusVariant,
-  getRuntimeWorkspaceRoute,
-} from '../../utils/runtimeWorkspace.js'
-import { getSingleTenantDisplayName, getTenantId } from '../MaintainTenants/tenantUtils.js'
+  buildCustomerHomeWorkspaceCard,
+  CUSTOMER_EXPERIENCE,
+  resolveCustomerExperience,
+} from '../../utils/customerExperience.js'
 import './Dashboard.css'
 
-const WORK_TYPE_OPTIONS = [
-  { value: 'ALL', label: 'All Work' },
-  { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
-]
-
-const ACTIVE_WORK_TYPE_OPTIONS = [
-  { value: 'ALL', label: 'All Work Types' },
-  { value: 'VALUE_NARRATIVE', label: 'Value Narratives' },
-]
-
-const ACTIVE_WORK_STATE_OPTIONS = [
-  { value: 'ALL', label: 'All States' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'LOCKED', label: 'Locked' },
-  { value: 'COMPLETED', label: 'Completed' },
-  { value: 'FAILED', label: 'Failed' },
-]
-
-const ACTIVE_WORK_HEALTH_OPTIONS = [
-  { value: 'ALL', label: 'All Health' },
-  { value: 'GOOD', label: 'Good' },
-  { value: 'NEEDS_REVIEW', label: 'Needs Review' },
-  { value: 'BLOCKED', label: 'Blocked' },
-  { value: 'UNKNOWN', label: 'Unknown' },
-]
-
-const EMPTY_RUNTIME_ROWS = Object.freeze([])
-const RUNTIME_ACTION_SUMMARY_PAGE_SIZE = 50
-const EMPTY_RUNTIME_SIGNAL_CARDS = Object.freeze([
-  {
-    id: 'runtime-signals-deferred',
-    title: 'Signals pending',
-    description: 'Runtime signals will appear here when a persisted signal source is available.',
-    icon: MdOutlineInsights,
-    variant: 'info',
+const EXPERIENCE_COPY = {
+  [CUSTOMER_EXPERIENCE.SIGNAL]: {
+    title: 'Signal Home',
+    eyebrow: 'Signal StoryLineOS',
+    description: 'Choose a focused Signal product: analyse a website or improve a document-backed outcome.',
+    assuranceTitle: 'Evidence assurance',
+    assuranceCopy: 'Evidence status is shown as review items and things to verify so you can see what still needs attention.',
   },
-])
-const EMPTY_RUNTIME_ACTIVITY = Object.freeze([])
-
-const normalizeFeatureKeys = (features) =>
-  Array.isArray(features)
-    ? features
-      .map((feature) => String(feature ?? '').trim().toUpperCase())
-      .filter(Boolean)
-    : []
-
-const normalizeRoleKeys = (roles) =>
-  Array.isArray(roles)
-    ? roles.map((role) => String(role ?? '').trim().toUpperCase()).filter(Boolean)
-    : []
-
-const getRuntimeHealthFilterKey = (readiness) => {
-  const variant = getRuntimeReadinessVariant(readiness)
-  if (variant === 'success') return 'GOOD'
-  if (variant === 'warning') return 'NEEDS_REVIEW'
-  if (variant === 'error') return 'BLOCKED'
-  return 'UNKNOWN'
+  [CUSTOMER_EXPERIENCE.CORE]: {
+    title: 'Customer Workspace',
+    eyebrow: 'Customer Home',
+    description: 'Pick up where you left off or open a workspace.',
+    assuranceTitle: 'Intelligence assurance',
+    assuranceCopy: 'Intelligence assurance keeps the current workspace view connected to its source basis and review items.',
+  },
 }
 
-const hasRole = (roles, role) => normalizeRoleKeys(roles).includes(role)
+const formatCount = (value) => `${value} ${value === 1 ? 'workspace' : 'workspaces'}`
 
-const getMembershipCustomerId = (membership) =>
-  membership?.customerId
-  ?? membership?.customer?.id
-  ?? membership?.customer?._id
+const projectAction = (card) => ({
+  label: card.nextAction,
+  to: card.id ? `/app/runtime/${encodeURIComponent(String(card.id))}` : '/app/workspaces/vmf',
+})
 
-const findCustomerMembership = (user, customerId, role) => {
-  if (!customerId || !Array.isArray(user?.memberships)) return null
-  const normalizedCustomerId = String(customerId)
+const formatActivityTime = (value) => {
+  const parsed = Date.parse(String(value ?? ''))
+  if (!Number.isFinite(parsed)) return 'Time unavailable'
 
-  return user.memberships.find((membership) => {
-    const membershipCustomerId = getMembershipCustomerId(membership)
-    return membershipCustomerId !== null
-      && membershipCustomerId !== undefined
-      && String(membershipCustomerId) === normalizedCustomerId
-      && (!role || hasRole(membership?.roles, role))
-  }) ?? null
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(parsed)
 }
 
-const findTenantMembership = (user, customerId, tenantId, role) => {
-  if (!customerId || !tenantId || !Array.isArray(user?.tenantMemberships)) return null
-  const normalizedCustomerId = String(customerId)
-  const normalizedTenantId = String(tenantId)
-
-  return user.tenantMemberships.find((membership) =>
-    String(getMembershipCustomerId(membership) ?? '') === normalizedCustomerId
-    && String(membership?.tenantId ?? '') === normalizedTenantId
-    && (!role || hasRole(membership?.roles, role))) ?? null
-}
-
-const findTenantMembershipByCustomer = (user, customerId, role) => {
-  if (!customerId || !Array.isArray(user?.tenantMemberships)) return null
-  const normalizedCustomerId = String(customerId)
-
-  return user.tenantMemberships.find((membership) =>
-    String(getMembershipCustomerId(membership) ?? '') === normalizedCustomerId
-    && (!role || hasRole(membership?.roles, role))) ?? null
-}
-
-const getVmfId = (vmf) => String(vmf?.id ?? vmf?._id ?? vmf?.runtimeInstanceKey ?? '').trim()
-
-const getVmfName = (vmf) => {
-  const candidate = vmf?.name ?? vmf?.title ?? vmf?.label ?? getVmfId(vmf)
-  return String(candidate || 'Value Narrative').trim()
-}
-
-const getFrameworkPackageLabel = (vmf) => {
-  const frameworkPackage = vmf?.frameworkPackage
-
-  if (typeof frameworkPackage === 'string') {
-    const trimmed = frameworkPackage.trim()
-    if (trimmed) return trimmed
-  } else if (frameworkPackage && typeof frameworkPackage === 'object') {
-    const candidates = [
-      frameworkPackage.packageName,
-      frameworkPackage.frameworkPackageName,
-      frameworkPackage.name,
-      frameworkPackage.label,
-      frameworkPackage.packageKey,
-      frameworkPackage.key,
-      frameworkPackage.code,
-      frameworkPackage.id,
-    ]
-
-    for (const candidate of candidates) {
-      const trimmed = String(candidate ?? '').trim()
-      if (trimmed) return trimmed
-    }
-  }
-
-  const fallbackCandidates = [
-    vmf?.frameworkPackageName,
-    vmf?.packageName,
-    vmf?.packageLabel,
-    vmf?.packageKey,
-    vmf?.frameworkPackageId,
-  ]
-
-  for (const candidate of fallbackCandidates) {
-    const trimmed = String(candidate ?? '').trim()
-    if (trimmed) return trimmed
-  }
-
-  return '--'
-}
-
-const getFrameworkPackageVersion = (vmf) => {
-  const frameworkPackage = vmf?.frameworkPackage
-  const candidates = [
-    frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.version : '',
-    frameworkPackage && typeof frameworkPackage === 'object' ? frameworkPackage.frameworkVersion : '',
-    vmf?.packageVersion,
-    vmf?.frameworkVersion,
-  ]
-
-  for (const candidate of candidates) {
-    const trimmed = String(candidate ?? '').trim()
-    if (trimmed) return trimmed
-  }
-
-  return '--'
-}
-
-const normalizeDashboardToken = (value) =>
-  String(value ?? '').trim().toUpperCase()
-
-const getFrameworkState = (runtimeRecord) =>
-  runtimeRecord?.framework_state ?? runtimeRecord?.frameworkState ?? {}
-
-const getRuntimeFrameworkLifecycleStage = (runtimeRecord, fallback = 'DRAFT') => {
-  const frameworkState = getFrameworkState(runtimeRecord)
-  const lifecycle = frameworkState?.lifecycle ?? {}
-  const candidates = [
-    typeof lifecycle === 'string' ? lifecycle : lifecycle?.stage,
-    lifecycle?.status,
-    runtimeRecord?.frameworkLifecycleStage,
-    runtimeRecord?.frameworkLifecycleStatus,
-    runtimeRecord?.lifecycleStatus,
-  ]
-
-  for (const candidate of candidates) {
-    const normalized = normalizeDashboardToken(candidate)
-    if (normalized) return normalized
-  }
-
-  return fallback
-}
-
-const getRuntimeValidationState = (runtimeRecord) => {
-  const frameworkState = getFrameworkState(runtimeRecord)
-  const validation = frameworkState?.validation ?? {}
-  const readiness = frameworkState?.readiness ?? {}
-
-  return normalizeDashboardToken(
-    runtimeRecord?.validationStatus
-      ?? runtimeRecord?.runtimeValidationStatus
-      ?? readiness?.validationState
-      ?? validation?.state
-      ?? validation?.status
-      ?? validation?.result,
-  )
-}
-
-const getRuntimeLockState = (runtimeRecord) => {
-  const frameworkState = getFrameworkState(runtimeRecord)
-  const lifecycle = frameworkState?.lifecycle ?? {}
-  const explicitLock = normalizeDashboardToken(
-    runtimeRecord?.lockStatus
-      ?? runtimeRecord?.runtimeLockStatus
-      ?? runtimeRecord?.lockState
-      ?? lifecycle?.lockStatus
-      ?? lifecycle?.lockState,
-  )
-
-  if (explicitLock) return explicitLock
-  if (runtimeRecord?.isLocked === true || lifecycle?.locked === true) return 'LOCKED'
-  return ''
-}
-
-const getRuntimeReadinessState = (runtimeRecord) => {
-  const frameworkState = getFrameworkState(runtimeRecord)
-  const readiness = frameworkState?.readiness ?? {}
-  const explicitState = normalizeDashboardToken(
-    runtimeRecord?.readinessState
-      ?? runtimeRecord?.runtimeReadinessState
-      ?? readiness?.state,
-  )
-
-  if (explicitState) return explicitState
-
-  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
-  if (['LOCKED', 'PUBLISHED', 'APPROVED', 'IN_REVIEW', 'READY'].includes(lifecycleStage)) {
-    return lifecycleStage
-  }
-
-  const validationState = getRuntimeValidationState(runtimeRecord)
-  if (['PASSED', 'VALIDATED'].includes(validationState)) return 'VALIDATED'
-  if (['FAILED', 'ERROR', 'BLOCKED'].includes(validationState)) return 'BLOCKED'
-
-  return 'DRAFT'
-}
-
-const getRuntimeUpdatedTime = (runtimeRecord) => {
-  const date = new Date(String(runtimeRecord?.updatedAt ?? '').trim())
-  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
-}
-
-const isRuntimeInstanceLocked = (runtimeRecord) => {
-  const runtimeStatus = getRuntimeLifecycleStatus(runtimeRecord)
-  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
-  const lockState = getRuntimeLockState(runtimeRecord)
-
-  return lockState === 'LOCKED'
-    || runtimeStatus === 'LOCKED'
-    || lifecycleStage === 'LOCKED'
-}
-
-const isRuntimeInstancePendingValidation = (runtimeRecord) => {
-  const validationState = getRuntimeValidationState(runtimeRecord)
-  const readinessState = getRuntimeReadinessState(runtimeRecord)
-  const readinessLabel = getRuntimeReadinessLabel(runtimeRecord)
-
-  return [
-    'NOT_RUN',
-    'PENDING',
-    'WAITING',
-    'IN_REVIEW',
-    'REQUIRED',
-    'REQUIRES_VALIDATION',
-  ].includes(validationState)
-    || readinessState === 'IN_REVIEW'
-    || readinessLabel === 'Readiness pending'
-}
-
-const isRuntimeInstanceAtRisk = (runtimeRecord) => {
-  const runtimeStatus = getRuntimeLifecycleStatus(runtimeRecord)
-  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
-  const validationState = getRuntimeValidationState(runtimeRecord)
-  const readinessState = getRuntimeReadinessState(runtimeRecord)
-  const executionState = getRuntimeExecutionState(runtimeRecord)
-  const readinessVariant = getRuntimeReadinessVariant(getRuntimeReadinessLabel(runtimeRecord))
-  const blockedStates = ['BLOCKED', 'FAILED', 'ERROR']
-
-  return blockedStates.includes(runtimeStatus)
-    || blockedStates.includes(lifecycleStage)
-    || blockedStates.includes(validationState)
-    || blockedStates.includes(readinessState)
-    || blockedStates.includes(executionState)
-    || executionState === 'WAITING_APPROVAL'
-    || readinessVariant === 'error'
-}
-
-const getRuntimeListTotal = (response) => {
-  const candidates = [
-    response?.meta?.total,
-    response?.meta?.totalCount,
-    response?.data?.meta?.total,
-    response?.data?.meta?.totalCount,
-    response?.total,
-  ]
-  const numeric = candidates.map(Number).find((value) => Number.isFinite(value))
-
-  return numeric ?? 0
-}
-
-const formatRuntimeActionCount = (count, singular, plural, { isLimited = false } = {}) => {
-  const label = `${count} ${count === 1 ? singular : plural}`
-  return isLimited ? `${label} in latest ${RUNTIME_ACTION_SUMMARY_PAGE_SIZE}` : label
-}
-
-const getRuntimeReviewBadge = (runtimeRecord) => {
-  const frameworkState = getFrameworkState(runtimeRecord)
-  const readiness = frameworkState?.readiness ?? {}
-  const readinessState = getRuntimeReadinessState(runtimeRecord)
-  const validationState = getRuntimeValidationState(runtimeRecord)
-  const lifecycleStage = getRuntimeFrameworkLifecycleStage(runtimeRecord, '')
-  const executionState = getRuntimeExecutionState(runtimeRecord)
-
-  if (
-    readiness?.submittedForReview === true
-    || runtimeRecord?.submittedForReview === true
-    || readinessState === 'IN_REVIEW'
-    || lifecycleStage === 'IN_REVIEW'
-    || executionState === 'WAITING_APPROVAL'
-  ) {
-    return { label: 'Needs Review', variant: 'info' }
-  }
-
-  if (
-    ['BLOCKED', 'FAILED', 'ERROR'].includes(readinessState)
-    || ['BLOCKED', 'FAILED', 'ERROR'].includes(validationState)
-    || ['BLOCKED', 'FAILED', 'ERROR'].includes(executionState)
-  ) {
-    return { label: 'Needs Review', variant: 'warning' }
-  }
-
-  if (['READY', 'VALIDATED', 'APPROVED', 'PUBLISHED', 'LOCKED'].includes(readinessState)) {
-    return {
-      label: formatRuntimeTokenLabel(readinessState),
-      variant: getRuntimeStatusVariant(readinessState, getRuntimeReadinessVariant(getRuntimeReadinessLabel(runtimeRecord))),
-    }
-  }
-
-  return null
-}
-
-const formatRuntimeActionUpdatedLabel = (value) => {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return 'Updated recently'
-
-  const date = new Date(trimmed)
-  if (Number.isNaN(date.getTime())) return 'Updated recently'
-
-  const dateLabel = date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-  const timeLabel = date.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-
-  return `Updated ${dateLabel} ${timeLabel}`
-}
-
-function DashboardHeroMetric({ label, value, children, control = false, icon = null }) {
-  const metricClassName = [
-    'dashboard__hero-metric',
-    control ? 'dashboard__hero-metric--control' : '',
-  ].filter(Boolean).join(' ')
-  const Icon = icon
-
+function AccessResolutionState() {
   return (
-    <div className={metricClassName}>
-      {Icon ? (
-        <span className="dashboard__hero-metric-icon" aria-hidden="true">
-          <Icon />
-        </span>
-      ) : null}
-      <div className="dashboard__hero-metric-copy">
-        <dt>{label}</dt>
-        <dd>{children ?? value}</dd>
-      </div>
-    </div>
+    <main className="customer-home customer-home--state" aria-labelledby="customer-home-access-title">
+      <section className="customer-home__state" role="status">
+        <Status variant="warning" size="lg" showIcon>Workspace access needs confirmation</Status>
+        <h1 id="customer-home-access-title">We could not confirm this customer workspace</h1>
+        <p>Select an accessible customer again or sign in again before opening customer work.</p>
+      </section>
+    </main>
   )
 }
 
-function DashboardSectionCard({
-  actions,
-  badge,
-  children,
-  description,
-  icon,
-  modifier,
-  panelAs = 'div',
-  panelLabel,
-  status,
-  title,
-}) {
-  const SectionIcon = icon
-  const PanelElement = panelAs
-  const cardClassName = [
-    'dashboard__section-card',
-    modifier ? `dashboard__section-card--${modifier}` : '',
-  ].filter(Boolean).join(' ')
-  const panelProps = panelAs === 'nav'
-    ? { 'aria-label': panelLabel }
-    : { 'aria-label': panelLabel, role: 'region' }
-
+function SignalHome({ copy }) {
   return (
-    <Card variant="default" className={cardClassName} role="listitem">
-      <Card.Body className="dashboard__section-body">
-        <div className="dashboard__section-summary">
-          <div className="dashboard__section-copy">
-            <h2 className="dashboard__section-title">{title}</h2>
-            <p className="dashboard__section-description">{description}</p>
-          </div>
-          {actions ? (
-            <div className="dashboard__section-actions">
-              {actions}
-            </div>
-          ) : (
-            <div className="dashboard__section-meta">
-              <span className="dashboard__section-icon" aria-hidden="true">
-                <SectionIcon />
-              </span>
-              {badge ? (
-                <Badge variant={badge.variant ?? 'info'} size="sm" pill outline>
-                  {badge.label}
-                </Badge>
-              ) : null}
-              {status ? (
-                <Status variant={status.variant ?? 'neutral'} size="sm" showIcon>
-                  {status.label}
-                </Status>
-              ) : null}
-            </div>
-          )}
-        </div>
-        <PanelElement className="dashboard__section-panel" {...panelProps}>
-          {children}
-        </PanelElement>
-      </Card.Body>
-    </Card>
-  )
-}
-
-const getDashboardBadgeKey = (badge, index) => [
-  badge?.key,
-  badge?.id,
-  badge?.label,
-  badge?.variant,
-  index,
-].map((part) => String(part ?? '').trim()).filter(Boolean).join('-')
-
-const getDashboardVisibleBadges = (badges) =>
-  (Array.isArray(badges) ? badges : [])
-    .filter((badge) => String(badge?.label ?? '').trim())
-
-const getDashboardReadinessBadge = (badge) => {
-  if (!badge) return null
-  const label = String(badge.label ?? '').trim()
-  const normalizedLabel = normalizeDashboardToken(label)
-
-  if (['DRAFT', 'VALIDATED', 'READY', 'APPROVED', 'PUBLISHED', 'LOCKED'].includes(normalizedLabel)) {
-    return {
-      ...badge,
-      key: badge.key || 'runtime-readiness',
-      label: `Readiness ${formatRuntimeTokenLabel(normalizedLabel)}`,
-    }
-  }
-
-  return {
-    ...badge,
-    key: badge.key || 'runtime-attention',
-  }
-}
-
-function RuntimeActionCard({ action, primary = false }) {
-  const Icon = action.icon
-  const displayTitle = String(action.title ?? '').replace(/^Continue\s+/i, '')
-  const linkLabel = [action.title, action.label].filter(Boolean).join(' ')
-  const commandLabel = primary ? 'Continue' : action.label
-  const visibleBadges = getDashboardVisibleBadges(action.badges)
-  const cardClassName = [
-    'dashboard__launch-item',
-    'dashboard__launch-item--action',
-    primary ? 'dashboard__launch-item--primary-action' : '',
-    'dashboard__continue-item',
-    action.actionable === false ? 'dashboard__action-card--summary' : '',
-    action.priority === 'HIGH' ? 'dashboard__action-card--priority' : '',
-    action.disabled ? 'dashboard__action-card--disabled' : '',
-  ].filter(Boolean).join(' ')
-
-  if (primary) {
-    return (
-      <li className={cardClassName}>
-        <Link
-          to={action.to}
-          disabled={action.disabled}
-          className="dashboard__continue-card dashboard__continue-card--primary dashboard__continue-card--link"
-          variant="subtle"
-          underline="none"
-          aria-label={linkLabel}
-          onClick={action.onSelect}
-        >
-          <div className="dashboard__continue-head">
-            <span className="dashboard__continue-icon" aria-hidden="true">
-              <Icon />
-            </span>
-            <div className="dashboard__continue-heading">
-              <h3 className="dashboard__continue-title">{displayTitle}</h3>
-              {visibleBadges.length > 0 ? (
-                <div className="dashboard__continue-status" aria-label="Runtime state">
-                  {visibleBadges.map((badge, index) => (
-                    <Badge
-                      key={getDashboardBadgeKey(badge, index)}
-                      variant={badge.variant}
-                      size="sm"
-                      pill
-                      outline
-                    >
-                      {badge.label}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="dashboard__continue-copy">
-            <p>{action.meta}</p>
-            {action.description ? (
-              <p>{action.description}</p>
-            ) : null}
-          </div>
-          <span className="dashboard__continue-actions">
-            <span className="dashboard__continue-cta">{commandLabel}</span>
-            <MdChevronRight className="dashboard__continue-arrow" aria-hidden="true" />
-          </span>
-        </Link>
-      </li>
-    )
-  }
-
-  return (
-    <li className={cardClassName}>
-      <div
-        className="dashboard__continue-card dashboard__continue-card--secondary dashboard__continue-card--summary"
-        aria-label={linkLabel}
-      >
-        <div className="dashboard__continue-head">
-          <span className="dashboard__continue-icon" aria-hidden="true">
-            <Icon />
-          </span>
-          <div className="dashboard__continue-heading">
-            <h3 className="dashboard__continue-title">{displayTitle}</h3>
-            {visibleBadges.length > 0 ? (
-              <div className="dashboard__continue-status" aria-label="Runtime state">
-                {visibleBadges.map((badge, index) => (
-                  <Badge
-                    key={getDashboardBadgeKey(badge, index)}
-                    variant={badge.variant}
-                    size="sm"
-                    pill
-                    outline
-                  >
-                    {badge.label}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="dashboard__continue-copy">
-          <p>{action.meta}</p>
-          {action.description ? (
-            <p>{action.description}</p>
-          ) : null}
-        </div>
-      </div>
-    </li>
-  )
-}
-
-function CreateWorkCard({ item }) {
-  const Icon = item.icon
-  const cardClassName = [
-    'dashboard__create-card',
-    item.tone ? `dashboard__create-card--${item.tone}` : '',
-    item.kind ? `dashboard__create-card--${item.kind}` : '',
-  ].filter(Boolean).join(' ')
-  const content = (
     <>
-      <span className="dashboard__create-visual">
-        <span className="dashboard__create-icon" aria-hidden="true">
-          <Icon />
-        </span>
-      </span>
-      <span className="dashboard__create-main">
-        <span className="dashboard__create-header">
-          <span className="dashboard__create-title">{item.title}</span>
-          <Badge variant={item.disabled ? 'neutral' : 'success'} size="sm" pill outline>
-            {item.label}
-          </Badge>
-        </span>
-        <span className="dashboard__create-meta">{item.meta}</span>
-        {item.reason ? (
-          <span className="dashboard__create-reason">
-            <MdLockOutline aria-hidden="true" />
-            <span>{item.reason}</span>
-          </span>
-        ) : null}
-        <span className={['dashboard__create-command', item.disabled ? 'dashboard__create-command--disabled' : ''].filter(Boolean).join(' ')}>
-          {item.commandLabel}
-        </span>
-      </span>
+      <section className="customer-home__hero" aria-labelledby="customer-home-title">
+        <div>
+          <p className="customer-home__eyebrow">{copy.eyebrow}</p>
+          <h1 id="customer-home-title">{copy.title}</h1>
+          <p className="customer-home__description">{copy.description}</p>
+        </div>
+      </section>
+
+      <section className="customer-home__signal-workspace" aria-labelledby="signal-start-title">
+        <div className="customer-home__signal-intro">
+          <p className="customer-home__eyebrow">Signal workspace</p>
+          <h2 id="signal-start-title">What would you like to improve today?</h2>
+          <p>Start with a website or a document. Each route is deliberately bounded, credit-aware, and designed to show the value of StoryLineOS without exposing the full workspace.</p>
+        </div>
+        <aside className="customer-home__credit-panel" aria-label="Available Signal credits">
+          <p className="customer-home__card-kicker">Available credits</p>
+          <div className="customer-home__credit-balance">
+            <div><strong>—</strong><span>Document improvement</span></div>
+            <div><strong>—</strong><span>Website analysis</span></div>
+          </div>
+          <p className="customer-home__credit-panel-copy">Credits are separate for each Signal product. No credit is consumed until approval or final report creation.</p>
+          <Link to="/app/credits" underline="none" className="customer-home__button">Request credits</Link>
+        </aside>
+        <div className="customer-home__journeys">
+          <Card className="customer-home__journey" variant="outlined">
+            <Card.Body>
+              <p className="customer-home__card-kicker">WA Website analysis</p>
+              <h3>Analyse a customer website</h3>
+              <p>Enter one public URL, usually the homepage. StoryLineOS reviews what the site appears to say, where the message is weak, and what should improve first.</p>
+              <ul className="customer-home__journey-list">
+                <li>One URL as the source basis</li>
+                <li>Framework-led analysis preview</li>
+                <li>Final website recommendation report</li>
+              </ul>
+              <Link to="/app/website-analysis" underline="none" className="customer-home__button">Start Website Analysis →</Link>
+            </Card.Body>
+          </Card>
+          <Card className="customer-home__journey" variant="outlined">
+            <Card.Body>
+              <p className="customer-home__card-kicker">DI Document improvement</p>
+              <h3>Improve one source document</h3>
+              <p>Upload or select one document, lock it as the evidence basis, then use Conversation to create a governed customer-ready outcome.</p>
+              <ul className="customer-home__journey-list">
+                <li>One uploaded document as the source basis</li>
+                <li>Limitations accepted before generation</li>
+                <li>Outcome saved into the same Assets library</li>
+              </ul>
+              <Link to="/app/document-improvement" underline="none" className="customer-home__button">Start Document Improvement →</Link>
+            </Card.Body>
+          </Card>
+        </div>
+      </section>
     </>
   )
+}
+
+const formatWorkspaceDate = (value) => {
+  const parsed = Date.parse(String(value ?? ''))
+  if (!Number.isFinite(parsed)) return 'Time unavailable'
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(parsed)
+}
+
+function Advisor({ card, activeWorkspaceCount }) {
+  const [whyOpen, setWhyOpen] = useState(false)
+  const action = card ? projectAction(card) : { to: '/app/workspaces/vmf' }
 
   return (
-    <li
-      className={[
-        'dashboard__launch-item',
-        'dashboard__launch-item--create',
-        item.disabled ? 'dashboard__create-card--disabled' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      {item.disabled ? (
-        <div
-          className={cardClassName}
-          aria-label={`${item.title} ${item.label} guidance`}
+    <section className="customer-home__advisor" aria-labelledby="customer-home-advisor-title">
+      <div className="customer-home__advisor-heading">
+        <div className="customer-home__advisor-label">
+          <span className="customer-home__advisor-icon" aria-hidden="true" />
+          <p className="customer-home__card-kicker">Advisor recommendation</p>
+        </div>
+        <span>Across {activeWorkspaceCount} active workspaces</span>
+      </div>
+      <div className="customer-home__advisor-content">
+        <div>
+          <h2 id="customer-home-advisor-title">{card?.title ?? 'Continue work'}</h2>
+          <p>
+            {card
+              ? `The next useful step is in ${card.title}.`
+              : 'Choose a Project Workspace to begin your next useful step.'}
+          </p>
+        </div>
+        <div className="customer-home__advisor-actions">
+          <Link to={action.to} underline="none" className="customer-home__button">Continue work →</Link>
+          {card ? <Link to={action.to} underline="none" className="customer-home__button customer-home__button--secondary">View review item</Link> : null}
+          <button
+            type="button"
+            className="customer-home__text-button customer-home__why-button"
+            aria-expanded={whyOpen}
+            onClick={() => setWhyOpen((previous) => !previous)}
+          >
+            Why this recommendation
+          </button>
+        </div>
+      </div>
+      {whyOpen ? (
+        <p className="customer-home__advisor-explanation">
+          This recommendation is based on the current workspace stage, review items, and latest summary update.
+        </p>
+      ) : null}
+      <dl className="customer-home__advisor-details">
+        <div><dt>Current stage</dt><dd>{card?.currentStage ?? 'Not yet recorded'}</dd></div>
+        <div><dt>Attention</dt><dd>{card ? card.nextAction : 'No review items'}</dd></div>
+        <div><dt>Last updated</dt><dd>{formatWorkspaceDate(card?.updatedAt)}</dd></div>
+      </dl>
+    </section>
+  )
+}
+
+function WorkspaceCard({ card, recommended = false }) {
+  const [isActionsOpen, setIsActionsOpen] = useState(false)
+  const action = projectAction(card)
+  return (
+    <article className={`customer-home__workspace-row${recommended ? ' customer-home__workspace-row--recommended' : ''}`}>
+      <div className="customer-home__workspace-identity">
+        <span className="customer-home__workspace-mark" aria-hidden="true">{card.currentStage.slice(0, 2)}</span>
+        <div>
+          <h3>{card.title}</h3>
+          {recommended ? <span className="customer-home__recommended-badge">Recommended</span> : null}
+          <p>Value Narrative workspace</p>
+          <small>Updated: {formatWorkspaceDate(card.updatedAt)}</small>
+        </div>
+      </div>
+      <div className="customer-home__workspace-understanding">
+        <strong>{card.understanding}</strong>
+        <span>{card.evidence || 'Assurance not yet available'}</span>
+        {card.evidence && !/not yet available/i.test(card.evidence) && !/not yet recorded/i.test(card.evidence) ? (
+          <Link to={action.to} underline="none" className="customer-home__assurance-link">View assurance details →</Link>
+        ) : null}
+      </div>
+      <div className="customer-home__workspace-state">
+        <Status variant={card.attentionGroup === 'Needs your input' ? 'warning' : 'info'} size="sm">{card.currentStage}</Status>
+        <Status variant={card.nextAction === 'Open workspace' ? 'success' : 'warning'} size="sm">{card.nextAction}</Status>
+      </div>
+      <div className="customer-home__workspace-actions">
+        <Link to={action.to} underline="none" className="customer-home__button customer-home__button--secondary">Open</Link>
+        <button
+          type="button"
+          className="customer-home__workspace-menu-toggle"
+          aria-label={`Show actions for ${card.title}`}
+          aria-expanded={isActionsOpen}
+          onClick={() => setIsActionsOpen((previous) => !previous)}
         >
-          {content}
-        </div>
-      ) : (
-        <Link
-          to={item.to}
-          disabled={item.disabled}
-          className={`${cardClassName} dashboard__create-card--link`}
-          variant="subtle"
-          underline="none"
-          aria-label={`${item.title} ${item.commandLabel}`}
-        >
-          {content}
-        </Link>
-      )}
-    </li>
+          <span aria-hidden="true">⌄</span>
+        </button>
+        {isActionsOpen ? (
+          <div className="customer-home__workspace-menu" role="menu">
+            <Link to={action.to} underline="none" role="menuitem">Open workspace</Link>
+          </div>
+        ) : null}
+      </div>
+    </article>
   )
 }
 
-function SignalRecommendationCard({ signal }) {
-  const Icon = signal.icon
+function AttentionSummary({ label, cards, detail, icon = '!' }) {
+  if (!cards.length) return null
+  const firstCard = cards[0]
 
   return (
-    <li className={['dashboard__signal-card', signal.variant ? `dashboard__signal-card--${signal.variant}` : ''].filter(Boolean).join(' ')}>
-      <span className="dashboard__signal-icon" aria-hidden="true">
-        <Icon />
+    <div className="customer-home__attention-summary">
+      <span
+        className={`customer-home__attention-icon${icon === '!' ? ' customer-home__attention-icon--warning' : ''}`}
+        aria-hidden="true"
+      >
+        {icon}
       </span>
-      <span className="dashboard__signal-copy">
-        <span className="dashboard__signal-title">{signal.title}</span>
-        <span className="dashboard__signal-description">{signal.description}</span>
-      </span>
-    </li>
-  )
-}
-
-function DashboardEmptyCard({ description, icon, spacious = false, title, variant = 'neutral' }) {
-  const Icon = icon
-
-  return (
-    <li
-      className={[
-        'dashboard__empty-item',
-        'dashboard__empty-item--composed',
-        spacious ? 'dashboard__empty-item--spacious' : '',
-        `dashboard__empty-item--${variant}`,
-      ].filter(Boolean).join(' ')}
-    >
-      <span className="dashboard__empty-icon" aria-hidden="true">
-        <Icon />
-      </span>
-      <span className="dashboard__empty-copy">
-        <span className="dashboard__empty-title">{title}</span>
-        <span className="dashboard__empty-description">{description}</span>
-      </span>
-    </li>
-  )
-}
-
-function Dashboard() {
-  const [workTypeFilter, setWorkTypeFilter] = useState('ALL')
-  const [activeWorkStateFilter, setActiveWorkStateFilter] = useState('ALL')
-  const [activeWorkHealthFilter, setActiveWorkHealthFilter] = useState('ALL')
-  const [activeWorkSearch, setActiveWorkSearch] = useState('')
-  const authorization = useAuthorization()
-  const {
-    user,
-    accessibleCustomerIds,
-    isSuperAdmin,
-    hasCustomerRole,
-    hasCustomerPermission,
-    hasTenantPermission,
-  } = authorization
-  const { getFeatureEntitlements } = authorization
-  const {
-    customerId,
-    tenantId,
-    tenants,
-    selectableTenants,
-    canViewTenants,
-    customerName,
-    resolvedTenantName,
-    supportsTenantManagement,
-    selectedCustomerTopology,
-    isLoadingTenants,
-    hasInvalidTenantContext,
-    setTenantId,
-  } = useTenantContext()
-  const { data: customerDetails } = useGetCustomerQuery(customerId, { skip: !customerId })
-
-  const selectableTenantRows = useMemo(
-    () => (Array.isArray(selectableTenants) ? selectableTenants : []),
-    [selectableTenants],
-  )
-
-  const customerScopeValue = useMemo(() => {
-    if (!customerId) return 'Not selected'
-
-    const customerMembership = findCustomerMembership(user, customerId)
-    const tenantMembership = findTenantMembershipByCustomer(user, customerId)
-
-    const customerNameCandidates = [
-      customerName,
-      customerDetails?.data?.name,
-      customerDetails?.data?.companyName,
-      customerDetails?.name,
-      customerDetails?.companyName,
-      customerMembership?.customer?.name,
-      customerMembership?.customer?.companyName,
-      customerMembership?.customerName,
-      customerMembership?.companyName,
-      tenantMembership?.customer?.name,
-      tenantMembership?.customer?.companyName,
-      tenantMembership?.customerName,
-      tenantMembership?.companyName,
-      ...tenants
-        .map((tenant) => tenant?.customer?.name ?? tenant?.customerName ?? tenant?.customer?.companyName)
-        .filter(Boolean),
-    ]
-
-    const resolvedCustomerName = customerNameCandidates
-      .map((candidate) => String(candidate ?? '').trim())
-      .find(Boolean)
-
-    return resolvedCustomerName || 'Current customer'
-  }, [customerDetails, customerId, customerName, tenants, user])
-
-  const hasAnyCustomerAdminAccess = useMemo(
-    () => accessibleCustomerIds.some((id) => hasCustomerRole(id, 'CUSTOMER_ADMIN')),
-    [accessibleCustomerIds, hasCustomerRole],
-  )
-
-  const hasAnyTenantAdminAccess = useMemo(() => {
-    const hasCustomerScopedTenantAdmin = accessibleCustomerIds.some(
-      (id) => hasCustomerRole(id, 'TENANT_ADMIN'),
-    )
-
-    const hasTenantMembershipAdmin = Array.isArray(user?.tenantMemberships)
-      && user.tenantMemberships.some((membership) => hasRole(membership?.roles, 'TENANT_ADMIN'))
-
-    return hasCustomerScopedTenantAdmin || hasTenantMembershipAdmin
-  }, [accessibleCustomerIds, hasCustomerRole, user])
-
-  const hasSelectedCustomerAdminAccess = useMemo(
-    () => Boolean(customerId && hasCustomerRole(customerId, 'CUSTOMER_ADMIN')),
-    [customerId, hasCustomerRole],
-  )
-
-  const hasCustomerScopedTenantAdmin = useMemo(
-    () => Boolean(customerId && hasCustomerRole(customerId, 'TENANT_ADMIN')),
-    [customerId, hasCustomerRole],
-  )
-
-  const hasSelectedCustomerTenantMembershipAdmin = useMemo(
-    () =>
-      Boolean(
-        customerId
-          && findTenantMembershipByCustomer(user, customerId, 'TENANT_ADMIN'),
-      ),
-    [customerId, user],
-  )
-
-  const hasSelectedCustomerTenantAdminAccess = useMemo(
-    () => hasCustomerScopedTenantAdmin || hasSelectedCustomerTenantMembershipAdmin,
-    [hasCustomerScopedTenantAdmin, hasSelectedCustomerTenantMembershipAdmin],
-  )
-
-  const hasSelectedSalesManagerRole = useMemo(
-    () =>
-      Boolean(
-        findCustomerMembership(user, customerId, 'SALES_MANAGER')
-        || findTenantMembership(user, customerId, tenantId, 'SALES_MANAGER'),
-      ),
-    [customerId, tenantId, user],
-  )
-
-  const hasSelectedSalesExecutionRole = useMemo(
-    () =>
-      Boolean(
-        findCustomerMembership(user, customerId, 'SALES')
-        || findCustomerMembership(user, customerId, 'SALES_USER')
-        || findTenantMembership(user, customerId, tenantId, 'SALES')
-        || findTenantMembership(user, customerId, tenantId, 'SALES_USER'),
-      ),
-    [customerId, tenantId, user],
-  )
-
-  const canOpenVmfWorkspace = useMemo(() => {
-    if (!customerId) return false
-    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_VIEW')) return true
-    if (tenantId && typeof hasTenantPermission === 'function') {
-      return hasTenantPermission(customerId, tenantId, 'VMF_VIEW')
-    }
-    return false
-  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
-
-  const featureEntitlements = useMemo(
-    () =>
-      customerId && typeof getFeatureEntitlements === 'function'
-        ? normalizeFeatureKeys(getFeatureEntitlements(customerId))
-        : [],
-    [customerId, getFeatureEntitlements],
-  )
-
-  const hasVmfFeature = featureEntitlements.includes('VMF')
-
-  const contextReady = Boolean(customerId && (!supportsTenantManagement || tenantId))
-  const debouncedActiveWorkSearch = useDebounce(activeWorkSearch, 350)
-  const activeWorkSearchQuery = debouncedActiveWorkSearch.trim()
-  const activeWorkStatusQuery = activeWorkStateFilter === 'ALL' ? '' : activeWorkStateFilter
-
-  const {
-    data: runtimeActionListResponse,
-    isLoading: isLoadingRuntimeActions,
-    isFetching: isFetchingRuntimeActions,
-    error: runtimeActionError,
-  } = useListRuntimeInstancesQuery(
-    {
-      customerId,
-      tenantId,
-      runtimeType: 'VALUE_NARRATIVE',
-      page: 1,
-      pageSize: RUNTIME_ACTION_SUMMARY_PAGE_SIZE,
-    },
-    { skip: !contextReady || !canOpenVmfWorkspace || !hasVmfFeature },
-  )
-
-  const {
-    data: runtimeInstanceListResponse,
-    isLoading: isLoadingRuntimeInstances,
-    isFetching: isFetchingRuntimeInstances,
-    error: runtimeInstanceError,
-  } = useListRuntimeInstancesQuery(
-    {
-      customerId,
-      tenantId,
-      runtimeType: 'VALUE_NARRATIVE',
-      q: activeWorkSearchQuery,
-      status: activeWorkStatusQuery,
-      page: 1,
-      pageSize: 25,
-    },
-    { skip: !contextReady || !canOpenVmfWorkspace || !hasVmfFeature },
-  )
-
-  const tenantRowsForSwitcher = useMemo(
-    () => selectableTenantRows,
-    [selectableTenantRows],
-  )
-
-  const hasTenantSelectionAccess = useMemo(
-    () => Boolean(customerId && supportsTenantManagement && canViewTenants),
-    [canViewTenants, customerId, supportsTenantManagement],
-  )
-
-  const primaryRole = useMemo(() => {
-    if (isSuperAdmin) return 'Super Administrator'
-    if (hasSelectedSalesManagerRole) return 'Sales Manager'
-    if (hasSelectedSalesExecutionRole) return 'Sales User'
-    if (customerId) {
-      if (hasSelectedCustomerAdminAccess) return 'Customer Administrator'
-      if (hasSelectedCustomerTenantAdminAccess) return 'Tenant Administrator'
-      return 'User'
-    }
-    if (hasAnyCustomerAdminAccess) return 'Customer Administrator'
-    if (hasAnyTenantAdminAccess) return 'Tenant Administrator'
-    return 'User'
-  }, [
-    customerId,
-    hasAnyCustomerAdminAccess,
-    hasAnyTenantAdminAccess,
-    hasSelectedCustomerAdminAccess,
-    hasSelectedCustomerTenantAdminAccess,
-    hasSelectedSalesExecutionRole,
-    hasSelectedSalesManagerRole,
-    isSuperAdmin,
-  ])
-
-  const tenantScopeValue = useMemo(() => {
-    if (selectedCustomerTopology === 'SINGLE_TENANT') {
-      return getSingleTenantDisplayName(
-        resolvedTenantName,
-        customerScopeValue,
-        'Single-tenant customer',
-      )
-    }
-    if (supportsTenantManagement && !hasTenantSelectionAccess) {
-      return 'Not selected'
-    }
-    if (resolvedTenantName) return resolvedTenantName
-    if (tenantId) return tenantId
-    if (customerId && supportsTenantManagement) return 'Not selected'
-    return 'Not selected'
-  }, [
-    customerId,
-    customerScopeValue,
-    hasTenantSelectionAccess,
-    resolvedTenantName,
-    selectedCustomerTopology,
-    supportsTenantManagement,
-    tenantId,
-  ])
-
-  const showCustomerSelector = hasAnyCustomerAdminAccess && accessibleCustomerIds.length > 1
-  const showAccessibleTenantSwitcher = Boolean(
-    supportsTenantManagement
-      && customerId
-      && hasTenantSelectionAccess
-      && tenantRowsForSwitcher.length > 1,
-  )
-
-  const tenantScopeSummary = useMemo(() => {
-    if (!customerId) return 'Select a customer to view runtime context.'
-    if (!supportsTenantManagement) {
-      return `${customerScopeValue} uses a single tenant. Runtime work opens in that tenant context.`
-    }
-
-    const tenantNames = tenantRowsForSwitcher
-      .map((tenant) => String(tenant?.name ?? '').trim())
-      .filter(Boolean)
-    const tenantCount = tenantRowsForSwitcher.length
-    const tenantLabel = tenantCount === 1 ? 'tenant' : 'tenants'
-
-    if (tenantId) {
-      return `Viewing runtime workspace for ${tenantScopeValue} under ${customerScopeValue}.`
-    }
-
-    if (tenantCount > 0) {
-      const tenantList = tenantNames.length > 0 ? `: ${tenantNames.join(', ')}` : ''
-      return `${customerScopeValue} has ${tenantCount} ${tenantLabel}${tenantList}. Select a tenant to view runtime work and VMF availability.`
-    }
-
-    return `${customerScopeValue} has no tenants available for this account.`
-  }, [
-    customerId,
-    customerScopeValue,
-    supportsTenantManagement,
-    tenantId,
-    tenantRowsForSwitcher,
-    tenantScopeValue,
-  ])
-
-  useEffect(() => {
-    if (!supportsTenantManagement || !customerId || isLoadingTenants || !hasTenantSelectionAccess) return
-    if (tenantRowsForSwitcher.length !== 1) return
-    if (tenantId && !hasInvalidTenantContext) return
-
-    const onlyTenant = tenantRowsForSwitcher[0]
-    const onlyTenantId = getTenantId(onlyTenant)
-    if (!onlyTenantId) return
-
-    setTenantId(onlyTenantId, onlyTenant?.name ?? null)
-  }, [
-    customerId,
-    hasTenantSelectionAccess,
-    hasInvalidTenantContext,
-    isLoadingTenants,
-    setTenantId,
-    supportsTenantManagement,
-    tenantId,
-    tenantRowsForSwitcher,
-  ])
-
-  const canCreateVmfRuntime = useMemo(() => {
-    if (!customerId) return false
-    if (typeof hasCustomerPermission === 'function' && hasCustomerPermission(customerId, 'VMF_CREATE')) return true
-    if (tenantId && typeof hasTenantPermission === 'function') {
-      return hasTenantPermission(customerId, tenantId, 'VMF_CREATE')
-    }
-    return false
-  }, [customerId, hasCustomerPermission, hasTenantPermission, tenantId])
-  const canCreateValueNarrative = Boolean(contextReady && hasVmfFeature && canCreateVmfRuntime)
-  const runtimeInstanceAppError = runtimeInstanceError ? normalizeError(runtimeInstanceError) : null
-  const runtimeActionAppError = runtimeActionError ? normalizeError(runtimeActionError) : null
-  const runtimeInstanceRows = !runtimeInstanceAppError && Array.isArray(runtimeInstanceListResponse?.data)
-    ? runtimeInstanceListResponse.data
-    : EMPTY_RUNTIME_ROWS
-  const runtimeActionRows = !runtimeActionAppError && Array.isArray(runtimeActionListResponse?.data)
-    ? [...runtimeActionListResponse.data].sort((left, right) => getRuntimeUpdatedTime(right) - getRuntimeUpdatedTime(left))
-    : EMPTY_RUNTIME_ROWS
-  const isLoadingRuntimeVmfs = Boolean(isLoadingRuntimeInstances || isFetchingRuntimeInstances)
-  const isLoadingRuntimeActionSummary = Boolean(isLoadingRuntimeActions || isFetchingRuntimeActions)
-
-  const runtimeActions = useMemo(() => {
-    if (!customerId) {
-      return [
-        {
-          actionKey: 'SELECT_CUSTOMER',
-          description: 'Select a customer before opening runtime work.',
-          disabled: true,
-          icon: MdOutlineWarningAmber,
-          label: 'Customer required',
-          meta: 'Runtime context is incomplete',
-          priority: 'HIGH',
-          runtimeInstanceId: null,
-          title: 'Select a customer to continue',
-          to: '/app/dashboard',
-        },
-      ]
-    }
-
-    if (supportsTenantManagement && !tenantId) {
-      return [
-        {
-          actionKey: 'SELECT_TENANT',
-          description: 'Tenant context is required before runtime actions can run.',
-          disabled: true,
-          icon: MdOutlineWarningAmber,
-          label: 'Tenant required',
-          meta: `${customerScopeValue} / No tenant selected`,
-          priority: 'HIGH',
-          runtimeInstanceId: null,
-          title: 'Select a tenant to continue your work',
-          to: '/app/dashboard',
-        },
-      ]
-    }
-
-    if (runtimeActionAppError) {
-      return [
-        {
-          actionKey: 'RUNTIME_INSTANCE_LOAD_FAILED',
-          description: runtimeActionAppError.message,
-          disabled: true,
-          icon: MdOutlineWarningAmber,
-          label: 'Unavailable',
-          meta: `${tenantScopeValue} / Runtime instances unavailable`,
-          priority: 'HIGH',
-          runtimeInstanceId: 'load-failed',
-          title: 'Runtime work unavailable',
-          to: '/app/dashboard',
-        },
-      ]
-    }
-
-    const primaryRuntimeInstance = runtimeActionRows[0] ?? null
-    if (!primaryRuntimeInstance) return []
-
-    const runtimeActionTotal = getRuntimeListTotal(runtimeActionListResponse)
-    const isRuntimeActionSummaryLimited = runtimeActionTotal > runtimeActionRows.length
-    const lockedInstances = runtimeActionRows.filter(isRuntimeInstanceLocked)
-    const pendingValidationInstances = runtimeActionRows.filter(isRuntimeInstancePendingValidation)
-    const atRiskInstances = runtimeActionRows.filter(isRuntimeInstanceAtRisk)
-    const buildSummaryAction = ({
-      actionKey,
-      count,
-      icon,
-      label,
-      meta,
-      priority = 'MEDIUM',
-      title,
-    }) => ({
-      actionable: false,
-      actionKey,
-      disabled: count === 0 || !canOpenVmfWorkspace,
-      icon,
-      label,
-      meta,
-      priority,
-      runtimeInstanceId: null,
-      title,
-    })
-
-    const runtimeName = getVmfName(primaryRuntimeInstance)
-    const packageVersion = getFrameworkPackageVersion(primaryRuntimeInstance)
-    const runtimeTypeLabel = formatRuntimeTokenLabel(primaryRuntimeInstance?.runtimeType ?? 'VALUE_NARRATIVE')
-    const runtimeStatus = getRuntimeLifecycleStatus(primaryRuntimeInstance)
-    const frameworkLifecycle = getRuntimeFrameworkLifecycleStage(primaryRuntimeInstance)
-    const reviewBadge = getDashboardReadinessBadge(getRuntimeReviewBadge(primaryRuntimeInstance))
-    const runtimeInstanceId = getRuntimeInstanceRouteId(primaryRuntimeInstance) || runtimeName
-    const runtimeWorkspaceTo = getRuntimeWorkspaceRoute(runtimeInstanceId)
-    const packageSummary = [
-      runtimeTypeLabel,
-      packageVersion && packageVersion !== '--' ? packageVersion : '',
-    ].filter(Boolean).join(' ')
-
-    return [
-      {
-        actionKey: 'OPEN_RUNTIME_INSTANCE',
-        badges: [
-          {
-            key: 'runtime-status',
-            label: `Runtime ${formatRuntimeTokenLabel(runtimeStatus)}`,
-            variant: getRuntimeStatusVariant(runtimeStatus),
-          },
-          {
-            key: 'truth-lifecycle',
-            label: `Truth ${formatRuntimeTokenLabel(frameworkLifecycle)}`,
-            variant: getRuntimeStatusVariant(frameworkLifecycle),
-          },
-          reviewBadge,
-        ].filter(Boolean),
-        disabled: !canOpenVmfWorkspace,
-        icon: MdOutlineDescription,
-        label: canOpenVmfWorkspace ? 'Open workspace' : 'Unavailable',
-        meta: `${packageSummary} - ${formatRuntimeActionUpdatedLabel(primaryRuntimeInstance?.updatedAt)}`,
-        priority: 'MEDIUM',
-        runtimeInstanceId,
-        title: `Continue ${runtimeName}`,
-        to: canOpenVmfWorkspace ? runtimeWorkspaceTo : '/app/dashboard',
-      },
-      buildSummaryAction({
-        actionKey: 'REVIEW_LOCKED_RUNTIME_INSTANCES',
-        count: lockedInstances.length,
-        icon: MdLockOutline,
-        label: 'Review locked instances',
-        meta: formatRuntimeActionCount(lockedInstances.length, 'instance locked', 'instances locked', {
-          isLimited: isRuntimeActionSummaryLimited,
-        }),
-        title: 'Review Locked Instances',
-      }),
-      buildSummaryAction({
-        actionKey: 'RESOLVE_PENDING_RUNTIME_VALIDATION',
-        count: pendingValidationInstances.length,
-        icon: MdShield,
-        label: 'Resolve pending validation',
-        meta: formatRuntimeActionCount(
-          pendingValidationInstances.length,
-          'instance needs attention',
-          'instances need attention',
-          { isLimited: isRuntimeActionSummaryLimited },
-        ),
-        title: 'Resolve Pending Validation',
-      }),
-      buildSummaryAction({
-        actionKey: 'REVIEW_AT_RISK_RUNTIME_INSTANCES',
-        count: atRiskInstances.length,
-        icon: MdOutlineWarningAmber,
-        label: 'Review at-risk instances',
-        meta: formatRuntimeActionCount(
-          atRiskInstances.length,
-          'instance needs attention',
-          'instances need attention',
-          { isLimited: isRuntimeActionSummaryLimited },
-        ),
-        priority: 'HIGH',
-        title: 'Review At-Risk Instances',
-      }),
-    ]
-  }, [
-    canOpenVmfWorkspace,
-    customerId,
-    customerScopeValue,
-    runtimeActionAppError,
-    runtimeActionListResponse,
-    runtimeActionRows,
-    supportsTenantManagement,
-    tenantId,
-    tenantScopeValue,
-  ])
-
-  const runtimeInstances = useMemo(() => {
-    if (!contextReady) return []
-    return runtimeInstanceRows.map((runtimeInstance) => {
-      const runtimeName = getVmfName(runtimeInstance)
-      const packageLabel = getFrameworkPackageLabel(runtimeInstance)
-      const packageVersion = getFrameworkPackageVersion(runtimeInstance)
-      const workType = String(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE').trim() || 'VALUE_NARRATIVE'
-      const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
-      const executionState = getRuntimeExecutionState(runtimeInstance)
-      const lifecycle = getRuntimeFrameworkLifecycleStage(runtimeInstance)
-      const readiness = getRuntimeReadinessLabel(runtimeInstance)
-      const runtimeInstanceId = getRuntimeInstanceRouteId(runtimeInstance) || runtimeName
-
-      return {
-        id: runtimeInstanceId,
-        runtimeDisplayId: getRuntimeInstanceDisplayId(runtimeInstance, workType),
-        work: runtimeName,
-        workType,
-        workTypeLabel: formatRuntimeTokenLabel(workType),
-        tenant: tenantScopeValue,
-        packageSummary: `Package: ${packageLabel}`,
-        status: runtimeStatus,
-        executionState,
-        lifecycle,
-        readiness,
-        healthFilterKey: getRuntimeHealthFilterKey(readiness),
-        updatedAt: runtimeInstance?.updatedAt,
-        nextAction: `Open ${packageVersion}`,
-        to: getRuntimeWorkspaceRoute(runtimeInstanceId),
-      }
-    })
-  }, [contextReady, runtimeInstanceRows, tenantScopeValue])
-
-  const filteredRuntimeInstances = useMemo(() => {
-    return runtimeInstances.filter((instance) => {
-      const matchesWorkType = workTypeFilter === 'ALL' || instance.workType === workTypeFilter
-      const matchesHealth = activeWorkHealthFilter === 'ALL' || instance.healthFilterKey === activeWorkHealthFilter
-      return matchesWorkType && matchesHealth
-    })
-  }, [activeWorkHealthFilter, runtimeInstances, workTypeFilter])
-
-  const createWorkItems = useMemo(() => [
-    {
-      disabled: !canCreateValueNarrative,
-      icon: MdOutlineDashboardCustomize,
-      kind: 'source-backed',
-      label: canCreateValueNarrative ? 'Available' : 'Locked',
-      meta: canCreateValueNarrative
-        ? 'Create a new Value Narrative from an active VMF package.'
-        : 'VMF_CREATE permission and VMF entitlement required',
-      commandLabel: canCreateValueNarrative ? 'Create New' : 'Unavailable',
-      reason: canCreateValueNarrative ? '' : 'Requires VMF_CREATE permission and VMF entitlement',
-      tone: 'value-narrative',
-      title: 'Create Value Narrative',
-      to: canCreateValueNarrative ? '/app/workspaces/vmf' : '/app/dashboard',
-    },
-    {
-      commandLabel: 'Unavailable',
-      disabled: true,
-      icon: MdOutlineTrendingUp,
-      kind: 'planned',
-      label: 'Planned',
-      meta: 'Unlocks when a locked Value Narrative can be validated as the analysis anchor.',
-      reason: 'Requires locked Value Narrative anchor validation',
-      tone: 'deal-analysis',
-      title: 'Create Deal Analysis',
-      to: '/app/dashboard',
-    },
-    {
-      commandLabel: 'Unavailable',
-      disabled: true,
-      icon: MdOutlineInventory2,
-      kind: 'planned',
-      label: 'Planned',
-      meta: 'Unlocks after runtime work is certified, locked, and eligible for governed outputs.',
-      reason: 'Requires certified locked runtime truth',
-      tone: 'output',
-      title: 'Generate Output',
-      to: '/app/dashboard',
-    },
-  ], [canCreateValueNarrative])
-
-  const sourceBackedCreateItems = useMemo(() => (
-    createWorkItems.filter((item) => item.kind === 'source-backed')
-  ), [createWorkItems])
-
-  const plannedCreateItems = useMemo(() => (
-    createWorkItems.filter((item) => item.kind === 'planned')
-  ), [createWorkItems])
-
-  const availableCreateCount = useMemo(() => (
-    sourceBackedCreateItems.filter((item) => !item.disabled).length
-  ), [sourceBackedCreateItems])
-  const alerts = EMPTY_RUNTIME_SIGNAL_CARDS
-
-  const runtimeActionGridClassName = [
-    'dashboard__launch-grid',
-    'dashboard__launch-grid--actions',
-    runtimeActions.length === 1 ? 'dashboard__launch-grid--single' : '',
-  ].filter(Boolean).join(' ')
-  const runtimeActionAvailableCount = runtimeActions
-    .filter((action) => action.actionable !== false && !action.disabled).length
-  const hasActiveWorkFilters = Boolean(
-    activeWorkSearchQuery
-      || activeWorkStatusQuery
-      || workTypeFilter !== 'ALL'
-      || activeWorkHealthFilter !== 'ALL',
-  )
-
-  const runtimeInstanceEmptyMessage = !contextReady
-    ? 'Select a tenant to show runtime work.'
-    : runtimeInstanceAppError
-      ? `Unable to load runtime instances. ${runtimeInstanceAppError.message}`
-    : isLoadingRuntimeVmfs
-      ? 'Loading runtime work...'
-    : hasActiveWorkFilters
-      ? 'No runtime instances match the selected filters.'
-      : 'No runtime instances are available for this tenant yet.'
-  const runtimeActionEmptyLabel = isLoadingRuntimeActionSummary ? 'Loading runtime actions' : 'No runtime actions'
-  const runtimeActionEmptyMessage = isLoadingRuntimeActionSummary
-    ? 'Checking for active VMF runtime work in this tenant.'
-    : 'Runtime actions will appear here once runtime instances exist for this tenant.'
-  const runtimeActivityItems = EMPTY_RUNTIME_ACTIVITY
-
-  const tableColumns = useMemo(() => [
-    {
-      key: 'runtimeDisplayId',
-      label: 'Instance',
-      width: '20%',
-      render: (value, row) => (
-        <div className="dashboard__work-cell">
-          <span className="dashboard__work-instance">
-            <span className="dashboard__work-icon" aria-hidden="true">
-              <MdOutlineDescription />
-            </span>
-            <span className="dashboard__work-copy">
-              <span className="dashboard__work-heading">
-                <span className="dashboard__work-title">{row.work}</span>
-              </span>
-              <span className="dashboard__work-id">{value}</span>
-            </span>
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: 'workTypeLabel',
-      label: 'Work Type',
-      width: '14%',
-      render: (value) => (
-        <Badge variant="neutral" size="sm" pill outline>{value}</Badge>
-      ),
-    },
-    {
-      key: 'packageSummary',
-      label: 'Package',
-      width: '18%',
-      render: (value, row) => (
-        <div className="dashboard__stacked-cell">
-          <span>{value.replace(/^Package:\s*/, '')}</span>
-          <span>{row.tenant}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      label: 'State',
-      width: '11%',
-      render: (value, row) => (
-        <div className="dashboard__stacked-cell">
-          <Status variant={getRuntimeStatusVariant(value)} size="sm" showIcon>
-            {formatRuntimeTokenLabel(value)}
-          </Status>
-          <span>{formatRuntimeTokenLabel(row.executionState)}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'lifecycle',
-      label: 'Lifecycle',
-      width: '11%',
-      render: (value) => (
-        <Status variant={getRuntimeStatusVariant(value)} size="sm">
-          {formatRuntimeTokenLabel(value)}
-        </Status>
-      ),
-    },
-    {
-      key: 'readiness',
-      label: 'Health',
-      width: '14%',
-      render: (value) => (
-        <Status variant={getRuntimeReadinessVariant(value)} size="sm">
-          {value}
-        </Status>
-      ),
-    },
-    {
-      key: 'updatedAt',
-      label: 'Updated',
-      width: '10%',
-      render: (value) => <TableDateTime value={value} fallback="No activity yet" />,
-    },
-    {
-      key: 'nextAction',
-      label: 'Next Action',
-      width: '10%',
-      render: (value, row) => (
-        <div className="dashboard__next-cell">
-          <Link to={row.to ?? '/app/workspaces/vmf'} variant="primary" underline="none">
-            {value}
-          </Link>
-        </div>
-      ),
-    },
-  ], [])
-
-  const activeWorkToolbar = (
-    <div className="dashboard__work-toolbar" role="group" aria-label="Active work filters">
-      <Input
-        id="dashboard-active-work-search"
-        label="Search"
-        className="dashboard__work-search"
-        value={activeWorkSearch}
-        onChange={(event) => setActiveWorkSearch(event.target.value)}
-        placeholder="Search instances..."
-        size="sm"
-        fullWidth
-      />
-      <Select
-        id="dashboard-active-work-state"
-        label="State"
-        size="sm"
-        value={activeWorkStateFilter}
-        onChange={(event) => setActiveWorkStateFilter(event.target.value)}
-        options={ACTIVE_WORK_STATE_OPTIONS}
-        className="dashboard__work-filter"
-      />
-      <Select
-        id="dashboard-active-work-type"
-        label="Work Type"
-        size="sm"
-        value={workTypeFilter}
-        onChange={(event) => setWorkTypeFilter(event.target.value)}
-        options={ACTIVE_WORK_TYPE_OPTIONS}
-        className="dashboard__work-filter"
-      />
-      <Select
-        id="dashboard-active-work-health"
-        label="Health"
-        size="sm"
-        value={activeWorkHealthFilter}
-        onChange={(event) => setActiveWorkHealthFilter(event.target.value)}
-        options={ACTIVE_WORK_HEALTH_OPTIONS}
-        className="dashboard__work-filter"
-      />
+      <div>
+        <strong>{cards.length === 1 ? '1 review item' : `${cards.length} items need attention`}</strong>
+        <span>{firstCard.title} · {detail || label}</span>
+      </div>
     </div>
   )
+}
+
+function RecentActivity({ cards }) {
+  return (
+    <section className="customer-home__section customer-home__rail-section" aria-labelledby="customer-home-activity-title">
+      <div className="customer-home__section-heading">
+        <div>
+          <h2 id="customer-home-activity-title">Recent activity</h2>
+        </div>
+      </div>
+      {cards.length === 0 ? (
+        <div className="customer-home__state">
+          <Status variant="neutral" size="sm">No recent activity</Status>
+          <p>Activity will appear here as workspace review and source work progresses.</p>
+        </div>
+      ) : (
+        <ul className="customer-home__activity-list">
+          {cards.map((card) => (
+            <li key={`activity-${card.id}`} className="customer-home__activity-item">
+              <span className="customer-home__activity-icon" aria-hidden="true">
+                {card.nextAction === 'Open workspace' ? '↪' : card.understanding === 'Understanding accepted' ? '✓' : '▧'}
+              </span>
+              <div>
+                <strong>{card.title}</strong>
+                <p>{card.nextAction} · {card.attentionGroup}</p>
+              </div>
+              <time dateTime={card.updatedAt || undefined}>{formatActivityTime(card.updatedAt)}</time>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link
+        to="/app/activity"
+        underline="none"
+        className="customer-home__action customer-home__rail-action"
+        aria-label="View all activity"
+      >
+        View all activity →
+      </Link>
+    </section>
+  )
+}
+
+function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, greeting }) {
+  const [workspaceSearch, setWorkspaceSearch] = useState('')
+  const [workspaceFilter, setWorkspaceFilter] = useState('active')
+  const runtimeListQuery = useListRuntimeInstancesQuery(
+    {
+      customerId,
+      tenantId,
+      runtimeType: 'VALUE_NARRATIVE',
+      page: 1,
+      pageSize: 6,
+    },
+    {
+      skip: !customerId || !tenantId || !hasVmfViewPermission,
+    },
+  )
+  const workspaceCards = useMemo(
+    () => (runtimeListQuery.data?.data ?? []).map(buildCustomerHomeWorkspaceCard),
+    [runtimeListQuery.data],
+  )
+  const attentionGroups = useMemo(() => ({
+    'Needs your input': workspaceCards.filter((card) => card.attentionGroup === 'Needs your input'),
+    'StoryLineOS is working on': workspaceCards.filter((card) => card.attentionGroup === 'StoryLineOS is working on'),
+    'Things to verify': workspaceCards.filter((card) => card.attentionGroup === 'Things to verify'),
+  }), [workspaceCards])
+  const advisorCard = useMemo(
+    () => workspaceCards.find((card) => card.attentionGroup === 'Needs your input')
+      ?? workspaceCards.find((card) => card.attentionGroup === 'Things to verify')
+      ?? workspaceCards[0]
+      ?? null,
+    [workspaceCards],
+  )
+  const filteredWorkspaceCards = useMemo(() => {
+    const query = workspaceSearch.trim().toLowerCase()
+    return workspaceCards.filter((card) => {
+      const matchesSearch = !query || `${card.title} ${card.businessObjective}`.toLowerCase().includes(query)
+      const matchesFilter = workspaceFilter === 'all' || card.status.toUpperCase() !== 'ARCHIVED'
+      return matchesSearch && matchesFilter
+    })
+  }, [workspaceCards, workspaceFilter, workspaceSearch])
 
   return (
-    <section className="dashboard container" aria-label="Customer runtime home">
-      <header className="dashboard__page-header">
-        <h1 className="dashboard__hero-title">Customer Workspace</h1>
-        <p className="dashboard__hero-description">
-          Your operating hub for governed runtime work and customer value intelligence.
-        </p>
-      </header>
+    <>
+      <section className="customer-home__hero" aria-labelledby="customer-home-title">
+        <div>
+          <p className="customer-home__eyebrow">{copy.eyebrow}</p>
+          <h1 id="customer-home-title">{copy.title}</h1>
+          <p className="customer-home__description">
+            {greeting ? `${greeting} ${copy.description}` : copy.description}
+          </p>
+        </div>
+        <div className="customer-home__hero-actions">
+          <Link to="/app/workspaces/vmf" underline="none" className="customer-home__button">＋ Start new workspace</Link>
+        </div>
+      </section>
 
-      <Card variant="default" className="dashboard__context-card">
-        <Card.Body className="dashboard__context-body">
-          <div className="dashboard__scope-feedback" role="status">
-            {tenantScopeSummary}
-          </div>
+      <div className="customer-home__core-layout">
+        <div className="customer-home__core-primary">
+          <Advisor card={advisorCard} activeWorkspaceCount={workspaceCards.length} />
 
-          <dl className="dashboard__hero-metrics" aria-label="Runtime context summary">
-            <DashboardHeroMetric label="Customer" control={showCustomerSelector} icon={MdOutlineDomain}>
-              {showCustomerSelector ? (
-                <CustomerSelector className="dashboard__context-selector" />
-              ) : (
-                <span className="dashboard__context-value">{customerScopeValue}</span>
-              )}
-            </DashboardHeroMetric>
-            <DashboardHeroMetric label="Tenant" control={showAccessibleTenantSwitcher} icon={MdBusiness}>
-              {showAccessibleTenantSwitcher ? (
-                <TenantSwitcher
-                  className="dashboard__context-selector"
-                  includeAllTenants={false}
-                  placeholder="Select tenant"
-                />
-              ) : (
-                <span className="dashboard__context-value">{tenantScopeValue}</span>
-              )}
-            </DashboardHeroMetric>
-            <DashboardHeroMetric label="Role" icon={MdOutlinePeopleAlt}>
-              <span className="dashboard__context-value">{primaryRole}</span>
-            </DashboardHeroMetric>
-            <DashboardHeroMetric label="Work Type" control icon={MdFilterList}>
-              <CustomSelect
-                value={workTypeFilter}
-                onChange={setWorkTypeFilter}
-                options={WORK_TYPE_OPTIONS}
-                placeholder="All Work"
-                icon={<MdFilterList size={18} />}
-                ariaLabel="Work Type"
-                className="dashboard__context-selector"
-              />
-            </DashboardHeroMetric>
-          </dl>
-        </Card.Body>
-      </Card>
+          <section className="customer-home__section" aria-labelledby="customer-home-workspaces-title">
+            <div className="customer-home__section-heading">
+              <div>
+                <h2 id="customer-home-workspaces-title">Project Workspaces</h2>
+                <p className="customer-home__section-description">One workspace for each customer outcome you are working towards.</p>
+              </div>
+              <div className="customer-home__workspace-tools">
+                <label className="customer-home__search">
+                  <span className="sr-only">Search Project Workspaces</span>
+                  <span className="customer-home__search-icon" aria-hidden="true">⌕</span>
+                  <input
+                    type="search"
+                    value={workspaceSearch}
+                    onChange={(event) => setWorkspaceSearch(event.target.value)}
+                    placeholder="Search workspaces"
+                    aria-label="Search Project Workspaces"
+                  />
+                </label>
+                <div className="customer-home__workspace-filter" aria-label="Workspace status filter">
+                  <button type="button" aria-pressed={workspaceFilter === 'active'} className={workspaceFilter === 'active' ? 'is-active' : ''} onClick={() => setWorkspaceFilter('active')}>Active</button>
+                  <button type="button" aria-pressed={workspaceFilter === 'all'} className={workspaceFilter === 'all' ? 'is-active' : ''} onClick={() => setWorkspaceFilter('all')}>All</button>
+                </div>
+              </div>
+            </div>
 
-      <div className="dashboard__sections" role="list" aria-label="Customer runtime workspace groups">
-        <DashboardSectionCard
-          badge={{ label: `${runtimeActionAvailableCount} available`, variant: 'info' }}
-          description="Action items resolve to runtime instances and governed action keys."
-          icon={MdOutlinePlayCircle}
-          modifier="actions"
-          panelAs="nav"
-          panelLabel="Runtime action queue panel"
-          status={{ label: contextReady ? 'Context ready' : 'Tenant required', variant: contextReady ? 'success' : 'warning' }}
-          title="Continue Work"
-        >
-          <ul className={runtimeActionGridClassName} aria-label="Runtime action queue">
-            {runtimeActions.length > 0 ? (
-              runtimeActions.map((action, index) => (
-                <RuntimeActionCard
-                  key={`${action.runtimeInstanceId ?? 'context'}-${action.actionKey}`}
-                  action={action}
-                  primary={index === 0 && !action.disabled}
-                />
-              ))
+            {runtimeListQuery.isLoading ? (
+              <div className="customer-home__state" role="status"><Spinner size="lg" /><p>Loading workspace summaries…</p></div>
+            ) : runtimeListQuery.error ? (
+              <div className="customer-home__state" role="alert"><Status variant="warning" showIcon>Workspace summaries are temporarily unavailable</Status><p>Open Project Workspaces to review the current status.</p></div>
+            ) : !tenantId ? (
+              <div className="customer-home__state"><Status variant="neutral" size="sm">Choose a workspace</Status><p>Select a workspace before reviewing its summaries.</p></div>
+            ) : !hasVmfViewPermission ? (
+              <div className="customer-home__state"><Status variant="neutral" size="sm">Workspace summaries are permission-scoped</Status><p>Your selected customer scope does not currently include the permission needed to list workspace summaries.</p></div>
+            ) : workspaceCards.length === 0 ? (
+              <div className="customer-home__state"><Status variant="neutral" size="sm">No Project Workspaces yet</Status><p>Create or select a workspace to begin.</p></div>
             ) : (
-              <li className="dashboard__empty-item">
-                <Status variant="info" size="sm" showIcon>
-                  {runtimeActionEmptyLabel}
-                </Status>
-                <p>{runtimeActionEmptyMessage}</p>
-              </li>
+              <div className="customer-home__workspace-grid">
+                {filteredWorkspaceCards.map((card) => (
+                  <WorkspaceCard key={card.id} card={card} recommended={card.id === advisorCard?.id} />
+                ))}
+                {filteredWorkspaceCards.length === 0 ? <p className="customer-home__empty-filter">No workspaces match this view.</p> : null}
+              </div>
             )}
-          </ul>
-        </DashboardSectionCard>
+            {runtimeListQuery.data?.meta?.total > workspaceCards.length ? (
+              <p className="customer-home__muted">Showing {formatCount(workspaceCards.length)} from the current summary page.</p>
+            ) : null}
+          </section>
+        </div>
 
-        <DashboardSectionCard
-          badge={{ label: `${filteredRuntimeInstances.length} visible`, variant: 'neutral' }}
-          description="Runtime instances are first-class work objects. The selected work type filters this list."
-          icon={MdFilterList}
-          modifier="work"
-          panelLabel="Work in progress runtime instances panel"
-          status={{ label: workTypeFilter === 'ALL' ? 'All work' : formatRuntimeTokenLabel(workTypeFilter), variant: 'info' }}
-          title="Active Work"
-          actions={activeWorkToolbar}
-        >
-          <HorizontalScroll
-            className="dashboard__table-wrap"
-            ariaLabel="Work in progress runtime instances table"
-            gap="sm"
-          >
-            <Table
-              columns={tableColumns}
-              data={filteredRuntimeInstances}
-              variant="striped"
-              hoverable
-              ariaLabel="Work in progress runtime instances"
-              emptyMessage={runtimeInstanceEmptyMessage}
-              className="dashboard__work-table"
-            />
-          </HorizontalScroll>
-        </DashboardSectionCard>
+        <aside className="customer-home__core-rail" aria-label="Workspace attention and activity">
+          <section className="customer-home__section customer-home__rail-section" aria-labelledby="customer-home-attention-title">
+            <div className="customer-home__section-heading">
+              <div>
+                <h2 id="customer-home-attention-title">Attention required</h2>
+              </div>
+              <strong className="customer-home__attention-total">
+                {Object.values(attentionGroups).reduce((total, group) => total + group.length, 0)}
+              </strong>
+            </div>
+            <div className="customer-home__attention-grid">
+              <AttentionSummary label="Needs your input" cards={attentionGroups['Needs your input']} />
+              <AttentionSummary label="Things to verify" cards={attentionGroups['Things to verify']} detail="Across your workspaces" icon="△" />
+            </div>
+            <Link to="/app/attention" underline="none" className="customer-home__action customer-home__rail-action">View all →</Link>
+          </section>
 
-        <DashboardSectionCard
-          badge={{ label: `${availableCreateCount} available`, variant: availableCreateCount > 0 ? 'success' : 'neutral' }}
-          description="Source-backed create work is separated from planned locked capabilities that still require runtime anchors and output eligibility."
-          icon={MdAddCircleOutline}
-          modifier="create"
-          panelLabel="Create new work panel"
-          status={{ label: availableCreateCount > 0 ? 'Available now' : 'No create actions', variant: availableCreateCount > 0 ? 'success' : 'warning' }}
-          title="Create New Work"
-        >
-          <div className="dashboard__create-groups">
-            <ul className="dashboard__launch-grid dashboard__launch-grid--create dashboard__launch-grid--create-actions" aria-label="Source-backed create work">
-              {sourceBackedCreateItems.map((item) => (
-                <CreateWorkCard key={item.title} item={item} />
-              ))}
-            </ul>
-            <ul className="dashboard__launch-grid dashboard__launch-grid--create dashboard__launch-grid--planned" aria-label="Planned locked capabilities">
-              {plannedCreateItems.map((item) => (
-                <CreateWorkCard key={item.title} item={item} />
-              ))}
-            </ul>
-          </div>
-        </DashboardSectionCard>
-
-        <DashboardSectionCard
-          badge={{ label: `${alerts.length} signals`, variant: 'info' }}
-          description="Signals remain deferred until a persisted runtime signal source is available."
-          icon={MdOutlineInsights}
-          modifier="signals"
-          panelLabel="Runtime recommendations panel"
-          status={{ label: 'Current', variant: 'success' }}
-          title="Signals & Recommendations"
-        >
-          <div className="dashboard__signals-grid">
-            <ul className="dashboard__signal-list" aria-label="Runtime recommendations">
-              {alerts.map((alert) => (
-                <SignalRecommendationCard key={alert.id} signal={alert} />
-              ))}
-            </ul>
-          </div>
-        </DashboardSectionCard>
-
-        <DashboardSectionCard
-          badge={{ label: `${runtimeActivityItems.length} events`, variant: 'neutral' }}
-          description="Latest runtime events across your workspace."
-          icon={MdOutlineInsights}
-          modifier="activity"
-          panelLabel="Recent runtime activity panel"
-          status={runtimeActivityItems.length > 0
-            ? { label: 'Current', variant: 'success' }
-            : { label: 'No activity yet', variant: 'neutral' }}
-          title="Recent Activity"
-        >
-          <ul className="dashboard__activity-list" aria-label="Recent runtime activity">
-            {runtimeActivityItems.length > 0 ? (
-              runtimeActivityItems.map((activity) => (
-                <li key={activity.id} className="dashboard__activity-item">
-                  <Status variant={activity.variant} size="sm" showIcon>
-                    {activity.label}
-                  </Status>
-                  <p>{activity.description}</p>
-                </li>
-              ))
-            ) : (
-              <DashboardEmptyCard
-                description="Activity will appear here when runtime instances emit execution, review, or validation events."
-                icon={MdOutlineEventNote}
-                spacious
-                title="No runtime activity yet"
-                variant="info"
-              />
-            )}
-          </ul>
-        </DashboardSectionCard>
+          <RecentActivity cards={workspaceCards} />
+        </aside>
       </div>
-    </section>
+
+    </>
+  )
+}
+
+export function Dashboard() {
+  const { customerId, tenantId, isResolvingSelectedTenantContext } = useTenantContext()
+  const { getCustomerScope, hasCustomerPermission, hasTenantPermission, user } = useAuthorization()
+  const scope = customerId ? getCustomerScope(customerId) : null
+  const experience = resolveCustomerExperience(scope)
+  const hasVmfViewPermission = Boolean(
+    customerId && (
+      hasCustomerPermission(customerId, 'VMF_VIEW')
+      || (tenantId && hasTenantPermission(customerId, tenantId, 'VMF_VIEW'))
+    ),
+  )
+  const copy = EXPERIENCE_COPY[experience]
+  const firstName = String(user?.name ?? '').trim().split(/\s+/)[0]
+  const greeting = firstName ? `Good morning, ${firstName}.` : null
+
+  if (isResolvingSelectedTenantContext || !customerId) {
+    return (
+      <main className="customer-home customer-home--state" aria-labelledby="customer-home-loading-title">
+        <section className="customer-home__state" role="status">
+          <Spinner size="lg" />
+          <h1 id="customer-home-loading-title">Resolving workspace access…</h1>
+        </section>
+      </main>
+    )
+  }
+
+  if (!copy) return <AccessResolutionState />
+
+  return (
+    <main className="customer-home" aria-labelledby="customer-home-title">
+      <div className="customer-home__container">
+        {experience === CUSTOMER_EXPERIENCE.SIGNAL ? (
+          <SignalHome copy={copy} />
+        ) : (
+          <CoreHome
+            copy={copy}
+            customerId={customerId}
+            tenantId={tenantId}
+            hasVmfViewPermission={hasVmfViewPermission}
+            greeting={greeting}
+          />
+        )}
+      </div>
+    </main>
   )
 }
 

@@ -13,6 +13,7 @@
 import { lazy } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from '../components/ProtectedRoute'
+import { CustomerTierRoute } from '../components/CustomerTierRoute'
 import { isSuperAdminRuntimeControlEnabled } from '../constants/superAdminNavigation.js'
 import { CustomerAppGuard, RootLayout } from './RouterLayouts.jsx'
 import './router.css'
@@ -23,6 +24,9 @@ import './router.css'
 
 const Help = lazy(() => import('../pages/Help'))
 const Dashboard = lazy(() => import('../pages/Dashboard'))
+const CustomerJourneyPlaceholder = lazy(
+  () => import('../pages/CustomerJourney/CustomerJourneyPlaceholder'),
+)
 const Login = lazy(() => import('../pages/Login/Login'))
 const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
@@ -184,7 +188,48 @@ export const router = createBrowserRouter([
                 element: <Dashboard />,
               },
               {
+                path: 'attention',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Attention Centre" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'activity',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Activity Centre" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'website-analysis',
+                element: (
+                  <CustomerTierRoute requiredTier="SIGNAL">
+                    <CustomerJourneyPlaceholder section="Website Analysis" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'document-improvement',
+                element: (
+                  <CustomerTierRoute requiredTier="SIGNAL">
+                    <CustomerJourneyPlaceholder section="Document Improvement" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'credits',
+                element: <CustomerJourneyPlaceholder section="Credits" />,
+              },
+              {
+                path: 'account',
+                element: <CustomerJourneyPlaceholder section="Account" />,
+              },
+              {
                 path: 'workspaces',
+                element: <CustomerTierRoute requiredTier="CORE" />,
                 children: [
                   {
                     element: (
@@ -205,11 +250,67 @@ export const router = createBrowserRouter([
               },
               {
                 path: 'runtime/:runtimeInstanceId',
-                element: <RuntimeWorkspace />,
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <RuntimeWorkspace />
+                  </CustomerTierRoute>
+                ),
               },
               {
                 path: 'runtime/:runtimeInstanceId/outcome-studio',
-                element: <OutcomeStudioWorkspace />,
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <OutcomeStudioWorkspace />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'intelligence',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Intelligence Hub" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'intelligence/quality',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Intelligence Quality" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'workspace-structure',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Workspace Structure" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'outcome-studio',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Outcome Studio" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'assets',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Assets" />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'review-evidence',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <CustomerJourneyPlaceholder section="Review & evidence" />
+                  </CustomerTierRoute>
+                ),
               },
               {
                 path: 'administration',

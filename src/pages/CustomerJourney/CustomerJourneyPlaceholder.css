@@ -1,0 +1,71 @@
+.customer-journey {
+  min-height: 100%;
+  padding: var(--spacing-2xl) var(--spacing-lg) var(--spacing-3xl);
+}
+
+.customer-journey__container {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+}
+
+.customer-journey__eyebrow,
+.customer-journey__label {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.customer-journey__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-2xl);
+}
+
+.customer-journey__heading h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(var(--font-size-2xl), 5vw, var(--font-size-3xl));
+  line-height: var(--line-height-tight);
+}
+
+.customer-journey__heading p {
+  max-width: 720px;
+  margin: var(--spacing-md) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-relaxed);
+}
+
+.customer-journey__card {
+  max-width: 760px;
+}
+
+.customer-journey__card h2 {
+  max-width: 620px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-normal);
+}
+
+.customer-journey__action {
+  display: inline-flex;
+  margin-top: var(--spacing-lg);
+}
+
+@media (max-width: 640px) {
+  .customer-journey {
+    padding: var(--spacing-xl) var(--spacing-md) var(--spacing-2xl);
+  }
+
+  .customer-journey__heading {
+    flex-direction: column;
+  }
+}
+

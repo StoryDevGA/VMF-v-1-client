@@ -260,7 +260,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(
-      screen.getByText(/select a tenant from the tenant switcher before opening the vmf workspace/i),
+      screen.getByText(/select a tenant from the tenant switcher before opening the workspace/i),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^back$/i }))
@@ -282,7 +282,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(
-      screen.getByText(/vmf access is available, but the workspace could not resolve its tenant context/i),
+      screen.getByText(/workspace access is available, but the workspace could not resolve its tenant context/i),
     ).toBeInTheDocument()
   })
 
@@ -320,10 +320,10 @@ describe('MaintainVmfs', () => {
     expect(screen.queryByRole('table', { name: /value narrative runtime instances/i }))
       .not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /value narratives/i })).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: /value narrative work register/i }))
+    expect(screen.getByRole('table', { name: /value narrative workspace register/i }))
       .toBeInTheDocument()
-    expect(screen.getByText(/no value narratives found/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeInTheDocument()
+    expect(screen.getByText(/no value narrative workspaces found/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeInTheDocument()
   })
 
   it('lists Value Narrative runtime instances from the runtime instance API', async () => {
@@ -363,7 +363,7 @@ describe('MaintainVmfs', () => {
     const primaryCopy = primaryContinueCard.querySelector('.maintain-vmfs__continue-copy')
     const primaryActions = primaryContinueCard.querySelector('.maintain-vmfs__continue-actions')
     const lockedSummaryCard = within(continueSection)
-      .getByText('Review Locked Instances')
+      .getByText('Review locked workspaces')
       .closest('li')
 
     expect(primaryContinueCard).toHaveClass('maintain-vmfs__continue-card--primary')
@@ -371,7 +371,7 @@ describe('MaintainVmfs', () => {
     expect(primaryHead).toContainElement(
       within(primaryContinueCard).getByRole('heading', { name: 'Northwind Value Narrative' }),
     )
-    expect(primaryHead).toContainElement(within(primaryContinueCard).getByLabelText('Runtime state'))
+    expect(primaryHead).toContainElement(within(primaryContinueCard).getByLabelText('Workspace status'))
     expect(primaryCopy).not.toBeNull()
     expect(primaryCopy.querySelector('.maintain-vmfs__continue-title')).not.toBeInTheDocument()
     expect(primaryCopy.querySelector('.maintain-vmfs__continue-status')).not.toBeInTheDocument()
@@ -393,7 +393,7 @@ describe('MaintainVmfs', () => {
       }),
       { skip: false },
     )
-    const table = screen.getByRole('table', { name: /value narrative work register/i })
+    const table = screen.getByRole('table', { name: /value narrative workspace register/i })
 
     expect(table)
       .toBeInTheDocument()
@@ -410,7 +410,7 @@ describe('MaintainVmfs', () => {
     })
     expect(detailsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByLabelText(/value narrative register counts/i))
-      .toHaveTextContent(/1 runtime object\s*\|\s*0 VMF bridge records/i)
+      .toHaveTextContent(/1 workspace\s*\|\s*0 package provenance entries/i)
 
     expect(within(table).queryByRole('tablist')).not.toBeInTheDocument()
 
@@ -418,8 +418,8 @@ describe('MaintainVmfs', () => {
 
     expect(detailsToggle).toHaveAttribute('aria-expanded', 'true')
     expect(within(table).getAllByText('Overview').length).toBeGreaterThan(0)
-    expect(within(table).getAllByText('Runtime').length).toBeGreaterThan(0)
-    expect(within(table).getAllByText('Idle').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Workspace status').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Ready for next action').length).toBeGreaterThan(0)
     expect(within(table).queryByText(/no dependency records returned/i)).not.toBeInTheDocument()
     expect(within(table).queryByText(/no notes returned/i)).not.toBeInTheDocument()
     expect(within(table).queryByText(/no change-log events returned/i)).not.toBeInTheDocument()
@@ -569,26 +569,26 @@ describe('MaintainVmfs', () => {
     const continueSection = screen.getByRole('heading', { name: /^continue work$/i })
       .closest('section')
     const lockedCard = within(continueSection)
-      .getByText('Review Locked Instances')
+      .getByText('Review locked workspaces')
       .closest('li')
     const pendingCard = within(continueSection)
-      .getByText('Resolve Pending Validation')
+      .getByText('Review items needing attention')
       .closest('li')
     const atRiskCard = within(continueSection)
-      .getByText('Review At-Risk Instances')
+      .getByText('Things to verify')
       .closest('li')
 
-    expect(within(lockedCard).getByText('1 instance locked')).toBeInTheDocument()
+    expect(within(lockedCard).getByText('1 workspace locked')).toBeInTheDocument()
     expect(within(lockedCard).getByText('Latest: Locked Runtime')).toBeInTheDocument()
     expect(within(lockedCard).getByText('Locked').closest('.badge')).toHaveClass('badge--warning')
 
-    expect(within(pendingCard).getByText('1 instance needs attention')).toBeInTheDocument()
+    expect(within(pendingCard).getByText('1 workspace needs attention')).toBeInTheDocument()
     expect(within(pendingCard).getByText('Latest: Pending Validation Runtime')).toBeInTheDocument()
-    expect(within(pendingCard).getByText('Pending').closest('.badge')).toHaveClass('badge--info')
+    expect(within(pendingCard).getByText('Review Items').closest('.badge')).toHaveClass('badge--info')
 
-    expect(within(atRiskCard).getByText('1 instance needs attention')).toBeInTheDocument()
+    expect(within(atRiskCard).getByText('1 workspace needs attention')).toBeInTheDocument()
     expect(within(atRiskCard).getByText('Latest: At Risk Runtime')).toBeInTheDocument()
-    expect(within(atRiskCard).getByText('Blocked').closest('.badge')).toHaveClass('badge--danger')
+    expect(within(atRiskCard).getByText('Items needing attention').closest('.badge')).toHaveClass('badge--danger')
   })
 
   it('does not send VMF-only disabled status to the runtime instance API', async () => {
@@ -647,7 +647,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     await user.selectOptions(
-      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/workspace status/i, { selector: 'select#vmf-status-filter' }),
       'DISABLED',
     )
 
@@ -663,7 +663,7 @@ describe('MaintainVmfs', () => {
     )
     expect(screen.queryByText('Active Runtime Narrative')).not.toBeInTheDocument()
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Disabled Bridge VMF'),
     ).toBeInTheDocument()
   })
@@ -696,14 +696,14 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     const pagination = screen.getByRole('navigation', {
-      name: /value narrative runtime pagination/i,
+      name: /value narrative workspace pagination/i,
     })
 
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Page 1 Value Narrative'),
     ).toBeInTheDocument()
-    expect(within(pagination).getByText('Runtime objects page 1 of 3 (25 runtime objects)')).toBeInTheDocument()
+    expect(within(pagination).getByText('Workspaces page 1 of 3 (25 workspaces)')).toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customerId: 'cust-1',
@@ -730,20 +730,20 @@ describe('MaintainVmfs', () => {
       )
     })
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Page 2 Value Narrative'),
     ).toBeInTheDocument()
-    expect(within(pagination).getByText('Runtime objects page 2 of 3 (25 runtime objects)')).toBeInTheDocument()
+    expect(within(pagination).getByText('Workspaces page 2 of 3 (25 workspaces)')).toBeInTheDocument()
   })
 
   it('submits create payload with optional description to the runtime instance API', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toHaveDisplayValue('VMF v3.1 Runtime Knowledge Model / v3.1.0')
 
     await user.type(
@@ -804,10 +804,10 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toHaveDisplayValue('VMF v3.1.1 Runtime Knowledge Model / v3.1.1')
 
     await user.type(
@@ -867,12 +867,12 @@ describe('MaintainVmfs', () => {
     }))
 
     renderPage()
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
 
     const dialog = screen.getByRole('dialog')
-    const pagination = within(dialog).getByRole('navigation', { name: /vmf version pagination/i })
-    expect(within(pagination).getByText('VMF versions page 1 of 2')).toBeInTheDocument()
-    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+    const pagination = within(dialog).getByRole('navigation', { name: /framework package pagination/i })
+    expect(within(pagination).getByText('Framework packages page 1 of 2')).toBeInTheDocument()
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toHaveDisplayValue('VMF page 1 / v3.1.1')
 
     await user.click(within(pagination).getByRole('button', { name: /next versions/i }))
@@ -883,7 +883,7 @@ describe('MaintainVmfs', () => {
         { skip: false },
       )
     })
-    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toHaveDisplayValue('VMF page 2 / v3.1.2')
   })
 
@@ -918,10 +918,10 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     const dialog = screen.getByRole('dialog')
     await user.selectOptions(
-      within(dialog).getByRole('combobox', { name: /vmf version/i }),
+      within(dialog).getByRole('combobox', { name: /framework package/i }),
       'pkg-31',
     )
     await user.type(
@@ -976,7 +976,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     const dialog = screen.getByRole('dialog')
 
     await user.type(
@@ -985,7 +985,7 @@ describe('MaintainVmfs', () => {
     )
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
-    expect(await within(dialog).findByText(/VMF version is required/i)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/framework package is required/i)).toBeInTheDocument()
     expect(createRuntimeInstanceMock).not.toHaveBeenCalled()
   })
 
@@ -1019,7 +1019,7 @@ describe('MaintainVmfs', () => {
     })
 
     expect(capacityGuidance).toHaveTextContent(/0 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeDisabled()
   })
 
   it('shows compact Value Narrative usage guidance when runtime capacity remains', () => {
@@ -1050,7 +1050,7 @@ describe('MaintainVmfs', () => {
     const capacityGuidance = screen.getByRole('status', { name: /^value narrative capacity/i })
 
     expect(capacityGuidance).toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeEnabled()
   })
 
   it('uses runtime instance capacity instead of stale VMF catalogue capacity', () => {
@@ -1100,7 +1100,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity reached/i }))
       .toHaveTextContent(/0 of 3 left/i)
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeDisabled()
   })
 
   it('fails closed when runtime instance capacity cannot be loaded', () => {
@@ -1135,7 +1135,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
       .toHaveTextContent(/capacity unavailable/i)
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeDisabled()
   })
 
   it('fails closed when runtime instance metadata omits runtime capacity', () => {
@@ -1170,7 +1170,7 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity unavailable/i }))
       .toHaveTextContent(/capacity unavailable/i)
-    expect(screen.getByRole('button', { name: /^create new instance$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^create new workspace$/i })).toBeDisabled()
   })
 
   it('blocks create submission when runtime capacity becomes unavailable after the dialog opens', async () => {
@@ -1178,7 +1178,7 @@ describe('MaintainVmfs', () => {
 
     const view = renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     runtimeInstanceQueryResponse = {
@@ -1238,22 +1238,20 @@ describe('MaintainVmfs', () => {
 
     expect(screen.getByRole('status', { name: /^value narrative capacity/i }))
       .toHaveTextContent(/2 of 4 left/i)
-    expect(screen.getByRole('status', { name: /eligible VMF version required/i }))
-      .toHaveTextContent(/no eligible version/i)
-    expect(actionBar).toHaveTextContent(/No eligible version\s*Back\s*2 of 4 left/i)
+    expect(screen.getByRole('status', { name: /eligible framework package required/i }))
+      .toHaveTextContent(/no eligible package/i)
+    expect(actionBar).toHaveTextContent(/No eligible package\s*Back\s*2 of 4 left/i)
 
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
     const dialog = screen.getByRole('dialog')
 
-    expect(within(dialog).getByRole('combobox', { name: /vmf version/i }))
+    expect(within(dialog).getByRole('combobox', { name: /framework package/i }))
       .toBeDisabled()
     expect(within(dialog).getByText(/assigned or published for this customer/i))
       .toBeInTheDocument()
-    expect(within(dialog).getByText(/available to this customer and runtime-ready/i))
+    expect(within(dialog).getByText(/package assigned to this customer and ready for use/i))
       .toBeInTheDocument()
-    expect(within(dialog).getByText(/assign or publish a version with active deployment evidence/i))
-      .toBeInTheDocument()
-    expect(within(dialog).getByText(/certified dependency lock, active activation, active deployment/i))
+    expect(within(dialog).getByText(/contact your platform administrator if the required package is unavailable/i))
       .toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: /^create$/i })).toBeDisabled()
   })
@@ -1289,7 +1287,7 @@ describe('MaintainVmfs', () => {
     expect(within(actionBar).getByRole('button', { name: /^back$/i })).toBeInTheDocument()
     expect(within(actionBar).getByRole('status', { name: /^value narrative capacity/i })).toHaveTextContent('2 of 4 left')
     expect(within(actionBar).queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
-    expect(within(quickCreate).getByRole('button', { name: /^create new instance$/i })).toBeEnabled()
+    expect(within(quickCreate).getByRole('button', { name: /^create new workspace$/i })).toBeEnabled()
     expect(actionBar).toHaveTextContent(/Back.*2 of 4 left/)
   })
 
@@ -1310,15 +1308,15 @@ describe('MaintainVmfs', () => {
 
     await user.type(screen.getByLabelText(/search/i), 'Legacy')
     await user.selectOptions(
-      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/workspace status/i, { selector: 'select#vmf-status-filter' }),
       'ARCHIVED',
     )
-    await user.click(screen.getByRole('button', { name: /^create new instance$/i }))
+    await user.click(screen.getByRole('button', { name: /^create new workspace$/i }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/search/i)).toHaveValue('Legacy')
     expect(
-      screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
+      screen.getByLabelText(/workspace status/i, { selector: 'select#vmf-status-filter' }),
     ).toHaveValue('ARCHIVED')
 
     currentTenantContext = {
@@ -1333,7 +1331,7 @@ describe('MaintainVmfs', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(screen.getByLabelText(/search/i)).toHaveValue('')
       expect(
-        screen.getByLabelText(/state/i, { selector: 'select#vmf-status-filter' }),
+        screen.getByLabelText(/workspace status/i, { selector: 'select#vmf-status-filter' }),
       ).toHaveValue('')
       expect(useListVmfsQuery).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -1405,7 +1403,7 @@ describe('MaintainVmfs', () => {
     expect(screen.getByText('Access')).toBeInTheDocument()
     expect(screen.getByText('Review only')).toBeInTheDocument()
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Viewer VMF'),
     ).toBeInTheDocument()
     const actions = screen.getByRole('combobox', { name: /actions for viewer vmf/i })
@@ -1426,20 +1424,20 @@ describe('MaintainVmfs', () => {
 
     await user.selectOptions(actions, 'View details')
 
-    const dialog = screen.getByRole('dialog', { name: /viewer vmf details/i })
+    const dialog = screen.getByRole('dialog', { name: /details/i })
     expect(dialog).toBeInTheDocument()
-    expect(within(dialog).getByText('VMF Version')).toBeInTheDocument()
-    expect(within(dialog).getByText('VMF Version Id')).toBeInTheDocument()
-    expect(within(dialog).getByText('VMF Version Status')).toBeInTheDocument()
-    expect(within(dialog).getByText('VMF Version Number')).toBeInTheDocument()
+    expect(within(dialog).getByText('Framework package')).toBeInTheDocument()
+    expect(within(dialog).getByText('Framework package ID')).toBeInTheDocument()
+    expect(within(dialog).getByText('Framework package status')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Framework package version').length).toBeGreaterThan(0)
     expect(within(dialog).queryByText('Framework Package')).not.toBeInTheDocument()
     expect(within(dialog).getByText('VMF Package 2.2')).toBeInTheDocument()
     expect(within(dialog).getByText('pkg-vmf-2-2')).toBeInTheDocument()
     expect(within(dialog).getAllByText('ACTIVE').length).toBeGreaterThan(0)
     expect(within(dialog).getAllByText('2.2').length).toBeGreaterThan(0)
-    expect(within(dialog).getByText('Readiness pending')).toBeInTheDocument()
+    expect(within(dialog).getByText('Review items')).toBeInTheDocument()
     expect(within(dialog).getByText('Not Started')).toBeInTheDocument()
-    expect(within(dialog).getByText('PACKAGE_INFERRED_FROM_VERSION')).toBeInTheDocument()
+    expect(within(dialog).getByText('Package Inferred From Version')).toBeInTheDocument()
   })
 
   it('does not query available packages when VMF entitlement is missing', () => {
@@ -1454,7 +1452,7 @@ describe('MaintainVmfs', () => {
 
     renderPage()
 
-    expect(screen.getByText(/customer licence does not include vmf/i)).toBeInTheDocument()
+    expect(screen.getByText(/customer licence does not include core workspaces/i)).toBeInTheDocument()
     expect(useListAvailableFrameworkPackagesQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({ customerId: 'cust-1', tenantId: 'tenant-1' }),
       { skip: true },
@@ -1518,7 +1516,7 @@ describe('MaintainVmfs', () => {
       { skip: false },
     )
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Published Bridge VMF'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Draft Runtime Narrative')).not.toBeInTheDocument()
@@ -1559,7 +1557,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(
-      within(screen.getByRole('table', { name: /value narrative work register/i }))
+      within(screen.getByRole('table', { name: /value narrative workspace register/i }))
         .getByText('Package-backed VMF'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Latest Package').length).toBeGreaterThan(0)
@@ -1577,7 +1575,7 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(
-      screen.getByText(/you do not have permission to manage vmfs for this tenant/i),
+      screen.getByText(/you do not have permission to manage workspaces for this tenant/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^create value narrative$/i })).not.toBeInTheDocument()
     expect(useListVmfsQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true })
@@ -1625,7 +1623,7 @@ describe('MaintainVmfs', () => {
     await user.selectOptions(actions, 'Edit')
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /edit vmf/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /edit workspace/i })).toBeInTheDocument()
   })
 
   it('shows only the details action when VMF_UPDATE is not granted', () => {
@@ -1698,18 +1696,18 @@ describe('MaintainVmfs', () => {
     renderPage()
 
     expect(screen.getByText('Register guide')).toBeInTheDocument()
-    expect(screen.getByText('Runtime objects + bridge records')).toBeInTheDocument()
-    expect(screen.getByText('State + package lineage')).toBeInTheDocument()
-    expect(screen.getByText('Lifecycle-gated bridge edits')).toBeInTheDocument()
+    expect(screen.getByText('Workspaces + package provenance')).toBeInTheDocument()
+    expect(screen.getByText('Workspace status + package provenance')).toBeInTheDocument()
+    expect(screen.getByText('Lifecycle-gated workspace edits')).toBeInTheDocument()
 
-    const table = screen.getByRole('table', { name: /value narrative work register/i })
+    const table = screen.getByRole('table', { name: /value narrative workspace register/i })
 
-    expect(within(table).getByRole('columnheader', { name: /^instance$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^package$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^workspace$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^framework package$/i })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /^version$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^state$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^workspace status$/i })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /^lifecycle$/i })).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: /^health$/i })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: /^review status$/i })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /^action$/i })).toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: /^stage \/ health$/i })).not.toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: /^completion$/i })).not.toBeInTheDocument()
@@ -1726,9 +1724,9 @@ describe('MaintainVmfs', () => {
     await user.click(activeDetailsToggle)
 
     expect(activeDetailsToggle).toHaveAttribute('aria-expanded', 'true')
-    const completionValue = within(table).getAllByText('NOT_TRACKED')[0]
+    const completionValue = within(table).getAllByText('Not yet recorded')[0]
     expect(completionValue.closest('.badge')).toHaveClass('badge--info')
-    expect(within(table).getAllByText('VMF ID').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('Workspace ID').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('vmf-active').length).toBeGreaterThan(0)
 
     const activeActions = screen.getByRole('combobox', { name: /actions for active vmf/i })
@@ -1772,7 +1770,7 @@ describe('MaintainVmfs', () => {
       'Delete',
     )
 
-    expect(screen.getByRole('heading', { name: /delete vmf/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /delete workspace/i })).toBeInTheDocument()
     expect(screen.getByText(/delete archived vmf\?/i)).toBeInTheDocument()
   })
 
