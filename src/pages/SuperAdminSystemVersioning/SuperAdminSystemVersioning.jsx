@@ -5,6 +5,7 @@
  */
 
 import { useSystemVersioningManagement } from './useSystemVersioningManagement.js'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { VersioningPolicyView } from './VersioningPolicyView.jsx'
 import { VersioningHistoryView } from './VersioningHistoryView.jsx'
 import { EditMetadataDialog } from './VersioningDialogs.jsx'
@@ -14,18 +15,14 @@ function SuperAdminSystemVersioning() {
   const mgmt = useSystemVersioningManagement()
 
   return (
-    <section
+    <PageShell
       className="super-admin-system-versioning container"
       aria-label="Super admin system versioning"
     >
-      <header className="super-admin-system-versioning__header">
-        <h1 className="super-admin-system-versioning__title">
-          System Versioning Policy
-        </h1>
-        <p className="super-admin-system-versioning__subtitle">
-          Manage platform-wide governance policy versions.
-        </p>
-      </header>
+      <PageHeader
+        title="System Versioning Policy"
+        subtitle="Manage platform-wide governance policy versions."
+      />
 
       <VersioningPolicyView
         activePolicy={mgmt.activePolicy}
@@ -65,7 +62,7 @@ function SuperAdminSystemVersioning() {
         onSubmit={mgmt.handleUpdatePolicy}
         isLoading={mgmt.updatePolicyMetadataResult.isLoading}
       />
-    </section>
+    </PageShell>
   )
 }
 

@@ -1,14 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
-import { Card } from '../../components/Card'
 import { Accordion } from '../../components/Accordion'
-import { Fieldset } from '../../components/Fieldset'
-import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { RegistryListView } from '../../components/RegistryListView'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import {
   RUNTIME_PATH_REGISTRY_HELP_TEXT,
@@ -393,24 +390,22 @@ export function RuntimePathRegistryListView({
     ],
     [handleRowAction, isActionLoading],
   )
-  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
-  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
-
   return (
-    <Fieldset className="super-admin-runtime-path-registry__fieldset">
-      <Fieldset.Legend className="sr-only">Runtime path registry catalogue</Fieldset.Legend>
-      <Card variant="elevated" className="super-admin-runtime-path-registry__card">
-        <Card.Body className="super-admin-runtime-path-registry__card-body super-admin-runtime-path-registry__card-body--compact">
-          <div className="super-admin-runtime-path-registry__catalogue-actions">
-            <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
-              Back
-            </Button>
-            <Button type="button" variant="primary" size="sm" onClick={onCreatePath}>
-              Create
-            </Button>
-          </div>
-
-          <div className="super-admin-runtime-path-registry__toolbar">
+    <RegistryListView
+      block="super-admin-runtime-path-registry"
+      legend="Runtime path registry catalogue"
+      actions={(
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+            Back
+          </Button>
+          <Button type="button" variant="primary" size="sm" onClick={onCreatePath}>
+            Create
+          </Button>
+        </>
+      )}
+      filters={(
+        <>
             <Input
               id="runtime-path-registry-search"
               label="Search"
@@ -456,97 +451,28 @@ export function RuntimePathRegistryListView({
                 setPage(1)
               }}
             />
-          </div>
-
-          {listAppError ? (
-            <p className="super-admin-runtime-path-registry__error" role="alert">
-              {listAppError.message}
-            </p>
-          ) : null}
-
-          <p className="super-admin-runtime-path-registry__table-note">
-            {RUNTIME_PATH_REGISTRY_HELP_TEXT}
-          </p>
-
-          <HorizontalScroll
-            className="super-admin-runtime-path-registry__table-wrap"
-            ariaLabel="Runtime paths table"
-            gap="sm"
-          >
-            <Table
-              className="super-admin-runtime-path-registry__table"
-              columns={columns}
-              data={rows}
-              loading={showInitialSkeleton}
-              variant="striped"
-              hoverable
-              emptyMessage="No runtime paths found."
-              emptyComponent={
-                showPostSaveRefreshState ? (
-                  <p className="super-admin-runtime-path-registry__muted" role="status">
-                    Refreshing Runtime Paths...
-                  </p>
-                ) : undefined
-              }
-              ariaLabel="Runtime Paths"
-            />
-          </HorizontalScroll>
-
-          {isListFetching && !isListLoading ? (
-            <p className="super-admin-runtime-path-registry__muted">Refreshing list...</p>
-          ) : null}
-
-          {totalPages > 1 ? (
-            <div
-              className="super-admin-runtime-path-registry__pagination"
-              role="navigation"
-              aria-label="Runtime paths pagination"
-            >
-              <div className="super-admin-runtime-path-registry__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isListFetching}
-                  onClick={() => setPage(1)}
-                >
-                  First
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isListFetching}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Previous
-                </Button>
-              </div>
-
-              <p className="super-admin-runtime-path-registry__pagination-info">
-                Page {currentPage} of {totalPages}
-              </p>
-
-              <div className="super-admin-runtime-path-registry__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isListFetching}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                >
-                  Next
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isListFetching}
-                  onClick={() => setPage(totalPages)}
-                >
-                  Last
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </Card.Body>
-      </Card>
-    </Fieldset>
+        </>
+      )}
+      error={listAppError}
+      tableNote={RUNTIME_PATH_REGISTRY_HELP_TEXT}
+      table={{
+        columns,
+        data: rows,
+        emptyMessage: 'No runtime paths found.',
+        ariaLabel: 'Runtime Paths',
+        scrollAriaLabel: 'Runtime paths table',
+      }}
+      status={{
+        isLoading: isListLoading,
+        isFetching: isListFetching,
+        showPostSaveRefresh,
+      }}
+      pagination={{
+        currentPage,
+        totalPages,
+        setPage,
+        ariaLabel: 'Runtime paths pagination',
+      }}
+    />
   )
 }

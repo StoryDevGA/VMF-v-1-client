@@ -15,10 +15,6 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useListRuntimeInstancesQuery: vi.fn(),
 }))
 
-vi.mock('../../components/TenantSwitcher', () => ({
-  TenantSwitcher: () => <div data-testid="tenant-switcher">Choose workspace</div>,
-}))
-
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'

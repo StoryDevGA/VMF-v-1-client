@@ -1,10 +1,3 @@
-.super-admin-workflow-policy-editor {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
-.super-admin-workflow-policy-editor__header,
 .super-admin-workflow-policy-editor__intro,
 .super-admin-workflow-policy-editor__form,
 .super-admin-workflow-policy-editor__card-body,
@@ -15,12 +8,6 @@
   display: grid;
 }
 
-.super-admin-workflow-policy-editor__header {
-  gap: var(--spacing-xs);
-}
-
-.super-admin-workflow-policy-editor__title,
-.super-admin-workflow-policy-editor__subtitle,
 .super-admin-workflow-policy-editor__form-title,
 .super-admin-workflow-policy-editor__helper,
 .super-admin-workflow-policy-editor__summary-label,
@@ -28,7 +15,6 @@
   margin: 0;
 }
 
-.super-admin-workflow-policy-editor__subtitle,
 .super-admin-workflow-policy-editor__form-title,
 .super-admin-workflow-policy-editor__helper,
 .super-admin-workflow-policy-editor__summary-label {

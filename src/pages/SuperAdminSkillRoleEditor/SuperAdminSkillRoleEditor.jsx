@@ -5,6 +5,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
@@ -325,15 +326,11 @@ function SuperAdminSkillRoleEditor() {
   const statusIsRequired = true
 
   return (
-    <section className="super-admin-skill-role-registry container" aria-label="Skill role editor">
-      <header className="super-admin-skill-role-registry__header">
-        <h1 className="super-admin-skill-role-registry__title">
-          {isCloneMode ? 'Clone Skill Role' : isEditMode ? 'Edit Skill Role' : 'Create Skill Role'}
-        </h1>
-        <p className="super-admin-skill-role-registry__subtitle">
-          Skill Roles classify execution responsibility and are referenced by Skills.
-        </p>
-      </header>
+    <PageShell className="super-admin-skill-role-registry container" aria-label="Skill role editor">
+      <PageHeader
+        title={isCloneMode ? 'Clone Skill Role' : isEditMode ? 'Edit Skill Role' : 'Create Skill Role'}
+        subtitle="Skill Roles classify execution responsibility and are referenced by Skills."
+      />
 
       <Fieldset className="super-admin-skill-role-registry__fieldset">
         <Fieldset.Legend className="sr-only">Skill role editor</Fieldset.Legend>
@@ -621,7 +618,7 @@ function SuperAdminSkillRoleEditor() {
           )}
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

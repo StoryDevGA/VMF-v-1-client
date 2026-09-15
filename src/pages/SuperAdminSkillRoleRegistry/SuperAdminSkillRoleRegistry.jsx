@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { useToaster } from '../../components/Toaster'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
@@ -98,16 +99,14 @@ function SuperAdminSkillRoleRegistry() {
   }, [commitRoleStatus, pendingStatusChange])
 
   return (
-    <section
+    <PageShell
       className="super-admin-skill-role-registry container"
       aria-label="Super admin skill role registry"
     >
-      <header className="super-admin-skill-role-registry__header">
-        <h1 className="super-admin-skill-role-registry__title">Skill Roles</h1>
-        <p className="super-admin-skill-role-registry__subtitle">
-          Maintain the governed Skill Role Registry that classifies execution responsibility across Runtime Control.
-        </p>
-      </header>
+      <PageHeader
+        title="Skill Roles"
+        subtitle="Maintain the governed Skill Role Registry that classifies execution responsibility across Runtime Control."
+      />
 
       <SkillRoleRegistryListView
         search={mgmt.search}
@@ -170,7 +169,7 @@ function SuperAdminSkillRoleRegistry() {
           )}
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

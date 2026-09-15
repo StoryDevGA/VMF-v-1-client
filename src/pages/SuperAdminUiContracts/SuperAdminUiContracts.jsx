@@ -10,6 +10,7 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { useListUiContractsQuery } from '../../store/api/runtimeControlApi.js'
 import { normalizeError } from '../../utils/errors.js'
@@ -265,13 +266,11 @@ function SuperAdminUiContracts() {
   )
 
   return (
-    <section className="super-admin-ui-contracts container" aria-label="UI Contracts">
-      <header className="super-admin-ui-contracts__header">
-        <h1 className="super-admin-ui-contracts__title">UI Contracts</h1>
-        <p className="super-admin-ui-contracts__subtitle">
-          Manage presentation contracts for runtime sections, lifecycle labels, and governed action copy.
-        </p>
-      </header>
+    <PageShell className="super-admin-ui-contracts container" aria-label="UI Contracts">
+      <PageHeader
+        title="UI Contracts"
+        subtitle="Manage presentation contracts for runtime sections, lifecycle labels, and governed action copy."
+      />
 
       <Fieldset className="super-admin-ui-contracts__fieldset">
         <Fieldset.Legend className="sr-only">UI Contract catalogue</Fieldset.Legend>
@@ -390,7 +389,7 @@ function SuperAdminUiContracts() {
           </Card.Body>
         </Card>
       </Fieldset>
-    </section>
+    </PageShell>
   )
 }
 

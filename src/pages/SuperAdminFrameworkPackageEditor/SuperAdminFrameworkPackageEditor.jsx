@@ -7,6 +7,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -2653,17 +2654,14 @@ function SuperAdminFrameworkPackageEditor() {
   const paginatedAuditRows = getPaginatedRows(auditRows, auditTablePage)
 
   return (
-    <section
+    <PageShell
       className="super-admin-framework-packages super-admin-framework-package-editor container"
       aria-label="Framework package editor"
     >
-      <header className="super-admin-framework-packages__header">
-        <h1 className="super-admin-framework-packages__title">{pageTitle}</h1>
-        <p className="super-admin-framework-packages__subtitle">
-          Assemble deployable framework blueprints with governed access, sections, runtime settings,
-          validations, workflow policies, and future output placeholders.
-        </p>
-      </header>
+      <PageHeader
+        title={pageTitle}
+        subtitle="Assemble deployable framework blueprints with governed access, sections, runtime settings, validations, workflow policies, and future output placeholders."
+      />
 
       <Fieldset className="super-admin-framework-package-editor__fieldset">
         <Fieldset.Legend className="sr-only">Framework package editor</Fieldset.Legend>
@@ -4951,7 +4949,7 @@ function SuperAdminFrameworkPackageEditor() {
           </Button>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

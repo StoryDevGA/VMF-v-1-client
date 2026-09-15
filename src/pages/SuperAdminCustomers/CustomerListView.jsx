@@ -8,6 +8,7 @@ import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
+import { PageHeader } from '../../components/PageShell'
 import {
   STATUS_FILTER_OPTIONS,
   TOPOLOGY_FILTER_OPTIONS,
@@ -155,12 +156,11 @@ export function CustomerListView({
 
   return (
     <>
-      <header className="super-admin-customers__header">
-        <h2 className="super-admin-customers__title">Customers</h2>
-        <p className="super-admin-customers__subtitle">
-          Customers - Manage customer lifecycle, governance limits, and canonical customer admin flows.
-        </p>
-      </header>
+      <PageHeader
+        title="Customers"
+        subtitle="Customers - Manage customer lifecycle, governance limits, and canonical customer admin flows."
+        titleAs="h2"
+      />
 
       <Fieldset className="super-admin-customers__fieldset">
         <Fieldset.Legend className="sr-only">Customer catalogue</Fieldset.Legend>

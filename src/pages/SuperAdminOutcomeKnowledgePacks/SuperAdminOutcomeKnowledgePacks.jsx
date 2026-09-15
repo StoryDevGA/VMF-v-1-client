@@ -10,6 +10,7 @@ import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -2261,18 +2262,15 @@ function SuperAdminOutcomeKnowledgePacks() {
   )
 
   return (
-    <section
+    <PageShell
       className="super-admin-outcome-knowledge-packs container"
       aria-label="Outcome Studio Knowledge Packs"
     >
-      <header className="super-admin-outcome-knowledge-packs__header">
-        <div>
-          <h1 className="super-admin-outcome-knowledge-packs__title">Knowledge Packs</h1>
-          <p className="super-admin-outcome-knowledge-packs__subtitle">
-            Import, review, validate, and activate the Knowledge Packs resolved by Outcome Studio at runtime.
-          </p>
-        </div>
-        <Badge
+      <PageHeader
+        title="Knowledge Packs"
+        subtitle="Import, review, validate, and activate the Knowledge Packs resolved by Outcome Studio at runtime."
+        actions={(
+          <Badge
           variant={mandatorySafeguardsReady ? 'success' : 'danger'}
           size="sm"
           pill
@@ -2280,8 +2278,9 @@ function SuperAdminOutcomeKnowledgePacks() {
           icon={<MdInventory2 aria-hidden="true" />}
         >
           {mandatorySafeguardsReady ? 'Safeguards ready' : 'Safeguards blocked'}
-        </Badge>
-      </header>
+          </Badge>
+        )}
+      />
 
       <Card variant="elevated" className="super-admin-outcome-knowledge-packs__summary-card">
         <Card.Body className="super-admin-outcome-knowledge-packs__summary-card-body">
@@ -2578,7 +2577,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         onCancel={closeDeleteDialog}
         onConfirm={confirmDeletePack}
       />
-    </section>
+    </PageShell>
   )
 }
 

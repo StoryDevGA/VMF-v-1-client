@@ -9,15 +9,14 @@
  * - Filters results by selected framework keys + required operation (READ/WRITE)
  */
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Badge } from '../Badge'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Spinner } from '../Spinner'
+import { useComboboxSearch } from '../../hooks/useComboboxSearch.js'
 import { useLazyListRuntimePathsQuery } from '../../store/api/runtimeControlApi.js'
 import './RuntimePathSearchSelect.css'
-
-const SEARCH_DEBOUNCE = 300
 
 const normalizeKey = (value) => String(value ?? '').trim()
 const normalizeKeys = (values) =>
@@ -56,26 +55,6 @@ function RuntimePathSearchSelect({
   error,
   className = '',
 }) {
-  const containerRef = useRef(null)
-  const inputRef = useRef(null)
-  const listboxId = `${id}-search-results`
-  const [query, setQuery] = useState('')
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
-  const closeTimeoutRef = useRef(null)
-
-  const clearCloseTimeout = useCallback(() => {
-    if (!closeTimeoutRef.current) return
-    clearTimeout(closeTimeoutRef.current)
-    closeTimeoutRef.current = null
-  }, [])
-
-  const closeDropdown = useCallback(() => {
-    clearCloseTimeout()
-    setIsOpen(false)
-    setActiveIndex(-1)
-  }, [clearCloseTimeout])
-
   const normalizedSelected = useMemo(() => normalizeKeys(selectedKeys), [selectedKeys])
   const normalizedFrameworkKeys = useMemo(
     () => normalizeKeys(frameworkKeys).map((value) => value.toUpperCase()),
@@ -97,11 +76,11 @@ function RuntimePathSearchSelect({
 
   const [triggerSearch, { data: searchData, isFetching: isSearching }] =
     useLazyListRuntimePathsQuery()
-  const results = Array.isArray(searchData?.data?.data)
-    ? searchData.data.data
-    : Array.isArray(searchData?.data)
-      ? searchData.data
-      : []
+  const results = useMemo(() => {
+    if (Array.isArray(searchData?.data?.data)) return searchData.data.data
+    if (Array.isArray(searchData?.data)) return searchData.data
+    return []
+  }, [searchData])
 
   const availableResults = useMemo(() => {
     const selected = new Set(normalizedSelected)
@@ -141,55 +120,6 @@ function RuntimePathSearchSelect({
     })
   }, [isProtectedOnly, normalizedCategory, normalizedFrameworkKeys, normalizedScope, queryOperation, triggerSearch])
 
-  useEffect(() => {
-    if (!isOpen || disabled) return undefined
-
-    const handle = setTimeout(() => {
-      triggerRuntimeSearch(query)
-    }, SEARCH_DEBOUNCE)
-
-    return () => clearTimeout(handle)
-  }, [disabled, isOpen, query, triggerRuntimeSearch])
-
-  useEffect(() => () => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
-
-    const handlePointerDown = (event) => {
-      const container = containerRef.current
-      if (!container) return
-      if (container.contains(event.target)) return
-      closeDropdown()
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('touchstart', handlePointerDown)
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('touchstart', handlePointerDown)
-    }
-  }, [closeDropdown, isOpen])
-
-  const handleBlur = () => {
-    clearCloseTimeout()
-    closeTimeoutRef.current = setTimeout(() => {
-      closeDropdown()
-      closeTimeoutRef.current = null
-    }, 200)
-  }
-
-  const activeOptionId =
-    isOpen && activeIndex >= 0 && availableResults[activeIndex]
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined
-
   const handleAdd = (pathKey) => {
     const normalized = normalizeKey(pathKey)
     if (!normalized) return
@@ -209,27 +139,27 @@ function RuntimePathSearchSelect({
     onChange?.(next)
   }
 
-  const handleKeyDown = (event) => {
-    if (!isOpen) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex((current) =>
-        Math.min(current + 1, Math.max(0, availableResults.length - 1)),
-      )
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((current) => Math.max(current - 1, 0))
-    } else if (event.key === 'Enter') {
-      if (activeIndex >= 0 && availableResults[activeIndex]) {
-        event.preventDefault()
-        handleAdd(availableResults[activeIndex].pathKey)
-      }
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      closeDropdown()
-    }
-  }
+  const {
+    activeIndex,
+    activeOptionId,
+    closeDropdown,
+    containerRef,
+    handleBlur,
+    handleInputChange,
+    handleInputFocus,
+    handleKeyDown,
+    inputRef,
+    isOpen,
+    listboxId,
+    query,
+    setQuery,
+  } = useComboboxSearch({
+    id,
+    disabled,
+    resultCount: availableResults.length,
+    onSearch: triggerRuntimeSearch,
+    onSelectActive: (index) => handleAdd(availableResults[index]?.pathKey),
+  })
 
   const hasFrameworkFilter = normalizedFrameworkKeys.length > 0
   const resolvedHelperText = helperText
@@ -256,14 +186,8 @@ function RuntimePathSearchSelect({
         aria-expanded={Boolean(isOpen && !disabled)}
         aria-activedescendant={activeOptionId}
         aria-haspopup="listbox"
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setIsOpen(true)
-        }}
-        onFocus={() => {
-          clearCloseTimeout()
-          setIsOpen(true)
-        }}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
       />

@@ -1,9 +1,3 @@
-.super-admin-framework-package-editor {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
 .super-admin-framework-package-editor__fieldset {
   min-width: 0;
 }

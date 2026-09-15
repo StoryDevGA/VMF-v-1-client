@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { WorkflowPolicyListView } from './WorkflowPolicyListView.jsx'
 import { useWorkflowPolicyManagement } from './useWorkflowPolicyManagement.js'
@@ -29,17 +30,14 @@ function SuperAdminWorkflowPolicies() {
   }, [navigate])
 
   return (
-    <section
+    <PageShell
       className="super-admin-workflow-policies container"
       aria-label="Super admin workflow policies"
     >
-      <header className="super-admin-workflow-policies__header">
-        <h1 className="super-admin-workflow-policies__title">Workflow Policies</h1>
-        <p className="super-admin-workflow-policies__subtitle">
-          Govern runtime policy scope, trigger rules, and controlled action decisions from a
-          dedicated Workflow Policy catalogue.
-        </p>
-      </header>
+      <PageHeader
+        title="Workflow Policies"
+        subtitle="Govern runtime policy scope, trigger rules, and controlled action decisions from a dedicated Workflow Policy catalogue."
+      />
 
       <WorkflowPolicyListView
         search={mgmt.search}
@@ -65,7 +63,7 @@ function SuperAdminWorkflowPolicies() {
         onCloneClick={handleCloneClick}
         setWorkflowPolicyStatus={mgmt.setWorkflowPolicyStatus}
       />
-    </section>
+    </PageShell>
   )
 }
 

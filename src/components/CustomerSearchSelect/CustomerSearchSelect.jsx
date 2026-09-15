@@ -2,15 +2,14 @@
  * Searchable multi-select for assigning framework packages to customers.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Badge } from '../Badge'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Spinner } from '../Spinner'
+import { useComboboxSearch } from '../../hooks/useComboboxSearch.js'
 import { useLazyListCustomersQuery } from '../../store/api/customerApi.js'
 import './CustomerSearchSelect.css'
-
-const SEARCH_DEBOUNCE = 300
 
 const normalizeCustomerId = (value) => String(value ?? '').trim()
 const normalizeCustomerIds = (values) =>
@@ -39,13 +38,6 @@ function CustomerSearchSelect({
   error,
   className = '',
 }) {
-  const containerRef = useRef(null)
-  const inputRef = useRef(null)
-  const closeTimeoutRef = useRef(null)
-  const listboxId = `${id}-search-results`
-  const [query, setQuery] = useState('')
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [selectedCustomerCache, setSelectedCustomerCache] = useState({})
 
   const normalizedSelected = useMemo(() => normalizeCustomerIds(selectedIds), [selectedIds])
@@ -82,18 +74,6 @@ function CustomerSearchSelect({
       .slice(0, 50)
   }, [normalizedSelected, normalizedStatus, rows])
 
-  const clearCloseTimeout = useCallback(() => {
-    if (!closeTimeoutRef.current) return
-    clearTimeout(closeTimeoutRef.current)
-    closeTimeoutRef.current = null
-  }, [])
-
-  const closeDropdown = useCallback(() => {
-    clearCloseTimeout()
-    setIsOpen(false)
-    setActiveIndex(-1)
-  }, [clearCloseTimeout])
-
   const triggerCustomerSearch = useCallback(
     async (nextQuery) => {
       await triggerSearch({
@@ -105,51 +85,6 @@ function CustomerSearchSelect({
     },
     [normalizedStatus, triggerSearch],
   )
-
-  useEffect(() => {
-    if (!isOpen || disabled) return undefined
-
-    const handle = setTimeout(() => {
-      triggerCustomerSearch(query)
-    }, SEARCH_DEBOUNCE)
-
-    return () => clearTimeout(handle)
-  }, [disabled, isOpen, query, triggerCustomerSearch])
-
-  useEffect(() => () => {
-    clearCloseTimeout()
-  }, [clearCloseTimeout])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
-
-    const handlePointerDown = (event) => {
-      const container = containerRef.current
-      if (!container || container.contains(event.target)) return
-      closeDropdown()
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('touchstart', handlePointerDown)
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('touchstart', handlePointerDown)
-    }
-  }, [closeDropdown, isOpen])
-
-  const activeOptionId =
-    isOpen && activeIndex >= 0 && availableResults[activeIndex]
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined
-
-  const handleBlur = () => {
-    clearCloseTimeout()
-    closeTimeoutRef.current = setTimeout(() => {
-      closeDropdown()
-      closeTimeoutRef.current = null
-    }, 200)
-  }
 
   const handleAdd = (customer) => {
     const customerId = getCustomerId(customer)
@@ -167,27 +102,28 @@ function CustomerSearchSelect({
     onChange?.(normalizedSelected.filter((value) => value !== customerId))
   }
 
-  const handleKeyDown = (event) => {
-    if (!isOpen) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex((current) =>
-        Math.min(current + 1, Math.max(0, availableResults.length - 1)),
-      )
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((current) => Math.max(current - 1, 0))
-    } else if (event.key === 'Enter') {
-      if (activeIndex >= 0 && availableResults[activeIndex]) {
-        event.preventDefault()
-        handleAdd(availableResults[activeIndex])
-      }
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      closeDropdown()
-    }
-  }
+  const {
+    activeIndex,
+    activeOptionId,
+    closeDropdown,
+    containerRef,
+    handleBlur,
+    handleInputChange,
+    handleInputFocus,
+    handleKeyDown,
+    inputRef,
+    isOpen,
+    listboxId,
+    query,
+    setQuery,
+  } = useComboboxSearch({
+    id,
+    disabled,
+    resultCount: availableResults.length,
+    onSearch: triggerCustomerSearch,
+    searchEnabled: (nextQuery) => Boolean(nextQuery.trim()),
+    onSelectActive: (index) => handleAdd(availableResults[index]),
+  })
 
   const getSelectedLabel = (customerId) => {
     const customer = customerLookup[customerId]
@@ -219,14 +155,8 @@ function CustomerSearchSelect({
         aria-expanded={Boolean(isOpen && !disabled)}
         aria-activedescendant={activeOptionId}
         aria-haspopup="listbox"
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setIsOpen(true)
-        }}
-        onFocus={() => {
-          clearCloseTimeout()
-          setIsOpen(true)
-        }}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
       />

@@ -84,6 +84,16 @@ describe('Tooltip Component', () => {
     expect(getTooltip()).toHaveAttribute('aria-hidden', 'true')
   })
 
+  it('preserves a caller-provided tooltip id', () => {
+    renderTooltip({ id: 'custom-tooltip-id' })
+
+    expect(getTooltip()).toHaveAttribute('id', 'custom-tooltip-id')
+    expect(screen.getByRole('button')).toHaveAttribute(
+      'aria-describedby',
+      'custom-tooltip-id',
+    )
+  })
+
   it('applies position and alignment classes', () => {
     renderTooltip({ position: 'right', align: 'start' })
     const wrapper = screen.getByRole('button').parentElement

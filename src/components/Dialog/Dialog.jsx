@@ -5,9 +5,51 @@
  * with animations, focus management, and responsive design.
  */
 
-import { useRef, useEffect } from 'react'
+import {
+  Children,
+  Fragment,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+} from 'react'
 import { MdClose } from 'react-icons/md'
 import './Dialog.css'
+
+const DialogContext = createContext(null)
+
+function containsDialogHeader(children) {
+  let hasHeader = false
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return
+
+    if (child.type === DialogHeader) {
+      hasHeader = true
+      return
+    }
+
+    if (child.type === Fragment) {
+      hasHeader ||= containsDialogHeader(child.props.children)
+    }
+  })
+
+  return hasHeader
+}
+
+function DialogHeader({ children, className = '', ...props }) {
+  const dialogContext = useContext(DialogContext)
+  const headerId = props.id ?? dialogContext?.titleId
+  const headerClasses = ['dialog__header', className].filter(Boolean).join(' ')
+
+  return (
+    <div className={headerClasses} {...props} {...(headerId ? { id: headerId } : {})}>
+      {children}
+    </div>
+  )
+}
 
 /**
  * Opens a dialog element, falling back to the open attribute when
@@ -78,6 +120,24 @@ export function Dialog({
 }) {
   const dialogRef = useRef(null)
   const backdropPointerDownRef = useRef(false)
+  const generatedTitleId = `dialog-title-${useId().replace(/:/g, '')}`
+  const {
+    'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
+    ...dialogProps
+  } = props
+  const hasHeader = containsDialogHeader(children)
+  const shouldAutoLabelWithHeader = !ariaLabelledBy && !ariaLabel && hasHeader
+  const accessibleNameProps = ariaLabelledBy
+    ? { 'aria-labelledby': ariaLabelledBy }
+    : ariaLabel
+      ? { 'aria-label': ariaLabel }
+      : hasHeader
+        ? { 'aria-labelledby': generatedTitleId }
+        : { 'aria-label': 'Dialog' }
+  const dialogContext = shouldAutoLabelWithHeader
+    ? { titleId: generatedTitleId }
+    : null
 
   // Open/close the dialog when `open` prop changes
   useEffect(() => {
@@ -159,7 +219,8 @@ export function Dialog({
       onPointerDownCapture={handleBackdropPointerDownCapture}
       onClick={handleBackdropClick}
       onCancel={handleCancel}
-      {...props}
+      {...dialogProps}
+      {...accessibleNameProps}
     >
       <div className="dialog__container">
         {showCloseButton && (
@@ -172,24 +233,15 @@ export function Dialog({
             <MdClose size={24} aria-hidden="true" focusable="false" />
           </button>
         )}
-        {children}
+        <DialogContext.Provider value={dialogContext}>
+          {children}
+        </DialogContext.Provider>
       </div>
     </dialog>
   )
 }
 
-/**
- * Dialog Header
- */
-Dialog.Header = function DialogHeader({ children, className = '', ...props }) {
-  const headerClasses = ['dialog__header', className].filter(Boolean).join(' ')
-
-  return (
-    <div className={headerClasses} {...props}>
-      {children}
-    </div>
-  )
-}
+Dialog.Header = DialogHeader
 
 /**
  * Dialog Body

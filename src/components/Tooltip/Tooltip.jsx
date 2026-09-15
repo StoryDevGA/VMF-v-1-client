@@ -30,7 +30,8 @@ export function Tooltip({
   className = '',
   id
 }) {
-  const tooltipId = id || useId()
+  const generatedTooltipId = useId()
+  const tooltipId = id || generatedTooltipId
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
   const isControlled = open !== undefined
   const isOpen = isControlled ? open : uncontrolledOpen
@@ -59,6 +60,8 @@ export function Tooltip({
 
   const child = Children.only(children)
 
+  // cloneElement keeps aria-describedby on the actual focusable trigger.
+  // eslint-disable-next-line react-hooks/refs -- cloneElement does not read the child's ref
   const enhancedChild = cloneElement(child, {
     'aria-describedby': content ? tooltipId : undefined,
     onMouseEnter: (event) => {

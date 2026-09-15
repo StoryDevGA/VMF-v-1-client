@@ -4,23 +4,6 @@
   padding-block: var(--spacing-xl);
 }
 
-.super-admin-denied-logs__header {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.super-admin-denied-logs__title {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-2xl);
-  line-height: var(--line-height-tight);
-}
-
-.super-admin-denied-logs__subtitle {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
 .super-admin-denied-logs__fieldset {
   width: 100%;
   min-width: 0;

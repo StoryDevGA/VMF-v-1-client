@@ -1,4 +1,5 @@
 import { useAuditLogManagement } from './useAuditLogManagement.js'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { AuditLogListView } from './AuditLogListView.jsx'
 import { AuditLogToolsView } from './AuditLogToolsView.jsx'
 import './SuperAdminAuditLogs.css'
@@ -7,13 +8,11 @@ function SuperAdminAuditLogs() {
   const mgmt = useAuditLogManagement()
 
   return (
-    <section className="super-admin-audit-logs container" aria-label="Super admin audit logs">
-      <header className="super-admin-audit-logs__header">
-        <h1 className="super-admin-audit-logs__title">Audit Logs Explorer</h1>
-        <p className="super-admin-audit-logs__subtitle">
-          Query audit trails, correlate by request/resource, and verify integrity.
-        </p>
-      </header>
+    <PageShell className="super-admin-audit-logs container" aria-label="Super admin audit logs">
+      <PageHeader
+        title="Audit Logs Explorer"
+        subtitle="Query audit trails, correlate by request/resource, and verify integrity."
+      />
 
       <AuditLogListView
         filters={mgmt.filters}
@@ -47,7 +46,7 @@ function SuperAdminAuditLogs() {
         verifyIntegrityResult={mgmt.verifyIntegrityResult}
         handleVerifyIntegrity={mgmt.handleVerifyIntegrity}
       />
-    </section>
+    </PageShell>
   )
 }
 

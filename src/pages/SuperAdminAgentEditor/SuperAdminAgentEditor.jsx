@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Card } from '../../components/Card'
 import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
@@ -608,19 +609,14 @@ function SuperAdminAgentEditor() {
   }
 
   return (
-    <section
+    <PageShell
       className="super-admin-agents super-admin-agent-editor container"
       aria-label="Super admin runtime agent editor"
     >
-      <header className="super-admin-agents__header">
-        <h1 className="super-admin-agents__title">
-          {isEditMode ? 'Agent Editor' : isCloneMode ? 'Clone Agent' : 'Create Agent'}
-        </h1>
-        <p className="super-admin-agents__subtitle">
-          Govern runtime agents, control their availability, and define the framework and skill
-          metadata that downstream Runtime Control modules depend on.
-        </p>
-      </header>
+      <PageHeader
+        title={isEditMode ? 'Agent Editor' : isCloneMode ? 'Clone Agent' : 'Create Agent'}
+        subtitle="Govern runtime agents, control their availability, and define the framework and skill metadata that downstream Runtime Control modules depend on."
+      />
 
       <Fieldset className="super-admin-agent-editor__fieldset">
         <Fieldset.Legend className="sr-only">Runtime agent editor</Fieldset.Legend>
@@ -779,7 +775,7 @@ function SuperAdminAgentEditor() {
           </Button>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

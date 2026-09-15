@@ -1,9 +1,3 @@
-.super-admin-skill-editor {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
 .super-admin-skill-editor__fieldset {
   min-width: 0;
 }

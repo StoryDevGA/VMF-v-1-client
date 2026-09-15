@@ -9,6 +9,7 @@ import { Status } from '../../components/Status'
 import { Table } from '../../components/Table'
 import { Tooltip } from '../../components/Tooltip'
 import { UserTrustStatus } from '../../components/UserTrustStatus'
+import { PageHeader } from '../../components/PageShell'
 import { MdInfoOutline } from 'react-icons/md'
 import {
   USER_ROLE_FILTER_OPTIONS,
@@ -204,13 +205,11 @@ export function CustomerUsersWorkspace({
 
   return (
     <>
-      <header className="super-admin-customers__header">
-        <h2 className="super-admin-customers__title">Customer Users</h2>
-        <p className="super-admin-customers__subtitle">
-          View users, trust state, and customer-role assignments for{' '}
-          <strong>{customer?.name ?? '--'}</strong>.
-        </p>
-      </header>
+      <PageHeader
+        title="Customer Users"
+        subtitle={<>View users, trust state, and customer-role assignments for <strong>{customer?.name ?? '--'}</strong>.</>}
+        titleAs="h2"
+      />
 
       <Fieldset className="super-admin-customers__fieldset">
         <Fieldset.Legend className="sr-only">Customer users</Fieldset.Legend>

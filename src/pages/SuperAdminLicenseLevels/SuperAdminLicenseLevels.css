@@ -1,21 +1,8 @@
-.super-admin-license-levels {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
-.super-admin-license-levels__header {
-  display: grid;
-  gap: var(--spacing-xs);
-}
-
-.super-admin-license-levels__title,
 .super-admin-license-levels__section-title,
 .super-admin-license-levels__dialog-title {
   margin: 0;
 }
 
-.super-admin-license-levels__subtitle,
 .super-admin-license-levels__pagination-info,
 .super-admin-license-levels__muted {
   margin: 0;

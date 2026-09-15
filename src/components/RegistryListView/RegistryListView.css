@@ -1,0 +1,68 @@
+.registry-list-view__fieldset,
+.registry-list-view__card {
+  height: 100%;
+}
+
+.registry-list-view__card-body {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.registry-list-view__card-body--compact {
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.registry-list-view__catalogue-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.registry-list-view__toolbar {
+  display: grid;
+  align-items: end;
+  gap: var(--spacing-sm);
+}
+
+.registry-list-view__error,
+.registry-list-view__table-note,
+.registry-list-view__pagination-info,
+.registry-list-view__muted {
+  margin: 0;
+}
+
+.registry-list-view__error {
+  color: var(--color-danger);
+}
+
+.registry-list-view__table-note,
+.registry-list-view__pagination-info,
+.registry-list-view__muted {
+  color: var(--color-text-secondary);
+}
+
+.registry-list-view__table-wrap {
+  margin-top: 0;
+}
+
+.registry-list-view__pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.registry-list-view__pagination-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1023px) {
+  .registry-list-view__toolbar {
+    grid-template-columns: 1fr;
+  }
+}

@@ -5,6 +5,7 @@
  */
 
 import { useLicenseLevelManagement } from './useLicenseLevelManagement.js'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { LicenseLevelListView } from './LicenseLevelListView.jsx'
 import { CreateDialog, EditDialog } from './LicenseLevelDialogs.jsx'
 import './SuperAdminLicenseLevels.css'
@@ -13,16 +14,14 @@ function SuperAdminLicenseLevels() {
   const mgmt = useLicenseLevelManagement()
 
   return (
-    <section
+    <PageShell
       className="super-admin-license-levels container"
       aria-label="Super admin licence levels"
     >
-      <header className="super-admin-license-levels__header">
-        <h1 className="super-admin-license-levels__title">Licence Levels</h1>
-        <p className="super-admin-license-levels__subtitle">
-          Define reusable licence tiers here. Assign them to customers during customer creation or update.
-        </p>
-      </header>
+      <PageHeader
+        title="Licence Levels"
+        subtitle="Define reusable licence tiers here. Assign them to customers during customer creation or update."
+      />
 
       <p className="super-admin-license-levels__hint" role="status">
         Licence levels are catalogue items — create them independently, then select
@@ -69,7 +68,7 @@ function SuperAdminLicenseLevels() {
         isFetchingSelected={mgmt.isFetchingSelected}
         selectedAppError={mgmt.selectedAppError}
       />
-    </section>
+    </PageShell>
   )
 }
 

@@ -10,6 +10,7 @@ import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Spinner } from '../../components/Spinner'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { ConfirmDeleteRoleDialog, CreateRoleDialog, EditRoleDialog } from './RoleDialogs.jsx'
 import { PermissionMatrix } from './PermissionMatrix.jsx'
 import { SUPER_ADMIN_LOCKED_PERMISSION_KEYS } from './permissionCatalogue.constants.js'
@@ -28,13 +29,11 @@ function SuperAdminRoles() {
   const matrix = usePermissionMatrix()
 
   return (
-    <section className="super-admin-roles container" aria-label="Super admin roles">
-      <header className="super-admin-roles__header">
-        <h1 className="super-admin-roles__title">Role Permissions</h1>
-        <p className="super-admin-roles__subtitle">
-          Review seeded and custom role definitions through a single permission matrix.
-        </p>
-      </header>
+    <PageShell className="super-admin-roles container" aria-label="Super admin roles">
+      <PageHeader
+        title="Role Permissions"
+        subtitle="Review seeded and custom role definitions through a single permission matrix."
+      />
 
       <Fieldset className="super-admin-roles__fieldset">
         <Fieldset.Legend className="sr-only">Role permission matrix</Fieldset.Legend>
@@ -138,7 +137,7 @@ function SuperAdminRoles() {
         role={mgmt.roleToDelete}
         isLoading={mgmt.deleteResult.isLoading}
       />
-    </section>
+    </PageShell>
   )
 }
 

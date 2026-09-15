@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { TestRuntimeAgentDialog } from './RuntimeAgentDialogs.jsx'
 import { RuntimeAgentListView } from './RuntimeAgentListView.jsx'
@@ -32,14 +33,11 @@ function SuperAdminAgents() {
   )
 
   return (
-    <section className="super-admin-agents container" aria-label="Super admin runtime agents">
-      <header className="super-admin-agents__header">
-        <h1 className="super-admin-agents__title">Agents</h1>
-        <p className="super-admin-agents__subtitle">
-          Register runtime agents, control their availability, and define the framework and
-          skill metadata that downstream Runtime Control modules depend on.
-        </p>
-      </header>
+    <PageShell className="super-admin-agents container" aria-label="Super admin runtime agents">
+      <PageHeader
+        title="Agents"
+        subtitle="Register runtime agents, control their availability, and define the framework and skill metadata that downstream Runtime Control modules depend on."
+      />
 
       <RuntimeAgentListView
         search={mgmt.search}
@@ -77,7 +75,7 @@ function SuperAdminAgents() {
         frameworkOptions={mgmt.activeFrameworkOptions}
         onSubmit={mgmt.handleTestSubmit}
       />
-    </section>
+    </PageShell>
   )
 }
 

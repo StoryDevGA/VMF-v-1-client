@@ -4,6 +4,7 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
@@ -550,13 +551,11 @@ function SuperAdminRuntimePathRegistryEditor() {
   }
 
   return (
-    <section className="super-admin-runtime-path-registry container" aria-label="Runtime path editor">
-      <header className="super-admin-runtime-path-registry__header">
-        <h1 className="super-admin-runtime-path-registry__title">{pageTitle}</h1>
-        <p className="super-admin-runtime-path-registry__subtitle">
-          Maintain governed state addresses used by skills, agents, validations, and workflow policies.
-        </p>
-      </header>
+    <PageShell className="super-admin-runtime-path-registry container" aria-label="Runtime path editor">
+      <PageHeader
+        title={pageTitle}
+        subtitle="Maintain governed state addresses used by skills, agents, validations, and workflow policies."
+      />
 
       <Fieldset className="super-admin-runtime-path-registry__fieldset">
         <Fieldset.Legend className="sr-only">Runtime path editor</Fieldset.Legend>
@@ -1063,7 +1062,7 @@ function SuperAdminRuntimePathRegistryEditor() {
           </Card.Body>
         </Card>
       </Fieldset>
-    </section>
+    </PageShell>
   )
 }
 

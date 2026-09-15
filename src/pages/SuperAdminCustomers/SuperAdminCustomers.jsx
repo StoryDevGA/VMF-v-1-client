@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { PageShell } from '../../components/PageShell'
 import { TabView } from '../../components/TabView'
 import { useToaster } from '../../components/Toaster'
 import { SuperAdminInvitationsPanel } from '../SuperAdminInvitations/SuperAdminInvitations.jsx'
@@ -333,7 +334,7 @@ function SuperAdminCustomers() {
   }, [updateWorkspaceView])
 
   return (
-    <section className="super-admin-customer-admin container" aria-label="Customer admin workspace">
+    <PageShell className="super-admin-customer-admin container" aria-label="Customer admin workspace">
       <h1 className="sr-only">Customer Admin</h1>
 
       <TabView
@@ -353,7 +354,7 @@ function SuperAdminCustomers() {
           />
         </TabView.Tab>
       </TabView>
-    </section>
+    </PageShell>
   )
 }
 

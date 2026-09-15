@@ -1,35 +1,7 @@
-.super-admin-skills__fieldset,
-.super-admin-skills__card {
-  height: 100%;
-}
-
-.super-admin-skills__card-body {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.super-admin-skills__card-body--compact {
-  padding: var(--spacing-sm) var(--spacing-md);
-}
-
-.super-admin-skills__catalogue-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--spacing-xs);
-  flex-wrap: wrap;
-}
-
 .super-admin-skills__toolbar {
-  display: grid;
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px);
-  align-items: end;
-  gap: var(--spacing-sm);
 }
 
-.super-admin-skills__table-note,
-.super-admin-skills__pagination-info,
-.super-admin-skills__muted,
 .super-admin-skills__skill-key {
   margin: 0;
   color: var(--color-text-secondary);
@@ -95,10 +67,6 @@
   min-width: 120px;
 }
 
-.super-admin-skills__table-wrap {
-  margin-top: 0;
-}
-
 .super-admin-skills__table {
   min-width: 1068px;
 }
@@ -108,20 +76,6 @@
   .super-admin-skills__table .table__cell {
     padding-inline: var(--spacing-sm);
   }
-}
-
-.super-admin-skills__pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.super-admin-skills__pagination-controls {
-  display: flex;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
 }
 
 @media (max-width: 1023px) {

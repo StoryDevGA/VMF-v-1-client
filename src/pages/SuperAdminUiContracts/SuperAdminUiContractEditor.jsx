@@ -7,6 +7,7 @@ import { Dialog } from '../../components/Dialog'
 import { Fieldset } from '../../components/Fieldset'
 import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { TabView } from '../../components/TabView'
@@ -762,15 +763,11 @@ function SuperAdminUiContractEditor() {
   }
 
   return (
-    <section className="super-admin-ui-contracts container" aria-label="UI Contract editor">
-      <header className="super-admin-ui-contracts__header">
-        <h1 className="super-admin-ui-contracts__title">
-          {isCloneMode ? 'Clone UI Contract' : isEditMode ? 'UI Contract Editor' : 'Create UI Contract'}
-        </h1>
-        <p className="super-admin-ui-contracts__subtitle">
-          Configure package-synced presentation controls for runtime sections, lifecycle stages, and governed actions.
-        </p>
-      </header>
+    <PageShell className="super-admin-ui-contracts container" aria-label="UI Contract editor">
+      <PageHeader
+        title={isCloneMode ? 'Clone UI Contract' : isEditMode ? 'UI Contract Editor' : 'Create UI Contract'}
+        subtitle="Configure package-synced presentation controls for runtime sections, lifecycle stages, and governed actions."
+      />
 
       <Fieldset>
         <Fieldset.Legend className="sr-only">UI Contract editor</Fieldset.Legend>
@@ -1231,7 +1228,7 @@ function SuperAdminUiContractEditor() {
           <Button type="button" variant="primary" size="sm" onClick={saveActionDraft}>Save Action</Button>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

@@ -1,20 +1,7 @@
-.super-admin-audit-logs {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
-.super-admin-audit-logs__header {
-  display: grid;
-  gap: var(--spacing-xs);
-}
-
-.super-admin-audit-logs__title,
 .super-admin-audit-logs__section-title {
   margin: 0;
 }
 
-.super-admin-audit-logs__subtitle,
 .super-admin-audit-logs__table-note,
 .super-admin-audit-logs__pagination-info,
 .super-admin-audit-logs__muted,

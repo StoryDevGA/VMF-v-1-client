@@ -69,6 +69,61 @@ describe('Dialog Component', () => {
 
       expect(container.querySelector('dialog')).toHaveClass('custom-dialog')
     })
+
+    it('should associate the dialog with its header for an accessible name', () => {
+      const { container } = render(
+        <Dialog open={false}>
+          <Dialog.Header>Workspace settings</Dialog.Header>
+          <Dialog.Body>Dialog content</Dialog.Body>
+        </Dialog>
+      )
+
+      const dialog = container.querySelector('dialog')
+      const header = container.querySelector('.dialog__header')
+
+      expect(dialog).toHaveAttribute('aria-labelledby', header.id)
+      expect(header.id).toMatch(/^dialog-title-r/)
+      expect(dialog).not.toHaveAttribute('aria-label')
+    })
+
+    it('should provide a fallback accessible name when no header is rendered', () => {
+      const { container } = render(
+        <Dialog open={false}>
+          <Dialog.Body>Dialog content</Dialog.Body>
+        </Dialog>
+      )
+
+      const dialog = container.querySelector('dialog')
+
+      expect(dialog).toHaveAttribute('aria-label', 'Dialog')
+      expect(dialog).not.toHaveAttribute('aria-labelledby')
+    })
+
+    it('should preserve an explicit accessible name', () => {
+      const { container } = render(
+        <Dialog open={false} aria-label="Delete workspace">
+          <Dialog.Header>Delete workspace</Dialog.Header>
+        </Dialog>
+      )
+
+      const dialog = container.querySelector('dialog')
+
+      expect(dialog).toHaveAttribute('aria-label', 'Delete workspace')
+      expect(dialog).not.toHaveAttribute('aria-labelledby')
+    })
+
+    it('should preserve an explicit labelled-by reference', () => {
+      const { container } = render(
+        <Dialog open={false} aria-labelledby="custom-dialog-title">
+          <Dialog.Header>Delete workspace</Dialog.Header>
+        </Dialog>
+      )
+
+      const dialog = container.querySelector('dialog')
+
+      expect(dialog).toHaveAttribute('aria-labelledby', 'custom-dialog-title')
+      expect(dialog).not.toHaveAttribute('aria-label')
+    })
   })
 
   // ===========================

@@ -7,6 +7,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ConfirmationDialog } from '../../components/ConfirmationDialog'
 import { Fieldset } from '../../components/Fieldset'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Input } from '../../components/Input'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
@@ -3033,18 +3034,14 @@ function WorkflowPolicyEditor() {
   )
 
   return (
-    <section
+    <PageShell
       className="super-admin-workflow-policy-editor container"
       aria-label="Workflow policy editor"
     >
-      <header className="super-admin-workflow-policy-editor__header">
-        <h1 className="super-admin-workflow-policy-editor__title">
-          {isEditMode ? 'Workflow Policy Editor' : isCloneMode ? 'Clone Workflow Policy' : 'Create Workflow Policy'}
-        </h1>
-        <p className="super-admin-workflow-policy-editor__subtitle">
-          Configure workflow policy foundations, governed FRAMEWORK_STATE conditions, routed execution, outcome effects, escalation controls, and promotion metadata.
-        </p>
-      </header>
+      <PageHeader
+        title={isEditMode ? 'Workflow Policy Editor' : isCloneMode ? 'Clone Workflow Policy' : 'Create Workflow Policy'}
+        subtitle="Configure workflow policy foundations, governed FRAMEWORK_STATE conditions, routed execution, outcome effects, escalation controls, and promotion metadata."
+      />
 
       <Fieldset className="super-admin-workflow-policy-editor__fieldset">
         <Fieldset.Legend className="sr-only">Workflow policy editor</Fieldset.Legend>
@@ -3452,7 +3449,7 @@ function WorkflowPolicyEditor() {
         onCancel={handleCancelDiscardChanges}
         onConfirm={handleConfirmDiscardChanges}
       />
-    </section>
+    </PageShell>
   )
 }
 

@@ -5,6 +5,7 @@
  */
 
 import { useInvitationManagement } from './useInvitationManagement.js'
+import { PageHeader } from '../../components/PageShell'
 import { InvitationListView } from './InvitationListView.jsx'
 import { ResendDialog, RevokeDialog, AuthLinkDialog } from './InvitationDialogs.jsx'
 import './SuperAdminInvitations.css'
@@ -22,7 +23,6 @@ export function SuperAdminInvitationsPanel({
   headingLevel = 2,
   embedded = false,
 }) {
-  const HeadingTag = headingLevel === 1 ? 'h1' : 'h2'
   const panelClasses = [
     'super-admin-invitations',
     embedded && 'super-admin-invitations--embedded',
@@ -34,12 +34,11 @@ export function SuperAdminInvitationsPanel({
 
   return (
     <div className={panelClasses}>
-      <header className="super-admin-invitations__header">
-        <HeadingTag className="super-admin-invitations__title">Invitation Management</HeadingTag>
-        <p className="super-admin-invitations__subtitle">
-          Invitation Management - Track, resend, and revoke customer onboarding invitations.
-        </p>
-      </header>
+      <PageHeader
+        title="Invitation Management"
+        subtitle="Invitation Management - Track, resend, and revoke customer onboarding invitations."
+        titleAs={headingLevel === 1 ? 'h1' : 'h2'}
+      />
 
       <InvitationListView
         search={mgmt.search}

@@ -5,6 +5,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Fieldset } from '../../components/Fieldset'
 import { Input } from '../../components/Input'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Tickbox } from '../../components/Tickbox'
@@ -1617,19 +1618,14 @@ function SuperAdminSkillEditor() {
   }
 
   return (
-    <section
+    <PageShell
       className="super-admin-skills super-admin-skill-editor container"
       aria-label="Super admin skill editor"
     >
-      <header className="super-admin-skills__header">
-        <h1 className="super-admin-skills__title">
-          {isEditMode ? 'Skill Editor' : isCloneMode ? 'Clone Skill' : 'Create Skill'}
-        </h1>
-        <p className="super-admin-skills__subtitle">
-          Register reusable runtime skills, control their availability, and align framework
-          compatibility before packages and workflow policies reference them.
-        </p>
-      </header>
+      <PageHeader
+        title={isEditMode ? 'Skill Editor' : isCloneMode ? 'Clone Skill' : 'Create Skill'}
+        subtitle="Register reusable runtime skills, control their availability, and align framework compatibility before packages and workflow policies reference them."
+      />
 
       <Fieldset className="super-admin-skills__fieldset super-admin-skill-editor__fieldset">
         <Fieldset.Legend className="sr-only">Runtime skill editor</Fieldset.Legend>
@@ -1664,7 +1660,7 @@ function SuperAdminSkillEditor() {
           />
         ) : null}
       </Fieldset>
-    </section>
+    </PageShell>
   )
 }
 

@@ -25,13 +25,12 @@
  * @param {Record<string, {name?: string, email?: string, roles?: Array<string>, isActive?: boolean}>} [props.selectedUsers={}] — preloaded selected-user display data
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo, useId } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useLazyListUsersQuery } from '../../store/api/userApi.js'
+import { useComboboxSearch } from '../../hooks/useComboboxSearch.js'
 import { Spinner } from '../Spinner'
 import './UserSearchSelect.css'
 
-/** Debounce delay for search input (ms) */
-const SEARCH_DEBOUNCE = 300
 const getUserId = (user) => String(user?._id ?? user?.id ?? '').trim()
 const getUserRoles = (user) => user?.memberships?.[0]?.roles ?? []
 
@@ -55,16 +54,7 @@ function UserSearchSelect({
   selectedUsers = {},
   showSelectedUsers = true,
 }) {
-  const instanceId = useId()
-  const inputId = `${instanceId}-search-input`
-  const listboxId = `${instanceId}-search-results`
-
-  const [query, setQuery] = useState('')
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
   const [removalBlocked, setRemovalBlocked] = useState(null)
-  const containerRef = useRef(null)
-  const inputRef = useRef(null)
   const normalizedMaxSelections =
     Number.isFinite(maxSelections) && maxSelections > 0 ? maxSelections : Number.POSITIVE_INFINITY
   const isSelectionLocked =
@@ -76,28 +66,6 @@ function UserSearchSelect({
   const [triggerSearch, { data: searchData, isFetching: isSearching }] =
     useLazyListUsersQuery()
 
-  /* ---- Debounced search ---- */
-  useEffect(() => {
-    if (!query.trim() || !customerId) return
-
-    const timer = setTimeout(() => {
-      triggerSearch({
-        customerId,
-        q: query.trim(),
-        page: 1,
-        pageSize: 20,
-      })
-    }, SEARCH_DEBOUNCE)
-
-    return () => clearTimeout(timer)
-  }, [query, customerId, triggerSearch])
-
-  useEffect(() => {
-    if (!isSelectionLocked) return
-    setIsOpen(false)
-    setQuery('')
-  }, [isSelectionLocked])
-
   /* ---- Parse search results ---- */
   const searchResults = useMemo(() => {
     const users = searchData?.data?.users ?? []
@@ -107,21 +75,53 @@ function UserSearchSelect({
     })
   }, [searchData, selectedIds])
 
-  /* ---- Reset active index when results change ---- */
-  useEffect(() => {
-    setActiveIndex(-1)
-  }, [searchResults])
+  const triggerUserSearch = useCallback((nextQuery) => {
+    if (!customerId) return undefined
+    return triggerSearch({
+      customerId,
+      q: String(nextQuery ?? '').trim(),
+      page: 1,
+      pageSize: 20,
+    })
+  }, [customerId, triggerSearch])
 
-  /* ---- Close dropdown on outside click ---- */
+  const shouldSearch = useCallback(
+    (nextQuery) => Boolean(nextQuery.trim() && customerId),
+    [customerId],
+  )
+
+  const {
+    activeIndex,
+    activeOptionId,
+    closeDropdown,
+    containerRef,
+    handleInputChange,
+    handleInputFocus,
+    handleKeyDown,
+    inputId,
+    inputRef,
+    isOpen,
+    listboxId,
+    query,
+    resetSearch,
+    setQuery,
+  } = useComboboxSearch({
+    disabled: disabled || isSelectionLocked,
+    resultCount: searchResults.length,
+    onSearch: triggerUserSearch,
+    searchEnabled: shouldSearch,
+    closeOnBlur: false,
+    clearQueryOnEscape: true,
+    wrapNavigation: true,
+    openOnFocus: (nextQuery) => Boolean(nextQuery.trim()),
+    onInputChange: () => setRemovalBlocked(null),
+    onSelectActive: (index) => handleSelectUser(searchResults[index]),
+  })
+
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    if (!isSelectionLocked) return
+    resetSearch()
+  }, [isSelectionLocked, resetSearch])
 
   /* ---- Auto-clear removalBlocked when conditions change ---- */
   useEffect(() => {
@@ -173,23 +173,7 @@ function UserSearchSelect({
 
   /* ---- Handlers ---- */
 
-  const handleInputChange = useCallback((e) => {
-    if (isSelectionLocked) return
-    setQuery(e.target.value)
-    setIsOpen(true)
-    setActiveIndex(-1)
-    setRemovalBlocked(null)
-  }, [isSelectionLocked])
-
-  const handleInputFocus = useCallback(() => {
-    if (isSelectionLocked) return
-    if (query.trim()) {
-      setIsOpen(true)
-    }
-  }, [isSelectionLocked, query])
-
-  const handleSelectUser = useCallback(
-    (user) => {
+  function handleSelectUser(user) {
       const userId = getUserId(user)
       if (!userId) return
       if (selectedIds.includes(userId)) return
@@ -216,12 +200,9 @@ function UserSearchSelect({
         },
       })
       setQuery('')
-      setIsOpen(false)
-      setActiveIndex(-1)
+      closeDropdown()
       inputRef.current?.focus()
-    },
-    [normalizedMaxSelections, onChange, selectedIds],
-  )
+  }
 
   const handleRemoveUser = useCallback(
     (userId) => {
@@ -234,37 +215,6 @@ function UserSearchSelect({
       onChange(selectedIds.filter((id) => id !== userId))
     },
     [allowTemporaryEmptySelection, selectedIds, minRequired, onChange],
-  )
-
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false)
-        setQuery('')
-        setActiveIndex(-1)
-        return
-      }
-
-      if (!isOpen || searchResults.length === 0) return
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setActiveIndex((prev) =>
-          prev < searchResults.length - 1 ? prev + 1 : 0,
-        )
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setActiveIndex((prev) =>
-          prev > 0 ? prev - 1 : searchResults.length - 1,
-        )
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        if (activeIndex >= 0 && activeIndex < searchResults.length) {
-          handleSelectUser(searchResults[activeIndex])
-        }
-      }
-    },
-    [isOpen, searchResults, activeIndex, handleSelectUser],
   )
 
   /* ---- Compute display name for selected IDs ---- */
@@ -291,12 +241,6 @@ function UserSearchSelect({
     if (!removalBlocked) return false
     return selectedIds.length <= minRequired
   }, [removalBlocked, selectedIds, minRequired])
-
-  /* ---- Active descendant ID for aria ---- */
-  const activeDescendantId =
-    activeIndex >= 0 && activeIndex < searchResults.length
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined
 
   const containerClasses = [
     'user-search-select',
@@ -382,7 +326,7 @@ function UserSearchSelect({
           aria-expanded={isOpen}
           aria-haspopup="listbox"
           aria-controls={listboxId}
-          aria-activedescendant={activeDescendantId}
+          aria-activedescendant={activeOptionId}
         />
         {isSearching && (
           <span className="user-search-select__spinner" aria-hidden="true">

@@ -4,23 +4,6 @@
   padding-block: var(--spacing-xl);
 }
 
-.super-admin-system-versioning__header {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.super-admin-system-versioning__title {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-2xl);
-  line-height: var(--line-height-tight);
-}
-
-.super-admin-system-versioning__subtitle {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
 .super-admin-system-versioning__grid {
   display: grid;
   gap: var(--spacing-lg);

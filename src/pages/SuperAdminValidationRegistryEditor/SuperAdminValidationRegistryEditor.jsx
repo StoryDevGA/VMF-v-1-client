@@ -9,6 +9,7 @@ import { Select } from '../../components/Select'
 import { Spinner } from '../../components/Spinner'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { useToaster } from '../../components/Toaster'
 import RuntimePathSearchSelect from '../../components/RuntimePathSearchSelect/RuntimePathSearchSelect.jsx'
 import {
@@ -743,13 +744,11 @@ function SuperAdminValidationRegistryEditor() {
   const headline = isCloneMode ? 'Clone Validation' : (isEditMode ? 'Edit Validation' : 'Create Validation')
 
   return (
-    <section className="super-admin-validation-registry super-admin-validation-registry-editor container" aria-label="Super admin validation registry editor">
-      <header className="super-admin-validation-registry__header super-admin-validation-registry-editor__header">
-        <h1 className="super-admin-validation-registry__title super-admin-validation-registry-editor__title">{headline}</h1>
-        <p className="super-admin-validation-registry__subtitle super-admin-validation-registry-editor__subtitle">
-          Define governed validation checks used by workflow policies.
-        </p>
-      </header>
+    <PageShell className="super-admin-validation-registry super-admin-validation-registry-editor container" aria-label="Super admin validation registry editor">
+      <PageHeader
+        title={headline}
+        subtitle="Define governed validation checks used by workflow policies."
+      />
 
       <Card variant="elevated" className="super-admin-validation-registry__card super-admin-validation-registry-editor__card">
         <Card.Body className="super-admin-validation-registry__card-body super-admin-validation-registry__card-body--compact super-admin-validation-registry-editor__card-body super-admin-validation-registry-editor__card-body--compact">
@@ -1474,7 +1473,7 @@ function SuperAdminValidationRegistryEditor() {
           )}
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

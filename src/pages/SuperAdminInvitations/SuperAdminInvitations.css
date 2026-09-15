@@ -9,32 +9,6 @@
   padding-block: 0;
 }
 
-.super-admin-invitations--embedded .super-admin-invitations__header {
-  gap: var(--spacing-xs);
-}
-
-.super-admin-invitations--embedded .super-admin-invitations__title {
-  font-size: var(--font-size-xl);
-  line-height: var(--line-height-normal);
-}
-
-.super-admin-invitations__header {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.super-admin-invitations__title {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-2xl);
-  line-height: var(--line-height-tight);
-}
-
-.super-admin-invitations__subtitle {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
 .super-admin-invitations__grid {
   display: grid;
   gap: var(--spacing-lg);
@@ -160,9 +134,6 @@
 }
 
 @media (min-width: 1280px) {
-  .super-admin-invitations--embedded .super-admin-invitations__title {
-    font-size: var(--font-size-2xl);
-  }
 }
 
 @media (max-width: 768px) {

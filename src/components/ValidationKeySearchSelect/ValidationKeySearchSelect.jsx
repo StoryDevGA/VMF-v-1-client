@@ -9,15 +9,14 @@
  * - Existing legacy selections (missing from registry) remain visible as "LEGACY".
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Badge } from '../Badge'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Spinner } from '../Spinner'
+import { useComboboxSearch } from '../../hooks/useComboboxSearch.js'
 import { useLazyListValidationRegistryQuery } from '../../store/api/runtimeControlApi.js'
 import './ValidationKeySearchSelect.css'
-
-const SEARCH_DEBOUNCE = 300
 
 const normalizeKey = (value) => String(value ?? '').trim().toLowerCase()
 const normalizeKeys = (values) =>
@@ -45,14 +44,6 @@ function ValidationKeySearchSelect({
   error,
   className = '',
 }) {
-  const containerRef = useRef(null)
-  const inputRef = useRef(null)
-  const listboxId = `${id}-search-results`
-  const [query, setQuery] = useState('')
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(-1)
-  const closeTimeoutRef = useRef(null)
-
   const normalizedSelected = useMemo(() => normalizeKeys(selectedKeys), [selectedKeys])
   const normalizedFrameworkKeys = useMemo(
     () => [...new Set((Array.isArray(frameworkKeys) ? frameworkKeys : [])
@@ -63,11 +54,11 @@ function ValidationKeySearchSelect({
 
   const [triggerSearch, { data: searchData, isFetching: isSearching }] =
     useLazyListValidationRegistryQuery()
-  const results = Array.isArray(searchData?.data?.data)
-    ? searchData.data.data
-    : Array.isArray(searchData?.data)
-      ? searchData.data
-      : []
+  const results = useMemo(() => {
+    if (Array.isArray(searchData?.data?.data)) return searchData.data.data
+    if (Array.isArray(searchData?.data)) return searchData.data
+    return []
+  }, [searchData])
 
   const resolvedByKey = useMemo(() => {
     const map = new Map()
@@ -104,18 +95,6 @@ function ValidationKeySearchSelect({
       .slice(0, 50)
   }, [normalizedSelected, results])
 
-  const clearCloseTimeout = useCallback(() => {
-    if (!closeTimeoutRef.current) return
-    clearTimeout(closeTimeoutRef.current)
-    closeTimeoutRef.current = null
-  }, [])
-
-  const closeDropdown = useCallback(() => {
-    clearCloseTimeout()
-    setIsOpen(false)
-    setActiveIndex(-1)
-  }, [clearCloseTimeout])
-
   const triggerValidationSearch = useCallback(async (nextQuery) => {
     await triggerSearch({
       page: 1,
@@ -130,16 +109,6 @@ function ValidationKeySearchSelect({
   }, [normalizedFrameworkKeys, triggerSearch])
 
   useEffect(() => {
-    if (!isOpen || disabled) return undefined
-
-    const handle = setTimeout(() => {
-      triggerValidationSearch(query)
-    }, SEARCH_DEBOUNCE)
-
-    return () => clearTimeout(handle)
-  }, [disabled, isOpen, query, triggerValidationSearch])
-
-  useEffect(() => {
     if (disabled) return
     if (normalizedSelected.length === 0) return
 
@@ -149,45 +118,6 @@ function ValidationKeySearchSelect({
       keys: normalizedSelected.join(','),
     })
   }, [disabled, normalizedSelected, triggerResolve])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
-
-    const handlePointerDown = (event) => {
-      const container = containerRef.current
-      if (!container) return
-      if (container.contains(event.target)) return
-      closeDropdown()
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('touchstart', handlePointerDown)
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('touchstart', handlePointerDown)
-    }
-  }, [closeDropdown, isOpen])
-
-  useEffect(() => () => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
-  }, [])
-
-  const handleBlur = () => {
-    clearCloseTimeout()
-    closeTimeoutRef.current = setTimeout(() => {
-      closeDropdown()
-      closeTimeoutRef.current = null
-    }, 200)
-  }
-
-  const activeOptionId =
-    isOpen && activeIndex >= 0 && availableResults[activeIndex]
-      ? `${listboxId}-option-${activeIndex}`
-      : undefined
 
   const handleAdd = (validationKey) => {
     const normalized = normalizeKey(validationKey)
@@ -207,27 +137,27 @@ function ValidationKeySearchSelect({
     onChange?.(next)
   }
 
-  const handleKeyDown = (event) => {
-    if (!isOpen) return
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActiveIndex((current) =>
-        Math.min(current + 1, Math.max(0, availableResults.length - 1)),
-      )
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((current) => Math.max(current - 1, 0))
-    } else if (event.key === 'Enter') {
-      if (activeIndex >= 0 && availableResults[activeIndex]) {
-        event.preventDefault()
-        handleAdd(availableResults[activeIndex].key)
-      }
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      closeDropdown()
-    }
-  }
+  const {
+    activeIndex,
+    activeOptionId,
+    closeDropdown,
+    containerRef,
+    handleBlur,
+    handleInputChange,
+    handleInputFocus,
+    handleKeyDown,
+    inputRef,
+    isOpen,
+    listboxId,
+    query,
+    setQuery,
+  } = useComboboxSearch({
+    id,
+    disabled,
+    resultCount: availableResults.length,
+    onSearch: triggerValidationSearch,
+    onSelectActive: (index) => handleAdd(availableResults[index]?.key),
+  })
 
   const resolvedHelperText = helperText ?? 'Search and select governed validation keys (filtered to ACTIVE policy-usable rows).'
   const showDropdown = Boolean(isOpen && !disabled && (query.trim() || availableResults.length > 0))
@@ -251,14 +181,8 @@ function ValidationKeySearchSelect({
         aria-expanded={Boolean(isOpen && !disabled)}
         aria-activedescendant={activeOptionId}
         aria-haspopup="listbox"
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setIsOpen(true)
-        }}
-        onFocus={() => {
-          clearCloseTimeout()
-          setIsOpen(true)
-        }}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
       />

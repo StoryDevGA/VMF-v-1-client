@@ -1,13 +1,10 @@
 import { useCallback, useMemo } from 'react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
-import { Card } from '../../components/Card'
-import { Fieldset } from '../../components/Fieldset'
-import { HorizontalScroll } from '../../components/HorizontalScroll'
 import { Input } from '../../components/Input'
+import { RegistryListView } from '../../components/RegistryListView'
 import { Select } from '../../components/Select'
 import { Status } from '../../components/Status'
-import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import { Tooltip } from '../../components/Tooltip'
 import {
@@ -243,24 +240,22 @@ export function RuntimeAgentListView({
     ],
     [handleRowAction],
   )
-  const showPostSaveRefreshState = Boolean(showPostSaveRefresh)
-  const showInitialSkeleton = isListLoading && !showPostSaveRefreshState
-
   return (
-    <Fieldset className="super-admin-agents__fieldset">
-        <Fieldset.Legend className="sr-only">Runtime agent catalogue</Fieldset.Legend>
-        <Card variant="elevated" className="super-admin-agents__card">
-          <Card.Body className="super-admin-agents__card-body super-admin-agents__card-body--compact">
-            <div className="super-admin-agents__catalogue-actions">
-              <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
-                Back
-              </Button>
-              <Button type="button" variant="primary" size="sm" onClick={onCreateClick}>
-                Create
-              </Button>
-            </div>
-
-          <div className="super-admin-agents__toolbar">
+    <RegistryListView
+      block="super-admin-agents"
+      legend="Runtime agent catalogue"
+      actions={(
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={onBackClick}>
+            Back
+          </Button>
+          <Button type="button" variant="primary" size="sm" onClick={onCreateClick}>
+            Create
+          </Button>
+        </>
+      )}
+      filters={(
+        <>
             <Input
               id="runtime-agent-search"
               label="Search"
@@ -295,91 +290,28 @@ export function RuntimeAgentListView({
                 setPage(1)
               }}
             />
-          </div>
-
-          {listAppError ? (
-            <p className="super-admin-agents__error" role="alert">
-              {listAppError.message}
-            </p>
-          ) : null}
-
-          <p className="super-admin-agents__table-note">{RUNTIME_AGENTS_HELP_TEXT}</p>
-
-          <HorizontalScroll
-            className="super-admin-agents__table-wrap"
-            ariaLabel="Runtime agents table"
-            gap="sm"
-          >
-            <Table
-              className="super-admin-agents__table"
-              columns={columns}
-              data={rows}
-              loading={showInitialSkeleton}
-              variant="striped"
-              hoverable
-              emptyMessage="No runtime agents found."
-              emptyComponent={
-                showPostSaveRefreshState ? (
-                  <p className="super-admin-agents__muted" role="status">
-                    Refreshing Agents...
-                  </p>
-                ) : undefined
-              }
-              ariaLabel="Agents"
-            />
-          </HorizontalScroll>
-
-          {isListFetching && !isListLoading ? (
-            <p className="super-admin-agents__muted">Refreshing list...</p>
-          ) : null}
-
-          {totalPages > 1 ? (
-            <div className="super-admin-agents__pagination" role="navigation" aria-label="Agents pagination">
-              <div className="super-admin-agents__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isListFetching}
-                  onClick={() => setPage(1)}
-                >
-                  First
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1 || isListFetching}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Previous
-                </Button>
-              </div>
-
-              <p className="super-admin-agents__pagination-info">
-                Page {currentPage} of {totalPages}
-              </p>
-
-              <div className="super-admin-agents__pagination-controls">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isListFetching}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                >
-                  Next
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages || isListFetching}
-                  onClick={() => setPage(totalPages)}
-                >
-                  Last
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </Card.Body>
-      </Card>
-    </Fieldset>
+        </>
+      )}
+      error={listAppError}
+      tableNote={RUNTIME_AGENTS_HELP_TEXT}
+      table={{
+        columns,
+        data: rows,
+        emptyMessage: 'No runtime agents found.',
+        ariaLabel: 'Agents',
+        scrollAriaLabel: 'Runtime agents table',
+      }}
+      status={{
+        isLoading: isListLoading,
+        isFetching: isListFetching,
+        showPostSaveRefresh,
+      }}
+      pagination={{
+        currentPage,
+        totalPages,
+        setPage,
+        ariaLabel: 'Agents pagination',
+      }}
+    />
   )
 }

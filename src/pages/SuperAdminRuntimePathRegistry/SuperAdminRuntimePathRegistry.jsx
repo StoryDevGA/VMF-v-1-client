@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { useToaster } from '../../components/Toaster'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
@@ -122,17 +123,14 @@ function SuperAdminRuntimePathRegistry() {
   }, [addToast, deprecateRuntimePath])
 
   return (
-    <section
+    <PageShell
       className="super-admin-runtime-path-registry container"
       aria-label="Super admin runtime path registry"
     >
-      <header className="super-admin-runtime-path-registry__header">
-        <h1 className="super-admin-runtime-path-registry__title">Runtime Paths</h1>
-        <p className="super-admin-runtime-path-registry__subtitle">
-          Review the governed Runtime Path Registry used to validate skill and agent
-          access boundaries across Runtime Control.
-        </p>
-      </header>
+      <PageHeader
+        title="Runtime Paths"
+        subtitle="Review the governed Runtime Path Registry used to validate skill and agent access boundaries across Runtime Control."
+      />
       <RuntimePathRegistryListView
         search={mgmt.search}
         setSearch={mgmt.setSearch}
@@ -190,7 +188,7 @@ function SuperAdminRuntimePathRegistry() {
           </Button>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 

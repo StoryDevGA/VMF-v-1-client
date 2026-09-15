@@ -1,44 +1,15 @@
-.super-admin-runtime-path-registry__card-body {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.super-admin-runtime-path-registry__card-body--compact {
-  padding: var(--spacing-sm) var(--spacing-md);
-}
-
-.super-admin-runtime-path-registry__catalogue-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-  flex-wrap: wrap;
-}
-
 .super-admin-runtime-path-registry__toolbar {
-  display: grid;
   grid-template-columns: 1fr minmax(180px, 220px) minmax(180px, 220px) minmax(180px, 220px);
-  align-items: end;
-  gap: var(--spacing-sm);
 }
 
 .super-admin-runtime-path-registry__error {
-  margin: 0;
-  color: var(--color-danger);
   font-size: var(--font-size-sm);
 }
 
-.super-admin-runtime-path-registry__table-note,
-.super-admin-runtime-path-registry__muted,
-.super-admin-runtime-path-registry__pagination-info,
 .super-admin-runtime-path-registry__path-key {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-}
-
-.super-admin-runtime-path-registry__table-wrap {
-  margin-top: 0;
 }
 
 .super-admin-runtime-path-registry__table {
@@ -179,20 +150,6 @@
 
 .super-admin-runtime-path-registry__row-actions {
   min-width: 120px;
-}
-
-.super-admin-runtime-path-registry__pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.super-admin-runtime-path-registry__pagination-controls {
-  display: flex;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
 }
 
 @media (max-width: 1023px) {

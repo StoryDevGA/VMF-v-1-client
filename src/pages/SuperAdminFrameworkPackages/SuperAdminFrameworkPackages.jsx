@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { FrameworkPackageListView } from './FrameworkPackageListView.jsx'
 import { useFrameworkPackageManagement } from './useFrameworkPackageManagement.js'
@@ -24,17 +25,14 @@ function SuperAdminFrameworkPackages() {
   }, [navigate])
 
   return (
-    <section
+    <PageShell
       className="super-admin-framework-packages container"
       aria-label="Super admin framework packages"
     >
-      <header className="super-admin-framework-packages__header">
-        <h1 className="super-admin-framework-packages__title">Framework Packages</h1>
-        <p className="super-admin-framework-packages__subtitle">
-          Define framework versions, lifecycle state, runtime dependencies, and the active
-          default package used by Runtime Control.
-        </p>
-      </header>
+      <PageHeader
+        title="Framework Packages"
+        subtitle="Define framework versions, lifecycle state, runtime dependencies, and the active default package used by Runtime Control."
+      />
 
       <FrameworkPackageListView
         search={mgmt.search}
@@ -58,7 +56,7 @@ function SuperAdminFrameworkPackages() {
         onClonePackage={handleClonePackage}
         activatePackage={mgmt.activatePackage}
       />
-    </section>
+    </PageShell>
   )
 }
 

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import { RuntimeSkillListView } from './RuntimeSkillListView.jsx'
 import { useRuntimeSkillManagement } from './useRuntimeSkillManagement.js'
@@ -31,14 +32,11 @@ function SuperAdminSkills() {
   )
 
   return (
-    <section className="super-admin-skills container" aria-label="Super admin runtime skills">
-      <header className="super-admin-skills__header">
-        <h1 className="super-admin-skills__title">Skills</h1>
-        <p className="super-admin-skills__subtitle">
-          Register reusable runtime skills, control their availability, and align framework
-          compatibility before packages and workflow policies reference them.
-        </p>
-      </header>
+    <PageShell className="super-admin-skills container" aria-label="Super admin runtime skills">
+      <PageHeader
+        title="Skills"
+        subtitle="Register reusable runtime skills, control their availability, and align framework compatibility before packages and workflow policies reference them."
+      />
 
       <RuntimeSkillListView
         search={mgmt.search}
@@ -62,7 +60,7 @@ function SuperAdminSkills() {
         onCloneClick={handleCloneClick}
         setSkillStatus={mgmt.setSkillStatus}
       />
-    </section>
+    </PageShell>
   )
 }
 

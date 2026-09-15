@@ -13,6 +13,7 @@ import { Table } from '../../components/Table'
 import { TableDateTime } from '../../components/TableDateTime'
 import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import {
   useCreateFrameworkRegistryMutation,
   useGetFrameworkRegistryQuery,
@@ -837,17 +838,14 @@ function SuperAdminFrameworkRegistry() {
   }, [navigate])
 
   return (
-    <section
+    <PageShell
       className="super-admin-framework-registry container"
       aria-label="Super admin framework registry"
     >
-      <header className="super-admin-framework-registry__header">
-        <h1 className="super-admin-framework-registry__title">Framework Registry</h1>
-        <p className="super-admin-framework-registry__subtitle">
-          Define canonical framework keys, structure boundaries, and compatibility metadata for
-          Runtime Control catalogue surfaces.
-        </p>
-      </header>
+      <PageHeader
+        title="Framework Registry"
+        subtitle="Define canonical framework keys, structure boundaries, and compatibility metadata for Runtime Control catalogue surfaces."
+      />
 
       <FrameworkRegistryListView
         search={mgmt.search}
@@ -894,7 +892,7 @@ function SuperAdminFrameworkRegistry() {
         registry={mgmt.detailRegistry}
         isLoading={mgmt.isDetailFetching && !mgmt.detailRegistry}
       />
-    </section>
+    </PageShell>
   )
 }
 

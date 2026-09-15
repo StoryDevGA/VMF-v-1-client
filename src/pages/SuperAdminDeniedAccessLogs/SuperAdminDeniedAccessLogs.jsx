@@ -5,6 +5,7 @@
  */
 
 import { useDeniedAccessLogManagement } from './useDeniedAccessLogManagement.js'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { DeniedAccessFilters } from './DeniedAccessFilters.jsx'
 import { DeniedAccessResultsView } from './DeniedAccessResultsView.jsx'
 import './SuperAdminDeniedAccessLogs.css'
@@ -13,16 +14,14 @@ function SuperAdminDeniedAccessLogs() {
   const mgmt = useDeniedAccessLogManagement()
 
   return (
-    <section
+    <PageShell
       className="super-admin-denied-logs container"
       aria-label="Super admin denied access logs"
     >
-      <header className="super-admin-denied-logs__header">
-        <h1 className="super-admin-denied-logs__title">Denied Access Logs</h1>
-        <p className="super-admin-denied-logs__subtitle">
-          Review platform-wide authorization denials for audit and troubleshooting.
-        </p>
-      </header>
+      <PageHeader
+        title="Denied Access Logs"
+        subtitle="Review platform-wide authorization denials for audit and troubleshooting."
+      />
 
       <DeniedAccessFilters
         draftFilters={mgmt.draftFilters}
@@ -42,7 +41,7 @@ function SuperAdminDeniedAccessLogs() {
         appError={mgmt.appError}
         setPage={mgmt.setPage}
       />
-    </section>
+    </PageShell>
   )
 }
 

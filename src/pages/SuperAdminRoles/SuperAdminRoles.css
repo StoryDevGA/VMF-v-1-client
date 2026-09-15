@@ -1,35 +1,10 @@
-.super-admin-roles {
-  display: grid;
-  gap: var(--spacing-lg);
-  padding-block: var(--spacing-xl);
-}
-
-.super-admin-roles__header {
-  display: grid;
-  gap: var(--spacing-xs);
-}
-
-.super-admin-roles__title,
 .super-admin-roles__dialog-title {
   margin: 0;
 }
 
-.super-admin-roles__title {
-  font-size: var(--font-size-2xl);
-  line-height: var(--line-height-tight);
-  color: var(--color-text-primary);
-}
-
-.super-admin-roles__subtitle,
 .super-admin-roles__muted {
   margin: 0;
   color: var(--color-text-secondary);
-}
-
-.super-admin-roles__subtitle {
-  max-width: 52rem;
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-relaxed);
 }
 
 .super-admin-roles__fieldset,

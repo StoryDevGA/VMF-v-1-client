@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { PageHeader, PageShell } from '../../components/PageShell'
 import { useToaster } from '../../components/Toaster'
 import { usePostSaveListRefreshState } from '../../hooks/usePostSaveListRefreshState.js'
 import {
@@ -96,13 +97,11 @@ function SuperAdminValidationRegistry() {
   }, [commitStatus, pendingStatusChange])
 
   return (
-    <section className="super-admin-validation-registry container" aria-label="Super admin validation registry">
-      <header className="super-admin-validation-registry__header">
-        <h1 className="super-admin-validation-registry__title">Validation Registry</h1>
-        <p className="super-admin-validation-registry__subtitle">
-          Register reusable governed validation checks used by workflow policies and framework packages.
-        </p>
-      </header>
+    <PageShell className="super-admin-validation-registry container" aria-label="Super admin validation registry">
+      <PageHeader
+        title="Validation Registry"
+        subtitle="Register reusable governed validation checks used by workflow policies and framework packages."
+      />
 
       <ValidationRegistryListView
         search={mgmt.search}
@@ -166,7 +165,7 @@ function SuperAdminValidationRegistry() {
           )}
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </PageShell>
   )
 }
 
