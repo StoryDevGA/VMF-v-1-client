@@ -512,7 +512,7 @@ export function canActivateKnowledgePack(row = {}) {
     && normalizeToken(row.reviewStatus) === 'APPROVED'
 }
 
-export function getActivateKnowledgePackDisabledReason(row = {}) {
+export function getActivateKnowledgePackDisabledReason(row = {}, { requireValidationSummary = false } = {}) {
   if (
     !isImportedSourceDocument(row)
     || !hasKnowledgePackVersion(row)
@@ -521,6 +521,10 @@ export function getActivateKnowledgePackDisabledReason(row = {}) {
 
   if (normalizeToken(row.reviewStatus) !== 'APPROVED') {
     return 'Activate blocked - review not approved'
+  }
+
+  if (requireValidationSummary && normalizeToken(row.validationSummary?.status) !== 'PASSED') {
+    return 'Activate blocked - validation has not passed'
   }
 
   return ''

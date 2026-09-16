@@ -18,9 +18,19 @@ const REFRESH_TOKEN_KEY = 'vmf_refresh_token'
 let accessToken = null
 let sessionRevision = 0
 let tokenRevision = 0
+const sessionListeners = new Set()
 
 export const getSessionRevision = () => sessionRevision
 export const getTokenRevision = () => tokenRevision
+
+export const subscribeToSession = (listener) => {
+  sessionListeners.add(listener)
+  return () => sessionListeners.delete(listener)
+}
+
+const notifySessionChange = () => {
+  sessionListeners.forEach((listener) => listener())
+}
 
 /* ------------------------------------------------------------------ */
 /*  Access Token (in-memory)                                          */
@@ -40,6 +50,7 @@ export const setAccessToken = (token) => {
   sessionRevision += 1
   tokenRevision += 1
   accessToken = token
+  notifySessionChange()
 }
 
 /* ------------------------------------------------------------------ */
@@ -70,6 +81,7 @@ export const setRefreshToken = (token) => {
   } catch {
     // Private/incognito mode may throw — silently ignore
   }
+  notifySessionChange()
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,6 +101,7 @@ export const setTokens = ({ accessToken: at, refreshToken: rt }, { preserveSessi
   } catch {
     // Storage may be unavailable in private browsing.
   }
+  if (!preserveSession) notifySessionChange()
 }
 
 /**
@@ -103,6 +116,7 @@ export const clearTokens = () => {
   } catch {
     // ignore
   }
+  notifySessionChange()
 }
 
 /**

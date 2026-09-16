@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   MdArrowBack,
@@ -22,9 +22,12 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { useToaster } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage.js'
 import {
+  usePlanRuntimeOutcomeRequestMutation,
+  useConfirmRuntimeOutcomeRequestPlanMutation,
+  useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useApproveRuntimeOutcomeDraftMutation,
-  useCreateRuntimeOutcomeSessionMutation,
   useDiscardRuntimeOutcomeDraftMutation,
   useGenerateRuntimeOutcomeResponseMutation,
   useGetRuntimeOutcomeAssetRenderOutputsQuery,
@@ -55,6 +58,12 @@ const EMPTY_ARRAY = Object.freeze([])
 const DOWNLOAD_CLEANUP_DELAY_MS = 1000
 const REQUEST_HISTORY_PREVIEW_LIMIT = 5
 const OUTPUT_CONTRACT_CLARIFICATION_CODE = 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATION_REQUIRED'
+const normalizeRequestText = (value) => String(value || '').trim().replace(/\s+/g, ' ')
+const formatPlanningIntentValue = (value) => {
+  if (Array.isArray(value)) return value.map((entry) => formatPlanningIntentValue(entry)).join('; ')
+  if (value && typeof value === 'object') return JSON.stringify(value)
+  return value || 'Not specified'
+}
 const GOVERNED_RENDER_FORMATS = new Set(['MARKDOWN', 'HTML', 'DOCX', 'PDF', 'PPTX'])
 
 const payload = (response) => response?.data ?? response ?? null
@@ -68,7 +77,6 @@ const idOf = (record, keys) => {
 const sessionIdOf = (session) => idOf(session, ['sessionId', 'id', '_id'])
 const draftIdOf = (draft) => idOf(draft, ['draftId', 'id', '_id'])
 const assetIdOf = (asset) => idOf(asset, ['outcomeAssetId', 'assetId', 'id', '_id'])
-const normalizeRequestText = (value) => String(value || '').trim().replace(/\s+/g, ' ')
 const isUserRequestMessage = (message) => token(message?.role) !== 'ASSISTANT'
 
 const informationCurrentnessOf = (record) => token(
@@ -590,6 +598,26 @@ function OutcomeStudioWorkspace() {
   const runtimeScopeReady = Boolean(runtimeInstanceId && customerId && tenantId)
   const [activeTab, setActiveTab] = useState(0)
   const [prompt, setPrompt] = useState('')
+  const [planning, setPlanning] = useState(null)
+  const [planningBusy, setPlanningBusy] = useState(false)
+  const sessionRevision = useSyncExternalStore(subscribeToSession, getSessionRevision, getSessionRevision)
+  const planningScopeKey = `${runtimeInstanceId}:${customerId}:${tenantId}:${sessionRevision}`
+  const planningSequence = useRef(0)
+  const planningBusyRef = useRef(false)
+  const planningRegionRef = useRef(null)
+  const [planRequest] = usePlanRuntimeOutcomeRequestMutation()
+  const [confirmPlan] = useConfirmRuntimeOutcomeRequestPlanMutation()
+  const [retrievePlan] = useLazyRetrieveRuntimeOutcomeRequestPlanQuery()
+  useEffect(() => {
+    planningSequence.current += 1
+    planningBusyRef.current = false
+    setPlanning(null); setPlanningBusy(false); setPrompt(''); setComposerError('')
+    return () => { planningSequence.current += 1 }
+  }, [planningScopeKey])
+
+  useEffect(() => {
+    if (planning) planningRegionRef.current?.focus()
+  }, [planning])
   const [composerError, setComposerError] = useState('')
   const [uncertainPrompt, setUncertainPrompt] = useState('')
   const [requestSubmitting, setRequestSubmitting] = useState(false)
@@ -625,9 +653,9 @@ function OutcomeStudioWorkspace() {
   )
   const session = payload(sessionQuery.data) || activeSession
 
-  const [createSession, createState] = useCreateRuntimeOutcomeSessionMutation()
-  const [submitMessage, submitState] = useSubmitRuntimeOutcomeMessageMutation()
   const [generateResponse] = useGenerateRuntimeOutcomeResponseMutation()
+  const [submitMessage, submitState] = useSubmitRuntimeOutcomeMessageMutation()
+  const [loadSessionForReconciliation] = useLazyGetRuntimeOutcomeSessionQuery()
   const [updateTruth, updateTruthState] = useUpdateRuntimeOutcomeSessionFromLatestTruthMutation()
   const [approveDraft] = useApproveRuntimeOutcomeDraftMutation()
   const [reviseAsset] = useReviseRuntimeOutcomeAssetMutation()
@@ -639,7 +667,6 @@ function OutcomeStudioWorkspace() {
   const [loadPreview, assetPreviewState] = useLazyGetRuntimeOutcomeAssetPreviewQuery()
   const [loadDraftCompare] = useLazyGetRuntimeOutcomeDraftCompareQuery()
   const [loadDraftPreview] = useLazyGetRuntimeOutcomeDraftPreviewQuery()
-  const [loadSessionForReconciliation] = useLazyGetRuntimeOutcomeSessionQuery()
 
   const deliverables = useMemo(() => (
     (Array.isArray(studio?.deliverables?.available) ? studio.deliverables.available : EMPTY_ARRAY)
@@ -686,6 +713,7 @@ function OutcomeStudioWorkspace() {
   const readyDraftCount = draftRows.filter((row) => row.readyToApprove).length
   const unavailableDraftCount = draftRows.length - readyDraftCount
   const conversationEnabled = studio?.conversation?.enabled === true && isSessionInformationCurrent
+  const revisionMode = Boolean(selectedDraftRow && !planning)
   const responseGenerationAvailable = (
     studio?.safetyGates?.responseGenerationAvailable === true
     && dedicatedReadiness?.canReason === true
@@ -773,6 +801,46 @@ function OutcomeStudioWorkspace() {
     return true
   }
 
+
+  const handlePlanStep = async (action = 'ANSWER') => {
+    if (planningBusyRef.current || !runtimeScopeReady) return
+    const sequence = ++planningSequence.current
+    const scopeKey = planningScopeKey
+    const revision = sessionRevision
+    const stillCurrent = () => planningSequence.current === sequence
+      && planningScopeKey === scopeKey
+      && getSessionRevision() === revision
+    const consumesPrompt = !['CONFIRM', 'RETRIEVE'].includes(action)
+    planningBusyRef.current = true
+    setPlanningBusy(true); setComposerError('')
+    try {
+      let response
+      if (action === 'CONFIRM') {
+        response = await confirmPlan({ ...runtimeScope, requestId: planning.requestId,
+          body: { continuation: planning.continuation, confirm: true } }).unwrap()
+      } else if (action === 'RETRIEVE') {
+        response = await retrievePlan({ ...runtimeScope, requestId: planning.requestId, planId: planning.plan.planId }, false).unwrap()
+      } else {
+        response = await planRequest({ ...runtimeScope, body: { prompt: normalizeRequestText(prompt), action,
+          ...(planning?.continuation ? { continuation: planning.continuation } : {}),
+          ...(!planning && activeSessionId ? { sessionId: activeSessionId } : {}) } }).unwrap()
+      }
+      if (!stillCurrent()) return
+      const result = payload(response)
+      if (!result?.continuation || result?.execution?.canExecute !== false || result?.execution?.status !== 'BLOCKED') throw new Error('Invalid planning response')
+      setPlanning(result)
+      if (consumesPrompt) setPrompt('')
+    } catch (error) {
+      if (stillCurrent()) setComposerError(failureMessage(error) || 'Planning is unavailable. Retry this exact step; no new request will be created.')
+    } finally {
+      if (stillCurrent()) {
+        planningBusyRef.current = false
+        setPlanningBusy(false)
+      }
+    }
+  }
+
+
   const setClarificationFromError = (error) => {
     const normalized = normalizeError(error)
     if (token(normalized.code) !== OUTPUT_CONTRACT_CLARIFICATION_CODE) return false
@@ -836,7 +904,6 @@ function OutcomeStudioWorkspace() {
   const submitPromptToSession = async ({
     beforeMessages = [],
     boundOutputTypeKey = '',
-    isNewSession = false,
     promptText,
     targetSessionId,
   }) => {
@@ -849,14 +916,7 @@ function OutcomeStudioWorkspace() {
       setPrompt('')
       setComposerError('')
       setUncertainPrompt('')
-      await refreshAfterMutation(
-        isNewSession
-          ? 'Outcome Studio session started and request submitted.'
-          : 'Outcome Studio request submitted.',
-        isNewSession
-          ? { refetchers: [studioQuery.refetch, readinessQuery.refetch] }
-          : {},
-      )
+      await refreshAfterMutation('Outcome Studio request submitted.')
       return true
     } catch (error) {
       const reconciliation = await reconcileMessageSubmission({
@@ -868,12 +928,6 @@ function OutcomeStudioWorkspace() {
       if (reconciliation === 'COMMITTED' || reconciliation === 'UNCERTAIN') return reconciliation === 'COMMITTED'
       if (setClarificationFromError(error)) {
         notify('Outcome Studio needs clarification', failureMessage(error), 'warning')
-      } else if (isNewSession) {
-        notify(
-          'Outcome Studio session saved',
-          'The session was started, but the request was not saved. Submit the retained request again.',
-          'warning',
-        )
       } else {
         notify('Outcome Studio action failed', failureMessage(error), 'error')
       }
@@ -881,62 +935,9 @@ function OutcomeStudioWorkspace() {
     }
   }
 
-  const handleStartSession = async () => {
-    const promptText = normalizeRequestText(prompt)
-    if (!promptText || requestSubmitting) return
-    setRequestSubmitting(true)
-    setComposerError('')
-    try {
-      const response = await createSession({
-        ...runtimeScope,
-        body: { prompt: promptText },
-      }).unwrap()
-      const createdSession = payload(response)
-      const createdSessionId = sessionIdOf(createdSession)
-      if (!createdSessionId) throw new Error('Outcome Studio did not return the new session.')
-      await submitPromptToSession({
-        beforeMessages: [],
-        boundOutputTypeKey: createdSession?.requestedOutputTypeKey,
-        isNewSession: true,
-        promptText,
-        targetSessionId: createdSessionId,
-      })
-    } catch (error) {
-      if (setClarificationFromError(error)) {
-        notify('Outcome Studio needs clarification', failureMessage(error), 'warning')
-      } else {
-        try {
-          const refreshed = await studioQuery.refetch()
-          await readinessQuery.refetch()
-          const refreshedStudio = payload(refreshed?.data)
-          const recoveredSession = activeSessionFrom(refreshedStudio)
-          const recoveredSessionId = sessionIdOf(recoveredSession)
-          if (
-            recoveredSessionId
-            && normalizeRequestText(recoveredSession?.requestText) === promptText
-          ) {
-            await submitPromptToSession({
-              beforeMessages: [],
-              boundOutputTypeKey: recoveredSession?.requestedOutputTypeKey,
-              isNewSession: true,
-              promptText,
-              targetSessionId: recoveredSessionId,
-            })
-          } else {
-            notify('Outcome Studio action failed', failureMessage(error), 'error')
-          }
-        } catch {
-          notify('Outcome Studio action failed', failureMessage(error), 'error')
-        }
-      }
-    } finally {
-      setRequestSubmitting(false)
-    }
-  }
-
   const handleSubmit = async () => {
     const promptText = normalizeRequestText(prompt)
-    if (!activeSessionId || !promptText || requestSubmitting) return
+    if (!selectedDraftRow || planning || !conversationEnabled || !activeSessionId || !promptText || requestSubmitting) return
     setRequestSubmitting(true)
     setComposerError('')
     try {
@@ -1453,39 +1454,53 @@ function OutcomeStudioWorkspace() {
                 </div>
               ) : null}
               <div className="outcome-studio-workspace__composer">
+                <div ref={planningRegionRef} role="status" aria-live="polite" aria-atomic="true" tabIndex={-1}>
+                {planning ? <section aria-label="Request plan" className="outcome-studio-workspace__notice">
+                  <div><Status variant="warning" size="sm">{planning.status === 'SAVED' ? 'Plan saved · execution blocked' : formatRuntimeTokenLabel(planning.status)}</Status>
+                    {planning.question ? <p>{planning.question}</p> : null}
+                    {planning.message ? <p>{planning.message}</p> : null}
+                    {planning.intent && typeof planning.intent === 'object' ? <dl>{Object.entries(planning.intent).map(([field, value]) => <div key={field}><dt>{formatRuntimeTokenLabel(field)}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
+                    {planning.plan ? <p>Plan version {planning.plan.planVersion}. Source evidence has not been revalidated; this plan cannot execute.</p> : null}
+                  </div>
+                  <ButtonGroup><Button variant="outline" disabled={planningBusy} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button>
+                    {planning.plan ? <Button variant="outline" disabled={planningBusy} onClick={() => handlePlanStep('RETRIEVE')}>Retrieve saved plan</Button> : null}
+                  </ButtonGroup>
+                </section> : null}
+                </div>
                 <Textarea
                   id="outcome-studio-request"
                   label="Your request"
                   value={prompt}
                   rows={5}
                   maxLength={studio?.conversation?.requestMaxLength || 2000}
-                  disabled={Boolean(activeSessionId) && !conversationEnabled}
+                  disabled={planningBusy || requestSubmitting || planning?.status === 'CONFIRMATION_REQUIRED' || (revisionMode && !conversationEnabled)}
                   error={composerError}
-                  helperText="Outcome Studio will infer the deliverable, audience, structure, style, and applicable guidance from your request."
+                  helperText={revisionMode ? 'Describe the revision to the current working draft.' : planning?.status === 'SAVED' ? 'To change this request, state the re-resolution reason below. Start a new request for an independent plan.' : 'Describe the output you want. We will ask for missing facts before you confirm a plan. No output is generated.'}
                   onChange={(event) => {
                     setPrompt(event.target.value)
                     setComposerError('')
                     setUncertainPrompt('')
                   }}
                 />
-                {selectedDraftRow ? <div className="outcome-studio-workspace__asset-binding" role="status"><Status variant="info" size="sm" showIcon>Composer bound to current draft</Status><span>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'} · v{selectedDraftRow.draft.currentIterationNumber || 1}</span><small>Submitting a revision keeps the same governed asset identity and creates the next draft version.</small></div> : null}
+                {revisionMode ? <div className="outcome-studio-workspace__asset-binding" role="status"><Status variant="info" size="sm" showIcon>Composer bound to current draft</Status><span>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'} · v{selectedDraftRow.draft.currentIterationNumber || 1}</span><small>Submitting a revision keeps the same governed asset identity and creates the next draft version.</small></div> : null}
                 <ButtonGroup align="end" stackOnMobile fullWidthOnMobile>
+                  {revisionMode ? <Button variant="outline" disabled={requestSubmitting} onClick={() => { setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button> : null}
                   <Button
-                    loading={requestSubmitting || submitState.isLoading || createState.isLoading}
+                    loading={planningBusy || requestSubmitting || submitState.isLoading}
                     disabled={
-                      !prompt.trim()
-                      || normalizeRequestText(uncertainPrompt) === normalizeRequestText(prompt)
-                      || (activeSessionId ? !conversationEnabled : readiness.canStartSession !== true)
+                      !runtimeScopeReady || (revisionMode
+                        ? !prompt.trim() || !conversationEnabled || normalizeRequestText(uncertainPrompt) === normalizeRequestText(prompt)
+                        : planning?.status !== 'CONFIRMATION_REQUIRED' && !prompt.trim())
                     }
                     leftIcon={<MdPlayArrow aria-hidden="true" />}
-                    onClick={activeSessionId ? handleSubmit : handleStartSession}
+                    onClick={revisionMode ? handleSubmit : () => handlePlanStep(planning?.status === 'CONFIRMATION_REQUIRED' ? 'CONFIRM' : planning?.status === 'SAVED' ? 'RE_RESOLVE' : 'ANSWER')}
                   >
-                    {selectedDraftRow ? 'Submit revision' : 'Submit request'}
+                    {revisionMode ? 'Submit revision' : planning?.status === 'CONFIRMATION_REQUIRED' ? 'Confirm and save plan' : planning?.status === 'SAVED' ? 'Re-resolve request' : planning ? 'Continue planning' : 'Plan request'}
                   </Button>
                 </ButtonGroup>
               </div>
               <div className="outcome-studio-workspace__history">
-                <h3>Request history</h3>
+                <h3>Session request history</h3>
                 {generationBlockedReason && activeSessionId ? <p id="outcome-generation-blocked-reason">{generationBlockedReason}</p> : null}
                 {sessionQuery.error ? (
                   <div className="outcome-studio-workspace__error">
@@ -1493,7 +1508,7 @@ function OutcomeStudioWorkspace() {
                     <ErrorSupportPanel error={normalizeError(sessionQuery.error)} context="outcome-studio-session" />
                   </div>
                 ) : sessionQuery.isLoading ? <Spinner size="sm" aria-label="Loading conversation" /> : requestMessages.length ? (
-                  <ol id="outcome-studio-request-history" aria-label="Outcome Studio request history">
+                  <ol id="outcome-studio-request-history" aria-label="Outcome Studio session request history">
                     {visibleMessages.map((message) => {
                       const messageId = idOf(message, ['messageId', 'id', '_id'])
                       const messageContent = String(message.content || message.prompt || '').trim() || 'Request unavailable'
@@ -1540,7 +1555,7 @@ function OutcomeStudioWorkspace() {
                       )
                     })}
                   </ol>
-                ) : <Status variant="neutral" size="sm">No requests yet</Status>}
+                ) : <Status variant="neutral" size="sm">No session requests yet</Status>}
                 {requestMessages.length > REQUEST_HISTORY_PREVIEW_LIMIT ? (
                   <Button
                     type="button"

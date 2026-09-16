@@ -332,6 +332,15 @@ export const buildRenderRuntimeOutcomeAssetQuery = ({ runtimeInstanceId, outcome
   body: {},
 })
 
+export const buildOutcomePlanningQuery = ({ runtimeInstanceId, customerId, tenantId, body }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/planning`, { customerId, tenantId }), method: 'POST', body,
+})
+export const buildOutcomePlanConfirmationQuery = ({ runtimeInstanceId, customerId, tenantId, requestId, body }) => ({
+  url: appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/requests/${encodeURIComponent(String(requestId ?? '').trim())}/plans`, { customerId, tenantId }), method: 'POST', body,
+})
+export const buildOutcomePlanRetrievalQuery = ({ runtimeInstanceId, customerId, tenantId, requestId, planId }) =>
+  appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/requests/${encodeURIComponent(String(requestId ?? '').trim())}/plans/${encodeURIComponent(String(planId ?? '').trim())}`, { customerId, tenantId })
+
 export const buildRuntimeOutcomeAssetRenderOutputsQuery = ({ runtimeInstanceId, outcomeAssetId, customerId, tenantId }) =>
   appendRuntimeStateScope(`/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/outcome-studio/assets/${
     encodeURIComponent(String(outcomeAssetId ?? '').trim())
@@ -746,6 +755,9 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       query: buildExportRuntimeOutcomeAssetQuery,
       providesTags: getRuntimeInstanceDetailTags,
     }),
+    planRuntimeOutcomeRequest: build.mutation({ query: buildOutcomePlanningQuery, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    confirmRuntimeOutcomeRequestPlan: build.mutation({ query: buildOutcomePlanConfirmationQuery, invalidatesTags: getRuntimeInstanceDetailTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
+    retrieveRuntimeOutcomeRequestPlan: build.query({ query: buildOutcomePlanRetrievalQuery, providesTags: getRuntimeInstanceDetailTags, extraOptions: RUNTIME_HEAVY_READ_OPTIONS }),
 
     renderRuntimeOutcomeAsset: build.mutation({
       query: buildRenderRuntimeOutcomeAssetQuery,
@@ -908,6 +920,9 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 })
 
 export const {
+  usePlanRuntimeOutcomeRequestMutation,
+  useConfirmRuntimeOutcomeRequestPlanMutation,
+  useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
   useCreateRuntimeInstanceMutation,

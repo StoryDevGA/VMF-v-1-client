@@ -364,6 +364,28 @@ function getRowForText(text) {
   return row
 }
 
+function prepareSuccessor(overrides = {}, queryOverrides = {}) {
+  const active = { ...defaultVersionResult.data.data, status: 'ACTIVE', reviewStatus: 'APPROVED' }
+  const successor = { ...active, versionId: 'output-schemas-pack@1.0.1', semanticVersion: '1.0.1',
+    authoringMode: 'IMPORT_SOURCE_DOCUMENT', sourceMetadata: defaultListResult.data.data[0].sourceMetadata,
+    status: 'DRAFT', reviewStatus: 'DRAFT', validationSummary: { status: 'NOT_RUN' }, ...overrides }
+  listQueryMock.mockReturnValue({ ...defaultListResult, data: { ...defaultListResult.data,
+    data: [{ ...defaultListResult.data.data[0], status: 'ACTIVE', reviewStatus: 'APPROVED' }] } })
+  detailQueryMock.mockReturnValue({ ...defaultDetailResult, data: { data: {
+    ...defaultDetailResult.data.data, status: 'ACTIVE', versions: [successor, active],
+  } } })
+  versionQueryMock.mockImplementation(({ versionId }) => ({ ...defaultVersionResult,
+    data: { data: versionId === successor.versionId ? successor : active },
+    ...(versionId === successor.versionId ? queryOverrides : {}),
+  }))
+  return { active, successor }
+}
+
+async function openSuccessor(user, versionId = 'output-schemas-pack@1.0.1') {
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for output-schemas-pack' }), 'details')
+  await user.selectOptions(screen.getByLabelText(/^version$/i), versionId)
+}
+
 async function prepareTextSourceImport(user, {
   packType = 'ET',
   label = 'Execution Translation',
@@ -454,6 +476,79 @@ describe('SuperAdminOutcomeKnowledgePacks page', () => {
     loadContentPreviewMock.mockReturnValue({
       unwrap: vi.fn().mockResolvedValue({ data: defaultContentPreviewData }),
     })
+  })
+
+  it.each([
+    ['validate', 'DRAFT', 'DRAFT', 'NOT_RUN'],
+    ['submit-review', 'VALIDATED', 'DRAFT', 'PASSED'],
+    ['approve-review', 'VALIDATED', 'READY_FOR_REVIEW', 'PASSED'],
+    ['activate', 'VALIDATED', 'APPROVED', 'PASSED'],
+  ])('targets only successor 1.0.1 for %s', async (action, status, reviewStatus, validationStatus) => {
+    const user = userEvent.setup()
+    const { successor } = prepareSuccessor({ status, reviewStatus, validationSummary: { status: validationStatus } })
+    renderPage()
+    await openSuccessor(user)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for selected version' }), action)
+    const target = { packId: successor.packId, versionId: successor.versionId }
+    if (action === 'activate') {
+      expect(screen.getByLabelText(/^version$/i)).toBeDisabled()
+      await user.click(screen.getByRole('button', { name: /^activate$/i }))
+      await waitFor(() => expect(activateVersionMock).toHaveBeenCalledWith({ ...target, scopeType: 'GLOBAL' }))
+    } else if (action === 'validate') {
+      await waitFor(() => expect(validateVersionMock).toHaveBeenCalledWith(target))
+    } else {
+      await waitFor(() => expect(updateReviewStatusMock).toHaveBeenCalledWith({ ...target,
+        reviewStatus: action === 'submit-review' ? 'READY_FOR_REVIEW' : 'APPROVED' }))
+    }
+    for (const mock of [validateVersionMock, updateReviewStatusMock, activateVersionMock]) {
+      expect(mock.mock.calls.every(([args]) => args.versionId === successor.versionId)).toBe(true)
+    }
+    expect(deprecateVersionMock).not.toHaveBeenCalled()
+    expect(disableVersionMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['NOT_RUN', 'FAILED', undefined])('blocks selected activation without passed validation: %s', async (status) => {
+    const user = userEvent.setup()
+    prepareSuccessor({ status: 'VALIDATED', reviewStatus: 'APPROVED', validationSummary: { status } })
+    renderPage()
+    await openSuccessor(user)
+    expect(within(screen.getByRole('combobox', { name: 'Actions for selected version' }))
+      .getByRole('option', { name: 'Activate blocked - validation has not passed' }))
+      .toBeDisabled()
+    expect(activateVersionMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { isLoading: true }, { isFetching: true }, { error: { status: 503 } },
+  ])('disables selected-version actions for unavailable current evidence %j', async (queryOverrides) => {
+    const user = userEvent.setup()
+    prepareSuccessor({}, queryOverrides)
+    renderPage()
+    await openSuccessor(user)
+    expect(screen.getByRole('combobox', { name: 'Actions for selected version' })).toBeDisabled()
+    expect(validateVersionMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['versionId', 'packId'])('never authorizes cached mismatched %s', async (field) => {
+    const user = userEvent.setup()
+    const { successor } = prepareSuccessor()
+    versionQueryMock.mockReturnValue({ ...defaultVersionResult, data: { data: { ...successor, [field]: 'stale-other-identity' } } })
+    renderPage()
+    await openSuccessor(user)
+    expect(screen.queryByRole('combobox', { name: 'Actions for selected version' })).not.toBeInTheDocument()
+    expect(validateVersionMock).not.toHaveBeenCalled()
+  })
+
+  it('cancels successor activation without changing either version', async () => {
+    const user = userEvent.setup()
+    prepareSuccessor({ status: 'VALIDATED', reviewStatus: 'APPROVED', validationSummary: { status: 'PASSED' } })
+    renderPage()
+    await openSuccessor(user)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for selected version' }), 'activate')
+    const dialog = screen.getByRole('heading', { name: /activate pack version/i }).closest('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
+    expect(activateVersionMock).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/^version$/i)).toHaveValue('output-schemas-pack@1.0.1')
   })
 
   it('hides missing required placeholders while preserving the runtime blocker', () => {

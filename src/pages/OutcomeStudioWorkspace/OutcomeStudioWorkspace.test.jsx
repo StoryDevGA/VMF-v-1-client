@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToasterProvider } from '../../components/Toaster'
 import { formatDateTime } from '../../utils/dateTime.js'
 import {
+  usePlanRuntimeOutcomeRequestMutation,
+  useConfirmRuntimeOutcomeRequestPlanMutation,
+  useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useApproveRuntimeOutcomeDraftMutation,
   useCreateRuntimeOutcomeSessionMutation,
   useDiscardRuntimeOutcomeDraftMutation,
@@ -27,11 +30,20 @@ import {
 } from '../../store/api/runtimeInstanceApi.js'
 import OutcomeStudioWorkspace from './OutcomeStudioWorkspace.jsx'
 
+const testScope = vi.hoisted(() => ({ customerId: 'customer-001', tenantId: 'tenant-001' }))
+const authState = vi.hoisted(() => ({ revision: 0 }))
+vi.mock('../../utils/tokenStorage.js', async (importOriginal) => ({
+  ...await importOriginal(), getSessionRevision: () => authState.revision,
+}))
+
 vi.mock('../../hooks/useTenantContext.js', () => ({
-  useTenantContext: () => ({ customerId: 'customer-001', tenantId: 'tenant-001' }),
+  useTenantContext: () => testScope,
 }))
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  usePlanRuntimeOutcomeRequestMutation: vi.fn(),
+  useConfirmRuntimeOutcomeRequestPlanMutation: vi.fn(),
+  useLazyRetrieveRuntimeOutcomeRequestPlanQuery: vi.fn(),
   useApproveRuntimeOutcomeDraftMutation: vi.fn(),
   useCreateRuntimeOutcomeSessionMutation: vi.fn(),
   useDiscardRuntimeOutcomeDraftMutation: vi.fn(),
@@ -54,6 +66,9 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
 }))
 
 const refetchStudio = vi.fn()
+const planRequest = vi.fn()
+const confirmPlan = vi.fn()
+const retrievePlan = vi.fn()
 const refetchReadiness = vi.fn()
 const refetchSession = vi.fn()
 const createSession = vi.fn()
@@ -72,6 +87,22 @@ const loadDraftPreview = vi.fn()
 const loadSessionForReconciliation = vi.fn()
 
 const resolvedMutation = (value = { data: {} }) => ({ unwrap: vi.fn().mockResolvedValue(value) })
+
+const planResult = (overrides = {}) => ({
+  status: 'CLARIFICATION_REQUIRED', requestId: '11111111-1111-4111-8111-111111111111',
+  continuation: 'receipt-1', question: 'What decision should this output support?',
+  execution: { status: 'BLOCKED', canExecute: false, reason: 'REQUEST_EXECUTION_NOT_ENABLED' },
+  ...overrides,
+})
+const savedPlan = () => planResult({
+  status: 'SAVED', continuation: 'saved-receipt', question: '',
+  plan: { planId: 'outcome_kcp_22222222-2222-4222-8222-222222222222', planVersion: 1, currentness: 'NOT_REVALIDATED' },
+})
+const assertNoExecution = () => {
+  expect(createSession).not.toHaveBeenCalled()
+  expect(submitMessage).not.toHaveBeenCalled()
+  expect(generateResponse).not.toHaveBeenCalled()
+}
 
 const studio = {
   readiness: {
@@ -194,6 +225,11 @@ const session = {
   }],
 }
 
+const RuntimeSwitch = () => {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate('/app/runtime/value-narrative-002/outcome-studio')}>Switch test runtime</button>
+}
+
 const makePage = (initialEntry = {
   pathname: '/app/runtime/value-narrative-001/outcome-studio',
   state: {
@@ -203,6 +239,7 @@ const makePage = (initialEntry = {
 }) => (
   <ToasterProvider>
     <MemoryRouter initialEntries={[initialEntry]}>
+      <RuntimeSwitch />
       <Routes>
         <Route path="/app/runtime/:runtimeInstanceId/outcome-studio" element={<OutcomeStudioWorkspace />} />
         <Route path="/app/runtime/:runtimeInstanceId" element={<div>Execution Workspace Return</div>} />
@@ -230,6 +267,14 @@ describe('OutcomeStudioWorkspace', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.assign(testScope, { customerId: 'customer-001', tenantId: 'tenant-001' })
+    authState.revision = 0
+    planRequest.mockReset().mockReturnValue(resolvedMutation({ data: planResult() }))
+    confirmPlan.mockReset().mockReturnValue(resolvedMutation({ data: savedPlan() }))
+    retrievePlan.mockReset().mockReturnValue(resolvedMutation({ data: savedPlan() }))
+    usePlanRuntimeOutcomeRequestMutation.mockReturnValue([planRequest, { isLoading: false }])
+    useConfirmRuntimeOutcomeRequestPlanMutation.mockReturnValue([confirmPlan, { isLoading: false }])
+    useLazyRetrieveRuntimeOutcomeRequestPlanQuery.mockReturnValue([retrievePlan, { isFetching: false }])
     refetchStudio.mockResolvedValue({ data: studio })
     refetchReadiness.mockResolvedValue({ data: studio.readiness })
     refetchSession.mockResolvedValue({ data: session })
@@ -789,6 +834,14 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.getByText(/Board Narrative Draft · v2/)).toBeInTheDocument()
     expect(screen.getByRole('status', { name: /composer bound to current draft/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit revision' })).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Revise this draft for the board.')
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
+    expect(submitMessage).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
+      sessionId: 'session-1', body: { prompt: 'Revise this draft for the board.' },
+    })
+    expect(planRequest).not.toHaveBeenCalled()
+    expect(confirmPlan).not.toHaveBeenCalled()
   })
 
   it('previews the current working draft before approval', async () => {
@@ -1060,7 +1113,7 @@ describe('OutcomeStudioWorkspace', () => {
     })
     renderPage()
 
-    const history = screen.getByRole('list', { name: 'Outcome Studio request history' })
+    const history = screen.getByRole('list', { name: 'Outcome Studio session request history' })
     expect(within(history).queryByText('Request 1')).not.toBeInTheDocument()
     expect(within(history).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('Request 6'),
@@ -1112,11 +1165,11 @@ describe('OutcomeStudioWorkspace', () => {
     renderPage()
 
     expect(screen.queryByRole('button', { name: 'View all requests' })).not.toBeInTheDocument()
-    expect(screen.getByRole('list', { name: 'Outcome Studio request history' })).toHaveAttribute(
+    expect(screen.getByRole('list', { name: 'Outcome Studio session request history' })).toHaveAttribute(
       'id',
       'outcome-studio-request-history',
     )
-    expect(within(screen.getByRole('list', { name: 'Outcome Studio request history' })).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    expect(within(screen.getByRole('list', { name: 'Outcome Studio session request history' })).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('Request 5'),
       expect.stringContaining('Request 4'),
       expect.stringContaining('Request 3'),
@@ -1195,7 +1248,7 @@ describe('OutcomeStudioWorkspace', () => {
       { skip: true },
     )
     expect(screen.getByText('No active session')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Plan request' })).toBeDisabled()
     expect(screen.queryByText('Prepare the board narrative.')).not.toBeInTheDocument()
   })
 
@@ -1218,7 +1271,7 @@ describe('OutcomeStudioWorkspace', () => {
     const errorSupport = screen.getByRole('alert')
     expect(errorSupport).toHaveTextContent('Conversation details are temporarily unavailable.')
     expect(errorSupport).toHaveTextContent('req-session-503')
-    expect(screen.queryByText('No requests yet')).not.toBeInTheDocument()
+    expect(screen.queryByText('No session requests yet')).not.toBeInTheDocument()
   })
 
   it('prioritizes the shared session error over stale Working Drafts content', async () => {
@@ -1362,8 +1415,9 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.getByRole('textbox', { name: 'Your request' })).toBeEnabled()
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Add customer evidence.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
-    expect(submitMessage).toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest).toHaveBeenCalled()
+    expect(submitMessage).not.toHaveBeenCalled()
     expect(generateResponse).not.toHaveBeenCalled()
   })
 
@@ -1537,14 +1591,13 @@ describe('OutcomeStudioWorkspace', () => {
 
     expect(screen.queryByRole('combobox', { name: 'Deliverable' })).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the available deliverable.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
 
-    expect(submitMessage).toHaveBeenCalledWith({
+    expect(planRequest).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       customerId: 'customer-001',
       tenantId: 'tenant-001',
-      sessionId: 'session-1',
-      body: { prompt: 'Refine the available deliverable.' },
+      body: { prompt: 'Refine the available deliverable.', action: 'ANSWER', sessionId: 'session-1' },
     })
   })
 
@@ -1573,13 +1626,173 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByText('Output Lab asset')).not.toBeInTheDocument()
   })
 
-  it('warns that a submitted request was saved when only the refresh fails', async () => {
+  it('clarifies intent, explicitly confirms, retrieves and re-resolves an immutable plan without execution', async () => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult() }))
+      .mockReturnValueOnce(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', continuation: 'confirm-receipt', question: 'Confirm this intent.', intent: { outcome: 'Board narrative', audience: 'Directors' } }) }))
+      .mockReturnValueOnce(resolvedMutation({ data: planResult({ continuation: 're-resolution-receipt' }) }))
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('What decision should this output support?')
+    expect(confirmPlan).not.toHaveBeenCalled()
+    assertNoExecution()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Directors deciding the commercial strategy.')
+    await user.click(screen.getByRole('button', { name: 'Continue planning' }))
+    expect(planRequest.mock.calls[1][0].body).toEqual({ prompt: 'Directors deciding the commercial strategy.', action: 'ANSWER', continuation: 'receipt-1' })
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Directors')
+    expect(confirmPlan).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    expect(confirmPlan).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
+      requestId: planResult().requestId, body: { continuation: 'confirm-receipt', confirm: true },
+    })
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Plan saved · execution blocked')
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Source evidence has not been revalidated')
+    await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    expect(retrievePlan).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
+      requestId: planResult().requestId, planId: savedPlan().plan.planId,
+    }, false)
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Audience changed to investors.')
+    await user.click(screen.getByRole('button', { name: 'Re-resolve request' }))
+    expect(planRequest.mock.calls[2][0].body).toEqual({ prompt: 'Audience changed to investors.', action: 'RE_RESOLVE', continuation: 'saved-receipt' })
+    assertNoExecution()
+  })
+
+  it('retains the exact confirmation receipt after response loss and retries without prompt matching', async () => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', continuation: 'exact-confirm-receipt' }) }))
+    confirmPlan.mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR' }) })
+      .mockReturnValueOnce(resolvedMutation({ data: savedPlan() }))
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm and save plan' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    expect(confirmPlan).toHaveBeenCalledTimes(2)
+    expect(confirmPlan.mock.calls[1][0]).toEqual(confirmPlan.mock.calls[0][0])
+    expect(confirmPlan.mock.calls[1][0].body).toEqual({ continuation: 'exact-confirm-receipt', confirm: true })
+    expect(planRequest).toHaveBeenCalledTimes(1)
+    expect(loadSessionForReconciliation).not.toHaveBeenCalled()
+    assertNoExecution()
+  })
+
+  it('retains the prompt and permits retry after a planning error', async () => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 409, data: { error: {
+      message: 'The plan could not be resolved.', requestId: 'planning-ref-1',
+    } } }) })
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The plan could not be resolved. Reference: planning-ref-1')
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Refine the recommendation.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest).toHaveBeenCalledTimes(2)
+    expect(planRequest.mock.calls[1][0]).toEqual(planRequest.mock.calls[0][0])
+    assertNoExecution()
+  })
+
+  it.each([
+    ['missing continuation', { continuation: undefined }],
+    ['execution enabled', { execution: { status: 'BLOCKED', canExecute: true } }],
+    ['nonblocked execution', { execution: { status: 'READY', canExecute: false } }],
+  ])('fails closed for a malformed planning response: %s', async (_name, invalid) => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult(invalid) }))
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare the brief.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Request plan' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Prepare the brief.')
+    expect(confirmPlan).not.toHaveBeenCalled()
+    assertNoExecution()
+  })
+
+  it('keeps a saved plan visible when retrieval fails without reconfirming or executing', async () => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED' }) }))
+    retrievePlan.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR' }) })
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare the brief.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Plan version 1')
+    expect(confirmPlan).toHaveBeenCalledTimes(1)
+    assertNoExecution()
+  })
+
+  it('starts a genuinely new plan after selecting a working draft during planning', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
+    await user.click(screen.getByRole('button', { name: 'New request' }))
+    expect(screen.queryByRole('region', { name: 'Request plan' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Composer bound to current draft')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit revision' })).not.toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a separate investor brief.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest.mock.calls[1][0].body).toEqual({
+      prompt: 'Prepare a separate investor brief.', action: 'ANSWER', sessionId: 'session-1',
+    })
+    assertNoExecution()
+  })
+
+  it.each(['CONFIRM', 'RETRIEVE'])('ignores a late %s response after logout without a rerender', async (step) => {
+    const user = userEvent.setup()
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED' }) }))
+    let resolve
+    const deferred = { unwrap: () => new Promise((done) => { resolve = done }) }
+    if (step === 'CONFIRM') confirmPlan.mockReturnValue(deferred)
+    else retrievePlan.mockReturnValue(deferred)
+    renderPage()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
+    if (step === 'RETRIEVE') await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    authState.revision += 1
+    await act(async () => resolve({ data: { ...savedPlan(), message: 'Private late plan response' } }))
+    expect(screen.queryByText('Private late plan response')).not.toBeInTheDocument()
+    assertNoExecution()
+  })
+
+  it('shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
+    const user = userEvent.setup()
+    generateResponse.mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 422, data: { error: {
+      message: 'Please review the information provided and try again.', requestId: 'provider-context-ref-1',
+      diagnostic: { failureStage: 'GUIDANCE', diagnosticCode: 'REQUIRED_GUIDANCE_UNAVAILABLE' },
+    } } }) }).mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 422, data: { error: {
+      message: 'Please review the information provided and try again.', requestId: 'provider-context-ref-2',
+      diagnostic: { failureStage: 'INTERNAL_STAGE', diagnosticCode: 'RAW_INTERNAL_REASON' },
+    } } }) })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Generate draft' }))
+    expect(await screen.findByText('Please review the information provided and try again. Diagnostic: guidance preparation; required guidance was not available. Reference: provider-context-ref-1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Generate draft' }))
+    expect(await screen.findByText('Please review the information provided and try again. Reference: provider-context-ref-2')).toBeInTheDocument()
+    expect(screen.queryByText(/RAW_INTERNAL_REASON|INTERNAL_STAGE/)).not.toBeInTheDocument()
+  })
+
+  it('legacy selected-draft revision: warns that a submitted request was saved when only the refresh fails', async () => {
     const user = userEvent.setup()
     refetchSession.mockRejectedValueOnce(new Error('Internal refresh detail must not render.'))
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
     expect(screen.getByText(
@@ -1589,7 +1802,7 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByText('Internal refresh detail must not render.')).not.toBeInTheDocument()
   })
 
-  it('keeps a rejected mutation on the standard action-failed path', async () => {
+  it('legacy selected-draft revision: keeps a rejected mutation on the standard action-failed path', async () => {
     const user = userEvent.setup()
     submitMessage.mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
@@ -1603,16 +1816,19 @@ describe('OutcomeStudioWorkspace', () => {
       }),
     })
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
     expect(screen.getByText('The request could not be submitted. Reference: outcome-submit-ref-1')).toBeInTheDocument()
     expect(screen.queryByText('Outcome Studio refresh needed')).not.toBeInTheDocument()
   })
 
-  it('shows only the stable output-contract clarification as an inline composer error', async () => {
+  it('legacy selected-draft revision: shows only the stable output-contract clarification as an inline composer error', async () => {
     const user = userEvent.setup()
     submitMessage.mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
@@ -1627,16 +1843,19 @@ describe('OutcomeStudioWorkspace', () => {
       }),
     })
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare something for leadership.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Which outcome should I prepare: Board Narrative?')
     expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Prepare something for leadership.')
     expect(submitMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('reconciles a committed message after response loss without submitting it twice', async () => {
+  it('legacy selected-draft revision: reconciles a committed message after response loss without submitting it twice', async () => {
     const user = userEvent.setup()
     submitMessage.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
     loadSessionForReconciliation.mockReturnValue(resolvedMutation({
@@ -1654,9 +1873,12 @@ describe('OutcomeStudioWorkspace', () => {
       },
     }))
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByText('Outcome Studio request recovered')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('')
@@ -1669,19 +1891,22 @@ describe('OutcomeStudioWorkspace', () => {
     })
   })
 
-  it('retains the prompt and permits a manual retry when reconciliation proves no write', async () => {
+  it('legacy selected-draft revision: retains the prompt and permits a manual retry when reconciliation proves no write', async () => {
     const user = userEvent.setup()
     submitMessage
       .mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
       .mockReturnValueOnce(resolvedMutation())
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
     expect(submitMessage).toHaveBeenCalledTimes(2)
   })
 
@@ -1708,19 +1933,22 @@ describe('OutcomeStudioWorkspace', () => {
     submitMessage.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR', error: 'lost response' }) })
     loadSessionForReconciliation.mockReturnValue(reconcileResult)
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Outcome Studio could not confirm whether this request was saved. Refresh before trying again.',
     )
-    expect(screen.getByRole('button', { name: 'Submit request' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Submit revision' })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('Refine the recommendation.')
     expect(submitMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
+  it('legacy selected-draft revision: shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
     const user = userEvent.setup()
     submitMessage.mockReturnValue({
       unwrap: vi.fn().mockRejectedValue({
@@ -1738,9 +1966,12 @@ describe('OutcomeStudioWorkspace', () => {
       }),
     })
     renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Create the brief.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
 
     expect(await screen.findByText('Outcome Studio action failed')).toBeInTheDocument()
     expect(screen.getByText(
@@ -1763,7 +1994,7 @@ describe('OutcomeStudioWorkspace', () => {
       }),
     })
 
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
+    await user.click(screen.getByRole('button', { name: 'Submit revision' }))
     expect(await screen.findByText(
       'Please review the information provided and try again. Reference: provider-context-ref-2',
     )).toBeInTheDocument()
@@ -1821,13 +2052,12 @@ describe('OutcomeStudioWorkspace', () => {
     renderPage()
 
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Refine the recommendation.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
-    expect(submitMessage).toHaveBeenCalledWith({
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001',
       customerId: 'customer-001',
       tenantId: 'tenant-001',
-      sessionId: 'session-1',
-      body: { prompt: 'Refine the recommendation.' },
+      body: { prompt: 'Refine the recommendation.', action: 'ANSWER', sessionId: 'session-1' },
     })
 
     await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
@@ -1856,6 +2086,10 @@ describe('OutcomeStudioWorkspace', () => {
     'fails closed for %s session and draft information',
     async (currentness) => {
     const user = userEvent.setup()
+    const view = renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
     const outOfDateSession = {
       ...session,
       informationStatus: { status: currentness, currentness },
@@ -1870,7 +2104,7 @@ describe('OutcomeStudioWorkspace', () => {
       error: null,
       refetch: refetchSession,
     })
-    renderPage()
+    view.rerender(makePage())
 
     expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
@@ -1889,6 +2123,11 @@ describe('OutcomeStudioWorkspace', () => {
       'Approval is blocked until the draft uses current verified business information.',
     )
     expect(approveDraft).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Preview' }))
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }))
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Submit revision' })).toBeDisabled()
+    expect(submitMessage).not.toHaveBeenCalled()
     },
   )
 
@@ -1923,69 +2162,41 @@ describe('OutcomeStudioWorkspace', () => {
     expect(approveDraft).not.toHaveBeenCalled()
   })
 
-  it('starts a session conversationally and submits the first request without refetching the skipped session query', async () => {
+  it('plans before a session exists without starting one or refetching the skipped session query', async () => {
     const user = userEvent.setup()
-    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
-      data: { data: { ...studio, sessions: [] } },
-      isLoading: false,
-      error: null,
-      refetch: refetchStudio,
-    })
-    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      error: null,
-      refetch: refetchSession,
-    })
-    refetchSession.mockRejectedValue(new Error('Skipped query must not refetch.'))
+    useGetRuntimeOutcomeStudioQuery.mockReturnValue({ data: { data: { ...studio, sessions: [] } }, refetch: refetchStudio })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: undefined, refetch: refetchSession })
     renderPage()
-
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
-
-    expect(createSession).toHaveBeenCalledWith({
-      runtimeInstanceId: 'value-narrative-001',
-      customerId: 'customer-001',
-      tenantId: 'tenant-001',
-      body: { prompt: 'Prepare a board narrative.' },
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    expect(planRequest).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
+      body: { prompt: 'Prepare a board narrative.', action: 'ANSWER' },
     })
-    expect(submitMessage).toHaveBeenCalledWith({
-      runtimeInstanceId: 'value-narrative-001',
-      customerId: 'customer-001',
-      tenantId: 'tenant-001',
-      sessionId: 'session-new',
-      body: { prompt: 'Prepare a board narrative.' },
-    })
-    expect(refetchStudio).toHaveBeenCalled()
-    expect(refetchReadiness).toHaveBeenCalled()
+    expect(screen.getByText('No active session')).toBeInTheDocument()
+    expect(screen.getByText('No session requests yet')).toBeInTheDocument()
+    expect(confirmPlan).not.toHaveBeenCalled()
     expect(refetchSession).not.toHaveBeenCalled()
-    expect(await screen.findByText('Outcome Studio session started and request submitted.')).toBeInTheDocument()
+    assertNoExecution()
   })
 
-  it('warns that a new session was saved when its refresh fails', async () => {
+  it.each(['customer', 'tenant', 'logout', 'runtime'])('ignores a late planning response after %s changes', async (change) => {
     const user = userEvent.setup()
-    useGetRuntimeOutcomeStudioQuery.mockReturnValue({
-      data: { data: { ...studio, sessions: [] } },
-      isLoading: false,
-      error: null,
-      refetch: refetchStudio,
-    })
-    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      error: null,
-      refetch: refetchSession,
-    })
-    refetchStudio.mockRejectedValueOnce(new Error('Internal session refresh detail must not render.'))
-    renderPage()
-
+    let resolve
+    planRequest.mockReturnValue({ unwrap: () => new Promise((done) => { resolve = done }) })
+    const view = renderPage()
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
-    await user.click(screen.getByRole('button', { name: 'Submit request' }))
-
-    expect(await screen.findByText('Outcome Studio refresh needed')).toBeInTheDocument()
-    expect(screen.queryByText('Outcome Studio action failed')).not.toBeInTheDocument()
-    expect(screen.queryByText('Internal session refresh detail must not render.')).not.toBeInTheDocument()
-    expect(refetchSession).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    if (change === 'customer') testScope.customerId = 'customer-002'
+    if (change === 'tenant') testScope.tenantId = 'tenant-002'
+    if (change === 'logout') authState.revision += 1
+    if (change === 'runtime') await user.click(screen.getByRole('button', { name: 'Switch test runtime' }))
+    view.rerender(makePage())
+    await act(async () => resolve({ data: planResult({ question: 'Private old-scope question' }) }))
+    expect(screen.queryByText('Private old-scope question')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Request plan' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toHaveValue('')
+    assertNoExecution()
   })
 
   it.each([

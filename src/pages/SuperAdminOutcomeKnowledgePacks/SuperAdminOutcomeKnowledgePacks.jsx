@@ -659,10 +659,11 @@ function KnowledgePackRowActionsMenu({
   onDisable,
   onDelete,
   disabled = false,
+  selectedVersionOnly = false,
 }) {
   const options = []
 
-  if (canViewKnowledgePackDetail(row)) {
+  if (!selectedVersionOnly && canViewKnowledgePackDetail(row)) {
     options.push({ value: 'details', label: 'View Details' })
   }
 
@@ -692,8 +693,8 @@ function KnowledgePackRowActionsMenu({
     options.push({ value: 'reject-review', label: 'Reject' })
   }
 
-  const activateDisabledReason = getActivateKnowledgePackDisabledReason(row)
-  if (canActivateKnowledgePack(row)) {
+  const activateDisabledReason = getActivateKnowledgePackDisabledReason(row, { requireValidationSummary: selectedVersionOnly })
+  if (canActivateKnowledgePack(row) && !activateDisabledReason) {
     options.push({ value: 'activate', label: 'Activate Version' })
   } else if (activateDisabledReason) {
     options.push({
@@ -703,15 +704,15 @@ function KnowledgePackRowActionsMenu({
     })
   }
 
-  if (canDeprecateKnowledgePack(row)) {
+  if (!selectedVersionOnly && canDeprecateKnowledgePack(row)) {
     options.push({ value: 'deprecate', label: 'Deprecate Version' })
   }
 
-  if (canDisableKnowledgePack(row)) {
+  if (!selectedVersionOnly && canDisableKnowledgePack(row)) {
     options.push({ value: 'disable', label: 'Disable Version' })
   }
 
-  if (canDeleteKnowledgePack(row)) {
+  if (!selectedVersionOnly && canDeleteKnowledgePack(row)) {
     options.push({ value: 'delete', label: 'Delete Pack' })
   }
 
@@ -724,6 +725,7 @@ function KnowledgePackRowActionsMenu({
         options={options}
         disabled={disabled || options.length === 0}
         onChange={(event) => {
+          if (disabled) return
           if (event.target.value === 'details') onDetails(row)
           if (event.target.value === 'validate') onValidate(row)
           if (event.target.value === 'submit-review') {
@@ -740,7 +742,7 @@ function KnowledgePackRowActionsMenu({
           if (event.target.value === 'disable') onDisable(row)
           if (event.target.value === 'delete') onDelete(row)
         }}
-        aria-label={`Actions for ${row.packKey}`}
+        aria-label={selectedVersionOnly ? 'Actions for selected version' : `Actions for ${row.packKey}`}
       />
     </div>
   )
@@ -1025,6 +1027,10 @@ function KnowledgePackDetailDialog({
   onLoadContentPreview,
   onVersionChange,
   onRollbackVersion,
+  selectedVersionActionRow,
+  onValidate,
+  onReviewStatusChange,
+  onActivate,
   onClose,
 }) {
   const open = Boolean(pack)
@@ -1140,9 +1146,20 @@ function KnowledgePackDetailDialog({
                         }`,
                       }))}
                       onChange={(event) => onVersionChange(event.target.value)}
+                      disabled={isLifecycleLoading}
                     />
                     {selectedVersion ? (
                       <div className="super-admin-outcome-knowledge-packs__lifecycle-actions">
+                        {selectedVersionActionRow ? (
+                          <KnowledgePackRowActionsMenu
+                            row={selectedVersionActionRow}
+                            selectedVersionOnly
+                            disabled={isLifecycleLoading || isLoading || isFetching || isVersionLoading || Boolean(detailError || versionError)}
+                            onValidate={onValidate}
+                            onReviewStatusChange={onReviewStatusChange}
+                            onActivate={onActivate}
+                          />
+                        ) : null}
                         <Button
                           type="button"
                           variant="outline"
@@ -1590,6 +1607,13 @@ function SuperAdminOutcomeKnowledgePacks() {
   const selectedVersion = versionQuery.data?.data
     || detailVersions.find((version) => version.versionId === effectiveSelectedVersionId)
     || null
+  // Cached history is display-only; only an exact fetched version can authorize actions.
+  const fetchedVersion = versionQuery.data?.data
+  const selectedVersionActionRow = fetchedVersion?.packId === detailPackId
+    && fetchedVersion?.versionId === effectiveSelectedVersionId
+    ? { ...fetchedVersion, label: detailData?.label || detailPack?.label,
+      latestVersionId: fetchedVersion.versionId }
+    : null
   const activeContentPreviewKey = buildContentPreviewKey({
     packId: detailPackId,
     versionId: effectiveSelectedVersionId,
@@ -2506,7 +2530,11 @@ function SuperAdminOutcomeKnowledgePacks() {
         selectedVersion={selectedVersion}
         versionError={versionQuery.error ? normalizeError(versionQuery.error) : null}
         isVersionLoading={versionQuery.isLoading || versionQuery.isFetching}
-        isLifecycleLoading={isLifecycleMutating}
+        isLifecycleLoading={isMutating || Boolean(pendingActivation)}
+        selectedVersionActionRow={selectedVersionActionRow}
+        onValidate={handleValidateVersion}
+        onReviewStatusChange={handleReviewStatusChange}
+        onActivate={setPendingActivation}
         contentPreview={selectedContentPreviewState.data}
         contentPreviewError={selectedContentPreviewState.error}
         isContentPreviewLoading={selectedContentPreviewState.isLoading}

@@ -13,6 +13,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   getAccessToken,
+  getSessionRevision,
+  subscribeToSession,
   setAccessToken,
   getRefreshToken,
   setRefreshToken,
@@ -105,6 +107,26 @@ describe('tokenStorage', () => {
       clearTokens()
       expect(getAccessToken()).toBeNull()
       expect(getRefreshToken()).toBeNull()
+    })
+
+    it('notifies session subscribers for identity changes but not token refreshes', () => {
+      const listener = vi.fn()
+      const unsubscribe = subscribeToSession(listener)
+      const initialRevision = getSessionRevision()
+
+      setTokens({ accessToken: 'at', refreshToken: 'rt' })
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(getSessionRevision()).toBe(initialRevision + 1)
+
+      setTokens({ accessToken: 'refreshed-at', refreshToken: 'refreshed-rt' }, { preserveSession: true })
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(getSessionRevision()).toBe(initialRevision + 1)
+
+      clearTokens()
+      expect(listener).toHaveBeenCalledTimes(2)
+      unsubscribe()
+      setAccessToken('after-unsubscribe')
+      expect(listener).toHaveBeenCalledTimes(2)
     })
   })
 

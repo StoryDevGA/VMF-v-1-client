@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
 import {
+  buildOutcomePlanningQuery,
+  buildOutcomePlanConfirmationQuery,
+  buildOutcomePlanRetrievalQuery,
+  usePlanRuntimeOutcomeRequestMutation,
+  useConfirmRuntimeOutcomeRequestPlanMutation,
+  useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   buildRuntimeDiscoveryContradictionsQuery,
   buildReviewRuntimeDiscoveryContradictionQuery,
   useGetRuntimeDiscoveryContradictionsQuery,
@@ -160,6 +166,27 @@ import {
 } from './runtimeInstanceApi.js'
 
 describe('runtimeInstanceApi', () => {
+  it('exports scoped planning endpoints and hooks without using session execution routes', () => {
+    expect(typeof usePlanRuntimeOutcomeRequestMutation).toBe('function')
+    expect(typeof useConfirmRuntimeOutcomeRequestPlanMutation).toBe('function')
+    expect(typeof useLazyRetrieveRuntimeOutcomeRequestPlanQuery).toBe('function')
+    for (const name of ['planRuntimeOutcomeRequest', 'confirmRuntimeOutcomeRequestPlan', 'retrieveRuntimeOutcomeRequestPlan']) {
+      expect(runtimeInstanceApi.endpoints[name]).toBeDefined()
+    }
+    const scope = { runtimeInstanceId: 'runtime/1', customerId: 'customer-1', tenantId: 'tenant-1' }
+    const planning = buildOutcomePlanningQuery({ ...scope, body: { prompt: 'Board decision', action: 'ANSWER' } })
+    expect(planning.method).toBe('POST')
+    expect(planning.url).toBe('/runtime-instances/runtime%2F1/outcome-studio/planning?customerId=customer-1&tenantId=tenant-1')
+    expect(planning.body).toEqual({ prompt: 'Board decision', action: 'ANSWER' })
+    expect(buildOutcomePlanConfirmationQuery({ ...scope, requestId: 'request/1', body: { continuation: 'opaque-receipt', confirm: true } })).toEqual({
+      url: '/runtime-instances/runtime%2F1/outcome-studio/requests/request%2F1/plans?customerId=customer-1&tenantId=tenant-1',
+      method: 'POST', body: { continuation: 'opaque-receipt', confirm: true },
+    })
+    expect(buildOutcomePlanRetrievalQuery({ ...scope, requestId: 'request/1', planId: 'plan/1' })).toBe(
+      '/runtime-instances/runtime%2F1/outcome-studio/requests/request%2F1/plans/plan%2F1?customerId=customer-1&tenantId=tenant-1',
+    )
+  })
+
   it('shares runtime invalidation with contradiction reads and readiness consumers', async () => {
     const store = configureStore({
       reducer: { [runtimeInstanceApi.reducerPath]: runtimeInstanceApi.reducer },
