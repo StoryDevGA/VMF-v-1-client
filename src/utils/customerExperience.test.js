@@ -14,6 +14,12 @@ describe('customer experience resolution', () => {
     expect(resolveCustomerExperience({ featureEntitlements: ['DEALS', 'VIEWS'] })).toBe(CUSTOMER_EXPERIENCE.SIGNAL)
   })
 
+  it('keeps Signal when the API adds an unrelated additive entitlement token', () => {
+    expect(resolveCustomerExperience({ featureEntitlements: ['DEALS', 'VIEWS', 'NEW_SIGNAL_CAPABILITY'] })).toBe(
+      CUSTOMER_EXPERIENCE.SIGNAL,
+    )
+  })
+
   it('fails closed for missing, empty, and unknown scopes', () => {
     expect(resolveCustomerExperience(null)).toBe(CUSTOMER_EXPERIENCE.UNKNOWN)
     expect(resolveCustomerExperience({ featureEntitlements: [] })).toBe(CUSTOMER_EXPERIENCE.UNKNOWN)
@@ -26,16 +32,50 @@ describe('customer home workspace summary adapter', () => {
     expect(buildCustomerHomeWorkspaceCard({
       id: 'workspace-1',
       name: 'Objective',
+      runtimeType: 'VALUE_NARRATIVE',
+      frameworkKey: 'VMF',
       frameworkLifecycleStage: 'REVIEW',
       validationStatus: 'ACCEPTED',
       readinessState: 'READY',
       submittedForReview: true,
     })).toMatchObject({
       businessObjective: 'Objective',
-      currentStage: 'REVIEW',
+      workspaceType: 'Value Narrative workspace',
+      currentStage: 'Review',
       understanding: 'Understanding accepted',
-      evidence: 'READY',
+      evidence: 'Source basis available',
       nextAction: 'Review & evidence',
+      statusSignal: 'Evidence checked',
+    })
+  })
+
+  it('derives customer labels from VMF summary fields instead of exposing enum tokens', () => {
+    expect(buildCustomerHomeWorkspaceCard({
+      runtimeType: 'VALUE_NARRATIVE',
+      frameworkKey: 'VMF',
+      frameworkLifecycleStage: 'DRAFT',
+      validationStatus: 'PENDING',
+      readinessState: 'BLOCKED',
+    })).toMatchObject({
+      workspaceType: 'Value Narrative workspace',
+      currentStage: 'Draft',
+      understanding: 'Review items',
+      evidence: 'Items needing attention',
+      statusSignal: null,
+    })
+  })
+
+  it('maps VMF readiness states to customer language', () => {
+    expect(buildCustomerHomeWorkspaceCard({ readinessState: 'VALIDATED' }).evidence).toBe('Evidence checked')
+    expect(buildCustomerHomeWorkspaceCard({ readinessState: 'IN_REVIEW' }).evidence).toBe('Review & evidence')
+    expect(buildCustomerHomeWorkspaceCard({ readinessState: 'DRAFT' }).evidence).toBe('Not yet recorded')
+    expect(buildCustomerHomeWorkspaceCard({ snapshotStatus: 'PACKAGE_BOUND' }).evidence).toBe('Source basis available')
+  })
+
+  it('does not use a display name as a route identity', () => {
+    expect(buildCustomerHomeWorkspaceCard({ name: 'Named workspace' })).toMatchObject({
+      id: null,
+      title: 'Named workspace',
     })
   })
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
 
@@ -45,6 +45,7 @@ function mockAuthorization({ scope = signalScope, canView = true } = {}) {
     getCustomerScope: vi.fn(() => scope),
     hasCustomerPermission: vi.fn(() => canView),
     hasTenantPermission: vi.fn(() => canView),
+    isCustomerScopeReady: true,
   })
 }
 
@@ -80,6 +81,8 @@ describe('Dashboard customer home', () => {
           id: 'workspace-1',
           name: 'Launch a stronger operating model',
           description: 'Business objective from summary',
+          runtimeType: 'VALUE_NARRATIVE',
+          frameworkKey: 'VMF',
           frameworkLifecycleStage: 'REVIEW',
           validationStatus: 'ACCEPTED',
           readinessState: 'READY',
@@ -96,7 +99,7 @@ describe('Dashboard customer home', () => {
 
     expect(screen.getByRole('heading', { name: 'Customer Workspace' })).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Launch a stronger operating model', level: 2 }),
+      screen.getByRole('heading', { name: 'Continue Launch a stronger operating model', level: 2 }),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Attention required' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeInTheDocument()
@@ -105,7 +108,8 @@ describe('Dashboard customer home', () => {
       '/app/activity',
     )
     expect(screen.getByText('Understanding accepted')).toBeInTheDocument()
-    expect(screen.getByText('READY')).toBeInTheDocument()
+    expect(screen.getByText('Source basis available')).toBeInTheDocument()
+    expect(screen.getAllByText('Value Narrative workspace').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
       'href',
       '/app/runtime/workspace-1',
@@ -115,6 +119,8 @@ describe('Dashboard customer home', () => {
         customerId: 'cust-1',
         tenantId: 'tenant-1',
         runtimeType: 'VALUE_NARRATIVE',
+        status: 'ACTIVE',
+        page: 1,
         pageSize: 6,
       }),
       expect.objectContaining({ skip: false }),
@@ -130,5 +136,65 @@ describe('Dashboard customer home', () => {
     expect(screen.queryByRole('link', { name: /Website Analysis/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Project Workspaces/i })).not.toBeInTheDocument()
     expect(useListRuntimeInstancesQuery).not.toHaveBeenCalled()
+  })
+
+  it('holds the home while customer scopes are still resolving', () => {
+    mockAuthorization()
+    useAuthorization.mockReturnValue({
+      getCustomerScope: vi.fn(() => signalScope),
+      hasCustomerPermission: vi.fn(() => true),
+      hasTenantPermission: vi.fn(() => true),
+      isCustomerScopeReady: false,
+    })
+
+    renderDashboard()
+
+    expect(screen.getByRole('heading', { name: 'Resolving workspace access…' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Signal Home' })).not.toBeInTheDocument()
+  })
+
+  it('sends search and filter changes to the paginated summary query', () => {
+    mockAuthorization({ scope: coreScope })
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: { data: [], meta: { total: 0, totalPages: 1 } },
+      isLoading: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search Project Workspaces' }), {
+      target: { value: 'parlon' },
+    })
+
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'parlon', status: 'ACTIVE', page: 1, pageSize: 6 }),
+      expect.objectContaining({ skip: false }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'parlon', status: undefined, page: 1, pageSize: 6 }),
+      expect.objectContaining({ skip: false }),
+    )
+  })
+
+  it('uses the bounded workspace route when a summary has no route id', () => {
+    mockAuthorization({ scope: coreScope })
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [{ name: 'Unidentified workspace', runtimeType: 'VALUE_NARRATIVE' }],
+        meta: { total: 1 },
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/app/workspaces/vmf')
+    fireEvent.click(screen.getByRole('button', { name: 'Show actions for Unidentified workspace' }))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/app/workspaces/vmf')
   })
 })

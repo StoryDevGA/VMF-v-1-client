@@ -11,7 +11,12 @@
 
 import { useMemo, useCallback } from 'react'
 import { useSelector } from 'react-redux'
-import { selectCurrentUser, selectCustomerScopes, selectResolvedPermissions } from '../store/slices/authSlice.js'
+import {
+  selectCurrentUser,
+  selectCustomerScopes,
+  selectCustomerScopesReady,
+  selectResolvedPermissions,
+} from '../store/slices/authSlice.js'
 import {
   getUserPlatformRoles,
   hasPlatformRole as _hasPlatformRole,
@@ -42,6 +47,7 @@ import {
 export function useAuthorization() {
   const user = useSelector(selectCurrentUser)
   const customerScopes = useSelector(selectCustomerScopes)
+  const customerScopesReady = useSelector(selectCustomerScopesReady)
   const resolvedPermissions = useSelector(selectResolvedPermissions)
   const resolvedCustomerScopes = useMemo(() => {
     if (Array.isArray(customerScopes) && customerScopes.length > 0) {
@@ -199,6 +205,7 @@ export function useAuthorization() {
   return {
     user,
     customerScopes: resolvedCustomerScopes,
+    isCustomerScopeReady: customerScopesReady,
     resolvedPermissions,
     // Platform
     platformRoles,

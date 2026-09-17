@@ -88,6 +88,7 @@ import { createSlice } from '@reduxjs/toolkit'
  * @typedef {Object} AuthState
  * @property {AuthUser|null} user
  * @property {CustomerScope[]} customerScopes
+ * @property {boolean}         customerScopesReady
  * @property {ResolvedPermissions|null} resolvedPermissions
  * @property {'idle'|'loading'|'authenticated'|'unauthenticated'} status
  */
@@ -96,6 +97,7 @@ import { createSlice } from '@reduxjs/toolkit'
 const initialState = {
   user: null,
   customerScopes: [],
+  customerScopesReady: false,
   resolvedPermissions: null,
   status: 'idle', // idle → loading → authenticated | unauthenticated
 }
@@ -116,6 +118,7 @@ const authSlice = createSlice({
       state.customerScopes = Array.isArray(action.payload.customerScopes)
         ? action.payload.customerScopes
         : []
+      state.customerScopesReady = true
       state.resolvedPermissions = action.payload.resolvedPermissions ?? null
       state.status = 'authenticated'
     },
@@ -127,6 +130,7 @@ const authSlice = createSlice({
     clearCredentials: (state) => {
       state.user = null
       state.customerScopes = []
+      state.customerScopesReady = false
       state.resolvedPermissions = null
       state.status = 'unauthenticated'
     },
@@ -146,6 +150,7 @@ const authSlice = createSlice({
      */
     setLoading: (state) => {
       state.status = 'loading'
+      state.customerScopesReady = false
     },
   },
 })
@@ -165,6 +170,9 @@ export const selectCustomerScopes = (state) => state.auth.customerScopes ?? EMPT
 
 /** @param {import('../index').RootState} state */
 export const selectAuthStatus = (state) => state.auth.status
+
+/** @param {import('../index').RootState} state */
+export const selectCustomerScopesReady = (state) => state.auth.customerScopesReady === true
 
 /** @param {import('../index').RootState} state */
 export const selectIsAuthenticated = (state) => state.auth.status === 'authenticated'

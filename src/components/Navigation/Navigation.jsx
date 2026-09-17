@@ -415,7 +415,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                 ? 'Account menu'
                 : `${entry.label} account menu`
 
-              const groupClasses = ['nav__item', 'nav__item--group', 'nav__item--user', activeGroup && 'nav__item--active']
+              const groupClasses = ['nav__item', 'nav__item--group', `nav__item--${entry.key}`, 'nav__item--user', activeGroup && 'nav__item--active']
                 .filter(Boolean)
                 .join(' ')
 
@@ -507,7 +507,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             const activeGroup = isGroupActive(entry.links)
             const submenuId = `nav-submenu-${entry.key}`
 
-            const groupClasses = ['nav__item', 'nav__item--group', activeGroup && 'nav__item--active']
+            const groupClasses = ['nav__item', 'nav__item--group', `nav__item--${entry.key}`, activeGroup && 'nav__item--active']
               .filter(Boolean)
               .join(' ')
 

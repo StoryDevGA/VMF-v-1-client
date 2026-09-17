@@ -30,6 +30,14 @@ describe('CSS Design System', () => {
       expect(computedStyles.getPropertyValue('--spacing-md').trim()).toBe('1rem')
       expect(computedStyles.getPropertyValue('--spacing-xs').trim()).toBe('0.25rem')
     })
+
+    it('should define component sizing tokens separately from the spacing scale', () => {
+      expect(computedStyles.getPropertyValue('--control-height-sm')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--control-height-action')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--control-height-nav')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--field-width-search')).toBeTruthy()
+      expect(computedStyles.getPropertyValue('--layout-core-rail')).toBeTruthy()
+    })
   })
 
   describe('Design Tokens - Typography', () => {

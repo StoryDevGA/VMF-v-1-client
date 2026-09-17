@@ -34,6 +34,7 @@ export function Status({
   size = 'md',
   pulse = false,
   showIcon = false,
+  announce = true,
   className = '',
   ...props
 }) {
@@ -61,8 +62,8 @@ export function Status({
   return (
     <span
       className={classNames}
-      role="status"
-      aria-label={children ? `Status: ${children}` : `Status: ${variant}`}
+      role={announce ? 'status' : undefined}
+      aria-label={announce ? (children ? `Status: ${children}` : `Status: ${variant}`) : undefined}
       {...props}
     >
       {IconComponent ? (

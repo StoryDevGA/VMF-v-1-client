@@ -19,6 +19,7 @@ import authReducer, {
   selectCurrentUser,
   selectCustomerScopes,
   selectAuthStatus,
+  selectCustomerScopesReady,
   selectIsAuthenticated,
   selectResolvedPermissions,
 } from './authSlice.js'
@@ -54,7 +55,7 @@ describe('authSlice', () => {
   describe('reducer', () => {
     it('should return the initial state', () => {
       const state = authReducer(undefined, { type: '@@INIT' })
-      expect(state).toEqual({ user: null, customerScopes: [], resolvedPermissions: null, status: 'idle' })
+      expect(state).toEqual({ user: null, customerScopes: [], customerScopesReady: false, resolvedPermissions: null, status: 'idle' })
     })
 
     it('should handle setCredentials', () => {
@@ -64,6 +65,7 @@ describe('authSlice', () => {
       )
       expect(state.user).toEqual(mockUser)
       expect(state.customerScopes).toEqual(mockCustomerScopes)
+      expect(state.customerScopesReady).toBe(true)
       expect(state.status).toBe('authenticated')
     })
 
@@ -86,6 +88,7 @@ describe('authSlice', () => {
     it('should default customerScopes to an empty array when omitted', () => {
       const state = authReducer(undefined, setCredentials({ user: mockUser }))
       expect(state.customerScopes).toEqual([])
+      expect(state.customerScopesReady).toBe(true)
     })
 
     it('should handle clearCredentials', () => {
@@ -96,6 +99,7 @@ describe('authSlice', () => {
       const state = authReducer(authed, clearCredentials())
       expect(state.user).toBeNull()
       expect(state.customerScopes).toEqual([])
+      expect(state.customerScopesReady).toBe(false)
       expect(state.resolvedPermissions).toBeNull()
       expect(state.status).toBe('unauthenticated')
     })
@@ -149,6 +153,11 @@ describe('authSlice', () => {
 
     it('selectAuthStatus returns the status', () => {
       expect(selectAuthStatus(rootAuthenticated)).toBe('authenticated')
+    })
+
+    it('selectCustomerScopesReady returns the readiness signal', () => {
+      expect(selectCustomerScopesReady({ auth: { customerScopesReady: true } })).toBe(true)
+      expect(selectCustomerScopesReady({ auth: {} })).toBe(false)
     })
 
     it('selectIsAuthenticated returns true when authenticated', () => {

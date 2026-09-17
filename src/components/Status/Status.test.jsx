@@ -158,6 +158,12 @@ describe('Status Component', () => {
       render(<Status aria-live="polite">Live Status</Status>)
       expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
     })
+
+    it('can render as a non-live status chip', () => {
+      const { container } = render(<Status announce={false}>Workspace stage</Status>)
+      expect(container.querySelector('.status')).not.toHaveAttribute('role')
+      expect(container.querySelector('.status')).not.toHaveAttribute('aria-label')
+    })
   })
 
   describe('Edge Cases', () => {
