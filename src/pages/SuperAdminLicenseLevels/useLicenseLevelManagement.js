@@ -33,6 +33,7 @@ export function useLicenseLevelManagement() {
   const [editForm, setEditForm] = useState(INITIAL_FORM)
   const [editBase, setEditBase] = useState(INITIAL_FORM)
   const [editErrors, setEditErrors] = useState({})
+  const [deactivationConfirmation, setDeactivationConfirmation] = useState('')
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -72,9 +73,12 @@ export function useLicenseLevelManagement() {
       name: details.name ?? '',
       description: details.description ?? '',
       entitlements: formatEntitlements(details.featureEntitlements),
+      homeExperience: details.homeExperience ?? 'SIGNAL',
       isActive: Boolean(details.isActive),
     }
 
+    // The selected licence response hydrates the external edit form state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditForm(next)
     setEditBase(next)
   }, [selectedResponse])
@@ -141,6 +145,7 @@ export function useLicenseLevelManagement() {
 
     setSelectedLicenseLevelId(id)
     setEditErrors({})
+    setDeactivationConfirmation('')
     setEditOpen(true)
   }, [])
 
@@ -150,6 +155,7 @@ export function useLicenseLevelManagement() {
     setEditForm(INITIAL_FORM)
     setEditBase(INITIAL_FORM)
     setEditErrors({})
+    setDeactivationConfirmation('')
   }, [])
 
   const handleEditSubmit = useCallback(async () => {
@@ -162,6 +168,21 @@ export function useLicenseLevelManagement() {
       return
     }
 
+    const selectedCustomerCount = Number(selectedResponse?.data?.customerCount ?? 0)
+    const requiresDeactivationConfirmation =
+      editBase.isActive
+      && !editForm.isActive
+      && selectedCustomerCount > 0
+    if (
+      requiresDeactivationConfirmation
+      && deactivationConfirmation.trim() !== editBase.name.trim()
+    ) {
+      setEditErrors({
+        isActive: `Type "${editBase.name}" to deactivate this level while ${selectedCustomerCount} customer${selectedCustomerCount === 1 ? '' : 's'} are assigned.`,
+      })
+      return
+    }
+
     const patch = {}
     if (payload.name !== editBase.name.trim()) patch.name = payload.name
     if ((payload.description ?? '') !== editBase.description.trim()) {
@@ -169,6 +190,12 @@ export function useLicenseLevelManagement() {
     }
     if (payload.isActive !== Boolean(editBase.isActive)) {
       patch.isActive = payload.isActive
+      if (requiresDeactivationConfirmation) {
+        patch.deactivationConfirmation = deactivationConfirmation.trim()
+      }
+    }
+    if (payload.homeExperience !== (editBase.homeExperience ?? 'SIGNAL')) {
+      patch.homeExperience = payload.homeExperience
     }
 
     const baseEntitlements = parseEntitlements(editBase.entitlements).join('|')
@@ -220,6 +247,8 @@ export function useLicenseLevelManagement() {
     closeEditDialog,
     editBase,
     editForm,
+    deactivationConfirmation,
+    selectedResponse,
     selectedLicenseLevelId,
     updateLicenseLevel,
     addToast,
@@ -260,6 +289,10 @@ export function useLicenseLevelManagement() {
     editForm,
     setEditForm,
     editErrors,
+    deactivationConfirmation,
+    setDeactivationConfirmation,
+    selectedCustomerCount: Number(selectedResponse?.data?.customerCount ?? 0),
+    editBaseIsActive: Boolean(editBase.isActive),
     handleEditSubmit,
     updateResult,
     isFetchingSelected,

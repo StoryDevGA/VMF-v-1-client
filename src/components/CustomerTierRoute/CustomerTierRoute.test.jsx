@@ -22,9 +22,13 @@ vi.mock('../../store/slices/authSlice.js', () => ({
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 
-function renderRoute({ scope, requiredTier = 'CORE', customerId = 'cust-1' } = {}) {
+function renderRoute({ scope, requiredTier = 'CORE', requiredEntitlement, customerId = 'cust-1' } = {}) {
   useTenantContext.mockReturnValue({ customerId })
-  useAuthorization.mockReturnValue({ getCustomerScope: vi.fn(() => scope) })
+  useAuthorization.mockReturnValue({
+    getCustomerScope: vi.fn(() => scope),
+    hasFeatureEntitlement: vi.fn((_customerId, featureKey) =>
+      scope?.featureEntitlements?.includes(featureKey)),
+  })
 
   return render(
     <MemoryRouter initialEntries={['/protected']}>
@@ -32,7 +36,7 @@ function renderRoute({ scope, requiredTier = 'CORE', customerId = 'cust-1' } = {
         <Route
           path="/protected"
           element={(
-            <CustomerTierRoute requiredTier={requiredTier}>
+            <CustomerTierRoute requiredTier={requiredTier} requiredEntitlement={requiredEntitlement}>
               <h1>Protected customer surface</h1>
             </CustomerTierRoute>
           )}
@@ -60,6 +64,19 @@ describe('CustomerTierRoute', () => {
 
   it('fails closed for missing customer scope', () => {
     renderRoute({ scope: null })
+    expect(screen.getByRole('heading', { name: 'Customer Home' })).toBeInTheDocument()
+  })
+
+  it('redirects a Signal scope when the requested product entitlement is absent', () => {
+    renderRoute({
+      requiredTier: 'SIGNAL',
+      requiredEntitlement: 'DOCUMENTS',
+      scope: {
+        homeExperience: 'SIGNAL',
+        entitlementSource: 'LICENSE_LEVEL',
+        featureEntitlements: ['WEBSITE'],
+      },
+    })
     expect(screen.getByRole('heading', { name: 'Customer Home' })).toBeInTheDocument()
   })
 })

@@ -105,9 +105,31 @@ export const createFormFromCustomer = (customer) => ({
   maxVmfsPerTenant: String(customer?.governance?.maxVmfsPerTenant ?? 1),
   planCode: customer?.billing?.planCode ?? 'FREE',
   billingCycle: customer?.billing?.cycle ?? 'MONTHLY',
+  startingWebsiteCredits: '0',
+  startingDocumentCredits: '0',
+  creditBalances: {
+    websiteAnalysis: Number(customer?.creditBalances?.websiteAnalysis ?? 0),
+    documentImprovement: Number(customer?.creditBalances?.documentImprovement ?? 0),
+  },
 })
 
-export const validateForm = (form) => {
+export const parseWholeNumber = (value) => {
+  const normalized = String(value ?? '').trim()
+  if (!/^[-+]?\d+$/.test(normalized)) return Number.NaN
+  return Number(normalized)
+}
+
+const parseCreditAmount = (value) => parseWholeNumber(value)
+
+export const validateForm = (
+  form,
+  {
+    includeStartingCredits = false,
+    includeTopology = true,
+    requireLicenseLevel = true,
+    selectedLicenseLevel = null,
+  } = {},
+) => {
   const errors = {}
   const payload = {}
 
@@ -119,8 +141,10 @@ export const validateForm = (form) => {
   if (website && !isValidUrl(website)) errors.website = 'Website must be a valid URL.'
   else if (website) payload.website = website
 
-  if (!form.licenseLevelId) errors.licenseLevelId = 'Licence level is required.'
-  else payload.licenseLevelId = form.licenseLevelId
+  if (!form.licenseLevelId) {
+    if (requireLicenseLevel) errors.licenseLevelId = 'Licence level is required.'
+    else payload.licenseLevelId = null
+  } else payload.licenseLevelId = form.licenseLevelId
 
   let maxTenants = 1
   if (form.topology === 'MULTI_TENANT') {
@@ -135,16 +159,66 @@ export const validateForm = (form) => {
     errors.maxVmfsPerTenant = 'VMF count must be at least 1.'
   }
 
-  payload.topology = form.topology
-  payload.vmfPolicy = getVmfPolicyForCount(form.topology, maxVmfsPerTenant)
-  payload.isServiceProvider = form.topology === 'MULTI_TENANT'
+  if (includeTopology) {
+    payload.topology = form.topology
+    payload.vmfPolicy = getVmfPolicyForCount(form.topology, maxVmfsPerTenant)
+    payload.isServiceProvider = form.topology === 'MULTI_TENANT'
+  }
   payload.governance = { maxTenants, maxVmfsPerTenant }
   payload.billing = {
     planCode: form.planCode.trim() || 'FREE',
     cycle: form.billingCycle,
   }
 
+  if (includeStartingCredits) {
+    const websiteAnalysis = parseCreditAmount(form.startingWebsiteCredits)
+    const documentImprovement = parseCreditAmount(form.startingDocumentCredits)
+    if (!Number.isInteger(websiteAnalysis) || websiteAnalysis < 0) {
+      errors.startingWebsiteCredits = 'Website Analysis starting credits must be a whole number of 0 or more.'
+    }
+    if (!Number.isInteger(documentImprovement) || documentImprovement < 0) {
+      errors.startingDocumentCredits = 'Document Improvement starting credits must be a whole number of 0 or more.'
+    }
+    if (
+      !errors.startingWebsiteCredits
+      && !errors.startingDocumentCredits
+      && (websiteAnalysis > 0 || documentImprovement > 0)
+      && selectedLicenseLevel?.homeExperience
+      && selectedLicenseLevel.homeExperience !== 'SIGNAL'
+    ) {
+      errors.form = 'Starting credits are only available for Signal licence levels.'
+    }
+    if (!errors.startingWebsiteCredits && !errors.startingDocumentCredits) {
+      payload.startingCredits = { websiteAnalysis, documentImprovement }
+    }
+  }
+
   return { errors, payload }
+}
+
+export const mapCustomerValidationErrors = (details) => {
+  if (!details || typeof details !== 'object') return {}
+
+  const mapped = {}
+  const fieldMap = {
+    'startingCredits.websiteAnalysis': 'startingWebsiteCredits',
+    'startingCredits.documentImprovement': 'startingDocumentCredits',
+    maxVmfsPerTenant: 'maxVmfsPerTenant',
+  }
+
+  for (const [field, message] of Object.entries(details)) {
+    const target = fieldMap[field] || field
+    if (typeof message === 'string' && message.trim()) mapped[target] = message
+  }
+
+  if (details.startingCredits && typeof details.startingCredits === 'object') {
+    for (const [field, message] of Object.entries(details.startingCredits)) {
+      const target = fieldMap[`startingCredits.${field}`]
+      if (target && typeof message === 'string' && message.trim()) mapped[target] = message
+    }
+  }
+
+  return mapped
 }
 
 export const getFirstErrorDetailMessage = (details) => {

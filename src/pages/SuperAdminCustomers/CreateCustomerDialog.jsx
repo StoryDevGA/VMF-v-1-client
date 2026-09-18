@@ -100,9 +100,50 @@ export function CreateCustomerDialog({
                 })
                 .filter(Boolean),
             ]}
-            onChange={(event) => setForm((current) => ({ ...current, licenseLevelId: event.target.value }))}
+            onChange={(event) => {
+              const nextLicenseLevelId = event.target.value
+              const selectedLevel = licenseLevels.find(
+                (level) => String(level.id ?? level._id) === String(nextLicenseLevelId),
+              )
+              setForm((current) => ({
+                ...current,
+                licenseLevelId: nextLicenseLevelId,
+                ...(selectedLevel?.homeExperience === 'SIGNAL'
+                  ? {}
+                  : { startingWebsiteCredits: '0', startingDocumentCredits: '0' }),
+              }))
+            }}
             error={errors.licenseLevelId}
           />
+          {licenseLevels.find((level) => String(level.id ?? level._id) === String(form.licenseLevelId))?.homeExperience === 'SIGNAL' ? <fieldset className="super-admin-customers__credit-fields">
+            <legend className="super-admin-customers__field-label">Signal starting credits</legend>
+            <p className="super-admin-customers__field-help">Use whole numbers. Leave both at zero when no starting credits are included.</p>
+            <div className="super-admin-customers__row">
+              <Input
+                id="sa-customer-starting-website-credits"
+                type="number"
+                min={0}
+                step={1}
+                label="Website Analysis"
+                value={form.startingWebsiteCredits}
+                onChange={(event) => setForm((current) => ({ ...current, startingWebsiteCredits: event.target.value }))}
+                error={errors.startingWebsiteCredits}
+                fullWidth
+              />
+              <Input
+                id="sa-customer-starting-document-credits"
+                type="number"
+                min={0}
+                step={1}
+                label="Document Improvement"
+                value={form.startingDocumentCredits}
+                onChange={(event) => setForm((current) => ({ ...current, startingDocumentCredits: event.target.value }))}
+                error={errors.startingDocumentCredits}
+                fullWidth
+              />
+            </div>
+          </fieldset> : null}
+          {errors.form ? <p className="super-admin-customers__error" role="alert">{errors.form}</p> : null}
           <div className="super-admin-customers__row">
             <Select
               id="sa-customer-billing"

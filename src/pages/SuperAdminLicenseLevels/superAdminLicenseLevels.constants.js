@@ -1,9 +1,15 @@
 const ENTITLEMENT_PATTERN = /^[A-Z][A-Z0-9_]*$/
+export const LICENSE_ENTITLEMENT_KEYS = ['VMF', 'VIEWS', 'DEALS', 'WEBSITE', 'DOCUMENTS']
 
 export const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
   { value: 'true', label: 'Active' },
   { value: 'false', label: 'Inactive' },
+]
+
+export const HOME_EXPERIENCE_OPTIONS = [
+  { value: 'SIGNAL', label: 'Signal Home' },
+  { value: 'CORE', label: 'Core Home' },
 ]
 
 export const LICENSE_LEVELS_HELP_TEXT =
@@ -13,6 +19,7 @@ export const INITIAL_FORM = {
   name: '',
   description: '',
   entitlements: '',
+  homeExperience: 'SIGNAL',
   isActive: true,
 }
 
@@ -57,6 +64,10 @@ export function validateForm(formState) {
   if (invalid) {
     errors.entitlements = `Invalid entitlement key "${invalid}". Use uppercase letters, numbers, and underscores.`
   }
+  const unknown = entitlements.find((item) => !LICENSE_ENTITLEMENT_KEYS.includes(item))
+  if (!errors.entitlements && unknown) {
+    errors.entitlements = `Unknown entitlement key "${unknown}". Add it to the licence catalogue first.`
+  }
 
   return {
     errors,
@@ -64,6 +75,7 @@ export function validateForm(formState) {
       name,
       ...(description ? { description } : {}),
       featureEntitlements: entitlements,
+      homeExperience: formState.homeExperience || 'SIGNAL',
       isActive: Boolean(formState.isActive),
     },
   }

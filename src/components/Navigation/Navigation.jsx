@@ -25,6 +25,7 @@ import {
   hasCustomerPermission,
 } from '../../utils/authorization.js'
 import { getPhase1aSuperAdminNavigationEntries } from '../../constants/superAdminNavigation.js'
+import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 import { CUSTOMER_EXPERIENCE, resolveCustomerExperience } from '../../utils/customerExperience.js'
 import './Navigation.css'
 
@@ -34,7 +35,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, logoutResult } = useAuth()
-  const { getCustomerScope } = useAuthorization()
+  const { getCustomerScope, hasFeatureEntitlement } = useAuthorization()
   const {
     customerId: selectedCustomerId,
     customerName,
@@ -110,6 +111,24 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const customerExperience = resolveCustomerExperience(
     selectedCustomerId ? getCustomerScope(selectedCustomerId) : null,
   )
+  const {
+    data: customerCreditsResponse,
+    isLoading: isLoadingCustomerCredits,
+    isFetching: isFetchingCustomerCredits,
+    error: customerCreditsError,
+  } = useGetCustomerCreditsQuery(selectedCustomerId, {
+    skip: !selectedCustomerId || isSuperAdmin || customerExperience !== CUSTOMER_EXPERIENCE.SIGNAL,
+  })
+  const customerCreditBalances = customerCreditsResponse?.data?.balances
+  const customerCreditsPending = isLoadingCustomerCredits || isFetchingCustomerCredits
+  const hasWebsiteEntitlement = Boolean(
+    selectedCustomerId
+    && hasFeatureEntitlement(selectedCustomerId, 'WEBSITE', { fallbackWhenScopeMissing: false }),
+  )
+  const hasDocumentsEntitlement = Boolean(
+    selectedCustomerId
+    && hasFeatureEntitlement(selectedCustomerId, 'DOCUMENTS', { fallbackWhenScopeMissing: false }),
+  )
   const userDisplayName = useMemo(() => {
     const preferredName = typeof user?.name === 'string' ? user.name.trim() : ''
     if (preferredName) return preferredName
@@ -133,8 +152,12 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     if (!isSuperAdmin && customerExperience === CUSTOMER_EXPERIENCE.SIGNAL) {
       entries.push(
         { type: 'link', key: 'signal-home', label: 'Signal Home', to: '/app/dashboard' },
-        { type: 'link', key: 'website-analysis', label: 'Website Analysis', to: '/app/website-analysis' },
-        { type: 'link', key: 'document-improvement', label: 'Document Improvement', to: '/app/document-improvement' },
+        ...(hasWebsiteEntitlement
+          ? [{ type: 'link', key: 'website-analysis', label: 'Website Analysis', to: '/app/website-analysis' }]
+          : []),
+        ...(hasDocumentsEntitlement
+          ? [{ type: 'link', key: 'document-improvement', label: 'Document Improvement', to: '/app/document-improvement' }]
+          : []),
         { type: 'link', key: 'credits', label: 'Credits', to: '/app/credits' },
         { type: 'credit-summary', key: 'signal-credit-summary', to: '/app/credits' },
       )
@@ -271,6 +294,8 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     canViewSystemHealth,
     customerExperience,
     customerName,
+    hasDocumentsEntitlement,
+    hasWebsiteEntitlement,
     isAuthenticated,
     isSuperAdmin,
     resolvedTenantName,
@@ -392,6 +417,12 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             }
 
             if (entry.type === 'credit-summary') {
+              const getCreditValue = (value) => {
+                if (customerCreditsPending) return 'Loading…'
+                if (customerCreditsError) return 'Unavailable'
+                return Number.isFinite(Number(value)) ? Number(value) : 0
+              }
+
               return (
                 <li key={entry.key} className="nav__item nav__item--credit-summary">
                   <NavLink
@@ -400,8 +431,8 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                     aria-label="View Signal credit balances"
                     onClick={handleSubmenuLinkClick}
                   >
-                    <span><strong>—</strong><small>Document</small></span>
-                    <span><strong>—</strong><small>Website</small></span>
+                    <span><strong>{getCreditValue(customerCreditBalances?.documentImprovement)}</strong><small>Document</small></span>
+                    <span><strong>{getCreditValue(customerCreditBalances?.websiteAnalysis)}</strong><small>Website</small></span>
                   </NavLink>
                 </li>
               )

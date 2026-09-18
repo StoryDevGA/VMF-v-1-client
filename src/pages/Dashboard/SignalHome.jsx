@@ -1,7 +1,20 @@
 import { Card } from '../../components/Card'
 import { Link } from '../../components/Link'
 
-export function SignalHome({ copy }) {
+export function SignalHome({
+  copy,
+  hasWebsiteEntitlement = false,
+  hasDocumentsEntitlement = false,
+  creditBalances,
+  isLoadingCredits = false,
+  creditsError = false,
+}) {
+  const getCreditValue = (value) => {
+    if (isLoadingCredits) return 'Loading…'
+    if (creditsError) return 'Unavailable'
+    return Number.isFinite(Number(value)) ? Number(value) : 0
+  }
+
   return (
     <>
       <section className="customer-home__hero" aria-labelledby="customer-home-title">
@@ -21,14 +34,14 @@ export function SignalHome({ copy }) {
         <aside className="customer-home__credit-panel" aria-label="Available Signal credits">
           <p className="customer-home__card-kicker">Available credits</p>
           <div className="customer-home__credit-balance">
-            <div><strong>—</strong><span>Document improvement</span></div>
-            <div><strong>—</strong><span>Website analysis</span></div>
+            <div><strong>{getCreditValue(creditBalances?.documentImprovement)}</strong><span>Document improvement</span></div>
+            <div><strong>{getCreditValue(creditBalances?.websiteAnalysis)}</strong><span>Website analysis</span></div>
           </div>
           <p className="customer-home__credit-panel-copy">Credits are separate for each Signal product. No credit is consumed until approval or final report creation.</p>
           <Link to="/app/credits" underline="none" className="customer-home__button">Request credits</Link>
         </aside>
         <div className="customer-home__journeys">
-          <Card className="customer-home__journey" variant="outlined">
+          {hasWebsiteEntitlement ? <Card className="customer-home__journey" variant="outlined">
             <Card.Body>
               <p className="customer-home__card-kicker">WA Website analysis</p>
               <h3>Analyse a customer website</h3>
@@ -40,8 +53,8 @@ export function SignalHome({ copy }) {
               </ul>
               <Link to="/app/website-analysis" underline="none" className="customer-home__button">Start Website Analysis →</Link>
             </Card.Body>
-          </Card>
-          <Card className="customer-home__journey" variant="outlined">
+          </Card> : null}
+          {hasDocumentsEntitlement ? <Card className="customer-home__journey" variant="outlined">
             <Card.Body>
               <p className="customer-home__card-kicker">DI Document improvement</p>
               <h3>Improve one source document</h3>
@@ -53,7 +66,7 @@ export function SignalHome({ copy }) {
               </ul>
               <Link to="/app/document-improvement" underline="none" className="customer-home__button">Start Document Improvement →</Link>
             </Card.Body>
-          </Card>
+          </Card> : null}
         </div>
       </section>
     </>

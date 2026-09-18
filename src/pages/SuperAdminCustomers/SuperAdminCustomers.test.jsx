@@ -11,6 +11,7 @@ vi.mock('../../store/api/customerApi.js', () => ({
   useGetCustomerQuery: vi.fn(),
   useUpdateCustomerMutation: vi.fn(),
   useUpdateCustomerStatusMutation: vi.fn(),
+  useAdjustCustomerCreditMutation: vi.fn(),
   useCreateCustomerAdminInvitationMutation: vi.fn(),
   useReplaceCustomerAdminMutation: vi.fn(),
 }))
@@ -53,6 +54,7 @@ import {
   useGetCustomerQuery,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
+  useAdjustCustomerCreditMutation,
   useCreateCustomerAdminInvitationMutation,
   useReplaceCustomerAdminMutation,
 } from '../../store/api/customerApi.js'
@@ -114,6 +116,7 @@ describe('SuperAdminCustomers page', () => {
     useCreateCustomerMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useUpdateCustomerMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useUpdateCustomerStatusMutation.mockReturnValue([vi.fn(), { isLoading: false }])
+    useAdjustCustomerCreditMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useCreateCustomerAdminInvitationMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useReplaceCustomerAdminMutation.mockReturnValue([vi.fn(), { isLoading: false }])
     useListInvitationsQuery.mockReturnValue({

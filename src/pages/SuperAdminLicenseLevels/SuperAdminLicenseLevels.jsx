@@ -67,6 +67,10 @@ function SuperAdminLicenseLevels() {
         isLoading={mgmt.updateResult.isLoading}
         isFetchingSelected={mgmt.isFetchingSelected}
         selectedAppError={mgmt.selectedAppError}
+        selectedCustomerCount={mgmt.selectedCustomerCount}
+        editBaseIsActive={mgmt.editBaseIsActive}
+        deactivationConfirmation={mgmt.deactivationConfirmation}
+        setDeactivationConfirmation={mgmt.setDeactivationConfirmation}
       />
     </PageShell>
   )

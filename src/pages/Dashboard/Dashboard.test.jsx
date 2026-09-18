@@ -15,12 +15,27 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useListRuntimeInstancesQuery: vi.fn(),
 }))
 
+vi.mock('../../store/api/customerApi.js', () => ({
+  useGetCustomerCreditsQuery: vi.fn(),
+}))
+
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
+import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 
-const signalScope = { customerId: 'cust-1', featureEntitlements: ['DEALS', 'VIEWS'] }
-const coreScope = { customerId: 'cust-1', featureEntitlements: ['VMF', 'DEALS'] }
+const signalScope = {
+  customerId: 'cust-1',
+  homeExperience: 'SIGNAL',
+  entitlementSource: 'LICENSE_LEVEL',
+  featureEntitlements: ['WEBSITE', 'DOCUMENTS'],
+}
+const coreScope = {
+  customerId: 'cust-1',
+  homeExperience: 'CORE',
+  entitlementSource: 'LICENSE_LEVEL',
+  featureEntitlements: ['VMF', 'DEALS'],
+}
 
 function renderDashboard() {
   return render(
@@ -45,6 +60,7 @@ function mockAuthorization({ scope = signalScope, canView = true } = {}) {
     getCustomerScope: vi.fn(() => scope),
     hasCustomerPermission: vi.fn(() => canView),
     hasTenantPermission: vi.fn(() => canView),
+    hasFeatureEntitlement: vi.fn((_customerId, feature) => scope.featureEntitlements?.includes(feature)),
     isCustomerScopeReady: true,
   })
 }
@@ -55,6 +71,12 @@ describe('Dashboard customer home', () => {
     mockContext()
     mockAuthorization()
     useListRuntimeInstancesQuery.mockReturnValue({ data: undefined, isLoading: false, error: null })
+    useGetCustomerCreditsQuery.mockReturnValue({
+      data: { data: { balances: { websiteAnalysis: 7, documentImprovement: 4 } } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
   })
 
   it('renders Signal Home and skips runtime summary reads for Signal customers', () => {

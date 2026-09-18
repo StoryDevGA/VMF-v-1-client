@@ -172,6 +172,26 @@ export const customerApi = baseApi.injectEndpoints({
       ],
     }),
 
+    /* ---- Read Signal credit balances ---- */
+    getCustomerCredits: builder.query({
+      query: (customerId) => `/customers/${customerId}/credits`,
+      providesTags: (_result, _error, customerId) => [{ type: 'Customer', id: `${customerId}-credits` }],
+    }),
+
+    /* ---- Manually adjust a Signal credit balance ---- */
+    adjustCustomerCredit: builder.mutation({
+      query: ({ customerId, productKey, delta, reason, source = 'MANUAL' }) => ({
+        url: `/customers/${customerId}/credits/adjust`,
+        method: 'POST',
+        body: { productKey, delta, reason, source },
+      }),
+      invalidatesTags: (_result, _error, { customerId }) => [
+        { type: 'Customer', id: customerId },
+        { type: 'Customer', id: `${customerId}-credits` },
+        { type: 'Customer', id: 'LIST' },
+      ],
+    }),
+
     /* ---- Create Customer Admin Invitation ---- */
     createCustomerAdminInvitation: builder.mutation({
       query: ({ customerId, recipientName, recipientEmail }) => ({
@@ -230,6 +250,8 @@ export const {
   useCreateCustomerMutation,
   useOnboardCustomerMutation,
   useGetCustomerQuery,
+  useGetCustomerCreditsQuery,
+  useAdjustCustomerCreditMutation,
   useUpdateCustomerMutation,
   useUpdateCustomerStatusMutation,
   useCreateCustomerAdminInvitationMutation,

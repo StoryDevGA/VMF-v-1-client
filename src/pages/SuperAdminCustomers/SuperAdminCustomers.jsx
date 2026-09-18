@@ -195,6 +195,11 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         isSubmitting={customerMgmt.updateResult.isLoading}
         isFetchingDetails={customerMgmt.isFetchingCustomerDetails}
         detailsError={customerMgmt.customerDetailsAppError}
+        creditAdjustment={customerMgmt.creditAdjustment}
+        setCreditAdjustment={customerMgmt.setCreditAdjustment}
+        creditErrors={customerMgmt.creditErrors}
+        onAdjustCredit={customerMgmt.handleAdjustCredit}
+        isAdjustingCredit={customerMgmt.adjustCreditResult.isLoading}
       />
 
       <EditUserDialog

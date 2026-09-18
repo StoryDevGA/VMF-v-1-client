@@ -8,6 +8,7 @@ import {
 } from '../../utils/customerExperience.js'
 import { CoreHome } from './CoreHome.jsx'
 import { SignalHome } from './SignalHome.jsx'
+import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 import './Dashboard.css'
 
 const EXPERIENCE_COPY = {
@@ -37,9 +38,17 @@ function AccessResolutionState() {
 
 export function Dashboard() {
   const { customerId, tenantId, isResolvingSelectedTenantContext } = useTenantContext()
-  const { getCustomerScope, hasCustomerPermission, hasTenantPermission, isCustomerScopeReady, user } = useAuthorization()
+  const { getCustomerScope, hasCustomerPermission, hasTenantPermission, hasFeatureEntitlement, isCustomerScopeReady, user } = useAuthorization()
   const scope = customerId ? getCustomerScope(customerId) : null
   const experience = resolveCustomerExperience(scope)
+  const {
+    data: creditsResponse,
+    isLoading: isLoadingCredits,
+    isFetching: isFetchingCredits,
+    error: creditsError,
+  } = useGetCustomerCreditsQuery(customerId, {
+    skip: !customerId || experience !== CUSTOMER_EXPERIENCE.SIGNAL,
+  })
   const hasVmfViewPermission = Boolean(
     customerId && (
       hasCustomerPermission(customerId, 'VMF_VIEW')
@@ -67,7 +76,14 @@ export function Dashboard() {
     <div className="customer-home">
       <div className="customer-home__container">
         {experience === CUSTOMER_EXPERIENCE.SIGNAL ? (
-          <SignalHome copy={copy} />
+          <SignalHome
+            copy={copy}
+            hasWebsiteEntitlement={hasFeatureEntitlement(customerId, 'WEBSITE', { fallbackWhenScopeMissing: false })}
+            hasDocumentsEntitlement={hasFeatureEntitlement(customerId, 'DOCUMENTS', { fallbackWhenScopeMissing: false })}
+            creditBalances={creditsResponse?.data?.balances}
+            isLoadingCredits={isLoadingCredits || isFetchingCredits}
+            creditsError={Boolean(creditsError)}
+          />
         ) : (
           <CoreHome
             copy={copy}

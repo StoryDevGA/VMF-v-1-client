@@ -50,6 +50,7 @@ import { createSlice } from '@reduxjs/toolkit'
  * @typedef {Object} CustomerScope
  * @property {string} customerId
  * @property {string[]} featureEntitlements
+ * @property {'SIGNAL'|'CORE'} [homeExperience]
  * @property {'LICENSE_LEVEL'|'CUSTOMER_OVERRIDE'|'LEGACY_UNRESTRICTED'|string} [entitlementSource]
  * @property {string|null} [licenseLevelId]
  * @property {'SINGLE_TENANT'|'MULTI_TENANT'|string|null} [topology]

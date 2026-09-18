@@ -2,8 +2,9 @@ import { Dialog } from '../../components/Dialog'
 import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
 import { Tickbox } from '../../components/Tickbox'
+import { Select } from '../../components/Select'
 import { Button } from '../../components/Button'
-import { INITIAL_FORM } from './superAdminLicenseLevels.constants.js'
+import { HOME_EXPERIENCE_OPTIONS, INITIAL_FORM } from './superAdminLicenseLevels.constants.js'
 import './LicenseLevelDialogs.css'
 
 export function CreateDialog({
@@ -51,10 +52,19 @@ export function CreateDialog({
             fullWidth
           />
 
+          <Select
+            id="license-level-home-experience"
+            label="Home experience"
+            value={createForm.homeExperience}
+            options={HOME_EXPERIENCE_OPTIONS}
+            onChange={(event) => setCreateForm((current) => ({ ...current, homeExperience: event.target.value }))}
+            error={createErrors.homeExperience}
+          />
+
           <Textarea
             id="license-level-entitlements"
             label="Feature Entitlements"
-            helperText="Use commas/new lines. Optional brackets/quotes are ignored."
+            helperText="Use stable keys VMF, VIEWS, DEALS, WEBSITE, or DOCUMENTS. Separate with commas/new lines."
             value={createForm.entitlements}
             onChange={(event) =>
               setCreateForm((current) => ({ ...current, entitlements: event.target.value }))
@@ -112,6 +122,10 @@ export function EditDialog({
   isLoading,
   isFetchingSelected,
   selectedAppError,
+  selectedCustomerCount = 0,
+  editBaseIsActive = false,
+  deactivationConfirmation = '',
+  setDeactivationConfirmation,
 }) {
   return (
     <Dialog open={open} onClose={onClose} size="md">
@@ -151,9 +165,20 @@ export function EditDialog({
           disabled={isFetchingSelected}
         />
 
+        <Select
+          id="license-level-edit-home-experience"
+          label="Home experience"
+          value={editForm.homeExperience}
+          options={HOME_EXPERIENCE_OPTIONS}
+          onChange={(event) => setEditForm((current) => ({ ...current, homeExperience: event.target.value }))}
+          error={editErrors.homeExperience}
+          disabled={isFetchingSelected}
+        />
+
         <Textarea
           id="license-level-edit-entitlements"
           label="Feature Entitlements"
+          helperText="Use stable keys VMF, VIEWS, DEALS, WEBSITE, or DOCUMENTS. Separate with commas/new lines."
           value={editForm.entitlements}
           onChange={(event) =>
             setEditForm((current) => ({ ...current, entitlements: event.target.value }))
@@ -173,6 +198,23 @@ export function EditDialog({
           }
           disabled={isFetchingSelected}
         />
+
+        {!editForm.isActive && editBaseIsActive && selectedCustomerCount > 0 ? (
+          <div className="super-admin-license-levels__deactivation-confirmation">
+            <p className="super-admin-license-levels__warning" role="alert">
+              Deactivating this level will remove its entitlements from {selectedCustomerCount} assigned customer{selectedCustomerCount === 1 ? '' : 's'}.
+            </p>
+            <Input
+              id="license-level-deactivation-confirmation"
+              label="Type the licence level name to confirm"
+              value={deactivationConfirmation}
+              onChange={(event) => setDeactivationConfirmation(event.target.value)}
+              error={editErrors.isActive}
+              fullWidth
+              disabled={isFetchingSelected}
+            />
+          </div>
+        ) : null}
       </Dialog.Body>
       <Dialog.Footer>
         <Button variant="outline" onClick={onClose} disabled={isLoading}>

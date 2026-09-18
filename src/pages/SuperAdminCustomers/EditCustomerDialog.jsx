@@ -17,6 +17,11 @@ export function EditCustomerDialog({
   isSubmitting,
   isFetchingDetails,
   detailsError,
+  creditAdjustment,
+  setCreditAdjustment,
+  creditErrors,
+  onAdjustCredit,
+  isAdjustingCredit,
 }) {
   return (
     <Dialog open={open} onClose={onClose} size="lg">
@@ -48,21 +53,13 @@ export function EditCustomerDialog({
           disabled={isFetchingDetails}
         />
         <div className="super-admin-customers__row">
-          <Select
-            id="sa-customer-edit-topology"
-            label="Topology"
-            value={form.topology}
-            options={[
-              { value: 'SINGLE_TENANT', label: 'Single Tenant' },
-              { value: 'MULTI_TENANT', label: 'Multi Tenant' },
-            ]}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                topology: event.target.value,
-              }))
-            }
-          />
+          <div className="super-admin-customers__field">
+            <span className="super-admin-customers__field-label">Topology</span>
+            <span className="super-admin-customers__read-only-value">
+              {form.topology === 'MULTI_TENANT' ? 'Multi Tenant' : 'Single Tenant'}
+            </span>
+            <small className="super-admin-customers__field-help">Topology is fixed after customer creation.</small>
+          </div>
           <div className="super-admin-customers__field">
             <label htmlFor="sa-customer-edit-vmf-count" className="super-admin-customers__field-label">
               VMF Count
@@ -129,6 +126,46 @@ export function EditCustomerDialog({
             />
           </div>
         </div>
+        <fieldset className="super-admin-customers__credit-fields">
+          <legend className="super-admin-customers__field-label">Signal credit balances</legend>
+          <div className="super-admin-customers__credit-readback" aria-label="Current Signal credit balances">
+            <span>Website Analysis: <strong>{form.creditBalances?.websiteAnalysis ?? 0}</strong></span>
+            <span>Document Improvement: <strong>{form.creditBalances?.documentImprovement ?? 0}</strong></span>
+          </div>
+          <p className="super-admin-customers__field-help">Manual adjustments do not enable a disabled entitlement or change the licence level.</p>
+          <div className="super-admin-customers__row">
+            <Select
+              id="sa-customer-credit-product"
+              label="Product"
+              value={creditAdjustment.productKey}
+              options={[{ value: 'WEBSITE', label: 'Website Analysis' }, { value: 'DOCUMENTS', label: 'Document Improvement' }]}
+              onChange={(event) => setCreditAdjustment((current) => ({ ...current, productKey: event.target.value }))}
+            />
+            <Input
+              id="sa-customer-credit-delta"
+              type="number"
+              step={1}
+              label="Adjustment"
+              placeholder="e.g. 10 or -1"
+              value={creditAdjustment.delta}
+              onChange={(event) => setCreditAdjustment((current) => ({ ...current, delta: event.target.value }))}
+              error={creditErrors.delta}
+              fullWidth
+            />
+          </div>
+          <Input
+            id="sa-customer-credit-reason"
+            label="Adjustment reason"
+            value={creditAdjustment.reason}
+            onChange={(event) => setCreditAdjustment((current) => ({ ...current, reason: event.target.value }))}
+            error={creditErrors.reason}
+            fullWidth
+          />
+          {creditErrors.form ? <p className="super-admin-customers__error" role="alert">{creditErrors.form}</p> : null}
+          <Button type="button" variant="outline" onClick={onAdjustCredit} loading={isAdjustingCredit} disabled={isAdjustingCredit || isFetchingDetails}>
+            Apply credit adjustment
+          </Button>
+        </fieldset>
       </Dialog.Body>
       <Dialog.Footer>
         <Button variant="outline" onClick={onClose} disabled={isSubmitting}>

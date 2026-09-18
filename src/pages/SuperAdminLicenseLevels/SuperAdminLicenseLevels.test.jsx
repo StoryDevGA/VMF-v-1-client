@@ -91,7 +91,7 @@ describe('SuperAdminLicenseLevels page', () => {
       screen.getByLabelText(/feature entitlements/i, {
         selector: 'textarea#license-level-entitlements',
       }),
-      { target: { value: '[FEATURE_A, "feature_b"]' } },
+      { target: { value: '[VMF, "deals"]' } },
     )
     await user.click(screen.getByRole('button', { name: /create licence level/i }))
 
@@ -102,7 +102,7 @@ describe('SuperAdminLicenseLevels page', () => {
     expect(createLicenseLevelMock).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Professional',
-        featureEntitlements: ['FEATURE_A', 'FEATURE_B'],
+        featureEntitlements: ['VMF', 'DEALS'],
       }),
     )
   })
@@ -119,7 +119,7 @@ describe('SuperAdminLicenseLevels page', () => {
             name: 'Enterprise',
             isActive: true,
             customerCount: 12,
-            featureEntitlements: ['FEATURE_A'],
+        featureEntitlements: ['VMF'],
             updatedAt,
           },
         ],

@@ -82,6 +82,8 @@ export const INITIAL_FORM = {
   maxVmfsPerTenant: '1',
   planCode: 'FREE',
   billingCycle: 'MONTHLY',
+  startingWebsiteCredits: '0',
+  startingDocumentCredits: '0',
 }
 
 export const VIEW_CUSTOMERS = 'customers'

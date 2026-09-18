@@ -15,6 +15,7 @@ import tenantContextReducer from '../../store/slices/tenantContextSlice.js'
 import { baseApi } from '../../store/api/baseApi.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useListTenantsQuery } from '../../store/api/tenantApi.js'
+import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 
 vi.mock('../../hooks/useAuth.js', () => ({
   useAuth: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock('../../store/api/tenantApi.js', () => ({
   },
 }))
 
+vi.mock('../../store/api/customerApi.js', () => ({
+  useGetCustomerCreditsQuery: vi.fn(),
+}))
+
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function () { this.open = true })
   HTMLDialogElement.prototype.close = vi.fn(function () { this.open = false })
@@ -38,6 +43,12 @@ beforeEach(() => {
   useListTenantsQuery.mockReturnValue({
     data: undefined,
     isLoading: false,
+    error: null,
+  })
+  useGetCustomerCreditsQuery.mockReturnValue({
+    data: { data: { balances: { websiteAnalysis: 7, documentImprovement: 4 } } },
+    isLoading: false,
+    isFetching: false,
     error: null,
   })
   mockLogout.mockClear()
@@ -184,7 +195,12 @@ describe('Navigation', () => {
     const user = userEvent.setup()
     const store = createTestStore({
       ...basicUser,
-      customerScopes: [{ customerId: 'cust-1', featureEntitlements: ['DEALS', 'VIEWS'] }],
+      customerScopes: [{
+        customerId: 'cust-1',
+        homeExperience: 'SIGNAL',
+        entitlementSource: 'LICENSE_LEVEL',
+        featureEntitlements: ['WEBSITE', 'DOCUMENTS'],
+      }],
     }, 'authenticated', { customerId: 'cust-1' })
     renderNavigation(store)
 
@@ -198,6 +214,22 @@ describe('Navigation', () => {
     await user.click(screen.getByRole('button', { name: /basic account menu/i }))
     expect(screen.getByRole('link', { name: 'Account' })).toHaveAttribute('href', '/app/account')
     expect(screen.getByRole('link', { name: 'Help' })).toHaveAttribute('href', '/help')
+  })
+
+  it('shows only the independently enabled Signal product link', () => {
+    const store = createTestStore({
+      ...basicUser,
+      customerScopes: [{
+        customerId: 'cust-1',
+        homeExperience: 'SIGNAL',
+        entitlementSource: 'LICENSE_LEVEL',
+        featureEntitlements: ['WEBSITE'],
+      }],
+    }, 'authenticated', { customerId: 'cust-1' })
+    renderNavigation(store)
+
+    expect(screen.getByRole('link', { name: 'Website Analysis' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Document Improvement' })).not.toBeInTheDocument()
   })
 
   it('shows Core navigation only for VMF-entitled customers', () => {

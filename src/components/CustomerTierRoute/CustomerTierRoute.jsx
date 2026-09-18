@@ -6,11 +6,11 @@ import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { selectAuthStatus } from '../../store/slices/authSlice.js'
 import { CUSTOMER_EXPERIENCE, resolveCustomerExperience } from '../../utils/customerExperience.js'
 
-export function CustomerTierRoute({ requiredTier, children, unauthorizedRedirect = '/app/dashboard' }) {
+export function CustomerTierRoute({ requiredTier, requiredEntitlement, children, unauthorizedRedirect = '/app/dashboard' }) {
   const authStatus = useSelector(selectAuthStatus)
   const location = useLocation()
   const { customerId } = useTenantContext()
-  const { getCustomerScope } = useAuthorization()
+  const { getCustomerScope, hasFeatureEntitlement } = useAuthorization()
   const scope = customerId ? getCustomerScope(customerId) : null
   const experience = resolveCustomerExperience(scope)
 
@@ -23,7 +23,13 @@ export function CustomerTierRoute({ requiredTier, children, unauthorizedRedirect
     )
   }
 
-  if (experience === CUSTOMER_EXPERIENCE.UNKNOWN || experience !== requiredTier) {
+  const hasRequiredEntitlement = !requiredEntitlement || hasFeatureEntitlement(
+    customerId,
+    requiredEntitlement,
+    { fallbackWhenScopeMissing: false },
+  )
+
+  if (experience === CUSTOMER_EXPERIENCE.UNKNOWN || experience !== requiredTier || !hasRequiredEntitlement) {
     return <Navigate to={unauthorizedRedirect} state={{ from: location }} replace />
   }
 

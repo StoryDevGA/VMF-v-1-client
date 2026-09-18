@@ -8,6 +8,7 @@ export const CUSTOMER_EXPERIENCE = Object.freeze({
 
 const CORE_FEATURE = 'VMF'
 export const SIGNAL_FEATURES = Object.freeze(new Set(['DEALS', 'VIEWS']))
+const EXPLICIT_HOME_EXPERIENCES = new Set([CUSTOMER_EXPERIENCE.CORE, CUSTOMER_EXPERIENCE.SIGNAL])
 
 export const CUSTOMER_WORKSPACE_STATES = Object.freeze({
   UNDERSTANDING_ACCEPTED: 'UNDERSTANDING_ACCEPTED',
@@ -43,10 +44,14 @@ export const resolveCustomerExperience = (scope) => {
 
   const entitlements = normalizeFeatureEntitlements(scope.featureEntitlements)
   if (entitlements.length === 0) return CUSTOMER_EXPERIENCE.UNKNOWN
+  const explicitHome = String(scope.homeExperience ?? '').trim().toUpperCase()
+  if (EXPLICIT_HOME_EXPERIENCES.has(explicitHome)) return explicitHome
+
+  // Compatibility for pre-SS-031 in-memory fixtures only. Authenticated API
+  // scopes now carry explicit homeExperience metadata and fail closed otherwise.
+  if (scope.entitlementSource) return CUSTOMER_EXPERIENCE.UNKNOWN
   if (entitlements.includes(CORE_FEATURE)) return CUSTOMER_EXPERIENCE.CORE
-  if (entitlements.some((feature) => SIGNAL_FEATURES.has(feature))) {
-    return CUSTOMER_EXPERIENCE.SIGNAL
-  }
+  if (entitlements.some((feature) => SIGNAL_FEATURES.has(feature))) return CUSTOMER_EXPERIENCE.SIGNAL
 
   return CUSTOMER_EXPERIENCE.UNKNOWN
 }

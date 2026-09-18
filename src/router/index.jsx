@@ -206,7 +206,7 @@ export const router = createBrowserRouter([
               {
                 path: 'website-analysis',
                 element: (
-                  <CustomerTierRoute requiredTier="SIGNAL">
+                  <CustomerTierRoute requiredTier="SIGNAL" requiredEntitlement="WEBSITE">
                     <CustomerJourneyPlaceholder section="Website Analysis" />
                   </CustomerTierRoute>
                 ),
@@ -214,7 +214,7 @@ export const router = createBrowserRouter([
               {
                 path: 'document-improvement',
                 element: (
-                  <CustomerTierRoute requiredTier="SIGNAL">
+                  <CustomerTierRoute requiredTier="SIGNAL" requiredEntitlement="DOCUMENTS">
                     <CustomerJourneyPlaceholder section="Document Improvement" />
                   </CustomerTierRoute>
                 ),
