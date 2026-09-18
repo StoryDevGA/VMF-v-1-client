@@ -21,12 +21,14 @@ import { Tickbox } from '../../components/Tickbox'
 import { useToaster } from '../../components/Toaster'
 import {
   useActivateOutcomeKnowledgePackVersionMutation,
+  useDisableOutcomeKnowledgePackActivationMutation,
   useDeleteOutcomeKnowledgePackMutation,
   useDeprecateOutcomeKnowledgePackVersionMutation,
   useDisableOutcomeKnowledgePackVersionMutation,
   useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
+  useLazyGetOutcomeKnowledgePackVersionQuery,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useListOutcomeKnowledgePacksQuery,
@@ -58,6 +60,7 @@ import {
   buildOutcomeKnowledgePackRows,
   canApproveKnowledgePackReview,
   canActivateKnowledgePack,
+  canAddKnowledgePackScopeBinding,
   canDeleteKnowledgePack,
   canDeprecateKnowledgePack,
   canDisableKnowledgePack,
@@ -80,6 +83,13 @@ import './SuperAdminOutcomeKnowledgePacks.css'
 
 const GLOBAL_SCOPE_COPY =
   'This action activates the version at GLOBAL scope only. Outcome Studio remains blocked until every required pack is active.'
+
+const ADDITIONAL_SCOPE_FIELDS = {
+  FRAMEWORK: ['frameworkKey', 'Framework key'],
+  RUNTIME_TYPE: ['runtimeType', 'Runtime type'],
+  PACKAGE: ['packageKey', 'Package key'],
+  ENVIRONMENT: ['environmentKey', 'Environment key'],
+}
 
 const BINARY_SOURCE_PREVIEW_FORMATS = new Set(['DOCX', 'PDF'])
 const EMPTY_ROWS = Object.freeze([])
@@ -694,6 +704,9 @@ function KnowledgePackRowActionsMenu({
   }
 
   const activateDisabledReason = getActivateKnowledgePackDisabledReason(row, { requireValidationSummary: selectedVersionOnly })
+  if (canAddKnowledgePackScopeBinding(row, { requireContentHash: selectedVersionOnly })) {
+    options.push({ value: 'add-scope', label: 'Add Scope Binding' })
+  }
   if (canActivateKnowledgePack(row) && !activateDisabledReason) {
     options.push({ value: 'activate', label: 'Activate Version' })
   } else if (activateDisabledReason) {
@@ -738,6 +751,7 @@ function KnowledgePackRowActionsMenu({
             onReviewStatusChange(row, 'REJECTED')
           }
           if (event.target.value === 'activate') onActivate(row)
+          if (event.target.value === 'add-scope') onActivate(row, { fetchVersion: !selectedVersionOnly })
           if (event.target.value === 'deprecate') onDeprecate(row)
           if (event.target.value === 'disable') onDisable(row)
           if (event.target.value === 'delete') onDelete(row)
@@ -970,7 +984,7 @@ function VersionSummary({
   )
 }
 
-function ActivationHistory({ activations = [] }) {
+function ActivationHistory({ activations = [], onUndo, disabled }) {
   if (activations.length === 0) {
     return (
       <p className="super-admin-outcome-knowledge-packs__muted">
@@ -988,6 +1002,11 @@ function ActivationHistory({ activations = [] }) {
               {formatKnowledgePackStatus(activation.status)}
             </Status>
             <span>{activation.semanticVersion || activation.versionId}</span>
+            {activation.canDisableAdditionalScope === true && (
+              <Button size="sm" variant="outline" disabled={disabled} onClick={() => onUndo(activation)}>
+                Undo Scope Binding
+              </Button>
+            )}
           </div>
           <dl className="super-admin-outcome-knowledge-packs__history-meta">
             <DetailItem label="Scope">
@@ -1032,6 +1051,7 @@ function KnowledgePackDetailDialog({
   onReviewStatusChange,
   onActivate,
   onClose,
+  onUndoActivation,
 }) {
   const open = Boolean(pack)
   const versions = detail?.versions ?? []
@@ -1195,10 +1215,10 @@ function KnowledgePackDetailDialog({
                 <div className="super-admin-outcome-knowledge-packs__panel-header">
                   <div>
                     <h3>Activation History</h3>
-                    <p>Activation records are audit metadata only; rollback is not available in this UI.</p>
+                    <p>History is preserved. Eligible additional scope bindings can be undone without changing the original binding.</p>
                   </div>
                 </div>
-                <ActivationHistory activations={activations} />
+                <ActivationHistory activations={activations} onUndo={onUndoActivation} disabled={isLifecycleLoading} />
               </section>
             </div>
           </>
@@ -1492,6 +1512,30 @@ function SuperAdminOutcomeKnowledgePacks() {
   const [duplicateOverrideReason, setDuplicateOverrideReason] = useState('')
   const [duplicateOverrideError, setDuplicateOverrideError] = useState('')
   const [pendingActivation, setPendingActivation] = useState(null)
+  const [pendingUndoActivation, setPendingUndoActivation] = useState(null)
+  const [additionalScope, setAdditionalScope] = useState({ scopeType: 'FRAMEWORK', value: '', packageVersion: '', frameworkKey: '' })
+  const isAdditionalScope = canAddKnowledgePackScopeBinding(pendingActivation || {})
+  const [loadActivationVersion, { isFetching: isFetchingActivationVersion }] = useLazyGetOutcomeKnowledgePackVersionQuery()
+  const openActivation = useCallback(async (row, { fetchVersion = false } = {}) => {
+    let version = row
+    if (fetchVersion) {
+      const packId = getPackActionId(row)
+      const versionId = getVersionId(row)
+      try {
+        const result = await loadActivationVersion({ packId, versionId }, false).unwrap()
+        const fetched = result?.data
+        if (fetched?.packId !== packId || fetched?.versionId !== versionId || !canAddKnowledgePackScopeBinding(fetched)) {
+          throw new Error('The selected version is no longer eligible for an additional scope binding. Refresh the library.')
+        }
+        version = { ...fetched, label: row.label, latestVersionId: fetched.versionId }
+      } catch (error) {
+        addToast({ variant: 'error', title: 'Unable to load scope binding', description: normalizeError(error).message })
+        return
+      }
+    }
+    setAdditionalScope({ scopeType: 'FRAMEWORK', value: '', packageVersion: '', frameworkKey: '' })
+    setPendingActivation(version)
+  }, [loadActivationVersion, addToast])
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null)
   const [pendingDeletePack, setPendingDeletePack] = useState(null)
   const [detailPack, setDetailPack] = useState(null)
@@ -1517,6 +1561,7 @@ function SuperAdminOutcomeKnowledgePacks() {
     useUpdateOutcomeKnowledgePackReviewMutation()
   const [activateVersion, { isLoading: isActivatingVersion }] =
     useActivateOutcomeKnowledgePackVersionMutation()
+  const [disableActivation, { isLoading: isDisablingActivation }] = useDisableOutcomeKnowledgePackActivationMutation()
   const [deprecateVersion, { isLoading: isDeprecatingVersion }] =
     useDeprecateOutcomeKnowledgePackVersionMutation()
   const [disableVersion, { isLoading: isDisablingVersion }] =
@@ -1591,6 +1636,8 @@ function SuperAdminOutcomeKnowledgePacks() {
     } at GLOBAL scope.`
     : ''
   const isMutating =
+    isFetchingActivationVersion ||
+    isDisablingActivation || Boolean(pendingUndoActivation) ||
     isImportingSourceDocumentDraft
     || isValidatingVersion
     || isUpdatingReviewStatus
@@ -2054,25 +2101,51 @@ function SuperAdminOutcomeKnowledgePacks() {
 
   const confirmActivation = useCallback(async () => {
     if (!pendingActivation) return
+    if (isAdditionalScope && (!ADDITIONAL_SCOPE_FIELDS[additionalScope.scopeType] || !additionalScope.value.trim())) return
+    if (isAdditionalScope && additionalScope.scopeType === 'PACKAGE' && !additionalScope.frameworkKey?.trim()) return
 
     try {
       await activateVersion({
         packId: getPackActionId(pendingActivation),
         versionId: getVersionId(pendingActivation),
-        scopeType: 'GLOBAL',
+        ...(isAdditionalScope ? {
+          expectedContentHash: pendingActivation.contentHash,
+          scopeType: additionalScope.scopeType,
+          [ADDITIONAL_SCOPE_FIELDS[additionalScope.scopeType][0]]: additionalScope.value.trim(),
+          ...(additionalScope.scopeType === 'PACKAGE' ? { frameworkKey: additionalScope.frameworkKey.trim() } : {}),
+          ...(additionalScope.scopeType === 'PACKAGE' && additionalScope.packageVersion.trim()
+            ? { packageVersion: additionalScope.packageVersion.trim() } : {}),
+        } : { scopeType: 'GLOBAL' }),
       }).unwrap()
 
       addToast({
         variant: 'success',
-        title: 'Activated',
-        description: `${pendingActivation.label} activated at GLOBAL scope.`,
+        title: isAdditionalScope ? 'Scope binding added' : 'Activated',
+        description: isAdditionalScope ? 'Additional scope binding created. Existing bindings remain unchanged.' : `${pendingActivation.label} activated at GLOBAL scope.`,
       })
       setPendingActivation(null)
+      setAdditionalScope({ scopeType: 'FRAMEWORK', value: '', packageVersion: '', frameworkKey: '' })
     } catch (err) {
       const appError = normalizeError(err)
       addToast({ variant: 'error', title: 'Activation failed', description: appError.message })
     }
-  }, [activateVersion, addToast, pendingActivation])
+  }, [activateVersion, addToast, pendingActivation, additionalScope, isAdditionalScope])
+
+  const confirmUndoActivation = useCallback(async () => {
+    if (pendingUndoActivation?.canDisableAdditionalScope !== true || isDisablingActivation) return
+    try {
+      await disableActivation({
+        packId: pendingUndoActivation.packId,
+        activationId: pendingUndoActivation.activationId,
+        expectedVersionId: pendingUndoActivation.versionId,
+        expectedContentHash: pendingUndoActivation.contentHash,
+      }).unwrap()
+      addToast({ variant: 'success', title: 'Scope binding undone', description: 'The original binding and activation history remain unchanged.' })
+      setPendingUndoActivation(null)
+    } catch (error) {
+      addToast({ variant: 'error', title: 'Unable to undo scope binding', description: normalizeError(error).message })
+    }
+  }, [pendingUndoActivation, isDisablingActivation, disableActivation, addToast])
 
   const confirmLifecycleAction = useCallback(async () => {
     if (!pendingLifecycleAction) return
@@ -2266,7 +2339,7 @@ function SuperAdminOutcomeKnowledgePacks() {
             onDetails={openDetailDialog}
             onValidate={handleValidateVersion}
             onReviewStatusChange={handleReviewStatusChange}
-            onActivate={setPendingActivation}
+            onActivate={openActivation}
             onDeprecate={(row) => openLifecycleAction('deprecate', row)}
             onDisable={(row) => openLifecycleAction('disable', row)}
             onDelete={openDeleteDialog}
@@ -2282,6 +2355,7 @@ function SuperAdminOutcomeKnowledgePacks() {
       openDetailDialog,
       openDeleteDialog,
       openLifecycleAction,
+      openActivation,
     ],
   )
 
@@ -2530,11 +2604,12 @@ function SuperAdminOutcomeKnowledgePacks() {
         selectedVersion={selectedVersion}
         versionError={versionQuery.error ? normalizeError(versionQuery.error) : null}
         isVersionLoading={versionQuery.isLoading || versionQuery.isFetching}
-        isLifecycleLoading={isMutating || Boolean(pendingActivation)}
+        isLifecycleLoading={isMutating || Boolean(pendingActivation) || Boolean(pendingUndoActivation)}
         selectedVersionActionRow={selectedVersionActionRow}
         onValidate={handleValidateVersion}
         onReviewStatusChange={handleReviewStatusChange}
-        onActivate={setPendingActivation}
+        onActivate={openActivation}
+        onUndoActivation={(activation) => setPendingUndoActivation({ ...activation, packId: detailPackId })}
         contentPreview={selectedContentPreviewState.data}
         contentPreviewError={selectedContentPreviewState.error}
         isContentPreviewLoading={selectedContentPreviewState.isLoading}
@@ -2552,7 +2627,7 @@ function SuperAdminOutcomeKnowledgePacks() {
         size="sm"
       >
         <Dialog.Header>
-          <h2>Activate pack version?</h2>
+          <h2>{isAdditionalScope ? 'Add Scope Binding' : 'Activate pack version?'}</h2>
         </Dialog.Header>
         <Dialog.Body>
           <p className="super-admin-outcome-knowledge-packs__dialog-copy">
@@ -2560,8 +2635,25 @@ function SuperAdminOutcomeKnowledgePacks() {
             {getVersionId(pendingActivation) || 'latest'} for Outcome Studio resolution.
           </p>
           <p className="super-admin-outcome-knowledge-packs__dialog-helper">
-            {GLOBAL_SCOPE_COPY}
+            {isAdditionalScope ? 'Add a new non-global binding for this active version. Existing and global bindings remain unchanged.' : GLOBAL_SCOPE_COPY}
           </p>
+          {isAdditionalScope && (
+            <div className="super-admin-outcome-knowledge-packs__form-section">
+              <Select label="Binding scope" value={additionalScope.scopeType}
+                options={Object.entries(ADDITIONAL_SCOPE_FIELDS).map(([value, [, label]]) => ({ value, label: label.replace(' key', '') }))}
+                disabled={isActivatingVersion}
+                onChange={(event) => setAdditionalScope({ scopeType: event.target.value, value: '', packageVersion: '', frameworkKey: '' })} />
+              <Input id="knowledge-binding-scope-value" label={ADDITIONAL_SCOPE_FIELDS[additionalScope.scopeType][1]} value={additionalScope.value}
+                required disabled={isActivatingVersion} fullWidth
+                onChange={(event) => setAdditionalScope((current) => ({ ...current, value: event.target.value }))} />
+              {additionalScope.scopeType === 'PACKAGE' && <Input id="knowledge-binding-framework-key" label="Framework key" value={additionalScope.frameworkKey || ''}
+                required disabled={isActivatingVersion} fullWidth
+                onChange={(event) => setAdditionalScope((current) => ({ ...current, frameworkKey: event.target.value }))} />}
+              {additionalScope.scopeType === 'PACKAGE' && <Input id="knowledge-binding-package-version" label="Package version (optional)" value={additionalScope.packageVersion}
+                disabled={isActivatingVersion} fullWidth
+                onChange={(event) => setAdditionalScope((current) => ({ ...current, packageVersion: event.target.value }))} />}
+            </div>
+          )}
         </Dialog.Body>
         <Dialog.Footer>
           <Button
@@ -2572,11 +2664,23 @@ function SuperAdminOutcomeKnowledgePacks() {
           >
             Cancel
           </Button>
-          <Button type="button" variant="primary" onClick={confirmActivation} loading={isActivatingVersion}>
-            Activate
+          <Button type="button" variant="primary" onClick={confirmActivation} loading={isActivatingVersion}
+            disabled={isAdditionalScope && (!additionalScope.value.trim() || (additionalScope.scopeType === 'PACKAGE' && !additionalScope.frameworkKey?.trim()))}>
+            {isAdditionalScope ? 'Add Binding' : 'Activate'}
           </Button>
         </Dialog.Footer>
       </Dialog>
+
+      <ConfirmationDialog
+        open={Boolean(pendingUndoActivation)}
+        title="Undo scope binding?"
+        message="Disable only this additional scope binding. The original binding, pack version and history will be preserved."
+        detail={`${pendingUndoActivation?.scopeKey || ''} · ${pendingUndoActivation?.semanticVersion || pendingUndoActivation?.versionId || ''}`}
+        confirmLabel="Undo Binding"
+        loading={isDisablingActivation}
+        onCancel={() => { if (!isDisablingActivation) setPendingUndoActivation(null) }}
+        onConfirm={confirmUndoActivation}
+      />
 
       {pendingLifecycleConfig ? (
         <ConfirmationDialog

@@ -232,6 +232,7 @@ export const buildUpdateOutcomeKnowledgePackReviewQuery = ({
 export const buildActivateOutcomeKnowledgePackVersionQuery = ({
   packId,
   versionId,
+  expectedContentHash,
   scopeType = 'GLOBAL',
   frameworkKey = '',
   runtimeType = '',
@@ -244,6 +245,7 @@ export const buildActivateOutcomeKnowledgePackVersionQuery = ({
   }
 
   appendParam(body, 'frameworkKey', frameworkKey)
+  appendParam(body, 'expectedContentHash', expectedContentHash)
   appendParam(body, 'runtimeType', runtimeType)
   appendParam(body, 'packageKey', packageKey)
   appendParam(body, 'packageVersion', packageVersion)
@@ -264,6 +266,12 @@ export const buildDeprecateOutcomeKnowledgePackVersionQuery = ({ packId, version
   }/deprecate`,
   method: 'POST',
   body: {},
+})
+
+export const buildDisableOutcomeKnowledgePackActivationQuery = ({ packId, activationId, expectedVersionId, expectedContentHash }) => ({
+  url: `${OUTCOME_KNOWLEDGE_PACKS_BASE_PATH}/${encodePathSegment(packId)}/activations/${encodePathSegment(activationId)}/disable`,
+  method: 'POST',
+  body: { expectedVersionId: normalizeText(expectedVersionId), expectedContentHash: normalizeText(expectedContentHash) },
 })
 
 export const buildDisableOutcomeKnowledgePackVersionQuery = ({ packId, versionId }) => ({
@@ -631,7 +639,7 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
 
     previewOutcomeKnowledgePackVersionContent: build.query({
       query: buildPreviewOutcomeKnowledgePackVersionContentQuery,
-      providesTags: getPackTags,
+      keepUnusedDataFor: 0,
     }),
 
     createOutcomeKnowledgePackVersion: build.mutation({
@@ -669,6 +677,10 @@ export const outcomeKnowledgePacksApi = baseApi.injectEndpoints({
 
     activateOutcomeKnowledgePackVersion: build.mutation({
       query: buildActivateOutcomeKnowledgePackVersionQuery,
+      invalidatesTags: getMutationInvalidationTags,
+    }),
+    disableOutcomeKnowledgePackActivation: build.mutation({
+      query: buildDisableOutcomeKnowledgePackActivationQuery,
       invalidatesTags: getMutationInvalidationTags,
     }),
 
@@ -740,6 +752,7 @@ export const {
   useGetOutcomeKnowledgePackDuplicateDiagnosticsQuery,
   useGetOutcomeKnowledgePackQuery,
   useGetOutcomeKnowledgePackVersionQuery,
+  useLazyGetOutcomeKnowledgePackVersionQuery,
   useLazyPreviewOutcomeKnowledgePackVersionContentQuery,
   useCreateOutcomeKnowledgePackVersionMutation,
   useImportOutcomeKnowledgePackSourceDocumentDraftMutation,
@@ -750,6 +763,7 @@ export const {
   useValidateOutcomeKnowledgePackVersionMutation,
   useUpdateOutcomeKnowledgePackReviewMutation,
   useActivateOutcomeKnowledgePackVersionMutation,
+  useDisableOutcomeKnowledgePackActivationMutation,
   useRollbackOutcomeKnowledgePackMutation,
   usePreviewOutcomeKnowledgePackResolutionQuery,
   useListOutcomeKnowledgePackManifestsQuery,

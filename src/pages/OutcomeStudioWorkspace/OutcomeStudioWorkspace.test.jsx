@@ -88,15 +88,62 @@ const loadSessionForReconciliation = vi.fn()
 
 const resolvedMutation = (value = { data: {} }) => ({ unwrap: vi.fn().mockResolvedValue(value) })
 
+const planningRequestId = '11111111-1111-4111-8111-111111111111'
+const exactParlonPrompt = 'Create a Commercial Strategy and Decision Paper for Parlon leadership using the current governed Parlon evidence base. Focus on how Parlon should move from a coherent replacement proposition to a repeatable, evidence-backed buying decision system. Preserve all evidence boundaries, claim restrictions and governance gates.'
+const clarificationReceipt = (overrides = {}) => ({
+  contractVersion: 'ss-030.clarification-execution-receipt.v1',
+  stageKey: 'CLARIFICATION',
+  status: 'PASSED',
+  receiptId: 'clarification_receipt_1',
+  requestId: planningRequestId,
+  requestHash: 'request-hash-1',
+  intentFingerprint: 'intent-fingerprint-1',
+  handoffFingerprint: 'handoff-fingerprint-1',
+  confirmedBy: 'user-001',
+  executedAt: '2026-09-17T10:00:00.000Z',
+  ...overrides,
+})
+const confirmationIntent = (overrides = {}) => ({
+  originalRequest: exactParlonPrompt,
+  requestedOutputTypeKey: 'commercial-strategy-decision-paper',
+  outputTypeLabel: 'Commercial Strategy and Decision Paper',
+  audience: ['Parlon leadership'],
+  decisionPurpose: 'Move from a coherent replacement proposition to a repeatable, evidence-backed buying decision system.',
+  evidenceSource: 'Current governed Parlon evidence base',
+  constraints: ['Preserve evidence boundaries', 'Preserve claim restrictions', 'Preserve governance gates'],
+  format: 'DOCUMENT',
+  channel: '',
+  resolutionBasis: {
+    requestedOutputTypeKey: 'INFERRED_FROM_REQUEST',
+    audience: 'EXPLICIT',
+    decisionPurpose: 'EXPLICIT',
+    evidenceSource: 'EXPLICIT',
+    constraints: 'EXPLICIT',
+    format: 'GOVERNED_DEFAULT',
+    channel: 'OPTIONAL_UNSPECIFIED',
+  },
+  missingRequiredFields: [],
+  clarificationQuestions: [],
+  selectedSchema: 'commercial-strategy-decision-paper.v1',
+  knowledgePackSummary: ['Parlon governed evidence'],
+  ...overrides,
+})
 const planResult = (overrides = {}) => ({
-  status: 'CLARIFICATION_REQUIRED', requestId: '11111111-1111-4111-8111-111111111111',
+  status: 'CLARIFICATION_REQUIRED', requestId: planningRequestId,
   continuation: 'receipt-1', question: 'What decision should this output support?',
   execution: { status: 'BLOCKED', canExecute: false, reason: 'REQUEST_EXECUTION_NOT_ENABLED' },
   ...overrides,
 })
 const savedPlan = () => planResult({
   status: 'SAVED', continuation: 'saved-receipt', question: '',
-  plan: { planId: 'outcome_kcp_22222222-2222-4222-8222-222222222222', planVersion: 1, currentness: 'NOT_REVALIDATED' },
+  intent: confirmationIntent(),
+  execution: { status: 'READY', canExecute: true, reason: '' },
+  plan: {
+    planId: 'outcome_kcp_22222222-2222-4222-8222-222222222222',
+    planVersion: 1,
+    currentness: 'CURRENT',
+    clarificationReceipt: clarificationReceipt(),
+  },
 })
 const assertNoExecution = () => {
   expect(createSession).not.toHaveBeenCalled()
@@ -118,6 +165,7 @@ const studio = {
     },
     safetyGates: {
       responseGenerationAvailable: true,
+      gates: [{ code: 'RESPONSE_GENERATION_ENGINE', label: 'Response Generation Engine', status: 'PASSED', message: 'Generation prerequisites passed.' }],
     },
   },
   information: {
@@ -190,6 +238,8 @@ const studio = {
 
 const session = {
   sessionId: 'session-1',
+  requestId: planningRequestId,
+  clarificationReceipt: clarificationReceipt(),
   status: 'ACTIVE',
   requestedOutputTypeKey: 'board-narrative',
   informationStatus: { status: 'CURRENT', currentness: 'CURRENT' },
@@ -577,6 +627,78 @@ describe('OutcomeStudioWorkspace', () => {
     expect(frameworkHandoff.textContent).not.toContain('BlockedBlocked')
   })
 
+  it.each(['UNKNOWN', 'PENDING', 'FAILED', undefined])('fails closed for a %s current safety check despite optimistic readiness flags', async (status) => {
+    const user = userEvent.setup()
+    const message = 'Executable composition has not been verified.'
+    useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
+      data: { data: { ...studio.readiness, safetyGates: {
+        responseGenerationAvailable: true,
+        gates: [{ code: 'COMPOSITION', label: 'Composition', status, message }],
+      } } }, isLoading: false, error: null,
+    })
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: { data: { ...session, drafts: [], governanceEvidence: {
+        stages: [{ key: 'GUARDRAILS', evidenceLabel: 'Historical session evidence', knowledgePacks: [],
+          inputs: [{ key: 'safety-gates', label: 'Safety gates', status: 'UNKNOWN', value: '0/0 checks passed' }], checks: [] }],
+      } } }, isLoading: false, error: null,
+    })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toHaveAccessibleDescription(message)
+    expect(screen.getByRole('status', { name: 'Status: Generation blocked' })).toBeInTheDocument()
+    const summary = screen.getByRole('region', { name: /readiness and information/i })
+    expect(within(summary).getByText('Session readiness').parentElement).toHaveTextContent('Ready')
+    expect(within(summary).queryByText('Status')).not.toBeInTheDocument()
+    const tracker = screen.getByRole('region', { name: /stage progress/i })
+    expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('pre-generation checks are not draft execution receipts')
+    expect(within(tracker).getByLabelText('Stage result legend')).not.toHaveTextContent('exact draft version')
+    expect(within(tracker).getByRole('img', { name: 'Guardrails: not passed' })).toBeInTheDocument()
+    expect(tracker).not.toHaveTextContent('Generate Draft v1, then open')
+    expect(tracker).toHaveTextContent(message)
+    await user.click(within(tracker).getByRole('button', { name: 'Guardrails evidence details' }))
+    const dialog = screen.getByRole('dialog', { name: 'Guardrails evidence' })
+    expect(dialog).toHaveTextContent('Current pre-generation checks')
+    expect(dialog).toHaveTextContent('0/1 checks passed')
+    expect(dialog).not.toHaveTextContent('0/0 checks passed')
+    expect(dialog).toHaveTextContent(message)
+    expect(dialog).toHaveTextContent('not execution receipts')
+    expect(generateResponse).not.toHaveBeenCalled()
+  })
+
+  it('shows readable schema and pack descriptors and isolates new planning from the old session receipt', async () => {
+    const user = userEvent.setup()
+    const newRequestId = '33333333-3333-4333-8333-333333333333'
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({
+      requestId: newRequestId, status: 'CONFIRMATION_REQUIRED', question: '',
+      intent: confirmationIntent({
+        selectedSchema: { key: 'strategy-schema', label: 'Strategy schema', semanticVersion: '1.2.0' },
+        knowledgePackSummary: undefined,
+        selectedKnowledgePacks: [
+          { packKey: 'strategy-pack', label: 'Strategy guidance', semanticVersion: '2.0.0' },
+          { packKey: 'arl-pack', label: 'Reasoning guidance', versionId: 'kpv-arl-internal-id' },
+          { packKey: 'other-pack', label: 'Other guidance', version: 'kpv-other-internal-id' },
+          { packKey: 'versioned-pack', label: 'Versioned guidance', version: '3.1.0' },
+        ],
+      }),
+    }) }))
+    renderPage()
+    expect(screen.getByRole('img', { name: 'Clarification: passed' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    const requestPlan = screen.getByRole('region', { name: 'Request plan' })
+    expect(requestPlan).toHaveTextContent('Strategy schema · Version 1.2.0')
+    expect(requestPlan).toHaveTextContent('Strategy guidance · Version 2.0.0')
+    expect(requestPlan).toHaveTextContent('Reasoning guidance')
+    expect(requestPlan).toHaveTextContent('Other guidance')
+    expect(requestPlan).toHaveTextContent('Versioned guidance · Version 3.1.0')
+    expect(requestPlan).not.toHaveTextContent('kpv-')
+    expect(requestPlan).not.toHaveTextContent('"packKey"')
+    expect(screen.getByRole('img', { name: 'Clarification: not passed' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(planRequest.mock.calls[0][0].body).not.toHaveProperty('sessionId')
+    assertNoExecution()
+  })
+
   it('opens each stage evidence summary in its own standard dialog', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -643,20 +765,27 @@ describe('OutcomeStudioWorkspace', () => {
     expect(within(dialog).getByRole('img', { name: 'Draft receipt pack: execution passed' })).toBeInTheDocument()
   })
 
-  it('marks only passed stages with a tick', () => {
+  it('does not pass Clarification from a request and binding evidence alone', () => {
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({
+      data: { data: { ...session, requestId: undefined, clarificationReceipt: undefined } },
+      isLoading: false,
+      error: null,
+      refetch: refetchSession,
+    })
     renderPage()
 
     const tracker = screen.getByRole('region', { name: /stage progress/i })
-    expect(within(tracker).getByRole('img', { name: 'Clarification: passed' })).toBeInTheDocument()
+    expect(within(tracker).getByRole('img', { name: 'Clarification: not passed' })).toBeInTheDocument()
+    expect(tracker).toHaveTextContent('Clarification is waiting for a confirmed request receipt.')
     expect(within(tracker).getByRole('img', { name: 'Guardrails: passed' })).toBeInTheDocument()
     expect(within(tracker).getByRole('img', { name: 'Validation: not passed' })).toBeInTheDocument()
     expect(within(tracker).getByRole('img', { name: 'Outcome readiness: not passed' })).toBeInTheDocument()
-    expect(tracker).toHaveTextContent('2/4 stages passed')
-    expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('Tick = all required checks passed for this exact draft version')
+    expect(tracker).toHaveTextContent('1/4 stages passed')
+    expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('Tick = the displayed stage passed; pre-generation checks are not draft execution receipts')
     expect(within(tracker).getByLabelText('Stage result legend')).toHaveTextContent('Cross = not passed')
   })
 
-  it('blocks every parent stage and approval when exact-version execution evidence is not ready', async () => {
+  it('keeps each stage independent when exact-version approval evidence is not ready', async () => {
     const user = userEvent.setup()
     const blockedMessage = 'Approval is blocked until all required execution evidence passes for this exact draft version.'
     useGetRuntimeOutcomeSessionQuery.mockReturnValue({
@@ -686,12 +815,9 @@ describe('OutcomeStudioWorkspace', () => {
     renderPage()
 
     const tracker = screen.getByRole('region', { name: /stage progress/i })
-    expect(within(tracker).getAllByRole('status', { name: 'Status: Blocked' })).toHaveLength(4)
-    expect(within(tracker).getAllByText(blockedMessage)).toHaveLength(4)
-    expect(within(tracker).getByText('0/4 stages passed')).toBeInTheDocument()
-    for (const label of ['Clarification', 'Guardrails', 'Validation', 'Outcome readiness']) {
-      expect(within(tracker).getByRole('img', { name: `${label}: not passed` })).toBeInTheDocument()
-    }
+    expect(within(tracker).getByRole('img', { name: 'Clarification: passed' })).toBeInTheDocument()
+    expect(within(tracker).getByText('2/4 stages passed')).toBeInTheDocument()
+    expect(within(tracker).queryByText(blockedMessage)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))
     expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled()
@@ -1395,6 +1521,10 @@ describe('OutcomeStudioWorkspace', () => {
       data: {
         data: {
           ...studio,
+          readiness: {
+            ...studio.readiness,
+            blockers: [{ code: 'SAFETY_EXECUTION_RECEIPT_MISSING', message: 'Draft generation is blocked until the safety execution receipt is recorded.' }],
+          },
           safetyGates: {
             status: 'BLOCKED',
             responseGenerationAvailable: false,
@@ -1410,7 +1540,7 @@ describe('OutcomeStudioWorkspace', () => {
     const generateButton = screen.getByRole('button', { name: 'Generate draft' })
     expect(generateButton).toBeDisabled()
     expect(generateButton).toHaveAccessibleDescription(
-      'Draft generation is not available until the required information and content checks are complete.',
+      'Draft generation is blocked until the safety execution receipt is recorded.',
     )
     expect(screen.getByRole('textbox', { name: 'Your request' })).toBeEnabled()
 
@@ -1427,14 +1557,18 @@ describe('OutcomeStudioWorkspace', () => {
       readiness: {
         ...studio.readiness,
         canReason: false,
+        blockers: [{ code: 'PROVIDER_UNAVAILABLE', message: 'Draft generation is blocked because the drafting service is unavailable.' }],
       },
+      expected: 'Draft generation is blocked because the drafting service is unavailable.',
     },
     {
       label: 'the dedicated generation gate is blocked',
       readiness: {
         ...studio.readiness,
         safetyGates: { responseGenerationAvailable: false },
+        blockers: [{ code: 'KNOWLEDGE_PACK_RESOLUTION_NOT_RECORDED', message: 'Draft generation is blocked until Knowledge Pack resolution is recorded.' }],
       },
+      expected: 'Draft generation is blocked until Knowledge Pack resolution is recorded.',
     },
     {
       label: 'dedicated readiness flags are missing',
@@ -1444,8 +1578,9 @@ describe('OutcomeStudioWorkspace', () => {
         summary: 'Outcome Studio readiness is incomplete.',
         blockers: [],
       },
+      expected: 'Draft readiness has not been recorded yet.',
     },
-  ])('fails generation closed when $label', async ({ readiness }) => {
+  ])('fails generation closed when $label', async ({ readiness, expected }) => {
     const user = userEvent.setup()
     useGetRuntimeOutcomeStudioReadinessQuery.mockReturnValue({
       data: { data: readiness },
@@ -1457,9 +1592,7 @@ describe('OutcomeStudioWorkspace', () => {
 
     const generateButton = screen.getByRole('button', { name: 'Generate draft' })
     expect(generateButton).toBeDisabled()
-    expect(generateButton).toHaveAccessibleDescription(
-      'Draft generation is not available until the required information and content checks are complete.',
-    )
+    expect(generateButton).toHaveAccessibleDescription(expected)
 
     await user.click(generateButton)
     expect(generateResponse).not.toHaveBeenCalled()
@@ -1478,7 +1611,7 @@ describe('OutcomeStudioWorkspace', () => {
     const generateButton = screen.getByRole('button', { name: 'Generate draft' })
     expect(generateButton).toBeDisabled()
     expect(generateButton).toHaveAccessibleDescription(
-      'Draft generation is not available until the required information and content checks are complete.',
+      'Draft readiness has not been recorded yet.',
     )
 
     await user.click(generateButton)
@@ -1597,7 +1730,7 @@ describe('OutcomeStudioWorkspace', () => {
       runtimeInstanceId: 'value-narrative-001',
       customerId: 'customer-001',
       tenantId: 'tenant-001',
-      body: { prompt: 'Refine the available deliverable.', action: 'ANSWER', sessionId: 'session-1' },
+      body: { prompt: 'Refine the available deliverable.', action: 'ANSWER' },
     })
   })
 
@@ -1626,43 +1759,72 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByText('Output Lab asset')).not.toBeInTheDocument()
   })
 
-  it('clarifies intent, explicitly confirms, retrieves and re-resolves an immutable plan without execution', async () => {
+  it('prefills the exact Parlon request in one call, permits amendment, then records Clarification', async () => {
     const user = userEvent.setup()
-    planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult() }))
-      .mockReturnValueOnce(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', continuation: 'confirm-receipt', question: 'Confirm this intent.', intent: { outcome: 'Board narrative', audience: 'Directors' } }) }))
-      .mockReturnValueOnce(resolvedMutation({ data: planResult({ continuation: 're-resolution-receipt' }) }))
+    planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult({
+      status: 'CONFIRMATION_REQUIRED',
+      continuation: 'confirm-receipt',
+      question: '',
+      message: 'Review and confirm the inferred request.',
+      intent: confirmationIntent(),
+    }) }))
+      .mockReturnValueOnce(resolvedMutation({ data: planResult({
+        status: 'CONFIRMATION_REQUIRED',
+        continuation: 'amended-confirm-receipt',
+        question: '',
+        intent: confirmationIntent({ audience: ['Parlon leadership', 'Parlon board'] }),
+    }) }))
     renderPage()
-    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a board narrative.')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
     await user.click(screen.getByRole('button', { name: 'Plan request' }))
-    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('What decision should this output support?')
+    const requestPlan = screen.getByRole('region', { name: 'Request plan' })
+    expect(requestPlan).toHaveTextContent('Confirmation Required')
+    expect(requestPlan).toHaveTextContent('Commercial Strategy and Decision Paper')
+    expect(requestPlan).toHaveTextContent('Parlon leadership')
+    expect(requestPlan).toHaveTextContent('Current governed Parlon evidence base')
+    expect(requestPlan).toHaveTextContent('Governed Default')
+    expect(requestPlan).toHaveTextContent('Optional Unspecified')
+    expect(requestPlan).toHaveTextContent('commercial-strategy-decision-paper.v1')
+    expect(requestPlan).toHaveTextContent('Parlon governed evidence')
+    expect(requestPlan).not.toHaveTextContent('What decision should this output support?')
     expect(confirmPlan).not.toHaveBeenCalled()
     assertNoExecution()
-    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Directors deciding the commercial strategy.')
-    await user.click(screen.getByRole('button', { name: 'Continue planning' }))
-    expect(planRequest.mock.calls[1][0].body).toEqual({ prompt: 'Directors deciding the commercial strategy.', action: 'ANSWER', continuation: 'receipt-1' })
-    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Directors')
+    expect(screen.getByRole('textbox', { name: 'Your request' })).toBeEnabled()
+    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Also include the Parlon board in the audience.')
+    expect(screen.getByRole('button', { name: 'Confirm and save plan' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Apply amendment' }))
+    expect(planRequest.mock.calls[1][0].body).toEqual({ prompt: 'Also include the Parlon board in the audience.', action: 'RE_RESOLVE', continuation: 'confirm-receipt' })
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Parlon board')
     expect(confirmPlan).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Confirm and save plan' }))
     expect(confirmPlan).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
-      requestId: planResult().requestId, body: { continuation: 'confirm-receipt', confirm: true },
+      requestId: planResult().requestId, body: { continuation: 'amended-confirm-receipt', confirm: true },
     })
-    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Plan saved · execution blocked')
-    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Source evidence has not been revalidated')
+    expect(createSession).toHaveBeenCalledWith({
+      runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
+      body: { requestId: planningRequestId, planId: savedPlan().plan.planId },
+    })
+    expect(refetchStudio).toHaveBeenCalled()
+    expect(refetchReadiness).toHaveBeenCalled()
+    expect(submitMessage).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Plan saved')
+    expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Clarification receipt recorded')
+    expect(screen.getByRole('region', { name: /stage progress/i })).toHaveTextContent('The confirmed request has an exact Clarification execution receipt.')
     await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
     expect(retrievePlan).toHaveBeenCalledWith({
       runtimeInstanceId: 'value-narrative-001', customerId: 'customer-001', tenantId: 'tenant-001',
       requestId: planResult().requestId, planId: savedPlan().plan.planId,
     }, false)
-    await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Audience changed to investors.')
-    await user.click(screen.getByRole('button', { name: 'Re-resolve request' }))
-    expect(planRequest.mock.calls[2][0].body).toEqual({ prompt: 'Audience changed to investors.', action: 'RE_RESOLVE', continuation: 'saved-receipt' })
-    assertNoExecution()
+    expect(createSession).toHaveBeenCalledTimes(1)
+    expect(submitMessage).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled()
   })
 
   it('retains the exact confirmation receipt after response loss and retries without prompt matching', async () => {
     const user = userEvent.setup()
-    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', continuation: 'exact-confirm-receipt' }) }))
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', continuation: 'exact-confirm-receipt', question: '', intent: confirmationIntent() }) }))
     confirmPlan.mockReturnValueOnce({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR' }) })
       .mockReturnValueOnce(resolvedMutation({ data: savedPlan() }))
     renderPage()
@@ -1677,7 +1839,9 @@ describe('OutcomeStudioWorkspace', () => {
     expect(confirmPlan.mock.calls[1][0].body).toEqual({ continuation: 'exact-confirm-receipt', confirm: true })
     expect(planRequest).toHaveBeenCalledTimes(1)
     expect(loadSessionForReconciliation).not.toHaveBeenCalled()
-    assertNoExecution()
+    expect(createSession).toHaveBeenCalledTimes(1)
+    expect(submitMessage).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled()
   })
 
   it('retains the prompt and permits retry after a planning error', async () => {
@@ -1715,7 +1879,7 @@ describe('OutcomeStudioWorkspace', () => {
 
   it('keeps a saved plan visible when retrieval fails without reconfirming or executing', async () => {
     const user = userEvent.setup()
-    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED' }) }))
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', question: '', intent: confirmationIntent() }) }))
     retrievePlan.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 'FETCH_ERROR' }) })
     renderPage()
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare the brief.')
@@ -1725,7 +1889,9 @@ describe('OutcomeStudioWorkspace', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Request plan' })).toHaveTextContent('Plan version 1')
     expect(confirmPlan).toHaveBeenCalledTimes(1)
-    assertNoExecution()
+    expect(createSession).toHaveBeenCalledTimes(1)
+    expect(submitMessage).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled()
   })
 
   it('starts a genuinely new plan after selecting a working draft during planning', async () => {
@@ -1743,14 +1909,14 @@ describe('OutcomeStudioWorkspace', () => {
     await user.type(screen.getByRole('textbox', { name: 'Your request' }), 'Prepare a separate investor brief.')
     await user.click(screen.getByRole('button', { name: 'Plan request' }))
     expect(planRequest.mock.calls[1][0].body).toEqual({
-      prompt: 'Prepare a separate investor brief.', action: 'ANSWER', sessionId: 'session-1',
+      prompt: 'Prepare a separate investor brief.', action: 'ANSWER',
     })
     assertNoExecution()
   })
 
   it.each(['CONFIRM', 'RETRIEVE'])('ignores a late %s response after logout without a rerender', async (step) => {
     const user = userEvent.setup()
-    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED' }) }))
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED', question: '', intent: confirmationIntent() }) }))
     let resolve
     const deferred = { unwrap: () => new Promise((done) => { resolve = done }) }
     if (step === 'CONFIRM') confirmPlan.mockReturnValue(deferred)
@@ -1763,7 +1929,10 @@ describe('OutcomeStudioWorkspace', () => {
     authState.revision += 1
     await act(async () => resolve({ data: { ...savedPlan(), message: 'Private late plan response' } }))
     expect(screen.queryByText('Private late plan response')).not.toBeInTheDocument()
-    assertNoExecution()
+    if (step === 'CONFIRM') expect(createSession).not.toHaveBeenCalled()
+    else expect(createSession).toHaveBeenCalledTimes(1)
+    expect(submitMessage).not.toHaveBeenCalled()
+    expect(generateResponse).not.toHaveBeenCalled()
   })
 
   it('shows safe provider-context diagnostic copy and ignores malformed diagnostic tokens', async () => {
@@ -2057,7 +2226,7 @@ describe('OutcomeStudioWorkspace', () => {
       runtimeInstanceId: 'value-narrative-001',
       customerId: 'customer-001',
       tenantId: 'tenant-001',
-      body: { prompt: 'Refine the recommendation.', action: 'ANSWER', sessionId: 'session-1' },
+      body: { prompt: 'Refine the recommendation.', action: 'ANSWER' },
     })
 
     await user.click(screen.getByRole('tab', { name: 'Working Drafts' }))

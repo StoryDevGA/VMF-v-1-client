@@ -512,6 +512,13 @@ export function canActivateKnowledgePack(row = {}) {
     && normalizeToken(row.reviewStatus) === 'APPROVED'
 }
 
+export function canAddKnowledgePackScopeBinding(row = {}, { requireContentHash = true } = {}) {
+  return hasKnowledgePackVersion(row)
+    && (!requireContentHash || Boolean(normalizeText(row.contentHash)))
+    && normalizeToken(row.status) === OUTCOME_KNOWLEDGE_PACK_STATUSES.ACTIVE
+    && normalizeToken(row.reviewStatus) === 'APPROVED'
+}
+
 export function getActivateKnowledgePackDisabledReason(row = {}, { requireValidationSummary = false } = {}) {
   if (
     !isImportedSourceDocument(row)

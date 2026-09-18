@@ -85,9 +85,13 @@ export function TabView({
     isControlled ? controlledActiveTab : internalActiveTab,
     totalTabs,
   )
+  const firstEnabledTab = tabs.findIndex((tab) => tab.props.disabled !== true)
+  const resolvedActiveTab = tabs[activeTab]?.props.disabled === true
+    ? (firstEnabledTab >= 0 ? firstEnabledTab : 0)
+    : activeTab
 
   const selectTab = (index) => {
-    if (totalTabs === 0) return
+    if (totalTabs === 0 || tabs[index]?.props.disabled === true) return
     const nextIndex = clampTabIndex(index, totalTabs)
 
     if (!isControlled) {
@@ -106,39 +110,52 @@ export function TabView({
     if (totalTabs === 0) return
 
     let newIndex = currentIndex
+    const moveToEnabled = (startIndex, step) => {
+      let index = startIndex
+      for (let count = 0; count < totalTabs; count += 1) {
+        index = (index + step + totalTabs) % totalTabs
+        if (tabs[index]?.props.disabled !== true) return index
+      }
+      return currentIndex
+    }
+    const firstEnabled = tabs.findIndex((tab) => tab.props.disabled !== true)
+    const lastEnabled = tabs.reduce(
+      (last, tab, index) => (tab.props.disabled !== true ? index : last),
+      -1,
+    )
 
     switch (event.key) {
       case 'ArrowRight':
         if (orientation === 'horizontal') {
           event.preventDefault()
-          newIndex = currentIndex === totalTabs - 1 ? 0 : currentIndex + 1
+          newIndex = moveToEnabled(currentIndex, 1)
         }
         break
       case 'ArrowLeft':
         if (orientation === 'horizontal') {
           event.preventDefault()
-          newIndex = currentIndex === 0 ? totalTabs - 1 : currentIndex - 1
+          newIndex = moveToEnabled(currentIndex, -1)
         }
         break
       case 'ArrowDown':
         if (orientation === 'vertical') {
           event.preventDefault()
-          newIndex = currentIndex === totalTabs - 1 ? 0 : currentIndex + 1
+          newIndex = moveToEnabled(currentIndex, 1)
         }
         break
       case 'ArrowUp':
         if (orientation === 'vertical') {
           event.preventDefault()
-          newIndex = currentIndex === 0 ? totalTabs - 1 : currentIndex - 1
+          newIndex = moveToEnabled(currentIndex, -1)
         }
         break
       case 'Home':
         event.preventDefault()
-        newIndex = 0
+        newIndex = firstEnabled >= 0 ? firstEnabled : currentIndex
         break
       case 'End':
         event.preventDefault()
-        newIndex = totalTabs - 1
+        newIndex = lastEnabled >= 0 ? lastEnabled : currentIndex
         break
       default:
         return
@@ -170,7 +187,7 @@ export function TabView({
         aria-label={ariaLabel}
       >
         {tabs.map((tab, index) => {
-          const isActive = index === activeTab
+          const isActive = index === resolvedActiveTab
           const tabClasses = [
             'tabview__tab',
             isActive && 'tabview__tab--active'
@@ -188,7 +205,8 @@ export function TabView({
               aria-selected={isActive}
               aria-controls={`${idBase}-tabpanel-${index}`}
               id={`${idBase}-tab-${index}`}
-              tabIndex={isActive ? 0 : -1}
+              tabIndex={isActive && tab.props.disabled !== true ? 0 : -1}
+              disabled={tab.props.disabled === true}
               onClick={() => handleTabClick(index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
             >
@@ -200,7 +218,7 @@ export function TabView({
 
       <div className="tabview__content">
         {tabs.map((tab, index) => {
-          const isActive = index === activeTab
+          const isActive = index === resolvedActiveTab
           return (
             <div
               key={index}
@@ -221,7 +239,8 @@ export function TabView({
 }
 
 // eslint-disable-next-line no-unused-vars
-TabView.Tab = function TabViewTab({ children, label }) {
+TabView.Tab = function TabViewTab({ children, label, disabled = false }) {
+  void disabled
   return null
 }
 

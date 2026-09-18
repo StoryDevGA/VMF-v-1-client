@@ -26,6 +26,7 @@ import { getSessionRevision, subscribeToSession } from '../../utils/tokenStorage
 import {
   usePlanRuntimeOutcomeRequestMutation,
   useConfirmRuntimeOutcomeRequestPlanMutation,
+  useCreateRuntimeOutcomeSessionMutation,
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useApproveRuntimeOutcomeDraftMutation,
   useDiscardRuntimeOutcomeDraftMutation,
@@ -61,8 +62,107 @@ const OUTPUT_CONTRACT_CLARIFICATION_CODE = 'OUTCOME_OUTPUT_CONTRACT_CLARIFICATIO
 const normalizeRequestText = (value) => String(value || '').trim().replace(/\s+/g, ' ')
 const formatPlanningIntentValue = (value) => {
   if (Array.isArray(value)) return value.map((entry) => formatPlanningIntentValue(entry)).join('; ')
-  if (value && typeof value === 'object') return JSON.stringify(value)
+  if (value && typeof value === 'object') {
+    const label = value.label || value.name || value.schemaKey || value.packKey || value.key
+    const version = [value.semanticVersion, value.version].find((candidate) => (
+      typeof candidate === 'string' && /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(candidate)
+    ))
+    return [label, version && `Version ${version}`].filter(Boolean).join(' · ') || 'Not specified'
+  }
   return value || 'Not specified'
+}
+const planningIntentSummary = (intent = {}) => {
+  const resolutionBasis = intent.resolutionBasis && typeof intent.resolutionBasis === 'object'
+    ? intent.resolutionBasis
+    : {}
+  const rows = [
+    ['Original request', intent.originalRequest],
+    ['Output type', [intent.outputTypeLabel, intent.requestedOutputTypeKey].filter(Boolean).join(' · ')],
+    ['Output type basis', resolutionBasis.requestedOutputTypeKey],
+    ['Audience', intent.audience],
+    ['Audience basis', resolutionBasis.audience],
+    ['Decision purpose', intent.decisionPurpose],
+    ['Decision purpose basis', resolutionBasis.decisionPurpose],
+    ['Evidence source', intent.evidenceSource],
+    ['Evidence source basis', resolutionBasis.evidenceSource],
+    ['Constraints', intent.constraints],
+    ['Constraints basis', resolutionBasis.constraints],
+    ['Format', intent.format],
+    ['Format basis', resolutionBasis.format],
+    ['Channel', intent.channel],
+    ['Channel basis', resolutionBasis.channel],
+    ['Selected schema', intent.selectedSchema || intent.outputSchema],
+    ['Knowledge Packs', intent.knowledgePackSummary || intent.selectedKnowledgePacks || intent.knowledgePacks],
+  ]
+  return rows.filter(([, value]) => (
+    Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined && value !== ''
+  )).map(([label, value]) => [label, label.endsWith(' basis') || ['Format', 'Channel'].includes(label)
+    ? formatRuntimeTokenLabel(value)
+    : value])
+}
+
+const isExactClarificationReceipt = (receipt, requestId) => Boolean(
+  receipt
+  && String(receipt.contractVersion || '').trim()
+  && token(receipt.stageKey) === 'CLARIFICATION'
+  && token(receipt.status) === 'PASSED'
+  && String(receipt.receiptId || '').trim()
+  && String(receipt.requestId || '').trim() === String(requestId || '').trim()
+  && String(receipt.requestHash || '').trim()
+  && String(receipt.intentFingerprint || '').trim()
+  && String(receipt.handoffFingerprint || '').trim()
+  && String(receipt.confirmedBy || '').trim()
+  && String(receipt.executedAt || '').trim()
+)
+
+const clarificationReceiptCandidates = ({ planning, session, governanceEvidence } = {}) => {
+  if (planning) return [[planning.plan?.clarificationReceipt, planning.requestId]].filter(([receipt]) => receipt)
+  const sessionRequestId = session?.requestId
+    || session?.contextBindings?.requestId
+    || session?.contextBindings?.outcomeRequestId
+  const governanceRequestId = governanceEvidence?.requestId
+    || governanceEvidence?.clarificationReceipt?.requestId
+  return [
+    [planning?.plan?.clarificationReceipt, planning?.requestId],
+    [session?.clarificationReceipt, sessionRequestId],
+    [session?.contextBindings?.clarificationReceipt, sessionRequestId],
+    [governanceEvidence?.clarificationReceipt, governanceRequestId],
+  ].filter(([receipt]) => receipt)
+}
+
+const exactClarificationReceipt = (context) => clarificationReceiptCandidates(context)
+  .find(([receipt, requestId]) => isExactClarificationReceipt(receipt, requestId))?.[0] || null
+
+const isValidPlanningResponse = (result, action) => {
+  const status = token(result?.status)
+  const executionStatus = token(result?.execution?.status)
+  const validExecution = (
+    (executionStatus === 'READY' && result?.execution?.canExecute === true)
+    || (executionStatus === 'BLOCKED' && result?.execution?.canExecute === false)
+  )
+  if (!String(result?.continuation || '').trim() || !String(result?.requestId || '').trim() || !validExecution) return false
+  if (['CONFIRM', 'RETRIEVE'].includes(action) && status !== 'SAVED') return false
+
+  if (status === 'CLARIFICATION_REQUIRED') {
+    return executionStatus === 'BLOCKED' && Boolean(String(result.question || '').trim())
+  }
+  if (status === 'CONFIRMATION_REQUIRED') {
+    const intent = result.intent
+    return executionStatus === 'BLOCKED'
+      && intent && typeof intent === 'object'
+      && Boolean(String(intent.originalRequest || '').trim())
+      && Boolean(String(intent.requestedOutputTypeKey || '').trim())
+      && Array.isArray(intent.audience) && intent.audience.length > 0
+      && Boolean(String(intent.decisionPurpose || '').trim())
+      && Boolean(String(intent.evidenceSource || '').trim())
+      && Boolean(String(intent.format || '').trim())
+      && Array.isArray(intent.missingRequiredFields) && intent.missingRequiredFields.length === 0
+  }
+  if (status === 'SAVED') {
+    return Boolean(String(result?.plan?.planId || '').trim())
+      && isExactClarificationReceipt(result?.plan?.clarificationReceipt, result.requestId)
+  }
+  return false
 }
 const GOVERNED_RENDER_FORMATS = new Set(['MARKDOWN', 'HTML', 'DOCX', 'PDF', 'PPTX'])
 
@@ -223,7 +323,52 @@ const firstReadinessBlocker = (readiness = {}) => {
 
 const firstBlockedSafetyGate = (readiness = {}) => {
   const gates = Array.isArray(readiness?.safetyGates?.gates) ? readiness.safetyGates.gates : EMPTY_ARRAY
-  return gates.find((gate) => token(gate?.status) === 'BLOCKED') || null
+  return gates.find((gate) => token(gate?.status) === 'BLOCKED')
+    || gates.find((gate) => token(gate?.status) !== 'PASSED') || null
+}
+
+const safetyChecksPassed = (readiness) => Array.isArray(readiness?.safetyGates?.gates)
+  && readiness.safetyGates.gates.length > 0
+  && readiness.safetyGates.gates.every((gate) => token(gate?.status) === 'PASSED')
+
+const EXECUTION_BLOCKER_MESSAGES = Object.freeze({
+  PROVIDER_UNAVAILABLE: 'Draft generation is blocked because the drafting service is unavailable.',
+  DRAFTING_SERVICE_UNAVAILABLE: 'Draft generation is blocked because the drafting service is unavailable.',
+  KNOWLEDGE_PACK_RESOLUTION_NOT_RECORDED: 'Draft generation is blocked until Knowledge Pack resolution is recorded.',
+  SAFETY_EXECUTION_RECEIPT_MISSING: 'Draft generation is blocked until the safety execution receipt is recorded.',
+  FRAMEWORK_HANDOFF_NOT_CURRENT: 'Draft generation is blocked until the Framework handoff is current.',
+  INFORMATION_NOT_CURRENT: 'Draft generation is blocked until the session uses current verified business information.',
+  CLARIFICATION_RECEIPT_MISSING: 'Draft generation is blocked until the Clarification receipt is recorded.',
+})
+
+const blockerMessageOf = (blocker) => {
+  if (!blocker) return ''
+  if (typeof blocker === 'string') return EXECUTION_BLOCKER_MESSAGES[token(blocker)] || ''
+  return String(blocker.message || EXECUTION_BLOCKER_MESSAGES[token(blocker.code)] || '').trim()
+}
+
+const preciseGenerationBlocker = ({ clarificationPassed = true, informationCurrent, planning, readiness, studio }) => {
+  if (!informationCurrent) return EXECUTION_BLOCKER_MESSAGES.INFORMATION_NOT_CURRENT
+  if (!clarificationPassed) return EXECUTION_BLOCKER_MESSAGES.CLARIFICATION_RECEIPT_MISSING
+  const planningBlockers = Array.isArray(planning?.execution?.blockers) ? planning.execution.blockers : EMPTY_ARRAY
+  const readinessBlockers = Array.isArray(readiness?.blockers) ? readiness.blockers : EMPTY_ARRAY
+  const studioBlockers = Array.isArray(studio?.readiness?.blockers) ? studio.readiness.blockers : EMPTY_ARRAY
+  const blockedGates = [firstBlockedSafetyGate(readiness), firstBlockedSafetyGate(studio?.readiness)]
+  const candidates = [
+    ...(token(planning?.status) === 'SAVED' ? planningBlockers : EMPTY_ARRAY),
+    ...blockedGates,
+    ...readinessBlockers,
+    ...studioBlockers,
+  ]
+  for (const candidate of candidates) {
+    const message = blockerMessageOf(candidate)
+    if (message) return message
+  }
+  const reason = token(planning?.execution?.reason)
+  if (token(planning?.status) === 'SAVED' && EXECUTION_BLOCKER_MESSAGES[reason]) {
+    return EXECUTION_BLOCKER_MESSAGES[reason]
+  }
+  return 'Draft readiness has not been recorded yet.'
 }
 
 const stage = (key, status, message, nextAction = '', evidence = null) => ({
@@ -239,21 +384,28 @@ const stage = (key, status, message, nextAction = '', evidence = null) => ({
 const getOutcomeStudioStages = ({
   readiness = {},
   session = null,
+  planning = null,
   requestMessages = EMPTY_ARRAY,
   draftRows = EMPTY_ARRAY,
   governanceEvidence = null,
   selectedDraftRow = null,
   selectedDraftPreview = null,
+  generationBlockedReason = '',
 } = {}) => {
   const fixture = isBoundedFixture(readiness)
   const fixtureStatus = fixture ? 'BOUNDED_FIXTURE' : 'PASSED'
   const activeSession = token(session?.status) === 'ACTIVE'
-  const hasRequest = requestMessages.length > 0
-  const clarification = !activeSession
-    ? stage('CLARIFICATION', 'PENDING', 'No governed conversation has been started yet.', 'Start with an Executive Brief request.')
-    : !hasRequest
-      ? stage('CLARIFICATION', 'IN_PROGRESS', 'The governed session is active and is waiting for a request.', 'Describe the Executive Brief you need.')
-      : stage('CLARIFICATION', fixtureStatus, 'The request is captured in the governed conversation.', fixture ? 'Treat this source as bounded fixture evidence.' : '')
+  const receiptContext = { planning, session, governanceEvidence }
+  const clarificationReceipt = exactClarificationReceipt(receiptContext)
+  const hasReceiptCandidate = clarificationReceiptCandidates(receiptContext).length > 0
+  const hasRequest = requestMessages.length > 0 || Boolean(planning)
+  const clarification = clarificationReceipt
+    ? stage('CLARIFICATION', 'PASSED', 'The confirmed request has an exact Clarification execution receipt.')
+    : hasReceiptCandidate
+      ? stage('CLARIFICATION', 'BLOCKED', 'The Clarification receipt is incomplete or does not match this request.', 'Re-confirm the request against the current Framework handoff.')
+      : activeSession || hasRequest
+        ? stage('CLARIFICATION', 'IN_PROGRESS', 'Clarification is waiting for a confirmed request receipt.', 'Review and confirm the inferred request plan.')
+        : stage('CLARIFICATION', 'PENDING', 'No governed request has been confirmed yet.', 'Describe the outcome you need.')
 
   const blockedGate = firstBlockedSafetyGate(readiness)
   const guardrails = blockedGate || firstReadinessBlocker(readiness)
@@ -272,16 +424,17 @@ const getOutcomeStudioStages = ({
     || draftRows[0]
   const selectedContentReview = token(selectedDraftRow?.draft?.contentReview?.result)
   const validation = !draftRows.length
-    ? hasRequest
-      ? stage('VALIDATION', 'IN_PROGRESS', 'The request is waiting for a Working Draft v1.', 'Generate Draft v1, then open its in-context Preview.')
-      : stage('VALIDATION', 'PENDING', 'Validation begins after a Working Draft is available.', 'Submit a request to create the first draft.')
+    ? clarificationReceipt
+      ? stage('VALIDATION', 'IN_PROGRESS', 'The request is waiting for a Working Draft v1.', generationBlockedReason
+          ? `${generationBlockedReason} Resolve the readiness blocker before creating a draft.`
+          : 'Generate Draft v1, then open its in-context Preview.')
+      : stage('VALIDATION', 'PENDING', 'Validation begins after a confirmed request produces a Working Draft.', 'Confirm the request, then create the first draft.')
     : selectedDraftRow && selectedDraftPreview
       ? selectedDraftPreview.previewAvailable === false || (selectedContentReview && selectedContentReview !== 'ALLOW')
         ? stage('VALIDATION', 'BLOCKED', 'The selected draft did not pass customer-content validation.', 'Resolve the validation finding before approval or finalisation.')
         : stage('VALIDATION', fixtureStatus, `Working Draft v${selectedDraftRow.draft.currentIterationNumber || 1} is open in the in-context Preview surface.`, fixture ? 'Preview is bounded fixture evidence; it does not prove generation quality.' : '')
       : stage('VALIDATION', 'IN_PROGRESS', 'A Working Draft exists but its current version is not open in Preview.', 'Open Preview for the current draft before approving it.')
 
-  const executionReadiness = approvalReadinessOf(currentDraftRow?.draft)
   const executionReady = Boolean(currentDraftRow) && isExecutionApprovalReady(currentDraftRow.draft)
   const resolvedGuardrails = guardrails.status === 'PENDING' && executionReady
     ? stage(
@@ -293,7 +446,9 @@ const getOutcomeStudioStages = ({
     : guardrails
 
   const readyDraft = draftRows.find((row) => row.readyToApprove)
-  const outcomeReadiness = resolvedGuardrails.status === 'BLOCKED'
+  const outcomeReadiness = clarification.status !== 'PASSED'
+    ? stage('OUTCOME_READINESS', 'PENDING', 'Outcome readiness is waiting for a confirmed Clarification receipt.', 'Confirm the request before progressing to outcome readiness.')
+    : resolvedGuardrails.status === 'BLOCKED'
     ? stage('OUTCOME_READINESS', 'BLOCKED', 'Outcome readiness is unavailable while guardrails are blocked.', 'Resolve the earlier blocked stage first.')
     : validation.status === 'BLOCKED'
       ? stage('OUTCOME_READINESS', 'BLOCKED', 'Outcome readiness is blocked by the validation result.', 'Resolve validation before approval or finalisation.')
@@ -303,16 +458,7 @@ const getOutcomeStudioStages = ({
           ? stage('OUTCOME_READINESS', 'IN_PROGRESS', 'The flow is still preparing a draft for explicit approval.', 'Complete Preview and any conversational revision before approval.')
           : stage('OUTCOME_READINESS', 'PENDING', 'No outcome is available until the earlier stages pass.', 'Complete Clarification, Guardrails, and Validation first.')
 
-  const executionReceiptBlocked = Boolean(currentDraftRow) && !executionReady
-  const trackedStages = executionReceiptBlocked
-    ? [clarification, resolvedGuardrails, validation, outcomeReadiness].map((item) => stage(
-        item.key,
-        'BLOCKED',
-        executionReadiness?.message
-          || 'Required execution evidence is missing or incomplete for the exact current draft version.',
-        'Review the crossed Knowledge Pack and runtime checks, then regenerate the draft before approval.',
-      ))
-    : [clarification, resolvedGuardrails, validation, outcomeReadiness]
+  const trackedStages = [clarification, resolvedGuardrails, validation, outcomeReadiness]
 
   const evidenceSources = [
     currentDraftRow?.draft?.governanceEvidence,
@@ -332,7 +478,13 @@ const getOutcomeStudioStages = ({
 
   return trackedStages.map((item) => ({
     ...item,
-    evidence: stageEvidence(item.key),
+    evidence: item.key === 'GUARDRAILS'
+      ? {
+          ...stageEvidence(item.key),
+          inputs: (stageEvidence(item.key)?.inputs || []).filter((input) => input.key !== 'safety-gates'),
+          currentReadinessChecks: readiness?.safetyGates?.gates || EMPTY_ARRAY,
+        }
+      : stageEvidence(item.key),
   }))
 }
 
@@ -474,6 +626,26 @@ const renderEvidenceAcknowledgement = (passed, label) => (
 
 const renderStageEvidenceContent = (item) => (
   <div className="outcome-studio-workspace__stage-evidence-body">
+    {item.evidence.currentReadinessChecks ? (
+      <div className="outcome-studio-workspace__stage-evidence-section">
+        <h4>Current pre-generation checks</h4>
+        <p>These readiness checks are not execution receipts. Recorded pack execution evidence is shown separately below.</p>
+        {item.evidence.currentReadinessChecks.length ? (
+          <>
+            <p>{item.evidence.currentReadinessChecks.filter((check) => token(check.status) === 'PASSED').length}/{item.evidence.currentReadinessChecks.length} checks passed</p>
+            <ul className="outcome-studio-workspace__stage-evidence-checks">
+              {item.evidence.currentReadinessChecks.map((check) => (
+                <li key={check.code || check.key}>
+                  <strong>{check.label || formatRuntimeTokenLabel(check.code || check.key)}</strong>
+                  <Status variant={statusVariant(check.status)} size="sm">{formatRuntimeTokenLabel(check.status, 'Not recorded')}</Status>
+                  {check.message ? <span>{check.message}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : <p>Current readiness checks have not been recorded.</p>}
+      </div>
+    ) : null}
     <p className="outcome-studio-workspace__stage-evidence-status">
       {item.evidence.evidenceLabel || 'Evidence status not recorded.'}
     </p>
@@ -607,6 +779,7 @@ function OutcomeStudioWorkspace() {
   const planningRegionRef = useRef(null)
   const [planRequest] = usePlanRuntimeOutcomeRequestMutation()
   const [confirmPlan] = useConfirmRuntimeOutcomeRequestPlanMutation()
+  const [createSession] = useCreateRuntimeOutcomeSessionMutation()
   const [retrievePlan] = useLazyRetrieveRuntimeOutcomeRequestPlanQuery()
   useEffect(() => {
     planningSequence.current += 1
@@ -631,7 +804,7 @@ function OutcomeStudioWorkspace() {
   const [draftPreviewError, setDraftPreviewError] = useState(null)
   const [draftCompareError, setDraftCompareError] = useState(null)
   const [openEvidenceStageKey, setOpenEvidenceStageKey] = useState('')
-  const [busyKey, setBusyKey] = useState('')
+  const [busyKeys, setBusyKeys] = useState(() => new Set())
   const [showAllRequests, setShowAllRequests] = useState(false)
   const draftPreviewRequestRef = useRef(0)
   const requestedDraftIterationRef = useRef('')
@@ -644,7 +817,10 @@ function OutcomeStudioWorkspace() {
   )
   const studio = payload(studioQuery.data)
   const dedicatedReadiness = payload(readinessQuery.data)
-  const readiness = dedicatedReadiness || studio?.readiness || {}
+  const readiness = useMemo(
+    () => dedicatedReadiness || studio?.readiness || {},
+    [dedicatedReadiness, studio?.readiness],
+  )
   const activeSession = activeSessionFrom(studio)
   const activeSessionId = sessionIdOf(activeSession)
   const sessionQuery = useGetRuntimeOutcomeSessionQuery(
@@ -677,14 +853,20 @@ function OutcomeStudioWorkspace() {
       }))
       .filter((item) => item.key && item.label)
   ), [studio?.deliverables?.available])
-  const messages = Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY
-  const requestMessages = messages.filter(isUserRequestMessage)
+  const messages = useMemo(
+    () => (Array.isArray(session?.messages) ? session.messages : EMPTY_ARRAY),
+    [session?.messages],
+  )
+  const requestMessages = useMemo(() => messages.filter(isUserRequestMessage), [messages])
   const newestFirstRequestMessages = [...requestMessages].reverse()
   const visibleMessages = showAllRequests
     ? newestFirstRequestMessages
     : newestFirstRequestMessages.slice(0, REQUEST_HISTORY_PREVIEW_LIMIT)
-  const drafts = (Array.isArray(session?.drafts) ? session.drafts : EMPTY_ARRAY)
-    .filter((draft) => token(draft?.status) === 'ACTIVE')
+  const drafts = useMemo(
+    () => (Array.isArray(session?.drafts) ? session.drafts : EMPTY_ARRAY)
+      .filter((draft) => token(draft?.status) === 'ACTIVE'),
+    [session?.drafts],
+  )
   const assets = Array.isArray(session?.assets)
     ? session.assets
     : Array.isArray(studio?.assets) ? studio.assets : EMPTY_ARRAY
@@ -706,7 +888,10 @@ function OutcomeStudioWorkspace() {
     : null
   const information = studio?.information || studio?.truthBinding?.truthSignature || {}
   const isSessionInformationCurrent = !activeSessionId || isInformationCurrent(session)
-  const draftRows = buildDraftRows(drafts, { sessionInformationCurrent: isSessionInformationCurrent })
+  const draftRows = useMemo(
+    () => buildDraftRows(drafts, { sessionInformationCurrent: isSessionInformationCurrent }),
+    [drafts, isSessionInformationCurrent],
+  )
   const selectedDraftRow = draftRows.find((row) => row.draftId === selectedDraftId) || null
   const selectedDraftIterationId = String(selectedDraftRow?.draft?.currentIterationId || '').trim()
   currentSelectedDraftIterationRef.current = selectedDraftIterationId
@@ -714,25 +899,61 @@ function OutcomeStudioWorkspace() {
   const unavailableDraftCount = draftRows.length - readyDraftCount
   const conversationEnabled = studio?.conversation?.enabled === true && isSessionInformationCurrent
   const revisionMode = Boolean(selectedDraftRow && !planning)
+  const clarificationPassed = Boolean(exactClarificationReceipt({
+    planning,
+    session,
+    governanceEvidence: studio?.governanceEvidence,
+  }))
   const responseGenerationAvailable = (
-    studio?.safetyGates?.responseGenerationAvailable === true
+    isSessionInformationCurrent
+    && clarificationPassed
+    && studio?.safetyGates?.responseGenerationAvailable === true
     && dedicatedReadiness?.canReason === true
     && dedicatedReadiness?.safetyGates?.responseGenerationAvailable === true
+    && safetyChecksPassed(dedicatedReadiness)
+    && !(token(planning?.status) === 'SAVED' && token(planning?.execution?.status) === 'BLOCKED')
   )
-  const generationBlockedReason = !isSessionInformationCurrent
-    ? 'Draft generation is blocked until the session uses current verified business information.'
-    : !responseGenerationAvailable
-      ? 'Draft generation is not available until the required information and content checks are complete.'
-      : ''
-  const stageTracker = getOutcomeStudioStages({
+  const generationBlockedReason = responseGenerationAvailable
+    ? ''
+    : preciseGenerationBlocker({
+        clarificationPassed,
+        informationCurrent: isSessionInformationCurrent,
+        planning,
+        readiness: dedicatedReadiness,
+        studio,
+      })
+  const stageTracker = useMemo(() => getOutcomeStudioStages({
     governanceEvidence: studio?.governanceEvidence,
     readiness,
     session,
+    planning,
     requestMessages,
     draftRows,
     selectedDraftRow,
     selectedDraftPreview,
-  })
+    generationBlockedReason,
+  }), [
+    studio?.governanceEvidence,
+    readiness,
+    session,
+    planning,
+    requestMessages,
+    draftRows,
+    selectedDraftRow,
+    selectedDraftPreview,
+    generationBlockedReason,
+  ])
+  const setBusy = (key, active = true) => {
+    setBusyKeys((current) => {
+      const next = new Set(current)
+      if (active) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+  const isBusy = (key) => busyKeys.has(key)
+  const draftPreviewTabIndex = { CONTENT: 0, GOVERNANCE: 1, COMPARE: 2 }[draftPreviewView] ?? 0
+  const assetPreviewTabIndex = assetPreviewView === 'GOVERNANCE' ? 1 : 0
   const loading = studioQuery.isLoading || readinessQuery.isLoading
   const pageError = studioQuery.error || readinessQuery.error
 
@@ -746,7 +967,9 @@ function OutcomeStudioWorkspace() {
     setDraftPreviewError(null)
     setDraftCompareError(null)
     requestedDraftIterationRef.current = ''
-    setBusyKey((current) => current.startsWith('preview:') ? '' : current)
+    setBusyKeys((current) => new Set(
+      [...current].filter((key) => !key.startsWith('preview:')),
+    ))
   }, [activeSessionId])
 
   useEffect(() => {
@@ -764,8 +987,14 @@ function OutcomeStudioWorkspace() {
     setDraftPreviewView('CONTENT')
     setDraftPreviewError(null)
     setDraftCompareError(null)
-    setBusyKey((current) => current.startsWith('preview:') ? '' : current)
+    setBusyKeys((current) => new Set(
+      [...current].filter((key) => !key.startsWith('preview:')),
+    ))
   }, [selectedDraftId, selectedDraftIterationId])
+
+  useEffect(() => {
+    if (!selectedDraftCompare && draftPreviewView === 'COMPARE') setDraftPreviewView('CONTENT')
+  }, [selectedDraftCompare, draftPreviewView])
 
   const notify = (title, description, variant = 'success') => addToast({ title, description, variant })
   const failureMessage = (error) => {
@@ -822,12 +1051,20 @@ function OutcomeStudioWorkspace() {
         response = await retrievePlan({ ...runtimeScope, requestId: planning.requestId, planId: planning.plan.planId }, false).unwrap()
       } else {
         response = await planRequest({ ...runtimeScope, body: { prompt: normalizeRequestText(prompt), action,
-          ...(planning?.continuation ? { continuation: planning.continuation } : {}),
-          ...(!planning && activeSessionId ? { sessionId: activeSessionId } : {}) } }).unwrap()
+          ...(planning?.continuation ? { continuation: planning.continuation } : {}) } }).unwrap()
       }
       if (!stillCurrent()) return
       const result = payload(response)
-      if (!result?.continuation || result?.execution?.canExecute !== false || result?.execution?.status !== 'BLOCKED') throw new Error('Invalid planning response')
+      if (!isValidPlanningResponse(result, action)) throw new Error('Invalid planning response')
+      if (action === 'CONFIRM') {
+        await createSession({
+          ...runtimeScope,
+          body: { requestId: result.requestId, planId: result.plan.planId },
+        }).unwrap()
+        if (!stillCurrent()) return
+        await refetchAll(studioQuery.refetch, readinessQuery.refetch)
+        if (!stillCurrent()) return
+      }
       setPlanning(result)
       if (consumesPrompt) setPrompt('')
     } catch (error) {
@@ -955,7 +1192,8 @@ function OutcomeStudioWorkspace() {
   const handleGenerate = async (message) => {
     const messageId = idOf(message, ['messageId', 'id', '_id'])
     if (!activeSessionId || !messageId || generationBlockedReason) return
-    setBusyKey(`generate:${messageId}`)
+    const operationKey = `generate:${messageId}`
+    setBusy(operationKey)
     try {
       await generateResponse({
         ...runtimeScope,
@@ -967,7 +1205,7 @@ function OutcomeStudioWorkspace() {
     } catch (error) {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
     } finally {
-      setBusyKey('')
+      setBusy(operationKey, false)
     }
   }
 
@@ -985,7 +1223,8 @@ function OutcomeStudioWorkspace() {
     const { draftId } = draftRow || {}
     if (!activeSessionId || !draftId || draftRow.approvalDisabledReason) return false
 
-    setBusyKey(`approve:${draftId}`)
+    const operationKey = `approve:${draftId}`
+    setBusy(operationKey)
     try {
       await approveDraft({ ...runtimeScope, sessionId: activeSessionId, draftId, body: {} }).unwrap()
       await refreshAfterMutation('Working draft approved as a governed output.')
@@ -995,7 +1234,7 @@ function OutcomeStudioWorkspace() {
       notify('Outcome Studio action failed', failureMessage(error), 'error')
       return false
     } finally {
-      setBusyKey('')
+      setBusy(operationKey, false)
     }
   }
 
@@ -1040,7 +1279,8 @@ function OutcomeStudioWorkspace() {
       || token(asset?.status) === 'PUBLISHED'
     ) return false
 
-    setBusyKey(`revise:${outcomeAssetId}`)
+    const operationKey = `revise:${outcomeAssetId}`
+    setBusy(operationKey)
     try {
       const response = await reviseAsset({
         ...runtimeScope,
@@ -1063,7 +1303,7 @@ function OutcomeStudioWorkspace() {
       notify('Revision failed', failureMessage(error), 'error')
       return false
     } finally {
-      setBusyKey('')
+      setBusy(operationKey, false)
     }
   }
 
@@ -1082,7 +1322,8 @@ function OutcomeStudioWorkspace() {
     setDraftPreviewView('CONTENT')
     setDraftPreviewError(null)
     setDraftCompareError(null)
-    setBusyKey(`preview:${draftId}`)
+    const operationKey = `preview:${draftId}`
+    setBusy(operationKey)
     try {
       const [previewResult, compareResult] = await Promise.allSettled([
         loadDraftPreview({
@@ -1111,7 +1352,7 @@ function OutcomeStudioWorkspace() {
       if (draftPreviewRequestRef.current !== requestId) return
       setDraftPreviewError(error)
     } finally {
-      if (draftPreviewRequestRef.current === requestId) setBusyKey('')
+      if (draftPreviewRequestRef.current === requestId) setBusy(operationKey, false)
     }
   }
 
@@ -1124,14 +1365,15 @@ function OutcomeStudioWorkspace() {
       || asset?.distributionAvailable === false
       || token(asset?.status) === 'PUBLISHED'
     ) return
-    setBusyKey(`publish:${outcomeAssetId}`)
+    const operationKey = `publish:${outcomeAssetId}`
+    setBusy(operationKey)
     try {
       await publishAsset({ ...runtimeScope, outcomeAssetId, body: {} }).unwrap()
       await refreshAfterMutation('Approved output published.')
     } catch (error) {
       notify('Publish failed', failureMessage(error), 'error')
     } finally {
-      setBusyKey('')
+      setBusy(operationKey, false)
     }
   }
 
@@ -1144,7 +1386,8 @@ function OutcomeStudioWorkspace() {
       || asset?.distributionAvailable === false
     ) return
     const format = token(formatDescriptor?.format)
-    setBusyKey(`export:${outcomeAssetId}:${format}`)
+    const operationKey = `export:${outcomeAssetId}:${format}`
+    setBusy(operationKey)
     try {
       const response = await (GOVERNED_RENDER_FORMATS.has(format)
         ? renderAsset({ ...runtimeScope, outcomeAssetId, format }).unwrap()
@@ -1160,7 +1403,7 @@ function OutcomeStudioWorkspace() {
     } catch (error) {
       notify('Export failed', failureMessage(error), 'error')
     } finally {
-      setBusyKey('')
+      setBusy(operationKey, false)
     }
   }
 
@@ -1217,10 +1460,14 @@ function OutcomeStudioWorkspace() {
 
   const renderApprovedAssetGovernanceView = () => {
     const asset = selectedAssetDetail || selectedAsset || {}
-    const currentVersion = (Array.isArray(asset.versions) ? asset.versions : EMPTY_ARRAY).find(
+    const versions = Array.isArray(asset.versions) ? asset.versions : EMPTY_ARRAY
+    const currentVersion = versions.find(
       (version) => version?.outcomeAssetVersionId === asset.currentVersionId,
-    ) || asset.versions?.[0] || {}
-    const evidence = currentVersion.governanceEvidence || asset.governanceEvidence || {}
+    ) || null
+    if (versions.length > 0 && !currentVersion) {
+      return <Status variant="warning" size="sm">Governance evidence is unavailable for the current approved version.</Status>
+    }
+    const evidence = currentVersion?.governanceEvidence || asset.governanceEvidence || {}
     const sourceOutput = evidence.sourceOutput || {}
     const truthBinding = evidence.truthBinding || {}
     const runtimeContext = evidence.runtimeContext || {}
@@ -1234,31 +1481,31 @@ function OutcomeStudioWorkspace() {
       pack,
     ])).values())
     const assetIdentity = asset.outcomeAssetId || record.id
-    const versionIdentity = currentVersion.outcomeAssetVersionId || asset.currentVersionId || record.iterationId
-    const versionNumber = currentVersion.versionNumber || asset.currentVersionNumber || record.versionNumber
+    const versionIdentity = currentVersion?.outcomeAssetVersionId || asset.currentVersionId || record.iterationId
+    const versionNumber = currentVersion?.versionNumber || asset.currentVersionNumber || record.versionNumber
     const valueOrNotRecorded = (value) => value || 'Not recorded'
     return (
       <div className="outcome-studio-workspace__asset-governance-view">
         <dl className="outcome-studio-workspace__asset-governance-list">
           <div><dt>Asset identity</dt><dd>{valueOrNotRecorded(assetIdentity)}</dd></div>
-          <div><dt>Approved version</dt><dd>v{versionNumber || '?'} Â· {valueOrNotRecorded(versionIdentity)}</dd></div>
+          <div><dt>Approved version</dt><dd>v{versionNumber || '?'} · {valueOrNotRecorded(versionIdentity)}</dd></div>
           <div><dt>Source deliverable</dt><dd><Status variant={statusVariant(sourceOutput.status)} size="sm">{formatRuntimeTokenLabel(sourceOutput.status || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded(sourceOutput.outputTypeLabel || sourceOutput.outputTypeKey || sourceOutput.outputAssetId)}</span></dd></div>
-          <div><dt>Verified information / Certified Truth</dt><dd><Status variant={statusVariant(truthBinding.currentness || truthBinding.status)} size="sm">{formatRuntimeTokenLabel(truthBinding.currentness || truthBinding.status || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([truthBinding.status, truthBinding.truthSignatureId].filter(Boolean).join(' Â· '))}</span></dd></div>
-          <div><dt>Runtime context</dt><dd>{valueOrNotRecorded([runtimeContext.runtimeInstanceKey, runtimeContext.runtimeType, runtimeContext.frameworkKey, runtimeContext.packageKey, runtimeContext.packageVersion].filter(Boolean).join(' Â· '))}</dd></div>
-          <div><dt>Knowledge resolution</dt><dd><Status variant={statusVariant(knowledgeResolution.status)} size="sm">{formatRuntimeTokenLabel(knowledgeResolution.status || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([knowledgeResolution.manifestKey, knowledgeResolution.manifestVersion, knowledgeResolution.policyVersion].filter(Boolean).join(' Â· '))}</span></dd></div>
-          <div><dt>Governed reasoning chain</dt><dd><Status variant={statusVariant(governedReasoning.executionId || governedReasoning.runtimeArtifactId ? 'RECORDED' : 'NOT_RECORDED')} size="sm">{formatRuntimeTokenLabel(governedReasoning.executionId || governedReasoning.runtimeArtifactId ? 'RECORDED' : 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([governedReasoning.executionId, governedReasoning.runtimeArtifactId, governedReasoning.providerMode].filter(Boolean).join(' Â· '))}</span></dd></div>
-          <div><dt>Content validation</dt><dd><Status variant={statusVariant(asset.contentReview?.result || currentVersion.contentReview?.result)} size="sm">{formatRuntimeTokenLabel(asset.contentReview?.result || currentVersion.contentReview?.result || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded(asset.contentReview?.checkedAt || currentVersion.contentReview?.checkedAt)}</span></dd></div>
+          <div><dt>Verified information / Certified Truth</dt><dd><Status variant={statusVariant(truthBinding.currentness || truthBinding.status)} size="sm">{formatRuntimeTokenLabel(truthBinding.currentness || truthBinding.status || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([truthBinding.status, truthBinding.truthSignatureId].filter(Boolean).join(' · '))}</span></dd></div>
+          <div><dt>Runtime context</dt><dd>{valueOrNotRecorded([runtimeContext.runtimeInstanceKey, runtimeContext.runtimeType, runtimeContext.frameworkKey, runtimeContext.packageKey, runtimeContext.packageVersion].filter(Boolean).join(' · '))}</dd></div>
+          <div><dt>Knowledge resolution</dt><dd><Status variant={statusVariant(knowledgeResolution.status)} size="sm">{formatRuntimeTokenLabel(knowledgeResolution.status || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([knowledgeResolution.manifestKey, knowledgeResolution.manifestVersion, knowledgeResolution.policyVersion].filter(Boolean).join(' · '))}</span></dd></div>
+          <div><dt>Governed reasoning chain</dt><dd><Status variant={statusVariant(governedReasoning.executionId || governedReasoning.runtimeArtifactId ? 'RECORDED' : 'NOT_RECORDED')} size="sm">{formatRuntimeTokenLabel(governedReasoning.executionId || governedReasoning.runtimeArtifactId ? 'RECORDED' : 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded([governedReasoning.executionId, governedReasoning.runtimeArtifactId, governedReasoning.providerMode].filter(Boolean).join(' · '))}</span></dd></div>
+          <div><dt>Content validation</dt><dd><Status variant={statusVariant(asset.contentReview?.result || currentVersion?.contentReview?.result)} size="sm">{formatRuntimeTokenLabel(asset.contentReview?.result || currentVersion?.contentReview?.result || 'NOT_RECORDED')}</Status><span>{valueOrNotRecorded(asset.contentReview?.checkedAt || currentVersion?.contentReview?.checkedAt)}</span></dd></div>
         </dl>
         <div className="outcome-studio-workspace__asset-governance-section">
           <div className="outcome-studio-workspace__panel-heading"><div><h4>Knowledge Pack execution</h4><p>Server-projected binding and execution evidence for this approved asset version.</p></div><Status variant={uniquePacks.length ? 'info' : 'neutral'} size="sm">{uniquePacks.length} pack{uniquePacks.length === 1 ? '' : 's'}</Status></div>
           {uniquePacks.length ? (
             <ul className="outcome-studio-workspace__asset-governance-packs" aria-label="Approved asset Knowledge Pack execution">
-              {uniquePacks.map((pack) => {
+                  {uniquePacks.map((pack) => {
                 const hasReceipt = Array.isArray(pack.executionChecks) && pack.executionChecks.length > 0
                 const passed = hasReceipt && isExecutionPassed(pack.executionStatus)
                 return <li key={`${pack.packKey || pack.label}-${pack.versionId || pack.semanticVersion}`}>
                   {renderEvidenceAcknowledgement(passed, `${pack.label || pack.packKey}: ${passed ? 'execution passed' : hasReceipt ? 'execution not passed' : 'execution not recorded'}`)}
-                  <span><strong>{pack.label || pack.packKey || 'Knowledge Pack'}</strong><small>{valueOrNotRecorded([pack.packKey, pack.semanticVersion ? `v${pack.semanticVersion}` : '', pack.executionStatus ? formatRuntimeTokenLabel(pack.executionStatus) : ''].filter(Boolean).join(' Â· '))}</small></span>
+                  <span><strong>{pack.label || pack.packKey || 'Knowledge Pack'}</strong><small>{valueOrNotRecorded([pack.packKey, pack.semanticVersion ? `v${pack.semanticVersion}` : '', pack.executionStatus ? formatRuntimeTokenLabel(pack.executionStatus) : ''].filter(Boolean).join(' · '))}</small></span>
                 </li>
               })}
             </ul>
@@ -1283,7 +1530,7 @@ function OutcomeStudioWorkspace() {
       </div>
       <dl className="outcome-studio-workspace__summary-list">
         <div>
-          <dt>Status</dt>
+          <dt>Session readiness</dt>
           <dd><Status variant={statusVariant(readiness.state)} size="sm" showIcon>{formatRuntimeTokenLabel(readiness.state || 'UNKNOWN')}</Status></dd>
         </div>
         <div>
@@ -1307,6 +1554,63 @@ function OutcomeStudioWorkspace() {
           </dd>
         </div>
         <div>
+          <dt>Evidence readiness</dt>
+          <dd>
+            {frameworkHandoff.evidenceReadiness?.status
+              ? [
+                  formatRuntimeTokenLabel(frameworkHandoff.evidenceReadiness.status),
+                  frameworkHandoff.evidenceReadiness.unresolvedContradictionCount
+                    ? `${frameworkHandoff.evidenceReadiness.unresolvedContradictionCount} unresolved contradictions`
+                    : '',
+                  Array.isArray(frameworkHandoff.evidenceReadiness.missingDomains)
+                    && frameworkHandoff.evidenceReadiness.missingDomains.length > 0
+                    ? `missing ${frameworkHandoff.evidenceReadiness.missingDomains.join(', ')}`
+                    : '',
+                ].filter(Boolean).join(' · ')
+              : 'Not recorded'}
+          </dd>
+        </div>
+        {frameworkHandoff.runtimeIntegrity?.outputRequirements ? (
+          <div>
+            <dt>Output requirements</dt>
+            <dd>
+              {formatRuntimeTokenLabel(frameworkHandoff.runtimeIntegrity.outputRequirements.status || 'NOT_RECORDED')}
+              <small className="outcome-studio-workspace__summary-detail">
+                generated {frameworkHandoff.runtimeIntegrity.outputRequirements.generatedPresent ? 'recorded' : 'not recorded'} · accepted {frameworkHandoff.runtimeIntegrity.outputRequirements.acceptedPresent ? 'recorded' : 'not recorded'}
+              </small>
+            </dd>
+          </div>
+        ) : null}
+        {frameworkHandoff.runtimeIntegrity?.workspaceScope ? (
+          <div>
+            <dt>Workspace scope</dt>
+            <dd>{formatRuntimeTokenLabel(frameworkHandoff.runtimeIntegrity.workspaceScope.status || 'UNKNOWN')}</dd>
+          </div>
+        ) : null}
+        {frameworkHandoff.runtimeIntegrity?.outputContract ? (
+          <div>
+            <dt>Handoff output contract</dt>
+            <dd>{formatRuntimeTokenLabel(frameworkHandoff.runtimeIntegrity.outputContract.state || 'UNSELECTED_CONTEXT')}</dd>
+          </div>
+        ) : null}
+        {frameworkHandoff.handoffId ? (
+          <div>
+            <dt>Handoff identity</dt>
+            <dd>
+              {frameworkHandoff.handoffId}
+              <small className="outcome-studio-workspace__summary-detail">
+                revision {frameworkHandoff.runtimeIntegrity?.runtimeRevision || 'not recorded'}
+              </small>
+            </dd>
+          </div>
+        ) : null}
+        {frameworkHandoff.runtimeIntegrity?.malformedScopedViewKeys?.length ? (
+          <div>
+            <dt>Malformed scoped views</dt>
+            <dd>{frameworkHandoff.runtimeIntegrity.malformedScopedViewKeys.join(', ')}</dd>
+          </div>
+        ) : null}
+        <div>
           <dt>Source context</dt>
           <dd>{sourceContextLabelOf(sourceOutput)}</dd>
         </div>
@@ -1328,7 +1632,7 @@ function OutcomeStudioWorkspace() {
           <h2>Outcome readiness path</h2>
           <p>Each stage is shown from the current server-owned session and readiness state. A mandatory blocked stage prevents a governed outcome.</p>
           <p className="outcome-studio-workspace__stage-acknowledgement-legend" aria-label="Stage result legend">
-            <span><MdCheck aria-hidden="true" /> Tick = all required checks passed for this exact draft version</span>
+            <span><MdCheck aria-hidden="true" /> Tick = the displayed stage passed; pre-generation checks are not draft execution receipts</span>
             <span><MdClose aria-hidden="true" /> Cross = not passed</span>
           </p>
           {studio?.governanceEvidence?.notice ? <p className="outcome-studio-workspace__stage-evidence-notice">{studio.governanceEvidence.notice}</p> : null}
@@ -1456,11 +1760,12 @@ function OutcomeStudioWorkspace() {
               <div className="outcome-studio-workspace__composer">
                 <div ref={planningRegionRef} role="status" aria-live="polite" aria-atomic="true" tabIndex={-1}>
                 {planning ? <section aria-label="Request plan" className="outcome-studio-workspace__notice">
-                  <div><Status variant="warning" size="sm">{planning.status === 'SAVED' ? 'Plan saved · execution blocked' : formatRuntimeTokenLabel(planning.status)}</Status>
+                  <div><Status variant={planning.status === 'SAVED' && token(planning.execution?.status) === 'READY' ? 'success' : 'warning'} size="sm">{planning.status === 'SAVED' ? 'Plan saved' : formatRuntimeTokenLabel(planning.status)}</Status>
                     {planning.question ? <p>{planning.question}</p> : null}
                     {planning.message ? <p>{planning.message}</p> : null}
-                    {planning.intent && typeof planning.intent === 'object' ? <dl>{Object.entries(planning.intent).map(([field, value]) => <div key={field}><dt>{formatRuntimeTokenLabel(field)}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
-                    {planning.plan ? <p>Plan version {planning.plan.planVersion}. Source evidence has not been revalidated; this plan cannot execute.</p> : null}
+                    {planning.intent && typeof planning.intent === 'object' ? <dl>{planningIntentSummary(planning.intent).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
+                    {planning.plan ? <p>Plan version {planning.plan.planVersion}. Clarification receipt recorded.</p> : null}
+                    {planning.status === 'SAVED' && token(planning.execution?.status) === 'BLOCKED' ? <p>{preciseGenerationBlocker({ clarificationPassed, informationCurrent: isSessionInformationCurrent, planning, readiness: dedicatedReadiness, studio })}</p> : null}
                   </div>
                   <ButtonGroup><Button variant="outline" disabled={planningBusy} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button>
                     {planning.plan ? <Button variant="outline" disabled={planningBusy} onClick={() => handlePlanStep('RETRIEVE')}>Retrieve saved plan</Button> : null}
@@ -1473,9 +1778,9 @@ function OutcomeStudioWorkspace() {
                   value={prompt}
                   rows={5}
                   maxLength={studio?.conversation?.requestMaxLength || 2000}
-                  disabled={planningBusy || requestSubmitting || planning?.status === 'CONFIRMATION_REQUIRED' || (revisionMode && !conversationEnabled)}
+                  disabled={planningBusy || requestSubmitting || (revisionMode && !conversationEnabled)}
                   error={composerError}
-                  helperText={revisionMode ? 'Describe the revision to the current working draft.' : planning?.status === 'SAVED' ? 'To change this request, state the re-resolution reason below. Start a new request for an independent plan.' : 'Describe the output you want. We will ask for missing facts before you confirm a plan. No output is generated.'}
+                  helperText={revisionMode ? 'Describe the revision to the current working draft.' : planning?.status === 'CONFIRMATION_REQUIRED' ? 'Describe an amendment and apply it, or confirm the prefilled request plan. No output is generated.' : planning?.status === 'SAVED' ? 'To change this request, state the re-resolution reason below. Start a new request for an independent plan.' : 'Describe the output you want. We will ask only for required missing facts before you confirm a plan. No output is generated.'}
                   onChange={(event) => {
                     setPrompt(event.target.value)
                     setComposerError('')
@@ -1485,12 +1790,13 @@ function OutcomeStudioWorkspace() {
                 {revisionMode ? <div className="outcome-studio-workspace__asset-binding" role="status"><Status variant="info" size="sm" showIcon>Composer bound to current draft</Status><span>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'} · v{selectedDraftRow.draft.currentIterationNumber || 1}</span><small>Submitting a revision keeps the same governed asset identity and creates the next draft version.</small></div> : null}
                 <ButtonGroup align="end" stackOnMobile fullWidthOnMobile>
                   {revisionMode ? <Button variant="outline" disabled={requestSubmitting} onClick={() => { setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button> : null}
+                  {!revisionMode && planning?.status === 'CONFIRMATION_REQUIRED' ? <Button variant="outline" disabled={planningBusy || !prompt.trim()} onClick={() => handlePlanStep('RE_RESOLVE')}>Apply amendment</Button> : null}
                   <Button
                     loading={planningBusy || requestSubmitting || submitState.isLoading}
                     disabled={
                       !runtimeScopeReady || (revisionMode
                         ? !prompt.trim() || !conversationEnabled || normalizeRequestText(uncertainPrompt) === normalizeRequestText(prompt)
-                        : planning?.status !== 'CONFIRMATION_REQUIRED' && !prompt.trim())
+                        : planning?.status === 'CONFIRMATION_REQUIRED' ? Boolean(prompt.trim()) : !prompt.trim())
                     }
                     leftIcon={<MdPlayArrow aria-hidden="true" />}
                     onClick={revisionMode ? handleSubmit : () => handlePlanStep(planning?.status === 'CONFIRMATION_REQUIRED' ? 'CONFIRM' : planning?.status === 'SAVED' ? 'RE_RESOLVE' : 'ANSWER')}
@@ -1513,18 +1819,18 @@ function OutcomeStudioWorkspace() {
                       const messageId = idOf(message, ['messageId', 'id', '_id'])
                       const messageContent = String(message.content || message.prompt || '').trim() || 'Request unavailable'
                       const isPending = token(message.responseStatus) === 'PENDING_RESPONSE'
-                      const isGenerating = busyKey === `generate:${messageId}`
+                      const isGenerating = isBusy(`generate:${messageId}`)
                       const statusLabel = isGenerating
                         ? 'Generating draft'
                         : isPending
-                          ? 'Ready to generate'
+                          ? generationBlockedReason ? 'Generation blocked' : 'Ready to generate'
                           : token(message.responseStatus) === 'RESPONSE_GENERATED'
                             ? 'Draft created'
                             : formatRuntimeTokenLabel(message.responseStatus || message.status)
                       const statusDescription = isGenerating
                         ? 'Your draft is being created. This may take a moment.'
                         : isPending
-                          ? 'No draft has been created for this request yet.'
+                          ? generationBlockedReason || 'No draft has been created for this request yet.'
                           : token(message.responseStatus) === 'RESPONSE_GENERATED'
                             ? 'A draft was created from this request.'
                             : ''
@@ -1586,7 +1892,7 @@ function OutcomeStudioWorkspace() {
                     const { approvalDisabledReason, draft, draftId, informationCurrentness, key, previewDisabledReason, readyToApprove } = draftRow
                     const approvalReasonId = `outcome-draft-approval-reason-${key}`
                     const previewReasonId = `outcome-draft-preview-reason-${key}`
-                    return <li key={key}><div><h3>{draft.title || draft.outputTypeLabel || 'Working draft'}</h3><p>Current iteration {draft.currentIterationNumber || 1} · Updated {formatDateTime(draft.updatedAt, 'Time unavailable')}</p><Status variant={readyToApprove ? 'success' : 'warning'} size="sm">{readyToApprove ? 'Ready to approve' : 'Approval unavailable'}</Status><Status variant={statusVariant(informationCurrentness)} size="sm">Information {formatRuntimeTokenLabel(informationCurrentness)}</Status>{previewDisabledReason ? <p id={previewReasonId}>{previewDisabledReason}</p> : null}{approvalDisabledReason && approvalDisabledReason !== previewDisabledReason ? <p id={approvalReasonId}>{approvalDisabledReason}</p> : null}</div><ButtonGroup align="end"><Button variant="danger" size="sm" leftIcon={<MdDeleteOutline aria-hidden="true" />} disabled={!draftId || !draft.updatedAt || discardState.isLoading} onClick={() => setPendingDiscard(draft)}>Discard</Button><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} loading={busyKey === `preview:${draftId}`} disabled={Boolean(previewDisabledReason)} aria-describedby={previewDisabledReason ? previewReasonId : undefined} onClick={() => handlePreviewDraft(draftRow)}>Preview</Button><Button size="sm" leftIcon={<MdCheckCircle aria-hidden="true" />} loading={busyKey === `approve:${draftId}`} disabled={Boolean(approvalDisabledReason)} aria-describedby={approvalDisabledReason ? (approvalDisabledReason === previewDisabledReason ? previewReasonId : approvalReasonId) : undefined} onClick={() => handleApprove(draftRow)}>Approve draft</Button></ButtonGroup></li>
+                    return <li key={key}><div><h3>{draft.title || draft.outputTypeLabel || 'Working draft'}</h3><p>Current iteration {draft.currentIterationNumber || 1} · Updated {formatDateTime(draft.updatedAt, 'Time unavailable')}</p><Status variant={readyToApprove ? 'success' : 'warning'} size="sm">{readyToApprove ? 'Ready to approve' : 'Approval unavailable'}</Status><Status variant={statusVariant(informationCurrentness)} size="sm">Information {formatRuntimeTokenLabel(informationCurrentness)}</Status>{previewDisabledReason ? <p id={previewReasonId}>{previewDisabledReason}</p> : null}{approvalDisabledReason && approvalDisabledReason !== previewDisabledReason ? <p id={approvalReasonId}>{approvalDisabledReason}</p> : null}</div><ButtonGroup align="end"><Button variant="danger" size="sm" leftIcon={<MdDeleteOutline aria-hidden="true" />} disabled={!draftId || !draft.updatedAt || discardState.isLoading} onClick={() => setPendingDiscard(draft)}>Discard</Button><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} loading={isBusy(`preview:${draftId}`)} disabled={Boolean(previewDisabledReason)} aria-describedby={previewDisabledReason ? previewReasonId : undefined} onClick={() => handlePreviewDraft(draftRow)}>Preview</Button><Button size="sm" leftIcon={<MdCheckCircle aria-hidden="true" />} loading={isBusy(`approve:${draftId}`)} disabled={Boolean(approvalDisabledReason)} aria-describedby={approvalDisabledReason ? (approvalDisabledReason === previewDisabledReason ? previewReasonId : approvalReasonId) : undefined} onClick={() => handleApprove(draftRow)}>Approve draft</Button></ButtonGroup></li>
                   })}
                 </ul>
               ) : <Status variant="neutral" size="sm">No working drafts</Status>}
@@ -1594,33 +1900,24 @@ function OutcomeStudioWorkspace() {
                 <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio working draft preview">
                   <div className="outcome-studio-workspace__panel-heading">
                     <div><h3>Working Draft Preview</h3><p>{selectedDraftRow.draft.title || selectedDraftRow.draft.outputTypeLabel || 'Working draft'}</p></div>
-                    {busyKey === `preview:${selectedDraftId}` ? <Spinner size="sm" aria-label="Loading working draft preview" /> : <Status variant={draftPreviewError ? 'error' : selectedDraftPreview ? 'success' : 'neutral'} size="sm">{draftPreviewError ? 'Unavailable' : selectedDraftPreview ? 'Available' : 'Not loaded'}</Status>}
+                    {isBusy(`preview:${selectedDraftId}`) ? <Spinner size="sm" aria-label="Loading working draft preview" /> : <Status variant={draftPreviewError ? 'error' : selectedDraftPreview ? 'success' : 'neutral'} size="sm">{draftPreviewError ? 'Unavailable' : selectedDraftPreview ? 'Available' : 'Not loaded'}</Status>}
                   </div>
-                  <div className="outcome-studio-workspace__draft-view-tabs" role="tablist" aria-label="Working draft views">
-                    {[
-                      ['CONTENT', 'Content'],
-                      ['GOVERNANCE', 'Governance'],
-                      ['COMPARE', 'Compare'],
-                    ].map(([view, label]) => (
-                      <button
-                        key={view}
-                        type="button"
-                        role="tab"
-                        aria-selected={draftPreviewView === view}
-                        aria-controls={`outcome-studio-draft-view-${view.toLowerCase()}`}
-                        disabled={view === 'COMPARE' && !selectedDraftCompare}
-                        onClick={() => setDraftPreviewView(view)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div id={`outcome-studio-draft-view-${draftPreviewView.toLowerCase()}`} role="tabpanel" tabIndex="0">
-                    {draftPreviewSupportError ? <div className="outcome-studio-workspace__error"><Status variant="error" size="sm" showIcon>{draftPreviewSupportError.message}</Status><ErrorSupportPanel error={draftPreviewSupportError} context="outcome-studio-draft-preview" /></div>
-                      : draftPreviewView === 'GOVERNANCE' ? renderDraftGovernanceView()
-                        : draftPreviewView === 'COMPARE' ? renderDraftCompareView()
-                          : renderDraftPreviewBody(selectedDraftPreview)}
-                  </div>
+                  <TabView
+                    activeTab={draftPreviewTabIndex}
+                    onTabChange={(index) => setDraftPreviewView(['CONTENT', 'GOVERNANCE', 'COMPARE'][index])}
+                    className="outcome-studio-workspace__draft-view-tabs"
+                    aria-label="Working draft views"
+                  >
+                    <TabView.Tab label="Content">
+                      {draftPreviewSupportError ? <div className="outcome-studio-workspace__error"><Status variant="error" size="sm" showIcon>{draftPreviewSupportError.message}</Status><ErrorSupportPanel error={draftPreviewSupportError} context="outcome-studio-draft-preview" /></div> : renderDraftPreviewBody(selectedDraftPreview)}
+                    </TabView.Tab>
+                    <TabView.Tab label="Governance">
+                      {draftPreviewSupportError ? <div className="outcome-studio-workspace__error"><Status variant="error" size="sm" showIcon>{draftPreviewSupportError.message}</Status><ErrorSupportPanel error={draftPreviewSupportError} context="outcome-studio-draft-preview" /></div> : renderDraftGovernanceView()}
+                    </TabView.Tab>
+                    <TabView.Tab label="Compare" disabled={!selectedDraftCompare}>
+                      {draftPreviewSupportError ? <div className="outcome-studio-workspace__error"><Status variant="error" size="sm" showIcon>{draftPreviewSupportError.message}</Status><ErrorSupportPanel error={draftPreviewSupportError} context="outcome-studio-draft-preview" /></div> : renderDraftCompareView()}
+                    </TabView.Tab>
+                  </TabView>
                 </section>
               ) : null}
             </section>
@@ -1649,9 +1946,26 @@ function OutcomeStudioWorkspace() {
                 const publishReason = distributionReason || (token(asset.status) === 'PUBLISHED' ? 'This output has already been published.' : '')
                 const reasonId = `outcome-output-reason-${assetId}`
                 const previewReasonId = `outcome-output-preview-reason-${assetId}`
-                return <li key={assetId}><div><h3>{asset.title || asset.outputTypeLabel || 'Approved output'}</h3><p>Version {asset.currentVersionNumber || 1} | Generated {formatDateTime(asset.generatedAt || asset.createdAt, 'Time unavailable')}</p><Status variant={statusVariant(asset.status)} size="sm">{formatRuntimeTokenLabel(asset.status || 'APPROVED')}</Status>{previewReason ? <p id={previewReasonId}>{previewReason}</p> : null}{publishReason && publishReason !== previewReason ? <p id={reasonId}>{publishReason}</p> : null}</div><ButtonGroup align="end"><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} disabled={Boolean(previewReason)} aria-describedby={previewReason ? previewReasonId : undefined} onClick={() => handleViewAsset(asset)}>Preview</Button>{token(asset.status) !== 'PUBLISHED' ? <Button variant="outline" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} loading={busyKey === `revise:${assetId}`} disabled={!activeSessionId} onClick={() => handleReviseAsset(asset)}>Revise as working draft</Button> : null}<Button variant="outline" size="sm" leftIcon={<MdPublish aria-hidden="true" />} loading={busyKey === `publish:${assetId}`} disabled={Boolean(publishReason)} aria-describedby={publishReason ? (publishReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handlePublish(asset)}>Publish</Button>{formats.map((descriptor) => { const format = typeof descriptor === 'string' ? descriptor : descriptor.format; const formatDescriptor = typeof descriptor === 'string' ? { format: descriptor } : descriptor; return <Button key={format} variant="outline" size="sm" leftIcon={<MdDownload aria-hidden="true" />} loading={busyKey === `export:${assetId}:${token(format)}`} disabled={Boolean(distributionReason)} aria-describedby={distributionReason ? (distributionReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handleExport(asset, formatDescriptor)}>{formatDescriptor.label || formatRuntimeTokenLabel(format)}</Button> })}</ButtonGroup></li>
+                return <li key={assetId}><div><h3>{asset.title || asset.outputTypeLabel || 'Approved output'}</h3><p>Version {asset.currentVersionNumber || 1} | Generated {formatDateTime(asset.generatedAt || asset.createdAt, 'Time unavailable')}</p><Status variant={statusVariant(asset.status)} size="sm">{formatRuntimeTokenLabel(asset.status || 'APPROVED')}</Status>{previewReason ? <p id={previewReasonId}>{previewReason}</p> : null}{publishReason && publishReason !== previewReason ? <p id={reasonId}>{publishReason}</p> : null}</div><ButtonGroup align="end"><Button variant="outline" size="sm" leftIcon={<MdVisibility aria-hidden="true" />} disabled={Boolean(previewReason)} aria-describedby={previewReason ? previewReasonId : undefined} onClick={() => handleViewAsset(asset)}>Preview</Button>{token(asset.status) !== 'PUBLISHED' ? <Button variant="outline" size="sm" leftIcon={<MdRefresh aria-hidden="true" />} loading={isBusy(`revise:${assetId}`)} disabled={!activeSessionId} onClick={() => handleReviseAsset(asset)}>Revise as working draft</Button> : null}<Button variant="outline" size="sm" leftIcon={<MdPublish aria-hidden="true" />} loading={isBusy(`publish:${assetId}`)} disabled={Boolean(publishReason)} aria-describedby={publishReason ? (publishReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handlePublish(asset)}>Publish</Button>{formats.map((descriptor) => { const format = typeof descriptor === 'string' ? descriptor : descriptor.format; const formatDescriptor = typeof descriptor === 'string' ? { format: descriptor } : descriptor; return <Button key={format} variant="outline" size="sm" leftIcon={<MdDownload aria-hidden="true" />} loading={isBusy(`export:${assetId}:${token(format)}`)} disabled={Boolean(distributionReason)} aria-describedby={distributionReason ? (distributionReason === previewReason ? previewReasonId : reasonId) : undefined} onClick={() => handleExport(asset, formatDescriptor)}>{formatDescriptor.label || formatRuntimeTokenLabel(format)}</Button> })}</ButtonGroup></li>
               })}</ul> : <Status variant="neutral" size="sm">No approved outputs</Status>}
-              {selectedAsset ? <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio generated body preview"><div className="outcome-studio-workspace__panel-heading"><div><h3>Generated Body Preview</h3><p>{selectedAsset.title || selectedAsset.outputTypeLabel}</p></div>{previewLoading ? <Spinner size="sm" aria-label="Loading output preview" /> : <Status variant={previewError ? 'error' : selectedPreview?.previewAvailable === false ? 'warning' : selectedPreview ? 'success' : 'neutral'} size="sm">{previewError || selectedPreview?.previewAvailable === false ? 'Unavailable' : selectedPreview ? 'Available' : 'Not loaded'}</Status>}</div><div className="outcome-studio-workspace__draft-view-tabs" role="tablist" aria-label="Approved output views"><button type="button" role="tab" aria-selected={assetPreviewView === 'CONTENT'} aria-controls="outcome-studio-approved-output-content" onClick={() => setAssetPreviewView('CONTENT')}>Content</button><button type="button" role="tab" aria-selected={assetPreviewView === 'GOVERNANCE'} aria-controls="outcome-studio-approved-output-governance" onClick={() => setAssetPreviewView('GOVERNANCE')}>Governance</button></div><div id={`outcome-studio-approved-output-${assetPreviewView.toLowerCase()}`} role="tabpanel" tabIndex="0">{assetPreviewView === 'GOVERNANCE' ? renderApprovedAssetGovernanceView() : previewError ? <Status variant="error" size="sm" showIcon>{previewFailureMessage(previewError)}</Status> : String(selectedPreview?.markdown || '').trim() ? <div className="outcome-studio-workspace__preview-body outcome-studio-workspace__preview-body--markdown">{renderSafeMarkdown(selectedPreview.markdown)}</div> : selectedPreview?.sections?.length ? <div className="outcome-studio-workspace__preview-body">{selectedPreview.sections.map((section) => <section key={section.key || section.label}><h4>{section.label}</h4><p>{section.body}</p></section>)}</div> : selectedAssetDetail ? <Status variant="neutral" size="sm">Preview content is not available for this version.</Status> : null}</div></section> : null}
+              {selectedAsset ? (
+                <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio generated body preview">
+                  <div className="outcome-studio-workspace__panel-heading"><div><h3>Generated Body Preview</h3><p>{selectedAsset.title || selectedAsset.outputTypeLabel}</p></div>{previewLoading ? <Spinner size="sm" aria-label="Loading output preview" /> : <Status variant={previewError ? 'error' : selectedPreview?.previewAvailable === false ? 'warning' : selectedPreview ? 'success' : 'neutral'} size="sm">{previewError || selectedPreview?.previewAvailable === false ? 'Unavailable' : selectedPreview ? 'Available' : 'Not loaded'}</Status>}</div>
+                  <TabView
+                    activeTab={assetPreviewTabIndex}
+                    onTabChange={(index) => setAssetPreviewView(index === 1 ? 'GOVERNANCE' : 'CONTENT')}
+                    className="outcome-studio-workspace__draft-view-tabs"
+                    aria-label="Approved output views"
+                  >
+                    <TabView.Tab label="Content">
+                      {previewError ? <Status variant="error" size="sm" showIcon>{previewFailureMessage(previewError)}</Status> : String(selectedPreview?.markdown || '').trim() ? <div className="outcome-studio-workspace__preview-body outcome-studio-workspace__preview-body--markdown">{renderSafeMarkdown(selectedPreview.markdown)}</div> : selectedPreview?.sections?.length ? <div className="outcome-studio-workspace__preview-body">{selectedPreview.sections.map((section) => <section key={section.key || section.label}><h4>{section.label}</h4><p>{section.body}</p></section>)}</div> : selectedAssetDetail ? <Status variant="neutral" size="sm">Preview content is not available for this version.</Status> : null}
+                    </TabView.Tab>
+                    <TabView.Tab label="Governance">
+                      {renderApprovedAssetGovernanceView()}
+                    </TabView.Tab>
+                  </TabView>
+                </section>
+              ) : null}
               {selectedAsset ? <section className="outcome-studio-workspace__preview" aria-label="Outcome Studio render outputs"><div className="outcome-studio-workspace__panel-heading"><div><h3>Render outputs</h3><p>Presentations of the active asset version; governed content remains shared.</p></div>{renderOutputsQuery.isFetching ? <Spinner size="sm" aria-label="Loading render outputs" /> : <Status variant={renderOutputs.length ? 'success' : 'neutral'} size="sm">{renderOutputs.length} recorded</Status>}</div>{renderOutputs.length ? <ul className="outcome-studio-workspace__items" aria-label="Render outputs">{renderOutputs.map((output, index) => <li key={output.renderOutputId || `render-output-${index}`}><div><h4>{formatRuntimeTokenLabel(output.format)}</h4><p>{output.artifact?.filename || 'Artifact recorded'} · Version {output.versionNumber || renderOutputsQuery.data?.data?.versionNumber || selectedAsset.currentVersionNumber || 1}</p></div><Status variant={token(output.status) === 'READY' ? 'success' : token(output.status) === 'SUPERSEDED' ? 'neutral' : 'warning'} size="sm">{formatRuntimeTokenLabel(output.status || 'UNKNOWN')}</Status></li>)}</ul> : <Status variant="neutral" size="sm">No governed render outputs have been recorded for this version.</Status>}</section> : null}
             </section>
           </TabView.Tab>

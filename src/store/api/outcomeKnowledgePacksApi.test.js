@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { baseApi } from './baseApi.js'
 import {
   buildActivateOutcomeKnowledgePackVersionQuery,
+  buildDisableOutcomeKnowledgePackActivationQuery,
+  useDisableOutcomeKnowledgePackActivationMutation,
+  useLazyGetOutcomeKnowledgePackVersionQuery,
   buildCloneOutcomeKnowledgePackManifestQuery,
   buildCompareOutcomeKnowledgePackManifestsQuery,
   buildCreateOutcomeKnowledgePackVersionQuery,
@@ -60,6 +63,98 @@ it('retains an explicit empty Description override and inert Runtime Consumers',
 })
 
 describe('outcomeKnowledgePacksApi', () => {
+  it('preserves the selected content hash when adding a scoped activation', () => {
+    expect(buildActivateOutcomeKnowledgePackVersionQuery({ packId: 'pack-1', versionId: 'v1', scopeType: 'PACKAGE', frameworkKey: 'CUSTOM_FRAMEWORK', packageKey: 'vmf-next', packageVersion: '3.2.1', expectedContentHash: 'sha256:original' }).body)
+      .toEqual({ scopeType: 'PACKAGE', frameworkKey: 'CUSTOM_FRAMEWORK', packageKey: 'vmf-next', packageVersion: '3.2.1', expectedContentHash: 'sha256:original' })
+  })
+  it('refetches pack detail, library and resolution after scoped binding undo', async () => {
+    const NativeRequest = globalThis.Request
+    class TestRequest {
+      constructor(input, init = {}) {
+        this.url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost').toString()
+        this.method = init.method || input?.method || 'GET'
+        this.headers = init.headers || input?.headers || new Headers()
+        this.body = init.body || input?.body || null
+        this.signal = init.signal || input?.signal
+      }
+      clone() { return new TestRequest(this.url, this) }
+    }
+    vi.stubGlobal('Request', TestRequest)
+    const counts = { library: 0, detail: 0, resolution: 0, undo: 0 }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (request) => {
+      const path = new URL(request.url).pathname
+      const key = path.endsWith('/disable') ? 'undo' : path.endsWith('/resolution-preview') ? 'resolution' : path.endsWith('/pack-1') ? 'detail' : 'library'
+      counts[key] += 1
+      return new Response(JSON.stringify({ data: key === 'library' ? [] : {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    const store = configureStore({ reducer: { [baseApi.reducerPath]: baseApi.reducer }, middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware) })
+    const subscriptions = [
+      store.dispatch(outcomeKnowledgePacksApi.endpoints.listOutcomeKnowledgePacks.initiate({})),
+      store.dispatch(outcomeKnowledgePacksApi.endpoints.getOutcomeKnowledgePack.initiate({ packId: 'pack-1' })),
+      store.dispatch(outcomeKnowledgePacksApi.endpoints.previewOutcomeKnowledgePackResolution.initiate({})),
+    ]
+    try {
+      await Promise.all(subscriptions.map((entry) => entry.unwrap()))
+      await store.dispatch(outcomeKnowledgePacksApi.endpoints.disableOutcomeKnowledgePackActivation.initiate({ packId: 'pack-1', activationId: 'scope-1', expectedVersionId: 'v1', expectedContentHash: 'sha256:abc' })).unwrap()
+      await vi.waitFor(() => expect(counts).toEqual({ library: 2, detail: 2, resolution: 2, undo: 1 }))
+    } finally {
+      subscriptions.forEach((entry) => entry.unsubscribe())
+      store.dispatch(baseApi.util.resetApiState())
+      fetchSpy.mockRestore()
+      vi.stubGlobal('Request', NativeRequest)
+    }
+  })
+
+  it('does not refetch an explicitly loaded source preview after a governance mutation', async () => {
+    const NativeRequest = globalThis.Request
+    class TestRequest {
+      constructor(input, init = {}) {
+        this.url = new URL(typeof input === 'string' ? input : input.url, 'http://localhost').toString()
+        this.method = init.method || input?.method || 'GET'
+        this.headers = init.headers || input?.headers || new Headers()
+        this.body = init.body || input?.body || null
+        this.signal = init.signal || input?.signal
+      }
+
+      clone() { return new TestRequest(this.url, this) }
+    }
+    vi.stubGlobal('Request', TestRequest)
+    const counts = { preview: 0, review: 0 }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (request) => {
+      const path = new URL(request.url).pathname
+      if (path.endsWith('/content-preview')) {
+        counts.preview += 1
+        return new Response(JSON.stringify({ data: { content: 'source content' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (path.endsWith('/review')) {
+        counts.review += 1
+        return new Response(JSON.stringify({ data: { status: 'APPROVED' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    const store = configureStore({ reducer: { [baseApi.reducerPath]: baseApi.reducer }, middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware) })
+    const previewSubscription = store.dispatch(
+      outcomeKnowledgePacksApi.endpoints.previewOutcomeKnowledgePackVersionContent.initiate({ packId: 'pack-1', versionId: 'version-1' }),
+    )
+
+    try {
+      await previewSubscription.unwrap()
+      await store.dispatch(
+        outcomeKnowledgePacksApi.endpoints.updateOutcomeKnowledgePackReview.initiate({ packId: 'pack-1', versionId: 'version-1', reviewStatus: 'APPROVED' }),
+      ).unwrap()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(counts).toEqual({ preview: 1, review: 1 })
+    } finally {
+      previewSubscription.unsubscribe()
+      store.dispatch(baseApi.util.resetApiState())
+      fetchSpy.mockRestore()
+      vi.stubGlobal('Request', NativeRequest)
+    }
+  })
+  it('targets only the exact activation with version and hash preconditions', () => {
+    expect(buildDisableOutcomeKnowledgePackActivationQuery({ packId: 'pack/one', activationId: 'binding/one', expectedVersionId: 'version-1', expectedContentHash: 'sha256:abc' }))
+      .toEqual({ url: '/super-admin/outcome-studio/knowledge-packs/pack%2Fone/activations/binding%2Fone/disable', method: 'POST', body: { expectedVersionId: 'version-1', expectedContentHash: 'sha256:abc' } })
+  })
   it('registers expected endpoint definitions', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('listOutcomeKnowledgePacks')
     expect(outcomeKnowledgePacksApi.endpoints)
@@ -74,6 +169,9 @@ describe('outcomeKnowledgePacksApi', () => {
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('validateOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('updateOutcomeKnowledgePackReview')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('activateOutcomeKnowledgePackVersion')
+    expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('disableOutcomeKnowledgePackActivation')
+    expect(useDisableOutcomeKnowledgePackActivationMutation).toBeTypeOf('function')
+    expect(useLazyGetOutcomeKnowledgePackVersionQuery).toBeTypeOf('function')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('deprecateOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('disableOutcomeKnowledgePackVersion')
     expect(outcomeKnowledgePacksApi.endpoints).toHaveProperty('rollbackOutcomeKnowledgePack')

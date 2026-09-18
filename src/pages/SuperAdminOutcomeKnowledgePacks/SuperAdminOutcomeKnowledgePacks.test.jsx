@@ -7,6 +7,8 @@ import SuperAdminOutcomeKnowledgePacks from './SuperAdminOutcomeKnowledgePacks.j
 const navigateMock = vi.fn()
 const {
   activateVersionMock,
+  loadActivationVersionMock,
+  disableActivationMock,
   addToastMock,
   deletePackMock,
   deprecateVersionMock,
@@ -24,6 +26,8 @@ const {
   versionQueryMock,
 } = vi.hoisted(() => ({
   activateVersionMock: vi.fn(),
+  loadActivationVersionMock: vi.fn(),
+  disableActivationMock: vi.fn(),
   addToastMock: vi.fn(),
   deletePackMock: vi.fn(),
   deprecateVersionMock: vi.fn(),
@@ -347,6 +351,8 @@ vi.mock('../../store/api/outcomeKnowledgePacksApi.js', () => ({
     activateVersionMock,
     { isLoading: false },
   ],
+  useDisableOutcomeKnowledgePackActivationMutation: () => [disableActivationMock, { isLoading: false }],
+  useLazyGetOutcomeKnowledgePackVersionQuery: () => [loadActivationVersionMock, { isFetching: false }],
 }))
 
 function renderPage() {
@@ -413,6 +419,89 @@ async function prepareTextSourceImport(user, {
 }
 
 describe('SuperAdminOutcomeKnowledgePacks page', () => {
+  it.each([true, false])('fetches exact catalogue version before offering scope confirmation (eligible %s)', async (eligible) => {
+    const user = userEvent.setup()
+    prepareSuccessor()
+    loadActivationVersionMock.mockImplementation(({ packId, versionId }) => ({ unwrap: vi.fn().mockResolvedValue({ data: {
+      ...defaultVersionResult.data.data, packId, versionId,
+      status: eligible ? 'ACTIVE' : 'DEPRECATED', reviewStatus: 'APPROVED', contentHash: 'sha256:fresh-selected-source',
+    } }) }))
+    renderPage()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for output-schemas-pack' }), 'add-scope')
+    await waitFor(() => expect(loadActivationVersionMock).toHaveBeenCalled())
+    expect(activateVersionMock).not.toHaveBeenCalled()
+    if (!eligible) {
+      await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Unable to load scope binding' })))
+      expect(screen.queryByRole('button', { name: 'Add Binding' })).not.toBeInTheDocument()
+      return
+    }
+    await user.type(await screen.findByLabelText(/Framework key/), 'VMF')
+    await user.click(screen.getByRole('button', { name: 'Add Binding' }))
+    await waitFor(() => expect(activateVersionMock).toHaveBeenCalledWith(expect.objectContaining({ expectedContentHash: 'sha256:fresh-selected-source', scopeType: 'FRAMEWORK', frameworkKey: 'VMF' })))
+  })
+  it('keeps the undo confirmation open when the server rejects a stale binding', async () => {
+    const user = userEvent.setup()
+    detailQueryMock.mockReturnValue({ ...defaultDetailResult, data: { data: {
+      ...defaultDetailResult.data.data, activations: [{ ...defaultDetailResult.data.data.activations[0], canDisableAdditionalScope: true, scopeType: 'PACKAGE', scopeKey: 'PACKAGE:test' }],
+    } } })
+    disableActivationMock.mockReturnValue({ unwrap: vi.fn().mockRejectedValue({ status: 409, data: { message: 'Scope binding is stale.' } }) })
+    renderPage()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for output-schemas-pack' }), 'details')
+    await user.click(screen.getByRole('button', { name: 'Undo Scope Binding' }))
+    await user.click(screen.getByRole('button', { name: 'Undo Binding' }))
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error', title: 'Unable to undo scope binding' })))
+    expect(screen.getByRole('dialog', { name: 'Undo scope binding?' })).toBeInTheDocument()
+    expect(disableVersionMock).not.toHaveBeenCalled()
+  })
+  it.each([true, false, undefined])('offers undo only when the API explicitly allows it (%s)', async (eligible) => {
+    const user = userEvent.setup()
+    const activation = { ...defaultDetailResult.data.data.activations[0], activationId: 'scoped-binding',
+      scopeType: 'PACKAGE', scopeKey: 'PACKAGE:vmf-next:3.2.1', canDisableAdditionalScope: eligible }
+    detailQueryMock.mockReturnValue({ ...defaultDetailResult, data: { data: {
+      ...defaultDetailResult.data.data, activations: [defaultDetailResult.data.data.activations[0], activation],
+    } } })
+    disableActivationMock.mockReturnValue({ unwrap: vi.fn().mockResolvedValue({ data: { activation: { ...activation, status: 'DISABLED' } } }) })
+    renderPage()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for output-schemas-pack' }), 'details')
+    if (eligible !== true) {
+      expect(screen.queryByRole('button', { name: 'Undo Scope Binding' })).not.toBeInTheDocument()
+      return
+    }
+    await user.click(screen.getByRole('button', { name: 'Undo Scope Binding' }))
+    expect(disableActivationMock).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Undo scope binding?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(disableActivationMock).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Undo Scope Binding' }))
+    await user.click(screen.getByRole('button', { name: 'Undo Binding' }))
+    await waitFor(() => expect(disableActivationMock).toHaveBeenCalledWith({
+      packId: 'knowledge-pack-output-schemas-pack', activationId: activation.activationId,
+      expectedVersionId: activation.versionId, expectedContentHash: activation.contentHash,
+    }))
+    expect(disableVersionMock).not.toHaveBeenCalled()
+    expect(deprecateVersionMock).not.toHaveBeenCalled()
+  })
+
+  it('adds only a new non-global scope to the selected ACTIVE version', async () => {
+    const user = userEvent.setup()
+    const { successor } = prepareSuccessor({ status: 'ACTIVE', reviewStatus: 'APPROVED', validationSummary: { status: 'PASSED' } })
+    renderPage()
+    await openSuccessor(user)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Actions for selected version' }), 'add-scope')
+    expect(screen.getByRole('button', { name: 'Add Binding' })).toBeDisabled()
+    expect(within(screen.getByLabelText('Binding scope')).queryByRole('option', { name: /global/i })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Binding scope'), 'PACKAGE')
+    await user.type(screen.getByLabelText(/Package key/), 'vmf-next')
+    await user.type(screen.getByLabelText('Package version (optional)'), '3.2.1')
+    expect(screen.getByRole('button', { name: 'Add Binding' })).toBeDisabled()
+    expect(screen.getByLabelText(/Framework key/)).toHaveValue('')
+    await user.type(screen.getByLabelText(/Framework key/), 'CUSTOM_FRAMEWORK')
+    await user.click(screen.getByRole('button', { name: 'Add Binding' }))
+    await waitFor(() => expect(activateVersionMock).toHaveBeenCalledWith({ packId: successor.packId, versionId: successor.versionId, expectedContentHash: successor.contentHash, scopeType: 'PACKAGE', frameworkKey: 'CUSTOM_FRAMEWORK', packageKey: 'vmf-next', packageVersion: '3.2.1' }))
+    expect(disableVersionMock).not.toHaveBeenCalled()
+    expect(deprecateVersionMock).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     importMetadataPreviewMock.mockImplementation(() => ({ unwrap: vi.fn().mockResolvedValue({ data: {
