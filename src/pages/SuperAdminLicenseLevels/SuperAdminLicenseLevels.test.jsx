@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import SuperAdminLicenseLevels from './SuperAdminLicenseLevels'
 
 vi.mock('../../store/api/licenseLevelApi.js', () => ({
@@ -19,15 +20,9 @@ import {
 } from '../../store/api/licenseLevelApi.js'
 
 const createLicenseLevelMock = vi.fn()
-const padTwoDigits = (value) => String(value).padStart(2, '0')
 
 const getExpectedDateTimeParts = (value) => {
-  const parsed = new Date(value)
-  return {
-    iso: parsed.toISOString(),
-    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
-    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
-  }
+  return formatRelativeDateTimeParts(value)
 }
 
 function renderPage() {
@@ -107,7 +102,7 @@ describe('SuperAdminLicenseLevels page', () => {
     )
   })
 
-  it('renders updated timestamp in catalogue rows using standardized two-line format', () => {
+  it('renders updated timestamp in catalogue rows using the shared relative format', () => {
     const updatedAt = '2026-03-05T14:30:00.000Z'
     const parts = getExpectedDateTimeParts(updatedAt)
 
@@ -180,5 +175,51 @@ describe('SuperAdminLicenseLevels page', () => {
       )
     })
     expect(screen.getByText(/page 1 of 4/i)).toBeInTheDocument()
+  })
+
+  it('preserves unsaved edit values when the selected licence refetches', async () => {
+    const user = userEvent.setup()
+    let selectedDetails = {
+      data: {
+        id: 'lic-1',
+        name: 'Enterprise',
+        description: 'Original description',
+        featureEntitlements: ['VMF'],
+        homeExperience: 'CORE',
+        isActive: true,
+        customerCount: 0,
+      },
+      isFetching: false,
+      error: null,
+    }
+
+    useListLicenseLevelsQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'lic-1', name: 'Enterprise', isActive: true, customerCount: 0, featureEntitlements: ['VMF'] }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetLicenseLevelQuery.mockImplementation((id) => (id ? selectedDetails : { data: null, isFetching: false, error: null }))
+
+    const view = renderPage()
+    await user.click(screen.getAllByText('Edit')[0])
+    const nameInput = await screen.findByLabelText(/name/i, { selector: 'input#license-level-edit-name' })
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Unsaved name')
+
+    selectedDetails = {
+      ...selectedDetails,
+      data: { ...selectedDetails.data, name: 'Refetched server name' },
+    }
+    view.rerender(
+      <ToasterProvider>
+        <SuperAdminLicenseLevels />
+      </ToasterProvider>,
+    )
+
+    expect(nameInput).toHaveValue('Unsaved name')
   })
 })

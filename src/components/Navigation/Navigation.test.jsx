@@ -181,6 +181,7 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('navigation', { name: /main navigation/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /basic account menu/i })).toBeInTheDocument()
+    expect(document.querySelector('.nav__user-context-label')).toBeNull()
     expect(screen.queryByRole('link', { name: /^help$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
@@ -261,6 +262,8 @@ describe('Navigation', () => {
 
     expect(screen.getByRole('button', { name: /^admin$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /system health/i })).toBeInTheDocument()
+    expect(screen.getByText('Administration')).toBeInTheDocument()
+    expect(screen.getByText('Health')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /system admin/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^customer admin$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /admin account menu/i })).toBeInTheDocument()

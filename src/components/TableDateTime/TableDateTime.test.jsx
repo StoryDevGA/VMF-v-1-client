@@ -1,16 +1,34 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { TableDateTime } from './TableDateTime'
 
 describe('TableDateTime', () => {
-  it('renders fixed date and time parts for valid values', () => {
-    render(<TableDateTime value="2026-03-05T14:30:00.000Z" />)
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
-    const node = screen.getByText(/\d{4}-\d{2}-\d{2}/).closest('time')
+  it('renders relative date and time parts for valid values', () => {
+    const now = new Date(2026, 2, 5, 15, 0)
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+
+    render(<TableDateTime value={new Date(2026, 2, 5, 14, 30).toISOString()} />)
+
+    const node = screen.getByText('Today').closest('time')
     expect(node).not.toBeNull()
-    expect(node).toHaveAttribute('datetime', '2026-03-05T14:30:00.000Z')
-    expect(screen.getByText(/^\d{4}-\d{2}-\d{2}$/)).toBeInTheDocument()
-    expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeInTheDocument()
+    expect(node).toHaveAttribute('datetime', new Date(2026, 2, 5, 14, 30).toISOString())
+    expect(screen.getByText('Today')).toBeInTheDocument()
+    expect(screen.getByText('14:30')).toBeInTheDocument()
+  })
+
+  it('uses Yesterday for the preceding local calendar day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 5, 15, 0))
+
+    render(<TableDateTime value={new Date(2026, 2, 4, 9, 15).toISOString()} />)
+
+    expect(screen.getByText('Yesterday')).toBeInTheDocument()
+    expect(screen.getByText('09:15')).toBeInTheDocument()
   })
 
   it('renders fallback when value is invalid', () => {
@@ -18,4 +36,3 @@ describe('TableDateTime', () => {
     expect(screen.getByText('N/A')).toBeInTheDocument()
   })
 })
-

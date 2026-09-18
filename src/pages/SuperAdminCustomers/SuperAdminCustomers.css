@@ -61,6 +61,11 @@
   color: var(--color-text-secondary);
 }
 
+.super-admin-customers__read-only-value {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
 .super-admin-customers__field .input-container {
   gap: 0;
 }
@@ -85,6 +90,10 @@
   flex-wrap: wrap;
   gap: var(--spacing-md);
   color: var(--color-text-secondary);
+}
+
+.super-admin-customers__credit-readback strong {
+  color: var(--color-text-primary);
 }
 
 .super-admin-customers__dialog-body .input-label--floating {

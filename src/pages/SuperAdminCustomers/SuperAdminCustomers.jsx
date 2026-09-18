@@ -179,6 +179,7 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         setErrors={customerMgmt.setCreateErrors}
         licenseLevels={customerMgmt.licenseLevels}
         isLoadingLicenseLevels={customerMgmt.isLoadingLicenseLevels}
+        licenseLevelsError={customerMgmt.licenseLevelsAppError}
         onSubmit={customerMgmt.handleCreate}
         isSubmitting={customerMgmt.createResult.isLoading}
       />
@@ -189,8 +190,9 @@ export function SuperAdminCustomersPanel({ onAssignAdminSuccess }) {
         form={customerMgmt.editForm}
         setForm={customerMgmt.setEditForm}
         errors={customerMgmt.editErrors}
-        licenseLevels={customerMgmt.licenseLevels}
+        licenseLevels={customerMgmt.editLicenseLevels}
         isLoadingLicenseLevels={customerMgmt.isLoadingLicenseLevels}
+        licenseLevelsError={customerMgmt.licenseLevelsAppError}
         onSubmit={customerMgmt.handleUpdate}
         isSubmitting={customerMgmt.updateResult.isLoading}
         isFetchingDetails={customerMgmt.isFetchingCustomerDetails}

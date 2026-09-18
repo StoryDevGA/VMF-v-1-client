@@ -44,6 +44,7 @@ export const buildRuntimeInstanceListQuery = ({
   runtimeType,
   q = '',
   status = '',
+  lifecycleStage = '',
   page = 1,
   pageSize = 20,
 }) => {
@@ -53,10 +54,25 @@ export const buildRuntimeInstanceListQuery = ({
   appendParam(params, 'runtimeType', runtimeType)
   appendParam(params, 'q', q)
   appendParam(params, 'status', status)
+  appendParam(params, 'lifecycleStage', lifecycleStage)
   params.set('page', String(page))
   params.set('pageSize', String(pageSize))
 
   return `/runtime-instances?${params.toString()}`
+}
+
+export const buildRuntimeInstanceActivityQuery = ({
+  customerId,
+  tenantId,
+  runtimeType = DEFAULT_RUNTIME_INSTANCE_TYPE,
+  limit = 5,
+}) => {
+  const params = new URLSearchParams()
+  appendParam(params, 'customerId', customerId)
+  appendParam(params, 'tenantId', tenantId)
+  appendParam(params, 'runtimeType', runtimeType)
+  params.set('limit', String(limit))
+  return `/runtime-instances/activity?${params.toString()}`
 }
 
 export const buildAvailableFrameworkPackagesQuery = ({
@@ -106,6 +122,11 @@ export const getCreateRuntimeInstanceInvalidationTags = (_result, _error, { body
 
 export const buildRuntimeInstanceDetailQuery = ({ runtimeInstanceId }) =>
   `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}`
+
+export const buildRuntimeInstanceSummaryQuery = ({ runtimeInstanceId, customerId, tenantId }) => {
+  const params = buildRuntimeStateScopeParams({ customerId, tenantId })
+  return `/runtime-instances/${encodeURIComponent(String(runtimeInstanceId ?? '').trim())}/summary?${params.toString()}`
+}
 
 const buildRuntimeStateScopeParams = ({ customerId, tenantId } = {}) => {
   const params = new URLSearchParams()
@@ -601,6 +622,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
       providesTags: getRuntimeInstanceListTags,
     }),
 
+    listRuntimeInstanceActivity: build.query({
+      query: buildRuntimeInstanceActivityQuery,
+      providesTags: [runtimeInstanceListTag(DEFAULT_RUNTIME_INSTANCE_TYPE)],
+    }),
+
     createRuntimeInstance: build.mutation({
       query: buildCreateRuntimeInstanceQuery,
       invalidatesTags: getCreateRuntimeInstanceInvalidationTags,
@@ -613,6 +639,11 @@ export const runtimeInstanceApi = baseApi.injectEndpoints({
 
     getRuntimeInstance: build.query({
       query: buildRuntimeInstanceDetailQuery,
+      providesTags: getRuntimeInstanceDetailTags,
+    }),
+
+    getRuntimeInstanceSummary: build.query({
+      query: buildRuntimeInstanceSummaryQuery,
       providesTags: getRuntimeInstanceDetailTags,
     }),
 
@@ -925,9 +956,11 @@ export const {
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
+  useListRuntimeInstanceActivityQuery,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeRevisionMutation,
   useGetRuntimeInstanceQuery,
+  useGetRuntimeInstanceSummaryQuery,
   useGetRuntimeStateBootstrapQuery,
   useGetRuntimeStateSectionSummaryQuery,
   useGetRuntimeStateEvidenceQuery,

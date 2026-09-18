@@ -1,5 +1,6 @@
 import { Card } from '../../components/Card'
 import { Link } from '../../components/Link'
+import { getCreditValue } from './creditUtils.js'
 
 export function SignalHome({
   copy,
@@ -9,12 +10,6 @@ export function SignalHome({
   isLoadingCredits = false,
   creditsError = false,
 }) {
-  const getCreditValue = (value) => {
-    if (isLoadingCredits) return 'Loading…'
-    if (creditsError) return 'Unavailable'
-    return Number.isFinite(Number(value)) ? Number(value) : 0
-  }
-
   return (
     <>
       <section className="customer-home__hero" aria-labelledby="customer-home-title">
@@ -33,9 +28,14 @@ export function SignalHome({
         </div>
         <aside className="customer-home__credit-panel" aria-label="Available Signal credits">
           <p className="customer-home__card-kicker">Available credits</p>
-          <div className="customer-home__credit-balance">
-            <div><strong>{getCreditValue(creditBalances?.documentImprovement)}</strong><span>Document improvement</span></div>
-            <div><strong>{getCreditValue(creditBalances?.websiteAnalysis)}</strong><span>Website analysis</span></div>
+          <div
+            className="customer-home__credit-balance"
+            role="status"
+            aria-live="polite"
+            aria-label={`Available Signal credits: ${getCreditValue(creditBalances?.documentImprovement, { isLoading: isLoadingCredits, hasError: Boolean(creditsError) })} Document improvement, ${getCreditValue(creditBalances?.websiteAnalysis, { isLoading: isLoadingCredits, hasError: Boolean(creditsError) })} Website analysis`}
+          >
+            <div><strong>{getCreditValue(creditBalances?.documentImprovement, { isLoading: isLoadingCredits, hasError: Boolean(creditsError) })}</strong><span>Document improvement</span></div>
+            <div><strong>{getCreditValue(creditBalances?.websiteAnalysis, { isLoading: isLoadingCredits, hasError: Boolean(creditsError) })}</strong><span>Website analysis</span></div>
           </div>
           <p className="customer-home__credit-panel-copy">Credits are separate for each Signal product. No credit is consumed until approval or final report creation.</p>
           <Link to="/app/credits" underline="none" className="customer-home__button">Request credits</Link>

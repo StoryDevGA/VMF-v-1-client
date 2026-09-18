@@ -1,4 +1,4 @@
-import { formatDateTimeParts } from '../../utils/dateTime.js'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import './TableDateTime.css'
 
 export function TableDateTime({
@@ -6,7 +6,7 @@ export function TableDateTime({
   fallback = '--',
   className = '',
 }) {
-  const parts = formatDateTimeParts(value)
+  const parts = formatRelativeDateTimeParts(value)
   if (!parts) return fallback
 
   const classes = ['table-date-time', className].filter(Boolean).join(' ')
@@ -20,4 +20,3 @@ export function TableDateTime({
 }
 
 export default TableDateTime
-

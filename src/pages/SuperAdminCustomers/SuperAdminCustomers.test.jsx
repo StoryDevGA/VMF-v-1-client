@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import SuperAdminCustomers from './SuperAdminCustomers'
 
 vi.mock('../../store/api/customerApi.js', () => ({
@@ -208,24 +209,12 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.queryByText(/not assigned/i)).not.toBeInTheDocument()
 
     const parsedUpdatedAt = new Date(updatedAt)
-    const padTwoDigits = (value) => String(value).padStart(2, '0')
-    const updatedDateLabel = `${parsedUpdatedAt.getFullYear()}-${padTwoDigits(
-      parsedUpdatedAt.getMonth() + 1,
-    )}-${padTwoDigits(parsedUpdatedAt.getDate())}`
-    const updatedTimeLabel = `${padTwoDigits(parsedUpdatedAt.getHours())}:${padTwoDigits(
-      parsedUpdatedAt.getMinutes(),
-    )}`
+    const updatedParts = formatRelativeDateTimeParts(updatedAt)
     const updatedTimestamp = document.querySelector('.table-date-time')
     expect(updatedTimestamp).not.toBeNull()
     expect(updatedTimestamp).toHaveAttribute('datetime', parsedUpdatedAt.toISOString())
-    expect(updatedTimestamp).toHaveTextContent(updatedDateLabel)
-    expect(updatedTimestamp).toHaveTextContent(updatedTimeLabel)
-    expect(updatedTimestamp.querySelector('.table-date-time__date')).toHaveTextContent(
-      /^\d{4}-\d{2}-\d{2}$/,
-    )
-    expect(updatedTimestamp.querySelector('.table-date-time__time')).toHaveTextContent(
-      /^\d{2}:\d{2}$/,
-    )
+    expect(updatedTimestamp.querySelector('.table-date-time__date')).toHaveTextContent(updatedParts.dateLabel)
+    expect(updatedTimestamp.querySelector('.table-date-time__time')).toHaveTextContent(updatedParts.timeLabel)
   })
 
   it('opens create customer dialog from the catalogue create button', async () => {
@@ -1361,6 +1350,9 @@ describe('SuperAdminCustomers page', () => {
     expect(screen.getByRole('heading', { name: /update customer/i })).toBeInTheDocument()
     expect(await screen.findByDisplayValue('Acme Corp Updated')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://acme.example')).toBeInTheDocument()
+    const editDialog = screen.getByRole('dialog', { name: /update customer/i })
+    expect(within(editDialog).getByText('Multi Tenant')).toBeInTheDocument()
+    expect(within(editDialog).queryByRole('combobox', { name: /^topology$/i })).not.toBeInTheDocument()
 
     const editNameInput = screen.getByLabelText(/customer name/i, {
       selector: 'input#sa-customer-edit-name',
@@ -1368,6 +1360,60 @@ describe('SuperAdminCustomers page', () => {
     const editNameContainer = editNameInput.closest('.input-container')
     const editNameLabel = editNameContainer?.querySelector('.input-label')
     expect(editNameLabel).toHaveClass('input-label--floating')
+  })
+
+  it('preserves unsaved customer edits when customer details refetch', async () => {
+    const user = userEvent.setup()
+    let detailsResult = {
+      data: {
+        data: {
+          id: 'c-1',
+          name: 'Acme Corp',
+          website: 'https://acme.example',
+          topology: 'SINGLE_TENANT',
+          licenseLevelId: 'lic-1',
+          governance: { maxTenants: 1, maxVmfsPerTenant: 1 },
+          billing: { planCode: 'FREE', cycle: 'MONTHLY' },
+          creditBalances: { websiteAnalysis: 3, documentImprovement: 1 },
+        },
+      },
+      isFetching: false,
+      error: null,
+    }
+    useListCustomersQuery.mockReturnValue({
+      data: {
+        data: [{ id: 'c-1', name: 'Acme Corp', status: 'ACTIVE', topology: 'SINGLE_TENANT' }],
+        meta: { page: 1, totalPages: 1, total: 1 },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    })
+    useGetCustomerQuery.mockImplementation((customerId) => (
+      customerId ? detailsResult : { data: null, isFetching: false, error: null }
+    ))
+
+    const view = renderPage()
+    await user.click(screen.getByRole('button', { name: /^acme corp$/i }))
+    const nameInput = await screen.findByLabelText(/customer name/i, {
+      selector: 'input#sa-customer-edit-name',
+    })
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Unsaved customer edit')
+
+    detailsResult = {
+      ...detailsResult,
+      data: { ...detailsResult.data, data: { ...detailsResult.data.data, name: 'Refetched customer name' } },
+    }
+    view.rerender(
+      <MemoryRouter initialEntries={['/super-admin/customers']}>
+        <ToasterProvider>
+          <SuperAdminCustomers />
+        </ToasterProvider>
+      </MemoryRouter>,
+    )
+
+    expect(nameInput).toHaveValue('Unsaved customer edit')
   })
 
   it('requires customer name before saving edit dialog changes', async () => {

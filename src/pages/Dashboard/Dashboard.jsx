@@ -58,6 +58,7 @@ export function Dashboard() {
   const copy = EXPERIENCE_COPY[experience]
   const firstName = String(user?.name ?? '').trim().split(/\s+/)[0]
   const greeting = firstName ? `Welcome back, ${firstName}.` : null
+  const userId = user?.id ?? user?._id ?? user?.userId ?? null
 
   if (isResolvingSelectedTenantContext || !customerId || isCustomerScopeReady === false) {
     return (
@@ -89,6 +90,7 @@ export function Dashboard() {
             copy={copy}
             customerId={customerId}
             tenantId={tenantId}
+            userId={userId}
             hasVmfViewPermission={hasVmfViewPermission}
             greeting={greeting}
           />

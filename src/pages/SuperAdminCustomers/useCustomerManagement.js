@@ -58,10 +58,10 @@ export function useCustomerManagement() {
   const {
     data: licenseLevelsResponse,
     isLoading: isLoadingLicenseLevels,
+    error: licenseLevelsError,
   } = useListLicenseLevelsQuery({
     page: 1,
     pageSize: 100,
-    isActive: true,
   })
 
   const {
@@ -104,12 +104,17 @@ export function useCustomerManagement() {
   const meta = listResponse?.meta ?? {}
   const totalPages = Number(meta.totalPages) || 1
   const currentPage = Number(meta.page) || page
-  const licenseLevels = useMemo(() => licenseLevelsResponse?.data ?? [], [licenseLevelsResponse])
+  const editLicenseLevels = useMemo(() => licenseLevelsResponse?.data ?? [], [licenseLevelsResponse])
+  const licenseLevels = useMemo(
+    () => editLicenseLevels.filter((level) => level.isActive !== false),
+    [editLicenseLevels],
+  )
 
   const listAppError = listError ? normalizeError(listError) : null
   const customerDetailsAppError = customerDetailsError
     ? normalizeError(customerDetailsError)
     : null
+  const licenseLevelsAppError = licenseLevelsError ? normalizeError(licenseLevelsError) : null
 
   const handleCreate = useCallback(
     async (event) => {
@@ -305,9 +310,11 @@ export function useCustomerManagement() {
     totalPages,
     currentPage,
     licenseLevels,
+    editLicenseLevels,
     isListLoading,
     isListFetching,
     isLoadingLicenseLevels,
+    licenseLevelsAppError,
     isFetchingCustomerDetails,
     listAppError,
     customerDetailsAppError,

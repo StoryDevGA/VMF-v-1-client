@@ -54,6 +54,7 @@ import './ProtectedRoute.css'
  */
 export function ProtectedRoute({
   redirectTo = '/app/login',
+  children,
   requiredRole,
   requiredPlatformRole,
   requiredCustomerRole,
@@ -188,7 +189,7 @@ export function ProtectedRoute({
     }
   }
 
-  return <Outlet />
+  return children ?? <Outlet />
 }
 
 export default ProtectedRoute

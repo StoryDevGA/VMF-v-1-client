@@ -3,6 +3,7 @@ import {
   formatDateOnly,
   formatDateTime,
   formatDateTimeParts,
+  formatRelativeDateTimeParts,
 } from './dateTime.js'
 
 const toExpectedDateTime = (value) => {
@@ -47,5 +48,30 @@ describe('dateTime utils', () => {
     const iso = '2026-11-09T06:07:00.000Z'
     const expected = toExpectedDateTime(iso)
     expect(formatDateOnly(iso)).toBe(expected.date)
+  })
+
+  it('formats customer-facing timestamps as Today and Yesterday', () => {
+    const reference = new Date(2026, 2, 5, 15, 0)
+
+    expect(formatRelativeDateTimeParts(new Date(2026, 2, 5, 9, 41), reference)).toMatchObject({
+      dateLabel: 'Today',
+      timeLabel: '09:41',
+    })
+    expect(formatRelativeDateTimeParts(new Date(2026, 2, 4, 16, 20), reference)).toMatchObject({
+      dateLabel: 'Yesterday',
+      timeLabel: '16:20',
+    })
+  })
+
+  it('uses a compact month and day for older timestamps', () => {
+    const parts = formatRelativeDateTimeParts(
+      new Date(2026, 5, 18, 11, 4),
+      new Date(2026, 8, 18, 12, 0),
+    )
+
+    expect(parts).toMatchObject({
+      dateLabel: '18 Jun',
+      timeLabel: '11:04',
+    })
   })
 })

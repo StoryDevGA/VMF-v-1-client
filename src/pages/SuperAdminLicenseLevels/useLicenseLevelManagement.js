@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useListLicenseLevelsQuery,
   useCreateLicenseLevelMutation,
@@ -34,6 +34,7 @@ export function useLicenseLevelManagement() {
   const [editBase, setEditBase] = useState(INITIAL_FORM)
   const [editErrors, setEditErrors] = useState({})
   const [deactivationConfirmation, setDeactivationConfirmation] = useState('')
+  const editHydratedLicenseLevelIdRef = useRef('')
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -69,6 +70,8 @@ export function useLicenseLevelManagement() {
     if (!selectedResponse?.data) return
 
     const details = selectedResponse.data
+    const responseId = details.id ?? details._id
+    if (responseId && String(responseId) !== String(selectedLicenseLevelId)) return
     const next = {
       name: details.name ?? '',
       description: details.description ?? '',
@@ -77,11 +80,15 @@ export function useLicenseLevelManagement() {
       isActive: Boolean(details.isActive),
     }
 
-    // The selected licence response hydrates the external edit form state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEditForm(next)
-    setEditBase(next)
-  }, [selectedResponse])
+    if (editHydratedLicenseLevelIdRef.current !== String(selectedLicenseLevelId)) {
+      // The selected licence response is the external source of truth only when
+      // a dialog opens. Refetches while editing must not clobber unsaved changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditForm(next)
+      setEditBase(next)
+      editHydratedLicenseLevelIdRef.current = String(selectedLicenseLevelId)
+    }
+  }, [selectedResponse, selectedLicenseLevelId])
 
   const handleCreateSubmit = useCallback(
     async (event) => {
@@ -152,6 +159,7 @@ export function useLicenseLevelManagement() {
   const closeEditDialog = useCallback(() => {
     setEditOpen(false)
     setSelectedLicenseLevelId('')
+    editHydratedLicenseLevelIdRef.current = ''
     setEditForm(INITIAL_FORM)
     setEditBase(INITIAL_FORM)
     setEditErrors({})

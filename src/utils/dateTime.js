@@ -16,6 +16,25 @@ const toValidDate = (value) => {
   return parsed
 }
 
+const getLocalDayStart = (value) => new Date(
+  value.getFullYear(),
+  value.getMonth(),
+  value.getDate(),
+)
+
+const formatCompactDateLabel = (value, reference) => {
+  const options = {
+    day: 'numeric',
+    month: 'short',
+  }
+
+  if (value.getFullYear() !== reference.getFullYear()) {
+    options.year = 'numeric'
+  }
+
+  return new Intl.DateTimeFormat('en-GB', options).format(value)
+}
+
 /**
  * @param {string|number|Date|null|undefined} value
  * @returns {{ iso: string, dateLabel: string, timeLabel: string } | null}
@@ -33,6 +52,38 @@ export const formatDateTimeParts = (value) => {
   return {
     iso: parsed.toISOString(),
     dateLabel: `${year}-${month}-${day}`,
+    timeLabel: `${hours}:${minutes}`,
+  }
+}
+
+/**
+ * Formats a timestamp using the compact relative labels used by customer
+ * workspace surfaces.
+ *
+ * @param {string|number|Date|null|undefined} value
+ * @param {string|number|Date} [referenceValue=new Date()]
+ * @returns {{ iso: string, dateLabel: string, timeLabel: string } | null}
+ */
+export const formatRelativeDateTimeParts = (value, referenceValue = new Date()) => {
+  const parsed = toValidDate(value)
+  const reference = toValidDate(referenceValue)
+  if (!parsed || !reference) return null
+
+  const dayDifference = Math.round(
+    (getLocalDayStart(reference).getTime() - getLocalDayStart(parsed).getTime())
+      / (24 * 60 * 60 * 1000),
+  )
+
+  const hours = padTwoDigits(parsed.getHours())
+  const minutes = padTwoDigits(parsed.getMinutes())
+
+  return {
+    iso: parsed.toISOString(),
+    dateLabel: dayDifference === 0
+      ? 'Today'
+      : dayDifference === 1
+        ? 'Yesterday'
+        : formatCompactDateLabel(parsed, reference),
     timeLabel: `${hours}:${minutes}`,
   }
 }

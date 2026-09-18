@@ -10,28 +10,31 @@ import {
 import { RiCheckboxBlankCircleLine, RiHexagonLine } from 'react-icons/ri'
 import { Link } from '../../components/Link'
 import { Status } from '../../components/Status'
+import { TableDateTime } from '../../components/TableDateTime/TableDateTime.jsx'
 import { CUSTOMER_WORKSPACE_STATES } from '../../utils/customerExperience.js'
-import { getWorkspaceCardKey, projectAction } from './dashboardModel.js'
+import { projectAction } from './dashboardModel.js'
 
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
-
-const formatDate = (value) => {
-  const parsed = Date.parse(String(value ?? ''))
-  if (!Number.isFinite(parsed)) return 'Time unavailable'
-  return DATE_TIME_FORMATTER.format(parsed)
+const formatRecentActivityTitle = (activity = {}) => {
+  const summary = String(activity.summary ?? '').trim()
+  const shortened = summary.replace(/\s+for\s+value-narrative-.+$/i, '').trim()
+  return shortened || 'Workspace activity'
 }
 
-const formatDateTimeAttribute = (value) => {
-  const parsed = Date.parse(String(value ?? ''))
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined
+const getRecentActivityCategory = (activity = {}) => {
+  const value = `${activity.action ?? ''} ${activity.summary ?? ''}`.toUpperCase()
+  if (value.includes('OUTPUT') || value.includes('ASSET')) return 'Customer output'
+  if (value.includes('CERTIFICATE') || value.includes('SNAPSHOT')) return 'Certificate'
+  if (value.includes('REVIEW') || value.includes('QUALITY') || value.includes('TRUTH')) return 'Review'
+  if (value.includes('SOURCE') || value.includes('EVIDENCE')) return 'Source'
+  return 'Workspace activity'
 }
 
 export function Advisor({ card, activeWorkspaceCount }) {
   const [whyOpen, setWhyOpen] = useState(false)
   const action = card ? projectAction(card) : { to: '/app/workspaces/vmf' }
+  const reviewItemTo = card && card.nextAction !== 'Open workspace'
+    ? '/app/intelligence?view=quality'
+    : action.to
   const recommendationTitle = card ? `Continue ${card.title}` : 'Continue work'
   const recommendationCopy = card
     ? card.understandingState === CUSTOMER_WORKSPACE_STATES.UNDERSTANDING_REVIEW
@@ -49,7 +52,7 @@ export function Advisor({ card, activeWorkspaceCount }) {
           <span className="customer-home__advisor-icon" aria-hidden="true" />
           <p className="customer-home__card-kicker">Advisor recommendation</p>
         </div>
-        <span>Across {activeWorkspaceCount} active workspaces</span>
+        <span>Across {activeWorkspaceCount} workspaces</span>
       </div>
       <div className="customer-home__advisor-content">
         <div>
@@ -58,7 +61,7 @@ export function Advisor({ card, activeWorkspaceCount }) {
         </div>
         <div className="customer-home__advisor-actions">
           <Link to={action.to} underline="none" className="customer-home__button">Continue work →</Link>
-          {card ? <Link to={action.to} underline="none" className="customer-home__button customer-home__button--secondary">View review item</Link> : null}
+          {card ? <Link to={reviewItemTo} underline="none" className="customer-home__button customer-home__button--secondary">View review item</Link> : null}
           <button
             type="button"
             className="customer-home__text-button customer-home__why-button"
@@ -76,9 +79,9 @@ export function Advisor({ card, activeWorkspaceCount }) {
         </p>
       ) : null}
       <dl className="customer-home__advisor-details">
-        <div><dt>Current stage</dt><dd>{card?.currentStage ?? 'Not yet recorded'}</dd></div>
-        <div><dt>Attention</dt><dd>{card ? card.nextAction : 'No review items'}</dd></div>
-        <div><dt>Last updated</dt><dd>{formatDate(card?.updatedAt)}</dd></div>
+        <div><dt>Current stage</dt><dd className="customer-home__current-stage">{card?.currentStage ?? 'Not yet recorded'}</dd></div>
+        <div><dt>Attention</dt><dd>{card && card.nextAction !== 'Open workspace' ? card.nextAction : 'No items'}</dd></div>
+        <div><dt>Last updated</dt><dd><TableDateTime value={card?.updatedAt} fallback="Time unavailable" className="customer-home__date-time" /></dd></div>
       </dl>
     </section>
   )
@@ -87,6 +90,13 @@ export function Advisor({ card, activeWorkspaceCount }) {
 export function WorkspaceCard({ card, recommended = false }) {
   const [isActionsOpen, setIsActionsOpen] = useState(false)
   const action = projectAction(card)
+  const hasRuntimeId = Boolean(card.id)
+  const assuranceTo = hasRuntimeId
+    ? `/app/runtime/${encodeURIComponent(String(card.id))}/assurance`
+    : '/app/workspaces/vmf'
+  const activityTo = hasRuntimeId
+    ? `/app/activity?runtimeInstanceId=${encodeURIComponent(String(card.id))}`
+    : '/app/activity'
   const understandingAccepted = card.understandingState === CUSTOMER_WORKSPACE_STATES.UNDERSTANDING_ACCEPTED
   const evidenceAvailable = card.evidenceStatus !== CUSTOMER_WORKSPACE_STATES.EVIDENCE_UNRECORDED
 
@@ -103,7 +113,7 @@ export function WorkspaceCard({ card, recommended = false }) {
           <h3>{card.title}</h3>
           {recommended ? <span className="customer-home__recommended-badge">Recommended</span> : null}
           <p>{card.workspaceType}</p>
-          <small>Updated: {formatDate(card.updatedAt)}</small>
+          <small>Updated: <TableDateTime value={card.updatedAt} fallback="Time unavailable" className="customer-home__date-time" /></small>
         </div>
       </div>
       <div className="customer-home__workspace-understanding">
@@ -116,7 +126,7 @@ export function WorkspaceCard({ card, recommended = false }) {
           <strong>{card.understanding}</strong>
           <span>{card.evidence}</span>
           {evidenceAvailable ? (
-            <Link to={action.to} underline="none" className="customer-home__assurance-link">View assurance details →</Link>
+            <Link to={assuranceTo} underline="none" className="customer-home__assurance-link">View assurance details →</Link>
           ) : null}
         </div>
       </div>
@@ -143,6 +153,8 @@ export function WorkspaceCard({ card, recommended = false }) {
         {isActionsOpen ? (
           <div className="customer-home__workspace-menu">
             <Link to={action.to} underline="none">Open workspace</Link>
+            <Link to={activityTo} underline="none">View activity</Link>
+            <Link to={assuranceTo} underline="none">View assurance details</Link>
           </div>
         ) : null}
       </div>
@@ -151,9 +163,22 @@ export function WorkspaceCard({ card, recommended = false }) {
 }
 
 export function AttentionSummary({ label, cards, detail, icon = MdPriorityHigh, warning = true }) {
-  if (!cards.length) return null
-  const firstCard = cards[0]
   const IconComponent = icon
+
+  if (!cards.length) {
+    return (
+      <div className="customer-home__attention-summary customer-home__attention-summary--empty">
+        <span className="customer-home__attention-icon" aria-hidden="true">
+          <IconComponent aria-hidden="true" focusable="false" />
+        </span>
+        <div>
+          <strong>{label}</strong>
+          <span>No items</span>
+        </div>
+      </div>
+    )
+  }
+  const firstCard = cards[0]
 
   return (
     <div className="customer-home__attention-summary">
@@ -171,7 +196,7 @@ export function AttentionSummary({ label, cards, detail, icon = MdPriorityHigh, 
   )
 }
 
-export function RecentActivity({ cards }) {
+export function RecentActivity({ activities = [], isLoading = false }) {
   return (
     <section className="customer-home__section customer-home__rail-section" aria-labelledby="customer-home-activity-title">
       <div className="customer-home__section-heading">
@@ -179,29 +204,31 @@ export function RecentActivity({ cards }) {
           <h2 id="customer-home-activity-title">Recent activity</h2>
         </div>
       </div>
-      {cards.length === 0 ? (
+      {isLoading ? (
+        <div className="customer-home__state" role="status"><Status variant="neutral" size="sm">Loading recent activity…</Status></div>
+      ) : activities.length === 0 ? (
         <div className="customer-home__state">
           <Status variant="neutral" size="sm">No recent activity</Status>
           <p>Activity will appear here as workspace review and source work progresses.</p>
         </div>
       ) : (
         <ul className="customer-home__activity-list">
-          {cards.map((card, index) => (
-            <li key={`activity-${getWorkspaceCardKey(card, index)}`} className="customer-home__activity-item">
+          {activities.slice(0, 5).map((activity, index) => (
+            <li key={`activity-${activity.id || activity.runtimeInstanceId || index}`} className="customer-home__activity-item">
               <span className="customer-home__activity-icon" aria-hidden="true">
-                {card.nextAction === 'Open workspace' ? (
+                {activity.action === 'RUNTIME_INSTANCE_CREATED' ? (
                   <MdSubdirectoryArrowRight aria-hidden="true" focusable="false" />
-                ) : card.understandingState === CUSTOMER_WORKSPACE_STATES.UNDERSTANDING_ACCEPTED ? (
+                ) : activity.action === 'RUNTIME_STATE_MUTATED' ? (
                   <MdCheck aria-hidden="true" focusable="false" />
                 ) : (
                   <MdDescription aria-hidden="true" focusable="false" />
                 )}
               </span>
               <div>
-                <strong>{card.title}</strong>
-                <p>{card.nextAction} · {card.attentionGroup}</p>
+                <strong>{formatRecentActivityTitle(activity)}</strong>
+                <p>{activity.runtimeName || getRecentActivityCategory(activity)}</p>
               </div>
-              <time dateTime={formatDateTimeAttribute(card.updatedAt)}>{formatDate(card.updatedAt)}</time>
+              <TableDateTime value={activity.occurredAt} fallback="Time unavailable" className="customer-home__date-time" />
             </li>
           ))}
         </ul>

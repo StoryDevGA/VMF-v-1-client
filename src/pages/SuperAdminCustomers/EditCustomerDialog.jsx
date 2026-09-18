@@ -13,6 +13,7 @@ export function EditCustomerDialog({
   errors,
   licenseLevels,
   isLoadingLicenseLevels,
+  licenseLevelsError,
   onSubmit,
   isSubmitting,
   isFetchingDetails,
@@ -23,6 +24,20 @@ export function EditCustomerDialog({
   onAdjustCredit,
   isAdjustingCredit,
 }) {
+  const selectedLicenseLevel = licenseLevels.find(
+    (level) => String(level.id ?? level._id) === String(form.licenseLevelId),
+  )
+  const hasSignalLicence = selectedLicenseLevel?.homeExperience === 'SIGNAL'
+
+  // Only active levels are assignable, but the level already on the customer must stay
+  // visible and selectable after it has been deactivated, otherwise the select renders
+  // blank and any save silently reassigns the customer to a different licence.
+  const assignableLicenseLevels = licenseLevels.filter(
+    (level) =>
+      level.isActive !== false
+      || String(level.id ?? level._id) === String(form.licenseLevelId),
+  )
+
   return (
     <Dialog open={open} onClose={onClose} size="lg">
       <Dialog.Header>
@@ -32,6 +47,11 @@ export function EditCustomerDialog({
         {detailsError ? (
           <p className="super-admin-customers__error" role="alert">
             {detailsError.message}
+          </p>
+        ) : null}
+        {licenseLevelsError ? (
+          <p className="super-admin-customers__error" role="alert">
+            {licenseLevelsError.message}
           </p>
         ) : null}
         <Input
@@ -94,12 +114,13 @@ export function EditCustomerDialog({
           label="Licence Level"
           value={form.licenseLevelId}
           options={[
-            { value: '', label: isLoadingLicenseLevels ? 'Loading...' : 'Select licence level' },
-            ...licenseLevels
+            { value: '', label: isLoadingLicenseLevels ? 'Loading...' : 'Clear licence' },
+            ...assignableLicenseLevels
               .map((level) => {
                 const levelId = level.id ?? level._id
                 if (!levelId) return null
-                return { value: levelId, label: level.name ?? levelId }
+                const name = level.name ?? levelId
+                return { value: levelId, label: level.isActive === false ? `${name} (inactive)` : name }
               })
               .filter(Boolean),
           ]}
@@ -126,9 +147,14 @@ export function EditCustomerDialog({
             />
           </div>
         </div>
-        <fieldset className="super-admin-customers__credit-fields">
+        {hasSignalLicence ? <fieldset className="super-admin-customers__credit-fields">
           <legend className="super-admin-customers__field-label">Signal credit balances</legend>
-          <div className="super-admin-customers__credit-readback" aria-label="Current Signal credit balances">
+          <div
+            className="super-admin-customers__credit-readback"
+            role="status"
+            aria-live="polite"
+            aria-label={`Current Signal credit balances: ${form.creditBalances?.websiteAnalysis ?? 0} Website Analysis, ${form.creditBalances?.documentImprovement ?? 0} Document Improvement`}
+          >
             <span>Website Analysis: <strong>{form.creditBalances?.websiteAnalysis ?? 0}</strong></span>
             <span>Document Improvement: <strong>{form.creditBalances?.documentImprovement ?? 0}</strong></span>
           </div>
@@ -165,7 +191,7 @@ export function EditCustomerDialog({
           <Button type="button" variant="outline" onClick={onAdjustCredit} loading={isAdjustingCredit} disabled={isAdjustingCredit || isFetchingDetails}>
             Apply credit adjustment
           </Button>
-        </fieldset>
+        </fieldset> : null}
       </Dialog.Body>
       <Dialog.Footer>
         <Button variant="outline" onClick={onClose} disabled={isSubmitting}>

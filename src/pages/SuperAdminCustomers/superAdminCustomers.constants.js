@@ -84,6 +84,10 @@ export const INITIAL_FORM = {
   billingCycle: 'MONTHLY',
   startingWebsiteCredits: '0',
   startingDocumentCredits: '0',
+  creditBalances: {
+    websiteAnalysis: 0,
+    documentImprovement: 0,
+  },
 }
 
 export const VIEW_CUSTOMERS = 'customers'

@@ -3,7 +3,10 @@ import { MdChangeHistory, MdPriorityHigh, MdSearch } from 'react-icons/md'
 import { Link } from '../../components/Link'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
-import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
+import {
+  useListRuntimeInstanceActivityQuery,
+  useListRuntimeInstancesQuery,
+} from '../../store/api/runtimeInstanceApi.js'
 import {
   buildCustomerHomeWorkspaceCard,
 } from '../../utils/customerExperience.js'
@@ -14,22 +17,81 @@ import {
   WorkspaceCard,
 } from './DashboardShared.jsx'
 import { getWorkspaceCardKey } from './dashboardModel.js'
+import {
+  buildWorkspaceFilterPreferenceKey,
+  DEFAULT_WORKSPACE_FILTER,
+  isWorkspaceFilter,
+  readWorkspaceFilterPreference,
+  WORKSPACE_FILTERS,
+  writeWorkspaceFilterPreference,
+} from './workspaceFilterPreference.js'
 
 const WORKSPACE_PAGE_SIZE = 6
+const WORKSPACE_SUMMARY_PAGE_SIZE = 100
 
-export function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, greeting }) {
+const WORKSPACE_FILTER_CONFIG = Object.freeze({
+  [WORKSPACE_FILTERS.DRAFT]: { label: 'Draft', lifecycleStage: 'DRAFT' },
+  [WORKSPACE_FILTERS.PUBLISHED]: { label: 'Published', lifecycleStage: 'PUBLISHED' },
+  [WORKSPACE_FILTERS.ALL]: { label: 'All' },
+})
+
+export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermission, greeting }) {
   const [workspaceSearch, setWorkspaceSearch] = useState('')
-  const [workspaceFilter, setWorkspaceFilter] = useState('active')
   const [workspacePage, setWorkspacePage] = useState(1)
+  const preferenceKey = useMemo(
+    () => buildWorkspaceFilterPreferenceKey({ userId, customerId, tenantId }),
+    [customerId, tenantId, userId],
+  )
+  const [workspacePreference, setWorkspacePreference] = useState(() => ({
+    key: preferenceKey,
+    value: readWorkspaceFilterPreference(preferenceKey),
+  }))
+  const workspaceFilter = workspacePreference.key === preferenceKey
+    ? workspacePreference.value
+    : readWorkspaceFilterPreference(preferenceKey)
+  const currentWorkspacePage = workspacePreference.key === preferenceKey ? workspacePage : 1
+
+  const selectedWorkspaceFilter = WORKSPACE_FILTER_CONFIG[workspaceFilter]
+    ?? WORKSPACE_FILTER_CONFIG[DEFAULT_WORKSPACE_FILTER]
+  const changeWorkspaceFilter = (value) => {
+    if (!isWorkspaceFilter(value)) return
+    setWorkspacePreference({ key: preferenceKey, value })
+    setWorkspacePage(1)
+    writeWorkspaceFilterPreference(preferenceKey, value)
+  }
+
   const runtimeListQuery = useListRuntimeInstancesQuery(
     {
       customerId,
       tenantId,
       runtimeType: 'VALUE_NARRATIVE',
       q: workspaceSearch.trim() || undefined,
-      status: workspaceFilter === 'active' ? 'ACTIVE' : undefined,
-      page: workspacePage,
+      lifecycleStage: selectedWorkspaceFilter.lifecycleStage,
+      page: currentWorkspacePage,
       pageSize: WORKSPACE_PAGE_SIZE,
+    },
+    {
+      skip: !customerId || !tenantId || !hasVmfViewPermission,
+    },
+  )
+  const workspaceSummaryQuery = useListRuntimeInstancesQuery(
+    {
+      customerId,
+      tenantId,
+      runtimeType: 'VALUE_NARRATIVE',
+      page: 1,
+      pageSize: WORKSPACE_SUMMARY_PAGE_SIZE,
+    },
+    {
+      skip: !customerId || !tenantId || !hasVmfViewPermission,
+    },
+  )
+  const activityQuery = useListRuntimeInstanceActivityQuery(
+    {
+      customerId,
+      tenantId,
+      runtimeType: 'VALUE_NARRATIVE',
+      limit: 5,
     },
     {
       skip: !customerId || !tenantId || !hasVmfViewPermission,
@@ -47,25 +109,38 @@ export function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, gre
       }),
     [runtimeListQuery.data],
   )
-  const attentionGroups = useMemo(() => ({
-    'Needs your input': workspaceCards.filter((card) => card.attentionGroup === 'Needs your input'),
-    'StoryLineOS is working on': workspaceCards.filter((card) => card.attentionGroup === 'StoryLineOS is working on'),
-    'Things to verify': workspaceCards.filter((card) => card.attentionGroup === 'Things to verify'),
-  }), [workspaceCards])
-  const advisorCard = useMemo(
-    () => workspaceCards.find((card) => card.attentionGroup === 'Needs your input')
-      ?? workspaceCards.find((card) => card.attentionGroup === 'Things to verify')
-      ?? workspaceCards[0]
-      ?? null,
-    [workspaceCards],
+  const allWorkspaceCards = useMemo(
+    () => (workspaceSummaryQuery.data?.data ?? [])
+      .map(buildCustomerHomeWorkspaceCard)
+      .sort((left, right) => {
+        const leftTime = Date.parse(String(left.updatedAt ?? ''))
+        const rightTime = Date.parse(String(right.updatedAt ?? ''))
+        if (!Number.isFinite(leftTime)) return Number.isFinite(rightTime) ? 1 : 0
+        if (!Number.isFinite(rightTime)) return -1
+        return rightTime - leftTime
+      }),
+    [workspaceSummaryQuery.data],
   )
-  const totalWorkspaceCount = Number(runtimeListQuery.data?.meta?.total ?? workspaceCards.length)
+  const attentionGroups = useMemo(() => ({
+    'Needs your input': allWorkspaceCards.filter((card) => card.attentionGroup === 'Needs your input'),
+    'StoryLineOS is working on': allWorkspaceCards.filter((card) => card.attentionGroup === 'StoryLineOS is working on'),
+    'Things to verify': allWorkspaceCards.filter((card) => card.attentionGroup === 'Things to verify'),
+  }), [allWorkspaceCards])
+  const advisorCard = useMemo(
+    () => allWorkspaceCards.find((card) => card.attentionGroup === 'Needs your input')
+      ?? allWorkspaceCards.find((card) => card.attentionGroup === 'Things to verify')
+      ?? allWorkspaceCards[0]
+      ?? null,
+    [allWorkspaceCards],
+  )
+  const totalWorkspaceCount = Number(workspaceSummaryQuery.data?.meta?.total ?? allWorkspaceCards.length)
   const totalWorkspacePages = Math.max(
     1,
     Number(runtimeListQuery.data?.meta?.totalPages)
       || Math.ceil(totalWorkspaceCount / WORKSPACE_PAGE_SIZE),
   )
-  const isFilteredWorkspaceView = Boolean(workspaceSearch.trim()) || workspaceFilter !== 'active'
+  const recentActivities = activityQuery.data?.data ?? []
+  const isFilteredWorkspaceView = Boolean(workspaceSearch.trim()) || workspaceFilter !== DEFAULT_WORKSPACE_FILTER
 
   return (
     <>
@@ -110,8 +185,17 @@ export function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, gre
                 </label>
                 <div className="customer-home__workspace-filter" role="group" aria-labelledby="customer-home-workspace-filter-label">
                   <span id="customer-home-workspace-filter-label" className="sr-only">Workspace status filter</span>
-                  <button type="button" aria-pressed={workspaceFilter === 'active'} className={workspaceFilter === 'active' ? 'is-active' : ''} onClick={() => { setWorkspaceFilter('active'); setWorkspacePage(1) }}>Active</button>
-                  <button type="button" aria-pressed={workspaceFilter === 'all'} className={workspaceFilter === 'all' ? 'is-active' : ''} onClick={() => { setWorkspaceFilter('all'); setWorkspacePage(1) }}>All</button>
+                  {Object.entries(WORKSPACE_FILTER_CONFIG).map(([value, config]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={workspaceFilter === value}
+                      className={workspaceFilter === value ? 'is-active' : ''}
+                      onClick={() => changeWorkspaceFilter(value)}
+                    >
+                      {config.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -137,9 +221,9 @@ export function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, gre
             )}
             {totalWorkspacePages > 1 ? (
               <div className="customer-home__pagination" aria-label="Project Workspace pages">
-                <button type="button" disabled={workspacePage <= 1} onClick={() => setWorkspacePage((page) => Math.max(1, page - 1))}>Previous</button>
-                <span>Page {workspacePage} of {totalWorkspacePages}</span>
-                <button type="button" disabled={workspacePage >= totalWorkspacePages} onClick={() => setWorkspacePage((page) => Math.min(totalWorkspacePages, page + 1))}>Next</button>
+                <button type="button" disabled={currentWorkspacePage <= 1} onClick={() => setWorkspacePage((page) => Math.max(1, page - 1))}>Previous</button>
+                <span>Page {currentWorkspacePage} of {totalWorkspacePages}</span>
+                <button type="button" disabled={currentWorkspacePage >= totalWorkspacePages} onClick={() => setWorkspacePage((page) => Math.min(totalWorkspacePages, page + 1))}>Next</button>
               </div>
             ) : null}
           </section>
@@ -168,7 +252,7 @@ export function CoreHome({ copy, customerId, tenantId, hasVmfViewPermission, gre
             <Link to="/app/attention" underline="none" className="customer-home__action customer-home__rail-action">View all →</Link>
           </section>
 
-          <RecentActivity cards={workspaceCards} />
+          <RecentActivity activities={recentActivities} isLoading={activityQuery.isLoading} />
         </aside>
       </div>
     </>

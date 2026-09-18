@@ -242,6 +242,7 @@ export const customerApi = baseApi.injectEndpoints({
       ],
     }),
   }),
+  overrideExisting: false,
 })
 
 export const {

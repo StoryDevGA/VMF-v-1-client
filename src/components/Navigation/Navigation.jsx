@@ -27,6 +27,7 @@ import {
 import { getPhase1aSuperAdminNavigationEntries } from '../../constants/superAdminNavigation.js'
 import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 import { CUSTOMER_EXPERIENCE, resolveCustomerExperience } from '../../utils/customerExperience.js'
+import { getCreditValue } from '../../pages/Dashboard/creditUtils.js'
 import './Navigation.css'
 
 function Navigation({ isOpen = false, onLinkClick = () => {} }) {
@@ -38,8 +39,11 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
   const { getCustomerScope, hasFeatureEntitlement } = useAuthorization()
   const {
     customerId: selectedCustomerId,
+    tenantId: selectedTenantId,
     customerName,
     resolvedTenantName,
+    selectableTenants,
+    setTenantId,
     selectedCustomerTopology,
     supportsTenantManagement: selectedCustomerSupportsTenantManagement,
   } = useTenantContext()
@@ -185,7 +189,13 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           key: 'tenant',
           label: 'Tenant',
           secondaryLabel: resolvedTenantName || 'Select tenant',
-          links: [{ key: 'project-workspaces', label: 'Project Workspaces', to: '/app/workspaces/vmf' }],
+          links: (selectableTenants ?? []).map((tenant) => ({
+            key: `tenant-${String(tenant?._id ?? tenant?.id ?? tenant?.name ?? '').trim()}`,
+            label: tenant?.name || 'Unnamed tenant',
+            tenantId: tenant?._id ?? tenant?.id,
+            tenantName: tenant?.name ?? null,
+            isSelected: String(tenant?._id ?? tenant?.id ?? '') === String(selectedTenantId ?? ''),
+          })),
         },
       )
     }
@@ -221,6 +231,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
           type: 'group',
           key: 'admin',
           label: 'Admin',
+          secondaryLabel: 'Administration',
           links: adminLinks,
         })
       }
@@ -230,7 +241,9 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
       entries.push({
         type: 'group',
         key: 'system-health',
-        label: 'System Health',
+        label: 'System',
+        ariaLabel: 'System Health',
+        secondaryLabel: 'Health',
         links: [
           {
             key: 'monitoring',
@@ -258,6 +271,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
         type: 'group',
         key: 'help',
         label: 'Help',
+        secondaryLabel: 'Support',
         links: [{ key: 'help', label: 'Help centre', to: '/help' }],
       })
     }
@@ -299,6 +313,8 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     isAuthenticated,
     isSuperAdmin,
     resolvedTenantName,
+    selectableTenants,
+    selectedTenantId,
     userDisplayName,
     userEmail,
   ])
@@ -350,6 +366,13 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
     onLinkClick()
   }
 
+  const handleTenantChange = (link) => {
+    if (!link?.tenantId) return
+    setTenantId(link.tenantId, link.tenantName)
+    setOpenMenuKey(null)
+    onLinkClick()
+  }
+
   const handleActionClick = async (entry) => {
     if (entry.key !== 'sign-out' || logoutResult.isLoading) return
 
@@ -363,7 +386,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
 
   const isGroupActive = (links) =>
     links.some(
-      (link) => location.pathname === link.to || location.pathname.startsWith(`${link.to}/`),
+      (link) => link.to && (location.pathname === link.to || location.pathname.startsWith(`${link.to}/`)),
     )
 
   return (
@@ -417,22 +440,16 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
             }
 
             if (entry.type === 'credit-summary') {
-              const getCreditValue = (value) => {
-                if (customerCreditsPending) return 'Loading…'
-                if (customerCreditsError) return 'Unavailable'
-                return Number.isFinite(Number(value)) ? Number(value) : 0
-              }
-
               return (
                 <li key={entry.key} className="nav__item nav__item--credit-summary">
                   <NavLink
                     to={entry.to}
                     className="nav__credit-summary"
-                    aria-label="View Signal credit balances"
+                    aria-label={`View Signal credit balances: ${getCreditValue(customerCreditBalances?.documentImprovement, { isLoading: customerCreditsPending, hasError: Boolean(customerCreditsError) })} Document, ${getCreditValue(customerCreditBalances?.websiteAnalysis, { isLoading: customerCreditsPending, hasError: Boolean(customerCreditsError) })} Website`}
                     onClick={handleSubmenuLinkClick}
                   >
-                    <span><strong>{getCreditValue(customerCreditBalances?.documentImprovement)}</strong><small>Document</small></span>
-                    <span><strong>{getCreditValue(customerCreditBalances?.websiteAnalysis)}</strong><small>Website</small></span>
+                    <span><strong>{getCreditValue(customerCreditBalances?.documentImprovement, { isLoading: customerCreditsPending, hasError: Boolean(customerCreditsError) })}</strong><small>Document</small></span>
+                    <span><strong>{getCreditValue(customerCreditBalances?.websiteAnalysis, { isLoading: customerCreditsPending, hasError: Boolean(customerCreditsError) })}</strong><small>Website</small></span>
                   </NavLink>
                 </li>
               )
@@ -463,17 +480,21 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                     aria-controls={submenuId}
                     aria-label={accountMenuLabel}
                   >
-                    <Avatar
-                      name={entry.label}
-                      size="sm"
-                      className="nav__user-avatar"
-                      aria-hidden="true"
-                    />
                     <span className="nav__user-summary">
-                      <span className="nav__user-name">{entry.label}</span>
-                      {entry.secondaryLabel ? (
-                        <span className="nav__user-email">{entry.secondaryLabel}</span>
-                      ) : null}
+                      <span className="nav__user-identity">
+                        <Avatar
+                          name={entry.label}
+                          size="sm"
+                          className="nav__user-avatar"
+                          aria-hidden="true"
+                        />
+                        <span className="nav__user-details">
+                          <span className="nav__user-name">{entry.label}</span>
+                          {entry.secondaryLabel ? (
+                            <span className="nav__user-email">{entry.secondaryLabel}</span>
+                          ) : null}
+                        </span>
+                      </span>
                     </span>
                     <MdExpandMore
                       className={`nav__group-icon ${isOpenGroup ? 'nav__group-icon--open' : ''}`}
@@ -505,15 +526,26 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                     <ul className="nav__submenu">
                       {entry.links.map((link) => (
                         <li key={link.key} className="nav__submenu-item">
-                          <NavLink
-                            to={link.to}
-                            className={({ isActive }) =>
-                              isActive ? 'nav__submenu-link nav__submenu-link--active' : 'nav__submenu-link'
-                            }
-                            onClick={handleSubmenuLinkClick}
-                          >
-                            <span className="nav__text">{link.label}</span>
-                          </NavLink>
+                          {link.tenantId ? (
+                            <button
+                              type="button"
+                              className={`nav__submenu-link nav__submenu-link--button${link.isSelected ? ' nav__submenu-link--active' : ''}`}
+                              aria-current={link.isSelected ? 'page' : undefined}
+                              onClick={() => handleTenantChange(link)}
+                            >
+                              <span className="nav__text">{link.label}</span>
+                            </button>
+                          ) : (
+                            <NavLink
+                              to={link.to}
+                              className={({ isActive }) =>
+                                isActive ? 'nav__submenu-link nav__submenu-link--active' : 'nav__submenu-link'
+                              }
+                              onClick={handleSubmenuLinkClick}
+                            >
+                              <span className="nav__text">{link.label}</span>
+                            </NavLink>
+                          )}
                         </li>
                       ))}
                       {entry.actions.map((action) => (
@@ -553,6 +585,7 @@ function Navigation({ isOpen = false, onLinkClick = () => {} }) {
                   onClick={() => toggleMenuGroup(entry.key)}
                   aria-expanded={isOpenGroup}
                   aria-controls={submenuId}
+                  aria-label={entry.ariaLabel ?? entry.label}
                   >
                   {entry.secondaryLabel ? (
                     <span className="nav__group-summary">

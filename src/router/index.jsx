@@ -27,6 +27,12 @@ const Dashboard = lazy(() => import('../pages/Dashboard'))
 const CustomerJourneyPlaceholder = lazy(
   () => import('../pages/CustomerJourney/CustomerJourneyPlaceholder'),
 )
+const CustomerAttention = lazy(
+  () => import('../pages/CustomerAttention'),
+)
+const CustomerActivity = lazy(
+  () => import('../pages/CustomerActivity'),
+)
 const Login = lazy(() => import('../pages/Login/Login'))
 const SuperAdminLogin = lazy(
   () => import('../pages/SuperAdminLogin/SuperAdminLogin'),
@@ -120,6 +126,9 @@ const MaintainVmfs = lazy(
 const RuntimeWorkspace = lazy(
   () => import('../pages/RuntimeWorkspace'),
 )
+const AssuranceDetails = lazy(
+  () => import('../pages/AssuranceDetails'),
+)
 const OutcomeStudioWorkspace = lazy(
   () => import('../pages/OutcomeStudioWorkspace'),
 )
@@ -191,7 +200,13 @@ export const router = createBrowserRouter([
                 path: 'attention',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
-                    <CustomerJourneyPlaceholder section="Attention Centre" />
+                    <ProtectedRoute
+                      redirectTo="/app/login"
+                      requiredSelectedScopePermission="VMF_VIEW"
+                      unauthorizedRedirect="/app/dashboard"
+                    >
+                      <CustomerAttention />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },
@@ -199,7 +214,13 @@ export const router = createBrowserRouter([
                 path: 'activity',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
-                    <CustomerJourneyPlaceholder section="Activity Centre" />
+                    <ProtectedRoute
+                      redirectTo="/app/login"
+                      requiredSelectedScopePermission="VMF_VIEW"
+                      unauthorizedRedirect="/app/dashboard"
+                    >
+                      <CustomerActivity />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },
@@ -253,6 +274,20 @@ export const router = createBrowserRouter([
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
                     <RuntimeWorkspace />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
+                path: 'runtime/:runtimeInstanceId/assurance',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <ProtectedRoute
+                      redirectTo="/app/login"
+                      requiredSelectedScopePermission="VMF_VIEW"
+                      unauthorizedRedirect="/app/dashboard"
+                    >
+                      <AssuranceDetails />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },

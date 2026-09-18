@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import SuperAdminDeniedAccessLogs from './SuperAdminDeniedAccessLogs'
 
 vi.mock('../../store/api/superAdminAuditApi.js', () => ({
@@ -10,15 +11,8 @@ vi.mock('../../store/api/superAdminAuditApi.js', () => ({
 
 import { useListDeniedAccessLogsQuery } from '../../store/api/superAdminAuditApi.js'
 
-const padTwoDigits = (value) => String(value).padStart(2, '0')
-
 const getExpectedDateTimeParts = (value) => {
-  const parsed = new Date(value)
-  return {
-    iso: parsed.toISOString(),
-    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
-    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
-  }
+  return formatRelativeDateTimeParts(value)
 }
 
 function renderPage() {
@@ -51,7 +45,7 @@ describe('SuperAdminDeniedAccessLogs page', () => {
     expect(screen.getByLabelText(/end date/i)).toBeInTheDocument()
   })
 
-  it('renders timestamp column using standardized two-line date/time format', () => {
+  it('renders timestamp column using the shared relative date/time format', () => {
     const createdAt = '2026-03-05T14:30:00.000Z'
     const parts = getExpectedDateTimeParts(createdAt)
 

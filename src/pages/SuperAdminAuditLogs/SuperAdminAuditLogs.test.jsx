@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import SuperAdminAuditLogs from './SuperAdminAuditLogs'
 
 vi.mock('../../store/api/auditLogApi.js', () => ({
@@ -20,15 +21,8 @@ import {
   useVerifyAuditIntegrityMutation,
 } from '../../store/api/auditLogApi.js'
 
-const padTwoDigits = (value) => String(value).padStart(2, '0')
-
 const getExpectedDateTimeParts = (value) => {
-  const parsed = new Date(value)
-  return {
-    iso: parsed.toISOString(),
-    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
-    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
-  }
+  return formatRelativeDateTimeParts(value)
 }
 
 function renderPage() {
@@ -125,7 +119,7 @@ describe('SuperAdminAuditLogs page', () => {
     })
   })
 
-  it('renders timestamp column using standardized two-line date/time format', () => {
+  it('renders timestamp column using the shared relative date/time format', () => {
     const timestamp = '2026-03-05T14:30:00.000Z'
     const timestampParts = getExpectedDateTimeParts(timestamp)
 

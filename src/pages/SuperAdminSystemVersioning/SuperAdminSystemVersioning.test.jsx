@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ToasterProvider } from '../../components/Toaster'
+import { formatRelativeDateTimeParts } from '../../utils/dateTime.js'
 import SuperAdminSystemVersioning from './SuperAdminSystemVersioning'
 
 vi.mock('../../store/api/systemVersioningApi.js', () => ({
@@ -22,15 +23,8 @@ import {
   useUpdatePolicyMetadataMutation,
 } from '../../store/api/systemVersioningApi.js'
 
-const padTwoDigits = (value) => String(value).padStart(2, '0')
-
 const getExpectedDateTimeParts = (value) => {
-  const parsed = new Date(value)
-  return {
-    iso: parsed.toISOString(),
-    dateLabel: `${parsed.getFullYear()}-${padTwoDigits(parsed.getMonth() + 1)}-${padTwoDigits(parsed.getDate())}`,
-    timeLabel: `${padTwoDigits(parsed.getHours())}:${padTwoDigits(parsed.getMinutes())}`,
-  }
+  return formatRelativeDateTimeParts(value)
 }
 
 function renderPage() {
@@ -76,7 +70,7 @@ describe('SuperAdminSystemVersioning page', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders policy history activated/created timestamps in standardized two-line format', () => {
+  it('renders policy history activated/created timestamps using the shared relative format', () => {
     const activatedAt = '2026-03-05T14:30:00.000Z'
     const createdAt = '2026-03-01T10:15:00.000Z'
     const activatedParts = getExpectedDateTimeParts(activatedAt)

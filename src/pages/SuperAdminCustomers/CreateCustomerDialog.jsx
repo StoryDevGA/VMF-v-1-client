@@ -14,6 +14,7 @@ export function CreateCustomerDialog({
   setErrors,
   licenseLevels,
   isLoadingLicenseLevels,
+  licenseLevelsError,
   onSubmit,
   isSubmitting,
 }) {
@@ -23,6 +24,11 @@ export function CreateCustomerDialog({
         <h2 className="super-admin-customers__dialog-title">Create Customer</h2>
       </Dialog.Header>
       <Dialog.Body className="super-admin-customers__dialog-body">
+        {licenseLevelsError ? (
+          <p className="super-admin-customers__error" role="alert">
+            {licenseLevelsError.message}
+          </p>
+        ) : null}
         <form className="super-admin-customers__form" onSubmit={onSubmit} noValidate>
           <Input
             id="sa-customer-name"

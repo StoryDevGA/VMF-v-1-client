@@ -68,6 +68,9 @@ export function validateForm(formState) {
   if (!errors.entitlements && unknown) {
     errors.entitlements = `Unknown entitlement key "${unknown}". Add it to the licence catalogue first.`
   }
+  if (!errors.entitlements && formState.homeExperience === 'CORE' && entitlements.includes('WEBSITE')) {
+    errors.entitlements = 'Core licence levels cannot include WEBSITE.'
+  }
 
   return {
     errors,
@@ -94,6 +97,8 @@ export function mapValidationErrors(appError) {
   if (details.featureEntitlements) {
     nextErrors.entitlements = details.featureEntitlements
   }
+  if (details.homeExperience) nextErrors.homeExperience = details.homeExperience
+  if (details.isActive) nextErrors.isActive = details.isActive
   if (details['']) {
     nextErrors.entitlements = details['']
   }

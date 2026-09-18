@@ -12,6 +12,7 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
 }))
 
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
+  useListRuntimeInstanceActivityQuery: vi.fn(),
   useListRuntimeInstancesQuery: vi.fn(),
 }))
 
@@ -21,6 +22,7 @@ vi.mock('../../store/api/customerApi.js', () => ({
 
 import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import { useListRuntimeInstanceActivityQuery } from '../../store/api/runtimeInstanceApi.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
 import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 
@@ -55,22 +57,25 @@ function mockContext(overrides = {}) {
   })
 }
 
-function mockAuthorization({ scope = signalScope, canView = true } = {}) {
+function mockAuthorization({ scope = signalScope, canView = true, user = { id: 'user-1', name: 'Olivia' } } = {}) {
   useAuthorization.mockReturnValue({
     getCustomerScope: vi.fn(() => scope),
     hasCustomerPermission: vi.fn(() => canView),
     hasTenantPermission: vi.fn(() => canView),
     hasFeatureEntitlement: vi.fn((_customerId, feature) => scope.featureEntitlements?.includes(feature)),
     isCustomerScopeReady: true,
+    user,
   })
 }
 
 describe('Dashboard customer home', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
     mockContext()
     mockAuthorization()
     useListRuntimeInstancesQuery.mockReturnValue({ data: undefined, isLoading: false, error: null })
+    useListRuntimeInstanceActivityQuery.mockReturnValue({ data: { data: [] }, isLoading: false, error: null })
     useGetCustomerCreditsQuery.mockReturnValue({
       data: { data: { balances: { websiteAnalysis: 7, documentImprovement: 4 } } },
       isLoading: false,
@@ -141,7 +146,7 @@ describe('Dashboard customer home', () => {
         customerId: 'cust-1',
         tenantId: 'tenant-1',
         runtimeType: 'VALUE_NARRATIVE',
-        status: 'ACTIVE',
+        lifecycleStage: 'DRAFT',
         page: 1,
         pageSize: 6,
       }),
@@ -189,14 +194,14 @@ describe('Dashboard customer home', () => {
       target: { value: 'parlon' },
     })
 
-    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ q: 'parlon', status: 'ACTIVE', page: 1, pageSize: 6 }),
+    expect(useListRuntimeInstancesQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'parlon', lifecycleStage: 'DRAFT', page: 1, pageSize: 6 }),
       expect.objectContaining({ skip: false }),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    expect(useListRuntimeInstancesQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ q: 'parlon', status: undefined, page: 1, pageSize: 6 }),
+    expect(useListRuntimeInstancesQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'parlon', lifecycleStage: undefined, page: 1, pageSize: 6 }),
       expect.objectContaining({ skip: false }),
     )
   })
@@ -218,5 +223,31 @@ describe('Dashboard customer home', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show actions for Unidentified workspace' }))
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open workspace' })).toHaveAttribute('href', '/app/workspaces/vmf')
+  })
+
+  it('restores the last valid filter only for the same user and tenant context', () => {
+    mockAuthorization({ scope: coreScope, user: { id: 'user-1', name: 'Olivia' } })
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: { data: [], meta: { total: 0, totalPages: 1 } },
+      isLoading: false,
+      error: null,
+    })
+
+    const firstRender = renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Published' }))
+    expect(screen.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true')
+    firstRender.unmount()
+
+    const secondRender = renderDashboard()
+    expect(screen.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true')
+    expect(useListRuntimeInstancesQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ lifecycleStage: 'PUBLISHED', page: 1, pageSize: 6 }),
+      expect.objectContaining({ skip: false }),
+    )
+
+    secondRender.unmount()
+    mockContext({ tenantId: 'tenant-2' })
+    renderDashboard()
+    expect(screen.getByRole('button', { name: 'Draft' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
