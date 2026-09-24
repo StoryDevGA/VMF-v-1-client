@@ -324,7 +324,6 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
                 cards={attentionGroups['Things to verify']}
                 detail="Across your workspaces"
                 icon={MdChangeHistory}
-                warning={false}
               />
             </div>
             <Link to="/app/attention" underline="none" className="customer-home__action customer-home__rail-action">View all →</Link>

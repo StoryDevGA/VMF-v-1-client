@@ -8,6 +8,7 @@ import {
   MdSubdirectoryArrowRight,
 } from 'react-icons/md'
 import { RiCheckboxBlankCircleLine, RiHexagonLine } from 'react-icons/ri'
+import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { Link } from '../../components/Link'
 import { Status } from '../../components/Status'
@@ -42,6 +43,11 @@ export function Advisor({ card, activeWorkspaceCount, reviewItemCount = 0 }) {
       ? 'This workspace is locked and available in read-only form.'
       : 'This is your most relevant activity across all workspace instances. It is not affected by the Project Workspaces filter below.'
     : 'Choose a Project Workspace to begin your next useful step.'
+  const prioritySignal = card?.isLocked
+    ? 'Read-only workspace'
+    : reviewItemCount > 0
+      ? `${reviewItemCount} review ${reviewItemCount === 1 ? 'item' : 'items'} waiting`
+      : 'No review items waiting'
 
   return (
     <section className="customer-home__advisor" aria-labelledby="customer-home-advisor-title">
@@ -71,17 +77,50 @@ export function Advisor({ card, activeWorkspaceCount, reviewItemCount = 0 }) {
           </button>
         </div>
       </div>
-      <Dialog open={whyOpen} onClose={() => setWhyOpen(false)} size="lg" className="customer-home__recommendation-dialog">
-        <Dialog.Header>
-          <button type="button" className="customer-home__dialog-back" onClick={() => setWhyOpen(false)}>← Back to Customer Home</button>
-          <h2>Why this recommendation</h2>
+      <Dialog
+        open={whyOpen}
+        onClose={() => setWhyOpen(false)}
+        size="xl"
+        className="customer-home__recommendation-dialog"
+        aria-labelledby="customer-home-recommendation-title"
+      >
+        <Dialog.Header className="customer-home__recommendation-header">
+          <span className="customer-home__recommendation-kicker">Why Advisor recommends this</span>
+          <h2 id="customer-home-recommendation-title">Highest-priority resumable work across this customer</h2>
+          <p>Advisor evaluates the whole workspace list, independent of the Project Workspaces filter.</p>
         </Dialog.Header>
-        <Dialog.Body>
-          <h3>{recommendationTitle}</h3>
-          <p>{recommendationCopy}</p>
-          <p>This recommendation is based on the current workspace stage, its bounded summary and the next available customer action. It is selected across workspaces and does not change when the workspace list filter changes.</p>
-          {card ? <dl><div><dt>Workspace</dt><dd>{card.title}</dd></div><div><dt>Current stage</dt><dd>{card.currentStage}</dd></div><div><dt>Review items</dt><dd>{card.isLocked ? 'Unavailable while locked' : card.reviewItemCount ? `${card.reviewItemCount} review item` : 'No items'}</dd></div></dl> : null}
+        <Dialog.Body className="customer-home__recommendation-body">
+          <div className="customer-home__recommendation-signal">
+            <span>State considered</span>
+            <strong>{activeWorkspaceCount} workspace {activeWorkspaceCount === 1 ? 'instance' : 'instances'}</strong>
+            <p>Active, draft, published and locked workspaces remain part of the recommendation scan.</p>
+          </div>
+          <div className="customer-home__recommendation-signal">
+            <span>Priority signal</span>
+            <strong>{prioritySignal}</strong>
+            <p>{card?.isLocked
+              ? 'This workspace is locked and can only be inspected in read-only form.'
+              : reviewItemCount > 0
+                ? `The open ${reviewItemCount === 1 ? 'item can' : 'items can'} constrain accepted understanding and later customer outputs.`
+                : 'Advisor selects the next available customer action across workspaces.'}</p>
+          </div>
+          <div className="customer-home__recommendation-signal">
+            <span>Recommended action</span>
+            <strong>{card?.isLocked ? 'Inspect read-only' : 'Continue or inspect'}</strong>
+            <p>{card?.isLocked
+              ? 'Advisor can route you to the locked workspace in read-only mode.'
+              : 'Advisor can route you to the workspace or review; it cannot complete the review.'}</p>
+          </div>
         </Dialog.Body>
+        <Dialog.Footer className="customer-home__recommendation-footer">
+          <div className="customer-home__recommendation-note">
+            <span aria-hidden="true">A</span>
+            <p><strong>Recommendation only</strong><br />{card?.isLocked
+              ? 'Advisor cannot change a locked workspace or publish outcomes.'
+              : 'Advisor never accepts evidence, resolves findings, approves understanding or publishes outcomes.'}</p>
+          </div>
+          <Button variant="primary" className="customer-home__recommendation-close" onClick={() => setWhyOpen(false)}>Close</Button>
+        </Dialog.Footer>
       </Dialog>
       <dl className="customer-home__advisor-details">
         <div><dt>Current stage</dt><dd className="customer-home__current-stage">{card?.currentStage ?? 'Not yet recorded'}</dd></div>
@@ -168,7 +207,7 @@ export function WorkspaceCard({ card, recommended = false }) {
   )
 }
 
-export function AttentionSummary({ label, cards, detail, icon = MdPriorityHigh, warning = true }) {
+export function AttentionSummary({ label, cards, detail, icon = MdPriorityHigh }) {
   const IconComponent = icon
 
   if (!cards.length) {
@@ -188,14 +227,11 @@ export function AttentionSummary({ label, cards, detail, icon = MdPriorityHigh, 
 
   return (
     <div className="customer-home__attention-summary">
-      <span
-        className={`customer-home__attention-icon${warning ? ' customer-home__attention-icon--warning' : ''}`}
-        aria-hidden="true"
-      >
+      <span className="customer-home__attention-icon" aria-hidden="true">
         <IconComponent aria-hidden="true" focusable="false" />
       </span>
       <div>
-        <strong>{cards.length} {cards.length === 1 ? 'item needs' : 'items need'} attention</strong>
+        <strong className="customer-home__attention-count">{cards.length} {cards.length === 1 ? 'item needs' : 'items need'} attention</strong>
         <span>{firstCard.title} · {detail || label}</span>
       </div>
     </div>

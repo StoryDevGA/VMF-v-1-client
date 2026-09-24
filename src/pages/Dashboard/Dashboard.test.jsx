@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from './Dashboard'
 
@@ -203,6 +203,16 @@ describe('Dashboard customer home', () => {
     expect(screen.queryByRole('link', { name: 'View review item' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Submitted review workspace', level: 3 }).closest('article'))
       .toHaveTextContent('1 review item')
+
+    const attentionCounts = screen.getAllByText('1 item needs attention')
+    expect(attentionCounts).toHaveLength(2)
+    attentionCounts.forEach((count) => {
+      expect(count).toHaveClass('customer-home__attention-count')
+      expect(count.closest('.customer-home__attention-summary')
+        .querySelector('.customer-home__attention-icon')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('heading', { name: 'Attention required' }).closest('section')
+      .querySelector('.customer-home__attention-total')).toHaveTextContent('2')
   })
 
   it('fails closed when the selected customer scope is missing or unknown', () => {
@@ -302,16 +312,35 @@ describe('Dashboard customer home', () => {
 
   it('opens recommendation context in a dialog and returns without losing the selected filter', async () => {
     mockAuthorization({ scope: coreScope })
-    useListRuntimeInstancesQuery.mockReturnValue({ data: { data: [], meta: { total: 0 } }, isLoading: false, error: null })
+    window.localStorage.setItem('storylineos:customer-home:workspace-filter:user-1:cust-1:tenant-1', 'published')
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [{
+          id: 'workspace-1',
+          name: 'Latest Markdown Framework',
+          runtimeType: 'VALUE_NARRATIVE',
+          frameworkLifecycleStage: 'DRAFT',
+        }],
+        meta: { total: 1 },
+      },
+      isLoading: false,
+      error: null,
+    })
 
     renderDashboard()
-    fireEvent.click(screen.getByRole('button', { name: 'Published' }))
     expect(await screen.findByText('No workspaces match this view')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Why this recommendation' }))
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText(/does not change when the workspace list filter changes/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '← Back to Customer Home' }))
+    const recommendationDialog = screen.getByRole('dialog')
+    expect(recommendationDialog).toBeInTheDocument()
+    expect(within(recommendationDialog).getByRole('heading', { name: 'Highest-priority resumable work across this customer' })).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('Why Advisor recommends this')).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('State considered')).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('Priority signal')).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('Recommended action')).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('No review items waiting')).toBeInTheDocument()
+    expect(within(recommendationDialog).getByText('Recommendation only')).toBeInTheDocument()
+    fireEvent.click(within(recommendationDialog).getByRole('button', { name: 'Close', exact: true }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true')
