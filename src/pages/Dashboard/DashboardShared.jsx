@@ -8,6 +8,7 @@ import {
   MdSubdirectoryArrowRight,
 } from 'react-icons/md'
 import { RiCheckboxBlankCircleLine, RiHexagonLine } from 'react-icons/ri'
+import { Dialog } from '../../components/Dialog'
 import { Link } from '../../components/Link'
 import { Status } from '../../components/Status'
 import { TableDateTime } from '../../components/TableDateTime/TableDateTime.jsx'
@@ -29,7 +30,7 @@ const getRecentActivityCategory = (activity = {}) => {
   return 'Workspace activity'
 }
 
-export function Advisor({ card, activeWorkspaceCount }) {
+export function Advisor({ card, activeWorkspaceCount, reviewItemCount = 0 }) {
   const [whyOpen, setWhyOpen] = useState(false)
   const action = card ? projectAction(card) : { to: '/app/workspaces/vmf' }
   const reviewItemTo = card && card.nextAction !== 'Open workspace'
@@ -37,12 +38,9 @@ export function Advisor({ card, activeWorkspaceCount }) {
     : action.to
   const recommendationTitle = card ? `Continue ${card.title}` : 'Continue work'
   const recommendationCopy = card
-    ? card.understandingState === CUSTOMER_WORKSPACE_STATES.UNDERSTANDING_REVIEW
-      ? 'This workspace has review items waiting. Continue from the current project revision.'
-      : card.evidenceStatus === CUSTOMER_WORKSPACE_STATES.EVIDENCE_VERIFY
-        || card.evidenceStatus === CUSTOMER_WORKSPACE_STATES.EVIDENCE_ATTENTION
-        ? 'This workspace has things to verify before you continue.'
-        : 'Continue from the current project revision.'
+    ? card.isLocked
+      ? 'This workspace is locked and available in read-only form.'
+      : 'This is your most relevant activity across all workspace instances. It is not affected by the Project Workspaces filter below.'
     : 'Choose a Project Workspace to begin your next useful step.'
 
   return (
@@ -52,7 +50,7 @@ export function Advisor({ card, activeWorkspaceCount }) {
           <span className="customer-home__advisor-icon" aria-hidden="true" />
           <p className="customer-home__card-kicker">Advisor recommendation</p>
         </div>
-        <span>Across {activeWorkspaceCount} workspaces</span>
+        <span>Across all {activeWorkspaceCount} {activeWorkspaceCount === 1 ? 'workspace' : 'workspaces'}</span>
       </div>
       <div className="customer-home__advisor-content">
         <div>
@@ -60,27 +58,34 @@ export function Advisor({ card, activeWorkspaceCount }) {
           <p>{recommendationCopy}</p>
         </div>
         <div className="customer-home__advisor-actions">
-          <Link to={action.to} underline="none" className="customer-home__button">Continue work →</Link>
-          {card ? <Link to={reviewItemTo} underline="none" className="customer-home__button customer-home__button--secondary">View review item</Link> : null}
+          <Link to={action.to} state={{ from: '/app/dashboard' }} underline="none" className="customer-home__button">Continue work →</Link>
+          {card && !card.isLocked && card.reviewItemCount > 0 ? <Link to={reviewItemTo} underline="none" className="customer-home__button customer-home__button--secondary">View review item</Link> : null}
           <button
             type="button"
             className="customer-home__text-button customer-home__why-button"
             aria-expanded={whyOpen}
-            aria-controls="customer-home-advisor-explanation"
+            aria-haspopup="dialog"
             onClick={() => setWhyOpen((previous) => !previous)}
           >
             Why this recommendation
           </button>
         </div>
       </div>
-      {whyOpen ? (
-        <p id="customer-home-advisor-explanation" className="customer-home__advisor-explanation">
-          This recommendation is based on the current workspace stage, review items, and latest summary update.
-        </p>
-      ) : null}
+      <Dialog open={whyOpen} onClose={() => setWhyOpen(false)} size="lg" className="customer-home__recommendation-dialog">
+        <Dialog.Header>
+          <button type="button" className="customer-home__dialog-back" onClick={() => setWhyOpen(false)}>← Back to Customer Home</button>
+          <h2>Why this recommendation</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <h3>{recommendationTitle}</h3>
+          <p>{recommendationCopy}</p>
+          <p>This recommendation is based on the current workspace stage, its bounded summary and the next available customer action. It is selected across workspaces and does not change when the workspace list filter changes.</p>
+          {card ? <dl><div><dt>Workspace</dt><dd>{card.title}</dd></div><div><dt>Current stage</dt><dd>{card.currentStage}</dd></div><div><dt>Review items</dt><dd>{card.isLocked ? 'Unavailable while locked' : card.reviewItemCount ? `${card.reviewItemCount} review item` : 'No items'}</dd></div></dl> : null}
+        </Dialog.Body>
+      </Dialog>
       <dl className="customer-home__advisor-details">
         <div><dt>Current stage</dt><dd className="customer-home__current-stage">{card?.currentStage ?? 'Not yet recorded'}</dd></div>
-        <div><dt>Attention</dt><dd>{card && card.nextAction !== 'Open workspace' ? card.nextAction : 'No items'}</dd></div>
+        <div><dt>Attention</dt><dd className="customer-home__attention-value">{reviewItemCount === 0 ? 'No items' : `${reviewItemCount} ${reviewItemCount === 1 ? 'review item' : 'review items'}`}</dd></div>
         <div><dt>Last updated</dt><dd><TableDateTime value={card?.updatedAt} fallback="Time unavailable" className="customer-home__date-time" /></dd></div>
       </dl>
     </section>
@@ -124,23 +129,24 @@ export function WorkspaceCard({ card, recommended = false }) {
         </span>
         <div className="customer-home__workspace-understanding-copy">
           <strong>{card.understanding}</strong>
-          <span>{card.evidence}</span>
-          {evidenceAvailable ? (
-            <Link to={assuranceTo} underline="none" className="customer-home__assurance-link">View assurance details →</Link>
+          {!card.isLocked ? <span>{card.evidence}</span> : null}
+          {evidenceAvailable || card.isLocked ? (
+            <Link to={assuranceTo} state={{ from: '/app/dashboard' }} underline="none" className="customer-home__assurance-link">View assurance details →</Link>
           ) : null}
         </div>
       </div>
       <div className="customer-home__workspace-state">
         <Status variant="neutral" size="sm" announce={false}>{card.currentStage}</Status>
-        <Status variant={card.nextAction === 'Open workspace' ? 'success' : 'warning'} size="sm" announce={false}>{card.nextAction}</Status>
-        {card.statusSignal ? (
+        {card.isLocked ? null : <Status variant={card.nextAction === 'Open workspace' ? 'success' : 'warning'} size="sm" announce={false}>{card.nextAction}</Status>}
+        {!card.isLocked && card.statusSignal ? (
           <Status variant="neutral" size="sm" announce={false} className="customer-home__workspace-status-signal">
             {card.statusSignal}
           </Status>
         ) : null}
       </div>
       <div className="customer-home__workspace-actions">
-        <Link to={action.to} underline="none" className="customer-home__button customer-home__button--secondary">Open</Link>
+        {!card.isLocked ? <span className="customer-home__review-count">{card.reviewItemCount ? `${card.reviewItemCount} ${card.reviewItemCount === 1 ? 'review item' : 'review items'}` : 'No items'}</span> : null}
+        <Link to={action.to} state={{ from: '/app/dashboard' }} underline="none" className="customer-home__button customer-home__button--secondary">Open</Link>
         <button
           type="button"
           className="customer-home__workspace-menu-toggle"
@@ -152,9 +158,9 @@ export function WorkspaceCard({ card, recommended = false }) {
         </button>
         {isActionsOpen ? (
           <div className="customer-home__workspace-menu">
-            <Link to={action.to} underline="none">Open workspace</Link>
+            <Link to={action.to} state={{ from: '/app/dashboard' }} underline="none">Open workspace</Link>
             <Link to={activityTo} underline="none">View activity</Link>
-            <Link to={assuranceTo} underline="none">View assurance details</Link>
+            <Link to={assuranceTo} state={{ from: '/app/dashboard' }} underline="none">View assurance details</Link>
           </div>
         ) : null}
       </div>

@@ -2496,6 +2496,20 @@ describe('RuntimeWorkspace', () => {
     expect(screen.queryByText('Dashboard Route')).not.toBeInTheDocument()
   })
 
+  it('returns to Customer Home when opened from the Core Home workspace list', async () => {
+    const user = userEvent.setup()
+
+    renderRuntimeWorkspace({
+      pathname: '/app/runtime/value-narrative-001',
+      state: { from: '/app/dashboard' },
+    })
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByText('Dashboard Route')).toBeInTheDocument()
+    expect(screen.queryByText('VMF Workspace Route')).not.toBeInTheDocument()
+  })
+
   it('falls back to the Value Narrative workspace for direct runtime routes', async () => {
     const user = userEvent.setup()
 

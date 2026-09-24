@@ -44,7 +44,7 @@ export function CustomerAttention() {
   const cards = (response?.data ?? []).map(buildCustomerHomeWorkspaceCard)
   const items = useMemo(
     () => cards
-      .filter((card) => card.nextAction !== 'Open workspace')
+      .filter((card) => !card.isLocked && card.nextAction !== 'Open workspace')
       .map((card) => ({
         card,
         type: getAttentionType(card),
@@ -68,13 +68,14 @@ export function CustomerAttention() {
   return (
     <main className="customer-centre" aria-labelledby="customer-attention-title">
       <div className="customer-centre__container">
+        <Link to="/app/dashboard" underline="none" className="customer-centre__back customer-centre__back--top">← Back to Customer Home</Link>
         <section className="customer-centre__hero">
           <div>
             <p className="customer-centre__eyebrow">Customer Home</p>
             <h1 id="customer-attention-title">Attention Centre</h1>
             <p>Everything that needs a human look before work moves on. Items stay grouped by workspace so the next action is clear.</p>
           </div>
-          <Link to={recommendedItem?.card.id ? `/app/runtime/${encodeURIComponent(String(recommendedItem.card.id))}` : '/app/dashboard'} underline="none" className="customer-centre__hero-action">Continue recommended work →</Link>
+          <Link to={recommendedItem?.card.id ? `/app/runtime/${encodeURIComponent(String(recommendedItem.card.id))}` : '/app/dashboard'} state={{ from: '/app/dashboard' }} underline="none" className="customer-centre__hero-action">Continue recommended work →</Link>
         </section>
 
         {recommendedItem ? (
@@ -135,7 +136,7 @@ export function CustomerAttention() {
                     </div>
                     <div>
                       <span className="customer-centre__severity">{priority}</span>
-                      <Link to={getAttentionDestination(card, type)} underline="none">Open review →</Link>
+                      <Link to={getAttentionDestination(card, type)} state={{ from: '/app/dashboard' }} underline="none">Open review →</Link>
                     </div>
                   </li>
                 ))}
@@ -163,8 +164,6 @@ export function CustomerAttention() {
             </section>
           </aside>
         </div>
-
-        <Link to="/app/dashboard" underline="none" className="customer-centre__back">← Customer Home</Link>
       </div>
     </main>
   )

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MdChangeHistory, MdPriorityHigh, MdSearch } from 'react-icons/md'
 import { Link } from '../../components/Link'
 import { Spinner } from '../../components/Spinner'
@@ -6,6 +6,7 @@ import { Status } from '../../components/Status'
 import {
   useListRuntimeInstanceActivityQuery,
   useListRuntimeInstancesQuery,
+  useLazyListRuntimeInstancesQuery,
 } from '../../store/api/runtimeInstanceApi.js'
 import {
   buildCustomerHomeWorkspaceCard,
@@ -28,6 +29,7 @@ import {
 
 const WORKSPACE_PAGE_SIZE = 6
 const WORKSPACE_SUMMARY_PAGE_SIZE = 100
+const EMPTY_PUBLISHED_ROWS = Object.freeze([])
 
 const WORKSPACE_FILTER_CONFIG = Object.freeze({
   [WORKSPACE_FILTERS.DRAFT]: { label: 'Draft', lifecycleStage: 'DRAFT' },
@@ -53,6 +55,10 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
 
   const selectedWorkspaceFilter = WORKSPACE_FILTER_CONFIG[workspaceFilter]
     ?? WORKSPACE_FILTER_CONFIG[DEFAULT_WORKSPACE_FILTER]
+  const isPublishedFilter = workspaceFilter === WORKSPACE_FILTERS.PUBLISHED
+  const publishedQueryKey = JSON.stringify([customerId, tenantId, workspaceSearch.trim()])
+  const [loadRuntimeInstances] = useLazyListRuntimeInstancesQuery()
+  const [publishedState, setPublishedState] = useState({ key: '', rows: [], error: null })
   const changeWorkspaceFilter = (value) => {
     if (!isWorkspaceFilter(value)) return
     setWorkspacePreference({ key: preferenceKey, value })
@@ -71,9 +77,51 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
       pageSize: WORKSPACE_PAGE_SIZE,
     },
     {
-      skip: !customerId || !tenantId || !hasVmfViewPermission,
+      skip: !customerId || !tenantId || !hasVmfViewPermission || isPublishedFilter,
     },
   )
+  useEffect(() => {
+    if (!isPublishedFilter || !customerId || !tenantId || !hasVmfViewPermission) return undefined
+    let active = true
+    const loadAllPages = async (filter) => {
+      const rows = []
+      let page = 1
+      let totalPages = 1
+      do {
+        const response = await loadRuntimeInstances({
+          customerId,
+          tenantId,
+          runtimeType: 'VALUE_NARRATIVE',
+          q: workspaceSearch.trim() || undefined,
+          ...filter,
+          page,
+          pageSize: WORKSPACE_SUMMARY_PAGE_SIZE,
+        }).unwrap()
+        rows.push(...(response?.data ?? []))
+        totalPages = Math.max(1, Number(response?.meta?.totalPages) || 1)
+        page += 1
+      } while (active && page <= totalPages)
+      return rows
+    }
+
+    Promise.all([
+      loadAllPages({ lifecycleStage: 'PUBLISHED' }),
+      loadAllPages({ status: 'LOCKED' }),
+    ]).then(([publishedRows, lockedRows]) => {
+      if (!active) return
+      const combined = new Map()
+      const addRows = (rows, group) => rows.forEach((row, index) => {
+        const identity = row.id ?? row.runtimeInstanceKey
+        combined.set(identity == null || identity === '' ? `${group}-${index}` : String(identity), row)
+      })
+      addRows(publishedRows, 'published')
+      addRows(lockedRows, 'locked')
+      setPublishedState({ key: publishedQueryKey, rows: [...combined.values()], error: null })
+    }).catch((error) => {
+      if (active) setPublishedState({ key: publishedQueryKey, rows: [], error })
+    })
+    return () => { active = false }
+  }, [customerId, hasVmfViewPermission, isPublishedFilter, loadRuntimeInstances, publishedQueryKey, tenantId, workspaceSearch])
   const workspaceSummaryQuery = useListRuntimeInstancesQuery(
     {
       customerId,
@@ -97,8 +145,18 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
       skip: !customerId || !tenantId || !hasVmfViewPermission,
     },
   )
+  const publishedRows = publishedState.key === publishedQueryKey ? publishedState.rows : EMPTY_PUBLISHED_ROWS
+  const publishedCardsPage = useMemo(() => [...publishedRows]
+    .sort((left, right) => {
+      const leftTime = Date.parse(String(left.updatedAt ?? left.updated_at ?? ''))
+      const rightTime = Date.parse(String(right.updatedAt ?? right.updated_at ?? ''))
+      if (!Number.isFinite(leftTime)) return Number.isFinite(rightTime) ? 1 : 0
+      if (!Number.isFinite(rightTime)) return -1
+      return rightTime - leftTime
+    })
+    .slice((currentWorkspacePage - 1) * WORKSPACE_PAGE_SIZE, currentWorkspacePage * WORKSPACE_PAGE_SIZE), [currentWorkspacePage, publishedRows])
   const workspaceCards = useMemo(
-    () => (runtimeListQuery.data?.data ?? [])
+    () => (isPublishedFilter ? publishedCardsPage : runtimeListQuery.data?.data ?? [])
       .map(buildCustomerHomeWorkspaceCard)
       .sort((left, right) => {
         const leftTime = Date.parse(String(left.updatedAt ?? ''))
@@ -107,7 +165,7 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
         if (!Number.isFinite(rightTime)) return -1
         return rightTime - leftTime
       }),
-    [runtimeListQuery.data],
+    [isPublishedFilter, publishedCardsPage, runtimeListQuery.data],
   )
   const allWorkspaceCards = useMemo(
     () => (workspaceSummaryQuery.data?.data ?? [])
@@ -134,12 +192,28 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
     [allWorkspaceCards],
   )
   const totalWorkspaceCount = Number(workspaceSummaryQuery.data?.meta?.total ?? allWorkspaceCards.length)
+  const currentViewWorkspaceCount = isPublishedFilter
+    ? publishedRows.length
+    : Number(runtimeListQuery.data?.meta?.total ?? totalWorkspaceCount)
   const totalWorkspacePages = Math.max(
     1,
-    Number(runtimeListQuery.data?.meta?.totalPages)
-      || Math.ceil(totalWorkspaceCount / WORKSPACE_PAGE_SIZE),
+    isPublishedFilter
+      ? Math.ceil(currentViewWorkspaceCount / WORKSPACE_PAGE_SIZE)
+      : Number(runtimeListQuery.data?.meta?.totalPages) || Math.ceil(currentViewWorkspaceCount / WORKSPACE_PAGE_SIZE),
   )
-  const recentActivities = activityQuery.data?.data ?? []
+  const listIsLoading = isPublishedFilter
+    ? publishedState.key !== publishedQueryKey
+    : runtimeListQuery.isLoading
+  const listError = isPublishedFilter ? publishedState.error : runtimeListQuery.error
+  const recentActivities = useMemo(() => [...(activityQuery.data?.data ?? [])]
+    .sort((left, right) => {
+      const leftTime = Date.parse(String(left.occurredAt ?? ''))
+      const rightTime = Date.parse(String(right.occurredAt ?? ''))
+      if (!Number.isFinite(leftTime)) return Number.isFinite(rightTime) ? 1 : 0
+      if (!Number.isFinite(rightTime)) return -1
+      return rightTime - leftTime
+    })
+    .slice(0, 5), [activityQuery.data])
   const isFilteredWorkspaceView = Boolean(workspaceSearch.trim()) || workspaceFilter !== DEFAULT_WORKSPACE_FILTER
 
   return (
@@ -159,7 +233,11 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
 
       <div className="customer-home__core-layout">
         <div className="customer-home__core-primary">
-          <Advisor card={advisorCard} activeWorkspaceCount={totalWorkspaceCount} />
+          <Advisor
+            card={advisorCard}
+            activeWorkspaceCount={totalWorkspaceCount}
+            reviewItemCount={advisorCard?.reviewItemCount ?? 0}
+          />
 
           <section className="customer-home__section" aria-labelledby="customer-home-workspaces-title">
             <div className="customer-home__section-heading">
@@ -200,9 +278,9 @@ export function CoreHome({ copy, customerId, tenantId, userId, hasVmfViewPermiss
               </div>
             </div>
 
-            {runtimeListQuery.isLoading ? (
+            {listIsLoading ? (
               <div className="customer-home__state" role="status"><Spinner size="lg" /><p>Loading workspace summaries…</p></div>
-            ) : runtimeListQuery.error ? (
+            ) : listError ? (
               <div className="customer-home__state" role="alert"><Status variant="warning" showIcon>Workspace summaries are temporarily unavailable</Status><p>Open Project Workspaces to review the current status.</p></div>
             ) : !tenantId ? (
               <div className="customer-home__state"><Status variant="neutral" size="sm">Choose a workspace</Status><p>Select a workspace before reviewing its summaries.</p></div>

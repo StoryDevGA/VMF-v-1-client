@@ -196,7 +196,13 @@ export const buildCustomerHomeWorkspaceCard = (summary = {}) => {
         : 'Open workspace'
 
   const executionStatus = String(summary.executionStatus ?? '').trim().toUpperCase()
-  const attentionGroup = executionStatus === 'RUNNING' || executionStatus === 'IN_PROGRESS'
+  const isLocked = String(summary.status ?? '').trim().toUpperCase() === 'LOCKED'
+    || String(summary.lockStatus ?? '').trim().toUpperCase() === 'LOCKED'
+    || Boolean(summary.lockedAt)
+  const reviewItemCount = submittedForReview ? 1 : 0
+  const attentionGroup = isLocked
+    ? 'Locked'
+    : executionStatus === 'RUNNING' || executionStatus === 'IN_PROGRESS'
     ? 'StoryLineOS is working on'
     : (!understandingAccepted || businessObjective === 'Not yet recorded')
       ? 'Needs your input'
@@ -217,12 +223,14 @@ export const buildCustomerHomeWorkspaceCard = (summary = {}) => {
     workspaceType: formatWorkspaceTypeLabel(summary),
     currentStage,
     understandingState,
-    understanding: understandingAccepted ? 'Understanding accepted' : (understandingStatus ? 'Review items' : 'Not yet recorded'),
-    evidenceStatus,
-    evidence: evidenceState,
-    nextAction,
+    nextAction: isLocked ? 'Locked · read-only' : nextAction,
     attentionGroup,
-    statusSignal,
+    statusSignal: isLocked ? null : statusSignal,
+    isLocked,
+    reviewItemCount,
+    understanding: isLocked ? 'Locked · read-only' : understandingAccepted ? 'Understanding accepted' : (understandingStatus ? 'Review items' : 'Not yet recorded'),
+    evidence: isLocked ? '' : evidenceState,
+    evidenceStatus: isLocked ? CUSTOMER_WORKSPACE_STATES.EVIDENCE_UNRECORDED : evidenceStatus,
     status: firstText(summary.status),
     runtimeInstanceKey: summary.runtimeInstanceKey ?? null,
     updatedAt: summary.updatedAt ?? summary.updated_at ?? summary.modifiedAt ?? summary.createdAt ?? null,

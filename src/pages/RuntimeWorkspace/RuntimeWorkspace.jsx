@@ -145,13 +145,8 @@ const getRendererPayload = (response) => response?.data ?? null
 
 const getRuntimeWorkspaceBackTarget = (state) => {
   const from = typeof state?.from === 'string' ? state.from.trim() : ''
-  if (
-    from === RUNTIME_WORKSPACE_BACK_FALLBACK
-    || from.startsWith(`${RUNTIME_WORKSPACE_BACK_FALLBACK}?`)
-    || from.startsWith(`${RUNTIME_WORKSPACE_BACK_FALLBACK}#`)
-  ) {
-    return from
-  }
+  const allowedTargets = [RUNTIME_WORKSPACE_BACK_FALLBACK, '/app/dashboard']
+  if (allowedTargets.some((target) => from === target || from.startsWith(`${target}?`) || from.startsWith(`${target}#`))) return from
   return RUNTIME_WORKSPACE_BACK_FALLBACK
 }
 

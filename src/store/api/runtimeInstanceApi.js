@@ -956,6 +956,7 @@ export const {
   useLazyRetrieveRuntimeOutcomeRequestPlanQuery,
   useListAvailableFrameworkPackagesQuery,
   useListRuntimeInstancesQuery,
+  useLazyListRuntimeInstancesQuery,
   useListRuntimeInstanceActivityQuery,
   useCreateRuntimeInstanceMutation,
   useCreateRuntimeRevisionMutation,

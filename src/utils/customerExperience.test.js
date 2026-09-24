@@ -72,6 +72,26 @@ describe('customer home workspace summary adapter', () => {
     expect(buildCustomerHomeWorkspaceCard({ snapshotStatus: 'PACKAGE_BOUND' }).evidence).toBe('Source basis available')
   })
 
+  it('exposes only the bounded submitted-for-review count and makes locked workspaces read-only', () => {
+    expect(buildCustomerHomeWorkspaceCard({ submittedForReview: true })).toMatchObject({ reviewItemCount: 1, isLocked: false })
+    expect(buildCustomerHomeWorkspaceCard({ submittedForReview: false })).toMatchObject({ reviewItemCount: 0, isLocked: false })
+    expect(buildCustomerHomeWorkspaceCard({
+      id: 'locked-1',
+      status: 'LOCKED',
+      lockStatus: 'LOCKED',
+      submittedForReview: true,
+      validationStatus: 'PENDING',
+      readinessState: 'IN_REVIEW',
+    })).toMatchObject({
+      isLocked: true,
+      attentionGroup: 'Locked',
+      nextAction: 'Locked · read-only',
+      understanding: 'Locked · read-only',
+      evidence: '',
+      statusSignal: null,
+    })
+  })
+
   it('does not use a display name as a route identity', () => {
     expect(buildCustomerHomeWorkspaceCard({ name: 'Named workspace' })).toMatchObject({
       id: null,

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MdCheck, MdDescription, MdPriorityHigh, MdSubdirectoryArrowRight } from 'react-icons/md'
+import { useSearchParams } from 'react-router-dom'
 import { Link } from '../../components/Link'
 import { Spinner } from '../../components/Spinner'
 import { Status } from '../../components/Status'
@@ -59,12 +60,22 @@ const isToday = (value) => {
 
 export function CustomerActivity() {
   const { customerId, tenantId } = useTenantContext()
+  const [searchParams] = useSearchParams()
+  const scopedRuntimeId = searchParams.get('runtimeInstanceId') || ''
   const [activeFilter, setActiveFilter] = useState('ALL')
   const { data: response, isLoading, error } = useListRuntimeInstanceActivityQuery(
     { customerId, tenantId, runtimeType: 'VALUE_NARRATIVE', limit: 50 },
     { skip: !customerId || !tenantId },
   )
-  const activities = response?.data ?? EMPTY_ACTIVITY_LIST
+  const activities = useMemo(() => (response?.data ?? EMPTY_ACTIVITY_LIST)
+    .filter((activity) => !scopedRuntimeId || String(activity.runtimeInstanceId ?? activity.runtimeInstanceKey ?? '') === scopedRuntimeId)
+    .sort((left, right) => {
+      const leftTime = Date.parse(String(left.occurredAt ?? ''))
+      const rightTime = Date.parse(String(right.occurredAt ?? ''))
+      if (!Number.isFinite(leftTime)) return Number.isFinite(rightTime) ? 1 : 0
+      if (!Number.isFinite(rightTime)) return -1
+      return rightTime - leftTime
+    }), [response, scopedRuntimeId])
   const visibleActivities = useMemo(
     () => activeFilter === 'ALL'
       ? activities
@@ -78,6 +89,7 @@ export function CustomerActivity() {
   return (
     <main className="customer-centre" aria-labelledby="customer-activity-title">
       <div className="customer-centre__container">
+        <Link to="/app/dashboard" underline="none" className="customer-centre__back customer-centre__back--top">← Back to Customer Home</Link>
         <section className="customer-centre__hero">
           <div>
             <p className="customer-centre__eyebrow">Customer Home</p>
@@ -140,7 +152,7 @@ export function CustomerActivity() {
                     </div>
                     <div className="customer-centre__activity-action">
                       <TableDateTime value={activity.occurredAt} fallback="Time unavailable" className="customer-home__date-time" />
-                      <Link to={openTo} underline="none">Open →</Link>
+                      <Link to={openTo} state={{ from: '/app/dashboard' }} underline="none">Open →</Link>
                     </div>
                   </li>
                 )
@@ -148,8 +160,6 @@ export function CustomerActivity() {
             </ol>
           )}
         </section>
-
-        <Link to="/app/dashboard" underline="none" className="customer-centre__back">← Customer Home</Link>
       </div>
     </main>
   )

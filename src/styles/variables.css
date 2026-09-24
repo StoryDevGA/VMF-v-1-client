@@ -28,7 +28,7 @@
   --control-height-nav: calc(var(--spacing-md) * 2.25);
   --control-size-icon-sm: calc(var(--spacing-md) * 2);
   --field-width-search: calc(var(--spacing-xl) * 7);
-  --layout-core-rail: calc(var(--spacing-xl) * 11);
+  --layout-core-rail: calc(var(--spacing-xl) * 9);
 
   /* ===========================
      TYPOGRAPHY

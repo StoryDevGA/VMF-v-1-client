@@ -14,6 +14,7 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
 vi.mock('../../store/api/runtimeInstanceApi.js', () => ({
   useListRuntimeInstanceActivityQuery: vi.fn(),
   useListRuntimeInstancesQuery: vi.fn(),
+  useLazyListRuntimeInstancesQuery: vi.fn(),
 }))
 
 vi.mock('../../store/api/customerApi.js', () => ({
@@ -24,6 +25,7 @@ import { useAuthorization } from '../../hooks/useAuthorization.js'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import { useListRuntimeInstanceActivityQuery } from '../../store/api/runtimeInstanceApi.js'
 import { useListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
+import { useLazyListRuntimeInstancesQuery } from '../../store/api/runtimeInstanceApi.js'
 import { useGetCustomerCreditsQuery } from '../../store/api/customerApi.js'
 
 const signalScope = {
@@ -38,6 +40,7 @@ const coreScope = {
   entitlementSource: 'LICENSE_LEVEL',
   featureEntitlements: ['VMF', 'DEALS'],
 }
+const lazyTrigger = vi.fn(() => ({ unwrap: async () => ({ data: [], meta: { totalPages: 1 } }) }))
 
 function renderDashboard() {
   return render(
@@ -75,6 +78,8 @@ describe('Dashboard customer home', () => {
     mockContext()
     mockAuthorization()
     useListRuntimeInstancesQuery.mockReturnValue({ data: undefined, isLoading: false, error: null })
+    lazyTrigger.mockClear()
+    useLazyListRuntimeInstancesQuery.mockReturnValue([lazyTrigger])
     useListRuntimeInstanceActivityQuery.mockReturnValue({ data: { data: [] }, isLoading: false, error: null })
     useGetCustomerCreditsQuery.mockReturnValue({
       data: { data: { balances: { websiteAnalysis: 7, documentImprovement: 4 } } },
@@ -136,6 +141,7 @@ describe('Dashboard customer home', () => {
     )
     expect(screen.getByText('Understanding accepted')).toBeInTheDocument()
     expect(screen.getByText('Source basis available')).toBeInTheDocument()
+    expect(screen.getAllByText('No items').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Value Narrative workspace').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
       'href',
@@ -152,6 +158,51 @@ describe('Dashboard customer home', () => {
       }),
       expect.objectContaining({ skip: false }),
     )
+  })
+
+  it('keeps recommendation copy and attention scoped to the recommended workspace', () => {
+    mockAuthorization({ scope: coreScope })
+    useListRuntimeInstancesQuery.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: 'needs-input',
+            name: 'Needs input workspace',
+            runtimeType: 'VALUE_NARRATIVE',
+            frameworkKey: 'VMF',
+            frameworkLifecycleStage: 'DRAFT',
+            validationStatus: 'PENDING',
+            submittedForReview: false,
+            updatedAt: '2026-09-20T12:00:00.000Z',
+          },
+          {
+            id: 'submitted-review',
+            name: 'Submitted review workspace',
+            runtimeType: 'VALUE_NARRATIVE',
+            frameworkKey: 'VMF',
+            frameworkLifecycleStage: 'REVIEW',
+            validationStatus: 'ACCEPTED',
+            readinessState: 'IN_REVIEW',
+            submittedForReview: true,
+            updatedAt: '2026-09-19T12:00:00.000Z',
+          },
+        ],
+        meta: { total: 2 },
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    renderDashboard()
+
+    const recommendation = screen.getByRole('region', { name: 'Continue Needs input workspace' })
+    expect(screen.getByText('Across all 2 workspaces')).toBeInTheDocument()
+    expect(recommendation).toHaveTextContent('This is your most relevant activity across all workspace instances. It is not affected by the Project Workspaces filter below.')
+    expect(recommendation).toHaveTextContent('No items')
+    expect(recommendation).not.toHaveTextContent('1 review item')
+    expect(screen.queryByRole('link', { name: 'View review item' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submitted review workspace', level: 3 }).closest('article'))
+      .toHaveTextContent('1 review item')
   })
 
   it('fails closed when the selected customer scope is missing or unknown', () => {
@@ -204,6 +255,7 @@ describe('Dashboard customer home', () => {
       expect.objectContaining({ q: 'parlon', lifecycleStage: undefined, page: 1, pageSize: 6 }),
       expect.objectContaining({ skip: false }),
     )
+    expect(lazyTrigger).not.toHaveBeenCalled()
   })
 
   it('uses the bounded workspace route when a summary has no route id', () => {
@@ -240,14 +292,53 @@ describe('Dashboard customer home', () => {
 
     const secondRender = renderDashboard()
     expect(screen.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true')
-    expect(useListRuntimeInstancesQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ lifecycleStage: 'PUBLISHED', page: 1, pageSize: 6 }),
-      expect.objectContaining({ skip: false }),
-    )
+    expect(lazyTrigger).toHaveBeenCalledWith(expect.objectContaining({ lifecycleStage: 'PUBLISHED', page: 1, pageSize: 100 }))
 
     secondRender.unmount()
     mockContext({ tenantId: 'tenant-2' })
     renderDashboard()
     expect(screen.getByRole('button', { name: 'Draft' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens recommendation context in a dialog and returns without losing the selected filter', async () => {
+    mockAuthorization({ scope: coreScope })
+    useListRuntimeInstancesQuery.mockReturnValue({ data: { data: [], meta: { total: 0 } }, isLoading: false, error: null })
+
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Published' }))
+    expect(await screen.findByText('No workspaces match this view')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Why this recommendation' }))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText(/does not change when the workspace list filter changes/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '← Back to Customer Home' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('includes Locked instances in Published and suppresses their review and evidence details', async () => {
+    mockAuthorization({ scope: coreScope })
+    useListRuntimeInstancesQuery.mockReturnValue({ data: { data: [], meta: { total: 0 } }, isLoading: false, error: null })
+    lazyTrigger.mockImplementation((args) => ({
+      unwrap: async () => args.status === 'LOCKED'
+        ? { data: [{ id: args.page === 1 ? 'locked-1' : 'locked-2', name: args.page === 1 ? 'Locked instance' : 'Second locked instance', status: 'LOCKED', lockStatus: 'LOCKED', frameworkLifecycleStage: 'PUBLISHED', submittedForReview: true }], meta: { totalPages: 2 } }
+        : { data: [{ id: args.page === 1 ? 'published-1' : 'published-2', name: args.page === 1 ? 'Published instance' : 'Second published instance', status: 'PUBLISHED', frameworkLifecycleStage: 'PUBLISHED', validationStatus: 'ACCEPTED' }], meta: { totalPages: 2 } },
+    }))
+
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Published' }))
+
+    expect(await screen.findByRole('heading', { name: 'Published instance', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Second published instance', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Locked instance', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Second locked instance', level: 3 })).toBeInTheDocument()
+    expect(screen.getAllByText('Locked · read-only').length).toBeGreaterThan(0)
+    expect(screen.queryByText('1 review item')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review & evidence')).not.toBeInTheDocument()
+    expect(lazyTrigger).toHaveBeenCalledWith(expect.objectContaining({ lifecycleStage: 'PUBLISHED', page: 1, pageSize: 100 }))
+    expect(lazyTrigger).toHaveBeenCalledWith(expect.objectContaining({ status: 'LOCKED', page: 1, pageSize: 100 }))
+    expect(lazyTrigger).toHaveBeenCalledWith(expect.objectContaining({ lifecycleStage: 'PUBLISHED', page: 2, pageSize: 100 }))
+    expect(lazyTrigger).toHaveBeenCalledWith(expect.objectContaining({ status: 'LOCKED', page: 2, pageSize: 100 }))
   })
 })
