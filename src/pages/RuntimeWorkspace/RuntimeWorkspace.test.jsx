@@ -7,6 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToasterProvider } from '../../components/Toaster'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
+import AdvisorRecommendation from './AdvisorRecommendation.jsx'
 import {
   useAcceptRuntimeDiscoveryMutation,
   useGetRuntimeDiscoveryContradictionsQuery,
@@ -797,7 +798,7 @@ function VmfRouteProbe() {
   )
 }
 
-function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001') {
+function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001/workbench') {
   const initialEntries = Array.isArray(initialEntry) ? initialEntry : [initialEntry]
   return (
     <ToasterProvider>
@@ -807,6 +808,7 @@ function runtimeWorkspaceTree(initialEntry = '/app/runtime/value-narrative-001')
           <Route path="/app/dashboard" element={<div>Dashboard Route</div>} />
           <Route path="/app/runtime/:runtimeInstanceId/outcome-studio" element={<OutcomeStudioRouteProbe />} />
           <Route path="/app/runtime/:runtimeInstanceId" element={<RuntimeWorkspace />} />
+          <Route path="/app/runtime/:runtimeInstanceId/workbench" element={<RuntimeWorkspace />} />
         </Routes>
       </MemoryRouter>
     </ToasterProvider>
@@ -824,13 +826,13 @@ function OutcomeStudioRouteProbe() {
   )
 }
 
-function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001') {
+function renderRuntimeWorkspace(initialEntry = '/app/runtime/value-narrative-001/workbench') {
   return render(runtimeWorkspaceTree(initialEntry))
 }
 
 function renderInternalOutputLabWorkspace() {
   return renderRuntimeWorkspace({
-    pathname: '/app/runtime/value-narrative-001',
+    pathname: '/app/runtime/value-narrative-001/workbench',
     state: { runtimeWorkspace: { activeWorkspaceKey: 'output_lab' } },
   })
 }
@@ -870,6 +872,480 @@ function buildRuntimeSection(index, label) {
 }
 
 describe('RuntimeWorkspace', () => {
+  it('does not present runtime publication as published Outcome Studio assets', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            revisionNumber: 1,
+            rootRuntimeInstanceKey: 'value-narrative-001',
+            lineage: [{
+              runtimeInstanceId: 'runtime-1',
+              runtimeInstanceKey: 'value-narrative-001',
+              revisionNumber: 1,
+              relationship: 'CURRENT',
+            }],
+          },
+          publish: { state: 'PUBLISHED', published: true },
+          discovery: { discoveryHealth: { readiness: { pendingReviewCount: 0 } } },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const journey = screen.getByRole('list', { name: 'Workspace progress stages' })
+    expect(within(journey).getByRole('link', { name: 'Create: Unavailable' })).toHaveAttribute(
+      'href',
+      '/app/runtime/value-narrative-001/outcome-studio?workspaceRuntimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+    )
+    expect(within(journey).getByRole('link', { name: 'Publish: Unavailable' })).toHaveAttribute(
+      'href',
+      '/app/runtime/value-narrative-001/outcome-studio?workspaceRuntimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+    )
+    expect(within(journey).getByRole('link', { name: /^Review: Unavailable/ })).toHaveAttribute(
+      'href',
+      '/app/intelligence/quality?runtimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+    )
+    expect(within(journey).queryByRole('link', { name: 'Publish: Published' })).not.toBeInTheDocument()
+  })
+
+  it('shows selected workspace identity and only its route-matched current revision', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            revisionNumber: 2,
+            lineage: [{
+              runtimeInstanceId: 'runtime-1',
+              runtimeInstanceKey: 'value-narrative-001',
+              revisionNumber: 2,
+              relationship: 'CURRENT',
+            }],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const selectedContext = screen.getByRole('group', { name: 'Selected workspace context' })
+    expect(selectedContext).toHaveTextContent('Selected Workspace')
+    expect(selectedContext).toHaveTextContent('Acme Value Narrative')
+    expect(selectedContext).toHaveTextContent(/R2\s*·\s*Current/)
+    expect(selectedContext.querySelector('.runtime-workspace__selected-type')).toBeNull()
+  })
+
+  it('returns from the retained workbench to the selected Execution Workspace overview', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001/workbench')
+
+    const returnLink = screen.getByRole('link', { name: 'Back to Execution Workspace' })
+    expect(returnLink).toHaveAttribute('href', '/app/runtime/value-narrative-001')
+    expect(screen.getByRole('note', { name: 'Legacy workspace notice' })).toBeInTheDocument()
+
+    await user.click(returnLink)
+
+    expect(screen.getByRole('heading', { name: 'Execution Workspace' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Runtime workbench' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the Advisor Review Intelligence action available when no recommendation is projected', () => {
+    render(
+      <MemoryRouter>
+        <AdvisorRecommendation
+          workspaceRuntimeInstanceId="workspace-root"
+          selectedRevisionId="selected-revision"
+        />
+      </MemoryRouter>,
+    )
+
+    const reviewIntelligenceLink = screen.getByRole('link', { name: 'Review Intelligence' })
+    expect(reviewIntelligenceLink).toHaveAttribute(
+      'href',
+      '/app/intelligence?runtimeInstanceId=workspace-root&revisionId=selected-revision',
+    )
+  })
+
+  it('carries workspace and revision context to the Advisor recommended destination', () => {
+    render(
+      <MemoryRouter>
+        <AdvisorRecommendation
+          recommendation={{
+            actionHref: '/app/intelligence/quality?view=quality',
+            actionLabel: 'Review intelligence quality',
+          }}
+          workspaceRuntimeInstanceId="workspace-root"
+          selectedRevisionId="selected-revision"
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: /review intelligence quality/i })).toHaveAttribute(
+      'href',
+      '/app/intelligence/quality?view=quality&runtimeInstanceId=workspace-root&revisionId=selected-revision',
+    )
+  })
+
+  it('explains unavailable Intelligence Assurance for the selected workspace revision', async () => {
+    const user = userEvent.setup()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const assuranceButton = screen.getByRole('button', { name: 'Intelligence Assurance Unavailable' })
+    expect(assuranceButton).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(assuranceButton).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(assuranceButton)
+
+    const dialog = screen.getByRole('dialog', { name: 'Intelligence Assurance' })
+    expect(dialog).toHaveTextContent('for Acme Value Narrative.')
+    expect(dialog).toHaveTextContent('does not establish an assurance level')
+    expect(assuranceButton).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Close', exact: true }))
+    expect(screen.queryByRole('dialog', { name: 'Intelligence Assurance' })).not.toBeInTheDocument()
+    expect(assuranceButton).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes Advisor and journey dialogs when revision context changes', async () => {
+    const user = userEvent.setup()
+    const revisionOneRenderer = {
+      ...rendererPayload,
+      revision: {
+        revisionNumber: 1,
+        rootRuntimeInstanceKey: 'value-narrative-001',
+        lineage: [
+          {
+            runtimeInstanceId: 'runtime-1',
+            runtimeInstanceKey: 'value-narrative-001',
+            revisionNumber: 1,
+            relationship: 'CURRENT',
+          },
+          {
+            runtimeInstanceId: 'runtime-2',
+            runtimeInstanceKey: 'value-narrative-001-rev-2',
+            revisionNumber: 2,
+            relationship: 'CHILD',
+          },
+        ],
+      },
+    }
+    const revisionTwoRenderer = {
+      ...rendererPayload,
+      runtimeInstance: {
+        ...rendererPayload.runtimeInstance,
+        id: 'runtime-2',
+        runtimeInstanceKey: 'value-narrative-001-rev-2',
+      },
+      revision: {
+        revisionNumber: 2,
+        rootRuntimeInstanceKey: 'value-narrative-001',
+        lineage: [
+          {
+            runtimeInstanceId: 'runtime-1',
+            runtimeInstanceKey: 'value-narrative-001',
+            revisionNumber: 1,
+            relationship: 'PARENT',
+          },
+          {
+            runtimeInstanceId: 'runtime-2',
+            runtimeInstanceKey: 'value-narrative-001-rev-2',
+            revisionNumber: 2,
+            relationship: 'CURRENT',
+          },
+        ],
+      },
+    }
+    useGetRuntimeRendererQuery.mockImplementation(({ runtimeInstanceId: selectedRuntimeId }) => ({
+      data: {
+        data: selectedRuntimeId === 'value-narrative-001-rev-2'
+          ? revisionTwoRenderer
+          : revisionOneRenderer,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    }))
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    await user.click(screen.getByRole('button', { name: 'Why this recommendation' }))
+    expect(screen.getByRole('dialog', { name: 'Highest-priority action in the selected workspace' }))
+      .toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open revision R2' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open revision R1' })).toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Highest-priority action in the selected workspace' }))
+        .not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'How progress works' }))
+    expect(screen.getByRole('dialog', { name: 'How progress works' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open revision R1' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'How progress works' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('navigates to the adjacent parent revision from the current workspace context', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            contractVersion: 'runtime-revision.v1',
+            revisionNumber: 3,
+            lineage: [
+              {
+                runtimeInstanceId: 'runtime-2',
+                runtimeInstanceKey: 'value-narrative-001-rev-2',
+                revisionNumber: 2,
+                relationship: 'PARENT',
+              },
+              {
+                runtimeInstanceId: 'runtime-1',
+                runtimeInstanceKey: 'value-narrative-001',
+                revisionNumber: 3,
+                relationship: 'CURRENT',
+              },
+              {
+                runtimeInstanceId: 'runtime-4',
+                runtimeInstanceKey: 'value-narrative-001-rev-4',
+                revisionNumber: 4,
+                relationship: 'CHILD',
+              },
+            ],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    expect(screen.getByRole('button', { name: 'Previous revision' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Next revision' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Open revision R2' })).toBeInTheDocument()
+    expect(screen.getByText('R3', { selector: 'strong' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Previous revision' }))
+
+    await waitFor(() => {
+      expect(useGetRuntimeRendererQuery).toHaveBeenLastCalledWith(
+        {
+          runtimeInstanceId: 'value-narrative-001-rev-2',
+          customerId: '507f1f77bcf86cd799439012',
+          tenantId: '507f1f77bcf86cd799439013',
+        },
+        { skip: false },
+      )
+    })
+  })
+
+  it('navigates to the adjacent child revision from the current workspace context', async () => {
+    const user = userEvent.setup()
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            contractVersion: 'runtime-revision.v1',
+            revisionNumber: 3,
+            lineage: [
+              {
+                runtimeInstanceId: 'runtime-1',
+                runtimeInstanceKey: 'value-narrative-001',
+                revisionNumber: 3,
+                relationship: 'CURRENT',
+              },
+              {
+                runtimeInstanceId: 'runtime-4',
+                runtimeInstanceKey: 'value-narrative-001-rev-4',
+                revisionNumber: 4,
+                relationship: 'CHILD',
+              },
+            ],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    await user.click(screen.getByRole('button', { name: 'Next revision' }))
+
+    await waitFor(() => {
+      expect(useGetRuntimeRendererQuery).toHaveBeenLastCalledWith(
+        {
+          runtimeInstanceId: 'value-narrative-001-rev-4',
+          customerId: '507f1f77bcf86cd799439012',
+          tenantId: '507f1f77bcf86cd799439013',
+        },
+        { skip: false },
+      )
+    })
+  })
+
+  it('shows prototype-named workspace area links to the existing placeholder routes', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            revisionNumber: 1,
+            rootRuntimeInstanceKey: 'value-narrative-001',
+            lineage: [{
+              runtimeInstanceId: 'runtime-1',
+              runtimeInstanceKey: 'value-narrative-001',
+              revisionNumber: 1,
+              relationship: 'CURRENT',
+            }],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const workspaceAreas = screen.getByRole('navigation', { name: 'Workspace areas' })
+    const links = within(workspaceAreas).getAllByRole('link')
+    expect(links.map((link) => link.textContent.trim())).toEqual([
+      'Workspace Home',
+      'Intelligence Hub',
+      'Intelligence Quality',
+      'Workspace Structure',
+      'Outcome Studio',
+      'Workbench',
+    ])
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/app/runtime/value-narrative-001',
+      '/app/intelligence?runtimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+      '/app/intelligence/quality?runtimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+      '/app/workspace-structure?runtimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+      '/app/runtime/value-narrative-001/outcome-studio?workspaceRuntimeInstanceId=value-narrative-001&revisionId=value-narrative-001',
+      '/app/runtime/value-narrative-001/workbench',
+    ])
+    expect(links[0]).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('omits current revision context when the current lineage belongs to another runtime', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          revision: {
+            revisionNumber: 9,
+            lineage: [
+              {
+                runtimeInstanceId: 'other-runtime',
+                runtimeInstanceKey: 'other-runtime-key',
+                revisionNumber: 9,
+                relationship: 'CURRENT',
+              },
+              {
+                runtimeInstanceId: 'runtime-1',
+                runtimeInstanceKey: 'value-narrative-001',
+                relationship: 'CURRENT',
+              },
+            ],
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const selectedContext = screen.getByRole('group', { name: 'Selected workspace context' })
+    expect(selectedContext).not.toHaveTextContent('R9')
+    expect(selectedContext).not.toHaveTextContent('Current')
+    expect(screen.getByText('Revision unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous revision' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Next revision' })).toBeDisabled()
+  })
+
+  it('keeps product type in the workspace context metadata rather than the selected-workspace strip', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            runtimeType: undefined,
+          },
+          revision: { lineage: [] },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const selectedContext = screen.getByRole('group', { name: 'Selected workspace context' })
+    expect(selectedContext).toHaveTextContent('Acme Value Narrative')
+    expect(selectedContext.querySelector('.runtime-workspace__selected-type')).toBeNull()
+    expect(screen.getByLabelText('Workspace package metadata')).toHaveTextContent('Runtime type unavailable')
+  })
+
+  it('fails closed when renderer identity does not match the route', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          runtimeInstance: {
+            ...rendererPayload.runtimeInstance,
+            id: 'another-runtime-id',
+            runtimeInstanceKey: 'another-runtime-key',
+            name: 'Another workspace',
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const contextCard = screen.getByRole('heading', { name: 'Execution Workspace' })
+      .closest('.runtime-workspace__context-card')
+    expect(within(contextCard).getByText('Workspace unavailable')).toBeInTheDocument()
+    expect(within(contextCard).getByText('Workspace status unavailable')).toBeInTheDocument()
+    expect(contextCard).not.toHaveTextContent('Another workspace')
+  })
+
   it('loads human review inside Discovery Readiness using the active runtime identity', () => {
     renderRuntimeWorkspace()
     selectIntelligenceHubTab('Coverage')
@@ -1231,7 +1707,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     })
 
@@ -1290,7 +1766,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     })
 
@@ -1306,9 +1782,6 @@ describe('RuntimeWorkspace', () => {
       },
       { skip: false },
     )
-    expect(screen.getByLabelText('Execution progress summary')).toHaveTextContent('1/1')
-    expect(screen.getByLabelText('Execution progress summary')).toHaveTextContent('Generated1/1')
-
     fireEvent.click(screen.getByRole('button', { name: /intelligence hub/i }))
 
     expect(screen.queryByText(
@@ -1344,7 +1817,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     })
 
@@ -1378,7 +1851,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     })
 
@@ -1478,7 +1951,7 @@ describe('RuntimeWorkspace', () => {
     })
 
     renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     })
 
@@ -1519,7 +1992,7 @@ describe('RuntimeWorkspace', () => {
 
   it('preserves the selected section and tab while currentness responses refresh', () => {
     const initialEntry = {
-      pathname: '/app/runtime/value-narrative-001',
+      pathname: '/app/runtime/value-narrative-001/workbench',
       state: { runtimeWorkspace: { activeWorkspaceKey: 'customer_problem' } },
     }
     let bootstrapQuery = {
@@ -1731,34 +2204,7 @@ describe('RuntimeWorkspace', () => {
       { runtimeInstanceId: 'value-narrative-001' },
       { skip: true },
     )
-    const actionBar = screen.getByRole('group', { name: /execution workspace actions/i })
-    const backButton = within(actionBar).getByRole('button', { name: /^back$/i })
-    expect(backButton).toHaveClass('btn--outline', 'btn--sm')
-    expect(screen.getByRole('heading', { name: 'Execution Workspace' })).toBeInTheDocument()
-    expect(screen.getByText('Continue governed runtime work for Acme Value Narrative.')).toBeInTheDocument()
-    const heroMetadata = screen.getByLabelText(/runtime value-narrative-001 metadata/i)
-    expect(within(heroMetadata).getByText('Value Narrative')).toBeInTheDocument()
-    expect(within(heroMetadata).getByText('Draft')).toBeInTheDocument()
-    expect(within(heroMetadata).getByText('Package 2.3.1')).toBeInTheDocument()
-    expect(screen.getByText('VMF Standard / 2.3.1')).toBeInTheDocument()
-    expect(screen.getAllByText('Draft').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Unknown')).toBeInTheDocument()
-    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
-    const summaryItems = within(summary).getAllByRole('listitem')
-    expect(summaryItems).toHaveLength(8)
-    expect(within(summary).getByText('Runtime Status')).toBeInTheDocument()
-    expect(within(summary).getByText('Execution')).toBeInTheDocument()
-    expect(within(summary).getByText('Lifecycle Stage')).toBeInTheDocument()
-    expect(within(summary).getByText('Validation')).toBeInTheDocument()
-    expect(within(summary).getByText('Readiness')).toBeInTheDocument()
-    expect(within(summary).getByText('Publish')).toBeInTheDocument()
-    expect(within(summary).getByText('Lock')).toBeInTheDocument()
-    expect(within(summary).queryByRole('status')).not.toBeInTheDocument()
-    expect(summary.querySelector('dl, dt, dd')).toBeNull()
-    summaryItems.forEach((item) => {
-      expect(item.querySelector('.runtime-workspace__summary-label')).toBeInTheDocument()
-      expect(item.querySelector('.runtime-workspace__summary-value')).toBeInTheDocument()
-    })
+    expect(screen.getByRole('note', { name: 'Legacy workspace notice' })).toBeInTheDocument()
 
     const sections = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(sections).getByRole('heading', { name: /^intelligence hub$/i })).toBeInTheDocument()
@@ -1773,12 +2219,6 @@ describe('RuntimeWorkspace', () => {
     const sectionCard = within(sectionList).getByRole('listitem')
     expect(within(sectionCard).getByText('Required')).toBeInTheDocument()
     expect(within(sectionCard).getByText('Editable')).toBeInTheDocument()
-    const progressSummary = screen.getByLabelText(/execution progress summary/i)
-    expect(within(progressSummary).getByRole('progressbar', { name: /0 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '0')
-    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
-    expect(within(metrics).getByText('Truth ready')).toBeInTheDocument()
-    expect(within(metrics).getAllByText('0/1').length).toBeGreaterThanOrEqual(1)
-    expect(within(metrics).getByText(/1 warning/i)).toBeInTheDocument()
     const sectionObject = screen.getByRole('region', { name: /ownership zones/i })
     expect(sectionObject).toBeInTheDocument()
     expect(within(sectionObject).getByRole('tablist', { name: /customer problem sections/i })).toBeInTheDocument()
@@ -1832,6 +2272,14 @@ describe('RuntimeWorkspace', () => {
     expect(within(intelligencePanel).getByText('Workspace presentation fallback')).toBeInTheDocument()
     expect(within(intelligencePanel).queryByText('UI_CONTRACT_SECTION_MISSING')).not.toBeInTheDocument()
     expect(within(intelligencePanel).getByText('WARNING')).toBeInTheDocument()
+  })
+
+  it.each(['discovery', 'output_lab', 'market'])('skips workbench detail queries on overview with restored %s state', (activeWorkspaceKey) => {
+    renderRuntimeWorkspace({ pathname: '/app/runtime/value-narrative-001', state: { runtimeWorkspace: { activeWorkspaceKey } } })
+    for (const hook of [useGetRuntimeStateSectionSummaryQuery, useGetRuntimeStateEvidenceQuery, useGetRuntimeOutputLabQuery, useGetRuntimeTruthQualityQuery]) {
+      expect(hook).toHaveBeenLastCalledWith(expect.any(Object), expect.objectContaining({ skip: true }))
+    }
+    expect(screen.queryByRole('region', { name: 'Runtime workbench' })).not.toBeInTheDocument()
   })
 
   it('creates a runtime revision from the renderer revision contract', async () => {
@@ -1911,7 +2359,6 @@ describe('RuntimeWorkspace', () => {
 
     expect(screen.getByRole('heading', { name: 'Revision History' })).toBeInTheDocument()
     expect(screen.getByText('Current R1')).toBeInTheDocument()
-
     await user.click(screen.getByRole('button', { name: /create revision/i }))
     const dialog = screen.getByRole('dialog', { name: /create revision/i })
     await user.type(within(dialog).getByLabelText(/revision reason/i), 'Refresh for Q3 launch')
@@ -1983,7 +2430,7 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001/workbench')
 
     const revisionHistory = screen.getByRole('list', { name: /runtime revision history/i })
     expect(within(revisionHistory).getByRole('link', { name: 'Current R1' }))
@@ -1992,7 +2439,7 @@ describe('RuntimeWorkspace', () => {
       .toHaveAttribute('href', '/app/runtime/value-narrative-001-rev-2')
   })
 
-  it('clears revision reason when the create revision dialog is closed', async () => {
+  it.each(['/app/runtime/value-narrative-001', '/app/runtime/value-narrative-001/workbench'])('clears revision reason without mutation on %s', async (route) => {
     const user = userEvent.setup()
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
@@ -2044,16 +2491,17 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+    renderRuntimeWorkspace(route)
 
-    await user.click(screen.getByRole('button', { name: /create revision/i }))
+    await user.click(screen.getByRole('button', { name: route.endsWith('/workbench') ? /create revision/i : /new revision/i }))
     let dialog = screen.getByRole('dialog', { name: /create revision/i })
     await user.type(within(dialog).getByLabelText(/revision reason/i), 'Stale reason')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
-    await user.click(screen.getByRole('button', { name: /create revision/i }))
+    await user.click(screen.getByRole('button', { name: route.endsWith('/workbench') ? /create revision/i : /new revision/i }))
     dialog = screen.getByRole('dialog', { name: /create revision/i })
     expect(within(dialog).getByLabelText(/revision reason/i)).toHaveValue('')
+    expect(createRuntimeRevision).not.toHaveBeenCalled()
   })
 
   it('shows renderer-projected revision disabled reasons', () => {
@@ -2117,7 +2565,7 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /outcome studio/i }))
 
     expect(screen.getByText('Standalone Outcome Studio Route')).toBeInTheDocument()
-    expect(screen.getByText('/app/runtime/value-narrative-001')).toBeInTheDocument()
+    expect(screen.getByText('/app/runtime/value-narrative-001/workbench')).toBeInTheDocument()
     expect(screen.getByText('discovery')).toBeInTheDocument()
   })
 
@@ -2136,7 +2584,7 @@ describe('RuntimeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /outcome studio/i }))
 
     expect(screen.getByText('Standalone Outcome Studio Route')).toBeInTheDocument()
-    expect(screen.getByText('/app/runtime/value-narrative-001')).toBeInTheDocument()
+    expect(screen.getByText('/app/runtime/value-narrative-001/workbench')).toBeInTheDocument()
     expect(screen.getByText('customer_problem')).toBeInTheDocument()
   })
 
@@ -2415,10 +2863,10 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
-    expect(within(progressSummary).getByText('Accepted truth')).toBeInTheDocument()
+    expect(within(progressSummary).getByText('100%')).toBeInTheDocument()
     expect(within(progressSummary).getByRole('progressbar', { name: /1 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '100')
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('1/1')).toBeInTheDocument()
@@ -2472,53 +2920,15 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
     expect(within(progressSummary).getByRole('progressbar', { name: /0 of 1 required sections have accepted truth ready/i })).toHaveAttribute('value', '0')
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
     expect(within(metrics).getByText('0/1')).toBeInTheDocument()
-    expect(within(metrics).getByText('1/1')).toBeInTheDocument()
-  })
-
-  it('returns to the Value Narrative workspace from the Back button', async () => {
-    const user = userEvent.setup()
-
-    renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
-      state: { from: '/app/workspaces/vmf?state=ACTIVE' },
-    })
-
-    await user.click(screen.getByRole('button', { name: /^back$/i }))
-
-    expect(await screen.findByText('VMF Workspace Route')).toBeInTheDocument()
-    expect(screen.getByText('?state=ACTIVE')).toBeInTheDocument()
-    expect(screen.queryByText('Dashboard Route')).not.toBeInTheDocument()
-  })
-
-  it('returns to Customer Home when opened from the Core Home workspace list', async () => {
-    const user = userEvent.setup()
-
-    renderRuntimeWorkspace({
-      pathname: '/app/runtime/value-narrative-001',
-      state: { from: '/app/dashboard' },
-    })
-
-    await user.click(screen.getByRole('button', { name: /^back$/i }))
-
-    expect(await screen.findByText('Dashboard Route')).toBeInTheDocument()
-    expect(screen.queryByText('VMF Workspace Route')).not.toBeInTheDocument()
-  })
-
-  it('falls back to the Value Narrative workspace for direct runtime routes', async () => {
-    const user = userEvent.setup()
-
-    renderRuntimeWorkspace()
-
-    await user.click(screen.getByRole('button', { name: /^back$/i }))
-
-    expect(await screen.findByText('VMF Workspace Route')).toBeInTheDocument()
-    expect(screen.queryByText('Dashboard Route')).not.toBeInTheDocument()
+    expect(within(metrics).getByText('Generated')).toBeInTheDocument()
+    expect(within(metrics).getByText('1')).toBeInTheDocument()
+    expect(within(metrics).queryByText('1/1')).not.toBeInTheDocument()
   })
 
   it('groups repeated runtime warnings into business-safe summaries', async () => {
@@ -5579,7 +5989,7 @@ describe('RuntimeWorkspace', () => {
     expect(acceptance).toHaveTextContent('Accepted on 2026-05-24.')
   })
 
-  it('shows neutral progress when no runtime sections are projected', () => {
+  it('omits accepted-truth progress when no runtime sections are projected', () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -5608,19 +6018,16 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
-    expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
-    expect(within(progressSummary).getByRole('progressbar', { name: /no required section truth to measure/i })).toHaveAttribute('value', '0')
+    expect(within(progressSummary).getAllByText('Unavailable')).toHaveLength(5)
+    expect(within(progressSummary).queryByRole('progressbar')).not.toBeInTheDocument()
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
-    expect(within(metrics).getByText('None')).toBeInTheDocument()
-    expect(within(metrics).getByText('0/0')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^intelligence hub$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /0 intelligence hub evidence not ready/i })).toBeInTheDocument()
+    expect(within(metrics).getAllByText('Unavailable')).toHaveLength(3)
   })
 
-  it('shows neutral progress when projected sections have no required input', async () => {
+  it('omits accepted-truth progress when projected sections have no required input', async () => {
     useGetRuntimeRendererQuery.mockReturnValue({
       data: {
         data: {
@@ -5653,17 +6060,45 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
 
     const progressSummary = screen.getByLabelText(/execution progress summary/i)
-    expect(within(progressSummary).getByText('N/A')).toBeInTheDocument()
-    expect(within(progressSummary).getByRole('progressbar', { name: /no required section truth to measure/i })).toHaveAttribute('value', '0')
+    expect(within(progressSummary).getAllByText('Unavailable')).toHaveLength(4)
+    expect(within(progressSummary).queryByRole('progressbar')).not.toBeInTheDocument()
     const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
-    expect(within(metrics).getByText('None')).toBeInTheDocument()
-    expect(within(metrics).getByText('0/1')).toBeInTheDocument()
-    const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
-    const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
-    expect(within(sectionNav).getByRole('button', { name: /1 customer problem draft/i })).toBeInTheDocument()
+    expect(within(metrics).getByText('0')).toBeInTheDocument()
+    expect(within(metrics).getAllByText('Unavailable')).toHaveLength(2)
+  })
+
+  it('omits accepted-truth percentages for malformed readiness counts', () => {
+    useGetRuntimeRendererQuery.mockReturnValue({
+      data: {
+        data: {
+          ...rendererPayload,
+          readiness: {
+            ...rendererPayload.readiness,
+            sectionTruth: {
+              ...rendererPayload.readiness.sectionTruth,
+              requiredSectionCount: 2,
+              readySectionCount: 3,
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: refetchRenderer,
+    })
+
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
+
+    const progressSummary = screen.getByLabelText(/execution progress summary/i)
+    expect(within(progressSummary).queryByRole('progressbar')).not.toBeInTheDocument()
+    const metrics = within(progressSummary).getByRole('list', { name: /execution workspace metrics/i })
+    expect(within(metrics).getAllByText('Unavailable')).toHaveLength(2)
+    const statusSummary = screen.getByRole('list', { name: 'Workspace status summary' })
+    expect(within(statusSummary).queryByText(/Sections Accepted/)).not.toBeInTheDocument()
   })
 
   it('uses the server-projected action label when buttonLabel is absent', () => {
@@ -5692,7 +6127,7 @@ describe('RuntimeWorkspace', () => {
     expect(within(runtimeActions).getByRole('button', { name: /send to review/i })).toBeEnabled()
   })
 
-  it('shows missing publish and lock projections as unknown', () => {
+  it('omits missing publish and lock projections from the compact workspace status', () => {
     const { publish: _publish, lock: _lock, ...rendererWithoutPublishLock } = rendererPayload
     useGetRuntimeRendererQuery.mockReturnValue({
       data: { data: rendererWithoutPublishLock },
@@ -5702,11 +6137,12 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001')
 
-    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
-    const unknownSummaryValues = within(summary).getAllByText('Unknown')
-    expect(unknownSummaryValues.length).toBeGreaterThanOrEqual(3)
+    const summary = screen.getByRole('list', { name: 'Workspace status summary' })
+    expect(within(summary).getByText('Workspace Active')).toBeInTheDocument()
+    expect(within(summary).getByText('Validation Unknown')).toBeInTheDocument()
+    expect(within(summary).queryByText(/Publish|Lock/)).not.toBeInTheDocument()
   })
 
   it('shows a loading state before the renderer projection arrives', () => {
@@ -7536,7 +7972,6 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub/i })).toHaveAttribute('aria-current', 'step')
@@ -7635,7 +8070,6 @@ describe('RuntimeWorkspace', () => {
       },
     })
     expect(refetchRenderer).toHaveBeenCalled()
-    expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     const sectionNav = within(guidedPanel).getByRole('navigation', { name: /guided section navigation/i })
     expect(within(sectionNav).getByRole('button', { name: /0 intelligence hub/i })).toHaveAttribute('aria-current', 'step')
@@ -8478,7 +8912,7 @@ describe('RuntimeWorkspace', () => {
       refetch: refetchRenderer,
     })
 
-    renderRuntimeWorkspace()
+    renderRuntimeWorkspace('/app/runtime/value-narrative-001/workbench')
 
     const guidedSections = screen.getByRole('main', { name: /guided execution sections/i })
     expect(within(guidedSections).getByText(/locked runtime truth is frozen for inspection/i)).toBeInTheDocument()
@@ -8496,9 +8930,6 @@ describe('RuntimeWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: /customer problem/i }))
 
-    const summary = screen.getByRole('list', { name: /execution workspace summary/i })
-    expect(within(summary).getAllByText('Locked').length).toBeGreaterThanOrEqual(2)
-    expect(within(summary).getByText('Published')).toBeInTheDocument()
     const guidedPanel = screen.getByRole('complementary', { name: /guided sections side panel/i })
     expect(within(guidedPanel).getByRole('heading', { name: /truth quality/i })).toBeInTheDocument()
     expect(within(guidedPanel).getAllByText('Strategic Truth').length).toBeGreaterThanOrEqual(1)

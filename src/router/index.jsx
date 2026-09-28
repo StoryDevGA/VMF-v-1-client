@@ -278,6 +278,14 @@ export const router = createBrowserRouter([
                 ),
               },
               {
+                path: 'runtime/:runtimeInstanceId/workbench',
+                element: (
+                  <CustomerTierRoute requiredTier="CORE">
+                    <RuntimeWorkspace />
+                  </CustomerTierRoute>
+                ),
+              },
+              {
                 path: 'runtime/:runtimeInstanceId/assurance',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">

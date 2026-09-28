@@ -12,7 +12,13 @@ dist
 dist-ssr
 *.local
 public/version.json
-docs/
+/docs/*
+!/docs/help/
+/docs/help/*
+!/docs/help/customer/
+/docs/help/customer/*
+!/docs/help/customer/execution-workspace.md
+!/docs/help/customer/customer-workspace.md
 
 # Environment files
 .env.local

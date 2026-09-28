@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatRuntimeTokenLabel,
   getExecutionStateVariant,
+  getExecutionWorkspaceDestinationHref,
   getRuntimeExecutionState,
   getRuntimeInstanceDisplayId,
   getRuntimeInstanceRouteId,
@@ -16,6 +17,19 @@ import {
 } from './runtimeWorkspace.js'
 
 describe('runtimeWorkspace utilities', () => {
+  it('builds the execution workspace destination contracts with selected context', () => {
+    expect(getExecutionWorkspaceDestinationHref('intelligence', 'workspace-root', 'selected-revision'))
+      .toBe('/app/intelligence?runtimeInstanceId=workspace-root&revisionId=selected-revision')
+    expect(getExecutionWorkspaceDestinationHref('quality', 'workspace-root', 'selected-revision'))
+      .toBe('/app/intelligence/quality?runtimeInstanceId=workspace-root&revisionId=selected-revision')
+    expect(getExecutionWorkspaceDestinationHref('structure', 'workspace-root', 'selected-revision'))
+      .toBe('/app/workspace-structure?runtimeInstanceId=workspace-root&revisionId=selected-revision')
+    expect(getExecutionWorkspaceDestinationHref('outcome-studio', 'workspace-root', 'selected-revision'))
+      .toBe('/app/runtime/selected-revision/outcome-studio?workspaceRuntimeInstanceId=workspace-root&revisionId=selected-revision')
+    expect(getExecutionWorkspaceDestinationHref('outcome-studio', '', 'selected-revision')).toBe('')
+    expect(getExecutionWorkspaceDestinationHref('unknown', 'workspace-root', 'selected-revision')).toBe('')
+  })
+
   it('formats runtime work type prefixes and display labels', () => {
     expect(getRuntimeWorkTypePrefix('VALUE_NARRATIVE')).toBe('VN')
     expect(getRuntimeWorkTypePrefix('deal_analysis')).toBe('DA')

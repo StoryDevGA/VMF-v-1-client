@@ -286,6 +286,11 @@ describe('Router', () => {
       expect(runtimeRoute?.path).toBe('runtime/:runtimeInstanceId')
       expect(runtimeRoute?.element?.props?.requiredSelectedScopePermission).toBeUndefined()
       expect(runtimeRoute?.children).toBeUndefined()
+      const workbenchRoute = customerAppRoute?.children?.find(
+        (route) => route.path === 'runtime/:runtimeInstanceId/workbench',
+      )
+      expect(workbenchRoute?.element?.props?.requiredTier).toBe('CORE')
+      expect(workbenchRoute?.element?.props?.requiredSelectedScopePermission).toBeUndefined()
       const outcomeStudioRoute = customerAppRoute?.children?.find(
         (route) => route.path === 'runtime/:runtimeInstanceId/outcome-studio',
       )

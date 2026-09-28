@@ -116,6 +116,30 @@ export const getOutcomeStudioRoute = (runtimeRecordOrId) => {
     : '/app/workspaces/vmf'
 }
 
+export const getExecutionWorkspaceDestinationHref = (
+  destination,
+  workspaceRuntimeInstanceId,
+  selectedRevisionId,
+) => {
+  const workspaceId = String(workspaceRuntimeInstanceId ?? '').trim()
+  const revisionId = String(selectedRevisionId ?? '').trim()
+  if (!workspaceId || !revisionId) return ''
+
+  const paths = {
+    intelligence: '/app/intelligence',
+    quality: '/app/intelligence/quality',
+    structure: '/app/workspace-structure',
+    'outcome-studio': getOutcomeStudioRoute(revisionId),
+  }
+  const path = paths[destination]
+  if (!path) return ''
+
+  const context = new URLSearchParams()
+  context.set(destination === 'outcome-studio' ? 'workspaceRuntimeInstanceId' : 'runtimeInstanceId', workspaceId)
+  context.set('revisionId', revisionId)
+  return `${path}?${context.toString()}`
+}
+
 export const getOutcomeStudioReturnTarget = (runtimeInstanceId) => (
   getRuntimeWorkspaceRoute(runtimeInstanceId)
 )

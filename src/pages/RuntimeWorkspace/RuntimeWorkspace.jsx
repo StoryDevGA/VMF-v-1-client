@@ -43,6 +43,9 @@ import { TabView } from '../../components/TabView'
 import { Textarea } from '../../components/Textarea'
 import { Tooltip } from '../../components/Tooltip'
 import { useToaster } from '../../components/Toaster'
+import { WorkspaceJourney } from '../../components/WorkspaceJourney/WorkspaceJourney.jsx'
+import { getWorkspaceJourneyReviewSummary } from '../../components/WorkspaceJourney/workspaceJourneyModel.js'
+import { WorkspaceCapabilities } from './WorkspaceCapabilities.jsx'
 import { useTenantContext } from '../../hooks/useTenantContext.js'
 import {
   useAcceptRuntimeDiscoveryMutation,
@@ -78,20 +81,26 @@ import { formatDateOnly, formatDateTimeParts } from '../../utils/dateTime.js'
 import { normalizeError, stripRequestReference } from '../../utils/errors.js'
 import {
   formatRuntimeTokenLabel,
-  getExecutionStateVariant,
-  getRuntimeExecutionState,
+  getExecutionWorkspaceDestinationHref,
   getRuntimeInstanceDisplayId,
-  getRuntimeLifecycleStatus,
   getOutcomeStudioRoute,
   getRuntimeWorkspaceRoute,
   getRuntimeStatusVariant,
 } from '../../utils/runtimeWorkspace.js'
 import './RuntimeWorkspace.css'
 import DiscoveryContradictionReview from './DiscoveryContradictionReview'
+import { AdvisorRecommendation } from './AdvisorRecommendation.jsx'
+import { buildAdvisorRecommendation } from './advisorRecommendationModel.js'
 
 const EMPTY_ARRAY = Object.freeze([])
 const RuntimeGraphPanel = lazy(() => import('../../components/RuntimeGraphPanel'))
 const RUNTIME_WORKSPACE_BACK_FALLBACK = '/app/workspaces/vmf'
+const EXECUTION_WORKSPACE_AREAS = Object.freeze([
+  { label: 'Intelligence Hub', destination: 'intelligence' },
+  { label: 'Intelligence Quality', destination: 'quality' },
+  { label: 'Workspace Structure', destination: 'structure' },
+  { label: 'Outcome Studio', destination: 'outcome-studio' },
+])
 const DISCOVERY_INPUT_LABELS = Object.freeze({
   companyWebsite: 'Company website',
   websiteSources: 'Website sources',
@@ -658,11 +667,6 @@ const getDependencySummary = (dependency) => {
 const getTruthReadinessSummary = (readiness) =>
   readiness?.reason || formatRuntimeTokenLabel(readiness?.state || 'UNKNOWN')
 
-const getSummaryValueClassName = (variant = 'neutral') => [
-  'runtime-workspace__summary-value',
-  variant !== 'neutral' && `runtime-workspace__summary-value--${variant}`,
-].filter(Boolean).join(' ')
-
 const getActionButtonVariant = () => 'outline'
 
 const formatRuntimeIdentifier = (value) => {
@@ -861,22 +865,6 @@ const hasRuntimeValue = (value) => {
   return true
 }
 
-const hasAcceptedSectionTruth = (section) =>
-  hasRuntimeValue(section?.accepted?.content ?? section?.accepted)
-  || section?.intelligence?.ownershipZones?.acceptedTruth?.available === true
-  || section?.intelligence?.compare?.hasAccepted === true
-  || section?.compare?.hasAccepted === true
-
-const hasRequiredSectionProgress = (section) =>
-  section?.intelligence?.readiness?.publishEligible === true
-  || section?.readiness?.publishEligible === true
-  || section?.intelligence?.compare?.currentGeneratedAccepted === true
-  || section?.compare?.currentGeneratedAccepted === true
-  || (
-    hasAcceptedSectionTruth(section)
-    && String(section?.state?.status || '').trim().toUpperCase() === 'ACCEPTED'
-  )
-
 const hasRuntimeStateSummaryAcceptedTruth = (section) => {
   const summary = section?.runtimeStateSummary
   return summary
@@ -885,9 +873,7 @@ const hasRuntimeStateSummaryAcceptedTruth = (section) => {
 }
 
 const toProgressCount = (value) => {
-  const count = Number(value)
-  if (!Number.isFinite(count) || count < 0) return null
-  return Math.floor(count)
+  return Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 
 const stringifyValue = (value) => {
@@ -2160,19 +2146,6 @@ const getSectionDomId = (section, index = 0) => {
     .replace(/^-+|-+$/g, '')
     .toLowerCase()
   return `runtime-section-${rawId || index + 1}`
-}
-
-function RuntimeSummaryTile({
-  label,
-  value,
-  variant = 'neutral',
-}) {
-  return (
-    <li className="runtime-workspace__summary-card">
-      <span className="runtime-workspace__summary-label">{label}</span>
-      <strong className={getSummaryValueClassName(variant)}>{value}</strong>
-    </li>
-  )
 }
 
 function RuntimeValueControl({
@@ -3537,77 +3510,121 @@ function RuntimeActionButton({
 }
 
 function RuntimeProgressSummary({
-  configWarnings = EMPTY_ARRAY,
+  sectionsAvailable = false,
   readiness = null,
   sections = EMPTY_ARRAY,
+  workspaceName = '',
+  revisionNumber = null,
 }) {
+  const [assuranceOpen, setAssuranceOpen] = useState(false)
   const requiredSections = sections.filter((section) => section?.required)
   const sectionTruth = readiness?.sectionTruth || {}
   const serverReadyCount = toProgressCount(sectionTruth.readySectionCount)
   const serverRequiredCount = toProgressCount(sectionTruth.requiredSectionCount)
-  const hasSectionTruthCounts = requiredSections.length > 0
+  const hasSectionTruthCounts = sectionsAvailable
+    && requiredSections.length > 0
     && requiredSections.every((section) => section?.runtimeStateSummary)
-  const hasServerSectionTruthCounts = serverReadyCount !== null && serverRequiredCount !== null
+  const hasServerSectionTruthCounts = serverReadyCount !== null
+    && serverRequiredCount !== null
+    && serverReadyCount <= serverRequiredCount
   const requiredCompleteCount = hasSectionTruthCounts
     ? requiredSections.filter(hasRuntimeStateSummaryAcceptedTruth).length
     : hasServerSectionTruthCounts
-    ? Math.min(serverReadyCount, serverRequiredCount)
-    : requiredSections.filter(hasRequiredSectionProgress).length
+      ? serverReadyCount
+      : null
   const requiredTotal = hasSectionTruthCounts
     ? requiredSections.length
     : hasServerSectionTruthCounts
-    ? serverRequiredCount
-    : requiredSections.length
-  const generatedCount = sections.filter((section) =>
-    hasRuntimeValue(section?.generated?.content ?? section?.generated)
-    || hasRuntimeStateSummaryAcceptedTruth(section),
-  ).length
-  const warningCounts = configWarnings.reduce((acc, warning) => {
-    const severity = normalizeWarningSeverity(warning?.severity)
-    acc[severity] = (acc[severity] || 0) + 1
-    return acc
-  }, {})
-  const hasRequiredTruth = requiredTotal > 0
+      ? serverRequiredCount
+      : null
+  const hasRequiredTruth = requiredCompleteCount !== null
+    && requiredTotal !== null
+    && requiredTotal > 0
+  const generatedCount = sectionsAvailable && sections.length > 0
+    ? sections.filter((section) =>
+        hasRuntimeValue(section?.generated?.content ?? section?.generated)
+        || hasRuntimeStateSummaryAcceptedTruth(section),
+      ).length
+    : null
   const requiredPercent = hasRequiredTruth
     ? Math.round((requiredCompleteCount / requiredTotal) * 100)
-    : 0
-  const requiredPercentLabel = hasRequiredTruth ? `${requiredPercent}%` : 'N/A'
+    : null
+  const requiredPercentLabel = hasRequiredTruth ? `${requiredPercent}%` : 'Unavailable'
   const completionLabel = hasRequiredTruth
     ? `${requiredCompleteCount} of ${requiredTotal} required sections have accepted truth ready`
-    : 'No required section truth to measure'
-  const warningSummary = [
-    warningCounts.BLOCKER ? `${warningCounts.BLOCKER} blocker${warningCounts.BLOCKER === 1 ? '' : 's'}` : '',
-    warningCounts.ERROR ? `${warningCounts.ERROR} error${warningCounts.ERROR === 1 ? '' : 's'}` : '',
-    warningCounts.WARNING ? `${warningCounts.WARNING} warning${warningCounts.WARNING === 1 ? '' : 's'}` : '',
-    warningCounts.INFO ? `${warningCounts.INFO} info` : '',
-  ].filter(Boolean).join(' / ') || 'No workspace warnings'
+    : 'Accepted section truth progress is unavailable'
 
   return (
     <div className="runtime-workspace__progress-summary" aria-label="Execution progress summary">
-      <ProgressBar
-        ariaLabel={completionLabel}
-        className="runtime-workspace__progress-meter"
-        label="Accepted truth"
-        size="sm"
-        value={requiredPercent}
-        valueLabel={requiredPercentLabel}
-      />
+      <div className="runtime-workspace__assurance-summary">
+        <button
+          type="button"
+          className="runtime-workspace__assurance-trigger"
+          aria-haspopup="dialog"
+          aria-expanded={assuranceOpen}
+          onClick={() => setAssuranceOpen(true)}
+        >
+          <span className="runtime-workspace__assurance-mark" aria-hidden="true">?</span>
+          <span className="runtime-workspace__assurance-label">
+            <small>Intelligence Assurance</small>
+            <strong>Unavailable</strong>
+          </span>
+        </button>
+        <strong className="runtime-workspace__understanding-percent">{requiredPercentLabel}</strong>
+      </div>
+      {hasRequiredTruth ? (
+        <ProgressBar
+          ariaLabel={completionLabel}
+          className="runtime-workspace__progress-meter"
+          size="sm"
+          value={requiredPercent}
+        />
+      ) : (
+        <div className="runtime-workspace__progress-unavailable">
+          <span>Accepted truth progress unavailable</span>
+        </div>
+      )}
       <ul className="runtime-workspace__metric-list" aria-label="Execution workspace metrics">
         <li>
-          <span>Truth ready</span>
+          <span>Accepted</span>
           <strong className="runtime-workspace__metric-value runtime-workspace__metric-value--success">
-            {hasRequiredTruth ? `${requiredCompleteCount}/${requiredTotal}` : 'None'}
+            {hasRequiredTruth ? `${requiredCompleteCount}/${requiredTotal}` : 'Unavailable'}
           </strong>
         </li>
         <li>
           <span>Generated</span>
-          <strong className="runtime-workspace__metric-value">{generatedCount}/{sections.length}</strong>
+          <strong className="runtime-workspace__metric-value">
+            {generatedCount !== null ? generatedCount : 'Unavailable'}
+          </strong>
         </li>
-        <li>
-          <span>Warnings</span>
-          <strong className="runtime-workspace__metric-value">{warningSummary}</strong>
+        <li className="runtime-workspace__metric--warning">
+          <span>Review items</span>
+          <strong className="runtime-workspace__metric-value">Unavailable</strong>
         </li>
       </ul>
+      <Dialog
+        open={assuranceOpen}
+        onClose={() => setAssuranceOpen(false)}
+        size="sm"
+        aria-labelledby="runtime-workspace-assurance-title"
+      >
+        <Dialog.Header>
+          <h2 id="runtime-workspace-assurance-title">Intelligence Assurance</h2>
+        </Dialog.Header>
+        <Dialog.Body>
+          <p>
+            An assurance level and its supporting measures are unavailable in the Execution Workspace summary
+            {workspaceName ? ` for ${workspaceName}` : ''}
+            {Number.isSafeInteger(revisionNumber) ? ` · R${revisionNumber}` : ''}.
+          </p>
+          <p>Accepted truth progress describes workspace sections; it does not establish an assurance level.</p>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button type="button" variant="outline" size="sm" onClick={() => setAssuranceOpen(false)}>
+            Close
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
     </div>
   )
 }
@@ -6284,6 +6301,7 @@ function DiscoverySection({
 function RuntimeWorkspace() {
   const navigate = useNavigate()
   const location = useLocation()
+  const isWorkbench = location.pathname.endsWith('/workbench')
   const { runtimeInstanceId = '' } = useParams()
   const { addToast } = useToaster()
   const { customerId, tenantId } = useTenantContext()
@@ -6319,7 +6337,7 @@ function RuntimeWorkspace() {
       ])
       .filter(([normalizedKey, sectionKey]) => normalizedKey && sectionKey),
   )
-  const selectedRuntimeStateSectionKey = isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, DISCOVERY_NAV_KEY)
+  const selectedRuntimeStateSectionKey = !isWorkbench || isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, DISCOVERY_NAV_KEY)
     || isRuntimeWorkspaceKey(normalizedActiveWorkspaceKey, OUTPUT_LAB_NAV_KEY)
     || !runtimeStateSectionKeyByNormalizedKey.has(normalizedActiveWorkspaceKey)
     ? ''
@@ -6337,7 +6355,8 @@ function RuntimeWorkspace() {
       tenantId,
     },
     {
-      skip: !runtimeInstanceId
+      skip: !isWorkbench
+        || !runtimeInstanceId
         || !runtimeStateScopeReady
         || !runtimeStateBootstrapReady
         || !selectedRuntimeStateSectionKey,
@@ -6379,7 +6398,7 @@ function RuntimeWorkspace() {
     refetch: refetchOutputLab,
   } = useGetRuntimeOutputLabQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
+    { skip: !isWorkbench || !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
   )
   const {
     data: truthQualityResponse,
@@ -6388,7 +6407,7 @@ function RuntimeWorkspace() {
     error: truthQualityQueryError,
   } = useGetRuntimeTruthQualityQuery(
     { runtimeInstanceId },
-    { skip: !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
+    { skip: !isWorkbench || !runtimeInstanceId || !isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY) },
   )
   const [mutateRuntimeState] = useMutateRuntimeStateMutation()
   const [createRuntimeOutputRequest, { isLoading: isCreatingOutputRequest }] = useCreateRuntimeOutputRequestMutation()
@@ -6536,13 +6555,14 @@ function RuntimeWorkspace() {
       tenantId,
     },
     {
-      skip: !runtimeInstanceId
+      skip: !isWorkbench
+        || !runtimeInstanceId
         || !runtimeStateScopeReady
         || activeWorkspaceKey !== DISCOVERY_NAV_KEY,
     },
   )
   const runtimeStateEvidencePagePayload = getRuntimeStateEvidencePagePayload(runtimeStateEvidenceResponse)
-  const runtimeStateEvidenceEnabled = activeWorkspaceKey === DISCOVERY_NAV_KEY
+  const runtimeStateEvidenceEnabled = isWorkbench && activeWorkspaceKey === DISCOVERY_NAV_KEY
   const runtimeStateEvidenceLoading = runtimeStateEvidenceEnabled
     && (isLoadingRuntimeStateEvidence || isFetchingRuntimeStateEvidence)
   const evidenceDetail = runtimeStateEvidencePagePayload
@@ -6593,25 +6613,102 @@ function RuntimeWorkspace() {
     }
   }, [pendingRuntimeAction?.actionKey, pendingRuntimeActionConfig, pendingRuntimeActionEnabled])
 
-  const runtimeStatus = getRuntimeLifecycleStatus(runtimeInstance)
-  const executionState = getRuntimeExecutionState(runtimeInstance)
   const runtimeDisplayId = getRuntimeInstanceDisplayId(
     runtimeInstance,
     runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE',
   )
   const runtimeHeaderContext = String(runtimeInstance?.name ?? '').trim() || runtimeDisplayId || 'this runtime'
-  const packageName = String(renderer?.package?.packageName ?? runtimeInstance?.packageName ?? '').trim()
-  const packageKey = String(renderer?.package?.packageKey ?? runtimeInstance?.packageKey ?? '').trim()
-  const packageVersion = String(renderer?.package?.frameworkVersion ?? runtimeInstance?.packageVersion ?? '').trim()
-  const packageSummary = [packageName || packageKey, packageVersion].filter(Boolean).join(' / ') || '--'
+  const routeRuntimeId = String(runtimeInstanceId ?? '').trim()
+  const rendererRuntimeIds = [
+    renderer?.runtimeInstance?.id,
+    renderer?.runtimeInstance?.runtimeInstanceId,
+    renderer?.runtimeInstance?.runtimeInstanceKey,
+    renderer?.runtimeInstance?.key,
+  ].map((value) => String(value ?? '').trim()).filter(Boolean)
+  const contextRenderer = routeRuntimeId && rendererRuntimeIds.includes(routeRuntimeId) ? renderer : null
+  const contextRuntimeInstance = contextRenderer?.runtimeInstance ?? null
+  const contextPackageName = String(
+    contextRenderer?.package?.packageName ?? contextRuntimeInstance?.packageName ?? '',
+  ).trim()
+  const contextPackageKey = String(
+    contextRenderer?.package?.packageKey ?? contextRuntimeInstance?.packageKey ?? '',
+  ).trim()
+  const contextPackageVersion = String(
+    contextRenderer?.package?.frameworkVersion ?? contextRuntimeInstance?.packageVersion ?? '',
+  ).trim()
+  const contextRuntimeType = String(contextRuntimeInstance?.runtimeType ?? '').trim()
+  const contextSections = contextRenderer && !runtimeStateComposition.error
+    ? composedSections
+    : EMPTY_ARRAY
+  const contextSectionsAvailable = Boolean(contextRenderer)
+    && !runtimeStateComposition.error
+    && contextSections.length > 0
+  const contextReadiness = contextRenderer?.readiness ?? null
+  const contextSectionTruth = contextReadiness?.sectionTruth ?? null
+  const contextRequiredSections = contextSections.filter((section) => section?.required)
+  const hasContextSectionSummaries = contextSectionsAvailable
+    && contextRequiredSections.length > 0
+    && contextRequiredSections.every((section) => section?.runtimeStateSummary)
+  const contextReadyCount = hasContextSectionSummaries
+    ? contextRequiredSections.filter(hasRuntimeStateSummaryAcceptedTruth).length
+    : toProgressCount(contextSectionTruth?.readySectionCount)
+  const contextRequiredCount = hasContextSectionSummaries
+    ? contextRequiredSections.length
+    : toProgressCount(contextSectionTruth?.requiredSectionCount)
+  const hasContextSectionCounts = contextReadyCount !== null
+    && contextRequiredCount !== null
+    && contextRequiredCount > 0
+    && contextReadyCount <= contextRequiredCount
+  const contextDiscovery = getDiscoveryProjection(contextRenderer)
+  const explicitContextEvidenceState = String(
+    contextDiscovery?.state?.status ?? contextDiscovery?.status ?? '',
+  ).trim()
+  const contextEvidenceState = contextDiscovery?.accepted === true
+    ? 'ACCEPTED'
+    : contextDiscovery?.accepted === false && !explicitContextEvidenceState
+      ? 'NOT_ACCEPTED'
+      : explicitContextEvidenceState
+  const contextStatusItems = [
+    contextRuntimeInstance?.status || contextRenderer?.lifecycle?.runtimeStatus
+      ? {
+          key: 'workspace',
+          label: `Workspace ${formatRuntimeTokenLabel(
+            contextRuntimeInstance?.status ?? contextRenderer?.lifecycle?.runtimeStatus,
+          )}`,
+          variant: getRuntimeStatusVariant(
+            contextRuntimeInstance?.status ?? contextRenderer?.lifecycle?.runtimeStatus,
+          ),
+        }
+      : null,
+    contextRenderer?.validation?.state
+      ? {
+          key: 'validation',
+          label: `Validation ${formatRuntimeTokenLabel(contextRenderer.validation.state)}`,
+          variant: getTokenStatusVariant(contextRenderer.validation.state),
+        }
+      : null,
+    contextEvidenceState
+      ? {
+          key: 'evidence',
+          label: `Evidence ${formatRuntimeTokenLabel(contextEvidenceState)}`,
+          variant: contextEvidenceState === 'ACCEPTED'
+            ? 'success'
+            : getTokenStatusVariant(contextEvidenceState),
+        }
+      : null,
+    hasContextSectionCounts
+      ? {
+          key: 'sections',
+          label: `${contextReadyCount} Sections Accepted`,
+          variant: contextReadyCount === contextRequiredCount ? 'success' : 'neutral',
+        }
+      : null,
+  ].filter(Boolean)
   const validationState = renderer?.validation?.state ?? 'UNKNOWN'
   const actionGateStatus = getRuntimeActionGateStatus(validationState)
-  const readinessState = renderer?.readiness?.state ?? 'DRAFT'
   const sectionTruthState = isRuntimeLockedForInspection
     ? 'SECTION_TRUTH_LOCKED'
     : renderer?.readiness?.sectionTruth?.state ?? 'SECTION_TRUTH_NOT_CONFIGURED'
-  const publishState = renderer?.publish?.state ?? 'UNKNOWN'
-  const lockState = renderer?.lock?.state ?? 'UNKNOWN'
   const publishSnapshot = renderer?.publish?.snapshot || {}
   const lockSnapshot = renderer?.lock?.snapshot || {}
   const replayAnchor = renderer?.lock?.replayAnchor || renderer?.lock?.anchor || {}
@@ -6619,10 +6716,136 @@ function RuntimeWorkspace() {
   const revisionProjection = renderer?.revision || {}
   const createRevisionProjection = revisionProjection?.createRevision || {}
   const revisionLineage = Array.isArray(revisionProjection?.lineage) ? revisionProjection.lineage : EMPTY_ARRAY
+  const selectedCurrentRevision = revisionLineage.find((item) => {
+    const relationship = String(item?.relationship ?? '').trim().toUpperCase()
+    const matchesRoute = Boolean(routeRuntimeId) && [item?.runtimeInstanceId, item?.runtimeInstanceKey]
+      .some((value) => String(value ?? '').trim() === routeRuntimeId)
+    const revisionNumber = item?.revisionNumber
+    return relationship === 'CURRENT'
+      && matchesRoute
+      && Number.isSafeInteger(revisionNumber)
+      && revisionNumber > 0
+  }) || null
   const createRevisionDisabledReason = String(createRevisionProjection.disabledReason || '').trim()
   const canCreateRevision = Boolean(createRevisionProjection.enabled)
   const createRevisionExpectedUpdatedAt = createRevisionProjection.expectedUpdatedAt || runtimeInstance?.updatedAt || ''
   const hasRevisionContract = Boolean(revisionProjection?.contractVersion)
+  const contextRevisionLineage = Array.isArray(contextRenderer?.revision?.lineage)
+    ? contextRenderer.revision.lineage
+    : EMPTY_ARRAY
+  const contextCurrentRevisionRows = contextRevisionLineage.filter((item) => {
+    const relationship = String(item?.relationship ?? '').trim().toUpperCase()
+    const matchesRoute = Boolean(routeRuntimeId) && [item?.runtimeInstanceId, item?.runtimeInstanceKey]
+      .some((value) => String(value ?? '').trim() === routeRuntimeId)
+    return relationship === 'CURRENT'
+      && matchesRoute
+      && Number.isSafeInteger(item?.revisionNumber)
+      && item.revisionNumber > 0
+  })
+  const contextCurrentRevision = contextCurrentRevisionRows.length === 1
+    ? contextCurrentRevisionRows[0]
+    : null
+  const workspaceRuntimeInstanceId = String(
+    contextRenderer?.revision?.rootRuntimeInstanceKey
+      ?? contextRenderer?.revision?.rootRuntimeId
+      ?? '',
+  ).trim()
+  const selectedRevisionId = String(
+    contextCurrentRevision?.runtimeInstanceKey
+      ?? contextCurrentRevision?.runtimeInstanceId
+      ?? '',
+  ).trim()
+  const selectedWorkspaceContextKey = JSON.stringify([
+    customerId,
+    tenantId,
+    workspaceRuntimeInstanceId,
+    selectedRevisionId,
+  ])
+  const contextDiscoveryHealth = contextDiscovery?.discoveryHealth
+    && typeof contextDiscovery.discoveryHealth === 'object'
+    && !Array.isArray(contextDiscovery.discoveryHealth)
+    ? contextDiscovery.discoveryHealth
+    : {}
+  const advisorRecommendation = buildAdvisorRecommendation({
+    discoveryHealth: contextDiscoveryHealth,
+    acceptedSectionCount: contextReadyCount,
+    requiredSectionCount: contextRequiredCount,
+    requiredSections: contextRequiredSections,
+  })
+  const journeyReview = getWorkspaceJourneyReviewSummary(contextDiscovery)
+  const journeyAcquireStatus = contextDiscovery?.evidenceReady === true || contextDiscovery?.accepted === true
+    ? 'Complete'
+    : typeof contextDiscovery?.evidenceReady === 'boolean' || typeof contextDiscovery?.accepted === 'boolean'
+      ? 'Not ready'
+      : 'Unavailable'
+  const workspaceJourneyItems = [
+    {
+      key: 'acquire',
+      label: 'Acquire',
+      status: journeyAcquireStatus,
+      state: journeyAcquireStatus === 'Complete' ? 'complete' : journeyAcquireStatus === 'Not ready' ? 'attention' : 'unknown',
+      description: 'Gather and process customer context and source material.',
+      to: getExecutionWorkspaceDestinationHref('intelligence', workspaceRuntimeInstanceId, selectedRevisionId),
+    },
+    {
+      key: 'review',
+      label: 'Review',
+      status: journeyReview.status,
+      detail: journeyReview.detail,
+      state: journeyReview.state,
+      description: 'Inspect provenance and resolve evidence or quality findings.',
+      to: getExecutionWorkspaceDestinationHref('quality', workspaceRuntimeInstanceId, selectedRevisionId),
+    },
+    {
+      key: 'understand',
+      label: 'Understand',
+      status: contextReadyCount !== null && contextRequiredCount !== null
+        ? contextReadyCount + ' of ' + contextRequiredCount + ' accepted'
+        : 'Unavailable',
+      state: contextReadyCount === null || contextRequiredCount === null
+        ? 'unknown'
+        : contextReadyCount === contextRequiredCount
+          ? 'complete'
+          : contextReadyCount > 0 ? 'active' : 'attention',
+      description: 'Generate, review and accept framework-defined business understanding.',
+      to: getExecutionWorkspaceDestinationHref('structure', workspaceRuntimeInstanceId, selectedRevisionId),
+    },
+    {
+      key: 'create',
+      label: 'Create',
+      status: 'Unavailable',
+      state: 'unknown',
+      description: 'Produce customer outcomes using the governed workspace context.',
+      to: getExecutionWorkspaceDestinationHref('outcome-studio', workspaceRuntimeInstanceId, selectedRevisionId),
+    },
+    {
+      key: 'publish',
+      label: 'Publish',
+      status: 'Unavailable',
+      state: 'unknown',
+      description: 'Approve and publish controlled customer-ready assets.',
+      to: getExecutionWorkspaceDestinationHref('outcome-studio', workspaceRuntimeInstanceId, selectedRevisionId),
+    },
+  ]
+  const getContextAdjacentRevision = (relationship, expectedNumber) => {
+    if (!contextCurrentRevision) return null
+    const rows = contextRevisionLineage.filter((item) => {
+      const routeId = String(item?.runtimeInstanceKey || item?.runtimeInstanceId || '').trim()
+      return String(item?.relationship ?? '').trim().toUpperCase() === relationship
+        && Number.isSafeInteger(item?.revisionNumber)
+        && item.revisionNumber === expectedNumber
+        && Boolean(routeId)
+        && routeId !== routeRuntimeId
+    })
+    return rows.length === 1 ? rows[0] : null
+  }
+  const contextPreviousRevision = contextCurrentRevision
+    ? getContextAdjacentRevision('PARENT', contextCurrentRevision.revisionNumber - 1)
+    : null
+  const contextNextRevision = contextCurrentRevision
+    ? getContextAdjacentRevision('CHILD', contextCurrentRevision.revisionNumber + 1)
+    : null
+  const contextCanCreateRevision = Boolean(contextRenderer?.revision?.createRevision?.enabled)
   const hasRuntimeActionCommands = sidePanelActions.length > 0 || hasRevisionContract
   const hasCertifiedTruthState = Boolean(
     renderer?.publish?.published
@@ -6637,59 +6860,6 @@ function RuntimeWorkspace() {
     || truthQualityLoading
     || truthQualityError,
   )
-  const summaryItems = [
-    {
-      key: 'runtime-status',
-      label: 'Runtime Status',
-      value: formatRuntimeTokenLabel(runtimeStatus),
-      variant: getRuntimeStatusVariant(runtimeStatus),
-    },
-    {
-      key: 'execution',
-      label: 'Execution',
-      value: formatRuntimeTokenLabel(executionState),
-      variant: getExecutionStateVariant(executionState),
-    },
-    {
-      key: 'lifecycle-stage',
-      label: 'Lifecycle Stage',
-      value: formatRuntimeTokenLabel(renderer?.lifecycle?.stage ?? 'DRAFT'),
-    },
-    {
-      key: 'validation',
-      label: 'Validation',
-      value: formatRuntimeTokenLabel(validationState),
-      variant: getTokenStatusVariant(validationState),
-    },
-    {
-      key: 'readiness',
-      label: 'Readiness',
-      value: formatRuntimeTokenLabel(readinessState),
-      variant: getTokenStatusVariant(readinessState),
-    },
-    {
-      key: 'publish',
-      label: 'Publish',
-      value: formatRuntimeTokenLabel(publishState),
-      variant: getTokenStatusVariant(publishState),
-    },
-    {
-      key: 'lock',
-      label: 'Lock',
-      value: formatRuntimeTokenLabel(lockState),
-      variant: getTokenStatusVariant(lockState),
-    },
-    {
-      key: 'package',
-      label: 'Package',
-      value: packageSummary,
-    },
-  ]
-  const heroMetaItems = [
-    formatRuntimeTokenLabel(runtimeInstance?.runtimeType ?? 'VALUE_NARRATIVE'),
-    formatRuntimeTokenLabel(renderer?.lifecycle?.stage ?? 'DRAFT'),
-    packageVersion ? `Package ${packageVersion}` : packageName || packageKey,
-  ].filter(Boolean)
   const matchedActiveSectionIndex = sections.findIndex((section) =>
     normalizeRuntimeStateSectionKey(section?.sectionKey || section?.key)
       === normalizedActiveWorkspaceKey,
@@ -6717,7 +6887,7 @@ function RuntimeWorkspace() {
   }, [normalizedActiveWorkspaceKey, runtimeStateRefreshInFlight, sections, workspaceLoading])
 
   useEffect(() => {
-    if (hasAutoSelectedInitialSection.current) return
+    if (!isWorkbench || hasAutoSelectedInitialSection.current) return
     if (isRuntimeWorkspaceKey(activeWorkspaceKey, OUTPUT_LAB_NAV_KEY)) return
     if (activeWorkspaceKey !== DISCOVERY_NAV_KEY) {
       hasAutoSelectedInitialSection.current = true
@@ -6729,7 +6899,7 @@ function RuntimeWorkspace() {
       hasAutoSelectedInitialSection.current = true
       setActiveWorkspaceKey(firstSectionKey)
     }
-  }, [activeWorkspaceKey, discovery?.accepted, discoveryState, sections])
+  }, [activeWorkspaceKey, discovery?.accepted, discoveryState, isWorkbench, sections])
 
   useEffect(() => {
     if (selectedOutputTypeKey) return
@@ -7649,58 +7819,300 @@ function RuntimeWorkspace() {
   }
 
   return (
-    <section className="runtime-workspace container" aria-label="Execution workspace">
-      <header className="runtime-workspace__page-header">
-        <div className="runtime-workspace__page-copy">
-          <h1 className="runtime-workspace__page-title">
-            Execution Workspace
-          </h1>
-          <p className="runtime-workspace__page-description">
-            Continue governed runtime work for {runtimeHeaderContext}.
-          </p>
-        </div>
-        <div
-          className="runtime-workspace__actions"
-          role="group"
-          aria-label="Execution workspace actions"
-        >
-          <Button type="button" variant="outline" size="sm" onClick={handleBack}>
-            Back
-          </Button>
-          {isFetching ? (
-            <Status variant="info" size="sm" showIcon>Refreshing</Status>
-          ) : null}
-        </div>
-      </header>
-
-      <Card variant="default" className="runtime-workspace__hero">
-        <Card.Body className="runtime-workspace__hero-body">
-          <div className="runtime-workspace__hero-copy">
-            {heroMetaItems.length > 0 ? (
-              <ul className="runtime-workspace__hero-meta" aria-label={`Runtime ${runtimeDisplayId} metadata`}>
-                {heroMetaItems.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+    <>
+      {!isWorkbench ? (
+        <>
+      <div className="runtime-workspace__selected-bar">
+        <div className="runtime-workspace__selected-bar-inner container">
+          <div
+            className="runtime-workspace__selected-context"
+            role="group"
+            aria-label="Selected workspace context"
+          >
+            <span className="runtime-workspace__selected-label">Selected Workspace</span>
+            <span className="runtime-workspace__selected-name">{runtimeHeaderContext}</span>
+            {selectedCurrentRevision ? (
+              <span className="runtime-workspace__selected-revision">
+                {`R${selectedCurrentRevision.revisionNumber} · Current`}
+              </span>
             ) : null}
-            <RuntimeProgressSummary
-              sections={sections}
-              readiness={renderer?.readiness}
-              configWarnings={configWarnings}
-            />
           </div>
-          <ul className="runtime-workspace__summary-grid" aria-label="Execution workspace summary">
-            {summaryItems.map((item) => (
-              <RuntimeSummaryTile
-                key={item.key}
-                label={item.label}
-                value={item.value}
-                variant={item.variant}
+          <nav className="runtime-workspace__areas" aria-label="Workspace areas">
+            <Link
+              to={getRuntimeWorkspaceRoute(runtimeInstanceId)}
+              variant="subtle"
+              underline="none"
+              className={`runtime-workspace__area-link${isWorkbench ? '' : ' runtime-workspace__area-link--current'}`}
+              aria-current={isWorkbench ? undefined : 'page'}
+            >
+              Workspace Home
+            </Link>
+            {EXECUTION_WORKSPACE_AREAS.map(({ label, destination }) => {
+              const href = getExecutionWorkspaceDestinationHref(
+                destination,
+                workspaceRuntimeInstanceId,
+                selectedRevisionId,
+              )
+              return href ? (
+                <Link
+                  key={label}
+                  to={href}
+                  variant="subtle"
+                  underline="none"
+                  className="runtime-workspace__area-link"
+                >
+                  {label}
+                </Link>
+              ) : (
+                <span
+                  key={label}
+                  className="runtime-workspace__area-link"
+                  aria-disabled="true"
+                >
+                  {label}
+                </span>
+              )
+            })}
+            <Link
+              to={`${getRuntimeWorkspaceRoute(runtimeInstanceId)}/workbench`}
+              variant="subtle"
+              underline="none"
+              className={`runtime-workspace__area-link${isWorkbench ? ' runtime-workspace__area-link--current' : ''}`}
+              aria-current={isWorkbench ? 'page' : undefined}
+            >
+              Workbench
+            </Link>
+          </nav>
+        </div>
+      </div>
+      {isWorkbench ? (
+        <div className="runtime-workspace__workbench-return container">
+          <Link to={getRuntimeWorkspaceRoute(runtimeInstanceId)} variant="subtle">
+            Back to Execution Workspace
+          </Link>
+        </div>
+      ) : null}
+      <Card variant="default" className="runtime-workspace__context-card" aria-label="Execution Workspace context">
+        <Card.Body className="runtime-workspace__context-body">
+          <div className="runtime-workspace__context-grid">
+            <section className="runtime-workspace__context-column runtime-workspace__context-identity">
+              <h1 className="runtime-workspace__context-title">Execution Workspace</h1>
+              <p className="runtime-workspace__context-name">
+                {String(contextRuntimeInstance?.name ?? '').trim() || 'Workspace unavailable'}
+              </p>
+              <p className="runtime-workspace__context-metadata" aria-label="Workspace package metadata">
+                {contextRuntimeType ? formatRuntimeTokenLabel(contextRuntimeType) : 'Runtime type unavailable'}
+                <span aria-hidden="true"> • </span>
+                {contextPackageVersion
+                  ? `Package ${contextPackageVersion}`
+                  : contextPackageName || contextPackageKey || 'Package unavailable'}
+              </p>
+              {!isWorkbench && runtimeInstanceId ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  className="runtime-workspace__dev-intelligence-link"
+                  onClick={() => navigate(`${getRuntimeWorkspaceRoute(runtimeInstanceId)}/workbench`)}
+                >
+                  Dev · Intelligence Hub
+                </Button>
+              ) : null}
+            </section>
+
+            <section className="runtime-workspace__context-column runtime-workspace__context-revisions">
+              <h2 className="runtime-workspace__context-heading">Revision Navigation</h2>
+              <nav className="runtime-workspace__revision-navigation" aria-label="Revision navigation">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  iconOnly
+                  leftIcon={<MdArrowBack aria-hidden="true" />}
+                  aria-label="Previous revision"
+                  disabled={!contextPreviousRevision}
+                  onClick={() => {
+                    const targetId = String(
+                      contextPreviousRevision?.runtimeInstanceKey
+                        || contextPreviousRevision?.runtimeInstanceId
+                        || '',
+                    ).trim()
+                    if (targetId) {
+                      navigate(getRuntimeWorkspaceRoute(targetId), { state: { from: location.pathname } })
+                    }
+                  }}
+                />
+                <div className="runtime-workspace__revision-options">
+                  {contextPreviousRevision ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="runtime-workspace__revision-option"
+                      aria-label={`Open revision R${contextPreviousRevision.revisionNumber}`}
+                      onClick={() => {
+                        const targetId = String(
+                          contextPreviousRevision.runtimeInstanceKey || contextPreviousRevision.runtimeInstanceId,
+                        ).trim()
+                        navigate(getRuntimeWorkspaceRoute(targetId), { state: { from: location.pathname } })
+                      }}
+                    >
+                      <strong>{`R${contextPreviousRevision.revisionNumber}`}</strong>
+                      <span>Date unavailable</span>
+                    </Button>
+                  ) : null}
+                  {contextCurrentRevision ? (
+                    <span className="runtime-workspace__revision-current" aria-current="page">
+                      <strong>{`R${contextCurrentRevision.revisionNumber}`}</strong>
+                      <span>Current</span>
+                    </span>
+                  ) : (
+                    <span className="runtime-workspace__revision-current runtime-workspace__revision-current--unavailable">
+                      <span>Revision unavailable</span>
+                    </span>
+                  )}
+                  {contextNextRevision ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="runtime-workspace__revision-option"
+                      aria-label={`Open revision R${contextNextRevision.revisionNumber}`}
+                      onClick={() => {
+                        const targetId = String(
+                          contextNextRevision.runtimeInstanceKey || contextNextRevision.runtimeInstanceId,
+                        ).trim()
+                        navigate(getRuntimeWorkspaceRoute(targetId), { state: { from: location.pathname } })
+                      }}
+                    >
+                      <strong>{`R${contextNextRevision.revisionNumber}`}</strong>
+                      <span>Date unavailable</span>
+                    </Button>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  iconOnly
+                  rightIcon={<MdArrowForward aria-hidden="true" />}
+                  aria-label="Next revision"
+                  disabled={!contextNextRevision}
+                  onClick={() => {
+                    const targetId = String(
+                      contextNextRevision?.runtimeInstanceKey
+                        || contextNextRevision?.runtimeInstanceId
+                        || '',
+                    ).trim()
+                    if (targetId) {
+                      navigate(getRuntimeWorkspaceRoute(targetId), { state: { from: location.pathname } })
+                    }
+                  }}
+                />
+              </nav>
+              <div className="runtime-workspace__revision-footer">
+                <p className="runtime-workspace__revision-summary">
+                  <span>
+                    {contextCurrentRevision
+                      ? [
+                          `R${contextCurrentRevision.revisionNumber}`,
+                          contextCurrentRevision.lifecycleStage || contextCurrentRevision.status
+                            ? formatRuntimeTokenLabel(contextCurrentRevision.lifecycleStage || contextCurrentRevision.status)
+                            : 'Current',
+                        ].join(' · ')
+                      : 'Current revision unavailable'}
+                  </span>
+                  <span>Revision date and author unavailable</span>
+                </p>
+                {contextRenderer?.revision?.contractVersion ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<MdAdd aria-hidden="true" />}
+                    disabled={!contextCanCreateRevision}
+                    loading={isCreatingRuntimeRevision}
+                    onClick={handleOpenRevisionDialog}
+                  >
+                    New Revision
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="runtime-workspace__context-column runtime-workspace__context-status" aria-labelledby="runtime-workspace-context-status-heading">
+              <h2 id="runtime-workspace-context-status-heading" className="runtime-workspace__context-heading">
+                Workspace Status
+              </h2>
+              {contextStatusItems.length > 0 ? (
+                <ul className="runtime-workspace__context-status-list" aria-label="Workspace status summary">
+                  {contextStatusItems.map((item) => (
+                    <li key={item.key}>
+                      <Status variant={item.variant} size="sm" showIcon announce={false}>
+                        {item.label}
+                      </Status>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Status variant="neutral" size="sm" announce={false}>Workspace status unavailable</Status>
+              )}
+              <p className="runtime-workspace__context-note">Authoritative workspace health.</p>
+            </section>
+
+            <section className="runtime-workspace__context-column runtime-workspace__context-understanding" aria-labelledby="runtime-workspace-context-understanding-heading">
+              <h2 id="runtime-workspace-context-understanding-heading" className="runtime-workspace__context-heading">
+                Understanding Ready
+              </h2>
+              <RuntimeProgressSummary
+                key={`${selectedWorkspaceContextKey}:understanding`}
+                sections={contextSections}
+                sectionsAvailable={contextSectionsAvailable}
+                readiness={contextReadiness}
+                workspaceName={String(contextRuntimeInstance?.name ?? '').trim()}
+                revisionNumber={contextCurrentRevision?.revisionNumber}
               />
-            ))}
-          </ul>
+            </section>
+          </div>
         </Card.Body>
       </Card>
+
+      <div className="runtime-workspace__experience-flow">
+        <AdvisorRecommendation
+          key={`${selectedWorkspaceContextKey}:advisor`}
+          recommendation={advisorRecommendation}
+          workspaceName={String(contextRuntimeInstance?.name ?? '').trim()}
+          revisionLabel={contextCurrentRevision
+            ? 'R' + contextCurrentRevision.revisionNumber + ' only'
+            : 'Revision unavailable'}
+          workspaceRuntimeInstanceId={workspaceRuntimeInstanceId}
+          selectedRevisionId={selectedRevisionId}
+        />
+        <WorkspaceJourney key={`${selectedWorkspaceContextKey}:journey`} items={workspaceJourneyItems} />
+      </div>
+
+      <WorkspaceCapabilities
+        discovery={contextDiscovery}
+        discoveryHealth={contextDiscoveryHealth}
+        evidenceDetail={isWorkbench ? runtimeStateEvidencePagePayload : null}
+        sections={contextSections}
+        sectionsAvailable={contextSectionsAvailable}
+        loading={workspaceLoading && !appError}
+        workspaceRuntimeInstanceId={workspaceRuntimeInstanceId}
+        selectedRevisionId={selectedRevisionId}
+      />
+        </>
+      ) : null}
+
+      {isWorkbench ? <div className="runtime-workspace__legacy-surface">
+        <div className="runtime-workspace__legacy-notice container" role="note" aria-label="Legacy workspace notice">
+          <Status variant="warning" size="sm" showIcon announce={false}>Original workspace view</Status>
+          <p>This existing workspace is retained temporarily while the new Execution Workspace pages are being introduced.</p>
+          <Link to={getRuntimeWorkspaceRoute(runtimeInstanceId)} className="runtime-workspace__legacy-return">
+            Back to Execution Workspace
+          </Link>
+        </div>
+        <section className="runtime-workspace container" aria-label="Runtime workbench">
 
       <Card variant="default" className="runtime-workspace__action-panel">
         <Card.Body className="runtime-workspace__action-panel-body">
@@ -8185,6 +8597,8 @@ function RuntimeWorkspace() {
         onCancel={handleCancelRuntimeActionConfirmation}
         onConfirm={handleConfirmRuntimeAction}
       />
+        </section>
+      </div> : null}
       <Dialog
         open={revisionDialogOpen}
         onClose={handleCloseRevisionDialog}
@@ -8245,7 +8659,7 @@ function RuntimeWorkspace() {
           </div>
         </Dialog.Footer>
       </Dialog>
-    </section>
+    </>
   )
 }
 
