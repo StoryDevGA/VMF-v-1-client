@@ -1815,6 +1815,28 @@ describe('OutcomeStudioWorkspace', () => {
     expect(generateResponse).not.toHaveBeenCalled()
   })
 
+  it('shows complete current inventory without clearing contradictions or enabling generation', async () => {
+    const user = userEvent.setup(), saved = savedPlan()
+    saved.plan.evidenceToMeaning = { status: 'CLARIFICATION_REQUIRED', sectionLedger: [],
+      clarification: { required: true, firstBoundary: 'sourceSnapshot.SECTION_REFERENCE_UNRESOLVED', errors: [{ code: 'INTEGRITY_INVALID' }] } }
+    saved.plan.currentSnapshotReadiness = { completeness: 'COMPLETE', totalEvidenceCount: 853, projectedEvidenceCount: 56, diagnosticOnly: true }
+    saved.execution = { status: 'BLOCKED', canExecute: false }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: { ...session,
+      requestPlan: { requestId: saved.requestId, planId: saved.plan.planId } } }, isLoading: false, error: null, refetch: refetchSession })
+    retrievePlan.mockReturnValue(resolvedMutation({ data: saved }))
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    const region = await screen.findByRole('region', { name: 'Evidence readiness' })
+    expect(region).toHaveTextContent('Complete. 853 evidence records inventoried; 56 records')
+    expect(region).toHaveTextContent('Snapshot completeness does not establish section sufficiency')
+    expect(region).toHaveTextContent('does not replace the saved plan receipt')
+    expect(region).toHaveTextContent('Some governed section references do not resolve')
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(planRequest).not.toHaveBeenCalled()
+    expect(confirmPlan).not.toHaveBeenCalled()
+    assertNoExecution()
+  })
+
   it('retrieves the existing session plan after remount without creating another request or executing', async () => {
     const user = userEvent.setup(), saved = savedPlan()
     saved.plan.evidenceToMeaning = { status: 'CLARIFICATION_REQUIRED', sectionLedger: [],

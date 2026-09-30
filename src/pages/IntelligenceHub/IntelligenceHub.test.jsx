@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -34,6 +34,10 @@ let missingSummaryEvidence = false
 let conflictingStatusCounts = false
 let additionalUnclassifiedEvidence = false
 let emptyEvidenceTotal = false
+let sourcePageFixture
+let sourcePageError = false
+let sourcePageMissing = false
+let sourceCurrentPending = false
 vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: () => ({ customerId: 'customer-1', tenantId: 'tenant-1' }),
 }))
@@ -45,6 +49,9 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   } : { ...renderer, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
   useGetRuntimeStateEvidenceQuery: (...args) => {
     calls.evidence(...args)
+    if (args[0].pageSize === 25 && sourcePageError) return { data: sourcePageFixture ? { data: sourcePageFixture } : undefined, error: { status: 503 }, isLoading: false }
+    if (args[0].pageSize === 25 && sourcePageMissing) return { isLoading: false }
+    if (args[0].pageSize === 25 && sourcePageFixture) return { data: { data: typeof sourcePageFixture === 'function' ? sourcePageFixture(args[0]) : sourcePageFixture }, isLoading: false }
     if (missingSummaryEvidence && args[0].pageSize === 1) return {
       error: { data: { error: { code: 'RUNTIME_STATE_V2_EVIDENCE_MISSING' } } }, isLoading: false,
     }
@@ -110,12 +117,12 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
       ? { data: { ...renderer, runtimeInstance: { ...renderer.runtimeInstance, id: 'revision-3' }, revision: {
         ...renderer.revision, revisionNumber: 3, lineage: [{ runtimeInstanceId: 'revision-3', relationship: 'CURRENT' }],
       } } }
-      : detailPending ? undefined : result.data
+      : detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && args[0].pageSize === 25 && sourceCurrentPending) ? undefined : result.data
     return {
       ...result,
       data: initialOverviewPending && detailPending ? undefined : result.data,
       currentData,
-      isFetching: detailPending || (name === 'useGetRuntimeRendererQuery' && (rendererRefreshing || pendingRendererContext)),
+      isFetching: detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && args[0].pageSize === 25 && sourceCurrentPending) || (name === 'useGetRuntimeRendererQuery' && (rendererRefreshing || pendingRendererContext)),
       refetch: () => calls.refresh(name, args[0]),
     }
   }]))
@@ -139,6 +146,10 @@ describe('Intelligence Hub', () => {
   beforeEach(() => {
     contextInputs = undefined
     cachedContextRevision = false
+    sourcePageFixture = undefined
+    sourcePageError = false
+    sourcePageMissing = false
+    sourceCurrentPending = false
     emptyFilteredReview = false
     missingSummaryEvidence = false
     conflictingStatusCounts = false
@@ -243,6 +254,193 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Acme')).toBeInTheDocument()
     expect(screen.getByText('Loading Context evidence counts…')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '↻ Refresh' })).toBeDisabled()
+  })
+
+  const sourceFixture = () => ({
+    sourceRegistry: [
+      { sourceId: 'web', sourceType: 'WEBSITE', label: 'Customer website', sourceRef: 'https://acme.example/', url: 'https://acme.example/', acquisitionStatus: 'CAPTURED', lineageRef: 'input.companyWebsite', stateVersion: 'version-2' },
+      { sourceId: 'doc', sourceType: 'UPLOADED_DOCUMENT', label: 'Report.pdf', sourceRef: 'Report.pdf', fileName: 'Report.pdf', acquisitionStatus: 'ACQUIRED', lineageRef: 'batch-doc-1', stateVersion: 'version-2' },
+      { sourceId: 'note', sourceType: 'DISCOVERY_NOTES', label: 'Company name', acquisitionStatus: 'CAPTURED' },
+    ],
+    evidenceObjects: [
+      { evidenceObjectId: 'one', sourceId: 'web', extractedFact: 'Website discusses observability.', reviewStatus: 'ACCEPTED', acceptanceState: 'ACCEPTED', lineageRef: 'web:first' },
+      { evidenceObjectId: 'two', sourceId: 'doc', title: 'Market research', extractedFact: 'Specialised infrastructure demand.', reviewStatus: 'PENDING', acceptanceState: 'CANDIDATE', lineageRef: 'doc:second' },
+    ], total: 2, page: 1, pageSize: 25, totalPages: 2,
+  })
+
+  it('searches evidence text and titles on the current source page and keeps filters page-local', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const registry = within(screen.getByLabelText('Page-local source registry'))
+    const search = screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })
+    await user.type(search, 'infrastructure')
+    expect(registry.getByRole('button', { name: /Report.pdf/ })).toBeInTheDocument()
+    expect(registry.queryByRole('button', { name: /Customer website/ })).not.toBeInTheDocument()
+    await user.clear(search)
+    await user.type(search, 'Market research')
+    expect(registry.getByRole('button', { name: /Report.pdf/ })).toBeInTheDocument()
+    await user.clear(search)
+    await user.click(registry.getByRole('button', { name: 'Website', exact: true }))
+    expect(registry.getByRole('button', { name: /Customer website/ })).toBeInTheDocument()
+    expect(registry.queryByRole('button', { name: /Report.pdf/ })).not.toBeInTheDocument()
+    await user.click(registry.getByRole('button', { name: 'All', exact: true }))
+    expect(registry.getByRole('button', { name: /Company name/ })).toBeInTheDocument()
+    await user.type(search, 'absent')
+    expect(screen.getByText('No sources match on this page.')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('0 matching sources on this page.')
+  })
+
+  it('includes section-uploaded documents in the Document filter', async () => {
+    sourcePageFixture = sourceFixture()
+    sourcePageFixture.sourceRegistry[1].sourceType = 'SECTION_UPLOADED_DOCUMENT'
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const registry = within(screen.getByLabelText('Page-local source registry'))
+    await user.click(registry.getByRole('button', { name: 'Document', exact: true }))
+    await user.click(registry.getByRole('button', { name: /Report.pdf/ }))
+    expect(screen.getByText('Document source · Acquired')).toBeInTheDocument()
+    expect(registry.queryByRole('button', { name: /Company name/ })).not.toBeInTheDocument()
+  })
+
+  it('shows only matching evidence across sources and restores detail when cleared or selected', async () => {
+    sourcePageFixture = sourceFixture()
+    sourcePageFixture.evidenceObjects.push(
+      { evidenceObjectId: 'three', sourceId: 'web', extractedFact: 'Infrastructure growth.', reviewStatus: 'ACCEPTED' },
+      { evidenceObjectId: 'four', sourceId: 'doc', extractedFact: 'Unrelated fact.', reviewStatus: 'ACCEPTED' },
+    )
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const search = screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })
+    const detail = within(screen.getByLabelText('Source evidence'))
+    const registry = within(screen.getByLabelText('Page-local source registry'))
+    await user.type(search, 'infrastructure')
+    expect(detail.getByRole('heading', { name: 'Evidence matching “infrastructure”' })).toBeInTheDocument()
+    expect(detail.getByText('2 matching evidence objects across sources on this page')).toBeInTheDocument()
+    expect(detail.queryByText('Unrelated fact.')).not.toBeInTheDocument()
+    expect(detail.queryByText('Website discusses observability.')).not.toBeInTheDocument()
+    await user.click(detail.getByRole('button', { name: /Report.pdf Inspect recorded lineage/ }))
+    expect(within(screen.getByRole('dialog')).getByText('batch-doc-1')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(registry.getByRole('button', { name: 'Document', exact: true }))
+    expect(detail.getByText('1 matching evidence objects across sources on this page')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(search).toHaveFocus()
+    expect(detail.getByRole('heading', { name: 'Report.pdf' })).toBeInTheDocument()
+    expect(detail.getByText('Unrelated fact.')).toBeInTheDocument()
+    await user.type(search, 'Report.pdf')
+    expect(detail.getByText('2 matching evidence objects across sources on this page')).toBeInTheDocument()
+    await user.click(registry.getByRole('button', { name: /Report.pdf/ }))
+    expect(search).toHaveValue('')
+    expect(detail.getByRole('heading', { name: 'Report.pdf' })).toBeInTheDocument()
+  })
+
+  it('keeps unrecognized source types under All without inventing an input classification', async () => {
+    sourcePageFixture = sourceFixture()
+    sourcePageFixture.sourceRegistry[2].sourceType = 'FUTURE_SOURCE_TYPE'
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const registry = within(screen.getByLabelText('Page-local source registry'))
+    await user.click(registry.getByRole('button', { name: /Company name/ }))
+    expect(screen.getByText('Unknown source · Captured')).toBeInTheDocument()
+    await user.click(registry.getByRole('button', { name: 'Document', exact: true }))
+    expect(registry.queryByRole('button', { name: /Company name/ })).not.toBeInTheDocument()
+    await user.click(registry.getByRole('button', { name: 'All', exact: true }))
+    expect(registry.getByRole('button', { name: /Company name/ })).toBeInTheDocument()
+  })
+
+  it('retains the selected source across its provenance explanation and exposes actual states', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const registry = within(screen.getByLabelText('Page-local source registry'))
+    const selected = registry.getByRole('button', { name: /Report.pdf/ })
+    await user.click(selected)
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
+    const detail = within(screen.getByLabelText('Source evidence'))
+    expect(detail.getByText('Pending')).toBeInTheDocument()
+    await user.click(detail.getByRole('button', { name: /Inspect recorded lineage/ }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('batch-doc-1')
+    expect(screen.getByRole('dialog')).toHaveTextContent('doc:second')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Candidate')
+    await user.keyboard('{Escape}')
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
+    expect(detail.getByRole('button', { name: /Inspect recorded lineage/ })).toHaveFocus()
+  })
+
+  it('renders every bounded linked evidence object without inventing classifications', () => {
+    sourcePageFixture = { ...sourceFixture(), evidenceObjects: Array.from({ length: 6 }, (_, index) => ({ evidenceObjectId: `e-${index}`, sourceId: 'web', extractedFact: `Fact ${index}`, reviewStatus: 'ACCEPTED' })), total: 6 }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    const detail = within(screen.getByLabelText('Source evidence'))
+    expect(detail.getAllByRole('article')).toHaveLength(6)
+    expect(detail.getByText('Fact 5')).toBeInTheDocument()
+    expect(detail.getAllByText('Evidence classification unavailable')).toHaveLength(6)
+  })
+
+  it('clears prior page rows while current data is pending instead of presenting stale details', () => {
+    sourcePageFixture = sourceFixture()
+    sourceCurrentPending = true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    expect(screen.queryByText('Report.pdf')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading sources…')).toBeInTheDocument()
+    expect(screen.getByText('Loading selected-source evidence…')).toBeInTheDocument()
+  })
+
+  it('shows a source read failure separately from an empty successful page', () => {
+    sourcePageError = true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    expect(screen.getByRole('alert')).toHaveTextContent('Sources could not be loaded.')
+    expect(screen.queryByText('No sources are linked to this evidence page.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Source summary')).toHaveTextContent('UnavailableSources on page')
+  })
+
+  it.each(['failed refresh', 'missing read'])('does not announce zero search results for a %s', async (state) => {
+    sourcePageFixture = sourceFixture()
+    sourcePageError = state === 'failed refresh'
+    sourcePageMissing = state === 'missing read'
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    await user.type(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' }), 'report')
+    expect(screen.getByLabelText('Source summary')).toHaveTextContent('UnavailableSources on page')
+    expect(within(screen.getByLabelText('Page-local source registry')).getByText('Unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    const results = screen.getByRole('region', { name: 'Evidence search results' })
+    expect(results).toHaveAttribute('tabindex', '0')
+    expect(results).toHaveTextContent(state === 'failed refresh' ? 'Matching evidence could not be loaded.' : 'Matching evidence is unavailable.')
+    expect(screen.queryByText('0 matching evidence objects across sources on this page')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Source registry results' })).toHaveAttribute('tabindex', '0')
+  })
+
+  it('resets Sources page and search before querying a new cached revision', async () => {
+    sourcePageFixture = (args) => ({ ...sourceFixture(), sourceRegistry: [{ sourceId: 'web', sourceType: 'WEBSITE', label: args.runtimeInstanceId === 'revision-3' ? 'Current website' : 'Previous website' }], totalPages: args.runtimeInstanceId === 'revision-3' ? 1 : 2 })
+    cachedContextRevision = true
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="sources" />} /></Routes></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Next page', exact: true }))
+    expect(within(screen.getByLabelText('Page-local source registry')).getByText('Page 2 of 2')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' }), 'previous')
+    calls.evidence.mockClear()
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })).toHaveValue('')
+    expect(screen.getByText('1 shown · 1 on page 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Current website' })).toBeInTheDocument()
+    expect(calls.evidence.mock.calls.filter(([query]) => query.pageSize === 25).every(([query]) => query.runtimeInstanceId === 'revision-3' && query.page === 1)).toBe(true)
+    expect(screen.queryByText('Page 2 of 1')).not.toBeInTheDocument()
+  })
+
+  it('refreshes four scoped Sources reads and keeps processing report informational', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=sources')
+    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    expect(calls.refresh).toHaveBeenCalledTimes(4)
+    expect(calls.refresh.mock.calls.every(([, query]) => query.runtimeInstanceId === 'revision-2' && query.customerId === 'customer-1' && query.tenantId === 'tenant-1')).toBe(true)
+    expect(calls.refresh.mock.calls.filter(([, query]) => query.pageSize === 25)).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'View processing report', exact: true }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('downloadable logs are unavailable')
+    expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back to Sources' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('refreshes all six bounded Overview reads for the selected revision', async () => {

@@ -364,69 +364,124 @@ function EvidencePagination({ evidencePage, page, setPage, isLoading }) {
   </div> : null
 }
 
-function SourcesView({ discovery, evidencePage, isLoading, onOpen, onSelectView, page, setPage, workbenchHref }) {
+const getSourceLabel = (source) => source.label || source.url || source.sourceFileName || source.fileName || source.sourceRef || 'Unnamed source'
+const getSourceKind = (source) => {
+  const type = String(source.sourceType || '').toUpperCase()
+  if (type === 'WEBSITE' || type === 'URL') return 'Website'
+  if (['UPLOADED_DOCUMENT', 'SECTION_UPLOADED_DOCUMENT', 'DOCUMENT'].includes(type)) return 'Document'
+  if (type === 'DISCOVERY_NOTES') return 'Input'
+  return 'Unknown'
+}
+const getSourceStatus = (source) => displayHubToken(source.acquisitionStatus || source.documentStatus || source.status)
+
+function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, countsLoading, onOpen, onSelectView, page, setPage }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [selectedSourceId, setSelectedSourceId] = useState('')
-  const sources = Array.isArray(evidencePage?.sourceRegistry) ? evidencePage.sourceRegistry : []
+  const searchRef = useRef(null)
+  const sources = !isLoading && !error && Array.isArray(evidencePage?.sourceRegistry) ? evidencePage.sourceRegistry : []
+  const evidence = !isLoading && !error && Array.isArray(evidencePage?.evidenceObjects) ? evidencePage.evidenceObjects : []
+  const pageAvailable = !error && Boolean(evidencePage)
+  const query = search.trim().toLowerCase()
+  const linkedEvidence = (source) => evidence.filter((item) => item.sourceId === source.sourceId)
+  const sourceMatches = (source) => [getSourceLabel(source), source.url, source.fileName, source.sourceRef, source.sourceType].filter(Boolean).join(' ').toLowerCase().includes(query)
+  const evidenceMatches = (item) => [item.title, item.summary, item.extractedFact].filter(Boolean).join(' ').toLowerCase().includes(query)
   const filtered = sources.filter((source) => {
-    const kind = String(source?.sourceType || '').toUpperCase()
-    const isWebsite = kind.includes('WEB') || kind === 'URL' || /^https?:/i.test(String(source?.url || ''))
-    const isDocument = !isWebsite && (kind.includes('DOCUMENT') || Boolean(source?.sourceFileName || source?.fileName))
-    const matchesFilter = filter === 'All' || (filter === 'Website' ? isWebsite : isDocument)
-    const label = String(source?.label || source?.url || source?.sourceFileName || source?.fileName || source?.sourceId || '')
-    return matchesFilter && label.toLowerCase().includes(search.toLowerCase())
+    const matchesFilter = filter === 'All' || filter === getSourceKind(source)
+    return matchesFilter && (sourceMatches(source) || linkedEvidence(source).some(evidenceMatches))
   })
-  const selected = filtered.find((source) => source.sourceId === selectedSourceId) || filtered[0] || null
-  const selectedEvidence = selected
-    ? (Array.isArray(evidencePage?.evidenceObjects) ? evidencePage.evidenceObjects : []).filter((item) => item.sourceId === selected.sourceId)
-    : []
-  const totalEvidence = getHubCount(evidencePage, 'total')
-  return <>
-    <div className="intelligence-hub__view-intro">
-      <div><p className="intelligence-hub__eyebrow">Source provenance</p><h2>Confirm sources and processing</h2>
-        <p>Inspect source provenance and trace evidence to its source.</p></div>
-      <BoundaryLink to={workbenchHref} note={null}>＋ Add evidence in workbench →</BoundaryLink>
-    </div>
-    <div className="intelligence-hub__metrics intelligence-hub__metrics--four intelligence-hub__metrics--compact" aria-label="Source summary">
-      <Metric label="Total sources" value={displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))} hint="Source registry" onOpen={onOpen} detail="A revision-wide source total is unavailable when the source summary is not exposed." />
-      <Metric label="Processed" value={displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'processedCount'))} hint="Processing status" onOpen={onOpen} detail="Processing totals are shown only when an authoritative summary is available." />
-      <Metric label="Evidence objects" value={displayHubCount(totalEvidence)} hint="Revision total" onOpen={onOpen} detail="Count from the bounded selected-revision evidence page receipt." />
-      <Metric label="Require review" value={displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'pendingReviewCount'))} hint="Human review" onOpen={onOpen} detail="Missing review totals are unavailable, never assumed to be zero." />
-    </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__source-layout">
-      <Panel title="Source registry" eyebrow={`${sources.length} sources linked to page ${page}${totalEvidence === null ? '' : ` · ${displayHubCount(totalEvidence)} evidence objects in revision`}`}>
-        <label className="intelligence-hub__search">Search sources on this page<input value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-        <div className="intelligence-hub__filters" role="group" aria-label="Source type filters">
-          {['All', 'Website', 'Document'].map((item) => <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} aria-pressed={filter === item} onClick={() => setFilter(item)}>{item}</Button>)}
-        </div>
-        {isLoading ? <p role="status">Loading sources…</p> : filtered.length ? <ul className="intelligence-hub__list intelligence-hub__source-list">
-          {filtered.map((source, index) => <li key={source.sourceId || index}><button type="button" aria-pressed={selected?.sourceId === source.sourceId}
-            onClick={() => setSelectedSourceId(source.sourceId || '')}>
-            <strong>{source.label || source.url || source.sourceFileName || source.fileName || 'Unnamed source'}</strong>
-            <span>{displayHubToken(source.sourceType)} · {displayHubToken(source.acquisitionStatus || source.documentStatus || source.status)}</span>
-          </button></li>)}
-        </ul> : <p className="intelligence-hub__muted">{evidencePage ? 'No sources match on this page.' : 'Bounded source detail is unavailable.'}</p>}
-        <EvidencePagination evidencePage={evidencePage} page={page} setPage={setPage} isLoading={isLoading} />
-      </Panel>
-      <Panel title="Selected source" eyebrow={selected ? displayHubToken(selected.acquisitionStatus || selected.documentStatus || selected.status) : 'No source selected'}>
-        {selected ? <>
-          <h3>{selected.label || selected.url || selected.sourceFileName || selected.fileName || 'Source detail'}</h3>
-          <dl className="intelligence-hub__facts">
-            <div><dt>Type</dt><dd>{displayHubToken(selected.sourceType)}</dd></div>
-            <div><dt>Processing</dt><dd>{displayHubToken(selected.acquisitionStatus || selected.documentStatus || selected.status)}</dd></div>
-            <div><dt>Evidence linked on this page</dt><dd>{displayHubCount(selectedEvidence.length)}</dd></div>
-          </dl>
-          {selectedEvidence.length ? <ul className="intelligence-hub__related-evidence">{selectedEvidence.slice(0, 4).map((item, index) => <li key={item.evidenceObjectId || index}>
-            <strong>{displayHubToken(item.coverageArea || item.domain || item.sectionKey)}</strong><span>{item.extractedFact || item.summary || 'Evidence detail unavailable'}</span>
-          </li>)}</ul> : <p className="intelligence-hub__muted">No matching evidence objects are present in this bounded page.</p>}
-          <DetailButton onOpen={onOpen} title="Source provenance" body="Source details are limited to the selected page. The complete Source Registry is outside the page-local Sources scope accepted for this sprint.">About this source view →</DetailButton>
-        </> : <p className="intelligence-hub__muted">Select a source from the current evidence page to inspect its available provenance.</p>}
-        <Button size="sm" variant="ghost" onClick={() => onSelectView('Review')}>Continue to Review →</Button>
-        <BoundaryLink to={workbenchHref}>Open source workbench →</BoundaryLink>
-      </Panel>
-    </div>
+  const eligibleSources = sources.filter((source) => filter === 'All' || filter === getSourceKind(source))
+  const selected = eligibleSources.find((source) => source.sourceId === selectedSourceId) || eligibleSources[0] || null
+  const selectedEvidence = selected ? linkedEvidence(selected) : []
+  const resultIds = new Set()
+  const matchingEvidence = evidence.flatMap((item) => {
+    const source = filtered.find((candidate) => candidate.sourceId === item.sourceId)
+    const id = item.evidenceObjectId || item.id
+    if (!source || !(sourceMatches(source) || evidenceMatches(item)) || resultIds.has(id)) return []
+    resultIds.add(id)
+    return [{ item, source }]
+  })
+  const displayedEvidence = query ? matchingEvidence : selectedEvidence.map((item) => ({ item, source: selected }))
+  const totalEvidence = error || evidencePage?.totalCapped ? null : getHubCount(evidencePage, 'total')
+  const summaryValue = (count) => countsLoading ? 'Loading…' : displayHubCount(count)
+  const sourceMessage = isLoading ? 'Loading sources…' : error ? 'Sources could not be loaded. Refresh to retry.'
+    : !evidencePage ? 'Bounded source detail is unavailable.' : sources.length ? 'No sources match on this page.' : 'No sources are linked to this evidence page.'
+  const sourceFacts = (source, item) => <>
+    <p>This provenance belongs to the selected revision and the current evidence page. Inspecting it does not accept evidence or change the source.</p>
+    <dl className="intelligence-hub__facts">
+      {Object.entries({ Source: getSourceLabel(source), Type: displayHubToken(source.sourceType), 'Acquisition status': getSourceStatus(source),
+        Reference: source.sourceRef || source.url || source.fileName || 'Unavailable', 'Source lineage': source.lineageRef || 'Unavailable',
+        'State version': source.stateVersion || 'Unavailable',
+        ...(item ? { 'Evidence title': item.title || 'Unavailable', 'Review state': displayHubToken(item.reviewStatus),
+          'Acceptance state': displayHubToken(item.acceptanceState), 'Evidence lineage': item.lineageRef || 'Unavailable' } : {}),
+      }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+    </dl>
   </>
+  return <div className="intelligence-hub__sources-workspace">
+    <div className="intelligence-hub__sources-toolbar">
+      <div><p className="intelligence-hub__eyebrow">Source provenance</p><h2>Confirm sources and processing</h2>
+        <p>Inspect source provenance and trace evidence to its origin on this page.</p></div>
+      <div className="intelligence-hub__sources-search"><Input ref={searchRef} size="sm" fullWidth leftIcon={<MdSearch aria-hidden="true" />} aria-label="Search sources and evidence on this page" placeholder="Search evidence, source or title on this page…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {search ? <Button size="sm" variant="ghost" aria-label="Clear search" className="intelligence-hub__sources-clear" onClick={() => { setSearch(''); searchRef.current?.focus() }}>×</Button> : null}</div>
+    </div>
+    <span className="sr-only" role="status">{pageAvailable && !isLoading && (query || filter !== 'All') ? `${filtered.length} matching sources on this page.${query ? ` ${matchingEvidence.length} matching evidence objects on this page.` : ''}` : ''}</span>
+    <div className="intelligence-hub__sources-summary" aria-label="Source summary">
+      <span><strong>{isLoading ? 'Loading…' : pageAvailable ? sources.length : 'Unavailable'}</strong><small>Sources on page</small></span>
+      <span><strong>{summaryValue(getHubCount(discovery?.sourceRegistrySummary, 'processedCount'))}</strong><small>Processed total</small></span>
+      <span><strong>{isLoading ? 'Loading…' : displayHubCount(totalEvidence)}</strong><small>Evidence objects</small></span>
+      <span><strong>{summaryValue(pendingCount)}</strong><small>Require review</small></span>
+      <Button size="sm" variant="ghost" onClick={(event) => onOpen({ title: 'Source processing report', body: <>
+        <p>Sources shown here are linked to evidence page {page}. Acquisition status is a recorded source state, not proof that processing checks passed or evidence was accepted.</p>
+        <dl className="intelligence-hub__facts"><div><dt>Revision evidence objects</dt><dd>{displayHubCount(totalEvidence)}</dd></div><div><dt>Awaiting review</dt><dd>{displayHubCount(pendingCount)}</dd></div></dl>
+        {sources.length ? <ul>{sources.map((source) => <li key={source.sourceId}>{getSourceLabel(source)} · {getSourceStatus(source)}</li>)}</ul> : <p>Source processing detail unavailable.</p>}
+        <p>Processing runs, batch history, control checks and downloadable logs are unavailable from this bounded read. Evidence decisions remain in the governed review workflow.</p>
+      </> }, event.currentTarget)}>View processing report</Button>
+    </div>
+    <div className="intelligence-hub__sources-browser">
+      <Card variant="outlined" className="intelligence-hub__sources-registry" aria-label="Page-local source registry">
+        <Card.Header><div><h2>Source registry</h2><strong>{isLoading ? 'Loading…' : pageAvailable ? `${filtered.length} shown · ${sources.length} on page ${page}` : 'Unavailable'}</strong></div>
+          <div className="intelligence-hub__sources-filters" role="group" aria-label="Source type filters">
+            {['All', 'Website', 'Document'].map((item) => <Button key={item} size="sm" variant="outline" aria-pressed={filter === item} onClick={() => setFilter(item)}>{item}</Button>)}
+          </div>
+        </Card.Header>
+        <Card.Body role="region" aria-label="Source registry results" tabIndex={0}>{filtered.length ? <ul className="intelligence-hub__sources-list">
+          {filtered.map((source) => <li key={source.sourceId}><Button size="sm" variant="ghost" fullWidth className="intelligence-hub__sources-row" aria-pressed={selected?.sourceId === source.sourceId}
+            onClick={() => { setSelectedSourceId(source.sourceId); setSearch('') }} title={getSourceLabel(source)}>
+            <Badge variant="success" size="sm" className="intelligence-hub__sources-marker" aria-hidden="true">{getSourceKind(source)[0]}</Badge>
+            <span><strong>{getSourceLabel(source)}</strong><small>{displayHubToken(source.sourceType)} · {getSourceStatus(source)}</small></span>
+            <span className="intelligence-hub__sources-count"><strong>{linkedEvidence(source).length}</strong><small>on page</small></span>
+          </Button></li>)}
+        </ul> : <p role={isLoading ? 'status' : error ? 'alert' : undefined}>{sourceMessage}</p>}</Card.Body>
+        <Card.Footer><p>Evidence-linked sources on this page only. Search and filters do not cover the complete registry.</p>
+          <EvidencePagination evidencePage={error ? null : evidencePage} page={page} setPage={setPage} isLoading={isLoading} />
+        </Card.Footer>
+      </Card>
+      <Card variant="outlined" className="intelligence-hub__sources-detail" aria-label="Source evidence">
+        <Card.Header><div><small>{query ? 'Search results' : selected ? `${getSourceKind(selected)} source · ${getSourceStatus(selected)}` : 'No source selected'}</small>
+          <h3 title={!query && selected ? getSourceLabel(selected) : undefined}>{query ? `Evidence matching “${search.trim()}”` : selected ? getSourceLabel(selected) : 'Selected source'}</h3>
+          {query ? <p>{isLoading ? 'Loading matching evidence…' : error ? 'Matching evidence could not be loaded.' : !pageAvailable ? 'Matching evidence is unavailable.' : `${matchingEvidence.length} matching evidence objects across sources on this page`}</p> : selected ? <p>{selectedEvidence.length} evidence objects on this page · {displayHubToken(selected.sourceType)}</p> : null}</div>
+        </Card.Header>
+        <Card.Body role="region" aria-label={query ? 'Evidence search results' : 'Selected source detail'} tabIndex={0}>{query || selected ? <>
+          {displayedEvidence.map(({ item, source }) => {
+            const status = String(item.reviewStatus || item.acceptanceState || '').toUpperCase()
+            const variant = status === 'ACCEPTED' ? 'success' : status === 'PENDING' ? 'warning' : status === 'REJECTED' ? 'danger' : 'neutral'
+            return <article key={item.evidenceObjectId || item.id} className="intelligence-hub__sources-evidence" data-state={status}>
+              <header><strong>{item.title || 'Evidence classification unavailable'}</strong><Badge size="sm" variant={variant} pill>{displayHubToken(status)}</Badge></header>
+              <p>{item.extractedFact || item.summary || 'Evidence detail unavailable'}</p>
+              <footer><Button size="sm" variant="ghost" className="intelligence-hub__sources-origin" onClick={(event) => onOpen({ title: 'Source and evidence provenance', body: sourceFacts(source, item) }, event.currentTarget)}>
+                <Badge variant="success" size="sm" className="intelligence-hub__sources-marker" aria-hidden="true">{getSourceKind(source)[0]}</Badge>
+                <span><strong>{source.sourceRef || source.url || source.fileName || getSourceLabel(source)}</strong><small>Inspect recorded lineage</small></span>
+              </Button>{status === 'PENDING' ? <Button size="sm" variant="ghost" onClick={() => onSelectView('Review')}>Open in Review →</Button> : null}</footer>
+            </article>
+          })}
+          {!displayedEvidence.length ? <p>{isLoading ? 'Loading matching evidence…' : error ? 'Matching evidence could not be loaded.' : !pageAvailable ? 'Matching evidence is unavailable.' : 'No matching evidence is present in this bounded page.'}</p> : null}
+        </> : <p>{isLoading ? 'Loading selected-source evidence…' : error ? 'Selected-source evidence could not be loaded.' : !pageAvailable ? 'Selected-source evidence is unavailable.' : 'Select a source from this page to inspect its recorded evidence.'}</p>}</Card.Body>
+      </Card>
+    </div>
+    <footer className="intelligence-hub__sources-footer"><Button size="sm" variant="ghost" onClick={() => onSelectView('Context')}>← Context</Button>
+      <span>Processing is inspected here; evidence decisions remain in the governed review workflow.</span><Button size="sm" variant="ghost" onClick={() => onSelectView('Review')}>Continue to Review →</Button>
+    </footer>
+  </div>
 }
 
 function ReviewView({ discovery, evidencePage, isLoading, onOpen, qualityHref, page, setPage, filter, onFilterChange }) {
@@ -747,7 +802,9 @@ export default function IntelligenceHub() {
   const viewIndex = Math.max(0, getHubViewFromSearch(`?${searchParams.toString()}`))
   const view = HUB_VIEWS[viewIndex]
   const [info, setInfo] = useState(null)
-  const [evidencePageNumber, setEvidencePageNumber] = useState(1)
+  const [evidencePagination, setEvidencePagination] = useState({ contextKey, page: 1 })
+  const evidencePageNumber = evidencePagination.contextKey === contextKey ? evidencePagination.page : 1
+  const setEvidencePageNumber = (page) => setEvidencePagination({ contextKey, page })
   const [reviewFilter, setReviewFilter] = useState('Needs review')
   const visibleInfo = info?.contextKey === contextKey ? info : null
   const openerRef = useRef(null)
@@ -777,7 +834,7 @@ export default function IntelligenceHub() {
   )
   const { currentData: pendingEvidenceResponse, error: pendingEvidenceError, isFetching: pendingEvidenceFetching, refetch: refetchPendingEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'PENDING' },
-    { skip: !canReadDetail || !needsOverviewCounts },
+    { skip: !canReadDetail || !(needsOverviewCounts || view === 'Sources') },
   )
   const { currentData: rejectedEvidenceResponse, error: rejectedEvidenceError, isFetching: rejectedEvidenceFetching, refetch: refetchRejectedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'REJECTED' },
@@ -790,10 +847,11 @@ export default function IntelligenceHub() {
   }
   const needsEvidence = view === 'Sources' || view === 'Review'
   const {
-    data: evidenceResponse,
+    currentData: evidenceResponse,
     isLoading: evidenceLoading,
     isFetching: evidenceFetching,
     error: evidenceError,
+    refetch: refetchEvidence,
   } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: evidencePageNumber, pageSize: 25,
       reviewStatus: view === 'Review' && reviewFilter !== 'All'
@@ -840,6 +898,8 @@ export default function IntelligenceHub() {
   const contextPending = view === 'Context' && [[summaryEvidenceResponse, summaryEvidenceFetching], [acceptedEvidenceResponse, acceptedEvidenceFetching], [pendingEvidenceResponse, pendingEvidenceFetching]].some(([response, fetching]) => !response && fetching)
   const contextRefreshing = rendererFetching || summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching
   const refreshContext = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence].forEach((refetch) => refetch())
+  const sourcesRefreshing = rendererFetching || summaryEvidenceFetching || pendingEvidenceFetching || evidenceFetching
+  const refreshSources = () => [refetchRenderer, refetchSummaryEvidence, refetchPendingEvidence, refetchEvidence].forEach((refetch) => refetch())
   const discovery = summaryEvidenceLoading || !summaryEvidencePage
     ? null
     : reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)
@@ -868,7 +928,7 @@ export default function IntelligenceHub() {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -912,7 +972,7 @@ export default function IntelligenceHub() {
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
         {view !== 'Context' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' && contextRefreshing} aria-busy={view === 'Context' && Boolean(contextRefreshing)} onClick={view === 'Context' ? refreshContext : refetchRenderer}>↻ Refresh</Button>
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' && sourcesRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : refetchRenderer}>↻ Refresh</Button>
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -923,7 +983,7 @@ export default function IntelligenceHub() {
             <TabView activeTab={viewIndex} onTabChange={(index) => selectView(HUB_VIEWS[index])} aria-label="Intelligence Hub views" className="intelligence-hub__tabs">
             <TabView.Tab label="Overview"><Overview renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} evidenceStatusCounts={evidenceStatusCounts} isLoading={overviewPending} onOpen={openInfo} qualityHref={qualityHref} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
-            <TabView.Tab label="Sources"><SourcesView discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}`} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} onOpen={openInfo} qualityHref={qualityHref} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView renderer={renderer} discovery={discovery} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} workbenchHref={workbenchHref} /></TabView.Tab>

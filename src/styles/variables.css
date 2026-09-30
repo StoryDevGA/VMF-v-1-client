@@ -139,6 +139,19 @@
   --line-height-intelligence-context-heading: 1.2;
   --control-height-intelligence-context-notes: calc(var(--control-height-action) * 2 + var(--spacing-xs));
   --field-width-intelligence-context-notes-label: calc(var(--spacing-xl) * 4 + var(--spacing-sm));
+  /* SS-037 Sources toolbar measured from prototype DOM/CSS; scoped usage. */
+  --font-size-intelligence-sources-title: 0.9375rem; /* Reference 15px, absent from shared type scale. */
+  --field-width-intelligence-sources-search: calc(var(--spacing-xl) * 12 + var(--spacing-xs) + var(--spacing-2xs));
+  --layout-intelligence-sources-rail: calc(var(--spacing-xl) * 11 + var(--spacing-sm));
+  --background-intelligence-sources-panel: var(--background-intelligence-context-card); /* Same measured gradient. */
+  --color-intelligence-sources-selected: #0b1812;
+  --color-intelligence-sources-selected-border: #246247;
+  --color-intelligence-sources-hover: #0c120f;
+  --color-intelligence-sources-fact: #d3dbd6;
+  /* Measured Sources line-height ratios, absent from the shared scale. */
+  --line-height-intelligence-sources-row: 1.3;
+  --line-height-intelligence-sources-detail: 1.35;
+  --line-height-intelligence-sources-copy: 1.45;
 
 
   /* Compatibility aliases for legacy component/page tokens.

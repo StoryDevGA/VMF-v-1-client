@@ -351,7 +351,9 @@ const assessedSectionDeficit = (evidence) => !evidence.clarification?.errors?.le
   && Array.isArray(evidence.sectionLedger)
   && evidence.sectionLedger.some((section) => section.required && section.status === 'UNRESOLVED')
 
-const evidenceReadinessReview = (evidence) => String(evidence.clarification?.firstBoundary || '').startsWith('sourceSnapshot.')
+const evidenceReadinessReview = (evidence) => String(evidence.clarification?.firstBoundary || '').includes('SECTION_REFERENCE_UNRESOLVED')
+  ? 'Some governed section references do not resolve to current evidence. Review these references and required section support before re-resolving this request.'
+  : String(evidence.clarification?.firstBoundary || '').startsWith('sourceSnapshot.')
   ? 'The governed evidence snapshot could not be read completely. Section sufficiency has not been assessed. Ask a workspace administrator to review evidence readiness before re-resolving this request.'
   : 'The governed evidence and output bindings could not be verified for generation. Ask a workspace administrator to review readiness before re-resolving this request.'
 
@@ -769,12 +771,17 @@ const renderStageEvidenceContent = (item) => (
   </div>
 )
 
-function EvidenceReadiness({ evidence }) {
+function EvidenceReadiness({ evidence, currentSnapshot }) {
+  const snapshot = currentSnapshot || evidence.snapshotReadiness
   const sections = Array.isArray(evidence.sectionLedger) ? evidence.sectionLedger : []
   const needsClarification = evidence.clarification?.required === true
   const sectionDeficit = assessedSectionDeficit(evidence)
   return <section aria-label="Evidence readiness">
     <h4>Evidence readiness</h4>
+    {snapshot ? <p>{snapshot.completeness === 'COMPLETE'
+      ? `Current evidence snapshot: Complete. ${snapshot.totalEvidenceCount} evidence records inventoried; ${snapshot.projectedEvidenceCount} records in the governed section projection. Snapshot completeness does not establish section sufficiency.`
+      : 'Current evidence snapshot: Incomplete or not assessed. Draft generation remains unavailable.'}</p> : null}
+    {currentSnapshot ? <p>This current read does not replace the saved plan receipt. Re-resolve the request to record current evidence; existing readiness blockers still apply.</p> : null}
     <p>{needsClarification
       ? 'Clarification is required before draft generation. Confirming a request does not establish sufficient evidence.'
       : 'Supporting evidence is available for the selected sections. Draft review is still required.'}</p>
@@ -1806,7 +1813,7 @@ function OutcomeStudioWorkspace() {
                     {planning.message ? <p>{planning.message}</p> : null}
                     {planning.intent && typeof planning.intent === 'object' ? <dl>{planningIntentSummary(planning.intent).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
                     {planning.plan ? <p>Plan version {planning.plan.planVersion}. Clarification receipt recorded.</p> : null}
-                    {(planning.plan?.evidenceToMeaning || planning.evidenceToMeaning) ? <EvidenceReadiness evidence={planning.plan?.evidenceToMeaning || planning.evidenceToMeaning} /> : null}
+                    {(planning.plan?.evidenceToMeaning || planning.evidenceToMeaning) ? <EvidenceReadiness evidence={planning.plan?.evidenceToMeaning || planning.evidenceToMeaning} currentSnapshot={planning.plan?.currentSnapshotReadiness} /> : null}
                     {planning.status === 'SAVED' && token(planning.execution?.status) === 'BLOCKED' ? <p>{preciseGenerationBlocker({ clarificationPassed, informationCurrent: isSessionInformationCurrent, planning, readiness: dedicatedReadiness, studio })}</p> : null}
                   </div>
                   <ButtonGroup><Button variant="outline" disabled={planningBusy} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button>
