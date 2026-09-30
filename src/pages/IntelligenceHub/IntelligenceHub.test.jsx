@@ -23,6 +23,8 @@ const renderer = {
 }
 
 const calls = { evidence: vi.fn(), manifest: vi.fn(), graph: vi.fn(), coverage: vi.fn(), refresh: vi.fn() }
+let contextInputs
+let cachedContextRevision = false
 let staleOverviewDetails = false
 let initialOverviewPending = false
 let rendererRefreshing = false
@@ -40,7 +42,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   useGetRuntimeRendererQuery: () => ({ data: { data: emptyEvidenceTotal ? {
     ...renderer,
     discovery: { ...renderer.discovery, evidenceObjectSummary: { ...renderer.discovery.evidenceObjectSummary, evidenceObjectCount: 0 } },
-  } : renderer }, isLoading: false, refetch: vi.fn() }),
+  } : { ...renderer, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
   useGetRuntimeStateEvidenceQuery: (...args) => {
     calls.evidence(...args)
     if (missingSummaryEvidence && args[0].pageSize === 1) return {
@@ -99,7 +101,11 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
     const result = query(...args)
     const detailPending = (staleOverviewDetails || initialOverviewPending)
       && ['useGetRuntimeStateEvidenceQuery', 'useGetRuntimeIntelligenceGraphCoverageQuery'].includes(name)
-    const currentData = name === 'useGetRuntimeRendererQuery' && pendingRendererContext ? undefined
+    const currentData = name === 'useGetRuntimeRendererQuery' && cachedContextRevision && args[0].runtimeInstanceId === 'revision-3'
+      ? { data: { ...result.data.data, runtimeInstance: { ...renderer.runtimeInstance, id: 'revision-3' }, revision: {
+        ...renderer.revision, revisionNumber: 3, lineage: [{ runtimeInstanceId: 'revision-3', relationship: 'CURRENT' }],
+      } } }
+      : name === 'useGetRuntimeRendererQuery' && pendingRendererContext ? undefined
       : name === 'useGetRuntimeRendererQuery' && staleOverviewDetails
       ? { data: { ...renderer, runtimeInstance: { ...renderer.runtimeInstance, id: 'revision-3' }, revision: {
         ...renderer.revision, revisionNumber: 3, lineage: [{ runtimeInstanceId: 'revision-3', relationship: 'CURRENT' }],
@@ -121,16 +127,18 @@ const show = (search = '?runtimeInstanceId=workspace-1&revisionId=revision-2') =
   </MemoryRouter>,
 )
 
-function RevisionSwitchReview() {
+function RevisionSwitchReview({ view }) {
   const navigate = useNavigate()
   return <>
     <IntelligenceHub />
-    <button onClick={() => navigate('/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-3')}>Switch revision</button>
+    <button onClick={() => navigate(`/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-3${view ? `&view=${view}` : ''}`)}>Switch revision</button>
   </>
 }
 
 describe('Intelligence Hub', () => {
   beforeEach(() => {
+    contextInputs = undefined
+    cachedContextRevision = false
     emptyFilteredReview = false
     missingSummaryEvidence = false
     conflictingStatusCounts = false
@@ -141,6 +149,100 @@ describe('Intelligence Hub', () => {
     rendererRefreshing = false
     pendingRendererContext = false
     Object.values(calls).forEach((spy) => spy.mockClear())
+  })
+
+  it.each([undefined, null])('shows omitted/null brief values as unavailable, not empty (%s)', (inputs) => {
+    contextInputs = inputs
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    expect(screen.getByText('Brief details unavailable for this revision.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Recorded acquisition notes' })).toHaveValue('Notes unavailable')
+    expect(screen.queryByText('0/4 brief fields')).not.toBeInTheDocument()
+  })
+
+  it('renders real brief values independently of a failed evidence read and searches only its website', async () => {
+    contextInputs = { companyName: 'Acme', marketRegion: 'UK', targetOffer: 'Cloud', companyWebsite: 'https://acme.example/', notes: 'Focus on proof' }
+    missingSummaryEvidence = true
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Recorded acquisition notes' })).toHaveValue('Focus on proof')
+    expect(screen.getByRole('textbox', { name: 'Recorded acquisition notes' })).toHaveAttribute('readonly')
+    expect(screen.getByText('4/4 brief fields')).toBeInTheDocument()
+    expect(screen.getByText('https://acme.example/')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search brief website' }), 'other')
+    expect(screen.getByText('No matching website.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start over with evidence' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Run acquisition in workbench ↗' })).toHaveAttribute('href', '/app/runtime/revision-2/workbench')
+  })
+
+  it('displays and searches every recorded brief website without treating them as connected', async () => {
+    contextInputs = { companyWebsite: 'https://acme.example/', websiteSources: ['https://acme.example/', 'https://docs.acme.example/'] }
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    expect(screen.getByText('2 recorded in brief')).toBeInTheDocument()
+    expect(screen.getByText('https://acme.example/')).toBeInTheDocument()
+    expect(screen.getByText('https://docs.acme.example/')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search brief website' }), 'docs')
+    await user.tab()
+    expect(screen.getByRole('region', { name: 'Recorded brief websites' })).toHaveFocus()
+    expect(screen.getByRole('status')).toHaveTextContent('1 matching recorded website.')
+    expect(screen.queryByText('https://acme.example/')).not.toBeInTheDocument()
+    expect(screen.getByText('https://docs.acme.example/')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove https://docs.acme.example/' })).toBeDisabled()
+    await user.clear(screen.getByRole('textbox', { name: 'Search brief website' }))
+    await user.type(screen.getByRole('textbox', { name: 'Search brief website' }), 'missing')
+    expect(screen.getByRole('status')).toHaveTextContent('0 matching recorded websites.')
+  })
+
+  it('clears the website filter when a cached revision replaces the selected Context', async () => {
+    const user = userEvent.setup()
+    cachedContextRevision = true
+    contextInputs = { companyWebsite: 'https://previous.example/' }
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context']}>
+      <Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="context" />} /></Routes>
+    </MemoryRouter>)
+    await user.type(screen.getByRole('textbox', { name: 'Search brief website' }), 'previous')
+    contextInputs = { companyWebsite: 'https://current.example/' }
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('textbox', { name: 'Search brief website' })).toHaveValue('')
+    expect(screen.getByText('https://current.example/')).toBeInTheDocument()
+    expect(screen.queryByText('https://previous.example/')).not.toBeInTheDocument()
+  })
+
+  it('distinguishes an exposed empty brief and preserves navigation context', async () => {
+    contextInputs = {}
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    expect(screen.getByText('0/4 brief fields')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Recorded acquisition notes' })).toHaveValue('')
+    expect(screen.getByText('No website is recorded in the brief.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'About these actions' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('tab', { name: 'Context' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('button', { name: 'View current sources' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('refreshes only the four bounded Context reads and announces pending counts', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    expect(calls.refresh).toHaveBeenCalledTimes(4)
+    const reads = calls.refresh.mock.calls.map(([name, args]) => ({ name, ...args }))
+    expect(reads.filter((read) => read.pageSize === 1)).toHaveLength(3)
+    expect(reads.some((read) => read.reviewStatus === 'REJECTED')).toBe(false)
+    expect(calls.coverage.mock.calls.every(([, options]) => options.skip)).toBe(true)
+  })
+
+  it('keeps brief fields visible while counts load', () => {
+    initialOverviewPending = true
+    contextInputs = { companyName: 'Acme' }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=context')
+    expect(screen.getByText('Acme')).toBeInTheDocument()
+    expect(screen.getByText('Loading Context evidence counts…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '↻ Refresh' })).toBeDisabled()
   })
 
   it('refreshes all six bounded Overview reads for the selected revision', async () => {

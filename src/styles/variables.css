@@ -122,6 +122,24 @@
   /* SS-037 prototype accents, captured as semantic tokens for the Hub. */
   --color-intelligence-metric: #73b9ff;
   --color-intelligence-review: #ff675f;
+  /* SS-037 Context surfaces measured from the live prototype, 2026-09-30.
+     Keep these scoped to Context; neutral shared surfaces remain unchanged. */
+  --color-intelligence-context-card-start: #0c110e;
+  --color-intelligence-context-card-end: #080b09;
+  --background-intelligence-context-card: linear-gradient(145deg, var(--color-intelligence-context-card-start), var(--color-intelligence-context-card-end));
+  --color-intelligence-context-step: #080c0a;
+  --color-intelligence-context-notes: #060907;
+  --color-intelligence-context-field: #050806;
+  --color-intelligence-context-action: #07130e;
+  --color-intelligence-context-select: #021b12;
+  --color-intelligence-context-warning: #1d1301;
+  --color-intelligence-context-border-success: #1d6148;
+  /* Measured Context detail type; notes height stays on the existing size scale. */
+  --font-size-intelligence-context-detail: 0.8125rem;
+  --line-height-intelligence-context-heading: 1.2;
+  --control-height-intelligence-context-notes: calc(var(--control-height-action) * 2 + var(--spacing-xs));
+  --field-width-intelligence-context-notes-label: calc(var(--spacing-xl) * 4 + var(--spacing-sm));
+
 
   /* Compatibility aliases for legacy component/page tokens.
      These keep older surfaces aligned with the canonical SLOS system. */

@@ -347,9 +347,19 @@ const blockerMessageOf = (blocker) => {
   return String(blocker.message || EXECUTION_BLOCKER_MESSAGES[token(blocker.code)] || '').trim()
 }
 
+const assessedSectionDeficit = (evidence) => !evidence.clarification?.errors?.length
+  && Array.isArray(evidence.sectionLedger)
+  && evidence.sectionLedger.some((section) => section.required && section.status === 'UNRESOLVED')
+
+const evidenceReadinessReview = (evidence) => String(evidence.clarification?.firstBoundary || '').startsWith('sourceSnapshot.')
+  ? 'The governed evidence snapshot could not be read completely. Section sufficiency has not been assessed. Ask a workspace administrator to review evidence readiness before re-resolving this request.'
+  : 'The governed evidence and output bindings could not be verified for generation. Ask a workspace administrator to review readiness before re-resolving this request.'
+
 const preciseGenerationBlocker = ({ clarificationPassed = true, informationCurrent, planning, readiness, studio }) => {
   const evidence = planning?.plan?.evidenceToMeaning || planning?.evidenceToMeaning
-  if (evidence?.clarification?.required) return 'Required sections need supporting evidence before a draft can be generated. Review the evidence readiness below, then re-resolve this request.'
+  if (evidence?.clarification?.required) return assessedSectionDeficit(evidence)
+    ? 'Required sections need supporting evidence before a draft can be generated. Review the evidence readiness below, then re-resolve this request.'
+    : evidenceReadinessReview(evidence)
   if (!informationCurrent) return EXECUTION_BLOCKER_MESSAGES.INFORMATION_NOT_CURRENT
   if (!clarificationPassed) return EXECUTION_BLOCKER_MESSAGES.CLARIFICATION_RECEIPT_MISSING
   const planningBlockers = Array.isArray(planning?.execution?.blockers) ? planning.execution.blockers : EMPTY_ARRAY
@@ -762,6 +772,7 @@ const renderStageEvidenceContent = (item) => (
 function EvidenceReadiness({ evidence }) {
   const sections = Array.isArray(evidence.sectionLedger) ? evidence.sectionLedger : []
   const needsClarification = evidence.clarification?.required === true
+  const sectionDeficit = assessedSectionDeficit(evidence)
   return <section aria-label="Evidence readiness">
     <h4>Evidence readiness</h4>
     <p>{needsClarification
@@ -769,15 +780,19 @@ function EvidenceReadiness({ evidence }) {
       : 'Supporting evidence is available for the selected sections. Draft review is still required.'}</p>
     {sections.length ? <ul>{sections.map((section, index) => <li key={`${section.targetSectionKey || 'section'}-${index}`}>
       <strong>{section.heading || 'Selected section'}</strong>{' — '}
-      {section.status === 'OMITTED' && section.required === false
+      {needsClarification && !sectionDeficit
+        ? 'Section sufficiency has not been assessed.'
+        : section.status === 'OMITTED' && section.required === false
         ? 'Optional; omitted as permitted by the selected schema.'
         : section.status === 'SUPPORTED'
           ? `${section.required ? 'Required' : 'Optional'}; supporting evidence available.`
           : `${section.required ? 'Required' : 'Optional'}; supporting evidence needs clarification.`}
-      {section.status !== 'SUPPORTED' && section.status !== 'OMITTED'
+      {sectionDeficit && section.status !== 'SUPPORTED' && section.status !== 'OMITTED'
         ? <p>Which current customer evidence supports this section, and where are its source, validation and proof requirements recorded?</p> : null}
     </li>)}</ul> : null}
-    {needsClarification ? <p>Review the governed evidence and its source records, then re-resolve this request. Required sections must be supported; optional omissions follow the selected schema.</p> : null}
+    {needsClarification ? <p>{sectionDeficit
+      ? 'Review the governed evidence and its source records, then re-resolve this request. Required sections must be supported; optional omissions follow the selected schema.'
+      : evidenceReadinessReview(evidence)}</p> : null}
   </section>
 }
 
@@ -1055,7 +1070,7 @@ function OutcomeStudioWorkspace() {
   }
 
 
-  const handlePlanStep = async (action = 'ANSWER') => {
+  const handlePlanStep = async (action = 'ANSWER', savedPlanBinding = null) => {
     if (planningBusyRef.current || !runtimeScopeReady) return
     const sequence = ++planningSequence.current
     const scopeKey = planningScopeKey
@@ -1072,7 +1087,9 @@ function OutcomeStudioWorkspace() {
         response = await confirmPlan({ ...runtimeScope, requestId: planning.requestId,
           body: { continuation: planning.continuation, confirm: true } }).unwrap()
       } else if (action === 'RETRIEVE') {
-        response = await retrievePlan({ ...runtimeScope, requestId: planning.requestId, planId: planning.plan.planId }, false).unwrap()
+        const binding = planning?.plan ? { requestId: planning.requestId, planId: planning.plan.planId } : savedPlanBinding
+        if (!binding?.requestId || !binding?.planId) throw new Error('Saved request binding is unavailable')
+        response = await retrievePlan({ ...runtimeScope, requestId: binding.requestId, planId: binding.planId }, false).unwrap()
       } else {
         response = await planRequest({ ...runtimeScope, body: { prompt: normalizeRequestText(prompt), action,
           ...(planning?.continuation ? { continuation: planning.continuation } : {}) } }).unwrap()
@@ -1830,6 +1847,10 @@ function OutcomeStudioWorkspace() {
                   </Button>
                 </ButtonGroup>
               </div>
+              {!planning && session?.requestPlan?.requestId && session?.requestPlan?.planId ? <Button
+                variant="outline" disabled={planningBusy || !runtimeScopeReady}
+                onClick={() => handlePlanStep('RETRIEVE', session.requestPlan)}
+              >Retrieve saved plan</Button> : null}
               <div className="outcome-studio-workspace__history">
                 <h3>Session request history</h3>
                 {generationBlockedReason && activeSessionId ? <p id="outcome-generation-blocked-reason">{generationBlockedReason}</p> : null}

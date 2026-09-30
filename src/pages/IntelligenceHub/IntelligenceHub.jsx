@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { MdChevronRight, MdNorthEast } from 'react-icons/md'
+import { MdChevronRight, MdNorthEast, MdSearch } from 'react-icons/md'
+import { Input } from '../../components/Input'
+import { Textarea } from '../../components/Textarea'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -50,12 +52,12 @@ const compactReadableDate = (value) => {
     : 'Unavailable'
 }
 
-function Panel({ title, eyebrow, children, className = '', inlineHeader = false }) {
+function Panel({ title, eyebrow, children, className = '', inlineHeader = false, headerIcon = null }) {
   return (
     <Card variant="outlined" className={`intelligence-hub__panel ${className}`}>
       <Card.Body>
         {inlineHeader ? <header className="intelligence-hub__panel-header">
-          <h2>{title}</h2>
+          <h2>{headerIcon}{title}</h2>
           {eyebrow ? <p className="intelligence-hub__eyebrow">{eyebrow}</p> : null}
         </header> : <>
           {eyebrow ? <p className="intelligence-hub__eyebrow">{eyebrow}</p> : null}
@@ -260,68 +262,97 @@ function Overview({ renderer, discovery, graphCoverage, evidenceStatusCounts, is
   )
 }
 
-function ContextView({ discovery, onOpen, workbenchHref, onSelectView }) {
-  const values = discovery?.inputValues || {}
-  const sourceCount = getHubCount(discovery?.sourceRegistrySummary, 'count')
-  const evidenceCount = getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount')
-  const completeness = [values.companyName, values.marketRegion, values.targetOffer, values.companyWebsite]
-  const recorded = completeness.filter((value) => String(value ?? '').trim()).length
-  const acquisitionStages = [
-    { title: 'Context', detail: discovery?.inputComplete === true ? 'Ready' : discovery?.inputComplete === false ? 'Needs attention' : 'Status unavailable', current: true },
-    { title: 'Acquire', detail: 'Existing workbench', current: false },
-    { title: 'Sources', detail: sourceCount === null ? 'Summary unavailable' : `${displayHubCount(sourceCount)} recorded`, current: false },
-    { title: 'Review', detail: displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'pendingReviewCount')), current: false },
+function ContextView({ discovery, evidenceStatusCounts, isLoading, onOpen, workbenchHref, onSelectView }) {
+  const [search, setSearch] = useState('')
+  const briefAvailable = Boolean(discovery?.inputValues && typeof discovery.inputValues === 'object' && !Array.isArray(discovery.inputValues))
+  const values = briefAvailable ? discovery.inputValues : {}
+  const fields = [
+    ['Company', values.companyName], ['Market', values.marketRegion],
+    ['Product or offer', values.targetOffer], ['Acquisition profile', discovery?.acquisitionProfile],
   ]
-  return <>
+  const websites = [...new Set([values.companyWebsite, ...(Array.isArray(values.websiteSources) ? values.websiteSources : [])]
+    .filter((value) => typeof value === 'string').map((value) => value.trim()).filter(Boolean))]
+  const completeness = [values.companyName, values.marketRegion, values.targetOffer, websites[0]]
+    .map((value) => Boolean(String(value ?? '').trim()))
+  const recorded = completeness.filter(Boolean).length
+  const complete = discovery?.inputComplete
+  const readiness = complete === true ? 'Context ready' : complete === false ? 'Needs attention' : 'Status unavailable'
+  const matchingWebsites = websites.filter((website) => website.toLowerCase().includes(search.trim().toLowerCase()))
+  const stages = [
+    { title: 'Context', detail: readiness, complete: complete === true, current: complete !== true },
+    { title: 'Acquire', detail: 'Build a batch', current: complete === true },
+    { title: 'Sources', detail: 'Inspect recorded sources' },
+    { title: 'Review', detail: 'Resolve exceptions' },
+  ]
+  const workbenchTitle = 'Opens the acquisition workbench. No evidence or brief is changed in this view.'
+  const countText = (count) => isLoading ? 'Loading…' : displayHubCount(count)
+  return <div className="intelligence-hub__context-workspace">
     <ol className="intelligence-hub__journey" aria-label="Intelligence acquisition stages">
-      {acquisitionStages.map((stage, index) => <li key={stage.title} aria-current={stage.current ? 'step' : undefined}>
-        <span className="intelligence-hub__journey-index">{index === 0 && discovery?.inputComplete === true ? '✓' : index + 1}</span>
+      {stages.map((stage, index) => <li key={stage.title} data-complete={Boolean(stage.complete)} aria-current={stage.current ? 'step' : undefined}>
+        <span className="intelligence-hub__journey-index" aria-hidden="true">{stage.complete ? '✓' : index + 1}</span>
         <span><strong>{stage.title}</strong><small>{stage.detail}</small></span>
       </li>)}
     </ol>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__context-top">
-      <Panel title="What should this acquisition understand?" eyebrow="Acquisition brief">
+    <div className="intelligence-hub__grid intelligence-hub__context-top">
+      <Card variant="outlined" className="intelligence-hub__panel"><Card.Body>
+        <header className="intelligence-hub__context-header"><div>
+          <p className="intelligence-hub__eyebrow">Acquisition brief</p><h2>What should this acquisition understand?</h2>
+        </div><Link to={workbenchHref} className="intelligence-hub__context-control" underline="none" title={workbenchTitle}>Edit brief ↗</Link></header>
         <dl className="intelligence-hub__brief-grid">
-          <div><dt>Company</dt><dd>{summaryValue(values.companyName)}</dd></div>
-          <div><dt>Market</dt><dd>{summaryValue(values.marketRegion)}</dd></div>
-          <div><dt>Product or offer</dt><dd>{summaryValue(values.targetOffer)}</dd></div>
-          <div><dt>Acquisition profile</dt><dd>{displayHubToken(discovery?.acquisitionProfile)}</dd></div>
+          {fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{briefAvailable ? label === 'Acquisition profile' ? displayHubToken(value) : summaryValue(value) : 'Unavailable'}</dd></div>)}
         </dl>
-        <div className="intelligence-hub__notes"><strong>Optional notes</strong><p>{values.notes || 'No additional acquisition guidance is recorded.'}</p></div>
-        <BoundaryLink to={workbenchHref}>Open acquisition in the existing workbench →</BoundaryLink>
-      </Panel>
-      <Panel title="Acquisition readiness" eyebrow={discovery?.inputComplete === true ? 'Ready to acquire' : discovery?.inputComplete === false ? 'Needs attention' : 'Status unavailable'}>
-        <p>{discovery?.acquisitionEffectiveness?.summary || 'Readiness detail is unavailable in this revision summary.'}</p>
-        <p className="intelligence-hub__muted">{recorded} of 4 acquisition context fields are present in the selected revision summary.</p>
+        <div className="intelligence-hub__context-notes"><div><strong>Optional notes</strong><span>Recorded guidance</span></div>
+          <Textarea size="sm" fullWidth rows={2} resize="vertical" aria-label="Recorded acquisition notes" readOnly
+            value={briefAvailable ? String(values.notes ?? '') : 'Notes unavailable'} placeholder="No additional acquisition guidance is recorded." />
+        </div>
+      </Card.Body></Card>
+      <Card variant="outlined" className="intelligence-hub__panel"><Card.Body>
+        <header className="intelligence-hub__context-header"><div><p className="intelligence-hub__eyebrow">Acquisition readiness</p><h2>{readiness}</h2></div>
+          <Badge variant={briefAvailable && recorded === completeness.length ? 'success' : 'neutral'} size="sm" pill>{briefAvailable ? `${recorded}/${completeness.length} brief fields` : 'Unavailable'}</Badge></header>
         <div className="intelligence-hub__required-fields">
           {['Company identity', 'Market and region', 'Target offer', 'Website recorded'].map((label, index) => <span key={label}>
-            <strong aria-hidden="true">{completeness[index] ? '✓' : '○'}</strong>{label}
+            <strong aria-hidden="true">{briefAvailable ? completeness[index] ? '✓' : '○' : '—'}</strong>{label}
+            <span className="sr-only">{briefAvailable ? completeness[index] ? ' present' : ' missing' : ' unavailable'}</span>
           </span>)}
         </div>
-        {discovery?.acquisitionEffectiveness?.recommendation
-          ? <div className="intelligence-hub__recommendation"><strong>Recommended improvement</strong><p>{discovery.acquisitionEffectiveness.recommendation}</p></div>
-          : <p className="intelligence-hub__muted">No recommended improvement is present in the bounded summary.</p>}
+        <div className="intelligence-hub__context-guidance" data-recommendation={Boolean(discovery?.acquisitionEffectiveness?.recommendation)}>
+          <strong>{discovery?.acquisitionEffectiveness?.recommendation ? 'Recommended improvement' : 'Acquisition boundary'}</strong>
+          <p>{discovery?.acquisitionEffectiveness?.recommendation || 'Brief completeness does not confirm connected sources or authorise acquisition. Continue in the workbench.'}</p>
+        </div>
+        {!briefAvailable ? <p className="intelligence-hub__muted">Brief details unavailable for this revision.</p> : null}
+      </Card.Body></Card>
+    </div>
+    <div className="intelligence-hub__grid intelligence-hub__context-bottom">
+      <Panel title="Website discovery" headerIcon={<Badge variant="success" size="sm" className="intelligence-hub__intake-marker" aria-hidden="true">W</Badge>} eyebrow={briefAvailable ? websites.length ? `${websites.length} recorded in brief` : 'No website recorded' : 'Unavailable'} inlineHeader>
+        <Input size="sm" fullWidth leftIcon={<MdSearch aria-hidden="true" />} aria-label="Search brief website" placeholder="Search recorded website…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <span className="sr-only" role="status">{search.trim() ? `${matchingWebsites.length} matching recorded website${matchingWebsites.length === 1 ? '' : 's'}.` : ''}</span>
+        {matchingWebsites.length ? <div className="intelligence-hub__context-websites" role="region" aria-label="Recorded brief websites" tabIndex={0}>{matchingWebsites.map((website) => <div key={website} className="intelligence-hub__context-source"><div><small>{website === websites[0] ? 'Primary website in brief' : 'Website in brief'}</small><strong>{website}</strong></div>
+          <Button size="sm" variant="ghost" disabled title="Removal is not delivered in this view." aria-label={`Remove ${website}`}>Remove</Button></div>)}</div>
+          : <p>{!briefAvailable ? 'Website detail unavailable.' : websites.length ? 'No matching website.' : 'No website is recorded in the brief.'}</p>}
+        <Link to={workbenchHref} className="intelligence-hub__context-control" underline="none" title={workbenchTitle}>＋ Add URL in workbench ↗</Link>
+        <small className="intelligence-hub__muted">Connection status unavailable. Removal is not delivered here.</small>
+      </Panel>
+      <Panel title="Document batch" headerIcon={<Badge variant="success" size="sm" className="intelligence-hub__intake-marker" aria-hidden="true">D</Badge>} eyebrow="Batch status unavailable" inlineHeader>
+        <p>Select and process documents in the acquisition workbench, then review the resulting evidence candidates.</p>
+        <Link to={workbenchHref} className="intelligence-hub__context-control intelligence-hub__context-select" underline="none" title={workbenchTitle}>＋ Select files in workbench ↗</Link>
+        <small className="intelligence-hub__muted">File selection and acquisition are not performed in this view.</small>
+      </Panel>
+      <Panel title="Evidence continuity" headerIcon={<Badge variant="success" size="sm" className="intelligence-hub__intake-marker" aria-hidden="true">E</Badge>} eyebrow="Selected revision" inlineHeader>
+        <div className="intelligence-hub__context-evidence"><strong>{countText(evidenceStatusCounts.accepted)}</strong><span>Accepted evidence objects</span></div>
+        <p>Evidence and human decisions remain attached to their recorded revision. New acquisition does not silently alter a locked revision.</p>
+        <p className="intelligence-hub__context-batch-status">Batch history unavailable · {countText(evidenceStatusCounts.pending)} awaiting review</p>
+        <Button size="sm" variant="ghost" disabled>Start over with evidence</Button>
+        <small className="intelligence-hub__muted">Reset is not delivered here.</small>
       </Panel>
     </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--three intelligence-hub__context-bottom">
-      <Panel title="Website discovery" eyebrow={values.companyWebsite ? 'Website recorded in brief' : 'Source detail unavailable'}>
-        <p>{summaryValue(values.companyWebsite)}</p>
-        <p className="intelligence-hub__muted">Connection and processing status are not provided by the selected revision summary.</p>
-        <BoundaryLink to={workbenchHref}>Manage sources in the existing workbench →</BoundaryLink>
-      </Panel>
-      <Panel title="Document acquisition" eyebrow="Existing workflow">
-        <p>Document batch selection and processing are handled by the existing acquisition workbench.</p>
-        <p className="intelligence-hub__muted">No document batch status is available in the selected revision summary.</p>
-        <BoundaryLink to={workbenchHref}>Open document acquisition →</BoundaryLink>
-      </Panel>
-      <Panel title="Evidence continuity" eyebrow="Selected revision">
-        <strong className="intelligence-hub__large-value">{displayHubCount(evidenceCount)}</strong>
-        <p>Evidence objects recorded for the selected revision. Acceptance totals are unavailable when the summary and evidence read do not agree.</p>
-        <DetailButton onOpen={onOpen} title="Evidence continuity" body="Evidence and decisions stay attached to their recorded revision. New evidence does not silently rewrite an existing revision.">Why evidence continuity matters →</DetailButton>
-        <Button size="sm" variant="ghost" onClick={() => onSelectView('Sources')}>View current sources →</Button>
-      </Panel>
+    {isLoading ? <p role="status">Loading Context evidence counts…</p> : null}
+    <div className="intelligence-hub__context-actionbar"><span><strong>{readiness}</strong> · Recorded evidence is preserved. Acquisition continues in the workbench.</span>
+      <div><Button size="sm" variant="outline" onClick={() => onSelectView('Sources')}>View current sources</Button>
+        <Link to={workbenchHref} className="btn btn--primary intelligence-hub__context-control intelligence-hub__context-acquire" underline="none" title={workbenchTitle}>Run acquisition in workbench ↗</Link>
+        <DetailButton onOpen={onOpen} title="Context and acquisition" body="This view displays the selected revision's recorded brief and bounded evidence counts. Brief edits, file selection, acquisition and reset belong to the existing workbench; this screen does not perform those actions.">About these actions</DetailButton>
+      </div>
     </div>
-  </>
+  </div>
 }
 
 function EvidencePagination({ evidencePage, page, setPage, isLoading }) {
@@ -739,7 +770,7 @@ export default function IntelligenceHub() {
     { skip: !canReadDetail },
   )
   const summaryEvidencePage = getHubEvidencePage(summaryEvidenceResponse)
-  const needsOverviewCounts = view === 'Overview'
+  const needsOverviewCounts = view === 'Overview' || view === 'Context'
   const { currentData: acceptedEvidenceResponse, error: acceptedEvidenceError, isFetching: acceptedEvidenceFetching, refetch: refetchAcceptedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'ACCEPTED' },
     { skip: !canReadDetail || !needsOverviewCounts },
@@ -750,7 +781,7 @@ export default function IntelligenceHub() {
   )
   const { currentData: rejectedEvidenceResponse, error: rejectedEvidenceError, isFetching: rejectedEvidenceFetching, refetch: refetchRejectedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'REJECTED' },
-    { skip: !canReadDetail || !needsOverviewCounts },
+    { skip: !canReadDetail || view !== 'Overview' },
   )
   const evidenceStatusCounts = {
     accepted: getHubEvidenceStatusCount(acceptedEvidenceResponse, acceptedEvidenceError, summaryEvidencePage),
@@ -806,6 +837,9 @@ export default function IntelligenceHub() {
     [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence,
       refetchRejectedEvidence, refetchGraphCoverage].forEach((refetch) => refetch())
   }
+  const contextPending = view === 'Context' && [[summaryEvidenceResponse, summaryEvidenceFetching], [acceptedEvidenceResponse, acceptedEvidenceFetching], [pendingEvidenceResponse, pendingEvidenceFetching]].some(([response, fetching]) => !response && fetching)
+  const contextRefreshing = rendererFetching || summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching
+  const refreshContext = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence].forEach((refetch) => refetch())
   const discovery = summaryEvidenceLoading || !summaryEvidencePage
     ? null
     : reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)
@@ -834,7 +868,7 @@ export default function IntelligenceHub() {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -877,8 +911,8 @@ export default function IntelligenceHub() {
             title="Opens Evidence Workbench; evidence is not added in the Intelligence Hub.">＋ Add Evidence</Link>
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
-        <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span>
-        <Button size="sm" variant="outline" onClick={() => refetchRenderer()}>Refresh</Button>
+        {view !== 'Context' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
+        <Button size="sm" variant="outline" disabled={view === 'Context' && contextRefreshing} aria-busy={view === 'Context' && Boolean(contextRefreshing)} onClick={view === 'Context' ? refreshContext : refetchRenderer}>↻ Refresh</Button>
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -888,7 +922,7 @@ export default function IntelligenceHub() {
             {view === 'Overview' ? overviewPending ? null : <OverviewMetrics renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /> : null}
             <TabView activeTab={viewIndex} onTabChange={(index) => selectView(HUB_VIEWS[index])} aria-label="Intelligence Hub views" className="intelligence-hub__tabs">
             <TabView.Tab label="Overview"><Overview renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} evidenceStatusCounts={evidenceStatusCounts} isLoading={overviewPending} onOpen={openInfo} qualityHref={qualityHref} onSelectView={selectView} /></TabView.Tab>
-            <TabView.Tab label="Context"><ContextView discovery={discovery} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Sources"><SourcesView discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} onOpen={openInfo} qualityHref={qualityHref} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView renderer={renderer} discovery={discovery} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>

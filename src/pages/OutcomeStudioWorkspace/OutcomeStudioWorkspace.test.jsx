@@ -1789,6 +1789,54 @@ describe('OutcomeStudioWorkspace', () => {
     expect(generateResponse).not.toHaveBeenCalled()
   })
 
+  it.each(['preview', 'saved'])('SS-040 preserves unassessed source-boundary clarification in the %s plan', async (phase) => {
+    const user = userEvent.setup()
+    const evidence = { status: 'CLARIFICATION_REQUIRED', canExecute: false, sectionLedger: [],
+      clarification: { required: true, firstBoundary: 'sourceSnapshot.RUNTIME_STATE_V2_STORAGE_UNAVAILABLE',
+        errors: [{ code: 'INTEGRITY_INVALID' }] } }
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED',
+      question: '', intent: confirmationIntent(), evidenceToMeaning: evidence }) }))
+    const saved = savedPlan()
+    saved.execution = { status: 'BLOCKED', canExecute: false, reason: 'EVIDENCE_TO_MEANING_CLARIFICATION_REQUIRED' }
+    saved.plan.evidenceToMeaning = evidence
+    confirmPlan.mockReturnValue(resolvedMutation({ data: saved }))
+    renderPage()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    if (phase === 'saved') await user.click(await screen.findByRole('button', { name: 'Confirm and save plan' }))
+    const region = await screen.findByRole('region', { name: 'Evidence readiness' })
+    expect(region).toHaveTextContent('snapshot could not be read completely')
+    expect(region).toHaveTextContent('Section sufficiency has not been assessed')
+    expect(region).toHaveTextContent('workspace administrator')
+    expect(screen.queryByText(/Required sections need supporting evidence/)).not.toBeInTheDocument()
+    expect(region).not.toHaveTextContent('Which current customer evidence supports this section')
+    expect(region).not.toHaveTextContent('RUNTIME_STATE_V2_STORAGE_UNAVAILABLE')
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(generateResponse).not.toHaveBeenCalled()
+  })
+
+  it('retrieves the existing session plan after remount without creating another request or executing', async () => {
+    const user = userEvent.setup(), saved = savedPlan()
+    saved.plan.evidenceToMeaning = { status: 'CLARIFICATION_REQUIRED', sectionLedger: [],
+      clarification: { required: true, firstBoundary: 'sourceSnapshot.RUNTIME_STATE_V2_STORAGE_UNAVAILABLE', errors: [{ code: 'INTEGRITY_INVALID' }] } }
+    saved.execution = { status: 'BLOCKED', canExecute: false, reason: 'EVIDENCE_TO_MEANING_CLARIFICATION_REQUIRED' }
+    useGetRuntimeOutcomeSessionQuery.mockReturnValue({ data: { data: { ...session,
+      requestPlan: { requestId: saved.requestId, planId: saved.plan.planId } } }, isLoading: false, error: null, refetch: refetchSession })
+    retrievePlan.mockReturnValue(resolvedMutation({ data: saved }))
+    const mounted = renderPage()
+    mounted.unmount()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Retrieve saved plan' }))
+    expect(retrievePlan).toHaveBeenCalledTimes(1)
+    expect(retrievePlan).toHaveBeenCalledWith({ runtimeInstanceId: 'value-narrative-001',
+      customerId: 'customer-001', tenantId: 'tenant-001', requestId: saved.requestId, planId: saved.plan.planId }, false)
+    expect(await screen.findByText('Plan saved')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Evidence readiness' })).toHaveTextContent('Section sufficiency has not been assessed')
+    expect(planRequest).not.toHaveBeenCalled()
+    expect(confirmPlan).not.toHaveBeenCalled()
+    assertNoExecution()
+  })
+
   it('prefills the exact Parlon request in one call, permits amendment, then records Clarification', async () => {
     const user = userEvent.setup()
     planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult({
