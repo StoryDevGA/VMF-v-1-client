@@ -27,6 +27,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'))
 const CustomerJourneyPlaceholder = lazy(
   () => import('../pages/CustomerJourney/CustomerJourneyPlaceholder'),
 )
+const IntelligenceHub = lazy(() => import('../pages/IntelligenceHub/IntelligenceHub'))
 const CustomerAttention = lazy(
   () => import('../pages/CustomerAttention'),
 )
@@ -311,7 +312,13 @@ export const router = createBrowserRouter([
                 path: 'intelligence',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
-                    <CustomerJourneyPlaceholder section="Intelligence Hub" />
+                    <ProtectedRoute
+                      redirectTo="/app/login"
+                      requiredSelectedScopePermission="VMF_VIEW"
+                      unauthorizedRedirect="/app/dashboard"
+                    >
+                      <IntelligenceHub />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },
@@ -319,7 +326,13 @@ export const router = createBrowserRouter([
                 path: 'intelligence/quality',
                 element: (
                   <CustomerTierRoute requiredTier="CORE">
-                    <CustomerJourneyPlaceholder section="Intelligence Quality" />
+                    <ProtectedRoute
+                      redirectTo="/app/login"
+                      requiredSelectedScopePermission="VMF_VIEW"
+                      unauthorizedRedirect="/app/dashboard"
+                    >
+                      <CustomerJourneyPlaceholder section="Intelligence Quality" />
+                    </ProtectedRoute>
                   </CustomerTierRoute>
                 ),
               },

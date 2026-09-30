@@ -348,6 +348,8 @@ const blockerMessageOf = (blocker) => {
 }
 
 const preciseGenerationBlocker = ({ clarificationPassed = true, informationCurrent, planning, readiness, studio }) => {
+  const evidence = planning?.plan?.evidenceToMeaning || planning?.evidenceToMeaning
+  if (evidence?.clarification?.required) return 'Required sections need supporting evidence before a draft can be generated. Review the evidence readiness below, then re-resolve this request.'
   if (!informationCurrent) return EXECUTION_BLOCKER_MESSAGES.INFORMATION_NOT_CURRENT
   if (!clarificationPassed) return EXECUTION_BLOCKER_MESSAGES.CLARIFICATION_RECEIPT_MISSING
   const planningBlockers = Array.isArray(planning?.execution?.blockers) ? planning.execution.blockers : EMPTY_ARRAY
@@ -756,6 +758,28 @@ const renderStageEvidenceContent = (item) => (
     ) : null}
   </div>
 )
+
+function EvidenceReadiness({ evidence }) {
+  const sections = Array.isArray(evidence.sectionLedger) ? evidence.sectionLedger : []
+  const needsClarification = evidence.clarification?.required === true
+  return <section aria-label="Evidence readiness">
+    <h4>Evidence readiness</h4>
+    <p>{needsClarification
+      ? 'Clarification is required before draft generation. Confirming a request does not establish sufficient evidence.'
+      : 'Supporting evidence is available for the selected sections. Draft review is still required.'}</p>
+    {sections.length ? <ul>{sections.map((section, index) => <li key={`${section.targetSectionKey || 'section'}-${index}`}>
+      <strong>{section.heading || 'Selected section'}</strong>{' — '}
+      {section.status === 'OMITTED' && section.required === false
+        ? 'Optional; omitted as permitted by the selected schema.'
+        : section.status === 'SUPPORTED'
+          ? `${section.required ? 'Required' : 'Optional'}; supporting evidence available.`
+          : `${section.required ? 'Required' : 'Optional'}; supporting evidence needs clarification.`}
+      {section.status !== 'SUPPORTED' && section.status !== 'OMITTED'
+        ? <p>Which current customer evidence supports this section, and where are its source, validation and proof requirements recorded?</p> : null}
+    </li>)}</ul> : null}
+    {needsClarification ? <p>Review the governed evidence and its source records, then re-resolve this request. Required sections must be supported; optional omissions follow the selected schema.</p> : null}
+  </section>
+}
 
 function OutcomeStudioWorkspace() {
   const { runtimeInstanceId = '' } = useParams()
@@ -1765,6 +1789,7 @@ function OutcomeStudioWorkspace() {
                     {planning.message ? <p>{planning.message}</p> : null}
                     {planning.intent && typeof planning.intent === 'object' ? <dl>{planningIntentSummary(planning.intent).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatPlanningIntentValue(value)}</dd></div>)}</dl> : null}
                     {planning.plan ? <p>Plan version {planning.plan.planVersion}. Clarification receipt recorded.</p> : null}
+                    {(planning.plan?.evidenceToMeaning || planning.evidenceToMeaning) ? <EvidenceReadiness evidence={planning.plan?.evidenceToMeaning || planning.evidenceToMeaning} /> : null}
                     {planning.status === 'SAVED' && token(planning.execution?.status) === 'BLOCKED' ? <p>{preciseGenerationBlocker({ clarificationPassed, informationCurrent: isSessionInformationCurrent, planning, readiness: dedicatedReadiness, studio })}</p> : null}
                   </div>
                   <ButtonGroup><Button variant="outline" disabled={planningBusy} onClick={() => { planningSequence.current += 1; setPlanning(null); setSelectedDraftId(''); setPrompt(''); setComposerError(''); setUncertainPrompt('') }}>New request</Button>

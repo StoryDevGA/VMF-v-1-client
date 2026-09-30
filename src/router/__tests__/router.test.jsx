@@ -275,6 +275,17 @@ describe('Router', () => {
       expect(vmfRoute?.path).toBe('vmf')
     })
 
+    it('guards both Intelligence Hub and Intelligence Quality direct routes by Core and VMF_VIEW', () => {
+      const rootRoute = router.routes.find((route) => route.path === '/')
+      const appRoute = rootRoute?.children?.find((route) => route.path === 'app')
+      const customerAppRoute = appRoute?.children?.[0]
+      for (const path of ['intelligence', 'intelligence/quality']) {
+        const route = customerAppRoute?.children?.find((entry) => entry.path === path)
+        expect(route?.element?.props?.requiredTier).toBe('CORE')
+        expect(route?.element?.props?.children?.props?.requiredSelectedScopePermission).toBe('VMF_VIEW')
+      }
+    })
+
     it('should route runtime workspaces without hard-coding VMF_VIEW before runtime type resolution', () => {
       const rootRoute = router.routes.find((route) => route.path === '/')
       const appRoute = rootRoute?.children?.find((route) => route.path === 'app')

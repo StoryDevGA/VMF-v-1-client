@@ -1759,6 +1759,36 @@ describe('OutcomeStudioWorkspace', () => {
     expect(screen.queryByText('Output Lab asset')).not.toBeInTheDocument()
   })
 
+  it.each(['preview', 'saved'])('SS-040 shows required clarification and optional omission in the %s plan', async (phase) => {
+    const user = userEvent.setup()
+    const evidence = { status: 'CLARIFICATION_REQUIRED', canExecute: false,
+      contractHash: 'private-contract-hash', contractJson: 'private-source-snapshot',
+      clarification: { required: true }, sectionLedger: [
+        { targetSectionKey: 'economics', heading: 'Economics', required: true, status: 'UNRESOLVED' },
+        { targetSectionKey: 'appendix', heading: 'Appendix', required: false, status: 'OMITTED' },
+      ] }
+    planRequest.mockReturnValue(resolvedMutation({ data: planResult({ status: 'CONFIRMATION_REQUIRED',
+      question: '', intent: confirmationIntent(), evidenceToMeaning: evidence }) }))
+    const saved = savedPlan()
+    saved.execution = { status: 'BLOCKED', canExecute: false, reason: 'EVIDENCE_TO_MEANING_CLARIFICATION_REQUIRED' }
+    saved.plan.evidenceToMeaning = evidence
+    confirmPlan.mockReturnValue(resolvedMutation({ data: saved }))
+    renderPage()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your request' }), { target: { value: exactParlonPrompt } })
+    await user.click(screen.getByRole('button', { name: 'Plan request' }))
+    if (phase === 'saved') await user.click(await screen.findByRole('button', { name: 'Confirm and save plan' }))
+    const region = await screen.findByRole('region', { name: 'Evidence readiness' })
+    expect(region).toHaveTextContent('Clarification is required before draft generation')
+    expect(region).toHaveTextContent('Economics')
+    expect(region).toHaveTextContent('Required; supporting evidence needs clarification')
+    expect(region).toHaveTextContent('Optional; omitted as permitted by the selected schema')
+    expect(region).toHaveTextContent('re-resolve this request')
+    expect(screen.queryByText('private-contract-hash')).not.toBeInTheDocument()
+    expect(screen.queryByText('private-source-snapshot')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate draft' })).toBeDisabled()
+    expect(generateResponse).not.toHaveBeenCalled()
+  })
+
   it('prefills the exact Parlon request in one call, permits amendment, then records Clarification', async () => {
     const user = userEvent.setup()
     planRequest.mockReturnValueOnce(resolvedMutation({ data: planResult({

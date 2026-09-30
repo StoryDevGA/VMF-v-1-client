@@ -26,6 +26,7 @@
   --control-height-sm: calc(var(--spacing-md) + var(--spacing-sm) + var(--spacing-xs));
   --control-height-action: calc(var(--spacing-md) * 2);
   --control-height-nav: calc(var(--spacing-md) * 2.25);
+  --control-height-tab: calc(var(--control-height-nav) + var(--spacing-xs) - var(--border-width-thin));
   --control-size-icon-sm: calc(var(--spacing-md) * 2);
   --field-width-search: calc(var(--spacing-xl) * 7);
   --layout-core-rail: calc(var(--spacing-xl) * 9);
@@ -69,6 +70,7 @@
   --line-height-snug: 1.4;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.6;
+  --letter-spacing-label: 0.06em;
 
   /* ===========================
      COLORS
@@ -117,6 +119,9 @@
   --color-info-active: #677070;
   --color-data-blue: #67e8f9;
   --color-metric-accent: var(--color-data-blue);
+  /* SS-037 prototype accents, captured as semantic tokens for the Hub. */
+  --color-intelligence-metric: #73b9ff;
+  --color-intelligence-review: #ff675f;
 
   /* Compatibility aliases for legacy component/page tokens.
      These keep older surfaces aligned with the canonical SLOS system. */
