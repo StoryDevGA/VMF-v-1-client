@@ -374,10 +374,10 @@ const getSourceKind = (source) => {
 }
 const getSourceStatus = (source) => displayHubToken(source.acquisitionStatus || source.documentStatus || source.status)
 
-function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, countsLoading, onOpen, onSelectView, page, setPage }) {
+function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, countsLoading, onOpen, onSelectView, page, setPage, preferredSourceId = '' }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
-  const [selectedSourceId, setSelectedSourceId] = useState('')
+  const [selectedSourceId, setSelectedSourceId] = useState(preferredSourceId)
   const searchRef = useRef(null)
   const sources = !isLoading && !error && Array.isArray(evidencePage?.sourceRegistry) ? evidencePage.sourceRegistry : []
   const evidence = !isLoading && !error && Array.isArray(evidencePage?.evidenceObjects) ? evidencePage.evidenceObjects : []
@@ -391,7 +391,8 @@ function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, 
     return matchesFilter && (sourceMatches(source) || linkedEvidence(source).some(evidenceMatches))
   })
   const eligibleSources = sources.filter((source) => filter === 'All' || filter === getSourceKind(source))
-  const selected = eligibleSources.find((source) => source.sourceId === selectedSourceId) || eligibleSources[0] || null
+  const requestedSourceMissing = preferredSourceId && selectedSourceId === preferredSourceId && !sources.some((source) => source.sourceId === preferredSourceId)
+  const selected = eligibleSources.find((source) => source.sourceId === selectedSourceId) || (!requestedSourceMissing ? eligibleSources[0] : null) || null
   const selectedEvidence = selected ? linkedEvidence(selected) : []
   const resultIds = new Set()
   const matchingEvidence = evidence.flatMap((item) => {
@@ -475,7 +476,7 @@ function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, 
             </article>
           })}
           {!displayedEvidence.length ? <p>{isLoading ? 'Loading matching evidence…' : error ? 'Matching evidence could not be loaded.' : !pageAvailable ? 'Matching evidence is unavailable.' : 'No matching evidence is present in this bounded page.'}</p> : null}
-        </> : <p>{isLoading ? 'Loading selected-source evidence…' : error ? 'Selected-source evidence could not be loaded.' : !pageAvailable ? 'Selected-source evidence is unavailable.' : 'Select a source from this page to inspect its recorded evidence.'}</p>}</Card.Body>
+        </> : <p>{isLoading ? 'Loading selected-source evidence…' : error ? 'Selected-source evidence could not be loaded.' : !pageAvailable ? 'Selected-source evidence is unavailable.' : requestedSourceMissing ? 'The requested source is not present on this evidence page.' : 'Select a source from this page to inspect its recorded evidence.'}</p>}</Card.Body>
       </Card>
     </div>
     <footer className="intelligence-hub__sources-footer"><Button size="sm" variant="ghost" onClick={() => onSelectView('Context')}>← Context</Button>
@@ -484,61 +485,85 @@ function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, 
   </div>
 }
 
-function ReviewView({ discovery, evidencePage, isLoading, onOpen, qualityHref, page, setPage, filter, onFilterChange }) {
-  const evidence = Array.isArray(evidencePage?.evidenceObjects) ? evidencePage.evidenceObjects : []
-  const [selectedId, setSelectedId] = useState('')
-  const selected = evidence.find((item) => (item.evidenceObjectId || item.id) === selectedId) || evidence[0] || null
-  const source = selected && (evidencePage?.sourceRegistry || []).find((item) => item.sourceId === selected.sourceId)
-  const summary = discovery?.evidenceObjectSummary
-  const filterValues = ['Needs review', 'All', 'Approved', 'Rejected']
-  return <>
-    <div className="intelligence-hub__review-intro">
-      <div><p className="intelligence-hub__eyebrow">Evidence review</p><h2>Resolve evidence requiring attention</h2>
-        <p>Inspect the recorded evidence and review state. Decisions remain with the governed review workflow.</p></div>
-      <BoundaryLink to={qualityHref}>Open Intelligence Quality →</BoundaryLink>
-    </div>
-    <div className="intelligence-hub__metrics intelligence-hub__metrics--four intelligence-hub__metrics--compact" aria-label="Evidence review summary">
-      <Metric label="Evidence objects" value={displayHubCount(getHubCount(summary, 'evidenceObjectCount'))} hint="Selected revision" onOpen={onOpen} detail="Count from the bounded selected-revision evidence summary." />
-      <Metric label="Already accepted" value={displayHubCount(getHubCount(summary, 'acceptedEvidenceCount'))} hint="Recorded summary" onOpen={onOpen} detail="An unavailable count is not treated as zero or inferred from the current page." />
-      <Metric label="Needs review" value={displayHubCount(getHubCount(summary, 'pendingReviewCount'))} hint="Human decision" onOpen={onOpen} detail="The Hub does not approve or reject evidence." />
-      <Metric label="Rejected" value={displayHubCount(getHubCount(summary, 'rejectedEvidenceCount'))} hint="Recorded summary" onOpen={onOpen} detail="The count is shown only when supplied by a consistent server summary." />
-    </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__review-layout">
-      <Panel title="Exception queue" eyebrow={`${filter} · ${evidence.length ? `${evidence.length} shown on this page` : 'selected revision'}`}>
-        <div className="intelligence-hub__filters" role="group" aria-label="Review filters">
-          {filterValues.map((label) => <Button key={label} size="sm" variant={filter === label ? 'secondary' : 'ghost'} aria-pressed={filter === label} onClick={() => onFilterChange(label)}>{label}</Button>)}
-        </div>
-        {isLoading ? <p role="status">Loading evidence candidates…</p> : evidence.length ? <ul className="intelligence-hub__list">
-          {evidence.map((item, index) => {
-            const key = item.evidenceObjectId || item.id || `${item.sourceId}-${index}`
-            const candidateSource = (evidencePage?.sourceRegistry || []).find((sourceItem) => sourceItem.sourceId === item.sourceId)
-            return <li key={key}><button type="button" aria-pressed={selected && (selected.evidenceObjectId || selected.id) === key}
-              onClick={() => setSelectedId(key)}>
-              <strong>{item.extractedFact || item.summary || 'Evidence candidate'}</strong><span>{displayHubToken(item.reviewStatus)}</span>
-              <small>{candidateSource?.label || candidateSource?.sourceFileName || 'Source provenance available in the selected evidence record'}</small>
-            </button></li>
-          })}
-        </ul> : <p className="intelligence-hub__muted">{filter === 'Needs review' && evidencePage ? 'No candidates match this review filter in the selected revision.' : evidencePage ? 'No candidates match this review filter on the bounded page.' : 'Evidence candidates are unavailable for this revision.'}</p>}
-        <EvidencePagination evidencePage={evidencePage} page={page} setPage={setPage} isLoading={isLoading} />
-      </Panel>
-      <Panel title="Selected evidence" eyebrow={selected ? displayHubToken(selected.reviewStatus) : 'No candidate selected'}>
-        {selected ? <>
-          <h3>{selected.extractedFact || selected.summary || 'Evidence candidate'}</h3>
-          <dl className="intelligence-hub__facts">
-            <div><dt>Review state</dt><dd>{displayHubToken(selected.reviewStatus)}</dd></div>
-            <div><dt>Confidence</dt><dd>{summaryValue(selected.confidence?.score ?? selected.confidence)}</dd></div>
-            <div><dt>Source</dt><dd>{source?.label || source?.sourceFileName || source?.url || 'Unavailable'}</dd></div>
-          </dl>
-          <p className="intelligence-hub__muted">The Hub provides explanation only. Approval and rejection are recorded in the governed review workflow.</p>
-          <DetailButton onOpen={onOpen} title="Why this needs attention" body="Only a human reviewer can decide whether the candidate is accepted, rejected or deferred. This view does not change the evidence record.">Why this needs attention →</DetailButton>
-        </> : <p className="intelligence-hub__muted">A selected evidence detail is unavailable because no candidate matched this filter.</p>}
-        <BoundaryLink to={qualityHref}>Continue in Intelligence Quality →</BoundaryLink>
-        <button type="button" className="intelligence-hub__inline-action" onClick={() => { onFilterChange('All'); setPage(1) }}>← Show all evidence</button>
-      </Panel>
-    </div>
-  </>
+const getReviewState = (item) => String(item?.reviewStatus || '').toUpperCase()
+const getReviewLabel = (state) => state === 'PENDING' ? 'Needs review' : displayHubToken(state)
+const getReviewVariant = (state) => state === 'PENDING' ? 'warning' : state === 'ACCEPTED' ? 'success' : state === 'REJECTED' ? 'danger' : 'neutral'
+const getReviewFact = (item) => item.extractedFact || item.summary || item.title || 'Evidence detail unavailable'
+const getReviewConfidence = (confidence) => {
+  if (!confidence || typeof confidence !== 'object') return 'Unavailable'
+  const level = confidence.level ? displayHubToken(confidence.level) : ''
+  const score = confidence.score
+  const percentage = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 1 ? `${Math.round(score * 100)}%` : ''
+  return [level, percentage].filter(Boolean).join(' · ') || 'Unavailable'
 }
 
+function ReviewView({ evidencePage, isLoading, error, evidenceStatusCounts, countsLoading, onOpenSource, onSelectView, page, setPage, filter, onFilterChange }) {
+  const [search, setSearch] = useState('')
+  const [selection, setSelection] = useState(null)
+  const searchRef = useRef(null)
+  const selectionKey = `${filter}:${page}`
+  const available = !error && Boolean(evidencePage)
+  const evidence = available && !isLoading ? evidencePage.evidenceObjects || [] : []
+  const sources = available && !isLoading ? evidencePage.sourceRegistry || [] : []
+  const query = search.trim().toLowerCase()
+  const sourceFor = (item) => sources.find((source) => source.sourceId === item.sourceId)
+  const filtered = evidence.filter((item) => {
+    const source = sourceFor(item)
+    return [item.title, item.summary, item.extractedFact, source?.label, source?.sourceRef, source?.url, source?.fileName].filter(Boolean).join(' ').toLowerCase().includes(query)
+  })
+  const selected = evidence.find((item) => selection?.key === selectionKey && item.evidenceObjectId === selection.id) || evidence[0] || null
+  const source = selected ? sourceFor(selected) : null
+  const state = getReviewState(selected)
+  const count = (value) => countsLoading ? 'Loading…' : displayHubCount(value)
+  const queueMessage = isLoading ? 'Loading evidence candidates…' : error ? 'Evidence candidates could not be loaded. Refresh to retry.' : !available ? 'Evidence candidates are unavailable for this revision.' : query ? 'No candidates match this search on this page.' : 'No candidates match this review filter in the selected revision.'
+  return <div className="intelligence-hub__sources-workspace intelligence-hub__review-workspace">
+    <div className="intelligence-hub__sources-toolbar intelligence-hub__review-toolbar">
+      <div><p className="intelligence-hub__eyebrow">Evidence review</p><h2>Resolve evidence requiring attention</h2>
+        <p>Inspect accepted evidence and review exceptions. Evidence decisions remain in the governed workflow.</p></div>
+      <div className="intelligence-hub__sources-search"><Input ref={searchRef} size="sm" fullWidth leftIcon={<MdSearch aria-hidden="true" />} aria-label="Search evidence candidates on this page" placeholder="Search evidence or source on this page…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {search ? <Button size="sm" variant="ghost" aria-label="Clear evidence search" className="intelligence-hub__sources-clear" onClick={() => { setSearch(''); searchRef.current?.focus() }}>×</Button> : null}</div>
+      <Button size="sm" variant="outline" className="intelligence-hub__review-complete" disabled title="Review completion is not delivered by SS-037.">Complete review &amp; continue →</Button>
+    </div>
+    <span className="sr-only" role="status">{available && !isLoading && query ? `${filtered.length} matching evidence candidates on this page.` : ''}</span>
+    <div className="intelligence-hub__sources-summary intelligence-hub__review-summary" role="region" aria-label="Evidence review summary" tabIndex={0}>
+      <span><strong>Unavailable</strong><small>Review started with</small></span>
+      <span><strong>{count(evidenceStatusCounts.accepted)}</strong><small>Already accepted</small></span>
+      <span><strong>Unavailable</strong><small>Approved this review</small></span>
+      <span><strong>{count(evidenceStatusCounts.pending)}</strong><small>Unresolved decisions</small></span>
+    </div>
+    <div className="intelligence-hub__review-browser">
+      <Card variant="outlined" className="intelligence-hub__review-queue" aria-label="Exception queue">
+        <Card.Header><div><h2>Exception queue</h2><strong>{isLoading ? 'Loading…' : available ? `${filtered.length} items shown on this page` : 'Unavailable'}</strong></div>
+          <div className="intelligence-hub__sources-filters" role="group" aria-label="Review filters">{['Needs review', 'All', 'Approved', 'Rejected'].map((label) => <Button key={label} size="sm" variant="outline" aria-pressed={filter === label} onClick={() => onFilterChange(label)}>{label}</Button>)}</div>
+        </Card.Header>
+        <Card.Body role="region" aria-label="Evidence candidate queue" tabIndex={0}>{filtered.length ? <ul className="intelligence-hub__sources-list">{filtered.map((item) => {
+          const itemState = getReviewState(item)
+          const itemSource = sourceFor(item)
+          return <li key={item.evidenceObjectId}><Button variant="ghost" size="sm" fullWidth className="intelligence-hub__review-row" aria-pressed={selected?.evidenceObjectId === item.evidenceObjectId} onClick={() => setSelection({ key: selectionKey, id: item.evidenceObjectId })}>
+            <span className="intelligence-hub__review-row-heading"><Badge size="sm" variant="success" className="intelligence-hub__sources-marker" aria-hidden="true">E</Badge><strong>{item.title || 'Evidence'}</strong><Badge size="sm" variant={getReviewVariant(itemState)} pill>{getReviewLabel(itemState)}</Badge></span>
+            <p>{getReviewFact(item)}</p><small>{itemSource ? getSourceLabel(itemSource) : 'Source unavailable'}</small>
+          </Button></li>
+        })}</ul> : <p role={isLoading ? 'status' : error ? 'alert' : undefined}>{queueMessage}</p>}</Card.Body>
+        <Card.Footer><EvidencePagination evidencePage={error ? null : evidencePage} page={page} setPage={setPage} isLoading={isLoading} /></Card.Footer>
+      </Card>
+      <Card variant="outlined" className="intelligence-hub__review-detail" role="region" aria-label="Selected evidence candidate" tabIndex={0}>
+        {selected ? <>
+          <header><div><small>{selected.title || 'Evidence'} · {source ? getSourceKind(source) : 'Source unavailable'}</small><Badge size="sm" variant={getReviewVariant(state)} pill>{getReviewLabel(state)}</Badge></div><h3>{getReviewFact(selected)}</h3></header>
+          <dl className="intelligence-hub__review-detail-metrics">{[
+            ['Confidence', getReviewConfidence(selected.confidence)], ['Coverage area', 'Unavailable'], ['Acquisition', source?.acquisitionProfile ? displayHubToken(source.acquisitionProfile) : 'Unavailable'], ['Decision', state === 'PENDING' ? 'Unresolved' : displayHubToken(state)],
+          ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+          <section className="intelligence-hub__review-provenance"><header><strong>Evidence provenance</strong><Button variant="ghost" size="sm" disabled={!source} onClick={() => onOpenSource(source.sourceId)}>Open source →</Button></header>
+            <div><Badge variant="success" size="sm" className="intelligence-hub__sources-marker" aria-hidden="true">{source ? getSourceKind(source)[0] : '?'}</Badge><span><strong>{source ? source.sourceRef || source.url || source.fileName || getSourceLabel(source) : 'Source unavailable'}</strong><small>{source ? `${displayHubToken(source.sourceType)} · ${getSourceStatus(source)}` : 'Source provenance unavailable'}</small></span></div>
+            <p>Source content remains linked to this evidence object for inspection and explainability.</p>
+          </section>
+          <section className="intelligence-hub__review-explanation"><strong>Why this needs attention</strong><p>{state === 'PENDING' ? 'This candidate needs a human decision before it can affect downstream workspace understanding.' : 'This evidence has a recorded review state. Inspection does not change that decision or the selected revision.'}</p></section>
+          <footer className="intelligence-hub__review-actions"><span>Approval, rejection and review completion remain in the governed workflow.</span><div><Button variant="outline" size="sm" className="intelligence-hub__review-reject" disabled title="Evidence decisions are not delivered by SS-037.">× Reject</Button><Button variant="outline" size="sm" className="intelligence-hub__review-approve" disabled title="Evidence decisions are not delivered by SS-037.">✓ Approve evidence</Button></div></footer>
+        </> : <p>{isLoading ? 'Loading selected evidence…' : error ? 'Selected evidence could not be loaded.' : available ? 'No candidate is selected for this review filter.' : 'Selected evidence is unavailable.'}</p>}
+      </Card>
+    </div>
+    <footer className="intelligence-hub__sources-footer"><Button variant="ghost" size="sm" onClick={() => onSelectView('Sources')}>← Sources</Button><span>{countsLoading ? 'Loading unresolved decisions…' : evidenceStatusCounts.pending === null ? 'Unresolved decision count is unavailable.' : `${evidenceStatusCounts.pending} evidence decisions remain; continuing preserves them for later review.`}</span><Button variant="ghost" size="sm" onClick={() => onSelectView('Coverage')}>Continue to Coverage →</Button></footer>
+  </div>
+}
 function ReadinessView({ renderer, discovery, onOpen, qualityHref, workbenchHref }) {
   const readiness = discovery?.discoveryHealth?.readiness
   const locked = renderer?.lock?.locked === true
@@ -805,7 +830,11 @@ export default function IntelligenceHub() {
   const [evidencePagination, setEvidencePagination] = useState({ contextKey, page: 1 })
   const evidencePageNumber = evidencePagination.contextKey === contextKey ? evidencePagination.page : 1
   const setEvidencePageNumber = (page) => setEvidencePagination({ contextKey, page })
-  const [reviewFilter, setReviewFilter] = useState('Needs review')
+  const [reviewFilterReceipt, setReviewFilterReceipt] = useState(null)
+  const reviewFilter = reviewFilterReceipt?.contextKey === contextKey ? reviewFilterReceipt.filter : 'Needs review'
+  const setReviewFilter = (filter) => setReviewFilterReceipt({ contextKey, filter })
+  const [sourceFocus, setSourceFocus] = useState(null)
+  const preferredSourceId = sourceFocus?.contextKey === contextKey && sourceFocus.page === evidencePageNumber ? sourceFocus.sourceId : ''
   const visibleInfo = info?.contextKey === contextKey ? info : null
   const openerRef = useRef(null)
   const requiredContext = Boolean(workspaceId && revisionId && customerId && tenantId)
@@ -822,12 +851,12 @@ export default function IntelligenceHub() {
   const renderer = getHubPayload(rendererResponse)
   const context = validateHubContext({ renderer, workspaceId, revisionId, customerId, tenantId })
   const canReadDetail = context.valid
-  const { currentData: summaryEvidenceResponse, isLoading: summaryEvidenceLoading, isFetching: summaryEvidenceFetching, refetch: refetchSummaryEvidence } = useGetRuntimeStateEvidenceQuery(
+  const { currentData: summaryEvidenceResponse, error: summaryEvidenceError, isLoading: summaryEvidenceLoading, isFetching: summaryEvidenceFetching, refetch: refetchSummaryEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1 },
     { skip: !canReadDetail },
   )
-  const summaryEvidencePage = getHubEvidencePage(summaryEvidenceResponse)
-  const needsOverviewCounts = view === 'Overview' || view === 'Context'
+  const summaryEvidencePage = summaryEvidenceError || summaryEvidenceFetching ? null : getHubEvidencePage(summaryEvidenceResponse)
+  const needsOverviewCounts = view === 'Overview' || view === 'Context' || view === 'Review'
   const { currentData: acceptedEvidenceResponse, error: acceptedEvidenceError, isFetching: acceptedEvidenceFetching, refetch: refetchAcceptedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'ACCEPTED' },
     { skip: !canReadDetail || !needsOverviewCounts },
@@ -861,8 +890,10 @@ export default function IntelligenceHub() {
   )
   // The V2 endpoint reports an empty first filtered page as EVIDENCE_MISSING.
   // A successful unfiltered count distinguishes that from missing storage.
-  const emptyFilteredPage = view === 'Review' && reviewFilter !== 'All'
-    && summaryEvidencePage && evidenceError?.data?.error?.code === 'RUNTIME_STATE_V2_EVIDENCE_MISSING'
+  const emptyFilteredPage = view === 'Review' && reviewFilter !== 'All' && evidencePageNumber === 1
+    && typeof summaryEvidencePage?.total === 'number' && Number.isFinite(summaryEvidencePage.total)
+    && summaryEvidencePage.total >= 0 && !summaryEvidencePage.totalCapped
+    && evidenceError?.data?.error?.code === 'RUNTIME_STATE_V2_EVIDENCE_MISSING'
   const evidencePage = emptyFilteredPage
     ? { evidenceObjects: [], total: 0, page: 1, pageSize: 25 }
     : getHubEvidencePage(evidenceResponse)
@@ -900,6 +931,8 @@ export default function IntelligenceHub() {
   const refreshContext = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence].forEach((refetch) => refetch())
   const sourcesRefreshing = rendererFetching || summaryEvidenceFetching || pendingEvidenceFetching || evidenceFetching
   const refreshSources = () => [refetchRenderer, refetchSummaryEvidence, refetchPendingEvidence, refetchEvidence].forEach((refetch) => refetch())
+  const reviewRefreshing = sourcesRefreshing || acceptedEvidenceFetching
+  const refreshReview = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence, refetchEvidence].forEach((refetch) => refetch())
   const discovery = summaryEvidenceLoading || !summaryEvidencePage
     ? null
     : reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)
@@ -924,11 +957,16 @@ export default function IntelligenceHub() {
     setReviewFilter(nextFilter)
     setEvidencePageNumber(1)
   }
+  const openReviewSource = (sourceId) => {
+    setInfo(null)
+    setSourceFocus({ contextKey, page: evidencePageNumber, sourceId })
+    setSearchParams(`?${getHubContextSearch(workspaceId, revisionId, 'Sources')}`, { replace: true })
+  }
   const helpHref = `/help?context=${encodeURIComponent(`Intelligence Hub · ${view}`)}#context-help`
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -972,7 +1010,7 @@ export default function IntelligenceHub() {
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
         {view !== 'Context' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' && sourcesRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : refetchRenderer}>↻ Refresh</Button>
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' && reviewRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : refetchRenderer}>↻ Refresh</Button>
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -983,8 +1021,8 @@ export default function IntelligenceHub() {
             <TabView activeTab={viewIndex} onTabChange={(index) => selectView(HUB_VIEWS[index])} aria-label="Intelligence Hub views" className="intelligence-hub__tabs">
             <TabView.Tab label="Overview"><Overview renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} evidenceStatusCounts={evidenceStatusCounts} isLoading={overviewPending} onOpen={openInfo} qualityHref={qualityHref} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
-            <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}`} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
-            <TabView.Tab label="Review"><ReviewView discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} onOpen={openInfo} qualityHref={qualityHref} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
+            <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}`} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
+            <TabView.Tab label="Review"><ReviewView key={contextKey} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={emptyFilteredPage ? null : evidenceError} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching} onOpenSource={openReviewSource} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView renderer={renderer} discovery={discovery} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Coverage"><CoverageView discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>

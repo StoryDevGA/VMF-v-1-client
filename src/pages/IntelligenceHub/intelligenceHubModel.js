@@ -25,10 +25,10 @@ export const getHubEvidencePage = (response) => {
 
 export const getHubEvidenceStatusCount = (response, error, unfilteredPage) => {
   const page = getHubEvidencePage(response)
-  if (typeof page?.total === 'number' && Number.isFinite(page.total)
+  if (!error && typeof page?.total === 'number' && Number.isFinite(page.total)
     && page.total >= 0 && !page.totalCapped) return page.total
   const unfilteredCountIsVerified = typeof unfilteredPage?.total === 'number'
-    && Number.isFinite(unfilteredPage.total) && !unfilteredPage.totalCapped
+    && Number.isFinite(unfilteredPage.total) && unfilteredPage.total >= 0 && !unfilteredPage.totalCapped
   return unfilteredCountIsVerified
     && error?.data?.error?.code === 'RUNTIME_STATE_V2_EVIDENCE_MISSING' ? 0 : null
 }

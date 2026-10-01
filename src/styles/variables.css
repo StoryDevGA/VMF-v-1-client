@@ -152,6 +152,17 @@
   --line-height-intelligence-sources-row: 1.3;
   --line-height-intelligence-sources-detail: 1.35;
   --line-height-intelligence-sources-copy: 1.45;
+  /* SS-037 Review: measured prototype values absent from the shared scale. */
+  --layout-intelligence-review-rail: calc(var(--spacing-xl) * 13 + var(--spacing-xs));
+  --field-width-intelligence-review-search: calc(var(--spacing-xl) * 10 + var(--spacing-sm) + var(--spacing-2xs));
+  --layout-intelligence-review-pane: calc(var(--spacing-xl) * 15 + var(--border-width-thin));
+  --layout-intelligence-review-mobile-max: 70dvh;
+  --color-intelligence-review-explanation: #08111b;
+  --color-intelligence-review-explanation-border: #446f9f;
+  --color-intelligence-review-explanation-text: #91a7bb;
+  --color-intelligence-review-fact: #d2dad5;
+  --color-intelligence-review-reject: #ff7b72;
+  --color-intelligence-review-reject-border: #69332f;
 
 
   /* Compatibility aliases for legacy component/page tokens.

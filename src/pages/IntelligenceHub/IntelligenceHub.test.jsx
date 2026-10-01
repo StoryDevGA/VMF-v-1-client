@@ -34,6 +34,9 @@ let missingSummaryEvidence = false
 let conflictingStatusCounts = false
 let additionalUnclassifiedEvidence = false
 let emptyEvidenceTotal = false
+let invalidSummaryTotal = undefined
+let retainedSummaryError = false
+let retainedStatusError = false
 let sourcePageFixture
 let sourcePageError = false
 let sourcePageMissing = false
@@ -49,6 +52,8 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   } : { ...renderer, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
   useGetRuntimeStateEvidenceQuery: (...args) => {
     calls.evidence(...args)
+    if (args[0].pageSize === 1 && !args[0].reviewStatus && invalidSummaryTotal !== undefined) return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: invalidSummaryTotal === 'capped' ? 3 : invalidSummaryTotal, totalCapped: invalidSummaryTotal === 'capped' } }, isLoading: false }
+    if (args[0].pageSize === 1 && (args[0].reviewStatus ? retainedStatusError : retainedSummaryError)) return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: 99 } }, error: { status: 503 }, isLoading: false }
     if (args[0].pageSize === 25 && sourcePageError) return { data: sourcePageFixture ? { data: sourcePageFixture } : undefined, error: { status: 503 }, isLoading: false }
     if (args[0].pageSize === 25 && sourcePageMissing) return { isLoading: false }
     if (args[0].pageSize === 25 && sourcePageFixture) return { data: { data: typeof sourcePageFixture === 'function' ? sourcePageFixture(args[0]) : sourcePageFixture }, isLoading: false }
@@ -65,7 +70,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
       error: { data: { error: { code: 'RUNTIME_STATE_V2_EVIDENCE_MISSING' } } }, isLoading: false,
     }
     if (args[0].reviewStatus === 'ACCEPTED' || args[0].reviewStatus === 'PENDING') return {
-      data: { data: { evidenceObjects: emptyEvidenceTotal ? [] : [{}], sourceRegistry: [], total: emptyEvidenceTotal ? 0 : args[0].reviewStatus === 'ACCEPTED' ? 2 : args[0].reviewStatus === 'PENDING' && conflictingStatusCounts ? 2 : 1 } }, isLoading: false,
+      data: { data: { evidenceObjects: emptyEvidenceTotal ? [] : [{ evidenceObjectId: 'count-receipt', reviewStatus: args[0].reviewStatus }], sourceRegistry: [], total: emptyEvidenceTotal ? 0 : args[0].reviewStatus === 'ACCEPTED' ? 2 : args[0].reviewStatus === 'PENDING' && conflictingStatusCounts ? 2 : 1 } }, isLoading: false,
     }
     return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: emptyEvidenceTotal ? 0 : additionalUnclassifiedEvidence ? 4 : 3 } }, isLoading: false }
   },
@@ -145,6 +150,9 @@ function RevisionSwitchReview({ view }) {
 describe('Intelligence Hub', () => {
   beforeEach(() => {
     contextInputs = undefined
+    retainedSummaryError = false
+    invalidSummaryTotal = undefined
+    retainedStatusError = false
     cachedContextRevision = false
     sourcePageFixture = undefined
     sourcePageError = false
@@ -266,6 +274,110 @@ describe('Intelligence Hub', () => {
       { evidenceObjectId: 'one', sourceId: 'web', extractedFact: 'Website discusses observability.', reviewStatus: 'ACCEPTED', acceptanceState: 'ACCEPTED', lineageRef: 'web:first' },
       { evidenceObjectId: 'two', sourceId: 'doc', title: 'Market research', extractedFact: 'Specialised infrastructure demand.', reviewStatus: 'PENDING', acceptanceState: 'CANDIDATE', lineageRef: 'doc:second' },
     ], total: 2, page: 1, pageSize: 25, totalPages: 2,
+  })
+
+
+  it.each(['capped', null, 'unknown', -1])('does not classify filtered missing as empty using an invalid base total (%s)', (total) => {
+    invalidSummaryTotal = total
+    emptyFilteredReview = true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    expect(screen.getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
+    expect(screen.queryByText('No candidates match this review filter in the selected revision.')).not.toBeInTheDocument()
+  })
+  it('does not convert a filtered missing read to empty success using a failed retained base read', () => {
+    retainedSummaryError = true
+    emptyFilteredReview = true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    expect(screen.getByText('Evidence candidates could not be loaded. Refresh to retry.')).toBeInTheDocument()
+    expect(screen.queryByText('No candidates match this review filter in the selected revision.')).not.toBeInTheDocument()
+  })
+  it('does not present retained status counts as current after failed reads', () => {
+    retainedStatusError = true
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const summary = within(screen.getByLabelText('Evidence review summary'))
+    expect(summary.queryByText('99')).not.toBeInTheDocument()
+    expect(summary.getAllByText('Unavailable')).toHaveLength(4)
+  })
+  it('makes the Review summary a named keyboard-focusable region', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const summary = screen.getByRole('region', { name: 'Evidence review summary' })
+    expect(summary).toHaveAttribute('tabindex', '0')
+    await user.click(screen.getByRole('textbox', { name: 'Search evidence candidates on this page' }))
+    await user.tab()
+    expect(summary).toHaveFocus()
+    expect(within(summary).getByText('Unresolved decisions')).toBeInTheDocument()
+  })
+  it('preserves selected Review detail while searching and retains search across filters', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const queue = within(screen.getByRole('region', { name: 'Evidence candidate queue' }))
+    const detail = within(screen.getByRole('region', { name: 'Selected evidence candidate' }))
+    const search = screen.getByRole('textbox', { name: 'Search evidence candidates on this page' })
+    await user.type(search, 'market')
+    expect(queue.queryByText('Website discusses observability.')).not.toBeInTheDocument()
+    expect(queue.getByText('Specialised infrastructure demand.')).toBeInTheDocument()
+    expect(detail.getByRole('heading')).toHaveTextContent('Website discusses observability.')
+    await user.click(screen.getByRole('button', { name: 'All', exact: true }))
+    expect(search).toHaveValue('market')
+    await user.click(screen.getByRole('button', { name: 'Clear evidence search' }))
+    expect(search).toHaveFocus()
+    expect(screen.getByRole('button', { name: '✓ Approve evidence' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '× Reject' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Complete review & continue →' })).toBeDisabled()
+  })
+  it.each([0, null])('renders actual confidence without fabricating missing scores (%s)', (score) => {
+    sourcePageFixture = sourceFixture()
+    sourcePageFixture.evidenceObjects[0].confidence = score === null ? null : { score, level: 'LOW' }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const detail = within(screen.getByRole('region', { name: 'Selected evidence candidate' }))
+    expect(detail.getByText('Confidence').nextSibling).toHaveTextContent(score === null ? 'Unavailable' : 'Low · 0%')
+    expect(detail.getByText('Coverage area').nextSibling).toHaveTextContent('Unavailable')
+  })
+  it('opens the selected source preserving revision and bounded page', async () => {
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await user.click(screen.getByRole('button', { name: 'Next page', exact: true }))
+    await user.click(within(screen.getByRole('region', { name: 'Evidence candidate queue' })).getByRole('button', { name: /Market research/ }))
+    await user.click(screen.getByRole('button', { name: 'Open source →' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Report.pdf' })).toBeInTheDocument()
+    expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-2', page: 2, pageSize: 25 }), expect.anything())
+  })
+  it('does not substitute another source when the linked source is absent', async () => {
+    sourcePageFixture = (args) => ({ ...sourceFixture(), sourceRegistry: args.reviewStatus ? sourceFixture().sourceRegistry : [sourceFixture().sourceRegistry[1]] })
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    await user.click(screen.getByRole('button', { name: 'Open source →' }))
+    expect(screen.getByText('The requested source is not present on this evidence page.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Report.pdf' })).not.toBeInTheDocument()
+  })
+  it.each(['error', 'missing', 'loading'])('hides retained candidates during a Review %s read', (state) => {
+    sourcePageFixture = sourceFixture()
+    sourcePageError = state === 'error'
+    sourcePageMissing = state === 'missing'
+    sourceCurrentPending = state === 'loading'
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review')
+    const queue = within(screen.getByRole('region', { name: 'Evidence candidate queue' }))
+    expect(queue.queryByText('Website discusses observability.')).not.toBeInTheDocument()
+    expect(queue.getByText(state === 'error' ? 'Evidence candidates could not be loaded. Refresh to retry.' : state === 'missing' ? 'Evidence candidates are unavailable for this revision.' : 'Loading evidence candidates…')).toBeInTheDocument()
+  })
+  it('resets Review search and filters when switching to a cached revision', async () => {
+    cachedContextRevision = true
+    sourcePageFixture = sourceFixture()
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=review']}>
+      <Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="review" />} /></Routes>
+    </MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Approved', exact: true }))
+    await user.type(screen.getByRole('textbox', { name: 'Search evidence candidates on this page' }), 'market')
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.getByRole('textbox', { name: 'Search evidence candidates on this page' })).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Needs review', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    expect(calls.evidence).toHaveBeenLastCalledWith(expect.objectContaining({ runtimeInstanceId: 'revision-3', reviewStatus: 'PENDING', page: 1 }), expect.anything())
   })
 
   it('searches evidence text and titles on the current source page and keeps filters page-local', async () => {
