@@ -42,6 +42,8 @@ let sourcePageFixture
 let sourcePageError = false
 let sourcePageMissing = false
 let sourceCurrentPending = false
+let coverageHealthFixture
+let summaryEvidencePending = false
 vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: () => ({ customerId: 'customer-1', tenantId: 'tenant-1' }),
 }))
@@ -50,9 +52,10 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   useGetRuntimeRendererQuery: () => ({ data: { data: emptyEvidenceTotal ? {
     ...renderer,
     discovery: { ...renderer.discovery, evidenceObjectSummary: { ...renderer.discovery.evidenceObjectSummary, evidenceObjectCount: 0 } },
-  } : { ...renderer, ...readinessFields, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
+  } : { ...renderer, ...readinessFields, discovery: { ...renderer.discovery, discoveryHealth: coverageHealthFixture ?? renderer.discovery.discoveryHealth, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
   useGetRuntimeStateEvidenceQuery: (...args) => {
     calls.evidence(...args)
+    if (summaryEvidencePending && args[0].pageSize === 1 && !args[0].reviewStatus) return { isLoading: true }
     if (args[0].pageSize === 1 && !args[0].reviewStatus && invalidSummaryTotal !== undefined) return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: invalidSummaryTotal === 'capped' ? 3 : invalidSummaryTotal, totalCapped: invalidSummaryTotal === 'capped' } }, isLoading: false }
     if (args[0].pageSize === 1 && (args[0].reviewStatus ? retainedStatusError : retainedSummaryError)) return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: 99 } }, error: { status: 503 }, isLoading: false }
     if (args[0].pageSize === 25 && sourcePageError) return { data: sourcePageFixture ? { data: sourcePageFixture } : undefined, error: { status: 503 }, isLoading: false }
@@ -128,7 +131,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
       ...result,
       data: initialOverviewPending && detailPending ? undefined : result.data,
       currentData,
-      isFetching: detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && args[0].pageSize === 25 && sourceCurrentPending) || (name === 'useGetRuntimeRendererQuery' && (rendererRefreshing || pendingRendererContext)),
+      isFetching: detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && ((args[0].pageSize === 25 && sourceCurrentPending) || (args[0].pageSize === 1 && !args[0].reviewStatus && summaryEvidencePending))) || (name === 'useGetRuntimeRendererQuery' && (rendererRefreshing || pendingRendererContext)),
       refetch: () => calls.refresh(name, args[0]),
     }
   }]))
@@ -161,6 +164,8 @@ describe('Intelligence Hub', () => {
     sourcePageError = false
     sourcePageMissing = false
     sourceCurrentPending = false
+    coverageHealthFixture = undefined
+    summaryEvidencePending = false
     emptyFilteredReview = false
     missingSummaryEvidence = false
     conflictingStatusCounts = false
@@ -679,6 +684,49 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('70%')).toBeInTheDocument()
     expect(screen.getByText('Per-domain percentage unavailable')).toBeInTheDocument()
     expect(screen.getByText('Connected evidence')).toBeInTheDocument()
+  })
+
+  it.each(['loading', 'error'])('preserves Coverage renderer readiness independently of evidence-summary %s', (state) => {
+    coverageHealthFixture = { readiness: { state: 'REVIEW_RECOMMENDED', workspaceUse: 'ALLOWED', reason: 'Recorded renderer readiness.' }, confidence: 'REDUCED' }
+    summaryEvidencePending = state === 'loading'
+    retainedSummaryError = state === 'error'
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=coverage')
+    const coveragePanel = within(screen.getByRole('tabpanel', { name: 'Coverage' }))
+    expect(coveragePanel.getByText('Review Recommended')).toBeInTheDocument()
+    expect(coveragePanel.getByText('Allowed')).toBeInTheDocument()
+    expect(coveragePanel.getByText('Reduced')).toBeInTheDocument()
+    expect(coveragePanel.getByText('Recorded renderer readiness.')).toBeInTheDocument()
+    expect(coveragePanel.queryByText('Discovery readiness is not projected for this revision.')).not.toBeInTheDocument()
+    expect(coveragePanel.getByText('70%')).toBeInTheDocument()
+  })
+
+  it('refreshes Coverage reads and opens page-local supporting evidence with revision context', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=coverage')
+    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    expect(calls.refresh).toHaveBeenCalledTimes(3)
+    expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeIntelligenceGraphCoverageQuery', { runtimeInstanceId: 'revision-2' })
+    await user.click(screen.getByRole('button', { name: 'View supporting evidence →' }))
+    expect(screen.getByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })).toHaveValue('Company')
+    expect(calls.evidence.mock.calls.at(-1)[0]).toMatchObject({ runtimeInstanceId: 'revision-2', page: 1, pageSize: 25 })
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })).toHaveValue('')
+    await user.click(screen.getByRole('tab', { name: 'Coverage' }))
+    await user.click(screen.getByRole('button', { name: 'View supporting evidence →' }))
+    expect(screen.getByRole('textbox', { name: 'Search sources and evidence on this page' })).toHaveValue('Company')
+  })
+
+  it('resets Coverage filters and selected domain when a cached revision replaces the context', async () => {
+    cachedContextRevision = true
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=coverage']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="coverage" />} /></Routes></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Gaps', exact: true }))
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Problems domain')
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('region', { name: 'Selected coverage domain' })).toHaveTextContent('Company domain')
+    expect(screen.getByRole('link', { name: 'Acquire recommended evidence →' })).toHaveAttribute('href', '/app/runtime/revision-3/workbench')
   })
 
   it('uses server review filters and explains graph relationships without raw source text', async () => {

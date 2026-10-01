@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import CoverageView from './CoverageView.jsx'
 import { useSearchParams } from 'react-router-dom'
 import { MdChevronRight, MdNorthEast, MdSearch, MdInfoOutline } from 'react-icons/md'
 import { Input } from '../../components/Input'
@@ -374,8 +375,8 @@ const getSourceKind = (source) => {
 }
 const getSourceStatus = (source) => displayHubToken(source.acquisitionStatus || source.documentStatus || source.status)
 
-function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, countsLoading, onOpen, onSelectView, page, setPage, preferredSourceId = '' }) {
-  const [search, setSearch] = useState('')
+function SourcesView({ discovery, evidencePage, isLoading, error, pendingCount, countsLoading, onOpen, onSelectView, page, setPage, preferredSourceId = '', initialSearch = '' }) {
+  const [search, setSearch] = useState(initialSearch)
   const [filter, setFilter] = useState('All')
   const [selectedSourceId, setSelectedSourceId] = useState(preferredSourceId)
   const searchRef = useRef(null)
@@ -709,75 +710,6 @@ function AfterLockView({ renderer, onOpen, onSelectView }) {
   </section>
 }
 
-function CoverageView({ discovery, graphCoverage, onOpen, qualityHref, workbenchHref }) {
-  const health = discovery?.discoveryHealth
-  const graphSummary = graphCoverage?.available === true
-    && graphCoverage?.coverage?.coverageModel === 'EVIDENCE_DOMAIN_COVERAGE'
-    ? graphCoverage.coverage
-    : null
-  const [filter, setFilter] = useState('All')
-  const [selectedKey, setSelectedKey] = useState('')
-  const areas = Array.isArray(graphSummary?.domains) ? graphSummary.domains : []
-  const group = (item) => {
-    const state = String(item.signalStrength || item.state || '').toUpperCase()
-    if (state === 'STRONG') return 'Strong'
-    if (state === 'ADEQUATE' || state === 'MODERATE') return 'Adequate'
-    if (state === 'GAP' || state === 'WEAK' || state === 'REVIEW' || state === 'MISSING') return 'Gaps'
-    return 'Other'
-  }
-  const filtered = areas.filter((item) => filter === 'All' || group(item) === filter)
-  const selected = areas.find((item, index) => (item.signalId || item.area || item.domain || String(index)) === selectedKey) || filtered[0] || null
-  const coverage = getHubCount(graphSummary, 'coveragePercent')
-  const missingDomainCount = Array.isArray(graphSummary?.missingDomains) ? graphSummary.missingDomains.length : null
-  return <>
-    <div className="intelligence-hub__view-intro">
-      <div><p className="intelligence-hub__eyebrow">Intelligence health</p><h2>Understand where intelligence is sufficiently supported</h2>
-        <p>{health?.readiness?.reason || 'Coverage is diagnostic. It does not certify truth or approve a publication.'}</p></div>
-      <div className="intelligence-hub__readiness-statuses">
-        <span><small>Discovery readiness</small><strong>{displayHubToken(health?.readiness?.state)}</strong></span>
-        <span><small>Workspace use</small><strong>{displayHubToken(health?.readiness?.workspaceUse)}</strong></span>
-        <span><small>Confidence</small><strong>{displayHubToken(health?.confidence)}</strong></span>
-      </div>
-    </div>
-    <div className="intelligence-hub__metrics intelligence-hub__metrics--four intelligence-hub__metrics--compact" aria-label="Coverage summary">
-      <Metric label="Evidence mapped" value={coverage === null ? 'Unavailable' : `${coverage}%`} hint="Selected revision" onOpen={onOpen} detail="Coverage percent is supplied by the selected revision summary." />
-      <Metric label="Required domains" value={displayHubCount(getHubCount(graphSummary, 'totalDomainCount'))} hint="Recorded graph coverage summary" onOpen={onOpen} detail="The bounded graph coverage summary supplies this domain total." />
-      <Metric label="Supported" value={displayHubCount(getHubCount(graphSummary, 'coveredDomainCount'))} hint="Recorded graph coverage summary" onOpen={onOpen} detail="The bounded graph coverage summary supplies this supported-domain total." />
-      <Metric label="Material gaps" value={displayHubCount(missingDomainCount)} hint="Recorded graph coverage summary" onOpen={onOpen} detail="This count is the number of missing domains returned by the bounded graph coverage summary." />
-    </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__coverage-layout">
-      <Panel title="Coverage map" eyebrow={`${graphSummary ? displayHubCount(getHubCount(graphSummary, 'totalDomainCount')) : 'Unavailable'} domains in selected revision summary`}>
-        <div className="intelligence-hub__filters" role="group" aria-label="Coverage filters">
-          {['All', 'Strong', 'Adequate', 'Gaps'].map((item) => <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} aria-pressed={filter === item} onClick={() => { setFilter(item); setSelectedKey('') }}>{item}</Button>)}
-        </div>
-        {filtered.length ? <ul className="intelligence-hub__list">{filtered.map((item, index) => {
-          const key = item.signalId || item.area || item.domain || String(index)
-          const areaName = item.area || item.domain || item.signalId
-          const connectedEvidenceCount = getHubCount(item, 'connectedEvidenceCount')
-          return <li key={key}><button type="button" aria-pressed={selected?.signalId === item.signalId || selected?.area === item.area || selected?.domain === item.domain}
-            onClick={() => setSelectedKey(key)}>
-            <strong>{displayHubToken(areaName)}</strong><span>{displayHubToken(item.state)} · {connectedEvidenceCount === null ? 'Connected evidence unavailable' : `${displayHubCount(connectedEvidenceCount)} connected evidence`}</span>
-            <small>{displayHubCount(getHubCount(item, 'acceptedEvidenceCount'))} accepted · {displayHubCount(getHubCount(item, 'pendingEvidenceCount'))} pending · {displayHubCount(getHubCount(item, 'rejectedEvidenceCount'))} rejected</small>
-          </button></li>
-        })}</ul> : <p className="intelligence-hub__empty-state">{areas.length ? 'No domains match this filter.' : 'No domain coverage projection is available for this selected revision.'}</p>}
-        <BoundaryLink to={qualityHref}>Review recommended items →</BoundaryLink>
-      </Panel>
-      <Panel title={selected ? `${displayHubToken(selected.area || selected.domain)} domain` : 'Selected domain'} eyebrow={selected ? displayHubToken(group(selected)) : 'No domain selected'}>
-        {selected ? <>
-          <p>{selected.summary || selected.explanation || 'The graph coverage summary provides evidence counts and state, but no prose explanation for this domain.'}</p>
-          <dl className="intelligence-hub__facts">
-            <div><dt>Coverage</dt><dd>Per-domain percentage unavailable</dd></div>
-            <div><dt>Connected evidence</dt><dd>{displayHubCount(getHubCount(selected, 'connectedEvidenceCount'))}</dd></div>
-            <div><dt>Confidence</dt><dd>{displayHubToken(selected.confidence)}</dd></div>
-          </dl>
-          <DetailButton onOpen={onOpen} title={`${displayHubToken(selected.area || selected.domain)} coverage`} body="Coverage describes current evidence support. It is diagnostic guidance, not a resolution or assurance decision.">Why this matters →</DetailButton>
-        </> : <p className="intelligence-hub__muted">A selected-domain detail is unavailable because no coverage domain is present in the bounded summary.</p>}
-        <BoundaryLink to={workbenchHref}>Acquire evidence in the workbench →</BoundaryLink>
-      </Panel>
-    </div>
-  </>
-}
-
 function GraphView({ manifest, graph, isLoading, onOpen, qualityHref, workbenchHref }) {
   const [mode, setMode] = useState('Journey')
   const [search, setSearch] = useState('')
@@ -875,6 +807,8 @@ export default function IntelligenceHub() {
   const setReviewFilter = (filter) => setReviewFilterReceipt({ contextKey, filter })
   const [sourceFocus, setSourceFocus] = useState(null)
   const preferredSourceId = sourceFocus?.contextKey === contextKey && sourceFocus.page === evidencePageNumber ? sourceFocus.sourceId : ''
+  const preferredSourceSearch = sourceFocus?.contextKey === contextKey && sourceFocus.page === evidencePageNumber ? sourceFocus.search || '' : ''
+  const sourceSearchRequest = sourceFocus?.contextKey === contextKey ? sourceFocus.requestId || 0 : 0
   const visibleInfo = info?.contextKey === contextKey ? info : null
   const openerRef = useRef(null)
   if (info && info.contextKey !== contextKey) setInfo(null)
@@ -952,7 +886,7 @@ export default function IntelligenceHub() {
     { skip: !canReadDetail || view !== 'Intelligence Graph' || manifest?.status !== 'CURRENT' },
   )
   const graph = getHubPayload(graphResponse)?.graph ?? getHubPayload(graphResponse)
-  const { currentData: graphCoverageResponse, isFetching: graphCoverageFetching, refetch: refetchGraphCoverage } = useGetRuntimeIntelligenceGraphCoverageQuery(
+  const { currentData: graphCoverageResponse, isFetching: graphCoverageFetching, error: graphCoverageError, refetch: refetchGraphCoverage } = useGetRuntimeIntelligenceGraphCoverageQuery(
     { runtimeInstanceId: revisionId },
     { skip: !canReadDetail || (view !== 'Overview' && view !== 'Coverage') },
   )
@@ -970,6 +904,8 @@ export default function IntelligenceHub() {
     [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence,
       refetchRejectedEvidence, refetchGraphCoverage].forEach((refetch) => refetch())
   }
+  const coverageRefreshing = rendererFetching || summaryEvidenceFetching || graphCoverageFetching
+  const refreshCoverage = () => [refetchRenderer, refetchSummaryEvidence, refetchGraphCoverage].forEach(refetch => refetch())
   const contextPending = view === 'Context' && [[summaryEvidenceResponse, summaryEvidenceFetching], [acceptedEvidenceResponse, acceptedEvidenceFetching], [pendingEvidenceResponse, pendingEvidenceFetching]].some(([response, fetching]) => !response && fetching)
   const contextRefreshing = rendererFetching || summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching
   const refreshContext = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence].forEach((refetch) => refetch())
@@ -1008,11 +944,16 @@ export default function IntelligenceHub() {
     setSourceFocus({ contextKey, page: evidencePageNumber, sourceId })
     setSearchParams(`?${getHubContextSearch(workspaceId, revisionId, 'Sources')}`, { replace: true })
   }
+  const openCoverageSources = domain => {
+    setEvidencePageNumber(1)
+    setSourceFocus(previous => ({ contextKey, page: 1, sourceId: '', search: domain, requestId: (previous?.requestId || 0) + 1 }))
+    selectView('Sources')
+  }
   const helpHref = `/help?context=${encodeURIComponent(`Intelligence Hub · ${view}`)}#context-help`
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : view === 'Coverage' ? ' intelligence-hub--coverage' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -1055,9 +996,10 @@ export default function IntelligenceHub() {
             title="Opens Evidence Workbench; evidence is not added in the Intelligence Hub.">＋ Add Evidence</Link>
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
-        {view !== 'Context' && view !== 'After lock' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'After lock' && rendererFetching} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'After lock' && rendererFetching)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : refetchRenderer}>↻ Refresh</Button>
+        {view !== 'Context' && view !== 'After lock' && view !== 'Coverage' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'After lock' && rendererFetching} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'After lock' && rendererFetching)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : view === 'Coverage' ? refreshCoverage : refetchRenderer}>↻ Refresh</Button>
         {view === 'After lock' ? <Button size="sm" className="intelligence-hub__lock-discovery" onClick={event => openInfo(discoveryIntakeInfo(renderer), event.currentTarget)}>＋ Start discovery</Button> : null}
+        {view === 'Coverage' ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-hub__coverage-acquire" title="Opens Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -1068,11 +1010,11 @@ export default function IntelligenceHub() {
             <TabView activeTab={viewIndex} onTabChange={(index) => selectView(HUB_VIEWS[index])} aria-label="Intelligence Hub views" className="intelligence-hub__tabs">
             <TabView.Tab label="Overview"><Overview renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} evidenceStatusCounts={evidenceStatusCounts} isLoading={overviewPending} onOpen={openInfo} qualityHref={qualityHref} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
-            <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}`} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
+            <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}:${preferredSourceSearch}:${sourceSearchRequest}`} initialSearch={preferredSourceSearch} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView key={contextKey} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={emptyFilteredPage ? null : evidenceError} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching} onOpenSource={openReviewSource} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView key={contextKey} renderer={renderer} discovery={discovery} evidenceTotal={summaryEvidencePage?.totalCapped ? null : getHubCount(summaryEvidencePage, 'total')} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching || rejectedEvidenceFetching} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} onSelectView={selectView} /></TabView.Tab>
-            <TabView.Tab label="Coverage"><CoverageView discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="Coverage"><CoverageView key={contextKey} discovery={getHubDiscovery(renderer)} graphCoverage={graphCoverage} isLoading={graphCoverageFetching} error={graphCoverageError} qualityHref={qualityHref} workbenchHref={workbenchHref} onSelectView={selectView} onOpenSources={openCoverageSources} /></TabView.Tab>
             <TabView.Tab label="Intelligence Graph"><GraphView manifest={manifest} graph={graph} isLoading={graphLoading} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             </TabView>
           </>}

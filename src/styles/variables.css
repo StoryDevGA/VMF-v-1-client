@@ -329,3 +329,9 @@
   --layout-intelligence-lock-pane: calc(var(--spacing-xl) * 14 + var(--spacing-md) + var(--spacing-2xs)); /* 466px. */
   --layout-intelligence-lock-dialog: calc(var(--spacing-xl) * 23 + var(--spacing-lg)); /* 760px. */
 }
+/* SS-037 Coverage: measured prototype health rail 310px and hint colour. */
+:root {
+  --layout-intelligence-coverage-health: calc(var(--spacing-xl) * 9 + var(--spacing-lg) - var(--spacing-2xs));
+  --color-intelligence-coverage-hint: #8aa69a;
+  --color-intelligence-coverage-adequate: #172337; /* Prototype Adequate chip. */
+}

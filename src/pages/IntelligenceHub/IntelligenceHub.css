@@ -482,7 +482,6 @@
 .intelligence-hub__context-bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1.28fr) minmax(0, .8fr); }
 .intelligence-hub__source-layout { grid-template-columns: minmax(0, .46fr) minmax(0, 1fr); }
 .intelligence-hub__review-layout { grid-template-columns: minmax(0, .58fr) minmax(0, 1fr); }
-.intelligence-hub__coverage-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); }
 .intelligence-hub__after-lock-layout { grid-template-columns: minmax(0, .78fr) minmax(0, 1fr); }
 .intelligence-hub__graph-layout { grid-template-columns: minmax(0, 2.55fr) minmax(280px, 1fr); }
 
@@ -743,7 +742,6 @@
   .intelligence-hub__context-bottom,
   .intelligence-hub__source-layout,
   .intelligence-hub__review-layout,
-  .intelligence-hub__coverage-layout,
   .intelligence-hub__after-lock-layout,
   .intelligence-hub__graph-layout { grid-template-columns: 1fr; }
   .intelligence-hub__view-intro,
@@ -922,24 +920,24 @@
 }
 
 /* Context uses the existing shell, compact cards and shared form controls. */
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__heading {
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__heading {
   border: var(--border-width-thin) solid var(--color-card-border-hover);
   border-radius: var(--border-radius-md);
   background: var(--color-background);
   padding: calc(var(--spacing-sm) + var(--spacing-2xs));
 }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__heading h1 { font-size: var(--font-size-base); font-weight: var(--font-weight-normal); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__heading .intelligence-hub__eyebrow { color: var(--color-success); font-weight: var(--font-weight-bold); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__tabs [role="tablist"] {
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__heading h1 { font-size: var(--font-size-base); font-weight: var(--font-weight-normal); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__heading .intelligence-hub__eyebrow { color: var(--color-success); font-weight: var(--font-weight-bold); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__tabs [role="tablist"] {
   border-color: var(--color-card-border-hover);
   border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
   padding-block: 0;
   padding-inline: calc(var(--spacing-sm) + var(--spacing-2xs));
 }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__tabs [role="tab"] { min-height: var(--control-height-tab); border-radius: var(--border-radius-pill); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__tabs [role="tab"].tabview__tab--active { border-bottom: var(--border-width-medium) solid var(--color-success); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__tabs [role="tab"].tabview__tab--active::after { display: none; }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__tabs [role="tabpanel"] { padding: 0; }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__tabs [role="tab"] { min-height: var(--control-height-tab); border-radius: var(--border-radius-pill); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__tabs [role="tab"].tabview__tab--active { border-bottom: var(--border-width-medium) solid var(--color-success); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__tabs [role="tab"].tabview__tab--active::after { display: none; }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__tabs [role="tabpanel"] { padding: 0; }
 .intelligence-hub__context-workspace {
   display: grid;
   gap: var(--spacing-sm);
@@ -1015,7 +1013,7 @@
 .intelligence-hub--context .intelligence-hub__panel small { font-size: var(--font-size-xs); line-height: var(--line-height-snug); }
 .intelligence-hub--context .textarea::placeholder { color: var(--color-text-secondary); opacity: 1; }
 .intelligence-hub--context .intelligence-hub__context-control { text-transform: none; letter-spacing: 0; }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness) .intelligence-hub__heading-actions .btn,
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage) .intelligence-hub__heading-actions .btn,
 .intelligence-hub--context .intelligence-hub__context-actionbar .btn--outline {
   border: var(--border-width-thin) solid var(--color-card-border-hover);
   border-radius: var(--border-radius-sm);
@@ -1113,6 +1111,109 @@
   .intelligence-hub__sources-registry.card, .intelligence-hub__sources-detail.card { height: var(--layout-intelligence-sources-rail); }
   .intelligence-hub__sources-footer { grid-template-columns: auto auto; }
   .intelligence-hub__sources-footer span { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Coverage: measured prototype composition; shared tokens and controls. */
+.intelligence-hub__coverage-workspace { padding-block-start: calc(var(--spacing-sm) + var(--border-width-thin)); font-size: var(--font-size-intelligence-context-detail); }
+.intelligence-hub__coverage-workspace .card__body { color: var(--color-text-primary); font-size: inherit; line-height: inherit; }
+.intelligence-hub__coverage-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) var(--layout-intelligence-coverage-health) auto; gap: var(--spacing-sm); align-items: center; }
+.intelligence-hub__coverage-toolbar h2 { margin-block: var(--border-width-thin); font-family: var(--font-display); font-size: var(--font-size-intelligence-sources-title); line-height: var(--line-height-intelligence-context-heading); font-weight: var(--font-weight-semibold); }
+.intelligence-hub__coverage-toolbar p { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.intelligence-hub__coverage-toolbar .intelligence-hub__eyebrow { color: var(--color-success); font-weight: var(--font-weight-bold); }
+.intelligence-hub--coverage .intelligence-hub__coverage-readiness { min-width: 0; background: var(--background-intelligence-context-card); border: var(--border-width-thin) solid var(--color-card-border-hover); border-radius: calc(var(--border-radius-md) - var(--border-width-thin)); }
+.intelligence-hub--coverage .intelligence-hub__coverage-readiness .card__body { display: grid; gap: var(--spacing-xs); padding: calc(var(--spacing-sm) - var(--border-width-thin)) calc(var(--spacing-sm) + var(--border-width-thin)); }
+.intelligence-hub__coverage-readiness header { display: flex; justify-content: space-between; gap: var(--spacing-sm); font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-readiness header > span, .intelligence-hub__coverage-readiness small { color: var(--color-text-tertiary); text-transform: uppercase; }
+.intelligence-hub__coverage-readiness .card__body > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-block: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub__coverage-readiness .card__body > div > span { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: var(--spacing-2xs) var(--spacing-xs); font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-readiness .card__body > div > span + span { border-inline-start: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub--coverage .intelligence-hub__coverage-readiness .link { color: var(--color-warning); font-size: var(--font-size-xs); text-transform: none; font-weight: var(--font-weight-normal); }
+.intelligence-hub--coverage .intelligence-hub__coverage-acquire { color: var(--color-text-inverse); background: var(--color-success); border: 0; padding: calc(var(--spacing-sm) - var(--border-width-thin)) calc(var(--spacing-sm) + var(--spacing-xs)); min-height: var(--control-height-action); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; border-radius: var(--border-radius-pill); }
+.intelligence-hub__coverage-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.intelligence-hub__coverage-summary > span:first-child strong, .intelligence-hub__coverage-summary > span:nth-child(3) strong { color: var(--color-success); }
+.intelligence-hub__coverage-summary > span:nth-child(2) strong { color: var(--color-intelligence-metric); }
+.intelligence-hub__coverage-hint { margin: 0; color: var(--color-intelligence-coverage-hint); font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-browser { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: var(--spacing-sm); min-width: 0; }
+.intelligence-hub--coverage .tabview__panel { padding: 0; }
+.intelligence-hub--coverage :is(.intelligence-hub__coverage-map, .intelligence-hub__coverage-detail) { min-width: 0; background: var(--background-intelligence-context-card); border: var(--border-width-thin) solid var(--color-card-border-hover); border-radius: calc(var(--border-radius-md) - var(--border-width-thin)); overflow: hidden; box-shadow: none; }
+.intelligence-hub__coverage-map { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.intelligence-hub--coverage .intelligence-hub__coverage-map .card__header { display: grid; gap: calc(var(--spacing-sm) - var(--border-width-thin)); padding: var(--spacing-sm); border-block-end: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub__coverage-map .card__header > div, .intelligence-hub__coverage-detail header > div { display: flex; justify-content: space-between; align-items: center; gap: var(--spacing-sm); }
+.intelligence-hub__coverage-map h2 { font-family: var(--font-primary); font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); text-transform: uppercase; color: var(--color-text-tertiary); margin: 0; }
+.intelligence-hub__coverage-map .card__header strong { font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-map .intelligence-hub__sources-filters { flex-wrap: wrap; }
+.intelligence-hub--coverage .intelligence-hub__sources-filters .btn { min-height: var(--control-height-action); padding: 0 var(--spacing-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); text-transform: none; border: var(--border-width-thin) solid var(--color-card-border-hover); background: transparent; color: var(--color-text-secondary); }
+.intelligence-hub--coverage .intelligence-hub__sources-filters .btn[aria-pressed="true"] { color: var(--color-success); background: var(--color-intelligence-context-select); border-color: var(--color-intelligence-context-border-success); }
+.intelligence-hub--coverage .intelligence-hub__coverage-domains { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: max-content; gap: calc(var(--spacing-xs) + var(--border-width-thin)); padding: calc(var(--spacing-xs) + var(--spacing-2xs)); overflow: auto; align-content: start; max-height: var(--layout-intelligence-review-pane); }
+.intelligence-hub__coverage-domains:focus-visible, .intelligence-hub__coverage-detail:focus-visible { outline: var(--border-width-medium) solid var(--color-focus-ring); outline-offset: calc(-1 * var(--border-width-medium)); }
+.intelligence-hub--coverage .intelligence-hub__coverage-domain.btn { display: block; padding: calc(var(--spacing-xs) + var(--spacing-2xs)) calc(var(--spacing-sm) - var(--border-width-thin)); text-align: start; color: var(--color-text-primary); background: var(--color-intelligence-context-step); border: var(--border-width-thin) solid var(--color-card-border-hover); border-radius: calc(var(--border-radius-sm) + var(--spacing-2xs)); min-width: 0; min-height: 0; font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); text-transform: none; }
+.intelligence-hub__coverage-domain > .btn__content { display: grid; gap: var(--spacing-xs); width: 100%; min-width: 0; }
+.intelligence-hub--coverage .intelligence-hub__coverage-domain:hover { background: var(--color-intelligence-sources-hover); }
+.intelligence-hub--coverage .intelligence-hub__coverage-domain[aria-pressed="true"] { background: var(--color-intelligence-sources-selected); border-color: var(--color-intelligence-readiness-selected-border); }
+.intelligence-hub__coverage-domain-heading { display: grid; grid-template-columns: var(--spacing-lg) minmax(0, 1fr) auto; gap: calc(var(--spacing-xs) + var(--spacing-2xs)); align-items: center; }
+.intelligence-hub__coverage-domain-heading > i { display: grid; place-items: center; width: var(--spacing-lg); height: var(--spacing-lg); color: var(--color-text-tertiary); background: var(--color-intelligence-context-notes); border-radius: calc(var(--border-radius-sm) + var(--border-width-thin)); font-style: normal; }
+.intelligence-hub__coverage-domain-heading > strong { font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.intelligence-hub__coverage-domain small { color: var(--color-text-tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); }
+.intelligence-hub__coverage-divider { border-block-start: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub--coverage .intelligence-hub__coverage-browser .badge { padding: var(--border-width-thin) calc(var(--spacing-xs) + var(--border-width-thin)); border: 0; font-size: var(--font-size-xs); line-height: var(--line-height-intelligence-sources-copy); font-weight: var(--font-weight-normal); text-transform: none; color: var(--color-text-secondary); background: var(--color-intelligence-context-notes); }
+.intelligence-hub--coverage .intelligence-hub__coverage-browser .badge--success { color: var(--color-success); background: var(--color-intelligence-context-select); }
+.intelligence-hub--coverage .intelligence-hub__coverage-browser .badge--info { color: var(--color-intelligence-metric); background: var(--color-intelligence-coverage-adequate); }
+.intelligence-hub--coverage .intelligence-hub__coverage-browser .badge--warning { color: var(--color-warning); background: var(--color-intelligence-context-warning); }
+.intelligence-hub__coverage-legend--success { color: var(--color-success); }
+.intelligence-hub__coverage-legend--info { color: var(--color-intelligence-metric); }
+.intelligence-hub__coverage-legend--warning { color: var(--color-warning); }
+.intelligence-hub--coverage .intelligence-hub__coverage-map .card__footer { display: flex; gap: var(--spacing-xs); padding: calc(var(--spacing-xs) + var(--spacing-2xs)) calc(var(--spacing-sm) + var(--border-width-thin)); background: transparent; color: var(--color-text-tertiary); font-size: var(--font-size-xs); border-block-start: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub--coverage .intelligence-hub__coverage-detail { max-height: var(--layout-intelligence-review-pane); overflow: auto; }
+.intelligence-hub--coverage .intelligence-hub__coverage-detail > .card__body { display: flex; flex-direction: column; gap: calc(var(--spacing-xs) + var(--spacing-2xs)); padding: calc(var(--spacing-sm) + var(--border-width-thin)); }
+.intelligence-hub__coverage-detail header > div > span { color: var(--color-success); font-size: var(--font-size-xs); text-transform: uppercase; }
+.intelligence-hub__coverage-detail h3 { font-size: var(--font-size-intelligence-sources-title); font-family: var(--font-display); line-height: var(--line-height-intelligence-context-heading); margin-block: var(--spacing-2xs); }
+.intelligence-hub__coverage-detail p { color: var(--color-text-secondary); font-size: var(--font-size-xs); margin: 0; }
+.intelligence-hub__coverage-factors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: var(--border-width-thin) solid var(--color-card-border-hover); border-radius: calc(var(--border-radius-sm) + var(--spacing-2xs)); }
+.intelligence-hub__coverage-factors > span { padding: calc(var(--spacing-xs) + var(--spacing-2xs)) calc(var(--spacing-sm) - var(--border-width-thin)); }
+.intelligence-hub__coverage-factors > span + span { border-inline-start: var(--border-width-thin) solid var(--color-card-border-hover); }
+.intelligence-hub__coverage-factors small { display: block; color: var(--color-text-tertiary); font-size: var(--font-size-xs); text-transform: uppercase; }
+.intelligence-hub__coverage-factors strong { font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-confidence, .intelligence-hub__coverage-next { background: var(--color-intelligence-context-step); border: var(--border-width-thin) solid var(--color-card-border-hover); border-radius: calc(var(--border-radius-sm) + var(--spacing-2xs)); padding: calc(var(--spacing-xs) + var(--border-width-thin)) calc(var(--spacing-sm) - var(--border-width-thin)); }
+.intelligence-hub__coverage-confidence header { display: flex; justify-content: space-between; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-xs); }
+.intelligence-hub__coverage-confidence header > span { text-transform: uppercase; font-weight: var(--font-weight-bold); }
+.intelligence-hub__coverage-confidence header strong { color: var(--color-intelligence-metric); }
+.intelligence-hub__coverage-confidence > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(var(--spacing-xs) + var(--spacing-2xs)); margin-block-start: var(--spacing-xs); }
+.intelligence-hub__coverage-confidence p { display: grid; grid-template-columns: var(--spacing-md) minmax(0, 1fr); gap: calc(var(--spacing-xs) + var(--border-width-thin)); padding: var(--spacing-xs) calc(var(--spacing-xs) + var(--border-width-thin)); border-radius: calc(var(--border-radius-sm) + var(--border-width-thin)); align-items: center; }
+.intelligence-hub__coverage-confidence p > span { display: grid; }
+.intelligence-hub__coverage-confidence small { font-size: var(--font-size-xs); text-transform: uppercase; }
+.intelligence-hub__coverage-confidence i { font-style: normal; text-align: center; }
+.intelligence-hub__coverage-confidence .intelligence-hub__coverage-increase { background: var(--color-intelligence-context-select); color: var(--color-intelligence-readiness-copy); }
+.intelligence-hub__coverage-increase :is(i, small) { color: var(--color-success); }
+.intelligence-hub__coverage-confidence .intelligence-hub__coverage-reduction { background: var(--color-intelligence-context-warning); color: var(--color-intelligence-lock-notice-text); }
+.intelligence-hub__coverage-reduction :is(i, small) { color: var(--color-warning); }
+.intelligence-hub__coverage-impact { background: var(--color-intelligence-review-explanation); border-inline-start: var(--border-width-medium) solid var(--color-intelligence-review-explanation-border); padding: var(--spacing-xs) calc(var(--spacing-sm) - var(--border-width-thin)); }
+.intelligence-hub__coverage-impact h4, .intelligence-hub__coverage-next h4 { font-family: var(--font-primary); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-intelligence-metric); text-transform: uppercase; margin: 0; }
+.intelligence-hub__coverage-impact p, .intelligence-hub__coverage-next p { margin-block: var(--spacing-2xs) calc(var(--spacing-xs) + var(--border-width-thin)); color: var(--color-intelligence-readiness-basis-copy); }
+.intelligence-hub__coverage-next h4 { color: var(--color-success); }
+.intelligence-hub__coverage-next > div { display: flex; flex-wrap: wrap; gap: calc(var(--spacing-xs) + var(--border-width-thin)); }
+.intelligence-hub--coverage .intelligence-hub__coverage-next :is(.btn, .intelligence-hub__coverage-destination) { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-height-action); padding: 0 var(--spacing-sm); border: var(--border-width-thin) solid var(--color-border); border-radius: var(--border-radius-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); line-height: var(--line-height-intelligence-sources-detail); text-transform: none; color: var(--color-success); background: transparent; }
+.intelligence-hub--coverage .intelligence-hub__coverage-next .intelligence-hub__coverage-destination--quality { color: var(--color-warning); background: var(--color-intelligence-context-warning); border-color: var(--color-intelligence-lock-notice-border); }
+.intelligence-hub__coverage-detail footer { border-block-start: var(--border-width-thin) solid var(--color-card-border-hover); padding-block-start: calc(var(--spacing-xs) + var(--spacing-2xs)); font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+.intelligence-hub__coverage-detail footer p { color: var(--color-text-tertiary); }
+.intelligence-hub--coverage .intelligence-hub__sources-footer .btn { font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); text-transform: none; min-height: 0; border: 0; padding: 0; background: transparent; color: var(--color-success); white-space: normal; }
+.intelligence-hub--coverage .intelligence-hub__heading-actions .btn { min-height: var(--control-height-action); font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); text-transform: none; border-radius: calc(var(--border-radius-sm) + var(--spacing-2xs)); }
+.intelligence-hub--coverage .intelligence-hub__heading-actions .intelligence-hub__coverage-acquire { color: var(--color-text-inverse); background: var(--color-success); border: 0; border-radius: var(--border-radius-pill); font-weight: var(--font-weight-bold); text-transform: uppercase; }
+@media (min-width: 1024px) {
+  .intelligence-hub__coverage-toolbar > div > p:not(.intelligence-hub__eyebrow) { display: none; }
+}
+@media (max-width: 1023px) {
+  .intelligence-hub__coverage-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .intelligence-hub__coverage-toolbar > .link { justify-self: start; }
+  .intelligence-hub__coverage-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .intelligence-hub__coverage-summary > span { flex-wrap: wrap; }
+  .intelligence-hub__coverage-browser { grid-template-columns: minmax(0, 1fr); }
+  .intelligence-hub--coverage .intelligence-hub__coverage-detail { max-height: none; }
+}
+@media (max-width: 767px) {
+  .intelligence-hub--coverage .intelligence-hub__coverage-domains { grid-template-columns: minmax(0, 1fr); }
+  .intelligence-hub__coverage-factors { grid-template-columns: minmax(0, 1fr); }
+  .intelligence-hub__coverage-factors > span + span { border-inline-start: 0; border-block-start: var(--border-width-thin) solid var(--color-card-border-hover); }
+  .intelligence-hub__coverage-confidence > div { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* After lock composes the existing compact Hub patterns with measured token spacing. */
