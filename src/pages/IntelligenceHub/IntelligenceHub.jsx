@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MdChevronRight, MdNorthEast, MdSearch, MdInfoOutline } from 'react-icons/md'
 import { Input } from '../../components/Input'
@@ -625,69 +625,88 @@ function ReadinessView({ renderer, discovery, evidenceTotal, evidenceStatusCount
   </div>
 }
 
-function AfterLockView({ renderer, onOpen, workbenchHref }) {
+function DiscoveryIntake() {
+  const [sourceType, setSourceType] = useState('Document')
+  const [values, setValues] = useState({ Document: '', Website: '' })
+  const [description, setDescription] = useState('')
+  return <div className="intelligence-hub__discovery-intake">
+    <div role="group" aria-label="Evidence source type">{['Document', 'Website'].map(type => <Button key={type} size="sm" variant="outline" aria-pressed={sourceType === type} onClick={() => setSourceType(type)}>{type}</Button>)}</div>
+    <label htmlFor="hub-discovery-source">{sourceType === 'Document' ? 'Document name' : 'Website URL'}</label>
+    <Input id="hub-discovery-source" size="sm" fullWidth type={sourceType === 'Website' ? 'url' : 'text'} placeholder={sourceType === 'Document' ? 'For example, Customer interview notes' : 'https://example.com/customer-update'} value={values[sourceType]} onChange={event => setValues({ ...values, [sourceType]: event.target.value })} />
+    <label htmlFor="hub-discovery-description">What should we review?</label>
+    <Input id="hub-discovery-description" size="sm" fullWidth placeholder="Add a short description of the new evidence" value={description} onChange={event => setDescription(event.target.value)} />
+    <aside><strong>What happens next</strong><p>Add to discovery is unavailable because the API does not provide a post-lock intake workflow. These fields are a local draft only and are discarded when this dialog closes. No source or evidence is saved, and the selected revision remains unchanged.</p></aside>
+  </div>
+}
+
+const discoveryIntakeInfo = (renderer) => ({
+  kind: 'discovery-intake', title: 'Add evidence for review',
+  subtitle: `${summaryValue(renderer?.runtimeInstance?.name)} · ${renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Selected revision'}. Review new evidence separately; this dialog does not alter the selected revision.`,
+  body: <DiscoveryIntake />,
+})
+
+function AfterLockExplanation({ revision, locked }) {
+  const steps = [
+    ['The locked revision stays unchanged', locked ? `${revision} remains the reference that existing outcomes rely on.` : 'When a revision is locked, it remains the reference for outcomes created from it.'],
+    ['New evidence is reviewed separately', 'Source details, provenance and the possible effect must be visible before a decision is made.'],
+    ['A person records the impact', 'Evidence may support the current revision, need no change or require closer review.'],
+    ['An updated revision is created only when needed', locked ? `A new revision can be prepared and reviewed without overwriting ${revision}.` : 'A new revision can be prepared without overwriting a previously locked revision.'],
+  ]
+  return <div className="intelligence-hub__lock-explanation">
+    <section><strong>Separate review protects clarity</strong><p>Review new material, its provenance and its effect before an authorised person updates accepted understanding.</p></section>
+    <div className="intelligence-hub__lock-steps">{steps.map(([title, body], index) => <article key={title}><span aria-hidden="true">{index + 1}</span><div><strong>{title}</strong><p>{body}</p></div></article>)}</div>
+    <section className="intelligence-hub__lock-outcomes"><strong>What this means for you</strong><div><strong>Existing outcomes remain dependable</strong><p>Published assets retain their recorded revision reference until an authorised update.</p></div><div><strong>New evidence remains actionable</strong><p>Important changes need a visible review and updated-revision path rather than being applied silently.</p></div></section>
+  </div>
+}
+
+function AfterLockView({ renderer, onOpen, onSelectView }) {
   const lockToken = String(renderer?.lock?.state || '').toUpperCase()
   const lockedSignal = renderer?.lock?.locked === true || lockToken === 'LOCKED'
   const unlockedSignal = renderer?.lock?.locked === false || lockToken === 'UNLOCKED'
   const lockKnown = lockedSignal !== unlockedSignal
   const locked = lockKnown && lockedSignal
   const unlocked = lockKnown && unlockedSignal
-  const lockState = locked ? 'LOCKED' : unlocked ? 'UNLOCKED' : ''
-  const postLockMetric = (label, hint, detail) => ({
-    value: unlocked ? 'Not active' : 'Unavailable',
-    hint: unlocked ? 'Selected revision is unlocked' : hint,
-    detail: unlocked
-      ? 'After-lock items apply only after the selected revision is locked. This revision is currently unlocked.'
-      : detail,
-    label,
-  })
-  const discoveryMetric = postLockMetric('Items in discovery', 'No post-lock inbox projection', 'The current bounded customer read models do not expose a post-lock discovery inbox for this revision.')
-  const decisionMetric = postLockMetric('Needs a decision', 'Recorded decisions only', 'A missing post-lock read model does not establish that no decisions are pending.')
-  const impactMetric = postLockMetric('May require an update', 'No revision impact projection', 'Impact on a future revision must come from an authorised recorded decision.')
-  return <>
-    <div className="intelligence-hub__view-intro">
+  const revision = renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Selected revision'
+  const postLockValue = unlocked ? 'Not active' : 'Unavailable'
+  const readiness = displayHubToken(renderer?.readiness?.state)
+  const published = renderer?.publish?.published === true
+  const explanation = (event) => onOpen({ kind: 'after-lock', title: 'Why new evidence is reviewed separately', subtitle: locked ? `${revision} is a point-in-time reference. New evidence must not rewrite accepted understanding.` : 'These protections apply when a revision has a verified lock. This view does not establish a lock for the selected revision.', body: <AfterLockExplanation revision={revision} locked={locked} /> }, event.currentTarget)
+  return <section className="intelligence-hub__lock-workspace">
+    <header className="intelligence-hub__lock-hero">
       <div><p className="intelligence-hub__eyebrow">New evidence after lock</p><h2>{locked
-        ? 'Keep gathering evidence without changing the locked revision'
+        ? `Keep gathering evidence without changing ${revision}`
         : unlocked
           ? 'After-lock review starts when the selected revision is locked'
           : 'Confirm the lock state before reviewing post-lock evidence'}</h2>
         <p>{locked
-          ? 'New material can support, qualify or challenge a locked revision. Only an authorised decision can change a later revision.'
+          ? 'New material is reviewed separately. The locked revision remains unchanged until an authorised person creates an updated revision.'
           : unlocked
             ? 'The selected revision is not locked, so after-lock evidence and decision history are not active yet.'
             : 'The selected revision’s lock state is unavailable or inconsistent. Post-lock evidence is not inferred.'}</p></div>
-      <Status variant={locked ? 'success' : 'info'} size="sm">{locked ? 'Locked revision' : unlocked ? 'Not locked' : 'Lock state unavailable'}</Status>
-    </div>
-    <div className="intelligence-hub__metrics intelligence-hub__metrics--three intelligence-hub__metrics--compact" aria-label="After lock summary">
-      <Metric {...discoveryMetric} onOpen={onOpen} />
-      <Metric {...decisionMetric} onOpen={onOpen} />
-      <Metric {...impactMetric} onOpen={onOpen} />
-    </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__after-lock-layout">
-      <Panel title="Discovery inbox" eyebrow="Post-lock evidence">
-        <div className="intelligence-hub__filters" role="group" aria-label="Discovery inbox filters">
-          {['All', 'Needs decision', 'Accepted', 'New evidence'].map((item, index) => <Button key={item} size="sm" variant={index === 0 ? 'secondary' : 'ghost'} disabled aria-pressed={index === 0}>{item}</Button>)}
-        </div>
-        <p className="intelligence-hub__empty-state">{unlocked
+      <div className="intelligence-hub__lock-state"><strong>{locked ? published ? 'Published and locked' : 'Locked revision' : unlocked ? 'Not locked' : 'Lock state unavailable'}</strong><span>{summaryValue(renderer?.runtimeInstance?.name)} · {revision}</span><small>Locked {locked ? compactReadableDate(renderer?.lock?.lockedAt) : 'Unavailable'} · Snapshot {locked ? summaryValue(renderer?.lock?.snapshot?.snapshotId) : 'Unavailable'}</small></div>
+    </header>
+    <div className="intelligence-hub__lock-notice"><MdInfoOutline aria-hidden="true" /><p><strong>{locked ? `${revision} is protected` : unlocked ? `${revision} is not locked` : 'Lock state unavailable'}</strong> {locked ? 'Evidence gathered after lock can support, qualify or challenge the current revision, but cannot silently alter accepted understanding.' : 'These protections apply only after a verified lock. New evidence requires human review before changing accepted understanding.'}</p><Button size="sm" variant="ghost" onClick={explanation}>Why this is separate →</Button></div>
+    <div className="intelligence-hub__lock-summary" role="group" aria-label="After lock summary">{['Items in discovery', 'Needs a decision', 'May require an update', 'Current revision'].map((label, index) => <div key={label}><strong data-unavailable={index < 3 || readiness === 'Unavailable'}>{index < 3 ? postLockValue : readiness}</strong><small>{label}</small></div>)}<nav aria-label="Revision perspective"><Button size="sm" variant="outline" aria-current="page">After lock</Button><Button size="sm" variant="outline" onClick={() => onSelectView('Overview')}>Current revision</Button></nav></div>
+    <div className="intelligence-hub__lock-toolbar"><div><p className="intelligence-hub__eyebrow">Discovery inbox</p><strong>{locked ? `Evidence gathered since ${revision} was locked` : 'Post-lock evidence'}</strong></div><nav aria-label="Discovery inbox filters">{['All', 'Needs decision', 'Accepted'].map((label, index) => <Button key={label} size="sm" variant="outline" disabled aria-pressed={index === 0}>{label}</Button>)}</nav></div>
+    <div className="intelligence-hub__lock-browser">
+      <aside className="intelligence-hub__lock-inbox"><header><div><small>New evidence</small><strong>{postLockValue}</strong></div><small>Most recent first</small></header><div role="region" aria-label="Post-lock discovery inbox" tabIndex={0}><p>{unlocked
           ? 'Post-lock inbox is not active because the selected revision is unlocked.'
           : locked
             ? 'Post-lock inbox items are not available from the bounded read models for this selected revision.'
-            : 'Post-lock inbox state is unavailable because the selected revision lock state could not be verified.'}</p>
-        <p className="intelligence-hub__muted">General revision activity is not treated as new post-lock evidence.</p>
-        <BoundaryLink to={workbenchHref}>Open existing revision workbench →</BoundaryLink>
-      </Panel>
-      <Panel title="Evidence impact and history" eyebrow="Human authority">
-        <p>Accept, qualify, challenge or defer are decisions for the governed review workflow. This Hub makes no automatic impact decision.</p>
-        <dl className="intelligence-hub__facts">
-          <div><dt>Selected revision</dt><dd>{summaryValue(renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : '')}</dd></div>
-          <div><dt>Lock snapshot</dt><dd>{locked ? displayHubToken(renderer?.lock?.snapshotId || renderer?.lock?.lockedAt) : displayHubToken(lockState)}</dd></div>
-          <div><dt>Post-lock decision history</dt><dd>Unavailable</dd></div>
-        </dl>
-        <DetailButton onOpen={onOpen} title="Why After lock is separate" body="New evidence cannot silently change accepted understanding in a locked revision. An authorised person must decide whether it affects a later revision.">Why this is separate →</DetailButton>
-        <BoundaryLink to={workbenchHref}>Open the existing discovery workflow →</BoundaryLink>
-      </Panel>
+          : 'Post-lock inbox state is unavailable because the selected revision lock state could not be verified.'}</p></div><footer>Evidence must remain linked to the exact locked revision.</footer></aside>
+      <article className="intelligence-hub__lock-detail"><header><Badge size="sm" pill>{postLockValue}</Badge><h3>No post-lock item selected</h3><p>Source and received time unavailable</p></header><div className="intelligence-hub__lock-detail-scroll" role="region" aria-label="Post-lock evidence detail" tabIndex={0}>
+        <section><p className="intelligence-hub__eyebrow">Source and provenance</p><strong>Unavailable</strong><p>No post-lock source receipt is available for this revision.</p><Button size="sm" variant="ghost" disabled>Inspect source details →</Button></section>
+        <section className="intelligence-hub__lock-boundary"><p className="intelligence-hub__eyebrow">What this can affect</p><div><strong>{locked ? `Locked revision ${revision}` : revision}</strong><small>{locked ? 'New evidence cannot be added silently into this revision.' : 'A verified lock is required for after-lock review.'}</small></div><div><strong>Accepted understanding</strong><small>Any change requires human review and an updated revision.</small></div></section>
+        <section className="intelligence-hub__lock-impact"><p className="intelligence-hub__eyebrow">Evidence impact</p><p>Unavailable · no recorded post-lock impact decision.</p><div>{['No change to current revision', 'Supports current revision', 'Could require an updated revision', 'Current revision may need review'].map(label => <Button key={label} size="sm" variant="outline" disabled>○ {label}</Button>)}</div></section>
+        <section className="intelligence-hub__lock-next"><p className="intelligence-hub__eyebrow">Next action</p><strong>Unavailable</strong><p>No next step is inferred without a recorded impact.</p></section>
+        <aside className="intelligence-hub__lock-advisor"><MdInfoOutline aria-hidden="true" /><div><p className="intelligence-hub__eyebrow">Advisor suggestion</p><p>Unavailable</p><small>Guidance only · an authorised person records the decision.</small></div></aside>
+        <section className="intelligence-hub__lock-decision"><header><p className="intelligence-hub__eyebrow">Record next step</p><small>Owner · Unavailable</small></header><p>Recording a decision must not change {revision}. Decision recording is not delivered here.</p><Button size="sm" disabled>Save decision</Button></section>
+        <section><p className="intelligence-hub__eyebrow">Decision history</p><p>Unavailable · general revision activity is not post-lock decision history.</p></section>
+      </div></article>
     </div>
-  </>
+    <footer className="intelligence-hub__lock-footer"><span>Current revision readiness <strong>{readiness}</strong> · Outcome readiness <span>Unavailable</span></span><Button size="sm" variant="ghost" onClick={() => onSelectView('Readiness & publish')}>View readiness and history →</Button><Button size="sm" className="intelligence-hub__lock-discovery" onClick={event => onOpen(discoveryIntakeInfo(renderer), event.currentTarget)}>＋ Start discovery</Button></footer>
+    <nav className="intelligence-hub__sources-footer intelligence-hub__lock-navigation" aria-label="After lock view navigation"><Button size="sm" variant="ghost" onClick={() => onSelectView('Readiness & publish')}>← Readiness &amp; publish</Button><Button size="sm" variant="ghost" onClick={() => onSelectView('Coverage')}>Continue to Coverage →</Button></nav>
+  </section>
 }
 
 function CoverageView({ discovery, graphCoverage, onOpen, qualityHref, workbenchHref }) {
@@ -858,6 +877,10 @@ export default function IntelligenceHub() {
   const preferredSourceId = sourceFocus?.contextKey === contextKey && sourceFocus.page === evidencePageNumber ? sourceFocus.sourceId : ''
   const visibleInfo = info?.contextKey === contextKey ? info : null
   const openerRef = useRef(null)
+  if (info && info.contextKey !== contextKey) setInfo(null)
+  useEffect(() => {
+    openerRef.current = null
+  }, [contextKey])
   const requiredContext = Boolean(workspaceId && revisionId && customerId && tenantId)
   const {
     currentData: rendererResponse,
@@ -989,7 +1012,7 @@ export default function IntelligenceHub() {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -1032,8 +1055,9 @@ export default function IntelligenceHub() {
             title="Opens Evidence Workbench; evidence is not added in the Intelligence Hub.">＋ Add Evidence</Link>
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
-        {view !== 'Context' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' && readinessRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : refetchRenderer}>↻ Refresh</Button>
+        {view !== 'Context' && view !== 'After lock' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'After lock' && rendererFetching} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'After lock' && rendererFetching)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : refetchRenderer}>↻ Refresh</Button>
+        {view === 'After lock' ? <Button size="sm" className="intelligence-hub__lock-discovery" onClick={event => openInfo(discoveryIntakeInfo(renderer), event.currentTarget)}>＋ Start discovery</Button> : null}
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -1047,15 +1071,15 @@ export default function IntelligenceHub() {
             <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}`} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView key={contextKey} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={emptyFilteredPage ? null : evidenceError} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching} onOpenSource={openReviewSource} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView key={contextKey} renderer={renderer} discovery={discovery} evidenceTotal={summaryEvidencePage?.totalCapped ? null : getHubCount(summaryEvidencePage, 'total')} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching || rejectedEvidenceFetching} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /></TabView.Tab>
-            <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Coverage"><CoverageView discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Intelligence Graph"><GraphView manifest={manifest} graph={graph} isLoading={graphLoading} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             </TabView>
           </>}
-    <Dialog open={Boolean(visibleInfo)} onClose={closeInfo} size={visibleInfo?.kind === 'assurance-report' ? 'xl' : 'md'} className={visibleInfo?.kind === 'assurance-report' ? 'intelligence-hub__report-dialog' : ''} showCloseButton={visibleInfo?.kind !== 'assurance-report'} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Intelligence assurance report' : undefined}>
-      <Dialog.Header>{visibleInfo?.kind === 'assurance-report' ? <><div><p className="intelligence-hub__report-eyebrow">Assurance export preview</p><h2>{visibleInfo.title}</h2><p>{visibleInfo.subtitle}</p></div><Button size="sm" variant="outline" aria-label="Close report" onClick={closeInfo}>Close ×</Button></> : <h2>{visibleInfo?.title || 'Information'}</h2>}</Dialog.Header>
-      <Dialog.Body key={visibleInfo?.kind || 'information'} role={visibleInfo?.kind === 'assurance-report' ? 'region' : undefined} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Assurance report content' : undefined} tabIndex={visibleInfo?.kind === 'assurance-report' ? 0 : undefined}>{visibleInfo?.body}</Dialog.Body>
-      <Dialog.Footer>{visibleInfo?.kind === 'assurance-report' ? <><span>Read-only preview · governed exports are unavailable</span><div><Button variant="outline" size="sm" onClick={closeInfo}>Close</Button><Button variant="outline" size="sm" disabled>Download data CSV</Button><Button size="sm" disabled>Export PDF</Button></div></> : <Button variant="outline" size="sm" onClick={closeInfo}>Back to {view}</Button>}</Dialog.Footer>
+    <Dialog open={Boolean(visibleInfo)} onClose={closeInfo} size={visibleInfo?.kind === 'assurance-report' ? 'xl' : ['after-lock', 'discovery-intake'].includes(visibleInfo?.kind) ? 'lg' : 'md'} className={visibleInfo?.kind === 'assurance-report' ? 'intelligence-hub__report-dialog' : visibleInfo?.kind === 'after-lock' ? 'intelligence-hub__lock-dialog' : visibleInfo?.kind === 'discovery-intake' ? 'intelligence-hub__lock-dialog intelligence-hub__intake-dialog' : ''} showCloseButton={!['assurance-report', 'after-lock', 'discovery-intake'].includes(visibleInfo?.kind)} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Intelligence assurance report' : visibleInfo?.kind === 'after-lock' ? 'Why new evidence is reviewed separately' : visibleInfo?.kind === 'discovery-intake' ? 'Add evidence for review' : undefined}>
+      <Dialog.Header>{['after-lock', 'discovery-intake'].includes(visibleInfo?.kind) ? <><div><p className="intelligence-hub__eyebrow">{visibleInfo?.kind === 'discovery-intake' ? 'New evidence after lock' : 'About After lock'}</p><h2>{visibleInfo.title}</h2><p>{visibleInfo.subtitle}</p></div><Button size="sm" variant="outline" aria-label={visibleInfo?.kind === 'discovery-intake' ? 'Close evidence intake' : 'Close explanation'} onClick={closeInfo}>Close ×</Button></> : visibleInfo?.kind === 'assurance-report' ? <><div><p className="intelligence-hub__report-eyebrow">Assurance export preview</p><h2>{visibleInfo.title}</h2><p>{visibleInfo.subtitle}</p></div><Button size="sm" variant="outline" aria-label="Close report" onClick={closeInfo}>Close ×</Button></> : <h2>{visibleInfo?.title || 'Information'}</h2>}</Dialog.Header>
+      <Dialog.Body key={visibleInfo?.kind || 'information'} role={['assurance-report', 'after-lock', 'discovery-intake'].includes(visibleInfo?.kind) ? 'region' : undefined} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Assurance report content' : visibleInfo?.kind === 'after-lock' ? 'After lock explanation content' : visibleInfo?.kind === 'discovery-intake' ? 'Evidence intake content' : undefined} tabIndex={['assurance-report', 'after-lock', 'discovery-intake'].includes(visibleInfo?.kind) ? 0 : undefined}>{visibleInfo?.body}</Dialog.Body>
+      <Dialog.Footer>{visibleInfo?.kind === 'discovery-intake' ? <><Button variant="outline" size="sm" onClick={closeInfo}>Cancel</Button><Button size="sm" disabled>Add to discovery →</Button></> : visibleInfo?.kind === 'after-lock' ? <><Button variant="outline" size="sm" onClick={closeInfo}>Return to evidence</Button><Button size="sm" onClick={() => { closeInfo(); selectView('Readiness & publish') }}>View readiness and publication →</Button></> : visibleInfo?.kind === 'assurance-report' ? <><span>Read-only preview · governed exports are unavailable</span><div><Button variant="outline" size="sm" onClick={closeInfo}>Close</Button><Button variant="outline" size="sm" disabled>Download data CSV</Button><Button size="sm" disabled>Export PDF</Button></div></> : <Button variant="outline" size="sm" onClick={closeInfo}>Back to {view}</Button>}</Dialog.Footer>
     </Dialog>
   </main>
 }

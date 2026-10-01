@@ -145,6 +145,7 @@ function RevisionSwitchReview({ view }) {
   return <>
     <IntelligenceHub />
     <button onClick={() => navigate(`/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-3${view ? `&view=${view}` : ''}`)}>Switch revision</button>
+    <button onClick={() => navigate(`/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2${view ? `&view=${view}` : ''}`)}>Return to original revision</button>
   </>
 }
 
@@ -708,6 +709,128 @@ describe('Intelligence Hub', () => {
     expect(screen.getByRole('heading', { name: 'After-lock review starts when the selected revision is locked' })).toBeInTheDocument()
     expect(screen.getAllByText('Not active').length).toBeGreaterThan(0)
     expect(screen.getByText('Post-lock inbox is not active because the selected revision is unlocked.')).toBeInTheDocument()
+  })
+
+  it('uses recorded lock receipts without inventing a post-lock inbox or decision', () => {
+    readinessFields = { readiness: { state: 'LOCKED' }, publish: { published: true }, lock: { state: 'LOCKED', locked: true, lockedAt: '2026-09-17T18:14:00Z', snapshot: { snapshotId: 'lock-receipt-2' } } }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    expect(screen.getByText('Published and locked')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'After lock summary' })).toHaveTextContent('Unavailable')
+    expect(screen.getByText(/Snapshot lock-receipt-2/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Post-lock discovery inbox' })).toHaveTextContent('not available')
+    expect(screen.getByRole('button', { name: 'Save decision' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Inspect source details →' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '○ Supports current revision' })).toBeDisabled()
+    expect(within(screen.getByRole('tabpanel', { name: 'After lock' })).queryByText(/0 items shown/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '＋ Start discovery' })).toHaveLength(2)
+    expect(screen.queryByRole('link', { name: '＋ Start discovery' })).not.toBeInTheDocument()
+  })
+
+  it.each([{}, { state: 'LOCKED', locked: false }])('does not assert protection when lock state is missing or conflicting (%j)', (lock) => {
+    readinessFields = { lock }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    expect(screen.getByRole('heading', { name: 'Confirm the lock state before reviewing post-lock evidence' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Post-lock discovery inbox' })).toHaveTextContent('could not be verified')
+    expect(screen.queryByText('R2 is protected')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not active')).not.toBeInTheDocument()
+  })
+
+  it.each([{}, { state: 'LOCKED', locked: false }, { state: 'UNLOCKED', locked: false }])('keeps the protection explanation policy-only without a verified lock (%j)', async (lock) => {
+    const user = userEvent.setup()
+    readinessFields = { lock }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    expect(screen.getByText(/These protections apply only after a verified lock/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Why this is separate →' }))
+    const dialog = screen.getByRole('dialog', { name: 'Why new evidence is reviewed separately' })
+    expect(dialog).toHaveTextContent('This view does not establish a lock for the selected revision.')
+    expect(dialog).toHaveTextContent('When a revision is locked')
+    expect(dialog).not.toHaveTextContent('R2 is a point-in-time reference')
+    expect(dialog).not.toHaveTextContent('R2 remains the reference')
+  })
+
+  it('preserves After lock on explanation close and navigates with selected context', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const opener = screen.getByRole('button', { name: 'Why this is separate →' })
+    await user.click(opener)
+    expect(screen.getByRole('dialog', { name: 'Why new evidence is reviewed separately' })).toBeInTheDocument()
+    expect(screen.getByText('An updated revision is created only when needed')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Return to evidence' }))
+    expect(screen.getByRole('tab', { name: 'After lock' })).toHaveAttribute('aria-selected', 'true')
+    expect(opener).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'View readiness and history →' }))
+    expect(screen.getByRole('tab', { name: 'Readiness & publish' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'After lock' }))
+    await user.click(screen.getByRole('button', { name: 'Current revision' }))
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    expect(calls.evidence.mock.calls.at(-1)[0].runtimeInstanceId).toBe('revision-2')
+  })
+
+  it.each([0, 1])('opens local-only intake from discovery button %i and discards its fields on close', async (index) => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const opener = screen.getAllByRole('button', { name: '＋ Start discovery' })[index]
+    await user.click(opener)
+    const dialog = screen.getByRole('dialog', { name: 'Add evidence for review' })
+    expect(dialog).toHaveTextContent('API does not provide a post-lock intake workflow')
+    expect(within(dialog).getByRole('button', { name: 'Add to discovery →' })).toBeDisabled()
+    await user.type(screen.getByRole('textbox', { name: 'Document name' }), 'Local draft')
+    await user.click(within(dialog).getByRole('button', { name: 'Website', exact: true }))
+    expect(screen.getByRole('textbox', { name: 'Website URL' })).toHaveValue('')
+    await user.type(screen.getByRole('textbox', { name: 'Website URL' }), 'https://example.com')
+    await user.click(within(dialog).getByRole('button', { name: 'Document', exact: true }))
+    expect(screen.getByRole('textbox', { name: 'Document name' })).toHaveValue('Local draft')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(opener).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'After lock' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(opener)
+    expect(screen.getByRole('textbox', { name: 'Document name' })).toHaveValue('')
+  })
+
+  it('discards the discovery draft when the selected revision changes', async () => {
+    cachedContextRevision = true
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="after-lock" />} /></Routes></MemoryRouter>)
+    await user.click(screen.getAllByRole('button', { name: '＋ Start discovery' })[0])
+    await user.type(screen.getByRole('textbox', { name: 'What should we review?' }), 'Previous revision draft')
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: '＋ Start discovery' })[0])
+    expect(screen.getByRole('textbox', { name: 'What should we review?' })).toHaveValue('')
+    expect(screen.getByRole('dialog')).toHaveTextContent('R3')
+  })
+
+  it.each(['intake', 'explanation'])('does not reopen an obsolete %s dialog when returning to a revision', async (kind) => {
+    cachedContextRevision = true
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock']}><Routes><Route path="/app/intelligence" element={<RevisionSwitchReview view="after-lock" />} /></Routes></MemoryRouter>)
+    await user.click(kind === 'intake' ? screen.getAllByRole('button', { name: '＋ Start discovery' })[0] : screen.getByRole('button', { name: 'Why this is separate →' }))
+    if (kind === 'intake') await user.type(screen.getByRole('textbox', { name: 'Document name' }), 'Obsolete draft')
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Return to original revision' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: '＋ Start discovery' })[0])
+    expect(screen.getByRole('textbox', { name: 'Document name' })).toHaveValue('')
+  })
+
+  it('blocks After lock Refresh while its bounded renderer read is pending', async () => {
+    rendererRefreshing = true
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    const refresh = screen.getByRole('button', { name: /Refresh/ })
+    expect(refresh).toBeDisabled()
+    expect(refresh).toHaveAttribute('aria-busy', 'true')
+    await user.click(refresh)
+    expect(calls.refresh).not.toHaveBeenCalled()
+  })
+
+  it('refreshes only the selected bounded renderer from After lock', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=after-lock')
+    await user.click(screen.getByRole('button', { name: /Refresh/ }))
+    expect(calls.refresh).toHaveBeenCalledTimes(1)
+    expect(calls.refresh).toHaveBeenCalledWith('useGetRuntimeRendererQuery', { runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1' })
   })
 
   it('does not render revision data when route context is missing', () => {

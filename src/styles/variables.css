@@ -317,3 +317,15 @@
   --font-size-intelligence-report-fine: 0.625rem;
 }
 :root { --line-height-intelligence-report-title: 1.25; /* Measured 25px on 20px report headings. */ }
+
+/* SS-037 After lock: measured prototype values absent from the shared palette. */
+:root {
+  --background-intelligence-lock-hero: linear-gradient(135deg, var(--color-intelligence-sources-selected), #080d0a);
+  --color-intelligence-lock-notice: #171106;
+  --color-intelligence-lock-notice-border: #4b3d16;
+  --color-intelligence-lock-notice-text: #d5c28d;
+  --color-intelligence-lock-advisor-border: #285e47;
+  --font-size-intelligence-lock-heading: 1.1875rem; /* Measured 19px. */
+  --layout-intelligence-lock-pane: calc(var(--spacing-xl) * 14 + var(--spacing-md) + var(--spacing-2xs)); /* 466px. */
+  --layout-intelligence-lock-dialog: calc(var(--spacing-xl) * 23 + var(--spacing-lg)); /* 760px. */
+}
