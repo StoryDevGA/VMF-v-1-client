@@ -23,6 +23,7 @@ const renderer = {
 }
 
 const calls = { evidence: vi.fn(), manifest: vi.fn(), graph: vi.fn(), coverage: vi.fn(), refresh: vi.fn() }
+let readinessFields = {}
 let contextInputs
 let cachedContextRevision = false
 let staleOverviewDetails = false
@@ -49,7 +50,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   useGetRuntimeRendererQuery: () => ({ data: { data: emptyEvidenceTotal ? {
     ...renderer,
     discovery: { ...renderer.discovery, evidenceObjectSummary: { ...renderer.discovery.evidenceObjectSummary, evidenceObjectCount: 0 } },
-  } : { ...renderer, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
+  } : { ...renderer, ...readinessFields, discovery: { ...renderer.discovery, inputComplete: true, ...(contextInputs !== undefined ? { inputValues: contextInputs } : {}) } } }, isLoading: false, refetch: vi.fn() }),
   useGetRuntimeStateEvidenceQuery: (...args) => {
     calls.evidence(...args)
     if (args[0].pageSize === 1 && !args[0].reviewStatus && invalidSummaryTotal !== undefined) return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: invalidSummaryTotal === 'capped' ? 3 : invalidSummaryTotal, totalCapped: invalidSummaryTotal === 'capped' } }, isLoading: false }
@@ -149,6 +150,7 @@ function RevisionSwitchReview({ view }) {
 
 describe('Intelligence Hub', () => {
   beforeEach(() => {
+    readinessFields = {}
     contextInputs = undefined
     retainedSummaryError = false
     invalidSummaryTotal = undefined
@@ -754,4 +756,110 @@ describe('Intelligence Hub', () => {
     expect(screen.getByText('Other status: 1')).toBeInTheDocument()
     expect(screen.queryByText(/Draft/)).not.toBeInTheDocument()
   })
+  it('renders selected readiness receipts without inventing control decisions or outcome readiness', () => {
+    readinessFields = { readiness: { state: 'LOCKED', reason: 'WRONG TOP LEVEL REASON', sectionTruth: { reason: 'Recorded section truth', readySectionCount: 5, requiredSectionCount: 5 } }, publish: { state: 'PUBLISHED', outputEligibility: { outputEligible: true } }, lock: { state: 'LOCKED', locked: true, snapshot: { snapshotId: 'recorded-lock-id' } } }
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.getByText('Recorded section truth')).toBeInTheDocument()
+    expect(screen.queryByText('WRONG TOP LEVEL REASON')).not.toBeInTheDocument()
+    expect(screen.getByText('5 of 5 required sections ready')).toBeInTheDocument()
+    expect(screen.getByText('recorded-lock-id')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Publish & lock revision' })).toBeDisabled()
+    expect(within(screen.getByRole('region', { name: 'Selected assurance control' })).getAllByText('Unavailable').length).toBeGreaterThan(1)
+    expect(screen.queryByText(/Working revision R/)).not.toBeInTheDocument()
+  })
+  it('keeps the selected control after report preview closes and preserves navigation context', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await user.click(screen.getByRole('button', { name: /Evidence acceptance Human review/ }))
+    expect(screen.getByRole('heading', { name: 'Evidence acceptance' })).toBeInTheDocument()
+    expect(screen.getByText('2 accepted')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: 'Executive assurance summary' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Close', exact: true }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evidence acceptance' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open evidence review →' }))
+    expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('aria-selected', 'true')
+  })
+  it('does not present missing or failed readiness evidence totals as zero', async () => {
+    retainedStatusError = true
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await user.click(screen.getByRole('button', { name: /Evidence acceptance Human review/ }))
+    expect(screen.getByText('Unavailable accepted')).toBeInTheDocument()
+    expect(screen.getByText('Unavailable awaiting review')).toBeInTheDocument()
+    expect(screen.queryByText('0 accepted')).not.toBeInTheDocument()
+  })
+  it('refreshes only bounded readiness reads', async () => {
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    expect(calls.refresh.mock.calls).toHaveLength(5)
+    expect(calls.refresh.mock.calls.filter(([name]) => name === 'useGetRuntimeStateEvidenceQuery').every(([, args]) => args.pageSize === 1 && args.runtimeInstanceId === 'revision-2')).toBe(true)
+  })
+
+  it('does not fall back to renderer totals when the readiness evidence count is capped', () => {
+    invalidSummaryTotal = 'capped'
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.getByText('2 sources · Unavailable evidence objects')).toBeInTheDocument()
+    expect(within(screen.getByRole('heading', { name: 'Lock snapshot' }).closest('section')).getByText('Unlocked')).toBeInTheDocument()
+  })
+  it('resets the selected assurance control when the revision changes', async () => {
+    cachedContextRevision = true
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish']}><RevisionSwitchReview view="readiness-publish" /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: /Evidence acceptance Human review/ }))
+    await user.click(screen.getByRole('button', { name: 'Switch revision' }))
+    expect(screen.getByRole('heading', { name: 'Quality exceptions' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Selected assurance control' })).getByText('R3')).toBeInTheDocument()
+  })
+
+  it('opens assurance information locally and caps readiness runtime activity at ten events', async () => {
+    readinessFields = { activity: Array.from({ length: 14 }, (_, i) => ({ id: 'event-' + i, summary: 'Recorded runtime event ' + i })) }
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    expect(screen.getByRole('link', { name: 'Open quality findings →' })).toHaveAttribute('href', '/app/intelligence/quality?runtimeInstanceId=workspace-1&revisionId=revision-2')
+    await user.click(screen.getByRole('button', { name: /Intelligence assurance Assurance requires/ }))
+    await user.click(screen.getByRole('button', { name: 'Understand assurance →' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('does not expose a named assurance-control receipt')
+    await user.click(screen.getByRole('button', { name: 'Back to Readiness & publish' }))
+    await user.click(screen.getByRole('button', { name: /Decision and audit history Decisions require/ }))
+    await user.click(screen.getByRole('button', { name: 'View recorded activity →' }))
+    expect(within(screen.getByRole('dialog')).getAllByRole('listitem')).toHaveLength(10)
+    expect(screen.queryByText('Recorded runtime event 10')).not.toBeInTheDocument()
+  })
+
+  it.each(['zero', 'unavailable'])('does not assert accepted evidence when the report total is %s', async (state) => {
+    emptyEvidenceTotal = state === 'zero'
+    retainedStatusError = state === 'unavailable'
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
+    expect(within(dialog).getByText('Accepted evidence').previousElementSibling).toHaveTextContent(state === 'zero' ? '0' : 'Unavailable')
+    expect(within(dialog).queryByText(/Accepted evidence is recorded for this revision/)).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/Evidence counts describe recorded review state/)).toBeInTheDocument()
+  })
+
+  it('renders the paper assurance report with actual evidence and no synthetic certification or audit totals', async () => {
+    readinessFields = { publish: { state: 'PUBLISHED' }, activity: [{ id: 'one', summary: 'Generic runtime activity' }] }
+    const user = userEvent.setup()
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=readiness-publish')
+    await user.click(screen.getByRole('button', { name: 'Preview assurance report →' }))
+    const dialog = screen.getByRole('dialog', { name: 'Intelligence assurance report' })
+    expect(dialog).toHaveClass('intelligence-hub__report-dialog')
+    expect(within(dialog).getByRole('heading', { name: 'Acme Workspace' })).toBeInTheDocument()
+    expect(within(dialog).getByText('2')).toBeInTheDocument()
+    expect(within(dialog).getByText('Published')).toBeInTheDocument()
+    expect(within(dialog).getByText('Governed decisions').previousElementSibling).toHaveTextContent('Unavailable')
+    expect(within(dialog).getByText('Audit events').previousElementSibling).toHaveTextContent('Unavailable')
+    expect(within(dialog).getByRole('button', { name: 'Download data CSV' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Export PDF' })).toBeDisabled()
+    expect(within(dialog).queryByText(/ASSURE-R|L3 assured/)).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Close report' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
 })

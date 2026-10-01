@@ -1,0 +1,46 @@
+{
+  "sprint": "SS-040",
+  "version": "1.1",
+  "date": "2026-10-01",
+  "status": "DRAFT_PUBLICATION_CANDIDATE",
+  "authority": "Root docs/help is the editable source; regenerate these candidates from that source.",
+  "repository": "StoryDevGA/VMF-v-1-client",
+  "origin": "https://github.com/StoryDevGA/VMF-v-1-client.git",
+  "branch": "main",
+  "head": "4c08463387948cec7b6bf479d3fab39f2aaae605",
+  "localRepositoryPathVerified": true,
+  "localReadbackVerified": true,
+  "remotePublishedReadback": "NOT_PERFORMED",
+  "publication": "BLOCKED_PENDING_PUBLISHED_REPOSITORY_READBACK",
+  "screenshot": {
+    "source": "docs/generated/harness-runs/ss-040/2026-09-30-snapshot-readiness/browser-final-readback.png",
+    "recordedDate": "2026-09-30",
+    "historicalExample": true,
+    "unmodifiedCopy": true
+  },
+  "files": [
+    {
+      "canonicalSource": "docs/help/customer/outcome-studio.md",
+      "clientPath": "docs/help/customer/outcome-studio.md",
+      "sha256": "29e5248d8e8c771e10eb6fc9b24231fab7b64dce65d62fa347bee4a50d7b25c6",
+      "bytes": 4258,
+      "exactReadbackMatch": true
+    },
+    {
+      "canonicalSource": "docs/help/customer/outcome-studio-readiness.md",
+      "clientPath": "docs/help/customer/outcome-studio-readiness.md",
+      "sha256": "3f54d2175c3e97d62e0b3bdfa1bfbd47db4e0f5d73ed629a2cc54a146c9bf218",
+      "bytes": 5911,
+      "exactReadbackMatch": true
+    },
+    {
+      "canonicalSource": "docs/help/customer/assets/ss-040-readiness.png",
+      "clientPath": "docs/help/customer/assets/ss-040-readiness.png",
+      "sha256": "95441e915953a7e33230f82bd977365182f196fef780ee245c626aba53c7032c",
+      "bytes": 425685,
+      "exactReadbackMatch": true
+    }
+  ],
+  "gitCandidateInclusionVerified": true,
+  "ignoreRuleScope": "Two requested articles, one screenshot and this manifest only; unrelated docs/assets remain ignored."
+}

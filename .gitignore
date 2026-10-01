@@ -15,10 +15,16 @@ public/version.json
 /docs/*
 !/docs/help/
 /docs/help/*
+!/docs/help/ss-040-publication-candidate.json
 !/docs/help/customer/
 /docs/help/customer/*
 !/docs/help/customer/execution-workspace.md
 !/docs/help/customer/customer-workspace.md
+!/docs/help/customer/outcome-studio.md
+!/docs/help/customer/outcome-studio-readiness.md
+!/docs/help/customer/assets/
+/docs/help/customer/assets/*
+!/docs/help/customer/assets/ss-040-readiness.png
 
 # Environment files
 .env.local

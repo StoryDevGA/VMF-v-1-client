@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { MdChevronRight, MdNorthEast, MdSearch } from 'react-icons/md'
+import { MdChevronRight, MdNorthEast, MdSearch, MdInfoOutline } from 'react-icons/md'
 import { Input } from '../../components/Input'
 import { Textarea } from '../../components/Textarea'
 import { Badge } from '../../components/Badge'
@@ -564,43 +564,64 @@ function ReviewView({ evidencePage, isLoading, error, evidenceStatusCounts, coun
     <footer className="intelligence-hub__sources-footer"><Button variant="ghost" size="sm" onClick={() => onSelectView('Sources')}>← Sources</Button><span>{countsLoading ? 'Loading unresolved decisions…' : evidenceStatusCounts.pending === null ? 'Unresolved decision count is unavailable.' : `${evidenceStatusCounts.pending} evidence decisions remain; continuing preserves them for later review.`}</span><Button variant="ghost" size="sm" onClick={() => onSelectView('Coverage')}>Continue to Coverage →</Button></footer>
   </div>
 }
-function ReadinessView({ renderer, discovery, onOpen, qualityHref, workbenchHref }) {
-  const readiness = discovery?.discoveryHealth?.readiness
-  const locked = renderer?.lock?.locked === true
-  const activity = Array.isArray(renderer?.activity) ? renderer.activity : []
-  const activityLabel = (item) => item.summary || item.description || item.label || displayHubToken(item.eventType || item.action || item.type)
-  const activityDate = (item) => readableDate(item.occurredAt || item.createdAt || item.timestamp)
-  return <div className="intelligence-hub__grid intelligence-hub__grid--two">
-    <Panel title="Review the selected revision" eyebrow="Readiness and publication">
-      <dl className="intelligence-hub__facts">
-        <div><dt>Selected revision</dt><dd>{summaryValue(renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : '')}</dd></div>
-        <div><dt>Lifecycle</dt><dd>{displayHubToken(renderer?.lifecycle?.stage)}</dd></div>
-        <div><dt>Canonical readiness</dt><dd>{displayHubToken(renderer?.readiness?.state)}</dd></div>
-        <div><dt>Discovery readiness</dt><dd>{displayHubToken(readiness?.state)}</dd></div>
-        <div><dt>Publication</dt><dd>{displayHubToken(renderer?.publish?.state)}</dd></div>
-        <div><dt>Lock snapshot</dt><dd>{locked ? 'Locked' : displayHubToken(renderer?.lock?.state)}</dd></div>
-      </dl>
-      <DetailButton onOpen={onOpen} title="Publication control" body="Publication and locking are governed actions. This Hub displays recorded readiness only; it does not publish, lock or create a revision.">What changes at publication? →</DetailButton>
-    </Panel>
-    <Panel title="Publication boundary" eyebrow="Human authority">
-      <Status variant={renderer?.readiness?.state ? 'info' : 'warning'} size="sm">{displayHubToken(renderer?.readiness?.state)}</Status>
-      <p>{renderer?.readiness?.reason || 'No readiness explanation is available for this revision.'}</p>
-      <p>Open findings must be reviewed by an authorised person. Informational guidance does not approve evidence.</p>
-      <p className="intelligence-hub__muted">The bounded renderer does not expose a publication checklist for this revision.</p>
-      <BoundaryLink to={qualityHref}>Review quality findings →</BoundaryLink>
-      <DetailButton onOpen={onOpen} title="Lock snapshot" body={locked
-        ? `Revision ${renderer?.revision?.revisionNumber || ''} is recorded as locked. New evidence cannot silently alter its accepted understanding.`
-        : 'No locked snapshot is recorded for this selected revision. Publication and revision creation remain in the existing governed workflow.'}>What is retained in a lock snapshot? →</DetailButton>
-    </Panel>
-    <Panel title="Decision and assurance history" eyebrow="Recorded events">
-      <p>{activity.length ? `${activity.length} activity records are available in the selected revision summary.` : 'History detail is unavailable in this bounded projection.'}</p>
-      {activity.length ? <ol className="intelligence-hub__history-list">{activity.slice(0, 6).map((item, index) => <li key={item.id || item.eventId || `${item.type}-${index}`}>
-        <span className="intelligence-hub__history-dot" aria-hidden="true">{item.status === 'COMPLETED' ? '✓' : '·'}</span>
-        <div><strong>{activityLabel(item) || 'Recorded event'}</strong><small>{activityDate(item)}</small></div>
-      </li>)}</ol> : null}
-      <DetailButton onOpen={onOpen} title="Assurance history" body="History is read from recorded activity and control projections. The Hub does not infer approval, publication or assurance from an empty history.">Understand control history →</DetailButton>
-      <BoundaryLink to={workbenchHref}>Open existing publication workflow →</BoundaryLink>
-    </Panel>
+const READINESS_CONTROLS = [
+  ['acceptance', 'Evidence acceptance', 'Human review establishes accepted evidence.', 'Review'],
+  ['lineage', 'Provenance and lineage', 'Source origins and evidence lineage remain attached.', 'Sources'],
+  ['quality', 'Quality exceptions', 'Findings require a decision or disclosed exception.', 'Review'],
+  ['assurance', 'Intelligence assurance', 'Assurance requires a recorded review basis.', 'Overview'],
+  ['scope', 'Source scope and permissions', 'Source access remains within this workspace.', 'Sources'],
+  ['history', 'Decision and audit history', 'Decisions require authority and rationale.', 'Review'],
+]
+
+function RecentRuntimeActivity({ activity }) {
+  const events = Array.isArray(activity) ? activity.slice(0, 10) : []
+  return <section><h3>Recent runtime activity</h3><p>General runtime events are not per-control review decisions.</p>{events.length ? <ol>{events.map((item, index) => <li key={item.id || index}>{item.summary || item.description || item.label || displayHubToken(item.eventType || item.action || item.type)} · {readableDate(item.occurredAt || item.createdAt || item.timestamp)}</li>)}</ol> : <p>Unavailable</p>}</section>
+}
+
+function AssuranceReport({ renderer, evidenceStatusCounts, countsLoading, previewedAt }) {
+  const revision = renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Unavailable'
+  const name = summaryValue(renderer?.runtimeInstance?.name)
+  const accepted = countsLoading ? 'Loading…' : displayHubCount(getHubCount(evidenceStatusCounts, 'accepted'))
+  return <div className="intelligence-hub__report-content">
+    <section className="intelligence-hub__report-purpose"><div><h3>Report scope</h3><strong>Point-in-time summary for selected revision {revision}</strong><p>This point-in-time preview records the selected revision’s evidence and available publication state. Assurance and control decisions are shown only when recorded; this preview does not approve evidence or change workspace state.</p></div><Badge size="sm" pill>Assurance unavailable</Badge></section>
+    <article className="intelligence-hub__report-sheet" aria-label="Selected revision assurance summary">
+      <header><div><p>StorylineOS Intelligence Assurance Report</p><h3>{name}</h3><small>Selected revision {revision} · Previewed {compactReadableDate(previewedAt)}</small></div><span className="intelligence-hub__report-assurance" aria-label="Assurance level unavailable">—</span></header>
+      <div className="intelligence-hub__report-posture">{[['Assurance posture', 'Unavailable'], ['Workspace use', 'Unavailable'], ['Publication', displayHubToken(renderer?.publish?.state)], ['Assurance', 'Unavailable']].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
+      <section><header><h4>Executive assurance summary</h4><small>Selected revision</small></header><p>Canonical readiness: {displayHubToken(renderer?.readiness?.state)}. Evidence counts describe recorded review state; they do not independently establish assurance. Assurance decisions and disclosed quality exceptions are unavailable.</p><div className="intelligence-hub__report-metrics">{[['Accepted evidence', accepted], ['Governed decisions', 'Unavailable'], ['Open exceptions', 'Unavailable'], ['Audit events', 'Unavailable']].map(([label, value]) => <div key={label}><strong>{value}</strong><small>{label}</small></div>)}</div></section>
+      <section><header><h4>Control register</h4><small>6 controls</small></header><div className="intelligence-hub__report-controls">{READINESS_CONTROLS.map(([id, title]) => <section key={id}><span className="intelligence-hub__report-marker" aria-hidden="true"><MdInfoOutline /></span><div><strong>{title}</strong><small>Authority unavailable</small></div><Badge size="sm" pill>Unavailable</Badge></section>)}</div></section>
+      <section className="intelligence-hub__report-disclosures"><header><h4>Disclosed exceptions</h4><small>Recorded findings unavailable</small></header><div><p><strong>Quality exceptions unavailable</strong><small>No recorded exception summary is available for this revision.</small></p><p><strong>Material coverage gaps unavailable</strong><small>No recorded gap disclosure is available for this revision.</small></p></div></section>
+      <footer><span>Scope: {name} · {revision}</span><small>Recorded revision summary · This preview does not accept or approve new understanding</small></footer>
+    </article>
+  </div>
+}
+
+function ReadinessView({ renderer, discovery, evidenceTotal, evidenceStatusCounts, countsLoading, onOpen, onSelectView, qualityHref }) {
+  const [selectedId, setSelectedId] = useState('quality')
+  const selected = READINESS_CONTROLS.find(([id]) => id === selectedId)
+  const revision = renderer?.revision?.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Unavailable'
+  const truth = renderer?.readiness?.sectionTruth
+  const snapshot = renderer?.lock?.snapshot?.snapshotId
+  const count = (value) => countsLoading ? 'Loading…' : displayHubCount(getHubCount({ value }, 'value'))
+  const preview = (event) => onOpen({
+    title: 'Intelligence assurance report', kind: 'assurance-report',
+    subtitle: summaryValue(renderer?.runtimeInstance?.name) + ' · selected revision ' + revision,
+    body: <AssuranceReport renderer={renderer} evidenceStatusCounts={evidenceStatusCounts} countsLoading={countsLoading} previewedAt={new Date().toISOString()} />,
+  }, event.currentTarget)
+  return <div className="intelligence-hub__sources-workspace intelligence-hub__readiness-workspace">
+    <header className="intelligence-hub__readiness-toolbar"><div><p className="intelligence-hub__eyebrow">Readiness and publication</p><h2>Review the selected revision before publication</h2></div><Button size="sm" disabled title="Publication remains in the governed workflow.">Publish &amp; lock revision</Button></header>
+    <section className="intelligence-hub__readiness-posture" aria-label="Selected revision posture"><strong>Selected revision {revision} · {displayHubToken(renderer?.lifecycle?.stage)}</strong><div className="intelligence-hub__readiness-metrics"><span><small>Publication</small><b>{displayHubToken(renderer?.publish?.state)}</b></span><span><small>Canonical readiness</small><b>{displayHubToken(renderer?.readiness?.state)}</b></span><span><small>Discovery readiness</small><b>{displayHubToken(discovery?.discoveryHealth?.readiness?.state)}</b></span></div><p>{truth?.reason || 'Section-truth readiness explanation is unavailable.'}</p></section>
+    <section className="intelligence-hub__readiness-boundary"><span aria-hidden="true"><MdInfoOutline /></span><p><strong>What changes at publication</strong> Publication freezes the accepted understanding. New evidence after lock requires a governed successor revision; it does not silently change this revision.</p><Button variant="ghost" size="sm" onClick={() => onSelectView('After lock')}>View After lock →</Button></section>
+    <div className="intelligence-hub__readiness-cards">
+      <section><header><h3>Canonical readiness</h3><Badge variant="info" size="sm" pill>{displayHubToken(renderer?.readiness?.state)}</Badge></header><p>{truth ? `${displayHubCount(getHubCount(truth, 'readySectionCount'))} of ${displayHubCount(getHubCount(truth, 'requiredSectionCount'))} required sections ready` : 'Section readiness is unavailable.'}</p><Link to={qualityHref} variant="subtle" className="intelligence-hub__readiness-link">Review quality findings →</Link></section>
+      <section><header><h3>Outcome readiness</h3><Badge size="sm" pill>Unavailable</Badge></header><p>Outcome Studio readiness is not exposed by the bounded summary.</p><p>Recorded output eligibility: {typeof renderer?.publish?.outputEligibility?.outputEligible === 'boolean' ? renderer.publish.outputEligibility.outputEligible ? 'Eligible' : 'Not eligible' : 'Unavailable'}</p><Button variant="ghost" size="sm" onClick={() => onSelectView('Coverage')}>View coverage conditions →</Button></section>
+      <section><header><h3>Lock snapshot</h3><Badge size="sm" pill>{displayHubToken(renderer?.lock?.state)}</Badge></header><dl><div><dt>Revision</dt><dd>{revision}</dd></div><div><dt>Source basis</dt><dd>{displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))} sources · {count(evidenceTotal)} evidence objects</dd></div><div><dt>Snapshot</dt><dd title={snapshot}>{summaryValue(snapshot)}</dd></div></dl></section>
+    </div>
+    <section className="intelligence-hub__readiness-checklist"><header><h3>Publication checks</h3><span>Check receipts unavailable</span><Button variant="ghost" size="sm" onClick={preview}>Preview assurance report →</Button></header><div className="intelligence-hub__readiness-checks">{['Evidence provenance retained', 'Section mapping reviewed', 'Quality findings need a decision', 'Publication boundary confirmed'].map((title) => <div key={title}><span aria-hidden="true"><MdInfoOutline /></span><div><strong>{title}</strong><small>Unavailable</small></div></div>)}</div></section>
+    <div className="intelligence-hub__readiness-browser">
+      <section className="intelligence-hub__readiness-register"><header><h3>Decision and assurance history</h3><small>6 controls · select a control to inspect its basis</small></header><div role="region" aria-label="Assurance control register" tabIndex={0}>{READINESS_CONTROLS.map(([id, title, description]) => <Button variant="ghost" size="sm" key={id} className="intelligence-hub__readiness-row" aria-pressed={selectedId === id} onClick={() => setSelectedId(id)}><span className="intelligence-hub__readiness-marker" aria-hidden="true"><MdInfoOutline /></span><span><strong>{title}</strong><small>{description}</small></span><Badge size="sm" pill>Unavailable</Badge></Button>)}</div></section>
+      <section className="intelligence-hub__readiness-detail" aria-label="Selected assurance control" tabIndex={0}><header><p className="intelligence-hub__eyebrow">Selected assurance control</p><Badge size="sm" pill>Unavailable</Badge></header><h3>{selected[1]}</h3><p>{selected[2]}</p><div className="intelligence-hub__readiness-basis"><strong>Review basis</strong><p>No named control receipt is exposed in the bounded selected-revision summary. Evidence totals and general activity do not establish this control's approval.</p></div><div className="intelligence-hub__readiness-records"><span>{revision}</span>{selectedId === 'acceptance' ? <><span>{count(evidenceStatusCounts.accepted)} accepted</span><span>{count(evidenceStatusCounts.pending)} awaiting review</span><span>{count(evidenceStatusCounts.rejected)} rejected</span></> : <span>Control decision unavailable</span>}</div><div className="intelligence-hub__readiness-authority"><div><small>Authority</small><strong>Unavailable</strong></div><div><small>Latest review event</small><strong>Unavailable</strong></div></div><div className="intelligence-hub__readiness-action"><strong>Next available action</strong><p>Inspect the relevant information. Approval and publication require an authorised human decision.</p><div>{selectedId === 'quality' ? <Link to={qualityHref} variant="subtle" className="intelligence-hub__readiness-link">Open quality findings →</Link> : selectedId === 'assurance' ? <Button variant="ghost" size="sm" onClick={(event) => onOpen({ title: 'Intelligence assurance', body: 'Assurance describes a recorded review scope and state for a specific revision. This bounded summary does not expose a named assurance-control receipt. Evidence counts, output eligibility and a locked snapshot do not independently certify assurance.' }, event.currentTarget)}>Understand assurance →</Button> : selectedId === 'history' ? <Button variant="ghost" size="sm" onClick={(event) => onOpen({ title: 'Recent runtime activity', body: <RecentRuntimeActivity activity={renderer?.activity} /> }, event.currentTarget)}>View recorded activity →</Button> : <Button variant="ghost" size="sm" onClick={() => onSelectView(selected[3])}>{selectedId === 'acceptance' ? 'Open evidence review →' : selectedId === 'scope' ? 'Review source scope →' : 'Inspect sources →'}</Button>}</div></div><footer>Publication must retain authority, rationale, accepted evidence and the recorded snapshot.</footer></section>
+    </div>
+    <footer className="intelligence-hub__sources-footer"><Button variant="ghost" size="sm" onClick={() => onSelectView('Review')}>← Review</Button><span>Resolve or disclose findings before publication.</span><Button variant="ghost" size="sm" onClick={() => onSelectView('After lock')}>Continue to After lock →</Button></footer>
   </div>
 }
 
@@ -856,7 +877,7 @@ export default function IntelligenceHub() {
     { skip: !canReadDetail },
   )
   const summaryEvidencePage = summaryEvidenceError || summaryEvidenceFetching ? null : getHubEvidencePage(summaryEvidenceResponse)
-  const needsOverviewCounts = view === 'Overview' || view === 'Context' || view === 'Review'
+  const needsOverviewCounts = view === 'Overview' || view === 'Context' || view === 'Review' || view === 'Readiness & publish'
   const { currentData: acceptedEvidenceResponse, error: acceptedEvidenceError, isFetching: acceptedEvidenceFetching, refetch: refetchAcceptedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'ACCEPTED' },
     { skip: !canReadDetail || !needsOverviewCounts },
@@ -867,7 +888,7 @@ export default function IntelligenceHub() {
   )
   const { currentData: rejectedEvidenceResponse, error: rejectedEvidenceError, isFetching: rejectedEvidenceFetching, refetch: refetchRejectedEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1, reviewStatus: 'REJECTED' },
-    { skip: !canReadDetail || view !== 'Overview' },
+    { skip: !canReadDetail || (view !== 'Overview' && view !== 'Readiness & publish') },
   )
   const evidenceStatusCounts = {
     accepted: getHubEvidenceStatusCount(acceptedEvidenceResponse, acceptedEvidenceError, summaryEvidencePage),
@@ -933,6 +954,8 @@ export default function IntelligenceHub() {
   const refreshSources = () => [refetchRenderer, refetchSummaryEvidence, refetchPendingEvidence, refetchEvidence].forEach((refetch) => refetch())
   const reviewRefreshing = sourcesRefreshing || acceptedEvidenceFetching
   const refreshReview = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence, refetchEvidence].forEach((refetch) => refetch())
+  const readinessRefreshing = contextRefreshing || rejectedEvidenceFetching
+  const refreshReadiness = () => [refetchRenderer, refetchSummaryEvidence, refetchAcceptedEvidence, refetchPendingEvidence, refetchRejectedEvidence].forEach((refetch) => refetch())
   const discovery = summaryEvidenceLoading || !summaryEvidencePage
     ? null
     : reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)
@@ -966,7 +989,7 @@ export default function IntelligenceHub() {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -1010,7 +1033,7 @@ export default function IntelligenceHub() {
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
         {view !== 'Context' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' && reviewRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : refetchRenderer}>↻ Refresh</Button>
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : false} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' && readinessRefreshing)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : refetchRenderer}>↻ Refresh</Button>
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -1023,16 +1046,16 @@ export default function IntelligenceHub() {
             <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}`} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView key={contextKey} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={emptyFilteredPage ? null : evidenceError} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching} onOpenSource={openReviewSource} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
-            <TabView.Tab label="Readiness & publish"><ReadinessView renderer={renderer} discovery={discovery} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="Readiness & publish"><ReadinessView key={contextKey} renderer={renderer} discovery={discovery} evidenceTotal={summaryEvidencePage?.totalCapped ? null : getHubCount(summaryEvidencePage, 'total')} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching || rejectedEvidenceFetching} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Coverage"><CoverageView discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Intelligence Graph"><GraphView manifest={manifest} graph={graph} isLoading={graphLoading} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
             </TabView>
           </>}
-    <Dialog open={Boolean(visibleInfo)} onClose={closeInfo} size="md">
-      <Dialog.Header><h2>{visibleInfo?.title || 'Information'}</h2></Dialog.Header>
-      <Dialog.Body>{visibleInfo?.body}</Dialog.Body>
-      <Dialog.Footer><Button variant="outline" size="sm" onClick={closeInfo}>Back to {view}</Button></Dialog.Footer>
+    <Dialog open={Boolean(visibleInfo)} onClose={closeInfo} size={visibleInfo?.kind === 'assurance-report' ? 'xl' : 'md'} className={visibleInfo?.kind === 'assurance-report' ? 'intelligence-hub__report-dialog' : ''} showCloseButton={visibleInfo?.kind !== 'assurance-report'} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Intelligence assurance report' : undefined}>
+      <Dialog.Header>{visibleInfo?.kind === 'assurance-report' ? <><div><p className="intelligence-hub__report-eyebrow">Assurance export preview</p><h2>{visibleInfo.title}</h2><p>{visibleInfo.subtitle}</p></div><Button size="sm" variant="outline" aria-label="Close report" onClick={closeInfo}>Close ×</Button></> : <h2>{visibleInfo?.title || 'Information'}</h2>}</Dialog.Header>
+      <Dialog.Body key={visibleInfo?.kind || 'information'} role={visibleInfo?.kind === 'assurance-report' ? 'region' : undefined} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Assurance report content' : undefined} tabIndex={visibleInfo?.kind === 'assurance-report' ? 0 : undefined}>{visibleInfo?.body}</Dialog.Body>
+      <Dialog.Footer>{visibleInfo?.kind === 'assurance-report' ? <><span>Read-only preview · governed exports are unavailable</span><div><Button variant="outline" size="sm" onClick={closeInfo}>Close</Button><Button variant="outline" size="sm" disabled>Download data CSV</Button><Button size="sm" disabled>Export PDF</Button></div></> : <Button variant="outline" size="sm" onClick={closeInfo}>Back to {view}</Button>}</Dialog.Footer>
     </Dialog>
   </main>
 }

@@ -282,3 +282,38 @@
      Section → section gap   : --spacing-2xl (48px) minimum
      Card / container padding: --spacing-md (16px) to --spacing-lg (24px) */
 }
+/* Readiness reference: measured 430px rail, 145deg posture and green boundary. */
+:root {
+  --layout-intelligence-readiness-rail: calc(var(--spacing-xl) * 13 + var(--spacing-sm) + var(--spacing-xs) + var(--spacing-2xs));
+  --background-intelligence-readiness-posture: linear-gradient(145deg, #0b1711, #090d0a);
+  --color-intelligence-readiness-border: #315e4a;
+  --color-intelligence-readiness-boundary: #0a1510;
+  --color-intelligence-readiness-copy: #b8d1c5;
+  /* Measured Readiness control-selection and recorded-basis text colours. */
+  --color-intelligence-readiness-selected-border: #2b7554;
+  --color-intelligence-readiness-basis-copy: #a8bac9;
+  --color-intelligence-readiness-posture-copy: #91aa9d;
+}
+:root { --layout-intelligence-readiness-pane: calc(var(--spacing-xl) * 10 + var(--spacing-xs) + var(--spacing-2xs)); }
+/* Measured SS-037 paper-report palette; scoped report theme, no shared theme override. */
+:root {
+  --layout-intelligence-report-width: calc(var(--spacing-xl) * 33 + var(--spacing-lg));
+  --layout-intelligence-report-inset: calc(var(--spacing-md) + var(--spacing-2xs));
+  --color-intelligence-report-frame: #090d0b;
+  --color-intelligence-report-header: #0d1410;
+  --color-intelligence-report-footer: #0b100d;
+  --color-intelligence-report-scope: #0c120e;
+  --color-intelligence-report-paper: #f4f6f5;
+  --color-intelligence-report-paper-header: #e9eeeb;
+  --color-intelligence-report-paper-text: #17201b;
+  --color-intelligence-report-paper-title: #101713;
+  --color-intelligence-report-paper-muted: #68736d;
+  --color-intelligence-report-paper-copy: #48534d;
+  --color-intelligence-report-paper-border: #d3dbd6;
+  --color-intelligence-report-accent: #087b53;
+  --color-intelligence-report-neutral: #315f8a;
+  --color-intelligence-report-neutral-bg: #e8eef5;
+  --font-size-intelligence-report-caption: 0.6875rem;
+  --font-size-intelligence-report-fine: 0.625rem;
+}
+:root { --line-height-intelligence-report-title: 1.25; /* Measured 25px on 20px report headings. */ }
