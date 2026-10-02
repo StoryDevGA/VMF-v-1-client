@@ -349,7 +349,8 @@ const blockerMessageOf = (blocker) => {
 
 const assessedSectionDeficit = (evidence) => !evidence.clarification?.errors?.length
   && Array.isArray(evidence.sectionLedger)
-  && evidence.sectionLedger.some((section) => section.required && section.status === 'UNRESOLVED')
+  && evidence.sectionLedger.some((section) => section.required
+    && ['UNRESOLVED', 'PARTIAL', 'METADATA_ONLY'].includes(section.status))
 
 const evidenceReadinessReview = (evidence) => String(evidence.clarification?.firstBoundary || '').includes('SECTION_REFERENCE_UNRESOLVED')
   ? 'Some governed section references do not resolve to current evidence. Review these references and required section support before re-resolving this request.'
@@ -771,17 +772,39 @@ const renderStageEvidenceContent = (item) => (
   </div>
 )
 
-function EvidenceReadiness({ evidence, currentSnapshot }) {
+const readinessText = (value) => typeof value === 'string' ? value.trim() : ''
+const readinessNextAction = (value) => {
+  const action = readinessText(value)
+  if (!action || /^[A-Z][A-Z0-9_]+$/.test(action)) {
+    return 'Review the named evidence through the governed runtime workflow, then re-resolve this request.'
+  }
+  return action
+}
+const readinessSectionStatus = (section) => {
+  if (['OMITTED', 'OPTIONAL', 'OPTIONAL_OMITTED'].includes(section.status) && section.required === false) {
+    return 'Optional; omitted as permitted by the selected schema.'
+  }
+  if (section.status === 'SUPPORTED') return `${section.required ? 'Required' : 'Optional'}; supporting evidence available.`
+  if (section.status === 'PARTIAL') return 'Partially supported; remaining claims or references need clarification.'
+  if (section.status === 'METADATA_ONLY') return 'Metadata only; no admissible customer claim supports this section.'
+  return `${section.required ? 'Required' : 'Optional'}; supporting evidence needs clarification.`
+}
+
+export function EvidenceReadiness({ evidence, currentSnapshot }) {
   const snapshot = currentSnapshot || evidence.snapshotReadiness
   const sections = Array.isArray(evidence.sectionLedger) ? evidence.sectionLedger : []
   const needsClarification = evidence.clarification?.required === true
   const sectionDeficit = assessedSectionDeficit(evidence)
+  const questions = Array.isArray(evidence.clarification?.questions) ? evidence.clarification.questions : []
+  const candidates = Array.isArray(evidence.contradictionLedger) ? evidence.contradictionLedger : []
+  const readyToDraft = evidence.status === 'READY_TO_DRAFT' && evidence.canExecute === true && !needsClarification
   return <section aria-label="Evidence readiness">
     <h4>Evidence readiness</h4>
     {snapshot ? <p>{snapshot.completeness === 'COMPLETE'
       ? `Current evidence snapshot: Complete. ${snapshot.totalEvidenceCount} evidence records inventoried; ${snapshot.projectedEvidenceCount} records in the governed section projection. Snapshot completeness does not establish section sufficiency.`
       : 'Current evidence snapshot: Incomplete or not assessed. Draft generation remains unavailable.'}</p> : null}
     {currentSnapshot ? <p>This current read does not replace the saved plan receipt. Re-resolve the request to record current evidence; existing readiness blockers still apply.</p> : null}
+    {readyToDraft ? <p>Ready to Draft. The saved evidence handoff supports drafting. ARL meaning review is still required.</p> : null}
     <p>{needsClarification
       ? 'Clarification is required before draft generation. Confirming a request does not establish sufficient evidence.'
       : 'Supporting evidence is available for the selected sections. Draft review is still required.'}</p>
@@ -789,14 +812,35 @@ function EvidenceReadiness({ evidence, currentSnapshot }) {
       <strong>{section.heading || 'Selected section'}</strong>{' — '}
       {needsClarification && !sectionDeficit
         ? 'Section sufficiency has not been assessed.'
-        : section.status === 'OMITTED' && section.required === false
-        ? 'Optional; omitted as permitted by the selected schema.'
-        : section.status === 'SUPPORTED'
-          ? `${section.required ? 'Required' : 'Optional'}; supporting evidence available.`
-          : `${section.required ? 'Required' : 'Optional'}; supporting evidence needs clarification.`}
-      {sectionDeficit && section.status !== 'SUPPORTED' && section.status !== 'OMITTED'
+        : readinessSectionStatus(section)}
+      {sectionDeficit && section.status !== 'SUPPORTED' && !['OMITTED', 'OPTIONAL', 'OPTIONAL_OMITTED'].includes(section.status) && !questions.length
         ? <p>Which current customer evidence supports this section, and where are its source, validation and proof requirements recorded?</p> : null}
     </li>)}</ul> : null}
+    {needsClarification && questions.length ? <div>
+      <h5>What needs to be resolved</h5>
+      <ul>{questions.map((item, index) => <li key={`clarification-${index}`}>
+        {readinessText(item.sectionKey || item.sourceSectionKey) ? <p>Section: {readinessText(item.sectionKey || item.sourceSectionKey)}</p> : null}
+        {readinessText(item.sourceSectionKey) && item.sectionKey !== item.sourceSectionKey && readinessText(item.sectionKey)
+          ? <p>Source section: {readinessText(item.sourceSectionKey)}</p> : null}
+        {readinessText(item.missingReference) ? <p>Reference: {readinessText(item.missingReference)}</p> : null}
+        {readinessText(item.missingInput) ? <p>Missing input: {readinessText(item.missingInput)}</p> : null}
+        {readinessText(item.question) ? <p>{readinessText(item.question)}</p> : null}
+        <p>Next action: {readinessNextAction(item.nextAction)}</p>
+      </li>)}</ul>
+    </div> : null}
+    {candidates.length ? <div>
+      <h5>Contradiction candidates</h5>
+      <p>Candidates retain their source references. Qualification, scope, time and materiality determine whether they affect required section support.</p>
+      <ul>{candidates.map((candidate, index) => <li key={readinessText(candidate.candidateId) || index}>
+        {readinessText(candidate.candidateId) || 'Candidate'}{' — '}
+        {candidate.disposition === 'COMPATIBLE_QUALIFICATION' ? 'Compatible qualification; retained for review.'
+          : candidate.disposition === 'NOT_COMPARABLE' ? 'Different scope or time; retained for review.'
+          : candidate.disposition === 'SOURCE_REVIEWED_NOT_CONTRADICTORY' ? 'Reviewed as not contradictory; source review retained.'
+          : 'Unresolved; review the affected section and source evidence.'}
+        {Array.isArray(candidate.evidenceReferences) ? <p>References: {candidate.evidenceReferences.map(readinessText).filter(Boolean).join(', ')}</p> : null}
+        {Array.isArray(candidate.affectedSectionKeys) ? <p>Affected sections: {candidate.affectedSectionKeys.map(readinessText).filter(Boolean).join(', ')}</p> : null}
+      </li>)}</ul>
+    </div> : null}
     {needsClarification ? <p>{sectionDeficit
       ? 'Review the governed evidence and its source records, then re-resolve this request. Required sections must be supported; optional omissions follow the selected schema.'
       : evidenceReadinessReview(evidence)}</p> : null}

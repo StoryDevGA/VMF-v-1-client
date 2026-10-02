@@ -30,11 +30,17 @@ The current snapshot read is a diagnostic. It does not replace the evidence rece
 
 ### Development example
 
-This recorded example from 30 September 2026 shows a complete inventory of 853 records with 62 records in the governed section projection. Six contradictions, missing Constraints and unresolved section references still block Generate Draft. It illustrates the distinction; the counts and readiness are historical, not a current status for your workspace.
+This recorded example from 30 September 2026 shows a complete inventory of 853 records with 62 records in the governed section projection. Six contradiction candidates, missing Constraints and unresolved section references still block Generate Draft. Candidates require evaluation of provenance, scope, time and materiality before a contradiction is established. The counts and readiness are historical, not a current status for your workspace.
 
 <img src="assets/ss-040-readiness.png" alt="Recorded Outcome Studio example showing a complete evidence snapshot, unresolved contradictions and Constraints, and disabled Generate Draft" width="440" />
 
 ## Evidence and retry rules
+
+The section ledger distinguishes supported sections, partial support, metadata-only sections, unresolved sections and optional omissions permitted by the selected schema. Partial support and metadata do not establish the missing customer claims. A required unresolved section shows the affected section, exact stored reference or missing input, clarification question and next action. Legacy and scoped-view references remain visible until resolved through the governed workflow.
+
+A contradiction candidate is retained with its source references. Compatible qualification or evidence about different scopes or times does not automatically block a section; unresolved provenance or materiality still needs review. The handoff never resolves the underlying evidence automatically.
+
+**Insufficient handoff** means drafting stops before the Working Draft provider or ARL call. Resolve the exact source or claim requirement through the governed runtime workflow, then resolve the request again. **Provider failure** means the drafting call failed or its response did not match the validated handoff; invalid prose is not saved as a Working Draft. **ARL meaning rejection** means an actual draft reached meaning review and needs the identified correction. Readiness does not guarantee that ARL will accept a draft.
 
 Outcome Studio uses the accepted evidence already bound to the locked runtime. It does not ask the customer to upload another copy to bypass a governed gate. Provider receipts, stage execution IDs, predecessor fingerprints, and audit records must remain consistent. Retries are idempotent; historical records remain unchanged.
 

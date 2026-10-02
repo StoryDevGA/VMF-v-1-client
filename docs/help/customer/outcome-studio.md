@@ -29,6 +29,8 @@ Each required section needs admissible, current evidence with its original sourc
 
 An unresolved optional section may be omitted only when the selected schema permits omission. The evidence readiness panel distinguishes required sections needing clarification from permitted optional omissions. Confirming your request records what you want; it does not validate evidence or grant ARL approval.
 
+Read the exact clarification question and the named section, reference or missing input before taking its next action. Partial support and metadata-only sections still need admissible claims for their required content. Ready to Draft permits the Working Draft call against the saved handoff; it does not mean ARL has run or approved the result. Changing source evidence invalidates the saved readiness and requires a new request resolution.
+
 If the governed evidence snapshot or output binding cannot be verified, section sufficiency has not yet been assessed. Ask a workspace administrator to review that readiness boundary before resolving the request again; this does not establish that customer evidence is missing.
 
 A complete snapshot means the full in-scope evidence set was read and its source references and section coverage were checked. It does not mean the evidence supports every required section. Outcome Studio may show a complete snapshot while contradictions, missing Constraints, unresolved references or required decision inputs still prevent drafting. An incomplete snapshot keeps Generate Draft disabled before a drafting or ARL provider call.
