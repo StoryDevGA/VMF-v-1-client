@@ -3,6 +3,43 @@ import { describe, expect, it } from 'vitest'
 import { EvidenceReadiness } from './OutcomeStudioWorkspace.jsx'
 
 describe('Evidence handoff readiness', () => {
+  it('exposes receipt identities and exact source mappings without promoting them to section support', () => {
+    render(<EvidenceReadiness evidence={{ contractVersion: 'evidence-to-draft.v2',
+      contractHash: 'a'.repeat(64), contractJson: 'private-raw-evidence', status: 'CLARIFICATION_REQUIRED', canExecute: false,
+      snapshotReadiness: { completeness: 'COMPLETE', totalEvidenceCount: 853, projectedEvidenceCount: 62,
+        totalSourceCount: 36, overallHash: 'b'.repeat(64),
+        unresolvedReferences: [{ sourceSectionKey: 'strategic_objectives', missingReference: 'scoped_view' }] },
+      sectionLedger: [], clarification: { required: true, questions: [{ field: 'frameworkHandoff.claimBoundaries',
+        question: 'Resolve frameworkHandoff.claimBoundaries through its governed source owner.' }] },
+    }} />)
+    expect(screen.getByText('Sources inventoried: 36.')).toBeInTheDocument()
+    expect(screen.getByText('evidence-to-draft.v2')).toBeInTheDocument()
+    expect(screen.getByText('a'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText('b'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText('Source section: strategic_objectives')).toBeInTheDocument()
+    expect(screen.getByText('Reference: scoped_view')).toBeInTheDocument()
+    expect(screen.getByText('Which current governed evidence resolves the stored reference "scoped_view" in "strategic_objectives"?')).toBeInTheDocument()
+    expect(screen.getByText('Output section support has not been assessed.')).toBeInTheDocument()
+    expect(screen.queryByText(/private-raw-evidence/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ready to Draft\./)).not.toBeInTheDocument()
+  })
+
+  it('keeps a newer diagnostic snapshot distinct from the saved receipt and cannot enable drafting', () => {
+    render(<EvidenceReadiness evidence={{ contractVersion: 'evidence-to-draft.v2',
+      contractHash: 'a'.repeat(64), status: 'CLARIFICATION_REQUIRED', canExecute: false,
+      sectionLedger: [], snapshotReadiness: { overallHash: 'b'.repeat(64) }, clarification: { required: true },
+    }} currentSnapshot={{ diagnosticOnly: true, completeness: 'COMPLETE', totalSourceCount: 0,
+      totalEvidenceCount: 0, projectedEvidenceCount: 0, overallHash: 'c'.repeat(64),
+      unresolvedReferences: [{ sourceSectionKey: {}, missingReference: 'hidden-invalid-reference' }] }} />)
+    expect(screen.getByText('Saved snapshot hash')).toBeInTheDocument()
+    expect(screen.getByText('b'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText('Current diagnostic snapshot hash')).toBeInTheDocument()
+    expect(screen.getByText('c'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText('Sources inventoried: 0.')).toBeInTheDocument()
+    expect(screen.queryByText(/hidden-invalid-reference/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ready to Draft\./)).not.toBeInTheDocument()
+  })
+
   it('shows the exact unresolved section, stored reference, missing input and recovery action', () => {
     render(<EvidenceReadiness evidence={{ status: 'CLARIFICATION_REQUIRED', canExecute: false,
       contractHash: 'private-hash', contractJson: 'private-contract',

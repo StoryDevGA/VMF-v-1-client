@@ -792,6 +792,16 @@ const readinessSectionStatus = (section) => {
 
 export function EvidenceReadiness({ evidence, currentSnapshot }) {
   const snapshot = currentSnapshot || evidence.snapshotReadiness
+  const receiptHash = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : ''
+  const contractVersion = ['evidence-to-draft.v2', 'evidence-to-meaning.v1'].includes(evidence.contractVersion)
+    ? evidence.contractVersion : ''
+  const contractHash = receiptHash(evidence.contractHash)
+  const savedSnapshotHash = receiptHash(evidence.snapshotReadiness?.overallHash)
+  const currentSnapshotHash = receiptHash(currentSnapshot?.overallHash)
+  const sourceCount = Number.isSafeInteger(snapshot?.totalSourceCount) && snapshot.totalSourceCount >= 0
+    ? snapshot.totalSourceCount : null
+  const unresolvedReferences = Array.isArray(snapshot?.unresolvedReferences)
+    ? snapshot.unresolvedReferences.filter((item) => readinessText(item?.sourceSectionKey) && readinessText(item?.missingReference)) : []
   const sections = Array.isArray(evidence.sectionLedger) ? evidence.sectionLedger : []
   const needsClarification = evidence.clarification?.required === true
   const sectionDeficit = assessedSectionDeficit(evidence)
@@ -804,10 +814,21 @@ export function EvidenceReadiness({ evidence, currentSnapshot }) {
       ? `Current evidence snapshot: Complete. ${snapshot.totalEvidenceCount} evidence records inventoried; ${snapshot.projectedEvidenceCount} records in the governed section projection. Snapshot completeness does not establish section sufficiency.`
       : 'Current evidence snapshot: Incomplete or not assessed. Draft generation remains unavailable.'}</p> : null}
     {currentSnapshot ? <p>This current read does not replace the saved plan receipt. Re-resolve the request to record current evidence; existing readiness blockers still apply.</p> : null}
+    {sourceCount !== null ? <p>Sources inventoried: {sourceCount}.</p> : null}
+    {contractVersion || contractHash || savedSnapshotHash || currentSnapshotHash ? <details>
+      <summary>Evidence receipt details</summary>
+      <dl>
+        {contractVersion ? <div><dt>Evidence-to-draft contract version</dt><dd>{contractVersion}</dd></div> : null}
+        {contractHash ? <div><dt>Saved contract hash</dt><dd>{contractHash}</dd></div> : null}
+        {savedSnapshotHash ? <div><dt>Saved snapshot hash</dt><dd>{savedSnapshotHash}</dd></div> : null}
+        {currentSnapshotHash ? <div><dt>Current diagnostic snapshot hash</dt><dd>{currentSnapshotHash}</dd></div> : null}
+      </dl>
+    </details> : null}
     {readyToDraft ? <p>Ready to Draft. The saved evidence handoff supports drafting. ARL meaning review is still required.</p> : null}
     <p>{needsClarification
       ? 'Clarification is required before draft generation. Confirming a request does not establish sufficient evidence.'
       : 'Supporting evidence is available for the selected sections. Draft review is still required.'}</p>
+    {needsClarification && !sections.length ? <p>Output section support has not been assessed.</p> : null}
     {sections.length ? <ul>{sections.map((section, index) => <li key={`${section.targetSectionKey || 'section'}-${index}`}>
       <strong>{section.heading || 'Selected section'}</strong>{' — '}
       {needsClarification && !sectionDeficit
@@ -816,6 +837,17 @@ export function EvidenceReadiness({ evidence, currentSnapshot }) {
       {sectionDeficit && section.status !== 'SUPPORTED' && !['OMITTED', 'OPTIONAL', 'OPTIONAL_OMITTED'].includes(section.status) && !questions.length
         ? <p>Which current customer evidence supports this section, and where are its source, validation and proof requirements recorded?</p> : null}
     </li>)}</ul> : null}
+    {unresolvedReferences.length ? <div>
+      <h5>Unresolved source references</h5>
+      <p>These stored source mappings remain unresolved. The selected output's section ledger determines which support is required.</p>
+      <ul>{unresolvedReferences.map((item, index) => <li key={`source-reference-${index}`}>
+        <p>Source section: {readinessText(item.sourceSectionKey)}</p>
+        <p>Reference: {readinessText(item.missingReference)}</p>
+        <p>Missing input: A located source mapping for this exact reference.</p>
+        <p>Which current governed evidence resolves the stored reference "{readinessText(item.missingReference)}" in "{readinessText(item.sourceSectionKey)}"?</p>
+        <p>Next action: Review the named evidence through the governed runtime workflow, then re-resolve this request.</p>
+      </li>)}</ul>
+    </div> : null}
     {needsClarification && questions.length ? <div>
       <h5>What needs to be resolved</h5>
       <ul>{questions.map((item, index) => <li key={`clarification-${index}`}>
@@ -1652,7 +1684,7 @@ function OutcomeStudioWorkspace() {
               ? [
                   formatRuntimeTokenLabel(frameworkHandoff.evidenceReadiness.status),
                   frameworkHandoff.evidenceReadiness.unresolvedContradictionCount
-                    ? `${frameworkHandoff.evidenceReadiness.unresolvedContradictionCount} unresolved contradictions`
+                    ? `${frameworkHandoff.evidenceReadiness.unresolvedContradictionCount} unresolved contradiction candidates`
                     : '',
                   Array.isArray(frameworkHandoff.evidenceReadiness.missingDomains)
                     && frameworkHandoff.evidenceReadiness.missingDomains.length > 0
