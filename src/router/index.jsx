@@ -331,7 +331,7 @@ export const router = createBrowserRouter([
                       requiredSelectedScopePermission="VMF_VIEW"
                       unauthorizedRedirect="/app/dashboard"
                     >
-                      <CustomerJourneyPlaceholder section="Intelligence Quality" />
+                      <IntelligenceHub quality />
                     </ProtectedRoute>
                   </CustomerTierRoute>
                 ),

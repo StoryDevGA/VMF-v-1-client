@@ -909,24 +909,24 @@
 }
 
 /* Context uses the existing shell, compact cards and shared form controls. */
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__heading {
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__heading {
   border: var(--border-width-thin) solid var(--color-card-border-hover);
   border-radius: var(--border-radius-md);
   background: var(--color-background);
   padding: calc(var(--spacing-sm) + var(--spacing-2xs));
 }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__heading h1 { font-size: var(--font-size-base); font-weight: var(--font-weight-normal); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__heading .intelligence-hub__eyebrow { color: var(--color-success); font-weight: var(--font-weight-bold); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__tabs [role="tablist"] {
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__heading h1 { font-size: var(--font-size-base); font-weight: var(--font-weight-normal); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__heading .intelligence-hub__eyebrow { color: var(--color-success); font-weight: var(--font-weight-bold); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__tabs [role="tablist"] {
   border-color: var(--color-card-border-hover);
   border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
   padding-block: 0;
   padding-inline: calc(var(--spacing-sm) + var(--spacing-2xs));
 }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__tabs [role="tab"] { min-height: var(--control-height-tab); border-radius: var(--border-radius-pill); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__tabs [role="tab"].tabview__tab--active { border-bottom: var(--border-width-medium) solid var(--color-success); }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__tabs [role="tab"].tabview__tab--active::after { display: none; }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__tabs [role="tabpanel"] { padding: 0; }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__tabs [role="tab"] { min-height: var(--control-height-tab); border-radius: var(--border-radius-pill); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__tabs [role="tab"].tabview__tab--active { border-bottom: var(--border-width-medium) solid var(--color-success); }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__tabs [role="tab"].tabview__tab--active::after { display: none; }
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__tabs [role="tabpanel"] { padding: 0; }
 .intelligence-hub__context-workspace {
   display: grid;
   gap: var(--spacing-sm);
@@ -1002,7 +1002,7 @@
 .intelligence-hub--context .intelligence-hub__panel small { font-size: var(--font-size-xs); line-height: var(--line-height-snug); }
 .intelligence-hub--context .textarea::placeholder { color: var(--color-text-secondary); opacity: 1; }
 .intelligence-hub--context .intelligence-hub__context-control { text-transform: none; letter-spacing: 0; }
-:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph) .intelligence-hub__heading-actions .btn,
+:is(.intelligence-hub--context, .intelligence-hub--sources, .intelligence-hub--review, .intelligence-hub--readiness, .intelligence-hub--coverage, .intelligence-hub--graph, .intelligence-hub--quality) .intelligence-hub__heading-actions .btn,
 .intelligence-hub--context .intelligence-hub__context-actionbar .btn--outline {
   border: var(--border-width-thin) solid var(--color-card-border-hover);
   border-radius: var(--border-radius-sm);

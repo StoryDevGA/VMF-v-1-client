@@ -51,6 +51,7 @@ vi.mock('../../hooks/useTenantContext.js', () => ({
 }))
 vi.mock('../../store/api/runtimeInstanceApi.js', () => {
   const queries = {
+  useGetRuntimeDiscoveryContradictionsQuery: () => ({ data: { data: { candidates: [] } }, isLoading: false }),
   useGetRuntimeRendererQuery: () => ({ data: { data: emptyEvidenceTotal ? {
     ...renderer,
     discovery: { ...renderer.discovery, evidenceObjectSummary: { ...renderer.discovery.evidenceObjectSummary, evidenceObjectCount: 0 } },
@@ -628,7 +629,7 @@ describe('Intelligence Hub', () => {
     show()
     expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     expect(screen.getByText('Acme Workspace')).toBeInTheDocument()
-    expect(screen.getAllByRole('tab')).toHaveLength(8)
+    expect(screen.getAllByRole('tab')).toHaveLength(9)
     expect(screen.getByRole('button', { name: 'Inspect source records →' }).closest('.intelligence-hub__metric'))
       .toHaveTextContent('2')
     expect(screen.getByText('Sources connected').nextElementSibling).toHaveTextContent('2')

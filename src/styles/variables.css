@@ -184,6 +184,25 @@
   --layout-intelligence-graph-inspector: calc(var(--spacing-xl) * 9 + var(--spacing-sm) + var(--spacing-xs));
   --layout-intelligence-graph-canvas-min: calc(var(--spacing-xl) * 10 + var(--spacing-md) + var(--spacing-xs));
   --layout-intelligence-graph-mobile-layer: calc(var(--spacing-xl) * 6 - var(--spacing-2xs));
+  /* Intelligence Quality: measured live prototype, 2026-10-02. New values
+     are scoped to this surface; geometry composes the shared spacing scale. */
+  --layout-intelligence-quality-queue: calc(var(--spacing-xl) * 11 + var(--spacing-sm) + var(--spacing-xs) + var(--border-width-thin));
+  --layout-intelligence-quality-readiness: calc(var(--spacing-xl) * 10 - var(--spacing-xs) - var(--border-width-thin));
+  --field-width-intelligence-quality-search: calc(var(--spacing-xl) * 7 + var(--spacing-sm) + var(--spacing-2xs) + var(--border-width-thin));
+  --font-size-intelligence-quality-queue: 0.6875rem; /* Reference 11px. */
+  --font-size-intelligence-quality-metric: 1.0625rem; /* Reference 17px. */
+  --color-intelligence-quality-contradiction-fill: #2a1010;
+  --color-intelligence-quality-confidence-heading: #78a8cb;
+  --color-intelligence-quality-section-copy: #cbd4cf;
+  --color-intelligence-quality-evidence-copy: #d9dfdc;
+  --color-intelligence-quality-advisor-note: #79a591;
+  --color-intelligence-quality-confidence-border: #263d4e;
+  --color-intelligence-quality-confidence-separator: #47667e;
+  --color-intelligence-quality-advisor-border: #285e47;
+  --color-intelligence-quality-toolbar-start: #0c120e;
+  --color-intelligence-quality-border: rgba(106, 106, 106, 0.46);
+  --layout-intelligence-quality-pane: calc(var(--spacing-xl) * 12 + var(--spacing-xs));
+  --background-intelligence-quality-toolbar: linear-gradient(135deg, var(--color-intelligence-quality-toolbar-start), var(--color-intelligence-graph-panel-end));
 
 
   /* Compatibility aliases for legacy component/page tokens.
