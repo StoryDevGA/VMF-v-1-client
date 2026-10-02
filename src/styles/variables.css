@@ -163,6 +163,27 @@
   --color-intelligence-review-fact: #d2dad5;
   --color-intelligence-review-reject: #ff7b72;
   --color-intelligence-review-reject-border: #69332f;
+  /* SS-037 Graph: measured prototype surfaces missing from the shared palette.
+     All sizing remains composed from the shared scale; Graph-only usage. */
+  --color-intelligence-graph-panel-start: #0b100d;
+  --color-intelligence-graph-panel-end: #070a08;
+  --color-intelligence-graph-toolbar-start: #0b120e;
+  --color-intelligence-graph-context-start: #08140f;
+  --color-intelligence-graph-node: #090d0b;
+  --color-intelligence-graph-grid: rgba(255, 255, 255, 0.024);
+  --color-intelligence-graph-explanation-border: #3d719d;
+  --color-intelligence-graph-explanation-text: #a6bbcb;
+  --color-intelligence-graph-signal: #6edced;
+  --color-intelligence-graph-signal-bg: #09242a;
+  --color-intelligence-graph-truth: #c0a5ff;
+  --color-intelligence-graph-truth-bg: #181027;
+  --background-intelligence-graph-panel: linear-gradient(145deg, var(--color-intelligence-graph-panel-start), var(--color-intelligence-graph-panel-end));
+  --background-intelligence-graph-toolbar: linear-gradient(135deg, var(--color-intelligence-graph-toolbar-start), var(--color-intelligence-graph-panel-end));
+  --background-intelligence-graph-context: linear-gradient(90deg, var(--color-intelligence-graph-context-start), var(--color-intelligence-context-card-end));
+  --field-width-intelligence-graph-search: calc(var(--spacing-xl) * 8 + var(--spacing-lg));
+  --layout-intelligence-graph-inspector: calc(var(--spacing-xl) * 9 + var(--spacing-sm) + var(--spacing-xs));
+  --layout-intelligence-graph-canvas-min: calc(var(--spacing-xl) * 10 + var(--spacing-md) + var(--spacing-xs));
+  --layout-intelligence-graph-mobile-layer: calc(var(--spacing-xl) * 6 - var(--spacing-2xs));
 
 
   /* Compatibility aliases for legacy component/page tokens.

@@ -44,6 +44,8 @@ let sourcePageMissing = false
 let sourceCurrentPending = false
 let coverageHealthFixture
 let summaryEvidencePending = false
+let graphReadError = false
+let graphManifestState = 'CURRENT'
 vi.mock('../../hooks/useTenantContext.js', () => ({
   useTenantContext: () => ({ customerId: 'customer-1', tenantId: 'tenant-1' }),
 }))
@@ -78,8 +80,9 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
     }
     return { data: { data: { evidenceObjects: [], sourceRegistry: [], total: emptyEvidenceTotal ? 0 : additionalUnclassifiedEvidence ? 4 : 3 } }, isLoading: false }
   },
-  useGetRuntimeStateGraphManifestQuery: (...args) => { calls.manifest(...args); return { data: { data: { manifest: { status: 'CURRENT' } } } } },
+  useGetRuntimeStateGraphManifestQuery: (...args) => { calls.manifest(...args); return { data: { data: { manifest: { status: graphManifestState, graphHash: 'hash-1', graphVersion: '2.2' } } }, ...(graphReadError ? { error: { status: 503 } } : {}) } },
   useGetRuntimeStateGraphProjectionQuery: (...args) => { calls.graph(...args); return { data: { data: { graph: {
+    graphHash: 'hash-1', graphVersion: '2.2',
     nodes: [
       { nodeId: 'source-1', nodeType: 'SOURCE', entityDisplayName: 'Source', label: 'private raw source text' },
       { nodeId: 'truth-1', nodeType: 'SECTION_TRUTH', entityDisplayName: 'Section Truth' },
@@ -88,7 +91,8 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
       { nodeId: 'evidence-2', nodeType: 'EVIDENCE', entityDisplayName: 'Evidence', label: 'another private raw evidence text' },
     ],
     edges: [
-      { edgeId: 'edge-1', fromNodeId: 'source-1', toNodeId: 'truth-1', relationshipDisplayName: 'Supports', customerVisible: true },
+      { edgeId: 'edge-1', fromNodeId: 'source-1', toNodeId: 'truth-1', edgeType: 'INTELLIGENCE_SUPPORTS_SECTION_TRUTH', relationshipDisplayName: 'Supports', customerVisible: true },
+      { edgeId: 'edge-output', fromNodeId: 'truth-1', toNodeId: 'output-1', edgeType: 'CANONICAL_TRUTH_REFERENCED_BY_OUTPUT', customerVisible: true },
       { edgeId: 'edge-2', fromNodeId: 'evidence-1', toNodeId: 'evidence-2', edgeType: 'EVIDENCE_CONTRADICTS_EVIDENCE', relationshipDisplayName: 'Contradicts', customerVisible: true },
     ],
     coverage: { missingDomains: ['ECONOMICS'] },
@@ -132,7 +136,7 @@ vi.mock('../../store/api/runtimeInstanceApi.js', () => {
       data: initialOverviewPending && detailPending ? undefined : result.data,
       currentData,
       isFetching: detailPending || (name === 'useGetRuntimeStateEvidenceQuery' && ((args[0].pageSize === 25 && sourceCurrentPending) || (args[0].pageSize === 1 && !args[0].reviewStatus && summaryEvidencePending))) || (name === 'useGetRuntimeRendererQuery' && (rendererRefreshing || pendingRendererContext)),
-      refetch: () => calls.refresh(name, args[0]),
+      refetch: () => { calls.refresh(name, args[0]); return Promise.resolve({ data: result.data, error: result.error }) },
     }
   }]))
 })
@@ -166,6 +170,8 @@ describe('Intelligence Hub', () => {
     sourceCurrentPending = false
     coverageHealthFixture = undefined
     summaryEvidencePending = false
+    graphReadError = false
+    graphManifestState = 'CURRENT'
     emptyFilteredReview = false
     missingSummaryEvidence = false
     conflictingStatusCounts = false
@@ -729,6 +735,25 @@ describe('Intelligence Hub', () => {
     expect(screen.getByRole('link', { name: 'Acquire recommended evidence →' })).toHaveAttribute('href', '/app/runtime/revision-3/workbench')
   })
 
+  it.each(['STALE', 'MISSING'])('blocks projection for a %s manifest', status => {
+    graphManifestState = status
+    show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph')
+    expect(calls.graph.mock.calls.at(-1)[1].skip).toBe(true)
+    expect(screen.queryByRole('button', { name: /^Source Not projected/ })).not.toBeInTheDocument()
+  })
+
+  it('hides a retained current manifest on error and refreshes only graph reads in order', async () => {
+    graphReadError = true
+    const user = userEvent.setup()
+    const rendered = show('?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph')
+    expect(calls.graph.mock.calls.at(-1)[1].skip).toBe(true)
+    expect(screen.getAllByText('Graph could not be loaded. Refresh to retry.').length).toBeGreaterThan(0)
+    graphReadError = false
+    rendered.rerender(<MemoryRouter initialEntries={['/app/intelligence?runtimeInstanceId=workspace-1&revisionId=revision-2&view=intelligence-graph']}><Routes><Route path="/app/intelligence" element={<IntelligenceHub />} /></Routes></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: '↻ Refresh' }))
+    expect(calls.refresh.mock.calls.map(call => call[0])).toEqual(['useGetRuntimeStateGraphManifestQuery', 'useGetRuntimeStateGraphProjectionQuery'])
+  })
+
   it('uses server review filters and explains graph relationships without raw source text', async () => {
     const user = userEvent.setup()
     show()
@@ -739,15 +764,15 @@ describe('Intelligence Hub', () => {
     await user.click(screen.getByRole('tab', { name: 'Intelligence Graph' }))
     expect(calls.graph.mock.calls.at(-1)[1].skip).toBe(false)
     expect(screen.queryByText('private raw source text')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Source/i }))
-    expect(screen.getByText('Supports')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Source Not projected/ }))
+    expect(screen.getByText('Supports understanding')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Source' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Gaps' }))
+    await user.click(screen.getByRole('button', { name: /Gaps/ }))
     expect(screen.getAllByText('Economics').length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Impact' }))
     expect(screen.getAllByText('Output Reference').length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('button', { name: 'Contradictions' }))
-    expect(screen.getAllByText('Evidence ↔ Evidence').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: /Contradictions/ }))
+    expect(screen.getAllByText('Contradicts').length).toBeGreaterThan(0)
   })
 
   it('keeps After lock inactive while the selected revision is unlocked', async () => {

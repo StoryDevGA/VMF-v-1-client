@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CoverageView from './CoverageView.jsx'
+import GraphView from './GraphView.jsx'
 import { useSearchParams } from 'react-router-dom'
 import { MdChevronRight, MdNorthEast, MdSearch, MdInfoOutline } from 'react-icons/md'
 import { Input } from '../../components/Input'
@@ -710,86 +711,6 @@ function AfterLockView({ renderer, onOpen, onSelectView }) {
   </section>
 }
 
-function GraphView({ manifest, graph, isLoading, onOpen, qualityHref, workbenchHref }) {
-  const [mode, setMode] = useState('Journey')
-  const [search, setSearch] = useState('')
-  const [selectedKey, setSelectedKey] = useState('')
-  const nodes = (Array.isArray(graph?.nodes) ? graph.nodes : Array.isArray(graph?.elements) ? graph.elements : [])
-    .filter((node) => node?.customerVisible !== false)
-  const type = (node) => String(node?.nodeType || node?.type || '').toUpperCase()
-  const nodeLabel = (node) => node?.entityDisplayName || displayHubToken(type(node))
-  const focusNodes = mode === 'Lineage'
-    ? nodes.filter((node) => ['SOURCE', 'EVIDENCE', 'INTELLIGENCE', 'SECTION_TRUTH', 'PUBLISHED_TRUTH', 'CANONICAL_TRUTH'].includes(type(node)))
-    : mode === 'Impact'
-      ? nodes.filter((node) => ['SECTION_TRUTH', 'PUBLISHED_TRUTH', 'CANONICAL_TRUTH', 'OUTPUT_REFERENCE', 'REASONING_CONSUMER', 'SIGNAL'].includes(type(node)))
-      : mode === 'Gaps' || mode === 'Contradictions' ? [] : nodes
-  const edges = Array.isArray(graph?.edges) ? graph.edges.filter((edge) => edge?.customerVisible !== false) : []
-  const contradictionEdges = edges.filter((edge) => ['EVIDENCE_CONTRADICTS_EVIDENCE', 'INTELLIGENCE_CONTRADICTS_INTELLIGENCE'].includes(String(edge.edgeType || '').toUpperCase()))
-  const focusEntries = mode === 'Gaps'
-    ? (Array.isArray(graph?.coverage?.missingDomains) ? graph.coverage.missingDomains : []).map((domain) => ({ key: String(domain), label: displayHubToken(domain), kind: 'Coverage gap' }))
-    : mode === 'Contradictions'
-      ? contradictionEdges.map((edge) => {
-        const left = nodes.find((node) => (node.id || node.nodeId) === edge.fromNodeId)
-        const right = nodes.find((node) => (node.id || node.nodeId) === edge.toNodeId)
-        return { key: edge.edgeId, label: `${left ? nodeLabel(left) : 'Recorded object'} ↔ ${right ? nodeLabel(right) : 'recorded object'}`, kind: edge.relationshipDisplayName || 'Recorded contradiction' }
-      })
-      : focusNodes.map((node) => ({ key: node.id || node.nodeId, label: nodeLabel(node), kind: displayHubToken(node.type || node.nodeType), node }))
-  const filtered = focusEntries.filter((entry) => entry.label.toLowerCase().includes(search.toLowerCase())).slice(0, 12)
-  const selected = filtered.find((entry) => (entry.key || entry.label) === selectedKey) || filtered[0] || null
-  const relatedEdges = selected?.node
-    ? edges.filter((edge) => [edge.fromNodeId, edge.toNodeId].includes(selected.key)).slice(0, 6)
-    : []
-  const relatedLabels = relatedEdges.map((edge) => {
-    const otherId = edge.fromNodeId === selected.key ? edge.toNodeId : edge.fromNodeId
-    const other = nodes.find((node) => (node.id || node.nodeId) === otherId)
-    return { label: other ? nodeLabel(other) : 'Related object', relationship: edge.relationshipDisplayName || displayHubToken(edge.edgeType) }
-  })
-  const graphState = manifest?.status ? displayHubToken(manifest.status) : 'Unavailable'
-  const graphVersion = manifest?.graphVersion ? displayHubToken(manifest.graphVersion) : 'Unavailable'
-  return <>
-    <div className="intelligence-hub__view-intro">
-      <div><p className="intelligence-hub__eyebrow">Explainability and impact</p><h2>Intelligence Graph</h2>
-        <p>Trace available, customer-visible relationships from recorded evidence to the understanding and outcomes they support.</p></div>
-      <div className="intelligence-hub__graph-links">
-        <BoundaryLink to={workbenchHref} note="Graph actions remain in the selected workspace workflow.">Open selected workspace →</BoundaryLink>
-        <BoundaryLink to={qualityHref} note="Human review remains in Intelligence Quality.">Open Intelligence Quality →</BoundaryLink>
-      </div>
-    </div>
-    <div className="intelligence-hub__metrics intelligence-hub__metrics--three intelligence-hub__metrics--compact" aria-label="Graph summary">
-      <Metric label="Graph objects" value={displayHubCount(getHubCount(manifest?.counts, 'nodeCount'))} hint="Selected revision" onOpen={onOpen} detail="Object totals are shown only from the selected revision's graph manifest." />
-      <Metric label="Relationships" value={displayHubCount(getHubCount(manifest?.counts, 'edgeCount'))} hint="Selected revision" onOpen={onOpen} detail="Relationship totals are shown only from the selected revision's graph manifest." />
-      <Metric label="Graph version" value={graphVersion} hint={`Graph state · ${graphState}`} onOpen={onOpen} detail="The graph version and currentness state are provided by the selected revision manifest." />
-    </div>
-    <div className="intelligence-hub__grid intelligence-hub__grid--two intelligence-hub__graph-layout">
-      <Panel title={mode === 'Journey' ? 'Complete journey' : mode} eyebrow="Focused graph objects">
-        <p>{mode === 'Journey' ? 'Follow customer-visible objects and their recorded relationships through the selected revision.' : `Inspect ${mode.toLowerCase()} present in the selected revision graph.`}</p>
-        <div className="intelligence-hub__filters" role="group" aria-label="Intelligence Graph modes">
-          {['Journey', 'Lineage', 'Impact', 'Gaps', 'Contradictions'].map((item) => <Button key={item} size="sm" variant={mode === item ? 'secondary' : 'ghost'} aria-pressed={mode === item} onClick={() => { setMode(item); setSelectedKey('') }}>{item}</Button>)}
-        </div>
-        <label className="intelligence-hub__search">Search this graph view<input value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-        {isLoading ? <p role="status">Loading graph focus…</p> : filtered.length ? <ul className="intelligence-hub__list intelligence-hub__graph-list">{filtered.map((entry, index) => <li key={entry.key || `${entry.label}-${index}`}>
-          <button type="button" aria-pressed={selected === entry} onClick={() => setSelectedKey(entry.key || entry.label)}>
-            <span className="intelligence-hub__graph-step"><strong>{entry.label}</strong><span>{entry.kind}</span></span>
-            {entry.node ? <small>{relatedEdges.length && selected?.key === entry.key ? `${relatedEdges.length} recorded relationship${relatedEdges.length === 1 ? '' : 's'}` : 'Select to inspect recorded relationships'}</small> : null}
-          </button>
-        </li>)}</ul> : <p className="intelligence-hub__empty-state">{graph ? 'No customer-visible objects match this graph view.' : 'A current graph manifest and projection are unavailable for this selected revision.'}</p>}
-      </Panel>
-      <Panel title={selected ? selected.label : 'Selected graph object'} eyebrow={selected ? selected.kind : 'No object selected'}>
-        {selected ? <>
-          <p>{selected.node ? 'This object is shown from the selected revision graph. Its recorded relationships are listed below.' : `${selected.kind}. This is an informational relationship from the selected revision graph.`}</p>
-          <dl className="intelligence-hub__facts">
-            <div><dt>Graph state</dt><dd>{graphState}</dd></div>
-            <div><dt>Graph version</dt><dd>{graphVersion}</dd></div>
-            <div><dt>Recorded relationships</dt><dd>{selected.node ? displayHubCount(relatedEdges.length) : 'Unavailable'}</dd></div>
-          </dl>
-          {relatedLabels.length ? <ul className="intelligence-hub__related-evidence">{relatedLabels.map((item, index) => <li key={`${item.relationship}-${item.label}-${index}`}><strong>{item.relationship}</strong><span>{item.label}</span></li>)}</ul> : <p className="intelligence-hub__muted">No customer-visible relationship detail is available for this object.</p>}
-          <DetailButton onOpen={onOpen} title="Graph relationships" body="Graph relationships are read-only explanations of governed records. They do not edit nodes, edges, evidence or the selected revision.">Why this relationship is shown →</DetailButton>
-        </> : <p className="intelligence-hub__muted">Selected-object detail is unavailable until a current graph projection is exposed for this revision.</p>}
-      </Panel>
-    </div>
-  </>
-}
-
 export default function IntelligenceHub() {
   const [searchParams, setSearchParams] = useSearchParams()
   const workspaceId = String(searchParams.get('runtimeInstanceId') || '').trim()
@@ -876,16 +797,22 @@ export default function IntelligenceHub() {
     ? { evidenceObjects: [], total: 0, page: 1, pageSize: 25 }
     : getHubEvidencePage(evidenceResponse)
   const needsGraphManifest = view === 'Intelligence Graph'
-  const { data: graphManifestResponse } = useGetRuntimeStateGraphManifestQuery(
+  const { currentData: graphManifestResponse, isFetching: graphManifestFetching, error: graphManifestError, refetch: refetchGraphManifest } = useGetRuntimeStateGraphManifestQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId },
     { skip: !canReadDetail || !needsGraphManifest },
   )
-  const manifest = getHubPayload(graphManifestResponse)?.manifest ?? getHubPayload(graphManifestResponse)
-  const { data: graphResponse, isLoading: graphLoading } = useGetRuntimeStateGraphProjectionQuery(
+  const manifest = !graphManifestError ? getHubPayload(graphManifestResponse)?.manifest ?? getHubPayload(graphManifestResponse) : null
+  const { currentData: graphResponse, isFetching: graphFetching, error: graphError, isUninitialized: graphUninitialized, refetch: refetchGraph } = useGetRuntimeStateGraphProjectionQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId },
     { skip: !canReadDetail || view !== 'Intelligence Graph' || manifest?.status !== 'CURRENT' },
   )
-  const graph = getHubPayload(graphResponse)?.graph ?? getHubPayload(graphResponse)
+  const graphLoading = Boolean(graphManifestFetching || graphFetching)
+  const graph = !graphLoading && !graphError && manifest?.status === 'CURRENT' ? getHubPayload(graphResponse)?.graph ?? getHubPayload(graphResponse) : null
+  const refreshGraph = async () => {
+    const result = await refetchGraphManifest()
+    const nextManifest = getHubPayload(result.data)?.manifest ?? getHubPayload(result.data)
+    if (!result.error && !graphUninitialized && nextManifest?.status === 'CURRENT') refetchGraph()
+  }
   const { currentData: graphCoverageResponse, isFetching: graphCoverageFetching, error: graphCoverageError, refetch: refetchGraphCoverage } = useGetRuntimeIntelligenceGraphCoverageQuery(
     { runtimeInstanceId: revisionId },
     { skip: !canReadDetail || (view !== 'Overview' && view !== 'Coverage') },
@@ -953,7 +880,7 @@ export default function IntelligenceHub() {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : view === 'Coverage' ? ' intelligence-hub--coverage' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : view === 'Coverage' ? ' intelligence-hub--coverage' : view === 'Intelligence Graph' ? ' intelligence-hub--graph' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -996,10 +923,11 @@ export default function IntelligenceHub() {
             title="Opens Evidence Workbench; evidence is not added in the Intelligence Hub.">＋ Add Evidence</Link>
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
-        {view !== 'Context' && view !== 'After lock' && view !== 'Coverage' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'After lock' && rendererFetching} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'After lock' && rendererFetching)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : view === 'Coverage' ? refreshCoverage : refetchRenderer}>↻ Refresh</Button>
+        {view !== 'Context' && view !== 'After lock' && view !== 'Coverage' && view !== 'Intelligence Graph' ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
+        <Button size="sm" variant="outline" disabled={view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching} aria-busy={Boolean(view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching)} onClick={view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : view === 'Coverage' ? refreshCoverage : view === 'Intelligence Graph' ? refreshGraph : refetchRenderer}>↻ Refresh</Button>
         {view === 'After lock' ? <Button size="sm" className="intelligence-hub__lock-discovery" onClick={event => openInfo(discoveryIntakeInfo(renderer), event.currentTarget)}>＋ Start discovery</Button> : null}
         {view === 'Coverage' ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-hub__coverage-acquire" title="Opens Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
+        {view === 'Intelligence Graph' ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-graph__technical" title="Navigation to Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
@@ -1015,7 +943,7 @@ export default function IntelligenceHub() {
             <TabView.Tab label="Readiness & publish"><ReadinessView key={contextKey} renderer={renderer} discovery={discovery} evidenceTotal={summaryEvidencePage?.totalCapped ? null : getHubCount(summaryEvidencePage, 'total')} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching || rejectedEvidenceFetching} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Coverage"><CoverageView key={contextKey} discovery={getHubDiscovery(renderer)} graphCoverage={graphCoverage} isLoading={graphCoverageFetching} error={graphCoverageError} qualityHref={qualityHref} workbenchHref={workbenchHref} onSelectView={selectView} onOpenSources={openCoverageSources} /></TabView.Tab>
-            <TabView.Tab label="Intelligence Graph"><GraphView manifest={manifest} graph={graph} isLoading={graphLoading} onOpen={openInfo} qualityHref={qualityHref} workbenchHref={workbenchHref} /></TabView.Tab>
+            <TabView.Tab label="Intelligence Graph"><GraphView key={contextKey} manifest={manifest} graph={graph} isLoading={graphLoading} error={graphManifestError || graphError} workspaceName={renderer.runtimeInstance.name || 'Workspace'} revisionLabel={renderer.revision.revisionNumber ? `R${renderer.revision.revisionNumber}` : 'Selected revision'} qualityHref={qualityHref} workbenchHref={workbenchHref} onSelectView={selectView} onOpenSources={openCoverageSources} /></TabView.Tab>
             </TabView>
           </>}
     <Dialog open={Boolean(visibleInfo)} onClose={closeInfo} size={visibleInfo?.kind === 'assurance-report' ? 'xl' : ['after-lock', 'discovery-intake'].includes(visibleInfo?.kind) ? 'lg' : 'md'} className={visibleInfo?.kind === 'assurance-report' ? 'intelligence-hub__report-dialog' : visibleInfo?.kind === 'after-lock' ? 'intelligence-hub__lock-dialog' : visibleInfo?.kind === 'discovery-intake' ? 'intelligence-hub__lock-dialog intelligence-hub__intake-dialog' : ''} showCloseButton={!['assurance-report', 'after-lock', 'discovery-intake'].includes(visibleInfo?.kind)} aria-label={visibleInfo?.kind === 'assurance-report' ? 'Intelligence assurance report' : visibleInfo?.kind === 'after-lock' ? 'Why new evidence is reviewed separately' : visibleInfo?.kind === 'discovery-intake' ? 'Add evidence for review' : undefined}>
