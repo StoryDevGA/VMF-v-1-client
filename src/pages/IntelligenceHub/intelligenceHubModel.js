@@ -5,6 +5,7 @@ export const HUB_VIEWS = Object.freeze([
   'Context',
   'Sources',
   'Review',
+  'Evidence readiness',
   'Readiness & publish',
   'After lock',
   'Coverage',

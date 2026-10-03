@@ -294,7 +294,6 @@
 }
 .intelligence-hub--overview .intelligence-hub__metric .card__body {
   gap: var(--spacing-2xs);
-  padding: calc(var(--spacing-sm) + var(--spacing-xs) + var(--spacing-2xs));
 }
 .intelligence-hub--overview .intelligence-hub__metric--assurance .card__body {
   gap: 0;
@@ -302,12 +301,8 @@
 }
 .intelligence-hub--overview .intelligence-hub__metric .intelligence-hub__eyebrow {
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-snug);
 }
-.intelligence-hub--overview .intelligence-hub__metric .intelligence-hub__metric-value {
-  font-size: var(--font-size-xl);
-  line-height: var(--line-height-tight);
-}
+
 .intelligence-hub--overview .intelligence-hub__metric--assurance .intelligence-hub__metric-value {
   display: flex;
   min-height: var(--control-height-action);
@@ -455,6 +450,7 @@
   .intelligence-hub--overview .intelligence-hub__tabs [role="tab"] {
     min-height: var(--control-height-tab);
     padding-block: 0;
+    padding-inline: calc(var(--spacing-sm) + var(--spacing-xs) + var(--border-width-thin));
     border-bottom: var(--border-width-medium) solid transparent;
     border-radius: var(--border-radius-pill);
   }
@@ -473,7 +469,6 @@
 .intelligence-hub--overview .intelligence-hub__tabs [role="tabpanel"] { padding: 0; }
 .intelligence-hub--overview .intelligence-hub__overview-bottom {
   margin-inline: 0;
-  margin-block-start: calc(var(--spacing-sm) + var(--spacing-2xs));
 }
 
 .intelligence-hub__overview-top { grid-template-columns: minmax(0, .82fr) minmax(0, 1.2fr) minmax(0, 1fr); }
@@ -525,15 +520,12 @@
 .intelligence-hub--overview .intelligence-hub__panel-header h2 {
   margin: 0;
   font-family: var(--font-primary);
-  font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-snug);
 }
 .intelligence-hub--overview .intelligence-hub__panel-header .intelligence-hub__eyebrow {
   margin: 0;
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-snug);
   white-space: nowrap;
 }
 .intelligence-hub--overview .intelligence-hub__panel p {
@@ -558,11 +550,13 @@
   margin: 0;
   color: var(--color-text-secondary);
 }
+.intelligence-hub--overview .intelligence-hub__evidence-readiness-action,
 .intelligence-hub--overview .intelligence-hub__evidence-review-action {
   margin-block-start: calc(var(--spacing-sm) + var(--spacing-xs));
   color: var(--color-action-primary);
   font-weight: var(--font-weight-bold);
 }
+.intelligence-hub--overview .intelligence-hub__evidence-readiness-action { margin-inline-end: var(--spacing-xs); }
 .intelligence-hub--overview .intelligence-hub__evidence-review-action .btn__content { line-height: inherit; }
 .intelligence-hub--overview .intelligence-hub__overview-bottom .intelligence-hub__panel .card__body {
   padding-block: calc(var(--spacing-sm) + var(--spacing-xs));
@@ -1625,3 +1619,18 @@
 .intelligence-hub__report-sheet > header h3, .intelligence-hub__report-dialog .dialog__header h2 { line-height: var(--line-height-intelligence-report-title); }
 .intelligence-hub__report-dialog.dialog { position: fixed; inset: auto; left: 50vw; top: 50dvh; margin: 0; transform: translate(-50%, -50%); animation: none; }
 .intelligence-hub__report-dialog .dialog__body:focus-visible { outline: var(--border-width-medium) solid var(--color-border-focus); outline-offset: calc(var(--border-width-medium) * -1); }
+
+/* Latest prototype Overview typography; existing shared components remain unchanged. */
+.intelligence-hub--overview .intelligence-hub__metric .card__body { padding: calc(var(--spacing-sm) + var(--spacing-xs)) calc(var(--spacing-sm) + var(--spacing-xs) + var(--spacing-2xs)); }
+.intelligence-hub--overview .intelligence-hub__metric .intelligence-hub__eyebrow { text-transform: uppercase; font-weight: var(--font-weight-normal); line-height: var(--line-height-intelligence-sources-detail); }
+.intelligence-hub--overview .intelligence-hub__metric .intelligence-hub__metric-value { font-family: var(--font-primary); font-size: var(--font-size-intelligence-overview-value); line-height: var(--line-height-intelligence-overview-value); }
+.intelligence-hub--overview .intelligence-hub__metric .btn, .intelligence-hub--overview .intelligence-hub__metric-action { font-weight: var(--font-weight-normal); line-height: var(--line-height-intelligence-sources-detail); }
+.intelligence-hub--overview .btn__content { line-height: inherit; }
+.intelligence-hub--overview .intelligence-hub__overview-top, .intelligence-hub--overview .intelligence-hub__overview-bottom { gap: calc(var(--spacing-sm) + var(--border-width-thin)); }
+.intelligence-hub--overview .intelligence-hub__overview-bottom { margin-block-start: calc(var(--spacing-sm) + var(--border-width-thin)); }
+.intelligence-hub--overview .intelligence-hub__panel .card__body { font-size: var(--font-size-intelligence-context-detail); line-height: var(--line-height-intelligence-sources-copy); }
+.intelligence-hub--overview .intelligence-hub__panel-header h2 { font-weight: var(--font-weight-intelligence-overview-heading); line-height: var(--line-height-intelligence-sources-copy); }
+.intelligence-hub--overview .intelligence-hub__panel-header .intelligence-hub__eyebrow { line-height: var(--line-height-intelligence-sources-copy); }
+.intelligence-hub--overview .intelligence-hub__overview-top .intelligence-hub__facts dt { line-height: var(--line-height-intelligence-sources-detail); }
+.intelligence-hub--overview .intelligence-hub__overview-top .intelligence-hub__facts dd { color: var(--color-text-primary); line-height: var(--line-height-intelligence-sources-copy); }
+.intelligence-hub--overview .intelligence-hub__overview-top .btn--ghost { font-weight: var(--font-weight-intelligence-overview-action); line-height: var(--line-height-intelligence-sources-detail); }

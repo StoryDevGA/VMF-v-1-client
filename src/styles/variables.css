@@ -122,6 +122,29 @@
   /* SS-037 prototype accents, captured as semantic tokens for the Hub. */
   --color-intelligence-metric: #73b9ff;
   --color-intelligence-review: #ff675f;
+  /* Evidence readiness: source-measured surfaces, 2026-10-03. */
+  --background-evidence-readiness-panel: linear-gradient(145deg, #0b100d, #070a08);
+  --background-evidence-readiness-action: linear-gradient(145deg, #0b1711, #070b08);
+  --background-evidence-readiness-ready: linear-gradient(135deg, #0b1812, #07100b);
+  --background-evidence-readiness-attention: linear-gradient(135deg, #171307, #0c0b07);
+  --background-evidence-readiness-empty: linear-gradient(135deg, #171207, #0b0b07);
+  --color-evidence-readiness-border: #285e47;
+  --color-evidence-readiness-attention-border: #6c5418;
+  --color-evidence-readiness-hypothesis: #b58cff;
+  --color-evidence-readiness-line: #6a6a6a75;
+  --letter-spacing-evidence-readiness-label: 0.07em;
+  --font-weight-evidence-readiness-label: 730; /* Measured prototype section labels. */
+  --line-height-intelligence-overview-value: 1; /* Measured 24px line on 24px KPI. */
+  --font-size-intelligence-overview-value: 1.5rem; /* Measured 24px prototype KPI. */
+  --font-weight-intelligence-overview-heading: 710; /* Measured Overview panel labels. */
+  --font-weight-intelligence-overview-action: 690; /* Measured Overview text actions. */
+  --font-weight-evidence-readiness-action: 680; /* Measured prototype text actions. */
+  --layout-evidence-readiness-status: calc(var(--spacing-xl) * 7 - var(--spacing-xs));
+  --layout-evidence-readiness-primary-left: 1.1fr;
+  --layout-evidence-readiness-primary-right: 0.9fr;
+  --layout-evidence-readiness-secondary-left: 1.25fr;
+  --layout-evidence-readiness-secondary-right: 0.75fr;
+  --font-size-evidence-readiness-banner: 1.125rem; /* Measured 18px; no shared scale entry. */
   /* SS-037 Context surfaces measured from the live prototype, 2026-09-30.
      Keep these scoped to Context; neutral shared surfaces remain unchanged. */
   --color-intelligence-context-card-start: #0c110e;

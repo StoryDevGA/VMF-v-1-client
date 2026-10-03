@@ -629,8 +629,8 @@ describe('Intelligence Hub', () => {
     show()
     expect(screen.getByRole('heading', { name: 'Intelligence Hub' })).toBeInTheDocument()
     expect(screen.getByText('Acme Workspace')).toBeInTheDocument()
-    expect(screen.getAllByRole('tab')).toHaveLength(9)
-    expect(screen.getByRole('button', { name: 'Inspect source records →' }).closest('.intelligence-hub__metric'))
+    expect(screen.getAllByRole('tab')).toHaveLength(10)
+    expect(screen.getByRole('button', { name: 'Inspect connected sources →' }).closest('.intelligence-hub__metric'))
       .toHaveTextContent('2')
     expect(screen.getByText('Sources connected').nextElementSibling).toHaveTextContent('2')
     expect(screen.getByText('Evidence accepted').nextElementSibling).toHaveTextContent('2')
@@ -646,6 +646,21 @@ describe('Intelligence Hub', () => {
     expect(calls.evidence.mock.calls.filter(([query]) => query.pageSize === 25).at(-1)[0]).toMatchObject({ runtimeInstanceId: 'revision-2', customerId: 'customer-1', tenantId: 'tenant-1', pageSize: 25 })
   })
 
+  it.each([['READY', 'Ready'], ['PARTIALLY_READY', 'Partially Ready'], ['NOT_READY', 'Not Ready'], [undefined, 'Unavailable'], ['UNRECOGNISED', 'Unavailable']])('uses recorded Overview readiness %s without inferring it from coverage', (state, expected) => {
+    coverageHealthFixture = { readiness: { state }, coveragePercent: 99 }
+    show()
+    const card = screen.getByRole('button', { name: 'Check evidence coverage →' }).closest('.intelligence-hub__metric')
+    expect(within(card).getByText(expected, { exact: true })).toBeInTheDocument()
+    expect(card).not.toHaveTextContent('99%')
+  })
+  it.each(['Check evidence coverage →', 'Open evidence readiness →'])('opens Evidence readiness from Overview action %s with the selected context', async name => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name, exact: true }))
+    expect(screen.getByRole('tab', { name: 'Evidence readiness', exact: true })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Evidence readiness', exact: true })).toBeInTheDocument()
+    expect(calls.evidence.mock.calls.some(([query]) => query.runtimeInstanceId === 'revision-2' && query.customerId === 'customer-1' && query.tenantId === 'tenant-1')).toBe(true)
+  })
   it('preserves the selected view across an explanation popup', async () => {
     const user = userEvent.setup()
     show()

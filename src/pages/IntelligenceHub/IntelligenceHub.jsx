@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import CoverageView from './CoverageView.jsx'
 import GraphView from './GraphView.jsx'
 import QualityView from './QualityView.jsx'
+import EvidenceReadinessView from './EvidenceReadinessView.jsx'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MdChevronRight, MdNorthEast, MdSearch, MdInfoOutline } from 'react-icons/md'
 import { Input } from '../../components/Input'
@@ -104,25 +105,22 @@ function BoundaryLink({ to, children, note = 'Destination screen is outside SS-0
   ) : note ? <p className="intelligence-hub__muted">{note}</p> : null
 }
 
-function OverviewMetrics({ renderer, discovery, graphCoverage, onOpen, onSelectView, qualityHref }) {
+function OverviewMetrics({ renderer, discovery, onOpen, onSelectView, qualityHref }) {
   const evidenceSummary = discovery?.evidenceObjectSummary
   const acquisitionMetrics = discovery?.acquisitionEffectiveness?.metrics
-  const graphSummary = graphCoverage?.available === true
-    && graphCoverage?.coverage?.coverageModel === 'EVIDENCE_DOMAIN_COVERAGE'
-    ? graphCoverage.coverage
-    : null
-  const coverage = getHubCount(graphSummary, 'coveragePercent')
+  const readiness = discovery?.discoveryHealth?.readiness?.state
+  const readinessLabel = ['READY', 'PARTIALLY_READY', 'NOT_READY'].includes(readiness) ? displayHubToken(readiness) : 'Unavailable'
   const reviewCandidates = getHubCount(acquisitionMetrics, 'contradictionCount')
   const sourceCount = getHubCount(discovery?.sourceRegistrySummary, 'count')
   return <div className="intelligence-hub__metrics" aria-label="Intelligence summary">
     <Metric className="intelligence-hub__metric--assurance" label="Intelligence assurance" value={summaryValue(renderer?.truthBinding?.certification?.label)} hint="Select to view assurance details" onOpen={onOpen} valueAction
       detail="Assurance is shown only when the selected revision has a server-projected certification. Coverage or evidence counts alone do not establish an assurance level." />
-    <Metric className="intelligence-hub__metric--sources" label="Sources" value={displayHubCount(sourceCount)} hint="Inspect source records →" onOpen={onOpen} onAction={() => onSelectView('Sources')}
+    <Metric className="intelligence-hub__metric--sources" label="Sources" value={displayHubCount(sourceCount)} hint="Inspect connected sources →" onOpen={onOpen} onAction={() => onSelectView('Sources')}
       detail="The server-projected source registry summary reports this revision's source count. The bounded evidence read exposes only sources linked to its current page." />
     <Metric className="intelligence-hub__metric--evidence" label="Evidence objects" value={displayHubCount(getHubCount(evidenceSummary, 'evidenceObjectCount'))} hint="Inspect accepted evidence →" onOpen={onOpen} onAction={() => onSelectView('Review', 'Approved')}
       detail="Evidence objects are recorded facts or candidates. Accepted and pending counts are distinct; the Hub does not approve evidence." />
-    <Metric className="intelligence-hub__metric--coverage" label="Evidence coverage" value={coverage === null ? 'Unavailable' : `${coverage}%`} hint="Explore contributing domains →" onOpen={onOpen} onAction={() => onSelectView('Coverage')}
-      detail="Coverage is a discovery signal for the selected revision, not a truth certification or publication decision." />
+    <Metric className="intelligence-hub__metric--coverage" label="Evidence readiness" value={readinessLabel} hint="Check evidence coverage →" onOpen={onOpen} onAction={() => onSelectView('Evidence readiness')}
+      detail="Evidence readiness uses the recorded readiness state of this revision. Coverage percentages do not establish readiness, assurance or publication approval." />
     <Metric className="intelligence-hub__metric--review" label="Items recommended for review" value={displayHubCount(reviewCandidates)} hint="Open quality findings →" onOpen={onOpen} actionHref={qualityHref}
       detail="The saved acquisition summary reports contradiction candidates for human review. Open Intelligence Quality to inspect them; this recommendation does not approve evidence or change governed records." />
   </div>
@@ -214,6 +212,7 @@ function Overview({ renderer, discovery, graphCoverage, evidenceStatusCounts, is
           {otherEvidenceStatus ? <p className="intelligence-hub__distribution-other">
             Other status: {displayHubCount(otherEvidenceStatus.value)}
           </p> : null}
+          <Button className="intelligence-hub__evidence-readiness-action" size="sm" variant="ghost" onClick={() => onSelectView('Evidence readiness')}>Open evidence readiness →</Button>
           <Button className="intelligence-hub__evidence-review-action" size="sm" variant="ghost" onClick={() => onSelectView('Review', 'Needs review')}>Review exceptions →</Button>
         </Panel>
         <Panel title="Intelligence assurance" eyebrow={summaryValue(renderer?.truthBinding?.certification?.label)} className="intelligence-hub__overview-assurance" inlineHeader>
@@ -722,6 +721,7 @@ export default function IntelligenceHub({ quality = false }) {
   const contextKey = `${workspaceId}:${revisionId}:${customerId}:${tenantId}`
   const viewIndex = quality ? HUB_VIEWS.length : Math.max(0, getHubViewFromSearch(`?${searchParams.toString()}`))
   const view = quality ? 'Intelligence Quality' : HUB_VIEWS[viewIndex]
+  const evidenceReadiness = view === 'Evidence readiness'
   const [info, setInfo] = useState(null)
   const [evidencePagination, setEvidencePagination] = useState({ contextKey, page: 1 })
   const evidencePageNumber = evidencePagination.contextKey === contextKey ? evidencePagination.page : 1
@@ -755,7 +755,7 @@ export default function IntelligenceHub({ quality = false }) {
   const canReadDetail = context.valid
   const { currentData: qualityResponse, error: qualityError, isFetching: qualityFetching, isLoading: qualityLoading, refetch: refetchQuality } = useGetRuntimeDiscoveryContradictionsQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId },
-    { skip: !canReadDetail || !quality },
+    { skip: !canReadDetail || !(quality || evidenceReadiness) },
   )
   const { currentData: summaryEvidenceResponse, error: summaryEvidenceError, isLoading: summaryEvidenceLoading, isFetching: summaryEvidenceFetching, refetch: refetchSummaryEvidence } = useGetRuntimeStateEvidenceQuery(
     { runtimeInstanceId: revisionId, customerId, tenantId, page: 1, pageSize: 1 },
@@ -853,6 +853,8 @@ export default function IntelligenceHub({ quality = false }) {
     ? null
     : reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)
   const qualityHref = context.valid ? getHubDestinationHref('quality', workspaceId, revisionId) : ''
+  const evidenceReadinessRefreshing = rendererFetching || summaryEvidenceFetching || qualityFetching
+  const refreshEvidenceReadiness = () => [refetchRenderer, refetchSummaryEvidence, refetchQuality].forEach(refetch => refetch())
   const workbenchHref = context.valid ? `${getHubReturnHref(revisionId)}/workbench` : ''
 
   const openInfo = (nextInfo, opener) => {
@@ -895,7 +897,7 @@ export default function IntelligenceHub({ quality = false }) {
   const headingSourceCount = displayHubCount(getHubCount(discovery?.sourceRegistrySummary, 'count'))
   const headingEvidenceCount = displayHubCount(getHubCount(discovery?.evidenceObjectSummary, 'evidenceObjectCount'))
 
-  return <main className={`intelligence-hub container${view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : view === 'Coverage' ? ' intelligence-hub--coverage' : view === 'Intelligence Graph' ? ' intelligence-hub--graph' : quality ? ' intelligence-hub--quality' : ''}`} aria-labelledby="intelligence-hub-title">
+  return <main className={`intelligence-hub container${evidenceReadiness ? ' intelligence-hub--evidence-readiness' : view === 'Overview' ? ' intelligence-hub--overview' : view === 'Context' ? ' intelligence-hub--context' : view === 'Sources' ? ' intelligence-hub--sources' : view === 'Review' ? ' intelligence-hub--review' : view === 'Readiness & publish' ? ' intelligence-hub--readiness' : view === 'After lock' ? ' intelligence-hub--after-lock' : view === 'Coverage' ? ' intelligence-hub--coverage' : view === 'Intelligence Graph' ? ' intelligence-hub--graph' : quality ? ' intelligence-hub--quality' : ''}`} aria-labelledby="intelligence-hub-title">
     <div className="intelligence-hub__selected" role="group" aria-label="Selected workspace context">
       <div className="intelligence-hub__selected-context">
         <span>Selected Workspace</span>
@@ -929,7 +931,7 @@ export default function IntelligenceHub({ quality = false }) {
           </div>
           <strong>{compactReadableDate(renderer.runtimeInstance.updatedAt)}</strong>
           <span>{overviewPending ? 'Loading intelligence summary…' : headingSourceCount === 'Unavailable'
-            ? `Sources unavailable · ${headingEvidenceCount} evidence`
+            ? `Sources unavailable · ${headingEvidenceCount} evidence objects`
             : `${headingSourceCount} acquired sources · ${headingEvidenceCount} evidence objects`}</span>
         </div>
         <nav className="intelligence-hub__overview-controls" aria-label="Intelligence Hub actions">
@@ -938,23 +940,24 @@ export default function IntelligenceHub({ quality = false }) {
             title="Opens Evidence Workbench; evidence is not added in the Intelligence Hub.">＋ Add Evidence</Link>
         </nav>
       </div> : <div className="intelligence-hub__heading-actions">
-        {view !== 'Context' && view !== 'After lock' && view !== 'Coverage' && view !== 'Intelligence Graph' && !quality ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
-        <Button size="sm" variant="outline" disabled={quality ? rendererFetching || qualityFetching : view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching} aria-busy={Boolean(quality ? rendererFetching || qualityFetching : view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching)} onClick={quality ? () => { refetchRenderer(); refetchQuality() } : view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : view === 'Coverage' ? refreshCoverage : view === 'Intelligence Graph' ? refreshGraph : refetchRenderer}>↻ Refresh</Button>
+        {!evidenceReadiness && view !== 'Context' && view !== 'After lock' && view !== 'Coverage' && view !== 'Intelligence Graph' && !quality ? <span>Last updated <strong>{readableDate(renderer.runtimeInstance.updatedAt)}</strong></span> : null}
+        <Button size="sm" variant="outline" disabled={evidenceReadiness ? evidenceReadinessRefreshing : quality ? rendererFetching || qualityFetching : view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching} aria-busy={Boolean(evidenceReadiness ? evidenceReadinessRefreshing : quality ? rendererFetching || qualityFetching : view === 'Context' ? contextRefreshing : view === 'Sources' ? sourcesRefreshing : view === 'Review' ? reviewRefreshing : view === 'Readiness & publish' ? readinessRefreshing : view === 'Coverage' ? coverageRefreshing : view === 'Intelligence Graph' ? graphLoading : view === 'After lock' && rendererFetching)} onClick={evidenceReadiness ? refreshEvidenceReadiness : quality ? () => { refetchRenderer(); refetchQuality() } : view === 'Context' ? refreshContext : view === 'Sources' ? refreshSources : view === 'Review' ? refreshReview : view === 'Readiness & publish' ? refreshReadiness : view === 'Coverage' ? refreshCoverage : view === 'Intelligence Graph' ? refreshGraph : refetchRenderer}>↻ Refresh</Button>
         {view === 'After lock' ? <Button size="sm" className="intelligence-hub__lock-discovery" onClick={event => openInfo(discoveryIntakeInfo(renderer), event.currentTarget)}>＋ Start discovery</Button> : null}
         {view === 'Coverage' ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-hub__coverage-acquire" title="Opens Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
-        {view === 'Intelligence Graph' || quality ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-graph__technical" title="Navigation to Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
+        {view === 'Intelligence Graph' || quality || evidenceReadiness ? <Link to={workbenchHref} variant="subtle" underline="none" className="btn btn--primary intelligence-graph__technical" title="Navigation to Evidence Workbench; evidence is not added here.">＋ Add Evidence</Link> : null}
       </div> : null}
     </header>
     {!requiredContext ? <Status variant="warning">Open Intelligence Hub from a selected Execution Workspace revision.</Status>
       : rendererLoading || (!renderer && rendererFetching) ? <p role="status">Loading selected revision…</p>
         : rendererError || !context.valid ? <Status variant="warning">{rendererError ? 'The selected revision could not be loaded.' : context.reason}</Status>
           : <>
-            {view === 'Overview' ? overviewPending ? null : <OverviewMetrics renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /> : null}
+            {view === 'Overview' ? overviewPending ? null : <OverviewMetrics renderer={renderer} discovery={discovery} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /> : null}
             <TabView activeTab={viewIndex} onTabChange={(index) => selectView(index === HUB_VIEWS.length ? 'Intelligence Quality' : HUB_VIEWS[index])} aria-label="Intelligence Hub views" className="intelligence-hub__tabs">
             <TabView.Tab label="Overview"><Overview renderer={renderer} discovery={discovery} graphCoverage={graphCoverage} evidenceStatusCounts={evidenceStatusCounts} isLoading={overviewPending} onOpen={openInfo} qualityHref={qualityHref} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Context"><ContextView key={contextKey} discovery={reconcileHubDiscovery(getHubDiscovery(renderer), summaryEvidencePage)} evidenceStatusCounts={evidenceStatusCounts} isLoading={contextPending} onOpen={openInfo} onSelectView={selectView} workbenchHref={workbenchHref} /></TabView.Tab>
             <TabView.Tab label="Sources"><SourcesView key={`${contextKey}:${evidencePageNumber}:${preferredSourceId}:${preferredSourceSearch}:${sourceSearchRequest}`} initialSearch={preferredSourceSearch} preferredSourceId={preferredSourceId} discovery={discovery} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={evidenceError} pendingCount={evidenceStatusCounts.pending} countsLoading={summaryEvidenceFetching || pendingEvidenceFetching} onOpen={openInfo} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} /></TabView.Tab>
             <TabView.Tab label="Review"><ReviewView key={contextKey} evidencePage={evidencePage} isLoading={evidenceLoading || evidenceFetching} error={emptyFilteredPage ? null : evidenceError} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching} onOpenSource={openReviewSource} onSelectView={selectView} page={evidencePageNumber} setPage={setEvidencePageNumber} filter={reviewFilter} onFilterChange={selectReviewFilter} /></TabView.Tab>
+            <TabView.Tab label="Evidence readiness">{evidenceReadiness ? <EvidenceReadinessView key={contextKey} renderer={renderer} evidenceResponse={summaryEvidenceResponse} evidenceError={summaryEvidenceError} evidenceLoading={summaryEvidenceLoading || summaryEvidenceFetching} candidateResponse={qualityResponse} candidateError={qualityError} candidateLoading={qualityLoading || qualityFetching} workbenchHref={workbenchHref} workspaceHref={getHubReturnHref(revisionId)} onSelectView={selectView} /> : null}</TabView.Tab>
             <TabView.Tab label="Readiness & publish"><ReadinessView key={contextKey} renderer={renderer} discovery={discovery} evidenceTotal={summaryEvidencePage?.totalCapped ? null : getHubCount(summaryEvidencePage, 'total')} evidenceStatusCounts={evidenceStatusCounts} countsLoading={summaryEvidenceFetching || acceptedEvidenceFetching || pendingEvidenceFetching || rejectedEvidenceFetching} onOpen={openInfo} onSelectView={selectView} qualityHref={qualityHref} /></TabView.Tab>
             <TabView.Tab label="After lock"><AfterLockView renderer={renderer} onOpen={openInfo} onSelectView={selectView} /></TabView.Tab>
             <TabView.Tab label="Coverage"><CoverageView key={contextKey} discovery={getHubDiscovery(renderer)} graphCoverage={graphCoverage} isLoading={graphCoverageFetching} error={graphCoverageError} qualityHref={qualityHref} workbenchHref={workbenchHref} onSelectView={selectView} onOpenSources={openCoverageSources} /></TabView.Tab>
